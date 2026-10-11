@@ -268,8 +268,11 @@ func classifyQueued(s whySnapshot, v *whyVerdict) {
 		}
 		v.NextSteps = []NextStep{{Text: capitalise(fix), Kind: "change", Link: poolLink}}
 		if r := s.Renting; r != nil {
-			v.Evidence = append(v.Evidence, Evidence{Kind: "plan_reason", Label: "renting", Value: evidenceText(r.Summary)})
-			if r.Fix != "" {
+			// A waiting verdict's summary quotes the scheduler's sentence the
+			// line above already shows, so only its tail is new; and its fix is
+			// about hosts, which the pool's own next step covers.
+			v.Evidence = append(v.Evidence, Evidence{Kind: "plan_reason", Label: "renting", Value: evidenceText(r.Aside())})
+			if r.Fix != "" && r.State != RentingWaiting {
 				v.NextSteps = append(v.NextSteps, NextStep{Text: r.Fix, Kind: "change", Link: "/providers"})
 			}
 		}

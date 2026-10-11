@@ -166,6 +166,28 @@ func TestAWaitingVerdictAddsOnlyTheTailToTheSchedulersSentence(t *testing.T) {
 	if p.Fix != h.planFor(t, pool.ID).BlockedFix {
 		t.Errorf("fix = %q, want the scheduler's fix unchanged for a waiting pool", p.Fix)
 	}
+
+	// The job's drawer says the same once: the renting line carries the tail
+	// alone, because the scheduler's sentence is already its own line above,
+	// and the fix about hosts is not sent to the Providers page.
+	jobs, err := h.st.ListQueuedJobs(h.ctx)
+	if err != nil || len(jobs) == 0 {
+		t.Fatalf("ListQueuedJobs: %v (%d jobs)", err, len(jobs))
+	}
+	got, err := h.c.ExplainJob(h.ctx, jobs[0].ID, 0)
+	if err != nil {
+		t.Fatalf("ExplainJob: %v", err)
+	}
+	for _, e := range got.Evidence {
+		if e.Kind == "plan_reason" && e.Label == "renting" && e.Value != waitingTail {
+			t.Errorf("renting evidence = %q, want the tail alone %q", e.Value, waitingTail)
+		}
+	}
+	for _, step := range got.NextSteps {
+		if step.Link == "/providers" {
+			t.Errorf("next steps = %+v, want no link to /providers for a waiting pool", got.NextSteps)
+		}
+	}
 }
 
 // Whatever reaches the problems list is sent again each time it differs, so

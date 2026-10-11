@@ -74,7 +74,9 @@
         {#each notice.pools as pool (pool.pool_id)}
           <li>
             <span class="name">{pool.pool_name}</span>
-            <span class="queued">{pluralise(pool.queued, 'job')} queued</span>
+            {#if pool.queued > 0}
+              <span class="queued">{pluralise(pool.queued, 'job')} queued</span>
+            {/if}
             <span class="verdict">{pool.summary}</span>
           </li>
         {/each}
