@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/auth"
@@ -261,8 +262,6 @@ const shutdownGrace = 15 * time.Second
 // bind.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	defer s.closeTailcat()
-	go s.retryOIDC(ctx)
-	go s.runAutopilot(ctx)
 	if err := s.resumeTailcat(ctx, tailcatCheckInterval, tailcatHealthyInterval); err != nil {
 		return err
 	}
@@ -302,6 +301,22 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			return
 		}
 		errs <- nil
+	}()
+
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		s.retryOIDC(workerCtx)
+	}()
+	go func() {
+		defer workers.Done()
+		s.runAutopilot(workerCtx)
+	}()
+	defer func() {
+		cancelWorkers()
+		workers.Wait()
 	}()
 
 	select {
