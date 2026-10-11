@@ -114,6 +114,33 @@ func TestContainerAndReadOnlySysctlsAreSkipped(t *testing.T) {
 		}
 	}
 }
+
+// WSL2 is a real virtual machine with its own kernel, so its sysctls and Docker
+// daemon belong to the distro; but with systemd on, it writes "wsl" into
+// /run/systemd/container, which is the same file LXC and Podman use. Treating
+// that file's mere presence as "container" told WSL2 operators to run tune on
+// an outer host that does not exist.
+func TestWSLIsNotMistakenForAContainer(t *testing.T) {
+	for name, tc := range map[string]struct {
+		marker    string
+		container bool
+	}{
+		"wsl":    {"wsl\n", false},
+		"lxc":    {"lxc\n", true},
+		"podman": {"podman\n", true},
+		"empty":  {"", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := fake()
+			f.put("/etc/os-release", "ID=ubuntu\nVERSION_ID=24.04\n")
+			f.put("/run/systemd/container", tc.marker)
+			e := New(Options{System: f, OS: "linux", UID: 0, Now: time.Now, WorkDir: "/work"})
+			if e.Container != tc.container {
+				t.Fatalf("Container = %v, want %v", e.Container, tc.container)
+			}
+		})
+	}
+}
 func TestUnprivilegedDoctorDoesNotOfferAnApply(t *testing.T) {
 	e, f := fixture()
 	e.UID = 1000

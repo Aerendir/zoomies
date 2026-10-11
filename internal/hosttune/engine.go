@@ -321,10 +321,16 @@ func New(o Options) *Engine {
 			}
 		}
 	}
-	for _, p := range []string{"/.dockerenv", "/run/.containerenv", "/run/systemd/container"} {
+	for _, p := range []string{"/.dockerenv", "/run/.containerenv"} {
 		if _, err := o.System.Stat(p); err == nil {
 			e.Container = true
 		}
+	}
+	// systemd records the kind of container it runs in here, and WSL2 writes
+	// "wsl" into it although a WSL2 distro is a virtual machine with its own
+	// kernel, whose sysctls and Docker daemon are the distro's to tune.
+	if b, err := o.System.ReadFile("/run/systemd/container"); err == nil && strings.TrimSpace(string(b)) != "wsl" {
+		e.Container = true
 	}
 	if b, err := o.System.ReadFile("/proc/1/cgroup"); err == nil && (strings.Contains(string(b), "docker") || strings.Contains(string(b), "lxc") || strings.Contains(string(b), "kubepods")) {
 		e.Container = true
