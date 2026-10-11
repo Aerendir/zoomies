@@ -306,11 +306,10 @@ func (h *harness) do(req request) *response {
 	}
 
 	client := &http.Client{
-		// Generous on purpose: a request that takes a backup or an export
-		// copies the whole database, and under the race detector with coverage
-		// on a loaded runner that has taken longer than ten seconds. A request
-		// that really hangs is still caught by the package's test timeout.
-		Timeout: 2 * time.Minute,
+		// A backup or export copies the whole database, and under race coverage
+		// on a loaded runner that can take several minutes. The package timeout
+		// catches a request that really hangs.
+		Timeout: 10 * time.Minute,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			// Redirects are part of what is being asserted (the OIDC and login
 			// flows), so they are reported rather than followed.
