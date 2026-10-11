@@ -50,8 +50,17 @@ test('someone who cannot change settings is told who can', () => {
 });
 
 test('no ceiling offers the ceiling alone', () => {
-  const n = rentingNotice({ ...base, state: 'no_ceiling', suggested_max_machines: 2 }, true);
+  const pools = [pool('a', 'ceiling'), pool('b', 'waiting')];
+  const n = rentingNotice(
+    { ...base, state: 'no_ceiling', fix: 'Set a ceiling.', suggested_max_machines: 2, pools },
+    true,
+  );
   assert.equal(n?.title, 'Renting is on, but the fleet may rent no machines');
+  assert.equal(n?.fix, 'Set a ceiling.');
+  assert.deepEqual(
+    n?.pools.map((p) => p.pool_id),
+    ['a'],
+  );
   assert.equal(n?.action?.label, 'Allow 2 machines');
   assert.deepEqual(settingsFor(n!, 2), { 'provider.max_machines': 2 });
   assert.equal(
@@ -96,6 +105,12 @@ test('a ceiling is a whole number of at least one', () => {
   assert.equal(clampCeiling(0, 2), 2);
   assert.equal(clampCeiling(Number.NaN, 2), 2);
   assert.equal(clampCeiling(3.9, 2), 3);
+  assert.equal(clampCeiling(Infinity, 2), 2);
+  assert.equal(clampCeiling(-3, 2), 2);
+  // A ceiling above 100000 is refused to the fallback: no real fleet rents that
+  // many machines, so a figure that large is a mistake, not a wish.
+  assert.equal(clampCeiling(1e21, 2), 2);
+  assert.equal(clampCeiling(100_000, 2), 100_000);
 });
 
 test('a pool is found by its id, and a missing view finds nothing', () => {

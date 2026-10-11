@@ -78,11 +78,18 @@ export function settingsFor(
   return patch;
 }
 
-/** A ceiling is a whole number of at least one; anything else falls back. */
+/**
+ * A ceiling is a whole number from one to MAX_CEILING; anything else falls
+ * back. The upper bound is not a policy: it keeps a runaway figure (a sum that
+ * overflowed, a typo with too many zeros) from being offered as the most an
+ * operator is willing to pay for, and no real fleet rents that many machines.
+ */
+const MAX_CEILING = 100_000;
+
 export function clampCeiling(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
   const whole = Math.floor(value);
-  return whole >= 1 ? whole : fallback;
+  return whole >= 1 && whole <= MAX_CEILING ? whole : fallback;
 }
 
 /** One pool's verdict, or null when there is none to show. */
