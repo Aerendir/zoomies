@@ -1610,17 +1610,40 @@ func (c *Controller) PoolCapacityProblems() []Problem {
 			title = fmt.Sprintf("pool %s has %s waiting and nowhere to run them",
 				pp.PoolName, plural(pp.QueuedMatched, "job"))
 		}
+		detail, fix := c.withRenting(pp.PoolID, pp.Blocked, pp.BlockedFix)
 		out = append(out, Problem{
 			Code:         "pool.no_capacity",
 			Severity:     severity,
 			Title:        title,
-			Detail:       pp.Blocked,
-			Fix:          pp.BlockedFix,
+			Detail:       detail,
+			Fix:          fix,
 			Alternatives: pp.BlockedAlternatives,
 			TargetKind:   "pool", TargetID: pp.PoolID,
 		})
 	}
 	return out
+}
+
+// withRenting lays the machine planner's verdict for a pool over the
+// scheduler's sentence and fix, so that the one entry which says no runner can
+// be placed also says whether a machine is coming and, if not, what to change.
+// A pool the planner said nothing about (no provider, or nothing it could
+// act on) is returned as it was, which is how a fleet without providers reads
+// exactly as before.
+//
+// The verdict's fix goes first because it is the cheaper change when there is
+// one (switch renting on); a waiting pool's fix is the scheduler's own, so it
+// is left alone rather than stated twice.
+func (c *Controller) withRenting(poolID, detail, fix string) (string, string) {
+	v := c.rentingFor(poolID)
+	if v == nil {
+		return detail, fix
+	}
+	detail += " " + v.Aside()
+	if v.Fix != "" && v.State != RentingWaiting {
+		fix = v.Fix + " " + fix
+	}
+	return detail, fix
 }
 
 // plural writes "1 job" and "3 jobs". Titles are read as headings in the

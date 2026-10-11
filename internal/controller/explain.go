@@ -164,6 +164,9 @@ func (c *Controller) explainWhy(ctx context.Context, job *store.Job, out *JobExp
 			}
 		}
 	}
+	if s.PoolPlan != nil && s.PoolPlan.Blocked != "" {
+		s.Renting = c.rentingFor(job.PoolID)
+	}
 	v := classify(s)
 	out.Class, out.Confidence, out.ConfidenceReason = v.Class, v.Confidence, v.ConfidenceReason
 	out.Evidence, out.ProblemCode, out.NextSteps = v.Evidence, v.ProblemCode, v.NextSteps
@@ -385,6 +388,7 @@ func (c *Controller) explainQueued(ctx context.Context, job *store.Job, out *Job
 				if out.Fix == "" {
 					out.Fix = "add a host, raise a host's capacity, uncordon one, or relax the pool's host selector."
 				}
+				out.Detail, out.Fix = c.withRenting(pool.ID, out.Detail, out.Fix)
 				return
 			}
 			// A pool whose runners keep dying before they register is the case
