@@ -417,7 +417,7 @@ func TestTwoProvidersThatServeOnePoolGiveOneVerdict(t *testing.T) {
 // scheduler places on them first, so none of the pools is told it is covered,
 // and each is told about the pools together. Either way the provider's own
 // order is the group's, because it is one purchase.
-func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T) {
+func TestPoolsSharingAProviderQuoteTheirOwnShareOrSpeakForTheGroupWhenItIsHeldBack(t *testing.T) {
 	// queuedFor is n queued jobs that only the pool advertising label claims.
 	queuedFor := func(label string, n int) []*store.Job {
 		jobs := demandJobs(n)
@@ -626,7 +626,7 @@ func TestVerdictsAreInPoolNameOrderWhicheverWayTheyWereDecided(t *testing.T) {
 	p := demandProvider("lab")
 	alpha, beta := demandPool("alpha", "linux", "x64"), demandPool("beta", "linux", "x64")
 	waiting := demandPoolPlan(beta, 1, 2, 0, "")
-	waiting.Blocked = "no host can take a new docker runner (1 cordoned)"
+	waiting.Blocked = "no host can take a new docker runner (1 cordoned, 1 at capacity)"
 	s := MachineSnapshot{
 		Now: machineNow, Pools: []*store.Pool{alpha, beta}, Providers: []*store.Provider{p},
 		Jobs: demandJobs(1), Limits: demandLimits(),

@@ -88,7 +88,7 @@ type MachinePlan struct {
 	Unserved []UnservedPool `json:"unserved,omitempty"`
 	// Pools is a verdict for each pool the planner has something to say
 	// about: what this pass decided about renting for it and why, one a pool,
-	// in pool name order. A pool the scheduler is placing runners for has
+	// in pool name order. A pool the scheduler did not report blocked has
 	// none, and neither has one the fleet's free slots cover. It is the
 	// planner's reading alone. Whether renting is switched on, or a provider
 	// may buy at the moment, is for the controller to lay over it.
