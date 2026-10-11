@@ -891,10 +891,11 @@ func TestJoinCommandPinsTheControllersOwnRelease(t *testing.T) {
 	}
 }
 
-// The kill switch and the two ceilings are settings an operator reaches for
-// while the fleet is misbehaving, which is the one moment nobody wants to
-// restart the controller. Each is writable at runtime, and each takes effect in
-// the running configuration rather than only in the response.
+// The switch that lets the fleet rent, the kill switch and the two ceilings are
+// settings an operator reaches for while the fleet is misbehaving or while
+// nothing is being rented, which are the moments nobody wants to restart the
+// controller. Each is writable at runtime, and each takes effect in the running
+// configuration rather than only in the response.
 func TestTheMachineLimitsAreChangeableWithoutARestart(t *testing.T) {
 	h := newHarness(t)
 	admin, _ := h.user("root", store.RoleAdmin)
@@ -902,6 +903,7 @@ func TestTheMachineLimitsAreChangeableWithoutARestart(t *testing.T) {
 
 	patched := h.do(request{method: http.MethodPatch, path: "/api/v1/settings", cookie: cookie,
 		body: map[string]any{"provider": map[string]any{
+			"enabled":               true,
 			"paused":                true,
 			"max_machines":          6,
 			"max_creates_in_flight": 3,
@@ -910,6 +912,9 @@ func TestTheMachineLimitsAreChangeableWithoutARestart(t *testing.T) {
 	patched.mustStatus(t, http.StatusOK, "patch the provider limits")
 
 	cfg := h.ctrl.Config()
+	if !cfg.Provider.Enabled {
+		t.Error("renting was not switched on in the running configuration")
+	}
 	if !cfg.Provider.Paused {
 		t.Error("the kill switch was not pressed in the running configuration")
 	}
@@ -1018,7 +1023,7 @@ func TestTheProviderDeadlinesNeedARestart(t *testing.T) {
 	res.mustStatus(t, http.StatusOK, "settings")
 	var settings settingsResponse
 	res.into(t, &settings)
-	for _, key := range []string{"provider.enabled", "provider.create_timeout", "provider.ambiguity_timeout"} {
+	for _, key := range []string{"provider.create_timeout", "provider.ambiguity_timeout"} {
 		if !slices.Contains(settings.RestartRequiredKeys, key) {
 			t.Errorf("%s is neither writable at runtime nor listed as needing a restart", key)
 		}
@@ -1037,6 +1042,39 @@ func TestTheProviderDeadlinesNeedARestart(t *testing.T) {
 	// machine already being built keeps the deadline it was given.
 	if got := h.ctrl.Config().Provider.CreateTimeout.String(); got == "5m0s" {
 		t.Error("a deadline was changed under an operation already in flight")
+	}
+}
+
+// Renting is switched on by somebody who has just been told that is why nothing
+// is rented, so "saved, applies at the next restart" would be the worst thing the
+// page could say back. The machine loop runs whatever the setting says and only
+// waits to be allowed, which is what lets the switch be taken at once and be
+// absent from pending_restart.
+func TestRentingIsSwitchedOnWithoutWaitingForARestart(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.user("root", store.RoleAdmin)
+	cookie := h.session(admin)
+
+	if h.ctrl.Config().Provider.Enabled {
+		t.Fatal("renting starts switched on, so this test would prove nothing")
+	}
+	res := h.do(request{method: http.MethodPatch, path: "/api/v1/settings", cookie: cookie,
+		body: map[string]any{"provider.enabled": true}})
+	res.mustStatus(t, http.StatusOK, "switch renting on")
+
+	var after settingsResponse
+	res.into(t, &after)
+	if slices.Contains(after.PendingRestart, "provider.enabled") {
+		t.Errorf("renting was switched on and is reported as waiting for a restart: %v", after.PendingRestart)
+	}
+	if slices.Contains(after.RestartRequiredKeys, "provider.enabled") {
+		t.Errorf("provider.enabled is listed as a setting that needs a restart: %v", after.RestartRequiredKeys)
+	}
+	if view := findSetting(t, after, "provider.enabled"); !view.Live || view.Pending || !view.Stored || view.RestartReason != "" {
+		t.Errorf("provider.enabled = %+v, want stored and live, with nothing waiting and no reason to restart", view)
+	}
+	if !h.ctrl.Config().Provider.Enabled {
+		t.Error("the running configuration still has renting switched off, so the machine loop would go on declining to rent")
 	}
 }
 

@@ -612,6 +612,11 @@ func TestTheDemoMachinesRenderWithTheirProviderPoolAndHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders: %v", err)
 	}
+	// Renting is switched on first. With it off every provider is held for that
+	// reason, a seeded one included, and says so; what this asks is whether the
+	// fixture's own row has a hold of its own (a pause, a disabled row, a run of
+	// failures), which only shows once the switch is out of the way.
+	h.enableProviders(t)
 	p := h.c.ProviderView(providers[0], machines)
 	if p.Owned != 2 {
 		t.Errorf("the provider owns %d machines, want both of them counted against its ceiling", p.Owned)

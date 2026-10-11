@@ -639,10 +639,12 @@ func (c *Controller) Start(ctx context.Context) error {
 	// and reconcileMu is held for a whole scheduling pass, so a machine step
 	// inside it would stop the fleet placing runners for as long as a
 	// hypervisor felt like taking -- the same argument that moved
-	// capacity-demand delivery out of the pass.
-	if c.cfg().Provider.Enabled {
-		c.spawn("machines", loopCtx, c.machineLoop)
-	}
+	// capacity-demand delivery out of the pass. It runs whether or not renting
+	// is switched on, and rents nothing while it is not, so that turning renting
+	// on is a setting and not a restart: started only when the setting was
+	// already on, it left an operator who had just flipped the switch waiting
+	// for a restart.
+	c.spawn("machines", loopCtx, c.machineLoop)
 	if c.lease != nil {
 		c.spawn("lease", loopCtx, c.leaseLoop)
 	}

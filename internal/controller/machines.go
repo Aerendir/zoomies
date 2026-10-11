@@ -201,10 +201,12 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	if !c.mayAct() {
 		return nil
 	}
-	// Off is off, whoever asked. The loop is not started when providers are
-	// switched off, and a pass forced by a test or an API call must refuse for
-	// the same reason: renting a machine spends money, and nothing should
-	// start doing that because a release added the ability to.
+	// Off is off, whoever asked. The loop runs whether or not renting is
+	// switched on, so that switching it on is a setting and not a restart, and
+	// while it is off a pass rents, drains and deletes nothing. That holds for
+	// a pass forced by a test or an API call as much as for the loop's own:
+	// renting a machine spends money, and nothing should start doing that
+	// because a release added the ability to.
 	if !c.cfg().Provider.Enabled {
 		return nil
 	}
@@ -376,9 +378,22 @@ func (c *Controller) mutationsHeld() string {
 // a machine ask the provider for nothing new, so a held provider still scales
 // down -- holdWhileRateLimited's asymmetry, for the same reason. A kill switch
 // that also stopped those would strand running machines nobody is watching.
+//
+// Renting being switched off is said first after the fence, and it is not a hold
+// in that sense: it is the master switch, and a pass returns before it
+// recovers, sweeps, drains or deletes anything, which is why its sentence says
+// so where the others say that draining continues. It outranks the pause, the
+// transfer and the provider's own row because an operator told that a provider
+// is paused or disabled, while the whole loop is off, would resume it and still
+// rent nothing. It answers for a nil provider as well: it is a fact about the
+// controller and not about any one row.
 func (c *Controller) provisioningHeld(p *store.Provider, now time.Time) string {
 	if held := c.mutationsHeld(); held != "" {
 		return held
+	}
+	if !c.cfg().Provider.Enabled {
+		return "renting is switched off for this controller (provider.enabled), " +
+			"so no machine is created from any provider; nothing is drained, deleted or checked either"
 	}
 	if c.transferDraining.Load() {
 		return "this instance is draining for transfer; no new machines are created"
