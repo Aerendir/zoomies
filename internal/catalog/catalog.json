@@ -2281,7 +2281,7 @@
       "kind": "problem",
       "title": "pool.no_capacity",
       "category": "capacity",
-      "severity": "error with jobs waiting, warning without",
+      "severity": "error with jobs waiting, warning without, and a warning even with jobs waiting when every host that could run the pool is merely full",
       "detection": "runtime",
       "detects": "The pool cannot start the runners it wants. The entry carries the scheduler's own reason: no host matches its selector, every host that could run it is full, or every host is cordoned.",
       "fix": "The pool cannot start the runners it wants. The entry carries the scheduler's own reason: no host matches its selector, every host that could run it is full, or every host is cordoned.",
