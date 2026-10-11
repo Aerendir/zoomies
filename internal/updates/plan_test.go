@@ -70,7 +70,7 @@ func decide(t *testing.T, s Snapshot) Plan {
 	p := Decide(s)
 	starts := 0
 	for _, a := range p.Actions {
-		if a.Tag != "" && !ValidTag(a.Tag) {
+		if a.Tag != "" && !ValidTarget(a.Tag) {
 			t.Errorf("%s names the tag %q, which is not a release tag", a.Kind, a.Tag)
 		}
 		if a.Kind == ActionRequestController || a.Kind == ActionUpdateHost {
@@ -357,11 +357,29 @@ func TestDecideStartsARolloutInAutoWhenAHostIsBehindTheControllersRelease(t *tes
 	wantSentence(t, p, "v1.3.5", "1 host is behind")
 }
 
-// A controller built from main has no release to name, so there is nothing a
-// host could be taken to that the helper would accept.
-func TestDecideStartsARolloutInAutoNotWhenTheControllerHasNoTarget(t *testing.T) {
+// A controller built from main is followed exactly: hosts on any other main
+// build or on a release are behind it, and a host on a local build is not.
+func TestDecideStartsARolloutInAutoWhenAHostIsBehindAControllerBuiltFromMain(t *testing.T) {
 	s := planSnapshot()
 	s.Running = "main-sha-abc1234"
+	s.Hosts = []HostFacts{
+		planHost("h1", "runner-1", "main-sha-1c5b8378", 0),
+		planHost("h2", "runner-2", "main-sha-abc1234", 0),
+		planHost("h3", "runner-3", "1.3.5-3-gabcdef1", 0),
+	}
+	p := decide(t, s)
+	wantKinds(t, p, ActionStartRollout)
+	if p.Actions[0].Tag != "main-sha-abc1234" {
+		t.Errorf("tag = %q, want the controller's exact build", p.Actions[0].Tag)
+	}
+	wantSentence(t, p, "main-sha-abc1234", "1 host is behind")
+}
+
+// A local build of the controller has no release or main build to name, so
+// there is nothing a host could be taken to that the helper would accept.
+func TestDecideStartsARolloutInAutoNotWhenTheControllerHasNoTarget(t *testing.T) {
+	s := planSnapshot()
+	s.Running = "1.3.5-3-gabcdef1"
 	s.Hosts = []HostFacts{planHost("h1", "runner-1", "1.3.4", 0)}
 	p := decide(t, s)
 	wantKinds(t, p)
@@ -704,7 +722,7 @@ func TestDecideFinishesOrCancelsARolloutTheControllerHasMovedPast(t *testing.T) 
 	}{
 		{"the controller moved on", "1.4.0", "v1.3.5", ActionFinishRollout, "v1.4.0"},
 		{"the controller went back", "1.3.5", "v1.4.0", ActionCancelRollout, "never taken past"},
-		{"the controller is not a release", "main-sha-abc1234", "v1.3.5", ActionCancelRollout, "no longer runs a release"},
+		{"the controller is not a release", "1.3.5-3-gabcdef1", "v1.3.5", ActionCancelRollout, "no longer runs a release"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := planSnapshot()

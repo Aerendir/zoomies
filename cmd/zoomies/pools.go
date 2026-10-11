@@ -515,9 +515,9 @@ func registerPoolFlags(fs *flagSet) *poolSpec {
 	spec.tmpfsWork = fs.Bool("tmpfs-work", false, "keep the runner's _work folder in memory instead of on the host's disk; the folder is charged to the runner's memory limit; needs docker or podman")
 	spec.tmpfsWorkSize = fs.Int64("tmpfs-work-size", 0, "the _work folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 4096 and half the limit")
 	spec.tmpfsTmp = fs.Bool("tmpfs-tmp", false, "keep /tmp in memory as well; off unless asked for, because some jobs leave gigabytes there")
-	spec.tmpfsTmpSize = fs.Int64("tmpfs-tmp-size", 0, "the /tmp folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 1024")
+	spec.tmpfsTmpSize = fs.Int64("tmpfs-tmp-size", 0, "the /tmp folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 4096")
 	spec.tmpfsDocker = fs.Bool("tmpfs-docker", false, "keep the Docker-in-Docker sidecar's image store in memory; needs --docker-mode dind; an image bigger than the store does not pull, and it is charged to the sidecar's memory limit")
-	spec.tmpfsAuto = fs.Bool("tmpfs-auto", false, "let each runner decide where the in-memory folders live: in memory where the runner has room for one to be useful (2 GB for _work, 1 GB for /tmp, 4 GB for the image store), on disk where it has not; --tmpfs-auto=false makes them always in memory")
+	spec.tmpfsAuto = fs.Bool("tmpfs-auto", false, "let each runner decide where the in-memory folders live: in memory where the runner has room for one to be useful (2 GB for _work, 2 GB for /tmp, 4 GB for the image store), on disk where it has not; --tmpfs-auto=false makes them always in memory")
 	spec.tmpfsDockerSize = fs.Int64("tmpfs-docker-size", 0, "the image store's ceiling in MiB (at least 64); 0 sizes it from the sidecar's memory limit, at most 8192 and half of it")
 	return spec
 }

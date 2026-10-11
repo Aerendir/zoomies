@@ -238,7 +238,7 @@
             value: 'auto',
             label: 'Auto (recommended)',
             description:
-              'Each runner decides: a folder is in memory where the runner has room for it to be useful (2 GB for the work folder, 1 GB for /tmp, 4 GB for the image store), and on disk where it has not. Safe for a pool whose hosts differ, and the pool says where a folder stayed on disk.',
+              'Each runner decides: a folder is in memory where the runner has room for it to be useful (2 GB for the work folder, 2 GB for /tmp, 4 GB for the image store), and on disk where it has not. Safe for a pool whose hosts differ, and the pool says where a folder stayed on disk.',
           },
           {
             value: 'always',

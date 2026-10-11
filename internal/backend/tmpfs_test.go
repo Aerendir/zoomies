@@ -326,7 +326,7 @@ func TestAnAutomaticFolderIsNotMountedOnARunnerTooSmallForIt(t *testing.T) {
 		t.Errorf("a 2 GB runner was given %v, want disk", got)
 	}
 	got := tmpfsMounts(spec, 32768, false)
-	if got[RunnerWorkMount] != "size=4096m,rw,exec,nosuid,nodev,mode=1777" || got[RunnerTmpMount] != "size=1024m,rw,exec,nosuid,nodev,mode=1777" {
+	if got[RunnerWorkMount] != "size=4096m,rw,exec,nosuid,nodev,mode=1777" || got[RunnerTmpMount] != "size=4096m,rw,exec,nosuid,nodev,mode=1777" {
 		t.Errorf("a 32 GB runner was given %v", got)
 	}
 	// The host's own standard replaces the default an untyped folder is asked for.

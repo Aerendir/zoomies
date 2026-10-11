@@ -1386,7 +1386,7 @@ func TestTheHostRouteRefusesWithTheCodesOfTheStateThatCausesThem(t *testing.T) {
 		{"updates are off", func(h *harness, _ *store.Host) {
 			h.ctrl.UpdateConfig(func(c *config.Config) { c.Updates.Mode = "off" })
 		}, "update.mode_off"},
-		{"the build is not a release", func(h *harness, _ *store.Host) { useVersion(h.t, "main-sha-abc1234") }, "update.not_a_release"},
+		{"the build is not a release", func(h *harness, _ *store.Host) { useVersion(h.t, "1.3.5-3-gabcdef1") }, "update.not_a_release"},
 		{"the host is already on the release", func(h *harness, host *store.Host) {
 			host.Version = "1.3.5"
 			if err := h.st.SetHostReported(h.ctx, host); err != nil {

@@ -1436,8 +1436,8 @@ func validateTask(task Task) error {
 		if task.UpdateID == "" {
 			return errors.New("update_agent task has no update ID, so its outcome cannot be matched to an attempt; the controller must set one")
 		}
-		if !updates.ValidTag(task.UpdateTag) {
-			return fmt.Errorf("update_agent task names %q, which is not a release tag; it must look like vMAJOR.MINOR.PATCH, for example v1.3.5", task.UpdateTag)
+		if !updates.ValidWireTag(task.UpdateTag) {
+			return fmt.Errorf("update_agent task names %q, which is not a release tag or the dev channel; it must look like vMAJOR.MINOR.PATCH, for example v1.3.5, or be dev", task.UpdateTag)
 		}
 	default:
 		return fmt.Errorf("unknown task kind %q; this agent speaks protocol version %d, so upgrade it to match the controller", task.Kind, ProtocolVersion)

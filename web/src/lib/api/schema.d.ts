@@ -7042,13 +7042,13 @@ export interface components {
             /** @default false */
             enabled: boolean;
             /**
-             * @description Let each runner decide: the folder is in memory where the runner has room for it to be useful -- at least 2048 MB for the work folder, 1024 MB for /tmp, 4096 MB for the image store, or the size typed if that is smaller -- and on disk where it has not. Without it, an enabled folder is always in memory, fitted as small as the limit demands. Needs `enabled`. Where it kept a folder on disk the pool says so (`pool.tmpfs_auto_on_disk`).
+             * @description Let each runner decide: the folder is in memory where the runner has room for it to be useful -- at least 2048 MB for the work folder, 2048 MB for /tmp, 4096 MB for the image store, or the size typed if that is smaller -- and on disk where it has not. Without it, an enabled folder is always in memory, fitted as small as the limit demands. Needs `enabled`. Where it kept a folder on disk the pool says so (`pool.tmpfs_auto_on_disk`).
              * @default false
              */
             auto: boolean;
             /**
              * Format: int64
-             * @description The folder's ceiling in MB, at least 64. Zero sizes it from the runner's memory limit: the default (4096 MB for the work folder, 1024 MB for /tmp), shrunk so the folders together take no more than half of that limit.
+             * @description The folder's ceiling in MB, at least 64. Zero sizes it from the runner's memory limit: the default (4096 MB for the work folder and for /tmp), shrunk so the folders together take no more than half of that limit.
              */
             size_mb?: number;
         };

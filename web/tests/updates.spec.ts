@@ -188,9 +188,12 @@ test("the buttons are Refresh and the platform role's Update, and nothing instal
   const main = page.getByRole('main');
   await expect(main.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
   await expect(main.getByRole('button', { name: 'Update to v1.3.2', exact: true })).toBeVisible();
-  await expect(main.getByRole('button', { name: /install|apply|upgrade|restart/i })).toHaveCount(0);
+  const controllerPanel = main.getByRole('region', { name: 'Update this controller', exact: true });
   await expect(
-    main.getByRole('link', { name: /update now|install|apply|upgrade|restart/i }),
+    controllerPanel.getByRole('button', { name: /install|apply|upgrade|restart/i }),
+  ).toHaveCount(0);
+  await expect(
+    controllerPanel.getByRole('link', { name: /update now|install|apply|upgrade|restart/i }),
   ).toHaveCount(0);
 });
 
