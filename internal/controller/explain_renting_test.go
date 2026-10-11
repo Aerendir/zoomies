@@ -155,7 +155,7 @@ func TestAWaitingVerdictAddsOnlyTheTailToTheSchedulersSentence(t *testing.T) {
 	}
 	p := h.capacityProblemFor(t, pool.ID)
 	blocked := h.planFor(t, pool.ID).Blocked
-	if want := blocked + " " + waitingTail; p.Detail != want {
+	if want := blocked + ". " + waitingTail; p.Detail != want {
 		t.Errorf("detail = %q, want %q", p.Detail, want)
 	}
 	if strings.Count(p.Detail, blocked) != 1 {
