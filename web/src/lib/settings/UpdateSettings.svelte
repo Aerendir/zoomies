@@ -30,9 +30,9 @@
 
   const MODE = 'updates.mode';
   const OPTIONS = [
-    { value: 'off', label: 'Off', name: 'No updates are applied' },
-    { value: 'manual', label: 'Manual', name: 'Updates are applied by hand' },
-    { value: 'auto', label: 'Auto', name: 'Updates are applied as they arrive' },
+    { value: 'off', label: 'Off', name: 'Never look for a new release' },
+    { value: 'manual', label: 'Manual', name: 'Look for releases, install on request' },
+    { value: 'auto', label: 'Auto', name: 'Install new releases as they soak' },
   ] as const;
 
   let settings = $state<Settings | null>(null);
