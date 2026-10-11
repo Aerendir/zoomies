@@ -7,7 +7,14 @@
  * conversation can be shown in more than one place and survives moving between
  * pages, which a floating panel needs.
  */
-import { ApiError, streamAssistantChat } from '$lib/api/client';
+import {
+  ApiError,
+  createAssistantConversation,
+  replaceAssistantConversation,
+  streamAssistantChat,
+} from '$lib/api/client';
+import { session } from '$lib/state/session.svelte';
+import { transcript, turnsFrom, type StoredMessage } from './history';
 import { supportHint } from '$lib/errors';
 import { router } from '$lib/router';
 import { prefs } from '$lib/state/prefs.svelte';
@@ -68,8 +75,11 @@ export class Conversation {
   turns = $state<Turn[]>([]);
   busy = $state(false);
   draft = $state('');
+  /** The kept conversation this is, once an answer has been kept; nothing until then. */
+  id = $state<string | undefined>();
   #controller: AbortController | undefined;
   #next = 0;
+  #keeping: Promise<void> | undefined;
   /** Which provider the last question went to, so that asking again goes to the same one. */
   #provider: string | undefined;
 
@@ -137,6 +147,38 @@ export class Conversation {
         this.#controller = undefined;
       }
     }
+    if (!answer.error && this.#controller === undefined) await this.keep();
+  }
+
+  /**
+   * Keep the thread under the account, once an answer has landed. Nothing is
+   * kept for a session with no account, and a keep that fails is not the
+   * person's problem: the thread is still on the page, and the next answer
+   * tries again. Keeps are serialised so a fast second question cannot
+   * create a second conversation before the first keep has an id.
+   */
+  async keep(): Promise<void> {
+    if (session.authDisabled || session.identity?.kind !== 'user') return;
+    const messages = transcript(this.turns);
+    if (messages.length < 2) return;
+    const run = async () => {
+      try {
+        if (this.id) await replaceAssistantConversation(this.id, { messages });
+        else this.id = (await createAssistantConversation({ messages })).id;
+      } catch {
+        // Kept next time, or not at all; a thread is never lost over it.
+      }
+    };
+    this.#keeping = (this.#keeping ?? Promise.resolve()).then(run);
+    await this.#keeping;
+  }
+
+  /** Pick a kept conversation up where it was left. */
+  load(id: string, messages: readonly StoredMessage[]): void {
+    this.clear();
+    this.turns = turnsFrom(messages, this.#next);
+    this.#next += messages.length;
+    this.id = id;
   }
 
   /** Ask the last question again, replacing the answer that failed. */
@@ -168,5 +210,6 @@ export class Conversation {
     this.busy = false;
     this.turns = [];
     this.draft = '';
+    this.id = undefined;
   }
 }

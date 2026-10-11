@@ -228,6 +228,7 @@ export type BackupSchedule = Schemas['BackupSchedule'];
 export type BackupVerification = Schemas['BackupVerification'];
 export type BackupRemote = Schemas['BackupRemote'];
 export type AssistantProvider = Schemas['AssistantProvider'];
+export type AssistantConversation = Schemas['AssistantConversation'];
 export type AssistantProviderCheck = Schemas['AssistantProviderCheck'];
 export type AssistantProviderKind = Schemas['AssistantProviderKind'];
 export type RemoteBackupCopy = Schemas['RemoteBackupCopy'];

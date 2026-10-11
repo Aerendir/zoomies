@@ -7,8 +7,13 @@
  */
 import { tick } from 'svelte';
 import type { EliContext } from './prompts';
-import { listAssistantProviders } from '$lib/api/client';
-import type { AssistantProvider } from '$lib/api/types';
+import {
+  deleteAssistantConversation,
+  getAssistantConversation,
+  listAssistantConversations,
+  listAssistantProviders,
+} from '$lib/api/client';
+import type { AssistantConversation, AssistantProvider } from '$lib/api/types';
 import { answeringProvider } from '$lib/settings/assistant';
 import { session } from '$lib/state/session.svelte';
 import { Conversation } from './conversation.svelte';
@@ -18,6 +23,10 @@ class Eli {
   providers = $state<readonly AssistantProvider[]>([]);
   open = $state(false);
   pending = $state<EliContext[]>([]);
+  /** Whether the panel shows the kept conversations instead of the thread. */
+  history = $state(false);
+  conversations = $state<AssistantConversation[]>([]);
+  historyError = $state('');
   returnFocus: HTMLElement | null = null;
   #revision = 0;
 
@@ -105,7 +114,45 @@ class Eli {
       }),
     );
   }
+  /** Show the kept conversations, freshly listed. */
+  async openHistory(): Promise<void> {
+    this.history = true;
+    this.historyError = '';
+    try {
+      this.conversations = (await listAssistantConversations()).items;
+    } catch {
+      this.historyError = 'The kept conversations could not be read.';
+    }
+  }
+
+  closeHistory(): void {
+    this.history = false;
+  }
+
+  /** Pick a kept conversation up where it was left, in place of the thread. */
+  async resume(id: string): Promise<void> {
+    try {
+      const kept = await getAssistantConversation(id);
+      this.pending = [];
+      this.conversation.load(kept.id, kept.messages ?? []);
+      this.history = false;
+    } catch {
+      this.historyError = 'That conversation could not be read; it may have expired.';
+    }
+  }
+
+  async remove(id: string): Promise<void> {
+    try {
+      await deleteAssistantConversation(id);
+      this.conversations = this.conversations.filter((c) => c.id !== id);
+      if (this.conversation.id === id) this.conversation.clear();
+    } catch {
+      this.historyError = 'That conversation could not be deleted.';
+    }
+  }
+
   newConversation(): void {
+    this.history = false;
     this.conversation.clear();
     this.pending = [];
   }

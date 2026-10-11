@@ -1,9 +1,18 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Maximize2, Minimize2, PanelLeft, PanelRight, SquarePen, X } from '@lucide/svelte';
+  import {
+    History,
+    Maximize2,
+    Minimize2,
+    PanelLeft,
+    PanelRight,
+    SquarePen,
+    X,
+  } from '@lucide/svelte';
   import { listAssistantProviders } from '$lib/api/client';
   import Button from '$lib/components/Button.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
+  import ConversationList from './ConversationList.svelte';
   import ConversationView from './ConversationView.svelte';
   import EliAvatar from './EliAvatar.svelte';
   import { movable } from './movable';
@@ -189,6 +198,12 @@
           onclick={() => eli.newConversation()}
         />
         <IconButton
+          icon={History}
+          label="Past conversations"
+          pressed={eli.history}
+          onclick={() => (eli.history ? eli.closeHistory() : void eli.openHistory())}
+        />
+        <IconButton
           icon={full ? Minimize2 : Maximize2}
           label={full ? 'Restore panel' : 'Full screen'}
           pressed={full}
@@ -287,15 +302,19 @@
           >
         </details>
       {/if}
-      <ConversationView
-        conversation={eli.conversation}
-        fleetAccess={answering?.fleet_access ?? false}
-        {answering}
-        height="100%"
-        closedHint={loading
-          ? 'Connecting to Eli'
-          : error || 'Set up a default provider in Eli AI Assistant settings'}
-      />
+      {#if eli.history}
+        <ConversationList />
+      {:else}
+        <ConversationView
+          conversation={eli.conversation}
+          fleetAccess={answering?.fleet_access ?? false}
+          {answering}
+          height="100%"
+          closedHint={loading
+            ? 'Connecting to Eli'
+            : error || 'Set up a default provider in Eli AI Assistant settings'}
+        />
+      {/if}
     </div>
     <footer>
       {answering ? `${answering.name} · ${answering.model}` : 'Eli'}<span

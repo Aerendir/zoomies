@@ -1287,6 +1287,28 @@ export const setDefaultAssistantProvider = (id: string, scope: AssistantScope = 
     {},
   );
 
+export const listAssistantConversations = (signal?: AbortSignal) =>
+  api.get<Result<'personalListAssistantConversations'>>('/assistant/personal/conversations', {
+    signal,
+  });
+export const getAssistantConversation = (id: string) =>
+  api.get<Result<'personalGetAssistantConversation'>>(
+    `/assistant/personal/conversations/${encodeURIComponent(id)}`,
+  );
+export const createAssistantConversation = (body: Body<'personalCreateAssistantConversation'>) =>
+  api.post<Result<'personalCreateAssistantConversation'>>('/assistant/personal/conversations', {
+    body,
+  });
+export const replaceAssistantConversation = (
+  id: string,
+  body: Body<'personalReplaceAssistantConversation'>,
+) =>
+  api.put<Result<'personalReplaceAssistantConversation'>>(
+    `/assistant/personal/conversations/${encodeURIComponent(id)}`,
+    { body },
+  );
+export const deleteAssistantConversation = (id: string) =>
+  api.del<void>(`/assistant/personal/conversations/${encodeURIComponent(id)}`);
 export const listEliRepairs = () => api.get<Result<'listEliRepairs'>>('/assistant/repairs');
 export const getEliRepairSettings = () =>
   api.get<Result<'getEliRepairSettings'>>('/assistant/repairs/settings');

@@ -401,6 +401,13 @@ func (s *Server) apiRoutes() chi.Router {
 		r.Route("/assistant/personal", func(r chi.Router) {
 			r.Use(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner)
 			r.Post("/chat", s.handleAssistantChat)
+			r.Route("/conversations", func(r chi.Router) {
+				r.Get("/", s.handleListAssistantConversations)
+				r.Post("/", s.handleSaveAssistantConversation)
+				r.Get("/{id}", s.handleGetAssistantConversation)
+				r.Put("/{id}", s.handleSaveAssistantConversation)
+				r.Delete("/{id}", s.handleDeleteAssistantConversation)
+			})
 			r.Route("/providers", func(r chi.Router) {
 				r.Get("/", s.handleListAssistantProviders)
 				r.Post("/", s.handleCreateAssistantProvider)
