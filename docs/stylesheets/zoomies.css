@@ -1151,10 +1151,10 @@ input,
   }
 }
 
-/* The closing call to action follows the scheme, like the controller's UI: the
-   black lockup on a light panel in the light theme, the white lockup on Zoomies
-   Black in the dark one. Either way it is the one place on the page the brand
-   blue is allowed to glow. The primary button is the panel's inverse rather
+/* The closing call to action follows the scheme, like the controller's UI: a
+   light panel in the light theme, Zoomies Black in the dark one, with the same
+   black logo on the Orbital haze backdrop in both. Either way it is the one
+   place on the page the brand blue is allowed to glow. The primary button is the panel's inverse rather
    than blue -- the brand is a monochrome mark with blue as an accent, and the
    accent is already spent on the glow behind the logo. The dark values are the
    defaults below; the light scheme overrides them after the rules they feed. */
@@ -1165,9 +1165,9 @@ input,
   display: grid;
   /* A fixed first column: the lockup's fallback image is 1254px wide, and an
      auto track would size itself to that and starve the copy beside it. */
-  grid-template-columns: 12rem minmax(0, 1fr);
+  grid-template-columns: 16rem minmax(0, 1fr);
   align-items: center;
-  gap: 1.5rem 2.5rem;
+  gap: 1rem 1.5rem;
   margin: 3rem 0 1rem;
   padding: 2rem 2.25rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1192,12 +1192,36 @@ input,
   -webkit-mask-image: radial-gradient(50% 90% at 15% 50%, #000 20%, transparent 100%);
   mask-image: radial-gradient(50% 90% at 15% 50%, #000 20%, transparent 100%);
 }
+/* The sign-in page's treatment: the black logo, padded, on the Orbital haze
+   backdrop, whose edges are feathered into the panel so it reads as a galaxy
+   behind the dog rather than a picture. The same in both schemes; decoration
+   belongs to the backdrop, never to the artwork. */
 .zoomies-cta .zoomies-brand {
-  width: 12rem;
+  width: 16rem;
   max-width: 100%;
 }
 .zoomies-cta .zoomies-brand__art {
-  filter: drop-shadow(0 16px 40px rgba(47, 128, 237, 0.28));
+  position: relative;
+  isolation: isolate;
+}
+.zoomies-cta .zoomies-brand__art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url('../brand/backdrops/orbital.webp') center / contain no-repeat;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 28%, #000 72%, transparent),
+    linear-gradient(to bottom, transparent, #000 28%, #000 72%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent, #000 28%, #000 72%, transparent),
+    linear-gradient(to bottom, transparent, #000 28%, #000 72%, transparent);
+  mask-composite: intersect;
+}
+.zoomies-cta .zoomies-brand__fallback {
+  box-sizing: border-box;
+  padding: 18.75%;
 }
 .zoomies-cta__copy {
   min-width: 0;
@@ -1245,13 +1269,6 @@ input,
   color: var(--z-brand-black);
 }
 
-/* One lockup per scheme (overrides/partials/animated-logo.html): white art for
-   the dark panel, black for the light one. The hidden one is never fetched. */
-[data-md-color-scheme='default'] .zoomies-brand__fallback--dark,
-[data-md-color-scheme='slate'] .zoomies-brand__fallback--light {
-  display: none;
-}
-
 /* The light panel: white on the page's cool ground, the same blue glow behind
    the black lockup, and ink-coloured text and buttons. */
 [data-md-color-scheme='default'] .zoomies-cta {
@@ -1265,9 +1282,6 @@ input,
 }
 [data-md-color-scheme='default'] .zoomies-cta::before {
   background-image: radial-gradient(rgba(11, 12, 14, 0.1) 1px, transparent 1.3px);
-}
-[data-md-color-scheme='default'] .zoomies-cta .zoomies-brand__art {
-  filter: drop-shadow(0 16px 40px rgba(47, 128, 237, 0.18));
 }
 [data-md-color-scheme='default'] .md-typeset .zoomies-cta .title {
   color: var(--md-default-fg-color);

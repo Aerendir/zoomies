@@ -523,7 +523,7 @@ test('the brand panel is Zoomies Black in both themes', async ({ page }) => {
   await expect(page.getByRole('img', { name: 'Zoomies' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Zoomies', exact: true })).toHaveAttribute(
     'data-treatment',
-    'starlight',
+    'orbital',
   );
   await expect(page.locator('.mark img')).toHaveAttribute(
     'src',
@@ -933,8 +933,8 @@ test('a saved logo treatment survives reload and sign-out on a portrait screen',
   await signIn(page);
   await page.goto('/settings/appearance');
   const choice = page.getByRole('combobox', { name: 'Logo style' });
-  await expect(choice).toHaveValue('starlight');
-  for (const treatment of ['pearl', 'orbital', 'square', 'circle', 'starlight']) {
+  await expect(choice).toHaveValue('orbital');
+  for (const treatment of ['pearl', 'starlight', 'square', 'circle', 'orbital']) {
     await choice.selectOption(treatment);
     await expect(page.getByRole('img', { name: 'Zoomies logo preview' })).toHaveAttribute(
       'data-treatment',

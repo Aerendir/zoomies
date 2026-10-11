@@ -2,9 +2,9 @@
 
 These three backgrounds implement the approved detailed artwork direction:
 
-- `starlight.webp`: warm clouds, dense stars and constellations (the default).
+- `starlight.webp`: warm clouds, dense stars and constellations.
 - `pearl.webp`: flowing pearl and silver mist.
-- `orbital.webp`: platinum clouds and luminous blue orbital trails.
+- `orbital.webp`: platinum clouds and luminous blue orbital trails (the default).
 
 They were generated from the reviewed atmospheric concept on 11 October 2026,
 with the logo and all lettering removed, then encoded as lossless WebP at the
