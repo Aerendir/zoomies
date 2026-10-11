@@ -403,6 +403,16 @@ func (c *Controller) mutationsHeld() string {
 // rent nothing. It answers for a nil provider as well: it is a fact about the
 // controller and not about any one row.
 func (c *Controller) provisioningHeld(p *store.Provider, now time.Time) string {
+	return c.provisioningHeldWith(p, now, true)
+}
+
+// provisioningHeldWith is provisioningHeld with one choice: whether a provider
+// standing down says how long it has left. The provider's own card wants the
+// countdown, and is sent again each pass it moves. A sentence that reaches the
+// problems list may carry no clock, because the list is sent again whenever it
+// differs and a countdown differs on every read, so a held verdict asks for the
+// sentence without one.
+func (c *Controller) provisioningHeldWith(p *store.Provider, now time.Time, countdown bool) string {
 	if held := c.mutationsHeld(); held != "" {
 		return held
 	}
@@ -430,6 +440,9 @@ func (c *Controller) provisioningHeld(p *store.Provider, now time.Time) string {
 	case !p.Enabled:
 		return fmt.Sprintf("%s is disabled, so it is offered no new demand", p.Name)
 	case p.PausedUntil != nil && now.Before(*p.PausedUntil):
+		if !countdown {
+			return fmt.Sprintf("%s is standing down after %s in a row", p.Name, plural(p.ConsecutiveFailures, "failure"))
+		}
 		return fmt.Sprintf("%s is standing down after %s in a row; trying again in %s",
 			p.Name, plural(p.ConsecutiveFailures, "failure"), roundDuration(p.PausedUntil.Sub(now)))
 	}

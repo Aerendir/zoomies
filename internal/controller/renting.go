@@ -321,9 +321,10 @@ type rentingInput struct {
 	Paused      bool
 	MaxMachines int
 	// Held is what provisioningHeld says of each provider the pass read, by
-	// id, a row-disabled one included. It is gathered only while renting is
-	// on: while it is off every provider would answer with the switch, and the
-	// overlay says that in words of its own.
+	// id, a row-disabled one included, without the countdown of a provider
+	// standing down. It is gathered only while renting is on: while it is off
+	// every provider would answer with the switch, and the overlay says that
+	// in words of its own.
 	Held map[string]string
 }
 
@@ -460,7 +461,10 @@ func (c *Controller) rentingNow() rentingInput {
 		now := c.Now()
 		in.Held = make(map[string]string, len(report.Providers))
 		for _, p := range report.Providers {
-			if why := c.provisioningHeld(p, now); why != "" {
+			// Without the countdown a provider standing down carries: a held
+			// verdict's summary reaches the problems list, which may carry no
+			// clock.
+			if why := c.provisioningHeldWith(p, now, false); why != "" {
 				in.Held[p.ID] = why
 			}
 		}
@@ -514,7 +518,9 @@ func usableRows(rows []*store.Provider) []*store.Provider {
 // Held is computed rather than stored, so no row write announces that it has
 // moved: a provider's page open when renting was switched on would otherwise go
 // on saying it was off until somebody reloaded it. A provider with no sentence
-// from an earlier pass has nothing to differ from, and is only remembered.
+// from an earlier pass has nothing to differ from, and is only remembered. The
+// sentence compared is the card's own, countdown and all, unlike the verdict's,
+// so a provider standing down is sent again each pass with the time it has left.
 func (c *Controller) noteRenting(ctx context.Context, env *machineEnv, plan MachinePlan) {
 	report := &rentingReport{At: env.now}
 	for _, p := range env.rows {

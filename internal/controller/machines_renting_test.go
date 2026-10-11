@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -293,6 +295,75 @@ func TestTheOverlayHoldsAPoolChargedToADisabledProvider(t *testing.T) {
 	}
 	if got := h.c.rentingFor(pool.ID); got == nil || *got != want {
 		t.Fatalf("rentingFor = %+v, want %+v", got, want)
+	}
+}
+
+// A provider that keeps failing to build machines stands down for a while, and
+// its own card counts down to when it tries again. A held verdict says the same
+// thing about a pool, and that summary reaches the problems list, which is sent
+// again whenever it differs: a countdown in it would send the list out on every
+// read for as long as the provider stood down. So the verdict says only that it
+// is standing down, and the card keeps its countdown.
+func TestTheOverlayHoldsAStandingDownProviderWithoutACountdown(t *testing.T) {
+	h := newHarness(t)
+	h.enableProviders(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux-x64")
+	row := h.providerRow(t, "lab")
+	until := h.c.Now().Add(10 * time.Minute)
+	if err := h.st.SetProviderBreaker(h.ctx, row.ID, 3, &until); err != nil {
+		t.Fatalf("SetProviderBreaker: %v", err)
+	}
+	h.queueWork(t)
+	h.machinePass(t)
+
+	if got := len(h.machines()); got != 0 {
+		t.Fatalf("a provider standing down was asked for %d machines", got)
+	}
+	want := PoolRenting{
+		PoolID: pool.ID, PoolName: pool.Name, State: RentingHeld,
+		Summary:    "Not renting: lab is standing down after 3 failures in a row.",
+		ProviderID: row.ID, ProviderName: row.Name, Queued: 1, Short: 1, Machines: 1,
+	}
+	view := h.renting(t)
+	if len(view.Pools) != 1 || view.Pools[0] != want {
+		t.Errorf("pools:\n got %+v\nwant [%+v]", view.Pools, want)
+	}
+	for _, v := range view.Pools {
+		if strings.Contains(v.Summary, "trying again") {
+			t.Errorf("pool %s's verdict carries a countdown: %q", v.PoolName, v.Summary)
+		}
+	}
+
+	// Read again a minute on, the same verdict is the same bytes.
+	pools := func() string {
+		t.Helper()
+		raw, err := json.Marshal(h.renting(t).Pools)
+		if err != nil {
+			t.Fatalf("marshalling the pools: %v", err)
+		}
+		return string(raw)
+	}
+	before := pools()
+	h.advance(time.Minute)
+	if after := pools(); after != before {
+		t.Errorf("the pools changed as time passed:\n before: %s\n  after: %s", before, after)
+	}
+
+	// The card's own sentence keeps the countdown, and the next pass sends the
+	// card again with the time it has left.
+	fresh, err := h.st.GetProvider(h.ctx, row.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	if got := h.c.provisioningHeld(fresh, h.c.Now()); !strings.Contains(got, "; trying again in ") {
+		t.Errorf("provisioningHeld = %q, want the countdown the provider's card shows", got)
+	}
+	sub := h.listen(events.KindProviderUpdated)
+	h.machinePass(t)
+	frame := nextOfKind(t, sub, events.KindProviderUpdated)
+	if held, _ := frame["held"].(string); !strings.Contains(held, "lab is standing down after 3 failures in a row; trying again in ") {
+		t.Errorf("the card was sent again holding %q, want it standing down with its countdown", held)
 	}
 }
 
