@@ -8,7 +8,7 @@
   sentence says which one to open.
 -->
 <script lang="ts">
-  import type { Provider, ProviderPairing } from '$lib/api/types';
+  import type { PoolRenting, Provider, ProviderPairing } from '$lib/api/types';
   import { pluralise } from '$lib/format';
   import Badge from '$lib/components/Badge.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -18,9 +18,16 @@
     provider: Provider;
     /** Every pool against this provider, or null until they have been asked for. */
     pairings: readonly ProviderPairing[] | null;
+    /** The last machine pass's verdict on each pool, or null when it could not be read. */
+    renting: readonly PoolRenting[] | null;
   }
 
-  let { provider, pairings }: Props = $props();
+  let { provider, pairings, renting }: Props = $props();
+
+  // A pairing says whether this provider may rent for a pool; the verdict says
+  // what renting is doing for it now. Only a pool it would rent for gets the
+  // verdict, because the pairing's own reason already answers the rest.
+  const verdicts = $derived(new Map((renting ?? []).map((v) => [v.pool_id, v])));
 
   const serving = $derived((pairings ?? []).filter((entry) => entry.serves));
   const selector = $derived(Object.entries(provider.pool_selector ?? {}));
@@ -67,6 +74,13 @@
               <Badge tone="neutral" label="Would not rent" size="sm" dot={false} />
             {/if}
           </div>
+          {#if entry.serves && verdicts.has(entry.pool_id)}
+            {@const verdict = verdicts.get(entry.pool_id)}
+            <p class="verdict" data-testid="pool-renting">
+              <RemedyText text={verdict?.summary ?? ''} />
+              {#if verdict?.fix}<RemedyText text={verdict.fix} />{/if}
+            </p>
+          {/if}
           {#if !entry.serves && entry.why}
             <p class="why"><RemedyText text={entry.why} /></p>
             {#if entry.fix}<p class="why fix"><RemedyText text={entry.fix} /></p>{/if}
@@ -137,6 +151,13 @@
     color: var(--z-text-muted);
   }
   .fix {
+    color: var(--z-text);
+  }
+  .verdict {
+    margin: var(--z-nudge-1) 0 0;
+    max-width: 72ch;
+    font-size: var(--z-text-xs);
+    line-height: var(--z-leading-xs);
     color: var(--z-text);
   }
 </style>

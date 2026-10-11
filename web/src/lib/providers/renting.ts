@@ -89,3 +89,16 @@ export function clampCeiling(value: number, fallback: number): number {
 export function poolRenting(renting: ProviderRenting | null, poolId: string): PoolRenting | null {
   return renting?.pools.find((p) => p.pool_id === poolId) ?? null;
 }
+
+/**
+ * What a refused click shows. The settings route answers a pinned key with a
+ * general message and the reason under the key; the reason is the half that
+ * says where the setting lives and what to change, so it wins when there is one.
+ */
+export function refusalText(
+  message: string,
+  errors: readonly { message: string }[] | undefined,
+): string {
+  const reasons = (errors ?? []).map((e) => e.message).filter((m) => m !== '');
+  return reasons.length > 0 ? reasons.join(' ') : message;
+}

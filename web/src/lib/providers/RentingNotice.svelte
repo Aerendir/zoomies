@@ -15,7 +15,7 @@
   import Button from '$lib/components/Button.svelte';
   import Field from '$lib/components/Field.svelte';
   import Input from '$lib/components/Input.svelte';
-  import { clampCeiling, rentingNotice, settingsFor } from './renting';
+  import { clampCeiling, refusalText, rentingNotice, settingsFor } from './renting';
 
   interface Props {
     renting: ProviderRenting | null;
@@ -55,7 +55,7 @@
     } catch (cause) {
       failure =
         cause instanceof ApiError
-          ? cause.message
+          ? refusalText(cause.message, cause.errors)
           : 'The change was not saved. Check the connection and try again.';
     } finally {
       saving = false;

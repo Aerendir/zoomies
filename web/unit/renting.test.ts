@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   clampCeiling,
   poolRenting,
+  refusalText,
   rentingNotice,
   settingsFor,
 } from '../src/lib/providers/renting.ts';
@@ -102,4 +103,21 @@ test('a pool is found by its id, and a missing view finds nothing', () => {
   assert.equal(poolRenting(renting, 'a')?.state, 'off');
   assert.equal(poolRenting(renting, 'z'), null);
   assert.equal(poolRenting(null, 'a'), null);
+});
+
+/*
+ * The settings route refuses an environment-pinned key with a general message
+ * and the reason under the key. The reason is the one that says where the
+ * setting lives, so it is what the notice shows.
+ */
+test("a refusal shows the server's per-key reasons, and its message when there are none", () => {
+  const pinned = 'ZOOMIES_PROVIDER_ENABLED is setting this in the environment.';
+  assert.equal(
+    refusalText('these settings could not be changed', [
+      { field: 'provider.enabled', message: pinned },
+    ]),
+    pinned,
+  );
+  assert.equal(refusalText('that was refused', []), 'that was refused');
+  assert.equal(refusalText('that was refused', undefined), 'that was refused');
 });
