@@ -152,6 +152,39 @@ and says `incompatible` on its card.
 
 The disk figure on a host's card is the filesystem holding the work directory, the one the [host health](host-health.md) `disk.space` check reads. The card follows each heartbeat and the check runs about once a minute, and the figure turns amber by the check's rule (under 10% or under 10 GiB free) and links to that check.
 
+### A host in WSL2
+
+A Windows desktop can be a host through a WSL2 distro, with the Docker or
+Podman backend inside it. It stays enrolled only while the agent runs, and a
+distro does not start with systemd by default, so `agent join` finds no service
+manager, tells you to start the agent yourself, and that process ends when its
+terminal closes.
+
+Turning systemd on is optional, and it is what keeps the agent running. Add this
+to `/etc/wsl.conf` in the distro:
+
+```ini
+[boot]
+systemd=true
+```
+
+Then run `wsl --shutdown` from Windows, reopen the distro and join again with
+`sudo zoomies agent join ... --token zoojoin_...`, using a new token. The join
+installs the `zoomies-agent` service as on any systemd host, so the agent starts
+whenever the distro does. Joining again replaces the host's credentials and
+leaves the earlier record on the controller as an offline host until you remove
+it.
+
+`zoomies upgrade` notices the same situation: on a WSL distro without systemd
+it finds no service to restart, says so, and offers to write `systemd=true`
+into `/etc/wsl.conf` (it keeps the old file as `wsl.conf.zoomies-bak`, and
+`--yes` accepts the offer in advance; `--check` changes nothing). It cannot
+restart the distro for you, so it ends by telling you to run `wsl --shutdown`.
+
+WSL can still stop a distro that has no terminal open. To keep it up, add a
+Windows scheduled task that runs at logon (or at startup, to run before anyone
+signs in) and executes `wsl.exe -d <YourDistro> --exec sleep infinity`.
+
 ### What a host brings with it
 
 | What | Where it comes from | Why it matters |
@@ -1592,9 +1625,10 @@ exactly what the `process` backend means on Linux, and
 Windows runner is a kill rather than an interrupt, because a service has no
 console to raise one on; the runner's registration is single-use either way.
 
-This is new in 1.0 and
-[not yet qualified](index.md#what-is-qualified): it is built and unit-tested,
-and the first job that runs on a real Windows host is what moves the row.
+A Windows host has joined a controller and run
+a job, tried by hand on 11 October 2026. The
+[support matrix](index.md#what-is-qualified) still waits on the written-up
+evidence before it calls the row qualified.
 
 **Separating a noisy repository.** Give it a pool with its own labels and its own
 `max_runners`. Note the limit of `repository_scale_up_limit` on a shared pool: it

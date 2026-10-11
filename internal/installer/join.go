@@ -328,6 +328,12 @@ func Join(ctx context.Context, opts JoinOptions) error {
 	if kind != ServiceSystemd && kind != ServiceLaunchd && kind != ServiceWindows {
 		u.note("no service manager here; start the agent yourself with:")
 		u.note("  " + det.BinaryPath + " agent --config " + configFile)
+		if runningUnderWSL() {
+			u.blank()
+			for _, l := range wslServiceNotes() {
+				u.note(l)
+			}
+		}
 		return nil
 	}
 
