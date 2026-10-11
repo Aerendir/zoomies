@@ -27,10 +27,19 @@
     /** What the choice is, for the group's accessible name. */
     label: string;
     onchange: (value: T) => void;
+    /** The choice is shown but cannot be made, as when the environment holds the value. */
+    disabled?: boolean;
     class?: string;
   }
 
-  let { options, value, label, onchange, class: className = '' }: Props<string> = $props();
+  let {
+    options,
+    value,
+    label,
+    onchange,
+    disabled = false,
+    class: className = '',
+  }: Props<string> = $props();
 </script>
 
 <div class="segmented {className}" role="group" aria-label={label}>
@@ -40,6 +49,7 @@
       aria-pressed={value === option.value}
       aria-label={option.name ? `${option.label}, ${option.name}` : undefined}
       title={option.name}
+      {disabled}
       onclick={() => onchange(option.value)}>{option.label}</button
     >
   {/each}
@@ -76,7 +86,11 @@
   button:first-child {
     border-left: 0;
   }
-  button:hover {
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  button:hover:not(:disabled) {
     background: var(--z-surface-hover);
     color: var(--z-text);
   }

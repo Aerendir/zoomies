@@ -30,6 +30,7 @@
   import { authFailureText, sentence } from '$lib/errors';
   import { session } from '$lib/state/session.svelte';
   import { updates } from '$lib/state/updates.svelte';
+  import UpdateSettings from './UpdateSettings.svelte';
   import RolloutStatus from '$lib/updates/RolloutStatus.svelte';
   import UpdateControllerDialog from '$lib/updates/UpdateControllerDialog.svelte';
   import {
@@ -327,11 +328,15 @@
             <p class="detail">{soakNote(status.mode)}</p>
           </dd>
         </dl>
-        <p class="note">
-          The platform role changes both, as the settings <code>updates.mode</code> and
-          <code>updates.soak</code>{#if settingHref}, on
-            <a href={settingHref}>the Configuration page</a>{/if}.
-        </p>
+        {#if canUpdate}
+          <UpdateSettings />
+        {:else}
+          <p class="note">
+            The platform role changes both, as the settings <code>updates.mode</code> and
+            <code>updates.soak</code>{#if settingHref}, on
+              <a href={settingHref}>the Configuration page</a>{/if}.
+          </p>
+        {/if}
       </Panel>
 
       <Panel title="This controller">

@@ -119,36 +119,61 @@ test('the page says what the seeded release list would take, for a build on 1.3.
   await expect(take(page)).toContainText('Last checked');
 });
 
-test('the mode is read as text, with what it would do beside it, and is not a control', async ({
+test('the platform role sees the mode, the soak and the check interval as controls under what they mean', async ({
   page,
 }) => {
   await goto(page, PAGE, 'Updates');
 
-  await expect(mode(page)).toContainText('Manual');
-  await expect(mode(page)).toContainText(
-    'Zoomies offers the newest release that can be installed on this system, with an Update button for this controller and for each host whose update helper is installed, and one on the Hosts page that updates every host behind this controller, one at a time.',
+  const choice = mode(page).getByRole('group', { name: 'Update mode', exact: true });
+  await expect(choice.getByRole('button', { name: /Manual/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
   );
+  await expect(choice.getByRole('button', { name: /Off/ })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await expect(choice.getByRole('button', { name: /Auto/ })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  // The words beside the choice are the ones everybody is shown.
   await expect(mode(page)).toContainText('24 hours');
-  // Where the controls are is a link, for the roles that can open that page.
-  await expect(mode(page).getByRole('link', { name: 'the Configuration page' })).toHaveAttribute(
-    'href',
-    '/settings/configuration?setting=updates.mode',
-  );
+  await expect(mode(page)).toContainText('Only auto waits; manual and off ignore it.');
+  // The soak and the check interval are the Configuration page's own rows, so a
+  // value the environment holds is pinned here as it is there.
+  await expect(mode(page)).toContainText('check_interval');
+  await expect(mode(page).getByRole('button', { name: 'Change' })).toHaveCount(2);
+  // The seeded controller has the mode from its environment, which the page
+  // says rather than letting a press fail.
+  await expect(mode(page)).toContainText('ZOOMIES_UPDATE_MODE');
+  await expect(choice.getByRole('button', { name: /Auto/ })).toBeDisabled();
+});
 
-  // Nothing on the page chooses a mode or types a soak.
-  for (const role of [
-    'radiogroup',
-    'radio',
-    'combobox',
-    'listbox',
-    'switch',
-    'checkbox',
-    'textbox',
-    'spinbutton',
-    'slider',
-  ] as const) {
-    await expect(page.getByRole('main').getByRole(role), `a ${role} on the page`).toHaveCount(0);
-  }
+test('choosing auto asks first, and cancelling leaves the mode as it was', async ({ page }) => {
+  // The same settings with the mode held by the file and not the environment,
+  // which is the state in which it can be chosen here.
+  await page.route('**/api/v1/settings', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    for (const row of body.settings ?? []) {
+      if (row.key === 'updates.mode') Object.assign(row, { source: 'file', editable: true });
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await goto(page, PAGE, 'Updates');
+
+  const choice = mode(page).getByRole('group', { name: 'Update mode', exact: true });
+  await choice.getByRole('button', { name: /Auto/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Let Zoomies update itself' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(choice.getByRole('button', { name: /Manual/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 });
 
 // The Update button is the platform role's, and it is the only control that acts.
