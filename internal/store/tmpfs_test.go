@@ -374,3 +374,37 @@ func TestCPUAndMemoryAreSplitIndependently(t *testing.T) {
 		t.Errorf("pair factors are per resource: cpu %v memory %v", got.CPUPairFactor(), got.MemoryPairFactor())
 	}
 }
+
+// The floor for /tmp is what a toolchain keeps there until a command exits. Go
+// is the measure: it compiles every package of a cold build into its work
+// directory under /tmp and keeps them there, with the linker's output on top,
+// until the build finishes. A cold cross-compile of this repository leaves 962
+// MB there, and the darwin/amd64 link of main died twice on the fleet with
+// "mapping output file failed: no space left on device" in a 1 GB /tmp. The
+// floor is the least an in-memory /tmp is worth having, so it has to clear a
+// build like that with room for the binary to grow, and the default is what a
+// runner with room is given: the same as the work folder, which holds the
+// same kind of thing.
+func TestAnInMemoryTmpIsNeverTooSmallForAColdGoBuild(t *testing.T) {
+	const coldGoBuildMB = 962
+	if AutoMinTmpMB < 2*coldGoBuildMB {
+		t.Fatalf("AutoMinTmpMB = %d; a cold Go build of this repository leaves %d MB in /tmp and a floor that does not clear it twice fails the next link", AutoMinTmpMB, coldGoBuildMB)
+	}
+	if DefaultTmpfsTmpMB < DefaultTmpfsWorkMB {
+		t.Fatalf("DefaultTmpfsTmpMB = %d, DefaultTmpfsWorkMB = %d; /tmp holds a whole cold build the way the work folder holds a checkout, so it is given no less", DefaultTmpfsTmpMB, DefaultTmpfsWorkMB)
+	}
+}
+
+// With the two folders asked for the same size they come out of the fit the
+// same distance below their floors, and on a runner too small for both the
+// one that goes has to be /tmp: the work folder is the one worth having (it is
+// what the editor offers first), and a build whose /tmp is on disk is slower
+// while one whose checkout is on disk gets nothing from the setting.
+func TestATieBetweenTheFoldersGoesAgainstTmp(t *testing.T) {
+	auto := TmpfsConfig{Work: TmpfsMount{Enabled: true, Auto: true}, Tmp: TmpfsMount{Enabled: true, Auto: true}}
+	host := HostTmpfs{WorkMB: 4096, TmpMB: 4096}
+	work, tmp := auto.PlaceRunner(5120, host)
+	if work != 2560 || tmp != 0 {
+		t.Fatalf("placed work %d and /tmp %d MB on a 5 GB runner, want the work folder to take the half and /tmp to go to disk", work, tmp)
+	}
+}
