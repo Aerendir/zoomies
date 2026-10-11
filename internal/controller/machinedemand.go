@@ -359,7 +359,7 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			plan.BlockedFix = fix
 		}
 		for _, d := range ds {
-			verdicts = append(verdicts, chargedVerdict(p, d, create, because, fix, setting))
+			verdicts = append(verdicts, chargedVerdict(p, d, create, want, len(ds) > 1, because, fix, setting))
 		}
 		out.Providers = append(out.Providers, plan)
 	}

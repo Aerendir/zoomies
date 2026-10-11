@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -409,11 +410,13 @@ func TestTwoProvidersThatServeOnePoolGiveOneVerdict(t *testing.T) {
 	}
 }
 
-// One provider buying for several pools makes one purchase for all of them,
-// and each pool is told its own share of it. Quoting the provider's whole
-// order to every pool would tell a pool one slot short that it needs two
-// machines. The provider's own order is still the group's, because it is one
-// purchase.
+// One provider buying for several pools makes one purchase for all of them.
+// When the whole purchase is made, each pool is told its own share: the
+// provider's whole order would tell a pool one slot short that it needs two
+// machines. When it is held back, the machines bought serve whichever pool the
+// scheduler places on them first, so none of the pools is told it is covered,
+// and each is told about the pools together. Either way the provider's own
+// order is the group's, because it is one purchase.
 func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T) {
 	// queuedFor is n queued jobs that only the pool advertising label claims.
 	queuedFor := func(label string, n int) []*store.Job {
@@ -427,6 +430,9 @@ func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T
 	for _, tc := range []struct {
 		name   string
 		limits func(*MachineLimits)
+		// alpha and beta are how many runner slots each pool is short, with
+		// as many jobs queued.
+		alpha, beta int
 		// create and wanted are the provider's own order.
 		create, wanted int
 		want           []PoolRenting
@@ -434,16 +440,19 @@ func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T
 		{
 			name:   "the fleet may build one machine at a time",
 			limits: func(l *MachineLimits) { l.MaxCreatesInFlight = 1 },
+			alpha:  1, beta: 3,
 			create: 1, wanted: 2,
 			want: []PoolRenting{
 				{
 					PoolID: "pool_alpha", PoolName: "alpha", State: RentingBuying,
-					Summary:    "Renting 1 machine from lab, which covers this pool: 1 runner slot short with 1 job queued, and no host in the fleet can run it.",
+					Summary:    "Renting 1 of the 2 machines this pool and others need from lab: 1 runner slot short with 1 job queued, and no host in the fleet can run it. The rest are held back: provider.max_creates_in_flight allows only 1 machine at a time.",
+					Fix:        "Raise provider.max_creates_in_flight.",
+					Setting:    "provider.max_creates_in_flight",
 					ProviderID: "prv_lab", ProviderName: "lab", Queued: 1, Short: 1, Machines: 1,
 				},
 				{
 					PoolID: "pool_beta", PoolName: "beta", State: RentingBuying,
-					Summary:    "Renting 1 of the 2 machines it needs from lab, which covers this pool: 3 runner slots short with 3 jobs queued, and no host in the fleet can run it. The rest are held back: provider.max_creates_in_flight allows only 1 machine at a time.",
+					Summary:    "Renting 1 of the 2 machines this pool and others need from lab: 3 runner slots short with 3 jobs queued, and no host in the fleet can run it. The rest are held back: provider.max_creates_in_flight allows only 1 machine at a time.",
 					Fix:        "Raise provider.max_creates_in_flight.",
 					Setting:    "provider.max_creates_in_flight",
 					ProviderID: "prv_lab", ProviderName: "lab", Queued: 3, Short: 3, Machines: 1,
@@ -451,8 +460,33 @@ func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T
 			},
 		},
 		{
+			// Each pool alone would be covered by the one machine bought, and
+			// the two together are not, so neither may say it is.
+			name:   "two pools that one machine would each cover alone",
+			limits: func(l *MachineLimits) { l.MaxCreatesInFlight = 1 },
+			alpha:  2, beta: 2,
+			create: 1, wanted: 2,
+			want: []PoolRenting{
+				{
+					PoolID: "pool_alpha", PoolName: "alpha", State: RentingBuying,
+					Summary:    "Renting 1 of the 2 machines this pool and others need from lab: 2 runner slots short with 2 jobs queued, and no host in the fleet can run it. The rest are held back: provider.max_creates_in_flight allows only 1 machine at a time.",
+					Fix:        "Raise provider.max_creates_in_flight.",
+					Setting:    "provider.max_creates_in_flight",
+					ProviderID: "prv_lab", ProviderName: "lab", Queued: 2, Short: 2, Machines: 1,
+				},
+				{
+					PoolID: "pool_beta", PoolName: "beta", State: RentingBuying,
+					Summary:    "Renting 1 of the 2 machines this pool and others need from lab: 2 runner slots short with 2 jobs queued, and no host in the fleet can run it. The rest are held back: provider.max_creates_in_flight allows only 1 machine at a time.",
+					Fix:        "Raise provider.max_creates_in_flight.",
+					Setting:    "provider.max_creates_in_flight",
+					ProviderID: "prv_lab", ProviderName: "lab", Queued: 2, Short: 2, Machines: 1,
+				},
+			},
+		},
+		{
 			name:   "no ceiling bites",
 			limits: func(*MachineLimits) {},
+			alpha:  1, beta: 3,
 			create: 2, wanted: 2,
 			want: []PoolRenting{
 				{
@@ -475,11 +509,11 @@ func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T
 			tc.limits(&limits)
 			s := MachineSnapshot{
 				Now: machineNow, Pools: []*store.Pool{alpha, beta}, Providers: []*store.Provider{p},
-				Jobs:   append(queuedFor("alpha", 1), queuedFor("beta", 3)...),
+				Jobs:   append(queuedFor("alpha", tc.alpha), queuedFor("beta", tc.beta)...),
 				Limits: limits,
 				Plan: scheduler.Plan{Pools: []scheduler.PoolPlan{
-					demandPoolPlan(alpha, 0, 1, 1, "nowhere"),
-					demandPoolPlan(beta, 0, 3, 3, "nowhere"),
+					demandPoolPlan(alpha, 0, tc.alpha, tc.alpha, "nowhere"),
+					demandPoolPlan(beta, 0, tc.beta, tc.beta, "nowhere"),
 				}},
 			}
 
@@ -489,6 +523,13 @@ func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T
 			}
 			if got := planFor(t, plan, p.ID); got.Create != tc.create || got.Wanted != tc.wanted {
 				t.Errorf("provider create/wanted = %d/%d, want %d/%d", got.Create, got.Wanted, tc.create, tc.wanted)
+			}
+			if tc.create < tc.wanted {
+				for _, v := range plan.Pools {
+					if strings.Contains(v.Summary, "covers this pool") {
+						t.Errorf("pool %s says it is covered by a purchase that was held back: %q", v.PoolName, v.Summary)
+					}
+				}
 			}
 		})
 	}

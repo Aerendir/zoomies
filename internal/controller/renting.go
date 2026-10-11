@@ -188,30 +188,40 @@ func unservedVerdict(providers []*store.Provider, synth map[string]*store.Host, 
 }
 
 // chargedVerdict is a pool whose shortfall was charged to p, once every
-// ceiling has had its say. create and the ceiling's words are the provider's,
-// decided once for every pool charged to it, but each pool quotes its own
-// share: the machines it alone needs, and as many of those as create covers.
-// The provider's whole order would tell a pool one slot short that it needs
-// two machines.
-func chargedVerdict(p *store.Provider, d poolDemand, create int, because, fix, setting string) PoolRenting {
+// ceiling has had its say. create, want (what the pools charged to p need
+// between them) and the ceiling's words are the provider's, decided once for
+// all of those pools, and shared says there is more than one. Machines is the
+// pool's own share whatever the sentence: the machines it alone needs, and as
+// many of those as create covers.
+//
+// When the whole purchase is made, each pool quotes that share, because the
+// provider's whole order would tell a pool one slot short that it needs two
+// machines. When it is held back, no one of several pools can be said to be
+// covered: the machines bought serve whichever pool the scheduler places on
+// them first. So each is told about the pools together, and only a provider
+// charged with a single pool says what "it" needs.
+func chargedVerdict(p *store.Provider, d poolDemand, create, want int, shared bool, because, fix, setting string) PoolRenting {
 	need := ceilDiv(d.slots, providerSlots(p))
 	v := PoolRenting{
-		PoolID: d.poolID, PoolName: d.pool, ProviderID: p.ID, ProviderName: p.Name,
-		Queued: d.queued, Short: d.slots,
+		PoolID: d.poolID, PoolName: d.pool, State: RentingBuying,
+		ProviderID: p.ID, ProviderName: p.Name,
+		Queued: d.queued, Short: d.slots, Machines: min(create, need),
 	}
 	switch {
 	case create == 0:
 		v.State, v.Because = RentingCeiling, because
 		v.Summary = "Not renting: " + because + "."
 		v.Fix, v.Setting = sentence(fix), setting
-	case create < need:
-		v.State, v.Machines = RentingBuying, create
-		v.Summary = fmt.Sprintf("Renting %d of the %d machines it needs from %s, which covers this pool: %s. The rest are held back: %s.",
-			create, need, p.Name, poolReason(d), because)
+	case create >= want:
+		v.Summary = fmt.Sprintf("Renting %s from %s, which covers this pool: %s.", plural(need, "machine"), p.Name, poolReason(d))
+	case shared:
+		v.Summary = fmt.Sprintf("Renting %d of the %d machines this pool and others need from %s: %s. The rest are held back: %s.",
+			create, want, p.Name, poolReason(d), because)
 		v.Fix, v.Setting = sentence(fix), setting
 	default:
-		v.State, v.Machines = RentingBuying, need
-		v.Summary = fmt.Sprintf("Renting %s from %s, which covers this pool: %s.", plural(need, "machine"), p.Name, poolReason(d))
+		v.Summary = fmt.Sprintf("Renting %d of the %d machines it needs from %s, which covers this pool: %s. The rest are held back: %s.",
+			create, want, p.Name, poolReason(d), because)
+		v.Fix, v.Setting = sentence(fix), setting
 	}
 	return v
 }
