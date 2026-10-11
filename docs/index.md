@@ -46,7 +46,7 @@ curl -fsSL https://zoomies.sh/install.sh | sh
 ![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
 
 The Overview, on a fleet part-way through a morning; every number live, and
-nothing to press to keep it that way. [See all twelve pages, in both
+nothing to press to keep it that way. [See all fourteen pages, in both
 themes](ui.md).
 { .zoomies-shot-caption }
 
@@ -92,7 +92,7 @@ flowchart LR
 :material-monitor-dashboard:{ .icon }
 
 ### A live web UI
-Thirteen pages, one job each, and every one of them updates in place from the
+Fourteen pages, one job each, and every one of them updates in place from the
 controller's event stream; you never have to press refresh, though there is a
 button where you want to be sure. Light and dark, a command palette, and a log
 viewer built for a hundred thousand lines.
@@ -231,7 +231,7 @@ special: they are clients of the REST API, and so is everything else.
 
 | From | What it is for |
 | --- | --- |
-| [The web UI](ui.md) | Configuring and running the fleet, day to day. Thirteen pages, live. |
+| [The web UI](ui.md) | Configuring and running the fleet, day to day. Fourteen pages, live. |
 | [The command line](cli.md) | The same fleet from a terminal or a script: `zoomies status`, `zoomies pools create`, `zoomies runners drain`. |
 | [Docker Compose](compose.md) | Starting the controller from a file rather than the installer, on a host you own. |
 | [A PaaS](paas.md) or [a marketplace image](marketplace.md) | Starting a controller on a host you do not install on, and joining runner hosts to it. |

@@ -86,6 +86,13 @@ type MachinePlan struct {
 	// money was never the obstacle, so it is not a ProviderPlan's Blocked: an
 	// operator raising a ceiling would be sent to the wrong screen.
 	Unserved []UnservedPool `json:"unserved,omitempty"`
+	// Pools is a verdict for each pool the planner has something to say
+	// about: what this pass decided about renting for it and why, one a pool,
+	// in pool name order. A pool the scheduler did not report blocked has
+	// none, and neither has one the fleet's free slots cover. It is the
+	// planner's reading alone. Whether renting is switched on, or a provider
+	// may buy at the moment, is for the controller to lay over it.
+	Pools []PoolRenting `json:"pools,omitempty"`
 }
 
 // UnservedPool is one pool no provider will rent for, with the sentence that
@@ -123,7 +130,8 @@ type ProviderPlan struct {
 
 // poolDemand is one pool's unmet demand, charged to one provider.
 type poolDemand struct {
-	pool string
+	poolID string
+	pool   string
 	// slots is what is still missing after everything the fleet already has,
 	// or is already buying, has been subtracted from it.
 	slots  int
@@ -202,6 +210,7 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 
 	demand := map[string][]poolDemand{}
 	var unserved []UnservedPool
+	var verdicts []PoolRenting
 	for _, pool := range pools {
 		pp, ok := planned[pool.ID]
 		// Only a pool the scheduler says is blocked is demand a machine can
@@ -209,6 +218,21 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		// itself next pass, and buying a machine for it would pay for a queue
 		// that was already moving.
 		if !ok || (!pp.BlockedAtCapacity && !pp.BlockedNoEligibleHost) {
+			// A pool the scheduler could not place for a reason a machine
+			// does not answer is still given a verdict: from the queue it
+			// looks exactly like one nothing was rented for. Told to wait,
+			// it is promised a machine once its hosts are full, so a pool no
+			// provider could ever serve is told that instead. It is a verdict
+			// only: MachinePlan.Unserved is the pools whose work a machine
+			// would answer, and this pool's waits on its hosts.
+			if ok && pp.Blocked != "" && pp.Desired > pp.Current {
+				if providerFor(providers, synth, pool, owned, s.Now) == nil {
+					v, _ := unservedVerdict(providers, synth, pool, s.Now, pp.Desired-pp.Current, queued[pool.ID])
+					verdicts = append(verdicts, v)
+				} else {
+					verdicts = append(verdicts, waitingVerdict(pool, pp, queued[pool.ID]))
+				}
+			}
 			continue
 		}
 		short := pp.Desired - pp.Current
@@ -229,6 +253,14 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			free[h.ID] -= take
 			short -= take
 		}
+		// owed is what the free slots leave short, for machines on their way
+		// to cover. They are walked oldest first, so the first one credited is
+		// the oldest of those that do, and its provider is the one a verdict
+		// names. coming counts that provider's machines alone: a sentence that
+		// named one provider and counted another's would send an operator
+		// looking for a machine it is not building.
+		owed, coming := short, 0
+		var oldest *store.Machine
 		for _, m := range machines {
 			if short <= 0 {
 				break
@@ -240,21 +272,35 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			take := min(credit[m.ID], short)
 			credit[m.ID] -= take
 			short -= take
+			if oldest == nil {
+				oldest = m
+			}
+			if m.ProviderID == oldest.ProviderID {
+				coming++
+			}
 		}
 		if short <= 0 {
+			// A pool the free slots cover is told nothing; one that machines
+			// still being built cover is waiting on them, and is told so.
+			if oldest != nil {
+				verdicts = append(verdicts, onItsWayVerdict(pool, byProvider[oldest.ProviderID], coming, oldest.CreatedAt, owed, queued[pool.ID]))
+			}
 			continue
 		}
 		p := providerFor(providers, synth, pool, owned, s.Now)
 		if p == nil {
-			if u, ok := unservedBy(providers, synth, pool, s.Now); ok {
-				unserved = append(unserved, u)
+			v, refused := unservedVerdict(providers, synth, pool, s.Now, short, queued[pool.ID])
+			if refused != nil {
+				unserved = append(unserved, *refused)
 			}
+			verdicts = append(verdicts, v)
 			// No provider's machines would be allowed to run this pool, so its
 			// blockage is not one money can fix. BlockedNoEligibleHost is a
 			// hint that a machine might help, never an instruction to buy one.
 			continue
 		}
 		demand[p.ID] = append(demand[p.ID], poolDemand{
+			poolID:  pool.ID,
 			pool:    pool.Name,
 			slots:   short,
 			queued:  queued[pool.ID],
@@ -277,28 +323,30 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		want := ceilDiv(slots, providerSlots(p))
 		plan.Wanted = plan.Have + want
 
-		create, because, fix := want, "", ""
+		create, because, fix, setting := want, "", "", ""
 		// Each ceiling in turn, and the sentence kept is whichever one actually
 		// binds: an operator told to raise a limit that was not the one holding
-		// them back has been sent to the wrong screen.
-		bite := func(room int, what, how string) {
+		// them back has been sent to the wrong screen. The fleet's two are
+		// settings, kept with their key so a verdict can name the one to
+		// change; a provider's own are on its form, and have none.
+		bite := func(room int, what, how, key string) {
 			if room < create {
 				create = max(room, 0)
-				because, fix = what, how
+				because, fix, setting = what, how, key
 			}
 		}
 		what, how := providerMachineCeiling(p, owned[p.ID])
-		bite(p.MaxMachines-owned[p.ID], what, how)
+		bite(p.MaxMachines-owned[p.ID], what, how, "")
 		// The fleet's two counts are what it owns and is building plus what
 		// this pass has already granted to the providers before this one, so
 		// the second provider of a pass is told the truth about what is left
 		// rather than what there was before anything was bought.
 		what, how = fleetMachineCeiling(s.Limits, s.Limits.MaxMachines-fleetRoom)
-		bite(fleetRoom, what, how)
+		bite(fleetRoom, what, how, "provider.max_machines")
 		what, how = providerCreateCeiling(p, pending[p.ID])
-		bite(p.MaxCreatesInFlight-pending[p.ID], what, how)
+		bite(p.MaxCreatesInFlight-pending[p.ID], what, how, "")
 		what, how = fleetCreateCeiling(s.Limits, s.Limits.MaxCreatesInFlight-fleetCreateRoom)
-		bite(fleetCreateRoom, what, how)
+		bite(fleetCreateRoom, what, how, "provider.max_creates_in_flight")
 
 		plan.Create = create
 		fleetRoom -= create
@@ -310,8 +358,20 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			plan.Blocked = fmt.Sprintf("%s not bought: %s", plural(want-create, "machine"), because)
 			plan.BlockedFix = fix
 		}
+		for _, d := range ds {
+			verdicts = append(verdicts, chargedVerdict(p, d, create, want, len(ds) > 1, because, fix, setting))
+		}
 		out.Providers = append(out.Providers, plan)
 	}
+	// The verdicts were gathered in two walks, the pools' and then the
+	// providers', so they are put back in the pools' order.
+	slices.SortStableFunc(verdicts, func(a, b PoolRenting) int {
+		if c := strings.Compare(a.PoolName, b.PoolName); c != 0 {
+			return c
+		}
+		return strings.Compare(a.PoolID, b.PoolID)
+	})
+	out.Pools = verdicts
 	return out
 }
 
