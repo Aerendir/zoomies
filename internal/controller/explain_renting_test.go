@@ -54,7 +54,9 @@ func TestAPoolWaitingForAHostSaysARentalIsOffWhenItIs(t *testing.T) {
 	if !strings.HasPrefix(p.Fix, "Turn on Rent machines in Settings") {
 		t.Errorf("fix = %q, want it to start with the switch to turn on", p.Fix)
 	}
-	if !strings.HasSuffix(p.Fix, " "+h.planFor(t, pool.ID).BlockedFix) {
+	// The scheduler's fix begins a sentence of its own after the verdict's, so
+	// it is capitalised.
+	if !strings.HasSuffix(p.Fix, " "+capitalise(h.planFor(t, pool.ID).BlockedFix)) {
 		t.Errorf("fix = %q, want the scheduler's own fix kept at the end", p.Fix)
 	}
 }
