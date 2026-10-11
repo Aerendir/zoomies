@@ -656,6 +656,10 @@ func (c *Controller) rentingProblems(ctx context.Context, out *[]Problem) error 
 
 	// A pool that would rent nothing now (a machine already on its way) has
 	// nothing to add, and more than three would bury the sentence they sit in.
+	//
+	// An off verdict with no machines is a pool whose machine was already on
+	// its way: it still makes the problem a warning, because work is waiting on
+	// a switch, but there is no "would rent" sentence to add for it.
 	waiting := false
 	listed := 0
 	for _, v := range view.Pools {

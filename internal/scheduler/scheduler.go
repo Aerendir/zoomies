@@ -276,8 +276,9 @@ type PoolPlan struct {
 	// because the problems drawer shows the two differently.
 	BlockedFix string `json:"blocked_fix,omitempty"`
 	// BlockedAtCapacity distinguishes a fleet that is merely full (every host
-	// that could run this pool is out of slots, which the next finished job
-	// clears) from one where no host can ever run it. Both are worth saying;
+	// that could run this pool is out of slots, or is waiting on runners of
+	// ours to return what they hold, which the next finished job clears) from
+	// one where no host can ever run it. Both are worth saying;
 	// only the second is a fault.
 	//
 	// A host that could never run the pool (another backend, platform or
@@ -1798,8 +1799,8 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 	// onlyFull is the fleet whose every host that could run the pool is out of
 	// slots, as opposed to one that is also short of memory or CPU. Both are
 	// "at capacity" to a caller, but the fix text below tells them apart, so it
-	// asks this rather than atCapacity. It is asked of the same hosts, and for
-	// the same reason.
+	// asks this rather than atCapacity. Like atCapacity, it ignores any host
+	// that could never run the pool.
 	onlyFull := full+throttled == len(hs.hosts) || (candidates > 0 && slotsOut == candidates)
 	b := blockage{
 		what: fmt.Sprintf("no host can take a new %s runner (%s)",
@@ -1820,10 +1821,11 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 		// answer than a rented machine; one that is held or warming lifts on
 		// its own.
 		//
-		// The first half is every fleet that was ever reported full, kept as
-		// it was so that the second can only add to it: a fleet whose hosts
-		// are all throttled and also too small has no host that could run the
-		// pool, and has always been called full.
+		// The first half is the test the scheduler has always used, kept
+		// unchanged so that the second half can only add fleets to the full
+		// ones and never remove one. It still matters for a fleet whose hosts
+		// are all throttled and also too small: no host could run the pool,
+		// yet it has always been called full.
 		//
 		// A throttled host is full at the slots it has left, and to a
 		// provisioner that is the same fact as full: more hosts is the one

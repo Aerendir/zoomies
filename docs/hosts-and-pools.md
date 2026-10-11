@@ -1544,7 +1544,7 @@ Read the counts, because they name the fix:
 
 | What it says | What to do |
 | --- | --- |
-| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. |
+| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. Nor is one the pool's size excludes through its runner profile, or one already at its disk reserve, because a finishing job gives neither back. |
 | `cordoned` | Uncordon the host, if the maintenance is over. |
 | `unhealthy` | The agent is not heartbeating. Check that it is running on that machine and can reach this controller. |
 | `without the docker backend` | Fix the socket on that host, or point the pool at a backend your hosts already offer. When every other host is out for that reason, the sentence carries the agent's own words about the socket, and names the backends it could move to. |

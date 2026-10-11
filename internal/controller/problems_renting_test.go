@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
 )
@@ -151,5 +152,83 @@ func TestTheRentingOffProblemIsTheSameOnEveryPass(t *testing.T) {
 	second, ok := h.rentingOffProblem(t)
 	if !ok || !reflect.DeepEqual(first, second) {
 		t.Fatalf("the problem changed between identical passes:\n%+v\n%+v", first, second)
+	}
+}
+
+// The detail is built from three independent parts (the providers, the pools
+// that would rent, the machines still owned), and each has a corner the
+// single-case tests above do not reach: the wording for several providers, the
+// cap of three pools so that a large fleet's sentence is not buried, and the
+// plural of the machines still paid for.
+func TestTheRentingOffDetailCountsProvidersPoolsAndMachines(t *testing.T) {
+	queueFor := func(h *harness, label string, n int) {
+		for i := 0; i < n; i++ {
+			h.deliverJob(jobEvent{Action: "queued", JobID: time.Now().UnixNano(),
+				Labels: []string{"self-hosted", label}})
+		}
+	}
+	tests := []struct {
+		name   string
+		setup  func(t *testing.T, h *harness)
+		want   []string
+		absent []string
+	}{
+		{
+			name: "two providers are counted rather than named",
+			setup: func(t *testing.T, h *harness) {
+				h.c.UpdateConfig(func(c *config.Config) { c.Provider.MaxMachines = 10 })
+				h.providerRow(t, "lab")
+				h.providerRow(t, "attic")
+			},
+			want: []string{"2 providers are configured, but this controller is not allowed to rent machines, "},
+		},
+		{
+			name: "at most three pools are listed, in name order",
+			setup: func(t *testing.T, h *harness) {
+				h.c.UpdateConfig(func(c *config.Config) { c.Provider.MaxMachines = 10 })
+				inst := h.installation()
+				h.providerRow(t, "lab")
+				for _, name := range []string{"d-pool", "b-pool", "a-pool", "c-pool"} {
+					h.pool(inst, name, "self-hosted", name)
+					queueFor(h, name, 1)
+				}
+			},
+			want: []string{
+				" Pool zoomies-a-pool would rent 1 machine now. Pool zoomies-b-pool would rent 1 machine now. Pool zoomies-c-pool would rent 1 machine now.",
+			},
+			absent: []string{"d-pool"},
+		},
+		{
+			name: "several machines still owned are counted in the plural",
+			setup: func(t *testing.T, h *harness) {
+				h.machineFleet(t)
+				queueFor(h, "demo", 2)
+				h.machinePass(t)
+				h.c.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = false })
+			},
+			want: []string{"2 machines are still rented, and nothing is draining, deleting or checking them while renting is off."},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			tt.setup(t, h)
+			h.machinePass(t)
+
+			p, ok := h.rentingOffProblem(t)
+			if !ok {
+				t.Fatal("no provider.renting_off was raised")
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(p.Detail, w) {
+					t.Errorf("detail = %q, want it to contain %q", p.Detail, w)
+				}
+			}
+			for _, a := range tt.absent {
+				if strings.Contains(p.Detail, a) {
+					t.Errorf("detail = %q, want it not to mention %q", p.Detail, a)
+				}
+			}
+		})
 	}
 }

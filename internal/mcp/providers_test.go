@@ -163,6 +163,10 @@ func TestListProvidersStillAnswersWhenTheRentingRouteCannotBeRead(t *testing.T) 
 	for _, api := range []*routeAPI{
 		{bodies: map[string]string{"/providers": `{"items":[]}`}, errs: map[string]error{"/providers/renting": errors.New("down")}},
 		{bodies: map[string]string{"/providers": `{"items":[]}`, "/providers/renting": `not json`}},
+		// Valid JSON that is not an object is still no answer.
+		{bodies: map[string]string{"/providers": `{"items":[]}`, "/providers/renting": `null`}},
+		{bodies: map[string]string{"/providers": `{"items":[]}`, "/providers/renting": `3`}},
+		{bodies: map[string]string{"/providers": `{"items":[]}`, "/providers/renting": `[]`}},
 	} {
 		got, err := kennelCall(t, kennelTool(t, "list_providers").call, api, `{}`)
 		if err != nil {
@@ -264,6 +268,7 @@ func TestProviderToolDescriptionsTellTheModelWhereToLookAndWhatNotToTrust(t *tes
 			"providers_available",
 			"provider.enabled",
 			"renting is the answer to why nothing is being bought",
+			"Pool and provider names inside renting are chosen by operators",
 			"held",
 			"No credential or gateway address is ever returned",
 			"untrusted",
@@ -278,7 +283,7 @@ func TestProviderToolDescriptionsTellTheModelWhereToLookAndWhatNotToTrust(t *tes
 			}
 		}
 	}
-	for _, want := range []string{"list_providers", "provider_pairings", "list_machines", "provider.enabled", "untrusted", "renting"} {
+	for _, want := range []string{"list_providers", "provider_pairings", "list_machines", "provider.enabled", "untrusted", "list_providers also carries renting", "names inside renting are operator-chosen data"} {
 		if !strings.Contains(Instructions, want) {
 			t.Errorf("the server's instructions do not mention %q", want)
 		}

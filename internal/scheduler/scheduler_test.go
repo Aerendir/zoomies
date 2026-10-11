@@ -2086,6 +2086,7 @@ func TestAPoolWithNoHostsAtAllStillSaysItsJobsHaveNowhereToGo(t *testing.T) {
 // The fleet being busy and the fleet being wrong are different answers, and an
 // operator told to wait for the second one waits for ever.
 func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testing.T) {
+	warmingPool := testPool("linux-x64", "linux")
 	for _, tc := range []struct {
 		name  string
 		hosts []*store.Host
@@ -2093,6 +2094,9 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 		// pool that states a size and a runner already holding part of a host.
 		pool    *store.Pool
 		runners []*store.Runner
+		// jobs defaults to a single queued job; a row whose runner already
+		// covers that job needs a second to leave the pool short.
+		jobs []*store.Job
 		// neverRunnable and couldRun are host ids, and say which hosts the row
 		// is about. The answer depends on which of them the pool could ever run
 		// on, so each row states it and the loop checks it: a fixture that
@@ -2192,11 +2196,11 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 		},
 		{
 			// A host at its disk reserve refuses every pool, however little the
-			// pool asks for, and a finishing job gives no disk back (a runner
-			// leaves its caches behind on purpose). Waiting for a job is not what
-			// would clear it, so it is out of the question like a host that is
-			// too small, and the busy host is the whole of the fleet that
-			// could run the pool.
+			// pool asks for. HostFits measures the free disk as it is now, so
+			// this host is one that could never run the pool, like one that is
+			// too small, and the busy host is the whole of the fleet that could
+			// run it. (A finishing job would not give the disk back either: a
+			// runner leaves its caches behind on purpose.)
 			name: "one host busy and one with no disk left",
 			hosts: []*store.Host{
 				testHost("host_a", 1, 1),
@@ -2204,6 +2208,24 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 			},
 			neverRunnable: []string{"host_b"},
 			atCapacity:    true,
+		},
+		{
+			// A host under CPU pressure that is already starting a runner takes
+			// one runner at a time, and the one it is starting settles in a
+			// moment. It is not out of slots and not waiting on a job, so it is
+			// no reason to call the fleet full beside the busy host, and it
+			// is a host that could run the pool, so the pool is not unservable
+			// either.
+			name: "one host busy and one starting a runner under CPU pressure",
+			hosts: []*store.Host{
+				testHost("host_a", 1, 1),
+				withUsage(sized("host_b", 8, 8, 16*1024, 200*1024), 95, 12000),
+			},
+			pool:     warmingPool,
+			runners:  []*store.Runner{onHost(testRunner("r1", warmingPool, store.RunnerProvisioning, 0), "host_b")},
+			jobs:     []*store.Job{queued("j1", time.Minute, "linux"), queued("j2", time.Minute, "linux")},
+			couldRun: []string{"host_a", "host_b"},
+			// Neither: the warming host lifts on its own.
 		},
 		{
 			// A pressure hold is the most transient blockage there is: a job
@@ -2381,8 +2403,11 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 			assertCouldRun(tc.neverRunnable, false)
 			assertCouldRun(tc.couldRun, true)
 
-			pp := only(t, Decide(snap([]*store.Pool{pool}, tc.runners,
-				[]*store.Job{queued("j1", time.Minute, "linux")}, tc.hosts)))
+			jobs := tc.jobs
+			if jobs == nil {
+				jobs = []*store.Job{queued("j1", time.Minute, "linux")}
+			}
+			pp := only(t, Decide(snap([]*store.Pool{pool}, tc.runners, jobs, tc.hosts)))
 
 			if pp.BlockedAtCapacity != tc.atCapacity {
 				t.Errorf("BlockedAtCapacity = %v, want %v (%s)", pp.BlockedAtCapacity, tc.atCapacity, pp.Blocked)
