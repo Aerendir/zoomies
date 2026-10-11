@@ -748,16 +748,29 @@ folder's ceiling fails a step with `no space left on device`, which GitHub
 records as an ordinary failure; the runner's own output never carries a step's
 words, and a compiler deletes its work directory as the link fails, so by the
 time anybody looks the folder is empty again. The agent therefore measures each
-in-memory folder at every resource sample, through the container's root in
-`/proc`, and the fullest each got is kept on the job (`scratch_peaks` on its
-record). A failed job whose folder was at least 90% full at a sample is
-explained as `scratch-full` by `zoomies why`, the job's drawer and `get_job`,
-with the folder, its ceiling and how full it got as evidence, and
-`jobs.scratch_full` names the pool in the problems list, because the folder's
-size is the pool's setting. The fill itself falls between samples, which is
-why the explanation is sure to medium rather than high. A containerised agent
-that does not share the host's process namespace cannot see a container's
-root, and reports the folders unmeasured rather than empty.
+in-memory folder at every resource sample, by running `df` in the runner's
+container through the container engine's API, and the fullest each got is kept
+on the job (`scratch_peaks` on its record). A failed job whose folder was at
+least 90% full at a sample is explained as `scratch-full` by `zoomies why`, the
+job's drawer and `get_job`, with the folder, its ceiling and how full it got as
+evidence, and `jobs.scratch_full` names the pool in the problems list, because
+the folder's size is the pool's setting. The fill itself falls between samples,
+which is why the explanation is sure to medium rather than high.
+
+Measuring asks nothing of the host beyond the container socket the agent already
+has, so it does not depend on the agent's privileges or on whether the agent
+itself runs in a container. It costs one short command per runner per sample, always
+`df -P -k` with the runner's in-memory folders as its arguments and no shell,
+run as the container's own user; a runner whose pool keeps nothing in memory is
+never asked. Anything that audits `docker exec` will see it, and what `df`
+prints is read as untrusted, bounded in size and time, and used only to explain
+that runner's own job. A folder the agent cannot measure is reported unmeasured
+and never as empty, and a host where none can be measured says so in
+`host.scratch_unmeasured`, with the reason: the engine refuses to run a command
+in a container (a socket proxy or authorisation plugin in front of it, which
+needs to allow exec), the runner image has no `df`, or `df` printed something
+unreadable. Without that entry, a host that cannot measure would look exactly
+like a host whose folders never fill.
 
 The pool editor shows the result while you are choosing: under the folders in the
 Speed section, for every host the pool can run on, what a runner there has and what

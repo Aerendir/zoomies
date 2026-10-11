@@ -1755,19 +1755,25 @@ func (b *DockerBackend) Stats(ctx context.Context, h Handle) (Stats, error) {
 		runner <- sample{Stats(s), err}
 	}()
 	insp, err := b.api.ContainerInspect(ctx, string(h))
-	// The folders the pool keeps in memory, measured through the container's
-	// root while it is still there to measure: see ScratchUse for why a
-	// sample is the only moment that can.
-	scratch := scratchOf(insp, err)
+	// The folders the pool keeps in memory are measured beside the sample, in
+	// the container and while it is still there to measure: see ScratchUse for
+	// why a sample is the only moment that can. Each container's measurement is
+	// a goroutine with a budget of its own, and none of them can fail the
+	// sample.
+	measured := []<-chan scratchReading{probeScratch(ctx, b.api, string(h), scratchPaths(insp, err))}
 	if err != nil || insp.Config == nil || insp.Config.Labels[LabelDockerMode] != string(store.DockerDinD) {
 		r := <-runner
-		r.stats.Scratch = scratch
+		if r.err == nil {
+			r.stats.Scratch, r.stats.ScratchUnmeasured = collectScratch(measured)
+		}
 		return r.stats, r.err
 	}
 	name := insp.Config.Labels[LabelName]
 	if name == "" {
 		r := <-runner
-		r.stats.Scratch = scratch
+		if r.err == nil {
+			r.stats.Scratch, r.stats.ScratchUnmeasured = collectScratch(measured)
+		}
 		return r.stats, r.err
 	}
 	sidecars, err := b.api.ContainerList(ctx, map[string][]string{
@@ -1782,6 +1788,12 @@ func (b *DockerBackend) Stats(ctx context.Context, h Handle) (Stats, error) {
 	}
 	var halves []half
 	for _, sidecar := range sidecars {
+		// The image store is the sidecar's folder, measured in the sidecar. One
+		// inspect per sample, for a pair only, and it is asked before the stats
+		// call so the measurement runs in that call's shadow.
+		if sinsp, err := b.api.ContainerInspect(ctx, sidecar.ID); err == nil {
+			measured = append(measured, probeScratch(ctx, b.api, sidecar.ID, scratchPaths(sinsp, nil)))
+		}
 		sampled, err := b.api.ContainerStats(ctx, sidecar.ID)
 		if errors.Is(err, ErrNotFound) {
 			continue
@@ -1790,18 +1802,13 @@ func (b *DockerBackend) Stats(ctx context.Context, h Handle) (Stats, error) {
 			return Stats{}, err
 		}
 		halves = append(halves, half{Stats(sampled), sidecar.Labels})
-		// The image store is the sidecar's folder, measured through the
-		// sidecar's root. One inspect per sample, for a pair only.
-		if sinsp, err := b.api.ContainerInspect(ctx, sidecar.ID); err == nil {
-			scratch = append(scratch, scratchOf(sinsp, nil)...)
-		}
 	}
 	r := <-runner
 	if r.err != nil {
 		return Stats{}, r.err
 	}
 	out := r.stats
-	out.Scratch = scratch
+	out.Scratch, out.ScratchUnmeasured = collectScratch(measured)
 	busiest := halfPercent(out.CPUPercent, insp.Config.Labels)
 	runnerHalf := halfUse(out, insp.Config.Labels)
 	var daemonHalf *HalfUse

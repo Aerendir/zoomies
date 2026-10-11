@@ -934,6 +934,136 @@ func (c *APIClient) ContainerMemory(ctx context.Context, id string) (StatsSample
 	return raw.sample(), nil
 }
 
+// execOutputLimit is the most output of one command the client keeps. The
+// commands it runs print a table of a few lines; the limit is for the one that
+// does not stop, so that asking a container a question can never fill the
+// agent's memory.
+const execOutputLimit = 64 << 10
+
+// ExecResult is what a command run inside a container printed, and how it ended.
+type ExecResult struct {
+	// Stdout and Stderr are what the command wrote, in no more than
+	// execOutputLimit bytes between them. A daemon that could not start the
+	// command says why in the output, since by then it has taken the connection
+	// over and cannot send a status: Docker as a message on the stdout stream,
+	// others as plain text outside any frame, which is kept in Stderr. Either
+	// way the exit code, not the text, is what says the command never ran.
+	Stdout, Stderr string
+	// ExitCode is the command's, or -1 when the daemon did not say. The shell's
+	// own 126 and 127 mean it could not be run, or was not there.
+	ExitCode int
+}
+
+type execCreateRequest struct {
+	AttachStdin  bool     `json:"AttachStdin"`
+	AttachStdout bool     `json:"AttachStdout"`
+	AttachStderr bool     `json:"AttachStderr"`
+	Tty          bool     `json:"Tty"`
+	Cmd          []string `json:"Cmd"`
+	Env          []string `json:"Env,omitempty"`
+}
+
+type execStartRequest struct {
+	Detach bool `json:"Detach"`
+	Tty    bool `json:"Tty"`
+}
+
+// ContainerExec runs one command to its end inside a running container and
+// returns what it printed.
+//
+// It exists to ask a container a question the host cannot answer from outside,
+// and it asks it as the container's own user with no input and no terminal. The
+// command is an argument list, never a shell line, so nothing in it is
+// interpreted. A command the daemon would not run is the daemon's own error,
+// with its status; a command that ran and failed is a result with its exit code.
+//
+// The caller's context is the budget: a daemon that accepts the request and
+// never answers is waited for only as long as the context lasts.
+func (c *APIClient) ContainerExec(ctx context.Context, id string, cmd, env []string) (ExecResult, error) {
+	var created struct {
+		ID string `json:"Id"`
+	}
+	req := execCreateRequest{AttachStdout: true, AttachStderr: true, Cmd: cmd, Env: env}
+	if err := c.do(ctx, http.MethodPost, "/containers/"+id+"/exec", nil, req, &created); err != nil {
+		return ExecResult{}, err
+	}
+	if created.ID == "" {
+		return ExecResult{}, errors.New("docker api: the engine created an exec instance without an ID")
+	}
+
+	// Started without asking to upgrade the connection, so the daemon answers
+	// with the output as the body and closes the connection when the command's
+	// output ends.
+	resp, err := c.doRaw(ctx, http.MethodPost, "/exec/"+created.ID+"/start", nil, execStartRequest{}, nil, true)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, execOutputLimit))
+	_ = resp.Body.Close()
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("docker api: reading the output of a command run in %s: %w", id, err)
+	}
+	out := splitExecOutput(raw)
+	out.ExitCode = c.execExitCode(ctx, created.ID)
+	return out, nil
+}
+
+// execExitCode is how a command ended. The stream closes when its output does,
+// which can be a moment before the daemon has recorded the exit, and read then
+// the code is the zero of a command still running: a df that failed would be
+// taken for one that worked. So a command still shown as running is asked
+// about again, briefly.
+func (c *APIClient) execExitCode(ctx context.Context, execID string) int {
+	for range 10 {
+		var st struct {
+			Running  bool `json:"Running"`
+			ExitCode int  `json:"ExitCode"`
+		}
+		if err := c.do(ctx, http.MethodGet, "/exec/"+execID+"/json", nil, nil, &st); err != nil {
+			return -1
+		}
+		if !st.Running {
+			return st.ExitCode
+		}
+		select {
+		case <-ctx.Done():
+			return -1
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	return -1
+}
+
+// splitExecOutput separates a command's two streams from the daemon's framing:
+// a byte for the stream, three of padding and a big-endian length, then that
+// many bytes. Anything that is not a frame is the daemon's own sentence about
+// a command it could not start, and is kept as error text rather than dropped.
+// A stream cut mid-frame by the size limit keeps what arrived.
+func splitExecOutput(raw []byte) ExecResult {
+	var stdout, stderr []byte
+	for len(raw) > 0 {
+		if len(raw) < logFrameHeader || raw[0] > 2 || raw[1]|raw[2]|raw[3] != 0 {
+			stderr = append(stderr, raw...)
+			break
+		}
+		kind := raw[0]
+		n := uint64(binary.BigEndian.Uint32(raw[4:logFrameHeader]))
+		raw = raw[logFrameHeader:]
+		payload := raw
+		if n < uint64(len(payload)) {
+			payload = payload[:n]
+		}
+		raw = raw[len(payload):]
+		switch kind {
+		case 1:
+			stdout = append(stdout, payload...)
+		case 2:
+			stderr = append(stderr, payload...)
+		}
+	}
+	return ExecResult{Stdout: string(stdout), Stderr: string(stderr)}
+}
+
 // NetworkEnsure creates a bridge network if it does not already exist.
 func (c *APIClient) NetworkEnsure(ctx context.Context, name string) error {
 	if name == "" {

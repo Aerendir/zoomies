@@ -1358,6 +1358,20 @@
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-hosts-and-installations"
     },
     {
+      "id": "host.scratch_unmeasured",
+      "kind": "problem",
+      "title": "host.scratch_unmeasured",
+      "category": "reliability",
+      "severity": "info",
+      "detection": "runtime",
+      "detects": "A host's agent cannot tell how full its runners' in-memory folders get, so full-folder detection is off there: no `jobs.scratch_full` appears for a job that fills one, and the job's explanation cannot say a folder was why. The agent measures a folder by running `df` in the runner's container through the container engine's API, which needs nothing the agent does not already have, and it says why it could not once the host's runners have been sampled for two minutes and none of them has had a folder measured. The reason decides the change. `exec_refused`: the engine, or a socket proxy or authorisation plugin in front of it, refuses to run a command in a container; allow exec. `no_df`: the runner image has no `df`; use one with coreutils or busybox, as the stock image has. `unreadable`: `df` printed something that is not the table the agent reads; run `docker exec \u003crunner container\u003e df -P -k /tmp` on the host to see what. `timed_out`: the engine did not answer in time because it is overloaded or stalled, and the host's other entries say how. Raised only for a host with runners that keep a folder in memory, and not for a cordoned or incompatible host.",
+      "fix": "A host's agent cannot tell how full its runners' in-memory folders get, so full-folder detection is off there: no `jobs.scratch_full` appears for a job that fills one, and the job's explanation cannot say a folder was why. The agent measures a folder by running `df` in the runner's container through the container engine's API, which needs nothing the agent does not already have, and it says why it could not once the host's runners have been sampled for two minutes and none of them has had a folder measured. The reason decides the change. `exec_refused`: the engine, or a socket proxy or authorisation plugin in front of it, refuses to run a command in a container; allow exec. `no_df`: the runner image has no `df`; use one with coreutils or busybox, as the stock image has. `unreadable`: `df` printed something that is not the table the agent reads; run `docker exec \u003crunner container\u003e df -P -k /tmp` on the host to see what. `timed_out`: the engine did not answer in time because it is overloaded or stalled, and the host's other entries say how. Raised only for a host with runners that keep a folder in memory, and not for a cordoned or incompatible host.",
+      "verify": "The next sample after the change measures a folder, and the entry leaves the list.",
+      "status_sentence": "A machine cannot tell how full its in-memory folders get, so a job that fills one fails without saying why.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-hosts-and-installations",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-hosts-and-installations"
+    },
+    {
       "id": "host.shared_folder_unmounted",
       "kind": "problem",
       "title": "host.shared_folder_unmounted",
