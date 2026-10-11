@@ -17,9 +17,9 @@ func TestTmpfsSizesFitAutomaticMountsToTheMemoryLimit(t *testing.T) {
 		{"no limit takes the defaults", TmpfsConfig{Work: TmpfsMount{Enabled: true}, Tmp: TmpfsMount{Enabled: true}}, 0, DefaultTmpfsWorkMB, DefaultTmpfsTmpMB},
 		{"a roomy limit takes the defaults", TmpfsConfig{Work: TmpfsMount{Enabled: true}}, 32768, DefaultTmpfsWorkMB, 0},
 		{"a small limit shrinks the work folder to half of it", TmpfsConfig{Work: TmpfsMount{Enabled: true}}, 4096, 2048, 0},
-		{"two automatic mounts share half the limit in proportion", TmpfsConfig{Work: TmpfsMount{Enabled: true}, Tmp: TmpfsMount{Enabled: true}}, 5120, 2048, 512},
+		{"two automatic mounts share half the limit in proportion", TmpfsConfig{Work: TmpfsMount{Enabled: true}, Tmp: TmpfsMount{Enabled: true}}, 5120, 1280, 1280},
 		{"a typed size is never shrunk", TmpfsConfig{Work: TmpfsMount{Enabled: true, SizeMB: 3000}}, 4096, 3000, 0},
-		{"automatic mounts fit what a typed one leaves", TmpfsConfig{Work: TmpfsMount{Enabled: true, SizeMB: 1000}, Tmp: TmpfsMount{Enabled: true}}, 4096, 1000, 1024},
+		{"automatic mounts fit what a typed one leaves", TmpfsConfig{Work: TmpfsMount{Enabled: true, SizeMB: 1000}, Tmp: TmpfsMount{Enabled: true}}, 4096, 1000, 1048},
 		{"an absurdly small limit still gets a usable mount", TmpfsConfig{Work: TmpfsMount{Enabled: true}}, 100, MinTmpfsMB, 0},
 	}
 	for _, tc := range cases {
@@ -40,7 +40,9 @@ func TestTmpfsProposesRaisingTheLimitByWhatItMayFill(t *testing.T) {
 	if got, want := cfg.ReserveMB(), 6000+DefaultTmpfsTmpMB; got != want {
 		t.Fatalf("ReserveMB = %d, want %d", got, want)
 	}
-	if got, want := cfg.RecommendedMemoryMB(8192), int64(8192+6000)+DefaultTmpfsTmpMB; got != want {
+	// The limit plus the folders, and never less than twice the folders: with
+	// /tmp asking for as much as the work folder, twice is the larger here.
+	if got, want := cfg.RecommendedMemoryMB(8192), max(int64(8192)+6000+DefaultTmpfsTmpMB, 2*(6000+DefaultTmpfsTmpMB)); got != want {
 		t.Fatalf("RecommendedMemoryMB = %d, want %d", got, want)
 	}
 	if got := cfg.RecommendedMemoryMB(0); got != 0 {
@@ -289,11 +291,11 @@ func TestAnAutomaticFolderGoesToDiskWhereTheRunnerIsTooSmallForIt(t *testing.T) 
 		wantWorkAtMin bool
 	}{
 		{"a 2 GB runner has no room for either", auto, 2048, HostTmpfs{}, 0, 0, false},
-		{"a roomy runner takes both at their defaults", auto, 32768, HostTmpfs{}, 4096, 1024, false},
+		{"a roomy runner takes both at their defaults", auto, 32768, HostTmpfs{}, 4096, 4096, false},
 		{"/tmp gives way first and the work folder takes the room", auto, 5120, HostTmpfs{}, 2560, 0, true},
 		{"a host's bigger standard is asked for, and fitted", TmpfsConfig{Work: TmpfsMount{Enabled: true, Auto: true}}, 65536, HostTmpfs{WorkMB: 16384}, 16384, 0, false},
 		{"a host ceiling under the floor puts the folder on disk", TmpfsConfig{Work: TmpfsMount{Enabled: true, Auto: true}}, 65536, HostTmpfs{MaxMB: 1024}, 0, 0, false},
-		{"a folder that is not automatic is never dropped", TmpfsConfig{Work: TmpfsMount{Enabled: true}, Tmp: TmpfsMount{Enabled: true}}, 2048, HostTmpfs{}, 819, 204, false},
+		{"a folder that is not automatic is never dropped", TmpfsConfig{Work: TmpfsMount{Enabled: true}, Tmp: TmpfsMount{Enabled: true}}, 2048, HostTmpfs{}, 512, 512, false},
 		{"a typed size lowers the floor to itself", TmpfsConfig{Work: TmpfsMount{Enabled: true, Auto: true, SizeMB: 1024}}, 4096, HostTmpfs{}, 1024, 0, false},
 	} {
 		work, tmp := tc.cfg.PlaceRunner(tc.capMB, tc.host)
