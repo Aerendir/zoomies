@@ -17,8 +17,17 @@ import "fmt"
 const (
 	// DefaultTmpfsWorkMB and DefaultTmpfsTmpMB are what an enabled mount with no
 	// size of its own is given when the runner has no memory limit to fit them to.
+	//
+	// /tmp is given as much as the work folder because it holds the same kind of
+	// thing: a compiler keeps a whole cold build there until the command exits.
+	// Go compiles every package into its work directory under /tmp and leaves
+	// them there, with the linker's output on top, until the build is done; a
+	// cold cross-compile of this repository is 962 MB of that. It used to ask for
+	// 1 GB, and the darwin/amd64 link of main died on the fleet in it with
+	// "mapping output file failed: no space left on device", on the fleet's
+	// biggest runners, while the small ones, whose /tmp was on disk, passed.
 	DefaultTmpfsWorkMB int64 = 4096
-	DefaultTmpfsTmpMB  int64 = 1024
+	DefaultTmpfsTmpMB  int64 = 4096
 	// DefaultTmpfsDaemonMB is the same for the docker-in-docker sidecar's image
 	// store. It is larger because what lives there -- every image a job pulls and
 	// every layer it builds -- is larger than a checkout, and a pull that does not
@@ -30,9 +39,11 @@ const (
 	// that does not fit fails with "no space left on device", which names neither
 	// the mount nor the setting, and a folder that small saves little disk traffic
 	// anyway. A size an operator typed lowers the floor to itself, because they
-	// asked for exactly that much.
+	// asked for exactly that much. The floor for /tmp clears a cold Go build of
+	// this repository twice (DefaultTmpfsTmpMB says why that is the measure); a
+	// 1 GB /tmp did not clear it once.
 	AutoMinWorkMB   int64 = 2048
-	AutoMinTmpMB    int64 = 1024
+	AutoMinTmpMB    int64 = 2048
 	AutoMinDaemonMB int64 = 4096
 	// MinTmpfsMB is the least a tmpfs may be. Below it a checkout fails in a way
 	// that reads as a broken runner rather than a small mount.
@@ -331,16 +342,20 @@ func (c TmpfsConfig) PlaceRunner(capMB int64, h HostTmpfs) (workMB, tmpMB int64)
 		workMB, tmpMB = cc.sizes(capMB, defWork, defTmp)
 		workMB, tmpMB = Cap(workMB, h.MaxMB), Cap(tmpMB, h.MaxMB)
 		// How far each automatic folder is from being worth having, as a part of
-		// its floor; the worst below one goes.
+		// its floor; the worst below one goes. /tmp is judged first so that a tie
+		// goes against it: the two are asked for the same size by default and so
+		// come out of the fit the same distance below their floors, and the work
+		// folder is the one worth having. A build whose /tmp is on disk is slower;
+		// one whose checkout is on disk gets nothing from the setting.
 		worst, ratio := "", 1.0
-		if cc.Work.Enabled && cc.Work.Auto {
-			if r := float64(workMB) / float64(floorFor(cc.Work, AutoMinWorkMB)); r < ratio {
-				worst, ratio = "work", r
-			}
-		}
 		if cc.Tmp.Enabled && cc.Tmp.Auto {
 			if r := float64(tmpMB) / float64(floorFor(cc.Tmp, AutoMinTmpMB)); r < ratio {
 				worst, ratio = "tmp", r
+			}
+		}
+		if cc.Work.Enabled && cc.Work.Auto {
+			if r := float64(workMB) / float64(floorFor(cc.Work, AutoMinWorkMB)); r < ratio {
+				worst, ratio = "work", r
 			}
 		}
 		switch worst {

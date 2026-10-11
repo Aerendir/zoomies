@@ -225,11 +225,11 @@ Flags:
   --scale-up-delay           override scheduler.scale_up_delay for this pool (empty follows the fleet; 0 scales the moment a job is queued)
   --size-from-host           take each runner's size from the host it lands on, as that host's runner sizes say (see zoomies hosts edit); a pool does this or states a size, so it cannot be combined with --cpus or --memory-mb
   --timeout=30s              how long to wait for one request
-  --tmpfs-auto               let each runner decide where the in-memory folders live: in memory where the runner has room for one to be useful (2 GB for _work, 1 GB for /tmp, 4 GB for the image store), on disk where it has not; --tmpfs-auto=false makes them always in memory
+  --tmpfs-auto               let each runner decide where the in-memory folders live: in memory where the runner has room for one to be useful (2 GB for _work, 2 GB for /tmp, 4 GB for the image store), on disk where it has not; --tmpfs-auto=false makes them always in memory
   --tmpfs-docker             keep the Docker-in-Docker sidecar's image store in memory; needs --docker-mode dind; an image bigger than the store does not pull, and it is charged to the sidecar's memory limit
   --tmpfs-docker-size=0      the image store's ceiling in MiB (at least 64); 0 sizes it from the sidecar's memory limit, at most 8192 and half of it
   --tmpfs-tmp                keep /tmp in memory as well; off unless asked for, because some jobs leave gigabytes there
-  --tmpfs-tmp-size=0         the /tmp folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 1024
+  --tmpfs-tmp-size=0         the /tmp folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 4096
   --tmpfs-work               keep the runner's _work folder in memory instead of on the host's disk; the folder is charged to the runner's memory limit; needs docker or podman
   --tmpfs-work-size=0        the _work folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 4096 and half the limit
   --token                    an API token (or ZOOMIES_TOKEN)
@@ -307,11 +307,11 @@ Flags:
   --scale-up-delay           override scheduler.scale_up_delay for this pool (empty follows the fleet; 0 scales the moment a job is queued)
   --size-from-host           take each runner's size from the host it lands on, as that host's runner sizes say (see zoomies hosts edit); a pool does this or states a size, so it cannot be combined with --cpus or --memory-mb
   --timeout=30s              how long to wait for one request
-  --tmpfs-auto               let each runner decide where the in-memory folders live: in memory where the runner has room for one to be useful (2 GB for _work, 1 GB for /tmp, 4 GB for the image store), on disk where it has not; --tmpfs-auto=false makes them always in memory
+  --tmpfs-auto               let each runner decide where the in-memory folders live: in memory where the runner has room for one to be useful (2 GB for _work, 2 GB for /tmp, 4 GB for the image store), on disk where it has not; --tmpfs-auto=false makes them always in memory
   --tmpfs-docker             keep the Docker-in-Docker sidecar's image store in memory; needs --docker-mode dind; an image bigger than the store does not pull, and it is charged to the sidecar's memory limit
   --tmpfs-docker-size=0      the image store's ceiling in MiB (at least 64); 0 sizes it from the sidecar's memory limit, at most 8192 and half of it
   --tmpfs-tmp                keep /tmp in memory as well; off unless asked for, because some jobs leave gigabytes there
-  --tmpfs-tmp-size=0         the /tmp folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 1024
+  --tmpfs-tmp-size=0         the /tmp folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 4096
   --tmpfs-work               keep the runner's _work folder in memory instead of on the host's disk; the folder is charged to the runner's memory limit; needs docker or podman
   --tmpfs-work-size=0        the _work folder's ceiling in MiB (at least 64); 0 sizes it from the memory limit, at most 4096 and half the limit
   --token                    an API token (or ZOOMIES_TOKEN)

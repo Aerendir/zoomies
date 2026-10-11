@@ -717,21 +717,31 @@ tmpfs:
 | `tmp` | `/tmp`. Off unless asked for: some toolchains put their heaviest traffic there, and some jobs leave gigabytes behind. |
 | `daemon` | The Docker-in-Docker sidecar's image store, `/var/lib/docker` in the daemon's container: where every image a job pulls and every layer it builds is written. Needs `docker_mode: dind`. Its own choice, because it is the one folder that can fail a job that used to pass; an image bigger than the store does not pull. |
 | `auto` | Let each runner decide whether the folder is in memory: yes where it has room for it to be useful, on disk where it has not. The recommended setting, and what the pool editor starts a pool with. Without it an enabled folder is always in memory. |
-| `size_mb` | The folder's ceiling, at least 64. `0` fits it to the memory limit: 4096 MB for the work folder, 1024 MB for `/tmp` and 8192 MB for the image store, shrunk so the work folder and `/tmp` together take no more than half of the runner's limit, and the image store no more than half of the daemon's. |
+| `size_mb` | The folder's ceiling, at least 64. `0` fits it to the memory limit: 4096 MB for the work folder, 4096 MB for `/tmp` and 8192 MB for the image store, shrunk so the work folder and `/tmp` together take no more than half of the runner's limit, and the image store no more than half of the daemon's. |
 
 **Auto.** A pool is one setting for every host it lands on, and the hosts
 differ: the same pool has 31 GB machines with five slots and 128 GB machines
 with plenty to spare. With `auto` on, each runner decides at creation, from the
 memory limit it is really given and the host it is on: a folder is in memory
 only if it would come out at least as large as its floor (2 GB for the work
-folder, 1 GB for `/tmp`, 4 GB for the image store, or the size you typed if that
+folder, 2 GB for `/tmp`, 4 GB for the image store, or the size you typed if that
 is smaller) and on disk otherwise. When two folders compete for the room, the
-one furthest below its floor goes to disk first, which leaves the other more. The
-floors are not a measurement of your jobs: they are the least a folder is worth
-having, because below them a checkout, a build or an image pull fills it and
-fails with `no space left on device`, which names neither the mount nor the
-setting, while saving little disk traffic. A folder that is not `auto` is never
-put on disk; it is always in memory, as small as the limit demands.
+one furthest below its floor goes to disk first, which leaves the other more, and
+`/tmp` goes first when they are level, because the work folder is the one worth
+having. The floors are not a measurement of your jobs: they are the least a
+folder is worth having, because below them a checkout, a build or an image pull
+fills it and fails with `no space left on device`, which names neither the mount
+nor the setting, while saving little disk traffic. A folder that is not `auto` is
+never put on disk; it is always in memory, as small as the limit demands.
+
+`/tmp` is sized like the work folder, and its floor is set by a compiler. Go
+builds every package of a cold build into a work directory under `/tmp` and
+keeps it there, with the linker's output on top, until the command exits: a
+cold cross-compile of Zoomies itself leaves close to 1 GB there, and in a 1 GB
+`/tmp` its darwin link failed on the fleet's biggest runners with `no space
+left on device` while the small ones, whose `/tmp` had stayed on disk, passed.
+A job should not need a `GOTMPDIR` step to run on a runner with more memory,
+so an in-memory `/tmp` is never smaller than 2 GB.
 
 The pool editor shows the result while you are choosing: under the folders in the
 Speed section, for every host the pool can run on, what a runner there has and what
