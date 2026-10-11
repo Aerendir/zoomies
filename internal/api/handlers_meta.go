@@ -48,7 +48,7 @@ type metaResponse struct {
 	PollerLastPollAt            *time.Time `json:"poller_last_poll_at,omitempty"`
 	WorkflowCancellationEnabled bool       `json:"workflow_cancellation_enabled"`
 	// ProvidersAvailable says this deployment can rent machines: a driver to
-	// rent from, and an operator who has turned the machine loop on. The nav
+	// rent from, and an operator who has switched provider.enabled on. The nav
 	// asks it so that a build with no drivers does not offer a page whose
 	// every button would refuse.
 	ProvidersAvailable bool `json:"providers_available"`

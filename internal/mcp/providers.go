@@ -39,9 +39,10 @@ func providerTools() []*tool {
 				"which pools it will buy for (pool_selector; empty means any), how many machines it may own (max_machines) against how many it does (owned, and machines by state), " +
 				"whether it is enabled or paused, and held, the one sentence that says why no new machine may be bought from it right now, absent when one may. " +
 				"last_check is the last preflight against the hypervisor with each finding's fix. " +
-				"providers_available is whether this controller can rent at all: false means the machine loop is off or the build has no driver, " +
+				"providers_available is whether this controller can rent at all: false means provider.enabled is off or the build has no driver, " +
 				"so no machine will ever be bought, however many providers are listed and whatever a pool asks for. " +
 				"Only an administrator turns that on, with the provider.enabled setting. " +
+				"renting is the answer to why nothing is being bought: whether renting is switched on and the fleet ceiling, and for each pool with work waiting what a provider will do about it and what to change. " +
 				"An empty items list with providers_available true means none has been added, which is why a full pool buys nothing. " +
 				"A pool's own provider_selector, in list_pools, narrows which providers may buy for it; empty allows any. " +
 				"No credential or gateway address is ever returned, only whether a credential is configured. " +
@@ -90,12 +91,15 @@ func providerTools() []*tool {
 	}
 }
 
-// listProviders is the providers route with one fact added: whether this
-// controller can rent at all. That is a setting an administrator alone may read,
-// and the page that offers to buy machines learns it from the public meta route,
-// so the tool reads it the same way instead of leaving an assistant to guess from
-// an empty list. The answer is the route's own, with one key more; if meta cannot
-// be read the tool answers without it rather than failing the whole question.
+// listProviders is the providers route with two facts added: whether this
+// controller can rent at all, and the renting answer. The first is a setting an
+// administrator alone may read, and the page that offers to buy machines learns
+// it from the public meta route, so the tool reads it the same way instead of
+// leaving an assistant to guess from an empty list. The second is the
+// controller's own explanation of why nothing is being rented, passed through
+// verbatim so there is one wording of it. The answer is the route's own, with
+// those keys more; if either cannot be read the tool answers without it rather
+// than failing the whole question.
 func listProviders(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
 	if err := decodeArgs(raw, &struct{}{}); err != nil {
 		return nil, err
@@ -115,6 +119,9 @@ func listProviders(ctx context.Context, c API, raw json.RawMessage) ([]Content, 
 		if json.Unmarshal(meta, &m) == nil && m.ProvidersAvailable != nil {
 			list["providers_available"], _ = json.Marshal(*m.ProvidersAvailable)
 		}
+	}
+	if renting, err := c.Call(ctx, http.MethodGet, "/providers/renting", nil); err == nil && json.Valid(renting) {
+		list["renting"] = renting
 	}
 	out, err := json.Marshal(list)
 	if err != nil {

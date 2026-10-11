@@ -349,10 +349,12 @@ setting and the fix.
 
 Eli and any [MCP client](connect-claude.md#asking-about-providers-and-machines)
 can read the same answers with `provider_pairings`, and the providers and
-machines behind them with `list_providers` and `list_machines`. They answer a
-viewer's question, so they say nothing about `provider.enabled`, which only an
-administrator can read: when nothing there explains a pool that buys nothing,
-that setting, and `provider.paused`, are the next things to look at.
+machines behind them with `list_providers` and `list_machines`. A viewer cannot
+read `provider.enabled`, so `list_providers` carries `renting` as well: whether
+renting is switched on, the most the fleet may rent, and for each pool with work
+waiting what to change. `providers_available` alone is not the whole story, and
+`provider.paused` is still worth a look when nothing there explains a pool that
+buys nothing.
 
 ## What happens when a pool runs out of hosts
 
