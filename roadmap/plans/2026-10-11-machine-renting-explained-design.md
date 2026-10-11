@@ -135,8 +135,10 @@ not) and `off` (renting is switched off; every verdict that would have been
 A verdict carries `state`, a one-sentence `summary`, a `fix`, the `setting` when
 one setting changes it, the provider, `queued`, `short`, `machines` and `since`
 (when the oldest machine on its way was asked for). Sentences never contain a
-running clock or a count that changes between passes, because anything that reaches
-the problems list is re-sent whenever its JSON differs. Times travel as `since`.
+running clock or a counter that moves while the fleet stays as it is, because
+anything that reaches the problems list is re-sent whenever its JSON differs. Counts
+of jobs, slots and machines are fine: they move only when the fleet does, as the
+queue count in the `pool.no_capacity` title already does. Times travel as `since`.
 
 ### 3. The loop keeps the verdict, and renting applies live
 
