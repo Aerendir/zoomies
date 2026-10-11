@@ -40,8 +40,8 @@ func TestHeldSaysRentingIsOffWhenItIs(t *testing.T) {
 // being off is the master switch: unpausing a provider, enabling its row or
 // ending a transfer cannot be the thing to reach for while the whole loop is
 // stopped, so it is said before all of them. Only the recovery fence outranks
-// it, because the fence is stricter than any switch (it stops deletes too) and a
-// restored database must be told apart from a fleet that is merely switched off.
+// it, because a restored database must be told apart from a fleet that is merely
+// switched off, and the fence is the one thing that says so.
 func TestRentingBeingOffIsSaidBeforeEveryReasonButTheFence(t *testing.T) {
 	now := time.Now()
 	standingDownUntil := now.Add(10 * time.Minute)
@@ -150,6 +150,9 @@ func TestRentingSwitchedOnWhileTheControllerRunsStartsRenting(t *testing.T) {
 	}
 	t.Cleanup(func() { h.c.Stop(context.Background()) })
 
+	// Only a precondition: the loop's first timed pass is fifteen seconds away,
+	// so this cannot fail. That a running loop rents nothing while renting is
+	// off is TestNothingIsRentedUntilProvidersAreSwitchedOn's to show.
 	if got := len(h.machines()); got != 0 {
 		t.Fatalf("renting is off and %d machines were planned", got)
 	}

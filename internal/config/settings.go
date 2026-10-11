@@ -957,7 +957,7 @@ var registry = buildRegistry([]Setting{
 	// ---------------------------------------------------------------------
 	{
 		Key: "provider.enabled", Label: "Rent machines", Env: "ZOOMIES_PROVIDER_ENABLED", Kind: KindBool, Scope: ScopeInstance, Live: true,
-		Summary: "Whether the machine loop runs at all. Off by default: renting a machine spends money, and nothing here should start doing that because a release added the ability to. Turning it off stops the whole loop, including draining and deleting machines already rented; use Pause new machines to stop buying and keep tending them.",
+		Summary: "Whether the machine loop does anything at all. Off by default: renting a machine spends money, and nothing here should start doing that because a release added the ability to. Turning it off stops the whole loop, including draining and deleting machines already rented; use Pause new machines to stop buying and keep tending them.",
 	},
 	{
 		Key: "provider.paused", Label: "Pause new machines", Env: "ZOOMIES_PROVIDER_PAUSED", Kind: KindBool, Scope: ScopeInstance, Live: true,
