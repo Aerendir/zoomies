@@ -53,12 +53,13 @@ background and border. This keeps their weight and alignment consistent while
 labels and tooltips carry the meaning. A state still in progress moves a
 little, chosen by glyph so the same glyph moves the same way on a runner, a
 job or a machine: being set up turns, work executing sends one pulse along its
-trace, being accepted breathes, finishing turns its hourglass over now and
-then, extra CPU lifts its trend line a touch and maximum CPU charges its bolt
-with a soft fill. Everything waiting or finished holds still, and so does CPU
-being held back, so a page of idle runners is
-a calm one and a failure never draws the eye by moving, and reduced motion
-stops all of it. **An icon names a state, never an action**: the
+trace from left to right, being accepted breathes, and finishing turns its
+hourglass over now and then. The three CPU states each move the way the CPU
+went: extra CPU gives its trend line two quick hops, maximum CPU shakes its
+bolt harder as it fills with charge and then flashes, and CPU being held back
+tugs its line down and drags it slowly back up. Everything waiting or finished
+holds still, so a page of idle runners is a calm one and a failure never draws
+the eye by moving, and reduced motion stops all of it. **An icon names a state, never an action**: the
 Queue's Run now, Pause, Resume and Delete carry Zap, Pause, Play and the bin,
 Re-run a turning arrow, and the Runners page's Drain the slashed circle, so a
 status drawn with one of them beside those buttons reads as something to press.

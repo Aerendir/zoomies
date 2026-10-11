@@ -3,6 +3,7 @@ import {
   Handshake,
   Hourglass,
   LoaderCircle,
+  TrendingDown,
   TrendingUp,
   Zap,
   type LucideIcon,
@@ -13,11 +14,13 @@ import {
  * glyph means one thing wherever it appears, so the thing being set up turns
  * whether it is a runner or a machine. Only work still in progress moves, and
  * quietly; whatever is waiting or finished holds still, so a page of idle
- * runners is a calm one and a failure never draws the eye by moving. The two
- * boosts are work too: the trend line lifts now and then and the bolt charges,
- * while throttling, which is CPU being held back, holds still like the rest.
+ * runners is a calm one and a failure never draws the eye by moving. The
+ * three CPU states are work too, and each one says which way the CPU went:
+ * the trend line hops when there is extra, the bolt buzzes and charges up at
+ * maximum, and the line sags and drags itself back up when the CPU is being
+ * held back, so a runner on a lead is told apart from one that is simply idle.
  */
-export type OffMotion = 'spin' | 'trace' | 'breathe' | 'turn' | 'lift' | 'charge' | 'none';
+export type OffMotion = 'spin' | 'trace' | 'breathe' | 'turn' | 'lift' | 'buzz' | 'sag' | 'none';
 
 const MOTIONS = new Map<LucideIcon, OffMotion>([
   [LoaderCircle, 'spin'],
@@ -25,7 +28,8 @@ const MOTIONS = new Map<LucideIcon, OffMotion>([
   [Handshake, 'breathe'],
   [Hourglass, 'turn'],
   [TrendingUp, 'lift'],
-  [Zap, 'charge'],
+  [Zap, 'buzz'],
+  [TrendingDown, 'sag'],
 ]);
 
 export function offMotion(icon: LucideIcon): OffMotion {
