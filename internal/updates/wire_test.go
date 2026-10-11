@@ -54,9 +54,16 @@ func TestParseRequestRefusesAWireVersionItDoesNotKnow(t *testing.T) {
 	}
 }
 
+func TestParseRequestAcceptsTheDevChannel(t *testing.T) {
+	doc := `{"v":1,"id":"upd_k3fqz2mx7abcd","tag":"dev","requested_by":"user:alice","requested_at":"2026-10-08T09:00:00Z"}`
+	if _, err := ParseRequest([]byte(doc)); err != nil {
+		t.Errorf("a request for the dev channel was refused: %v", err)
+	}
+}
+
 func TestParseRequestRefusesABadTag(t *testing.T) {
 	for _, tag := range []string{
-		"", "1.3.5", "v1.3", "v1.3.5.1", "V1.3.5", "v1.3.5-rc1", "v1.3.5+build", "latest", "dev",
+		"", "1.3.5", "v1.3", "v1.3.5.1", "V1.3.5", "v1.3.5-rc1", "v1.3.5+build", "latest", "Dev", "dev ", "main-sha-abc1234",
 		"v1.3.5\n", " v1.3.5", "v1.3.5 --yes", "../v1.3.5", "v1.3.5/../../x", "v1.3.x",
 	} {
 		doc := `{"v":1,"id":"upd_k3fqz2mx7abcd","tag":` + quote(tag) + `,"requested_by":"user:alice","requested_at":"2026-10-08T09:00:00Z"}`

@@ -15,6 +15,7 @@ package updates
 import (
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/version"
@@ -76,6 +77,81 @@ func TargetTag(running string) (string, bool) {
 		return "", false
 	}
 	return tag, true
+}
+
+// DevTag is the wire tag for the rolling build from main. It is the one tag
+// besides a release that the helper accepts, and it is what "zoomies upgrade
+// --version" already takes for that channel.
+const DevTag = "dev"
+
+// ValidWireTag says whether tag may travel in a task or a request: a release
+// tag, or the rolling dev channel. The helper runs as root, so this is still a
+// closed set and never a pattern.
+func ValidWireTag(tag string) bool { return tag == DevTag || ValidTag(tag) }
+
+// ValidTarget says whether target is something a host can be taken to: a
+// release tag, or the exact main build the controller runs.
+func ValidTarget(target string) bool { return ValidTag(target) || version.IsMainBuild(target) }
+
+// HostTarget is what a host follows: the release its controller runs, or for a
+// controller built from main that exact build, so hosts on development builds
+// can follow it as hosts on releases follow a release. It is false when the
+// controller is neither, such as a local describe build.
+func HostTarget(running string) (string, bool) {
+	if tag, ok := TargetTag(running); ok {
+		return tag, true
+	}
+	if running = strings.TrimSpace(running); version.IsMainBuild(running) {
+		return running, true
+	}
+	return "", false
+}
+
+// WireTag is the tag that asks for target: the release itself, or the dev
+// channel for a main build, whose commit the download cannot name.
+func WireTag(target string) string {
+	if version.IsMainBuild(target) {
+		return DevTag
+	}
+	return target
+}
+
+// CompareTargets orders two targets. Releases are ordered by CompareBuilds; two
+// main builds are the same or different and never ahead of one another.
+func CompareTargets(a, b string) version.Skew {
+	if version.IsMainBuild(a) || version.IsMainBuild(b) {
+		if strings.TrimSpace(a) == strings.TrimSpace(b) {
+			return version.SkewNone
+		}
+		return version.SkewDiffers
+	}
+	return version.CompareBuilds(a, b)
+}
+
+// HostSkew says how a host's build stands to target. A release target is
+// compared as it always was, and only a release build can be behind it. A main
+// target is followed exactly: a host on another main build or on a release is
+// behind it, since the controller is the authority on what the fleet runs, and
+// a build that is neither, such as a local describe build, is Differs and left
+// alone so that whatever a developer is testing is not replaced.
+func HostSkew(hostVersion, target string) version.Skew {
+	if !version.IsMainBuild(target) {
+		if _, ok := TargetTag(hostVersion); !ok {
+			return version.SkewDiffers
+		}
+		return version.CompareBuilds(hostVersion, target)
+	}
+	hostVersion = strings.TrimSpace(hostVersion)
+	switch {
+	case hostVersion == strings.TrimSpace(target):
+		return version.SkewNone
+	case version.IsMainBuild(hostVersion):
+		return version.SkewBehind
+	}
+	if _, ok := TargetTag(hostVersion); ok {
+		return version.SkewBehind
+	}
+	return version.SkewDiffers
 }
 
 // AssetName is the binary a release publishes for a system, named as

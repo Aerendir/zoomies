@@ -104,8 +104,8 @@ func ParseRequest(body []byte) (Request, error) {
 	if len(r.ID) > maxRequestIDLength || !requestIDPattern.MatchString(r.ID) {
 		return Request{}, fmt.Errorf("the request id %q is not an update attempt id: upd_ followed by lowercase letters and digits, at most %d characters", r.ID, maxRequestIDLength)
 	}
-	if !ValidTag(r.Tag) {
-		return Request{}, fmt.Errorf("the tag %q is not a release tag of the form vMAJOR.MINOR.PATCH", r.Tag)
+	if !ValidWireTag(r.Tag) {
+		return Request{}, fmt.Errorf("the tag %q is not a release tag of the form vMAJOR.MINOR.PATCH, or dev", r.Tag)
 	}
 	// requested_by is only ever logged, but it is logged by root: a newline in it
 	// would let the less privileged side write a line of root's log, and an escape

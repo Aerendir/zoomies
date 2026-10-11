@@ -353,12 +353,12 @@ func TestTurningUpdatingOffRepaintsTheHostsCard(t *testing.T) {
 	}
 }
 
-// A controller built from main has no release to take its hosts to, and the
+// A local build has no release or main build to take its hosts to, and the
 // command by hand is what still works.
 func TestAHostCannotBeUpdatedWhenTheControllerIsNotARelease(t *testing.T) {
 	h := newHarness(t)
 	h.inMode("manual")
-	withVersion(t, "main-sha-abc1234")
+	withVersion(t, "1.3.5-3-gabcdef1")
 	host := h.updatableHost("vm-1")
 	command, _, _ := hostUpgrade(host, version.Version)
 
@@ -1616,5 +1616,51 @@ func TestTheGraceFollowsAFenceSeenByAPassOrByAHeldBeat(t *testing.T) {
 				t.Errorf("the first pass after a fence seen by %s closed the attempt as %s, want it left for the agent's next beat", tc.name, got.State)
 			}
 		})
+	}
+}
+
+// A controller built from main is followed exactly, so a host on an older main
+// build or a release is offered the update and is sent the dev channel, which
+// is the one tag besides a release the helper accepts.
+func TestAHostFollowsAControllerBuiltFromMain(t *testing.T) {
+	h := newHarness(t)
+	h.inMode("manual")
+	withVersion(t, "main-sha-abc1234")
+	host := h.agentHost("vm-1", "main-sha-1c5b8378", agent.FeatureSelfUpdate)
+
+	view := h.view(host.ID)
+	if !view.Update.CanUpdate {
+		t.Fatalf("the card says %+v, want a host on an older main build to be updatable", view.Update)
+	}
+	attempt := h.requestHost(host)
+	if attempt.ToVersion != "main-sha-abc1234" {
+		t.Errorf("to_version = %q, want the controller's exact build so the attempt ends when the host reports it", attempt.ToVersion)
+	}
+	tasks := updateTasks(h.poll(host))
+	if len(tasks) != 1 || tasks[0].UpdateTag != "dev" {
+		t.Errorf("tasks = %+v, want one asking for the dev channel", tasks)
+	}
+	if state, _, ended := hostReportOutcome(attempt, "main-sha-abc1234", nil); !ended || state != store.UpdateSucceeded {
+		t.Errorf("a host reporting the controller's build did not end its attempt as succeeded: %q, %v", state, ended)
+	}
+}
+
+func TestAHostOnTheControllersMainBuildHasNothingToUpdate(t *testing.T) {
+	h := newHarness(t)
+	h.inMode("manual")
+	withVersion(t, "main-sha-abc1234")
+	host := h.agentHost("vm-1", "main-sha-abc1234", agent.FeatureSelfUpdate)
+	if view := h.view(host.ID); view.Update.CanUpdate {
+		t.Errorf("the card says %+v, want nothing to update for a host already on the controller's build", view.Update)
+	}
+}
+
+func TestAHostOnALocalBuildIsLeftAloneByAMainController(t *testing.T) {
+	h := newHarness(t)
+	h.inMode("manual")
+	withVersion(t, "main-sha-abc1234")
+	host := h.agentHost("vm-1", "1.3.5-3-gabcdef1", agent.FeatureSelfUpdate)
+	if view := h.view(host.ID); view.Update.CanUpdate {
+		t.Errorf("the card says %+v, want a local build never replaced", view.Update)
 	}
 }

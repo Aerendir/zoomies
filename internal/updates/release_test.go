@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/eyupio/zoomies/internal/version"
 )
 
 // finished is the file list of a release once CI has uploaded all of it. The
@@ -253,4 +255,37 @@ func TestNewestSkipsATagTooBigToOrder(t *testing.T) {
 			t.Errorf("Newest = %q, %v from %s first; want v1.3.4", got.Tag, ok, rotated[0].Tag)
 		}
 	})
+}
+
+func TestHostSkewFollowsAControllerBuiltFromMainExactly(t *testing.T) {
+	const main = "main-sha-abc1234"
+	for _, tc := range []struct {
+		host string
+		want version.Skew
+	}{
+		{"main-sha-abc1234", version.SkewNone},
+		{"main-sha-1c5b8378", version.SkewBehind},
+		{"1.3.5", version.SkewBehind},
+		{"1.3.5-3-gabcdef1", version.SkewDiffers},
+		{"weird", version.SkewDiffers},
+	} {
+		if got := HostSkew(tc.host, main); got != tc.want {
+			t.Errorf("HostSkew(%q, %q) = %q, want %q", tc.host, main, got, tc.want)
+		}
+	}
+}
+
+func TestHostTargetAndWireTagForADevelopmentController(t *testing.T) {
+	if got, ok := HostTarget("main-sha-abc1234"); !ok || got != "main-sha-abc1234" {
+		t.Errorf("HostTarget = %q, %v; want the exact build", got, ok)
+	}
+	if _, ok := HostTarget("1.3.5-3-gabcdef1"); ok {
+		t.Error("a local build was given as a target")
+	}
+	if got := WireTag("main-sha-abc1234"); got != "dev" {
+		t.Errorf("WireTag = %q, want dev", got)
+	}
+	if got := WireTag("v1.3.5"); got != "v1.3.5" {
+		t.Errorf("WireTag = %q, want a release tag unchanged", got)
+	}
 }

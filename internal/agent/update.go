@@ -149,7 +149,20 @@ func (a *Agent) handleUpdate(ctx context.Context, task Task) {
 	}
 
 	running, tag := version.Version, task.UpdateTag
-	switch version.CompareBuilds(running, tag) {
+	skew := version.CompareBuilds(running, tag)
+	if tag == updates.DevTag {
+		// The dev channel moves, so it has no order to check. The controller has
+		// already decided this host is behind its build; the agent only refuses to
+		// replace a build that is neither a release nor one from main, which may
+		// be somebody's work in progress.
+		skew = version.SkewBehind
+		if _, release := version.Release(running); !release && !version.IsMainBuild(running) {
+			a.answerUpdate(ctx, task, "this agent runs the build "+fieldText(running)+
+				", which is neither a release nor a build from main, so it does not ask for the dev channel; update it on the host with zoomies upgrade")
+			return
+		}
+	}
+	switch skew {
 	case version.SkewNone, version.SkewAhead:
 		// An agent is never taken backwards, whatever the controller asks: an
 		// agent ahead of its controller is merely untested, and one taken back

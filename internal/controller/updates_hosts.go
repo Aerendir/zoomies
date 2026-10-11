@@ -121,7 +121,7 @@ func hostCanSelfUpdate(h *store.Host, target string, unsupported updates.HelperU
 	case h.Embedded:
 		return false, "This is the agent inside the controller, so it is updated with the controller, from Settings → Updates.", hostGapNone
 	case target == "":
-		return false, "This controller is not running a release, so there is no release to take its hosts to. Install a release on the controller with zoomies upgrade first.", hostGapNone
+		return false, "This controller is not running a release or a build from main, so there is nothing to take its hosts to. Install a release on the controller with zoomies upgrade first.", hostGapNone
 	case strings.TrimSpace(h.Version) == "":
 		byHandNow := "Update it on the host with zoomies upgrade."
 		if h.OS == "windows" {
@@ -133,11 +133,15 @@ func hostCanSelfUpdate(h *store.Host, target string, unsupported updates.HelperU
 	// hyphen as a pre-release, so a describe build such as 1.3.5-3-gabcdef1,
 	// which is ahead of v1.3.5, would otherwise read as behind it, and the
 	// button would take it back. The planner keeps the same gate of its own.
-	if _, ok := updates.TargetTag(h.Version); !ok {
+	switch skew := updates.HostSkew(h.Version, target); {
+	case skew == version.SkewDiffers && version.IsMainBuild(target):
+		return false, "This host runs the build " + reportedVersion(h.Version) + ", which is neither a release nor a build from main, so Zoomies leaves it alone. " +
+			byHand(h), hostGapNone
+	case skew == version.SkewDiffers:
 		return false, "This host runs the build " + reportedVersion(h.Version) + ", which is not a release build, so Zoomies cannot tell whether " +
 			target + " is newer. " + byHand(h), hostGapNone
 	}
-	switch version.CompareBuilds(h.Version, target) {
+	switch updates.HostSkew(h.Version, target) {
 	case version.SkewNone, version.SkewAhead:
 		return false, "This host already runs " + target + " or a later release, so there is nothing to update.", hostGapNone
 	case version.SkewDiffers:
@@ -182,16 +186,17 @@ func byHandOnCard(h *store.Host) string {
 // hosts a rollout to target is for, whether or not each can update itself.
 // hostCanSelfUpdate asks the same of the version, so the two never disagree.
 func hostBehind(h *store.Host, target string) bool {
-	if _, ok := updates.TargetTag(h.Version); !ok || h.Embedded || target == "" {
+	if h.Embedded || target == "" {
 		return false
 	}
-	return version.CompareBuilds(h.Version, target) == version.SkewBehind
+	return updates.HostSkew(h.Version, target) == version.SkewBehind
 }
 
-// hostTarget is the release every host is taken to: the one this controller
-// runs, and nothing when it is not a release.
+// hostTarget is the build every host is taken to: the release this controller
+// runs, or its exact build when that is from main, and nothing when it is
+// neither.
 func hostTarget() string {
-	tag, _ := updates.TargetTag(version.Version)
+	tag, _ := updates.HostTarget(version.Version)
 	return tag
 }
 
@@ -281,7 +286,7 @@ func (c *Controller) sendHostUpdate(h *store.Host, a store.UpdateAttempt) bool {
 	if c.handedOver(a.ID) {
 		return false
 	}
-	return c.enqueue(h.ID, agent.Task{Kind: agent.TaskUpdateAgent, UpdateID: a.ID, UpdateTag: a.ToVersion})
+	return c.enqueue(h.ID, agent.Task{Kind: agent.TaskUpdateAgent, UpdateID: a.ID, UpdateTag: updates.WireTag(a.ToVersion)})
 }
 
 // handedOver says whether the agent answered that it wrote this attempt's
