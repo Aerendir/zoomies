@@ -319,12 +319,13 @@ running beside it, and the gateway's Tailcat address is handled the same way:
 | POST | `/api/v1/provider-setups` | admin | Generate a Proxmox connection command, valid for one hour; identical uploads can be retried. Defaults to a private Tailcat callback. |
 | GET | `/api/v1/provider-setups/{id}` | admin | Poll connection readiness and detected name/address. Never returns credentials or private addresses. |
 | POST | `/api/v1/provider-setups/{id}/complete` | setup capability | Accept one sealed connection upload; cannot create providers or enrol runner hosts. Also admitted by the private listener. |
-| GET | `/api/v1/providers` | viewer | Each provider with its machines by state, how many still hold a resource, and `held`, why no new machine may be bought right now, in one sentence, or absent when one may. |
+| GET | `/api/v1/providers` | viewer | Each provider with its machines by state, how many still hold a resource, and `held`, why no new machine may be bought right now, in one sentence, or absent when one may. Renting being switched off is one of the answers; `GET /api/v1/providers/renting` says which pools it is costing. |
 | POST | `/api/v1/providers` | admin | Creates one renting nothing: `max_machines` defaults to zero, so a fleet that turns a provider on says in the same breath how many machines it is willing to pay for. 422 names the offending field. |
 | POST | `/api/v1/providers/validate` | admin | A dry run over a draft. Always 200 (the verdict is in the body) and it writes nothing and dials nothing, so a form can run it as somebody types. `?id=` says the draft is an edit to that provider, so the name check does not refuse it about itself. |
 | POST | `/api/v1/providers/discover` | admin | What a draft's credential can see, before the draft is saved, so the wizard offers a menu of nodes, storages, bridges and templates. Refused with the create's own field errors when the draft could not be saved; a hypervisor that does not answer is 200 with empty lists and the reason in `unavailable`. |
 | GET | `/api/v1/providers/kinds` | viewer | What this build can rent from, and the questions each driver's form has to ask. |
 | GET | `/api/v1/providers/pairings` | viewer | Every provider against every pool: whether the provider would rent a machine for the pool and, if not, `by` which side's selector refused, `why` and `fix`, and whether the machine it builds `fits` the pool. The same rules the machine decision acts on. |
+| GET | `/api/v1/providers/renting` | viewer | Whether this fleet is renting machines and, when work is waiting and nothing is rented, why. The fleet's `state` is `none` (no provider may rent), `off` (`provider.enabled` is off), `no_ceiling` (renting is on and `provider.max_machines` is zero) or `on`, with a `summary`, the `fix`, and the one `setting` that changes it. Each pool the last machine pass had something to say about gets a verdict of its own: a `state`, a `summary` and a `fix`. The switches are read when the request is made, so switching renting on shows at once; the verdicts are the last pass's, as old as `decided_at`, and `pools` is an empty list until a pass has run. |
 | GET | `/api/v1/providers/{id}` | viewer | |
 | PATCH | `/api/v1/providers/{id}` | admin | Every field independent; what is not named is left alone. A `credential` or `tailcat_address` of `""` leaves the stored one alone, so a form with a blank password box does not erase it. A provider's kind cannot be changed; the machines it owns are that kind. |
 | DELETE | `/api/v1/providers/{id}` | admin | 409 while any of its machines still holds a resource, naming how many. The rows are the only record of what was rented. |
@@ -390,7 +391,10 @@ drain and delete the VM it was promised would be left alone. A machine that is
 already being deleted is the exception: its delete carries on.
 
 `GET /api/v1/meta` includes the non-secret `providers_available` flag: this
-build ships at least one driver and `provider.enabled` is on.
+build ships at least one driver and `provider.enabled` is on. It is the coarse
+flag. `GET /api/v1/providers/renting` is the answer behind it: which switch is
+holding renting back, and what the machine planner decided for each pool with
+work waiting.
 
 ## Migrations
 

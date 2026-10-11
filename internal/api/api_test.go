@@ -925,6 +925,7 @@ func routeTable(ids fixtureIDs) []route {
 			body: map[string]any{"kind": "fake", "name": "draft", "credential": "tok", "settings": map[string]string{"zone": "zone-a"}}},
 		{method: "GET", path: "/api/v1/providers/kinds", role: store.RoleViewer, action: auth.ActionProvidersRead},
 		{method: "GET", path: "/api/v1/providers/pairings", role: store.RoleViewer, action: auth.ActionProvidersRead},
+		{method: "GET", path: "/api/v1/providers/renting", role: store.RoleViewer, action: auth.ActionProvidersRead},
 		{method: "GET", path: "/api/v1/providers/" + ids.provider, role: store.RoleViewer, action: auth.ActionProvidersRead},
 		{method: "PATCH", path: "/api/v1/providers/" + ids.provider, role: store.RoleAdmin, body: map[string]any{}, action: auth.ActionProvidersWrite},
 		{method: "DELETE", path: "/api/v1/providers/missing", role: store.RoleAdmin, action: auth.ActionProvidersDelete},

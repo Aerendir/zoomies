@@ -95,6 +95,24 @@ func (s *Server) handleProviderPairings(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, newList(items))
 }
 
+// handleProviderRenting answers GET /api/v1/providers/renting: whether this
+// controller is renting machines and, for each pool the last machine pass found
+// work waiting for, what it decided and why. GET /meta's providers_available is
+// the coarse flag for whether renting is possible at all; this is the answer
+// behind it, the one place a page learns why nothing is being rented.
+//
+// It is the controller's view as it is. The sentences, the switches and the
+// verdicts are worked out where the machines are decided, so that what the
+// fleet says here cannot differ from what the problem list or a pool's page say.
+func (s *Server) handleProviderRenting(w http.ResponseWriter, r *http.Request) {
+	view, err := s.ctrl.Renting(r.Context())
+	if err != nil {
+		s.internal(w, r, "working out whether this fleet is renting machines", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
 // handleGetProvider answers GET /api/v1/providers/{id}.
 func (s *Server) handleGetProvider(w http.ResponseWriter, r *http.Request) {
 	row, machines, ok := s.providerWithMachines(w, r)
