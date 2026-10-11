@@ -1639,6 +1639,11 @@ func (c *Controller) withRenting(poolID, detail, fix string) (string, string) {
 	if v == nil {
 		return detail, fix
 	}
+	// The scheduler's sentence does not end in a full stop, so the aside would
+	// otherwise run on from its last bracket.
+	if !strings.HasSuffix(detail, ".") {
+		detail += "."
+	}
 	detail += " " + v.Aside()
 	if v.Fix != "" && v.State != RentingWaiting {
 		fix = v.Fix + " " + fix
