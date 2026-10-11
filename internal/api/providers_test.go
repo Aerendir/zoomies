@@ -231,6 +231,10 @@ func TestPressingAProvidersKillSwitchTwiceIsNotAnError(t *testing.T) {
 	operator, _ := h.user("operator", store.RoleOperator)
 	cookie := h.session(operator)
 	prov := h.provider("proxmox-lab")
+	// Renting is switched on first. With it off every provider is held, and says
+	// so before it says anything about its own pause, so "a paused provider says
+	// why" would be passing on the switch and not on the pause.
+	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
 
 	for i := range 2 {
 		resp := h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/pause", cookie: cookie,
@@ -244,8 +248,8 @@ func TestPressingAProvidersKillSwitchTwiceIsNotAnError(t *testing.T) {
 		if out.PausedReason == "" {
 			t.Error("the reason was not kept, so the card cannot say why new machines stopped")
 		}
-		if out.Held == "" {
-			t.Error("a paused provider does not say why it is buying nothing")
+		if !strings.Contains(out.Held, "paused") {
+			t.Errorf("a paused provider says %q, not why it is buying nothing", out.Held)
 		}
 	}
 	for i := range 2 {
@@ -258,6 +262,9 @@ func TestPressingAProvidersKillSwitchTwiceIsNotAnError(t *testing.T) {
 		}
 		if out.PausedReason != "" {
 			t.Error("a resumed provider still carries the reason it was paused")
+		}
+		if out.Held != "" {
+			t.Errorf("a resumed provider is still held: %q", out.Held)
 		}
 	}
 

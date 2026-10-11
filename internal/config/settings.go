@@ -947,15 +947,17 @@ var registry = buildRegistry([]Setting{
 	// ---------------------------------------------------------------------
 	// provider -- renting machines from a hypervisor.
 	//
-	// Only the kill switch and the two ceilings are live. The deadlines bound
-	// operations that may already be in flight, so changing one under a clone
-	// that is half-built would mean two passes disagreeing about when to give
-	// up on it; they are stored and applied at the next start instead.
+	// The switch that lets the fleet rent, the kill switch and the ceilings are
+	// live. The machine loop runs whether or not renting is on and reads them on
+	// every pass, so turning renting on is a setting and not a restart. The
+	// deadlines bound operations that may already be in flight, so changing one
+	// under a clone that is half-built would mean two passes disagreeing about
+	// when to give up on it; they are stored and applied at the next start
+	// instead.
 	// ---------------------------------------------------------------------
 	{
-		Key: "provider.enabled", Label: "Rent machines", Env: "ZOOMIES_PROVIDER_ENABLED", Kind: KindBool, Scope: ScopeInstance,
-		Summary:       "Whether the machine loop runs at all. Off by default: renting a machine spends money, and nothing here should start doing that because a release added the ability to.",
-		RestartReason: "the machine loop is started at startup, so turning it on is a thing a running process cannot do to itself",
+		Key: "provider.enabled", Label: "Rent machines", Env: "ZOOMIES_PROVIDER_ENABLED", Kind: KindBool, Scope: ScopeInstance, Live: true,
+		Summary: "Whether the machine loop runs at all. Off by default: renting a machine spends money, and nothing here should start doing that because a release added the ability to. Turning it off stops the whole loop, including draining and deleting machines already rented; use Pause new machines to stop buying and keep tending them.",
 	},
 	{
 		Key: "provider.paused", Label: "Pause new machines", Env: "ZOOMIES_PROVIDER_PAUSED", Kind: KindBool, Scope: ScopeInstance, Live: true,

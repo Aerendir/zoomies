@@ -606,7 +606,7 @@ the validator says so with `limits.loopback`.
 | `provider.create_timeout` | `ZOOMIES_PROVIDER_CREATE_TIMEOUT` | next restart | Machine creation timeout: How long the whole asynchronous creation of a machine may take, rather than the request that starts it. |
 | `provider.delete_grace` | `ZOOMIES_PROVIDER_DELETE_GRACE` | next restart | Grace before a silent machine is lost: How long a machine whose host has gone silent is left alone before it is treated as lost. It has to outlast the controller's own judgement that a host is gone, or a network blip would destroy a machine in the middle of a job. |
 | `provider.delete_timeout` | `ZOOMIES_PROVIDER_DELETE_TIMEOUT` | next restart | Deletion timeout: How long an asynchronous deletion may take. |
-| `provider.enabled` | `ZOOMIES_PROVIDER_ENABLED` | next restart | Rent machines: Whether the machine loop runs at all. Off by default: renting a machine spends money, and nothing here should start doing that because a release added the ability to. |
+| `provider.enabled` | `ZOOMIES_PROVIDER_ENABLED` | at once | Rent machines: Whether the machine loop runs at all. Off by default: renting a machine spends money, and nothing here should start doing that because a release added the ability to. Turning it off stops the whole loop, including draining and deleting machines already rented; use Pause new machines to stop buying and keep tending them. |
 | `provider.enrol_timeout` | `ZOOMIES_PROVIDER_ENROL_TIMEOUT` | next restart | Enrolment timeout: How long a bootstrapped machine has to appear as a host. It has to outlast a heartbeat timeout, or a machine that joined and went briefly quiet would be given up on. |
 | `provider.idle_timeout` | `ZOOMIES_PROVIDER_IDLE_TIMEOUT` | at once | Idle before draining: How long a machine's host must have had no runner on it before the machine is drained. |
 | `provider.interval` | `ZOOMIES_PROVIDER_INTERVAL` | next restart | Machine loop interval: How often the machine loop runs. It is slower than the scheduler's on purpose: a clone takes minutes, and the pass that watches one gains nothing from a ten-second tick. |
@@ -1951,6 +1951,14 @@ provider:
 `provider.enabled` decides whether Zoomies may rent hosts at all. It is off,
 and it stays off until somebody deliberately turns it on, because every machine
 behind it is a bill.
+
+It applies at once. The machine loop runs whether or not it is on, so switching
+it on from the Settings page needs no restart: the loop is woken to act on it
+straight away. Switching it off again stops the whole loop, which is more than
+stopping the buying: machines already rented are not drained, deleted or checked
+while it is off. To stop buying and keep tending what is rented, use
+[`provider.paused`](#providerpaused-the-kill-switch) (Pause new machines)
+instead.
 
 `max_machines` is the ceiling across every provider put together, and it is the
 one number to set in the same edit as `enabled`. Each provider row carries its

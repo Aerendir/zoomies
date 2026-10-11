@@ -74,8 +74,11 @@ test('the provider card says what it rents, how much of its ceiling is spent and
   await expect(card).toContainText('ready 1');
   await expect(card).toContainText('bootstrapping 1');
 
-  // Nothing is holding it back, and the preflight has run: "Never checked"
-  // is the sentence a provider nothing has looked at shows instead.
+  // The one thing holding it back is that this controller may not rent at all,
+  // which the card says in the controller's own words. The provider itself is
+  // not paused, and the preflight has run: "Never checked" is the sentence a
+  // provider nothing has looked at shows instead.
+  await expect(card).toContainText('renting is switched off for this controller');
   await expect(card).toContainText('Last checked');
   await expect(card).not.toContainText('Never checked');
   await expect(card.getByText('Paused', { exact: true })).toHaveCount(0);
@@ -293,6 +296,20 @@ test('a provider named with markup is summarised as text, not run as it', async 
 });
 
 /**
+ * Switch renting on or off for the whole fleet.
+ *
+ * The shared controller has it off, as every controller starts, and a provider
+ * held for that reason leads with it and says nothing of its own pause. A test
+ * that reads what the card says about a pause therefore switches renting on for
+ * its length and puts it back, as the specs that turn any other switch on do. It
+ * is a live setting, so there is no restart in this.
+ */
+async function setRenting(page: Page, on: boolean): Promise<void> {
+  const res = await page.request.patch('/api/v1/settings', { data: { 'provider.enabled': on } });
+  expect(res.ok(), `provider.enabled was set to ${on}`).toBeTruthy();
+}
+
+/**
  * The kill switch: one press, and it is still pressed after a reload.
  *
  * It is a column on the provider row rather than a flag in memory, which is the
@@ -304,42 +321,47 @@ test('a provider named with markup is summarised as text, not run as it', async 
 test('the pause switch survives a reload, and says what being paused does not stop', async ({
   page,
 }) => {
-  await goto(page, '/providers', 'Providers');
-  const pause = page.getByRole('switch', { name: 'Pause new machines' });
-  await expect(pause).toHaveAttribute('aria-checked', 'false');
-
-  await plantMarker(page);
-  await pause.click();
-  await expect(pause).toHaveAttribute('aria-checked', 'true');
-
+  await setRenting(page, true);
   try {
-    // What it stopped, and what it did not. Both halves, because either one
-    // alone is the sentence that gets somebody to press it at the wrong time.
-    await expect(page.getByText('Nothing new is being bought.')).toBeVisible();
-    await expect(
-      page.getByText('Drains, deletes and machines already on their way carry on.').first(),
-    ).toBeVisible();
+    await goto(page, '/providers', 'Providers');
+    const pause = page.getByRole('switch', { name: 'Pause new machines' });
+    await expect(pause).toHaveAttribute('aria-checked', 'false');
 
-    // The card agrees, in the controller's own words rather than the page's:
-    // `held` answers for the fence, the configuration and the row at once.
-    const card = providerCard(page);
-    await expect(card.getByText('Paused', { exact: true })).toBeVisible();
-    await expect(card).toContainText(`${FIXTURE.provider} is paused`);
-    await expect(page.getByText('Paused providers').locator('..')).toContainText('1');
-    await expectNoReload(page);
+    await plantMarker(page);
+    await pause.click();
+    await expect(pause).toHaveAttribute('aria-checked', 'true');
 
-    // And it is on the row, not in this tab.
-    await reload(page, 'Providers');
-    await expect(page.getByRole('switch', { name: 'Pause new machines' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
+    try {
+      // What it stopped, and what it did not. Both halves, because either one
+      // alone is the sentence that gets somebody to press it at the wrong time.
+      await expect(page.getByText('Nothing new is being bought.')).toBeVisible();
+      await expect(
+        page.getByText('Drains, deletes and machines already on their way carry on.').first(),
+      ).toBeVisible();
+
+      // The card agrees, in the controller's own words rather than the page's:
+      // `held` answers for the fence, the configuration and the row at once.
+      const card = providerCard(page);
+      await expect(card.getByText('Paused', { exact: true })).toBeVisible();
+      await expect(card).toContainText(`${FIXTURE.provider} is paused`);
+      await expect(page.getByText('Paused providers').locator('..')).toContainText('1');
+      await expectNoReload(page);
+
+      // And it is on the row, not in this tab.
+      await reload(page, 'Providers');
+      await expect(page.getByRole('switch', { name: 'Pause new machines' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    } finally {
+      // Left as it was found: every other spec in this suite reads the same
+      // fleet, and a provider left paused is a fixture that quietly differs.
+      const restore = page.getByRole('switch', { name: 'Pause new machines' });
+      await restore.click();
+      await expect(restore).toHaveAttribute('aria-checked', 'false');
+    }
   } finally {
-    // Left as it was found: every other spec in this suite reads the same
-    // fleet, and a provider left paused is a fixture that quietly differs.
-    const restore = page.getByRole('switch', { name: 'Pause new machines' });
-    await restore.click();
-    await expect(restore).toHaveAttribute('aria-checked', 'false');
+    await setRenting(page, false);
   }
 });
 

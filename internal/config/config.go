@@ -413,14 +413,19 @@ const (
 // in a configuration file is a credential in a backup, a diagnostics bundle and
 // a screenshot.
 //
-// What lives here is the part an operator wants to set once and have a restart
-// honour: whether machines may be rented at all, the ceilings nothing may
+// What lives here is the part an operator wants to set once and have every
+// restart keep: whether machines may be rented at all, the ceilings nothing may
 // exceed, and how long each step of a machine's life is given before somebody
-// is asked about it.
+// is asked about it. The switch and the ceilings are live, because the machine
+// loop reads them on every pass; the deadlines are not, because they bound
+// operations that may already be in flight.
 type Provider struct {
-	// Enabled decides whether the machine loop runs at all. Off by default:
-	// renting a machine spends money, and nothing in this system should start
-	// doing that because a release added the ability to.
+	// Enabled decides whether the machine loop may rent anything at all. The
+	// loop itself always runs, so that turning this on is a setting and not a
+	// restart; while it is off it creates, drains and deletes nothing and asks
+	// no provider anything. Off by default: renting a machine spends money, and
+	// nothing in this system should start doing that because a release added
+	// the ability to.
 	Enabled bool `yaml:"enabled"`
 	// Paused is the kill switch in the file, for an operator who wants a
 	// restart to come back held. It blocks new machines only -- draining,

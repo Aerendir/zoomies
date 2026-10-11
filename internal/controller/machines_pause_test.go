@@ -198,9 +198,10 @@ func TestADisabledProviderKeepsItsMachinesAndBuysNoMore(t *testing.T) {
 	}
 }
 
-// The machine loop is not started at all unless providers are switched on.
-// Renting machines spends money, and nothing should start doing that because a
-// release added the ability to.
+// The machine loop runs whether or not providers are switched on, so that
+// switching them on is a setting and not a restart, and a pass while they are
+// off rents nothing and calls no provider. Renting machines spends money, and
+// nothing should start doing that because a release added the ability to.
 func TestNothingIsRentedUntilProvidersAreSwitchedOn(t *testing.T) {
 	h := newHarness(t)
 	inst := h.installation()
