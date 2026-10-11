@@ -8,7 +8,7 @@ description: >-
 
 # The UI
 
-Thirteen pages, one job each. Everything on them is live (every page updates in
+Fourteen pages, one job each. Everything on them is live (every page updates in
 place from the controller's event stream, so you never have to press refresh,
 though the same button sits at the top of each one for when you want to be sure)
 and nothing is reachable from the UI that is not reachable from the
@@ -625,6 +625,24 @@ otherwise looks like a slow fleet.
 
 ![The Installations page: one connected organisation with its App, installation, API, pools and rate limit, above the webhook delivery log](screenshots/installations-dark.webp#only-dark){ .zoomies-shot }
 ![The Installations page: one connected organisation with its App, installation, API, pools and rate limit, above the webhook delivery log](screenshots/installations-light.webp#only-light){ .zoomies-shot }
+
+## Eli repairs
+
+Where a failed pull request check becomes a repair. **Needs attention** lists
+the offers Eli has made for pull requests whose checks failed on a repository
+set to *Ask me first*, one per pull request head; each can be reviewed, which
+checks readiness (the payer, the model, the remaining allowance and anything
+that would stop the repair) before a model is asked anything, or dismissed for
+that commit. Pasting a pull request link does the same for a pull request Eli
+has not offered on. Below that is the history: every repair, with its state
+(queued, investigating, waiting for CI, passed, or why it stopped), and a
+failed one can be sent again. Administrators set the **Repository repair
+policies** here, choosing an installation, the repositories to enable together,
+whether Eli asks first, waits to be told or repairs automatically, and the
+daily attempt budget, and link each requester's GitHub account to their Zoomies
+user; the requester then confirms that their own provider pays for the repairs
+they ask for. [How repairs work](eli.md#set-up-pr-repairs). `g e` opens it
+from anywhere.
 
 ## Migrate
 
