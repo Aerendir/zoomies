@@ -969,6 +969,13 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "GET", path: "/api/v1/assistant/personal/providers/missing", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn},
 		{method: "PATCH", path: "/api/v1/assistant/personal/providers/missing", role: store.RoleViewer, accountOnly: true, body: map[string]any{}, action: auth.ActionAssistantOwn},
 		{method: "DELETE", path: "/api/v1/assistant/personal/providers/missing", role: store.RoleViewer, accountOnly: true, body: map[string]any{"name": "x"}, action: auth.ActionAssistantOwn},
+		{method: "GET", path: "/api/v1/assistant/personal/conversations", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn},
+		{method: "POST", path: "/api/v1/assistant/personal/conversations", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn,
+			body: map[string]any{"messages": []any{}}},
+		{method: "GET", path: "/api/v1/assistant/personal/conversations/missing", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn},
+		{method: "PUT", path: "/api/v1/assistant/personal/conversations/missing", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn,
+			body: map[string]any{"messages": []any{}}},
+		{method: "DELETE", path: "/api/v1/assistant/personal/conversations/missing", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn},
 		{method: "POST", path: "/api/v1/assistant/personal/providers/missing/check", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn},
 		{method: "POST", path: "/api/v1/assistant/personal/providers/missing/default", role: store.RoleViewer, accountOnly: true, action: auth.ActionAssistantOwn},
 

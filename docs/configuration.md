@@ -621,7 +621,7 @@ the validator says so with `limits.loopback`.
 
 | Key | Environment | Takes effect | What it is |
 | --- | --- | --- | --- |
-| `retention.jobs` | `ZOOMIES_RETENTION_JOBS` | at once | Keep job history for: How long job history is kept. |
+| `retention.assistant_conversations` | `ZOOMIES_RETENTION_ASSISTANT_CONVERSATIONS` | at once | Keep Eli conversations for: How long a person's saved conversations with Eli are kept since they were last touched. Each person keeps at most fifty and can delete any of theirs sooner; nobody else can read them. 0 keeps them until the person deletes them. |
 | `retention.machines` | `ZOOMIES_RETENTION_MACHINES` | at once | Keep deleted machines for: How long a deleted machine's row is kept, so what the fleet rented and gave back is still answerable after the machine itself is gone. |
 | `retention.runner_sessions` | `ZOOMIES_RETENTION_RUNNER_SESSIONS` | at once | Keep runner sessions for: How long the usage ledger keeps each finished runner's session (who it ran for, where, and for how long) after the runner's own row has been pruned. |
 | `retention.runners` | `ZOOMIES_RETENTION_RUNNERS` | at once | Keep finished runners for: How long finished runners are kept. |

@@ -1138,6 +1138,10 @@ type Retention struct {
 	// that grouped it, is kept. It is the answer to "why is this host behind",
 	// so it outlives the job history around it. One still open is never pruned.
 	UpdateAttempts time.Duration `yaml:"update_attempts"`
+	// AssistantConversations is how long a person's saved chats with Eli are
+	// kept since they were last touched. They are the person's own and can
+	// be deleted sooner by them; this is the ceiling. 0 keeps them until then.
+	AssistantConversations time.Duration `yaml:"assistant_conversations"`
 }
 
 // Path returns the file this config was loaded from, or "" for defaults.
@@ -1247,6 +1251,9 @@ func Default() *Config {
 			Webhooks:       7 * 24 * time.Hour,
 			Machines:       7 * 24 * time.Hour,
 			UpdateAttempts: 90 * 24 * time.Hour,
+			// A month covers "what did Eli say about this last week" without
+			// the database carrying every chat anyone ever had.
+			AssistantConversations: 30 * 24 * time.Hour,
 		},
 		// Hourly is soon enough that a host picks up a rebuilt image the same
 		// working day, and rare enough that the registry never notices.

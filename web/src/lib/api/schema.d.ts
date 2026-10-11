@@ -3395,6 +3395,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assistant/personal/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Personal conversations, List saved conversations
+         * @description The signed-in account's saved conversations with Eli, newest first, as summaries: the title, how many messages, and when. The messages themselves come from the item route. A token or an auth-disabled session has no account to keep them under and gets an empty list.
+         */
+        get: operations["personalListAssistantConversations"];
+        put?: never;
+        /**
+         * Personal conversations, Keep a conversation
+         * @description Keeps a conversation under the signed-in account and answers with its id, which later saves of the same conversation name. The transcript is bounded like a chat request (40 messages, 8 KiB each, 32 KiB in all; roles user and assistant), may end with the answer, and is redacted the way the chat is before it is written, so a credential pasted into a question is not in the database. The title is the first question unless one is sent. A person keeps at most fifty; keeping another removes their oldest. A session with no account is refused with 403.
+         */
+        post: operations["personalCreateAssistantConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/personal/conversations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Personal conversations, One conversation with its messages
+         * @description Another person's conversation, like none, is a 404.
+         */
+        get: operations["personalGetAssistantConversation"];
+        /**
+         * Personal conversations, Replace a conversation
+         * @description The whole transcript again, with the new turns; bounded and redacted as on create. Another person's id is a 404, so one account cannot overwrite another's by guessing.
+         */
+        put: operations["personalReplaceAssistantConversation"];
+        post?: never;
+        /** Personal conversations, Delete a conversation */
+        delete: operations["personalDeleteAssistantConversation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/personal/providers": {
         parameters: {
             query?: never;
@@ -9382,6 +9434,35 @@ export interface components {
             page?: string;
             style?: components["schemas"]["AssistantStyle"];
             /** @description The conversation so far, oldest first, ending in a `user` message. At most 40 messages, 8 KiB each and 32 KiB in all. */
+            messages: {
+                /** @enum {string} */
+                role: "user" | "assistant";
+                content: string;
+            }[];
+        };
+        AssistantConversation: {
+            id: string;
+            /** @description The first question */
+            title: string;
+            message_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When it was last kept; the retention window counts from here.
+             */
+            updated_at: string;
+            /** @description The transcript, on the item route only; absent in a list. */
+            messages?: {
+                /** @enum {string} */
+                role: "user" | "assistant";
+                content: string;
+            }[];
+        };
+        AssistantConversationInput: {
+            /** @description Optional; the first question otherwise. */
+            title?: string;
+            /** @description The conversation as the page holds it, oldest first. At most 40 messages, 8 KiB each and 32 KiB in all. */
             messages: {
                 /** @enum {string} */
                 role: "user" | "assistant";
@@ -15959,6 +16040,130 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    personalListAssistantConversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AssistantConversation"][];
+                    };
+                };
+            };
+        };
+    };
+    personalCreateAssistantConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantConversationInput"];
+            };
+        };
+        responses: {
+            /** @description Kept */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversation"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    personalGetAssistantConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversation"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    personalReplaceAssistantConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantConversationInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversation"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    personalDeleteAssistantConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     personalListAssistantProviders: {

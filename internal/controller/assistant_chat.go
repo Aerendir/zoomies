@@ -292,6 +292,42 @@ func ValidateAssistantChat(in []AssistantChatMessage) ([]assistant.Message, erro
 	return out, nil
 }
 
+// ValidateAssistantTranscript is ValidateAssistantChat for a conversation
+// being kept rather than sent: the same roles and the same limits, since what
+// is kept is what the page would send back, but it may end with the answer,
+// which is how a conversation is when a person stops reading it.
+func ValidateAssistantTranscript(in []AssistantChatMessage) ([]AssistantChatMessage, error) {
+	if len(in) == 0 {
+		return nil, &AssistantChatInvalid{"messages", "keep at least one message"}
+	}
+	if len(in) > assistantChatMaxMessages {
+		return nil, &AssistantChatInvalid{"messages", fmt.Sprintf("a conversation of more than %d messages is too long to keep", assistantChatMaxMessages)}
+	}
+	out := make([]AssistantChatMessage, 0, len(in))
+	total := 0
+	for i, m := range in {
+		field := fmt.Sprintf("messages[%d]", i)
+		if m.Role != string(assistant.RoleUser) && m.Role != string(assistant.RoleAssistant) {
+			return nil, &AssistantChatInvalid{field, "a message's role is user or assistant"}
+		}
+		text := strings.TrimSpace(m.Content)
+		switch {
+		case text == "":
+			return nil, &AssistantChatInvalid{field, "a message cannot be empty"}
+		case !utf8.ValidString(text):
+			return nil, &AssistantChatInvalid{field, "a message must be text"}
+		case len(text) > assistantChatMaxMessageBytes:
+			return nil, &AssistantChatInvalid{field, fmt.Sprintf("a message is at most %d KiB", assistantChatMaxMessageBytes>>10)}
+		}
+		total += len(text)
+		out = append(out, AssistantChatMessage{Role: m.Role, Content: text})
+	}
+	if total > assistantChatMaxTotalBytes {
+		return nil, &AssistantChatInvalid{"messages", fmt.Sprintf("a conversation of more than %d KiB is too long to keep", assistantChatMaxTotalBytes>>10)}
+	}
+	return out, nil
+}
+
 // UsableBy is whether an account may use a provider: any administrator may use
 // one that is shared, and only its owner one that is somebody's own subscription.
 func UsableBy(row *store.AssistantProvider, userID string) bool {

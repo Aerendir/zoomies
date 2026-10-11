@@ -256,6 +256,20 @@ provider, test it and make it your default. Its key is encrypted at rest and
 never returned to the browser. Each account has its own providers and default.
 Administrators manage installation providers separately. Existing API providers remain installation-owned after an upgrade; existing subscription providers retain their owner.
 
+## Past conversations
+
+Once Eli has answered, the conversation is kept under your account, so a
+reload or another device finds it: the clock icon in the panel's header lists
+your past conversations, newest first, to pick one up where it was left or to
+delete it. What is kept is the transcript the page would send back, bounded the
+same way as a chat and with credentials and email addresses hidden the same way,
+so nothing is in the database that was not already in front of a model; the
+looks, the provider and the follow-ups an answer came with are not kept, so a
+resumed answer is the words alone. Nobody else can read yours. Each person keeps
+at most fifty, and `retention.assistant_conversations` (thirty days by default)
+removes those untouched for longer. A session with authentication off has no
+account to keep them under, and keeps none.
+
 ## A chat that fits your work
 
 Open Ask Eli from any fleet page. Choose Compact, Default, Expanded or Full

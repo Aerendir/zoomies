@@ -372,6 +372,7 @@ func (c *Controller) prune(ctx context.Context) {
 			return int64(n), err
 		}},
 		{"usage capacity", r.Jobs, c.st.PruneUsageCapacity},
+		{"Eli conversations", r.AssistantConversations, c.st.PruneAssistantConversations},
 		// The class kept for a job is worked out from its runs, and goes when
 		// they do: a job that comes back after that long starts in the default
 		// class, as one that has never run does.

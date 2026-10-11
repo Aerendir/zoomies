@@ -38,3 +38,13 @@ test('an Ask Eli action starts a fresh conversation', () => {
   assert.ok(clear >= 0, 'ask clears the conversation');
   assert.ok(clear < ask.indexOf('this.pending.push'), 'and does so before queueing its prompt');
 });
+
+// The thinking dog and his quotes are what say Eli is working. A model that
+// writes "let me check" and then looks at the fleet a dozen times has words on
+// the page early, and the dog used to leave with the first of them, so the
+// rest of the work looked like a thread that had stopped.
+test('the thinking dog stays for as long as the answer is streaming, words or not', () => {
+  const view = readFileSync(join(src, 'lib/assistant/ConversationView.svelte'), 'utf8');
+  assert.match(view, /\{#if turn\.streaming\}\s*<EliThinking \/>/);
+  assert.doesNotMatch(view, /\{:else if turn\.streaming\}\s*<EliThinking/);
+});

@@ -247,7 +247,13 @@
               {/if}
               {#if turn.content}
                 <Markdown source={turn.content} />
-              {:else if turn.streaming}
+              {/if}
+              <!-- The dog and his quotes stay for as long as the answer is on
+                   its way, under whatever words have arrived: a model that says
+                   "let me check" and then looks at the fleet a dozen times is
+                   still working, and a thread that went quiet after one sentence
+                   read as stuck. -->
+              {#if turn.streaming}
                 <EliThinking />
               {/if}
               {#if turn.hidden}

@@ -846,6 +846,10 @@ var registry = buildRegistry([]Setting{
 		Floor:   24 * time.Hour,
 		Summary: "How long a finished attempt to update the controller or a host, and the rollout that grouped it, is kept, so why a host is behind stays answerable. One still open is never removed, and neither is a failure on the release a machine would still be taken to or the controller last tried, nor a rollout a person cancelled while no later one to its release has ended, so age never resets the two failures that hand a machine to a person or undoes a cancel. 0 keeps every one.",
 	},
+	{
+		Key: "retention.assistant_conversations", Label: "Keep Eli conversations for", Env: "ZOOMIES_RETENTION_ASSISTANT_CONVERSATIONS", Kind: KindDuration, Scope: ScopePlatform, Live: true,
+		Summary: "How long a person's saved conversations with Eli are kept since they were last touched. Each person keeps at most fifty and can delete any of theirs sooner; nobody else can read them. 0 keeps them until the person deletes them.",
+	},
 
 	// ---------------------------------------------------------------------
 	// limits -- fleet-wide ceilings. Platform-scoped, because a ceiling is
