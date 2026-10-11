@@ -275,10 +275,16 @@ type PoolPlan struct {
 	// BlockedFix is what to change to unblock it, kept apart from Blocked
 	// because the problems drawer shows the two differently.
 	BlockedFix string `json:"blocked_fix,omitempty"`
-	// BlockedAtCapacity distinguishes a fleet that is merely full -- every host
-	// could run this pool and all of them are busy, which the next finished job
-	// clears -- from one where no host can ever run it. Both are worth saying;
+	// BlockedAtCapacity distinguishes a fleet that is merely full (every host
+	// that could run this pool is out of slots, which the next finished job
+	// clears) from one where no host can ever run it. Both are worth saying;
 	// only the second is a fault.
+	//
+	// A host that could never run the pool (another backend, platform or
+	// selector, or a machine too small for one of its runners) is not part of
+	// that question, because it would be the same host however long anything
+	// waited. A busy Linux fleet beside a Windows host that only offers the
+	// process backend is therefore full.
 	BlockedAtCapacity bool `json:"blocked_at_capacity,omitempty"`
 	// BlockedNoEligibleHost is the other half of that distinction: not one host
 	// in the fleet could run this pool, so no job finishing anywhere will ever
@@ -1621,7 +1627,10 @@ type blockage struct {
 	what string
 	fix  string
 	// atCapacity is the one case that is not a misconfiguration: every host
-	// could run this pool and all of them are busy.
+	// that could run this pool is out of slots, or waiting on runners of ours
+	// to return what they hold. A host that could never run it is not counted
+	// either way, because it would be the same host however long anything
+	// waited.
 	atCapacity bool
 	// noEligibleHost is its opposite: not one host could take this pool's
 	// runner whatever it finished. Waiting does not clear this one -- only a
@@ -1650,8 +1659,18 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 	}
 	var unhealthy, cordoned, incompatible, backend, platform, selector, profile, tooSmall, full int
 	var shortCPU, shortMemory, lowDisk, held, warming, throttled, committed int
+	// candidates are the hosts that could run this pool whatever they are doing
+	// at the moment. Of those, waiting counts the ones that only need a job to
+	// finish (out of slots, or short of memory or CPU that runners of ours
+	// hold) and slotsOut the ones out of slots in particular. The two flags
+	// below are asked of these, so that a host that could never run the pool is
+	// counted neither as full nor as a reason the fleet is not.
+	var candidates, waiting, slotsOut int
 	var detail string
 	for _, h := range hs.hosts {
+		// waits is set where a job finishing would give this host back what it
+		// lacks, and outOfSlots where what it lacks is a slot.
+		var waits, outOfSlots bool
 		switch {
 		case !h.Healthy(hs.now):
 			unhealthy++
@@ -1695,6 +1714,7 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 			// operator to raise a capacity that is not the problem: the host
 			// is being pushed too hard at the slots it already has.
 			throttled++
+			waits, outOfSlots = true, true
 			if detail == "" {
 				detail = naming.ForSentence(h.Name) + ": " + ThrottleReason(h)
 			}
@@ -1712,6 +1732,7 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 			tooSmall++
 		case hs.free[h.ID] <= 0:
 			full++
+			waits, outOfSlots = true, true
 		default:
 			// It has a slot and is the right kind of machine, so what is left
 			// on it is what ran out. Naming which resource is the difference
@@ -1730,14 +1751,26 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 				shortMemory++
 				if hs.ours[h.ID] {
 					committed++
+					waits = true
 				}
 			case alloc.CPUsKnown && left.CPUs+cpuEpsilon < want.CPUs:
 				shortCPU++
 				if hs.ours[h.ID] {
 					committed++
+					waits = true
 				}
 			default:
 				full++
+				waits, outOfSlots = true, true
+			}
+		}
+		if HostCouldRun(h, p) {
+			candidates++
+			if waits {
+				waiting++
+			}
+			if outOfSlots {
+				slotsOut++
 			}
 		}
 	}
@@ -1762,14 +1795,36 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 	add(warming, "starting one runner at a time while CPU is busy")
 	add(throttled, "throttled after sustained pressure")
 	add(full, "at capacity")
-	// onlyFull is the fleet whose every host is out of slots, as opposed to one
-	// that is also short of memory or CPU. Both are "at capacity" to a caller,
-	// but the fix text below tells them apart, so it asks this rather than
-	// atCapacity.
-	onlyFull := full+throttled == len(hs.hosts)
+	// onlyFull is the fleet whose every host that could run the pool is out of
+	// slots, as opposed to one that is also short of memory or CPU. Both are
+	// "at capacity" to a caller, but the fix text below tells them apart, so it
+	// asks this rather than atCapacity. It is asked of the same hosts, and for
+	// the same reason.
+	onlyFull := full+throttled == len(hs.hosts) || (candidates > 0 && slotsOut == candidates)
 	b := blockage{
 		what: fmt.Sprintf("no host can take a new %s runner (%s)",
 			p.Backend, strings.Join(parts, ", ")),
+		// The fleet is full when every host that could run this pool is
+		// waiting on a job. A host that could never run it (another backend,
+		// platform or selector, or a machine too small for one of its
+		// runners) is not part of that question: it would be the same host
+		// however long anything waited, so it is not counted, and it cannot
+		// stop the fleet being called full. It used to, and one Windows box
+		// beside a busy Linux fleet kept the whole fleet from being called
+		// full.
+		//
+		// A host that could run the pool but is not waiting on a job keeps
+		// the fleet from being called full. One that is cordoned, silent or
+		// running an agent this controller cannot talk to is waiting on
+		// somebody to uncordon, repair or upgrade it, which is a cheaper
+		// answer than a rented machine; one that is held or warming lifts on
+		// its own.
+		//
+		// The first half is every fleet that was ever reported full, kept as
+		// it was so that the second can only add to it: a fleet whose hosts
+		// are all throttled and also too small has no host that could run the
+		// pool, and has always been called full.
+		//
 		// A throttled host is full at the slots it has left, and to a
 		// provisioner that is the same fact as full: more hosts is the one
 		// answer that helps either way, so a fleet blocked only by throttles
@@ -1782,7 +1837,7 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 		// the fleet, which no job of ours finishing will ease, and it stays in
 		// neither flag as it always has. Disk is never counted, because a
 		// finishing runner leaves its caches behind on purpose.
-		atCapacity: full+throttled+committed == len(hs.hosts),
+		atCapacity: full+throttled+committed == len(hs.hosts) || (candidates > 0 && waiting == candidates),
 		// Not one host was merely full, committed, throttled, held or warming,
 		// so nothing finishing -- and no pressure easing -- frees a slot this
 		// pool could use. The counts above already say which way each host

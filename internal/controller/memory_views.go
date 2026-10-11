@@ -9,6 +9,7 @@ import (
 	"github.com/eyupio/zoomies/internal/backend"
 	"github.com/eyupio/zoomies/internal/scheduler"
 	"github.com/eyupio/zoomies/internal/store"
+	"github.com/eyupio/zoomies/internal/version"
 )
 
 // Memory states a runner's memory_resource can be in. They are stable names for
@@ -155,6 +156,14 @@ type ScratchView struct {
 	// InMemory counts the folders the runner was given in memory.
 	InMemory int                 `json:"in_memory"`
 	Folders  []ScratchFolderView `json:"folders"`
+	// Estimated says the folders were worked out by a build other than the one
+	// that mounted them, and Note says so in a sentence that names both. The
+	// controller records a runner's folders from its own placement rule, and
+	// the agent on the host mounts them from its own copy of that rule, so
+	// while a fleet runs two builds the row can say 2 GB of a folder the agent
+	// mounted at 1 GB. Absent while the two are the same build.
+	Estimated bool   `json:"estimated,omitempty"`
+	Note      string `json:"note,omitempty"`
 }
 
 // ScratchFolderView is one folder: what it is, where it lives in the runner,
@@ -177,6 +186,10 @@ func scratchView(r *store.Runner) *ScratchView {
 		return nil
 	}
 	out := &ScratchView{InMemory: r.Scratch.InMemory(), Folders: make([]ScratchFolderView, 0, len(r.Scratch.Folders))}
+	if c, a := r.Scratch.ControllerVersion, r.Scratch.AgentVersion; version.CompareBuilds(a, c) != version.SkewNone {
+		out.Estimated = true
+		out.Note = fmt.Sprintf("An estimate: these folders were worked out by the controller, build %s, and mounted by the agent on the host, which ran build %s when this runner was created and may have placed them differently.", c, a)
+	}
 	for _, f := range r.Scratch.Folders {
 		label, path, floor := scratchFolder(f.Kind)
 		out.Folders = append(out.Folders, ScratchFolderView{

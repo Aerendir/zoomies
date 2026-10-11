@@ -153,9 +153,10 @@ the problems list is re-sent whenever its JSON differs. Times travel as `since`.
 - `provisioningHeld` gains a clause for the switch, after the recovery fence, so
   `ProviderView.Held` and `zoomies providers list` stop saying a provider is fine
   when nothing can be bought.
-- When a setting under `provider.` changes through the settings API, every
-  provider's view is republished (`provider.updated`), as `KickKennel` does for
-  its feature, so open pages move without a reload.
+- When a pass finds that a provider's held sentence has changed (renting
+  switched on or off, for example) it republishes that provider's view
+  (`provider.updated`), so open pages move without a reload. A settings change
+  already wakes the loop at once, so this follows the click within a second.
 
 ### 4. One verdict, every surface
 
@@ -180,15 +181,16 @@ the problems list is re-sent whenever its JSON differs. Times travel as `since`.
 }
 ```
 
-The fleet `state` is `none` (no provider rows other than demo fixtures), `off`,
+The fleet `state` is `none` (no enabled provider other than demo fixtures), `off`,
 `no_ceiling` (renting is on and the fleet ceiling is zero) or `on`.
 `suggested_max_machines` is the sum of the enabled providers' own ceilings, at
 least one: what the click sets. `pools` is empty before the first pass.
 
 **Held.** `ProviderView.Held` says renting is off (section 3).
 
-**Problem `provider.renting_off`.** Raised wherever a non-demo provider exists and
-renting is off, from a function that runs before `machineProblems` returns.
+**Problem `provider.renting_off`.** Raised wherever an enabled non-demo provider
+exists and renting is off, from a function that runs even though `machineProblems`
+returns early while renting is off.
 Severity is chosen in code: a warning when a pool's verdict is `off` or machines
 are still owned, otherwise info. The setting is `provider.enabled`. Fleet audience,
 a public-status sentence ("Machines are not being rented, so jobs wait for the

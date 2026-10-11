@@ -7364,6 +7364,10 @@ export interface components {
             /** @description How many of the folders the runner was given in memory. */
             in_memory: number;
             folders: components["schemas"]["ScratchFolder"][];
+            /** @description The folders were worked out by a build other than the one that mounted them. The controller records them from its own placement rule and the agent on the host mounts them from its own copy of that rule, so while a fleet runs two builds the row can say 2 GB of a folder the agent mounted at 1 GB. Absent while the two are the same build. */
+            estimated?: boolean;
+            /** @description The sentence for `estimated` */
+            note?: string;
         };
         ScratchFolder: {
             /** @enum {string} */

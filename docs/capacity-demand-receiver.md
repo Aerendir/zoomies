@@ -13,8 +13,9 @@ and a high-entropy `signing_secret`; `pools` optionally limits publication to
 pool IDs or names.
 
 The controller posts JSON for `capacity_demand` when queued work has nowhere to
-run (either because every eligible host is full, or because no host in the
-fleet could run that pool at all) and `scale_down_opportunity` only after
+run (either because every host that could run the pool is full, however many
+other hosts the fleet has, or because no host in the fleet could run that pool
+at all) and `scale_down_opportunity` only after
 excess idle host capacity remains continuously visible for the cooldown.
 Delivery state is stored in SQLite, so it survives a restart. A scale-down event
 is advisory: the receiver must apply its own safety policy before removing a VM.
