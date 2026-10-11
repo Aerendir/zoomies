@@ -406,28 +406,55 @@ func TestAModeNobodyDefinedIsReadAsOff(t *testing.T) {
 }
 
 // A build from main follows the head of main, whatever the mode. It is usually
-// ahead of the newest release, so there is nothing in a list of releases to
-// compare it with, and the mode must not change what it asks.
-func TestADevelopmentBuildKeepsAskingAboutMainWhateverTheMode(t *testing.T) {
-	for _, mode := range []string{"off", "manual", "auto"} {
+// ahead of the newest release, so the latest-release question is never asked of
+// it, and with updates off nothing else is.
+func TestADevelopmentBuildKeepsAskingAboutMainWithUpdatesOff(t *testing.T) {
+	h := newHarness(t)
+	withVersion(t, "main-sha-abc1234")
+	h.inMode("off")
+	gh := h.stubGitHub(http.StatusOK, `{"sha":"def5678901234567","html_url":"https://example.invalid/commit/def5678"}`)
+
+	if err := h.c.checkForRelease(h.ctx); err != nil {
+		t.Fatalf("checkForRelease: %v", err)
+	}
+
+	if want := []string{mainCommitURL}; !slices.Equal(gh.asked, want) {
+		t.Fatalf("asked for %v, want only %v", gh.asked, want)
+	}
+	if got := h.c.latestDevelopment(); got == nil || got.SHA != "def5678901234567" {
+		t.Errorf("development = %+v, want the head of main", got)
+	}
+	if got := h.c.latestRelease(); got != nil {
+		t.Errorf("release = %+v, want no release comparison for a main build", got)
+	}
+}
+
+// With updates on, a build from main reads the release list as well, because the
+// newest release can now replace it by hand.
+func TestADevelopmentBuildReadsTheReleaseListOnceUpdatesAreOn(t *testing.T) {
+	for _, mode := range []string{"manual", "auto"} {
 		t.Run(mode, func(t *testing.T) {
 			h := newHarness(t)
 			withVersion(t, "main-sha-abc1234")
 			h.inMode(mode)
-			gh := h.stubGitHub(http.StatusOK, `{"sha":"def5678901234567","html_url":"https://example.invalid/commit/def5678"}`)
+			var asked []string
+			h.c.httpClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) *http.Response {
+				asked = append(asked, r.URL.String())
+				if r.URL.String() == mainCommitURL {
+					return jsonResponse(http.StatusOK, `{"sha":"def5678901234567","html_url":"https://example.invalid/commit/def5678"}`)
+				}
+				return jsonResponse(http.StatusOK, `[]`)
+			})}
 
 			if err := h.c.checkForRelease(h.ctx); err != nil {
 				t.Fatalf("checkForRelease: %v", err)
 			}
 
-			if want := []string{mainCommitURL}; !slices.Equal(gh.asked, want) {
-				t.Fatalf("asked for %v, want only %v", gh.asked, want)
+			if want := []string{mainCommitURL, releaseListURL}; !slices.Equal(asked, want) {
+				t.Fatalf("asked for %v, want %v", asked, want)
 			}
-			if got := h.c.latestDevelopment(); got == nil || got.SHA != "def5678901234567" {
-				t.Errorf("development = %+v, want the head of main", got)
-			}
-			if got := h.c.latestRelease(); got != nil {
-				t.Errorf("release = %+v, want no release comparison for a main build", got)
+			if got := h.c.latestRelease(); got == nil || got.Releases == nil {
+				t.Errorf("release = %+v, want the list kept", got)
 			}
 		})
 	}

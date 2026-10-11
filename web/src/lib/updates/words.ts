@@ -95,9 +95,6 @@ export interface UpdateState {
  */
 export function updateState(status: UpdatesStatus, now: number = Date.now()): UpdateState {
   if (status.mode === 'off') return { label: 'Off', tone: 'neutral' };
-  // A build that is not from a release is left alone whether or not a list was
-  // read: one from main never reads it, and the sentence for either is the same.
-  if (!status.running.release) return { label: 'Left alone', tone: 'neutral' };
   if (status.checked_at === null) return { label: 'Not read yet', tone: 'neutral' };
   const { target } = status;
   if (target === null) return { label: 'Nothing to take', tone: 'neutral' };
@@ -124,7 +121,9 @@ export function soakNote(mode: UpdateMode): string {
 
 /** What the build says about where it came from. */
 export function buildText(release: boolean): string {
-  return release ? 'From a release' : 'Not from a release, so updates leave it alone';
+  return release
+    ? 'From a release'
+    : 'Not from a release, so an update moves it onto the newest release';
 }
 
 /**
@@ -291,8 +290,6 @@ export function controllerOffer(status: UpdatesStatus, canPlatform: boolean): Up
   if (!canPlatform) return none('Updating the controller needs the platform role.');
   if (status.mode === 'off')
     return none('Updating is off. Set updates.mode to manual or auto to update from here.');
-  if (!status.running.release)
-    return none('This build is not from a release, so there is nothing to update it to from here.');
   // A helper that can never be installed is never offered the command that
   // installs one, whatever arrived beside it: that command would only refuse.
   if (status.helper.state === 'unsupported')
@@ -315,6 +312,7 @@ export function controllerOffer(status: UpdatesStatus, canPlatform: boolean): Up
 export function confirmControllerUpdate(
   tag: string,
   running: string,
+  release = true,
 ): {
   title: string;
   description: string;
@@ -325,6 +323,11 @@ export function confirmControllerUpdate(
     title: 'Update the controller',
     description: `Update this controller from ${running} to ${tag}?`,
     consequences: [
+      ...(release
+        ? []
+        : [
+            'This build is not from a release. A build from main is usually ahead of the newest release, so this may take the controller back to older code.',
+          ]),
       'The controller restarts. This page loses its connection for a short while and finds it again by itself.',
       'Jobs that are running keep running.',
       'If the release changes the database, a copy of it is kept first beside the database, and the last two copies are kept. A release that changes nothing there takes none.',

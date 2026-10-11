@@ -51,6 +51,11 @@ type Target struct {
 	// Newer says whether Release is a later release than the one running. Only
 	// then is there anything to take.
 	Newer bool
+	// Replaces says the running build is not from a release, so Release would
+	// replace it rather than succeed it. It may be a step back, since a build from
+	// main is usually ahead of the newest release, which is why only a person takes
+	// it: the planner never does.
+	Replaces bool
 	// DueAt is the earliest time the mode takes Release: the end of the soak in
 	// auto, and zero in manual, where the person asking is the only wait. It
 	// means nothing unless Newer.
@@ -82,14 +87,18 @@ func Choose(in ChooseInput) Target {
 	t := Target{Release: best}
 
 	release, fromRelease := version.Release(in.Running)
-	if !fromRelease {
-		// A controller on :dev is usually ahead of the newest release, so any
-		// answer but "leave it alone" would be a downgrade.
-		t.Reason = "This build is not from a release, so updates leave it alone. Run a released build and this clears."
-		return t
-	}
 	if !found {
 		t.Reason = noReleaseReason(in.GOOS, in.GOARCH)
+		return t
+	}
+	if !fromRelease {
+		// A controller on :dev is usually ahead of the newest release, and there is
+		// no order to compare, so this is offered and never taken by itself: the
+		// person who presses the button is the one who knows whether a release is
+		// where they want to be.
+		t.Newer, t.Replaces = true, true
+		t.Reason = fmt.Sprintf("Available: %s can replace this build, %s, which is not from a release. A build from main is usually ahead of the newest release, so this may be a step back; it is taken only when someone asks, in manual and in auto.",
+			best.Tag, in.Running)
 		return t
 	}
 

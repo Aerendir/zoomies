@@ -267,12 +267,23 @@ func withHelperPlatform(t *testing.T, goos string) {
 	withHelperHost(t, updates.HelperHost{GOOS: goos, Systemd: true})
 }
 
-func TestAControllerUpdateIsRefusedOnABuildThatIsNotARelease(t *testing.T) {
+// A build from main has no place in the order of releases, so the newest is not
+// compared with it: the person pressing the button has chosen to move it onto
+// one, and the dialog warns them it may be a step back.
+func TestAControllerUpdateMovesABuildThatIsNotFromAReleaseOntoTheNewest(t *testing.T) {
 	h := newHarness(t)
 	h.readyToUpdate()
 	withVersion(t, "main-sha-abc1234")
-	_, err := h.c.RequestControllerUpdate(h.ctx, alice, "")
-	assertRefusedWithNothingWritten(t, h, err, ErrUpdateNotARelease)
+
+	h.request()
+
+	open := h.openAttempts()
+	if len(open) != 1 || open[0].FromVersion != "main-sha-abc1234" || open[0].ToVersion != "v1.3.5" {
+		t.Fatalf("attempts = %+v, want one from main-sha-abc1234 to v1.3.5", open)
+	}
+	if req := h.takeRequest(); req.Tag != "v1.3.5" {
+		t.Errorf("request = %+v, want it to name v1.3.5", req)
+	}
 }
 
 func TestAControllerUpdateIsRefusedWhenNothingIsNewer(t *testing.T) {

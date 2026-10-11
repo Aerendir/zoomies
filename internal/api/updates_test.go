@@ -520,17 +520,6 @@ func TestTheUpdateRoutesRefuseWithTheirCodesFromTheStateThatCausesThem(t *testin
 			code: "update.check_disabled",
 		},
 		{
-			name: "the build is not a release",
-			setup: func(h *harness, as updateCallers) {
-				h.readyToUpdate(as)
-				useVersion(h.t, "main-sha-abc1234")
-			},
-			do: func(h *harness, as updateCallers) *response {
-				return h.do(request{method: http.MethodPost, path: updatesControllerPath, cookie: as.platform})
-			},
-			code: "update.not_a_release",
-		},
-		{
 			name: "there is no helper",
 			setup: func(h *harness, as updateCallers) {
 				h.readyToUpdate(as)

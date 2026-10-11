@@ -1301,16 +1301,15 @@ func TestAMissingHelperRaisesAPlatformProblemOnlyWhenTheModeIsNotOff(t *testing.
 		})
 	}
 
-	// A build from main cannot be updated by the button (RequestControllerUpdate
-	// refuses it first), so a missing helper is no reason to warn: the warning
-	// would name a fix that changes nothing.
+	// A build from main can be moved onto the newest release by the button, which
+	// needs the helper like any other, so its absence is worth the warning.
 	t.Run("manual with the helper missing on a build that is not a release", func(t *testing.T) {
 		h := newHarness(t)
 		withVersion(t, "main-sha-abc1234")
 		h.inMode("manual")
 		h.pass(h.c)
-		if contains(h.problemCodes(), "controller.update_helper_missing") {
-			t.Errorf("problems = %v, want no missing-helper problem on a build that cannot be updated", h.problemCodes())
+		if !contains(h.problemCodes(), "controller.update_helper_missing") {
+			t.Errorf("problems = %v, want the missing-helper problem on a build that can be updated", h.problemCodes())
 		}
 	})
 

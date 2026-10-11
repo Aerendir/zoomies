@@ -225,6 +225,19 @@ func chooseFor(s Snapshot) Target {
 	return Choose(ChooseInput{Mode: s.Mode, Soak: s.Soak, Now: s.Now, Running: s.Running, Releases: s.Releases, GOOS: s.GOOS, GOARCH: s.GOARCH})
 }
 
+// Auto never moves a build that is not from a release: the release would
+// replace it and may be a step back, which is a decision for a person.
+func TestDecideNeverReplacesABuildThatIsNotFromAReleaseInAuto(t *testing.T) {
+	s := planSnapshot()
+	s.Running = "main-sha-abc1234"
+	p := decide(t, s)
+	for _, a := range p.Actions {
+		if a.Kind == ActionRequestController {
+			t.Errorf("auto asked to update a build that is not from a release: %+v", a)
+		}
+	}
+}
+
 func TestDecideRequestsTheControllerOnceTheSoakHasPassedInAuto(t *testing.T) {
 	for _, age := range []time.Duration{24 * time.Hour, 25 * time.Hour} {
 		t.Run(age.String(), func(t *testing.T) {

@@ -232,9 +232,10 @@ A release is offered only once it is complete: a tag of the form `vX.Y.Z`,
 neither a prerelease nor a draft, with `checksums.txt` and the binary for the
 machine's system attached. GitHub makes a release public before all its files
 are uploaded, so the newest release is not always one that can be installed. A
-controller built from `main`, or from a checkout of your own, is never updated
-this way: it is usually ahead of the newest release, and an update would take it
-back.
+controller built from `main`, or from a checkout of your own, is offered the
+newest release as a replacement, by the button and never by `auto`: it is
+usually ahead of that release, so the update may take it back, and the
+confirmation says so.
 
 ### Adding the update helper
 

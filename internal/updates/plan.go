@@ -464,7 +464,7 @@ func (p *planner) halted() bool {
 // cannot when it cannot. Until it is due, hosts follow the release it runs.
 func (p *planner) controller() bool {
 	t := p.choice
-	if !t.DueBy(p.s.Now) {
+	if t.Replaces || !t.DueBy(p.s.Now) {
 		return false
 	}
 	tag := t.Release.Tag

@@ -17,13 +17,15 @@
     tag: string;
     /** The build the controller reports now. */
     running: string;
+    /** Whether that build came from a release; one that did not may be taken back by the update. */
+    release?: boolean;
     /** Return false to keep the dialog open for another try. */
     onconfirm: () => boolean | Promise<boolean>;
   }
 
-  let { open = $bindable(false), tag, running, onconfirm }: Props = $props();
+  let { open = $bindable(false), tag, running, release = true, onconfirm }: Props = $props();
 
-  const words = $derived(confirmControllerUpdate(tag, running));
+  const words = $derived(confirmControllerUpdate(tag, running, release));
 </script>
 
 <ConfirmDialog

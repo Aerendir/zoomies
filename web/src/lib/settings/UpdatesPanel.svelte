@@ -351,6 +351,7 @@
     bind:open={confirming}
     tag={asked}
     running={status.running.version}
+    release={status.running.release}
     onconfirm={() => start(asked)}
   />
 {/if}

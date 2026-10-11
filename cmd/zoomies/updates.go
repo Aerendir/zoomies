@@ -102,7 +102,7 @@ func updatesStatusCmd(ctx context.Context, e *env, args []string) error {
 	// in a row of the CLI's own.
 	release := "a release build"
 	if !st.Running.Release {
-		release = "not from a release, so it is never offered an update"
+		release = "not from a release, so an update moves it onto the newest release"
 	}
 	rows := [][2]string{
 		{"Mode", plain(st.Mode)},

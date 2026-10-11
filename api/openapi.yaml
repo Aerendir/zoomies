@@ -7102,7 +7102,8 @@ paths:
         with `mode: off` it names no release and says how to turn updating on, and until the
         list of releases has been read it says that, because a list nobody has read and a
         list with nothing in it that can be installed are different things to be told. A
-        build that is not from a release is left alone, and the sentence says so. It changes
+        build that is not from a release is offered the newest release as a replacement, never
+        as the next step, and the sentence says it may be a step back. It changes
         nothing. The same document is the payload of the `updates.updated` event. Below the
         `platform` role the text of the controller's last attempt is a fixed sentence for its
         state, in the response and in the event alike, because the real text can name a path
