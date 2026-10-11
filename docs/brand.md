@@ -79,7 +79,7 @@ actually serves: `favicon.ico` (16/32/48), `favicon-16.png`, `favicon-32.png`,
 
 The app serves the full logo and emblem as SVG paths. It keeps the original
 black artwork on a pale backdrop in both themes. Settings, Appearance offers
-**Starlight** (the default), **Pearl veil**, **Orbital haze**, **White square** and
+**Orbital haze** (the default), **Starlight**, **Pearl veil**, **White square** and
 **White circle**. The selection stays in this browser, survives sign-out and
 applies to the main logo, including the login screen on portrait phones.
 Paw icons retain their original appearance, without a decorative backdrop.
@@ -213,7 +213,10 @@ branded exactly as one created from the editor is.
 
 ## Animated homepage logo
 
-The homepage gives the approved full logo a gentle whole-artwork movement.
+The homepage closes on the approved black logo over the Orbital haze backdrop, in
+both schemes, exactly as the sign-in page shows it
+(`brand/backdrops/orbital.webp`, drawn by CSS and never baked into the
+artwork). It gives the logo a gentle whole-artwork movement.
 It does not slice or reshape the dog. The old anatomy-specific animation has
 been retired because its clips belong to the previous design.
 

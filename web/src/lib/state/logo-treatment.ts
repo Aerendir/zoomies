@@ -1,7 +1,7 @@
 /** The backdrop changes; the approved black artwork does not. */
 export const LOGO_TREATMENTS = ['starlight', 'pearl', 'orbital', 'square', 'circle'] as const;
 export type LogoTreatment = (typeof LOGO_TREATMENTS)[number];
-export const DEFAULT_LOGO_TREATMENT: LogoTreatment = 'starlight';
+export const DEFAULT_LOGO_TREATMENT: LogoTreatment = 'orbital';
 
 export const LOGO_TREATMENT_OPTIONS = [
   {

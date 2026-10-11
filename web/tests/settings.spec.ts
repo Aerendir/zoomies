@@ -538,7 +538,7 @@ test('a duration setting reads 2 weeks and writes it back as 14d', async ({ page
   await row.getByRole('button', { name: `Cancel editing ${key}` }).click();
 });
 
-test('an unsupported saved logo style falls back to Starlight without losing other preferences', async ({
+test('an unsupported saved logo style falls back to Orbital haze without losing other preferences', async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -548,10 +548,10 @@ test('an unsupported saved logo style falls back to Starlight without losing oth
     );
   });
   await goto(page, '/settings/appearance', 'Appearance');
-  await expect(page.getByRole('combobox', { name: 'Logo style' })).toHaveValue('starlight');
+  await expect(page.getByRole('combobox', { name: 'Logo style' })).toHaveValue('orbital');
   await expect(page.getByRole('img', { name: 'Zoomies logo preview' })).toHaveAttribute(
     'data-treatment',
-    'starlight',
+    'orbital',
   );
   await page.getByRole('combobox', { name: 'Logo style' }).selectOption('pearl');
   const stored = await page.evaluate(() =>
