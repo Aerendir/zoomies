@@ -13,6 +13,7 @@ import (
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/naming"
 	"github.com/eyupio/zoomies/internal/store"
+	"github.com/eyupio/zoomies/internal/version"
 )
 
 // A pool that keeps its work folder or /tmp in memory spends its memory limit
@@ -643,6 +644,11 @@ func (c *Controller) recordScratch(ctx context.Context, r *store.Runner, pool *s
 		return
 	}
 	scratch := backend.PlanScratch(spec, pool.Tmpfs)
+	if host != nil {
+		// Whose rule placed the folders, and whose will mount them. The view
+		// calls the row an estimate while the two are different builds.
+		scratch.ControllerVersion, scratch.AgentVersion = version.Version, host.Version
+	}
 	if host != nil && !hostSupportsTmpfs(host) {
 		// An agent too old to mount a tmpfs starts the runner with its folders
 		// on disk, which is what the row has to say rather than what the pool

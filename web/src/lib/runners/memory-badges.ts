@@ -455,6 +455,9 @@ function folderBadge(scratch: RunnerScratch): MemoryBadge | null {
     detail: some
       ? "These live in the runner's memory instead of on its host's disk, which is faster and is charged to the runner's memory limit."
       : "The pool keeps these folders in memory where it can; for this runner it could not, so they are on its host's disk, as they would be with the setting off.",
+    // While the host's agent runs another build than the controller the row is
+    // the controller's estimate, and the sentence that says so names both builds.
+    notes: scratch.estimated && scratch.note ? [scratch.note] : [],
     folders: rows,
   });
 }

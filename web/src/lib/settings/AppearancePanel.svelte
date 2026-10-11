@@ -69,8 +69,8 @@
     <div class="text">
       <label class="label" for="logo-treatment">Logo style</label>
       <p class="description" id="logo-treatment-description">
-        Orbital haze is the default. This choice applies to the main Zoomies logo, including sign-in on
-        a phone, and stays in this browser after you sign out. Paw icons keep their original
+        Orbital haze is the default. This choice applies to the main Zoomies logo, including sign-in
+        on a phone, and stays in this browser after you sign out. Paw icons keep their original
         appearance. The black logo artwork is the same in every style.
       </p>
       <div class="logo-select">

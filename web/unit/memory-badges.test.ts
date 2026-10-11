@@ -297,3 +297,12 @@ test('the small words', () => {
   assert.equal(sentenceCase('already ends.'), 'Already ends.');
   assert.equal(sentenceCase('  '), '');
 });
+
+test('folders worked out by another build than the one that mounted them say they are an estimate', () => {
+  const note =
+    'An estimate: these folders were worked out by the controller, build main-sha-1c5b8378, and mounted by the agent on the host, which ran build main-sha-503de486 when this runner was created and may have placed them differently.';
+  const [badge] = memoryBadges({ scratch: { ...scratch([work, tmp]), estimated: true, note } });
+  assert.deepEqual(badge?.notes, [note]);
+  const [plain] = memoryBadges({ scratch: scratch([work, tmp]) });
+  assert.deepEqual(plain?.notes, []);
+});

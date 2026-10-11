@@ -185,3 +185,32 @@ func TestARunnersInMemoryFoldersAreRecordedOnceAndReadBack(t *testing.T) {
 		t.Fatalf("scratch after a whole-row update = %+v, %v; want it kept", again.Scratch, err)
 	}
 }
+
+// The row says which build worked the folders out and which mounted them. The
+// controller writes it from its own placement rule and the agent on the host
+// mounts from its own copy, and while a fleet runs two builds the two can
+// disagree; the view can only say so if the row remembers both.
+func TestARunnersScratchRemembersWhichBuildsWorkedItOutAndMountedIt(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	_, pool, host := seedPool(t, s)
+	r := &Runner{PoolID: pool.ID, HostID: host.ID, Name: "builds", State: RunnerProvisioning}
+	if err := s.CreateRunner(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	want := RunnerScratch{
+		Folders:           []ScratchFolder{{Kind: ScratchTmp, AskedMB: 4096, SizeMB: 4096, Auto: true}},
+		ControllerVersion: "main-sha-1c5b8378",
+		AgentVersion:      "main-sha-503de486",
+	}
+	if err := s.SetRunnerScratch(ctx, r.ID, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetRunner(ctx, r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Scratch.ControllerVersion != want.ControllerVersion || got.Scratch.AgentVersion != want.AgentVersion {
+		t.Fatalf("scratch builds = %q and %q, want %q and %q", got.Scratch.ControllerVersion, got.Scratch.AgentVersion, want.ControllerVersion, want.AgentVersion)
+	}
+}
