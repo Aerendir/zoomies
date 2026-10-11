@@ -28,7 +28,7 @@ and backdrop together to fit, without clipping the atmosphere. Preserve the supp
 Leave clear space equal to the wordmark's O around the full logo, or 12.5%
 of the emblem's width. Never stretch, recolour individual parts, add shadows,
 or replace the lettering with a font. Keep the original black artwork in both themes. Settings, Appearance offers
-Starlight (the default), Pearl veil, Orbital haze, White square and White circle.
+Orbital haze (the default), Starlight, Pearl veil, White square and White circle.
 Atmospheric treatments blend pale light into the surrounding surface; stars and
 orbital trails belong to the backdrop behind the separate original artwork.
 Simple treatments use a white inset.

@@ -20,8 +20,8 @@ from here rather than inventing values.
 ## 1. Design tokens
 
 Logo backdrops are chosen in Settings, Appearance and saved in this browser.
-Starlight is the default for new, missing or unrecognised preferences. Pearl
-veil, Orbital haze, White square and White circle are the other choices. Every
+Orbital haze is the default for new, missing or unrecognised preferences.
+Starlight, Pearl veil, White square and White circle are the other choices. Every
 main logo uses the same choice, including the unauthenticated login screen.
 The original black artwork remains unchanged in both themes. The `--z-logo-*`
 tokens select the full atmospheric backdrop assets and define inset spacing.
