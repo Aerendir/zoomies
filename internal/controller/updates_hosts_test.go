@@ -1218,17 +1218,18 @@ func TestWhatIsRememberedOfAnAnswerGoesWithItsAttempt(t *testing.T) {
 
 // A card offers the way to update its host by hand that works on that host.
 // zoomies upgrade knows systemd and launchd and no Windows service, and Windows
-// has no sudo, so a Windows agent is given the steps by hand and never a sudo
-// line it would paste into a prompt that cannot run it.
+// has no sudo, so a Windows agent is given the installer script, which upgrades
+// an enrolled machine, and never a sudo line it would paste into a prompt that
+// cannot run it.
 func TestAHostCardOffersTheCommandThatWorksOnItsPlatform(t *testing.T) {
 	for _, tc := range []struct {
 		goos     string
-		sudo     bool
+		prefix   string
 		mentions string
 	}{
-		{"linux", true, "zoomies upgrade --mode agent"},
-		{"darwin", true, "zoomies upgrade --mode agent"},
-		{"windows", false, "zoomies.exe"},
+		{"linux", "sudo ", "zoomies upgrade --mode agent"},
+		{"darwin", "sudo ", "zoomies upgrade --mode agent"},
+		{"windows", "& ", "install.ps1))) -Mode agent -Version 'v1.3.5'"},
 	} {
 		t.Run(tc.goos, func(t *testing.T) {
 			withVersion(t, "1.3.5")
@@ -1243,43 +1244,27 @@ func TestAHostCardOffersTheCommandThatWorksOnItsPlatform(t *testing.T) {
 			if tc.goos != "linux" && view.Update.State != HostUpdateUnsupported {
 				t.Errorf("the %s card's update block = %+v, want unsupported", tc.goos, view.Update)
 			}
-			if tc.sudo {
-				if !strings.HasPrefix(view.UpgradeCommand, "sudo ") || !strings.Contains(view.UpgradeCommand, tc.mentions) {
-					t.Errorf("upgrade_command = %q, want the sudo zoomies upgrade line", view.UpgradeCommand)
+			if !strings.HasPrefix(view.UpgradeCommand, tc.prefix) || !strings.Contains(view.UpgradeCommand, tc.mentions) {
+				t.Errorf("upgrade_command = %q, want it to start %q and contain %q", view.UpgradeCommand, tc.prefix, tc.mentions)
+			}
+			if tc.goos == "windows" {
+				if strings.Contains(view.UpgradeCommand, "sudo") || strings.Contains(view.UpgradeCommand, "zoomies upgrade") {
+					t.Errorf("a Windows command is %q, want no sudo and no zoomies upgrade", view.UpgradeCommand)
 				}
-				return
-			}
-			if view.UpgradeCommand != "" {
-				t.Errorf("upgrade_command = %q, want none: Windows has no sudo and zoomies upgrade knows no Windows service", view.UpgradeCommand)
-			}
-			for _, text := range []string{view.UpgradeNote, view.Update.Reason} {
-				if strings.Contains(text, "sudo") || strings.Contains(text, "command below") {
-					t.Errorf("a Windows card says %q, want no sudo and no command below", text)
+				if strings.Contains(view.UpgradeCommand, "JoinToken") {
+					t.Errorf("a Windows command is %q, want an upgrade, never a new enrolment", view.UpgradeCommand)
 				}
-			}
-			if !strings.Contains(view.UpgradeNote, tc.mentions) || !strings.Contains(view.UpgradeNote, "sc.exe") {
-				t.Errorf("upgrade_note = %q, want the steps by hand: replace zoomies.exe and restart the service", view.UpgradeNote)
 			}
 			if view.UpgradeVersion != "1.3.5" {
-				t.Errorf("upgrade_version = %q, want the controller's release, which the steps take it to", view.UpgradeVersion)
-			}
-			ps, err := h.c.Problems(h.ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, p := range ps {
-				if p.TargetID == host.ID && strings.Contains(p.Fix, "command") {
-					t.Errorf("the %s note's fix is %q, want it to point at the steps on the card, there being no command", p.Code, p.Fix)
-				}
+				t.Errorf("upgrade_version = %q, want the controller's release, which the command takes it to", view.UpgradeVersion)
 			}
 		})
 	}
 }
 
-// The two other places that send a person to update a host by hand must not
-// name a command a Windows host cannot run: the card of an agent that has not
-// said its version, and the refusal of a rollout no host can take.
-func TestAWindowsHostIsNeverSentToACommandItCannotRun(t *testing.T) {
+// The card of a Windows agent that has not said its version, and the refusal of
+// a rollout no host can take, send a person to the command on the card.
+func TestAWindowsHostIsSentToTheCommandOnItsCard(t *testing.T) {
 	withVersion(t, "1.3.5")
 	h := newHarness(t)
 	h.inMode("manual")
@@ -1288,8 +1273,8 @@ func TestAWindowsHostIsNeverSentToACommandItCannotRun(t *testing.T) {
 	if err := h.st.CreateHost(h.ctx, host); err != nil {
 		t.Fatalf("CreateHost: %v", err)
 	}
-	if why := h.view(host.ID).Update.Reason; strings.Contains(why, "zoomies upgrade") || strings.Contains(why, "command") {
-		t.Errorf("a Windows host with no version says %q, want the steps by hand and no command", why)
+	if why := h.view(host.ID).Update.Reason; strings.Contains(why, "zoomies upgrade") || !strings.Contains(why, "command below") {
+		t.Errorf("a Windows host with no version says %q, want the command below and no zoomies upgrade", why)
 	}
 	host.Version = "1.3.4"
 	if err := h.st.SetHostReported(h.ctx, host); err != nil {
@@ -1298,9 +1283,6 @@ func TestAWindowsHostIsNeverSentToACommandItCannotRun(t *testing.T) {
 	_, _, err := h.c.StartHostRollout(h.ctx, alice, nil)
 	if !errors.Is(err, ErrUpdateHostCannotUpdate) {
 		t.Fatalf("StartHostRollout = %v, want the refusal that no host can update itself", err)
-	}
-	if strings.Contains(err.Error(), "command on their cards") {
-		t.Errorf("the refusal says %q, want it to send a person to the cards without promising a command", err)
 	}
 }
 

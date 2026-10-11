@@ -123,11 +123,8 @@ func hostCanSelfUpdate(h *store.Host, target string, unsupported updates.HelperU
 	case target == "":
 		return false, "This controller is not running a release or a build from main, so there is nothing to take its hosts to. Install a release on the controller with zoomies upgrade first.", hostGapNone
 	case strings.TrimSpace(h.Version) == "":
-		byHandNow := "Update it on the host with zoomies upgrade."
-		if h.OS == "windows" {
-			byHandNow = byHand(h)
-		}
-		return false, "This host's agent has not said which version it runs, so Zoomies cannot tell whether " + target + " is newer. " + byHandNow, hostGapNone
+		return false, "This host's agent has not said which version it runs, so Zoomies cannot tell whether " + target + " is newer. " +
+			"Update it on the host with the command below.", hostGapNone
 	}
 	// Only a release build can be behind. CompareBuilds reads what follows a
 	// hyphen as a pre-release, so a describe build such as 1.3.5-3-gabcdef1,
@@ -164,22 +161,10 @@ func hostCanSelfUpdate(h *store.Host, target string, unsupported updates.HelperU
 }
 
 // byHand is the end of a card's sentence that sends a person to update the
-// host on the host itself. On Windows there is no command at the foot of the
-// card to point at (see hostUpgrade), only the steps.
-func byHand(h *store.Host) string {
-	if h.OS == "windows" {
-		return "Update it by hand on the host, with the steps at the foot of this card."
-	}
+// host on the host itself. Every host has a command at the foot of its card
+// (see hostUpgrade): sudo zoomies upgrade, or the installer script on Windows.
+func byHand(*store.Host) string {
 	return "Update it on the host with the command below."
-}
-
-// byHandOnCard is what the foot of a host's card holds for updating it by
-// hand, for a sentence that points at it from elsewhere.
-func byHandOnCard(h *store.Host) string {
-	if h.OS == "windows" {
-		return "steps"
-	}
-	return "command"
 }
 
 // hostBehind says whether a host runs a release build older than target: the

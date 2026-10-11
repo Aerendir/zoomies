@@ -1042,11 +1042,20 @@ what makes a binary swap non-disruptive at all. Draining first is what makes it
 *predictable* (a host with nothing on it cannot surprise you) and on a host
 whose jobs are short it costs a few minutes.
 
-On a Windows host the same sequence is `zoomies hosts drain`, replace
-`zoomies.exe` in place, then `sc.exe stop zoomies-agent` and
-`sc.exe start zoomies-agent` from an elevated prompt, and `zoomies hosts
-uncordon`. A Windows host's card gives these steps in place of a command, since
-`zoomies upgrade` knows no Windows service. A Windows agent runs the `process` backend, so the runner release it
+On a Windows host the same sequence is `zoomies hosts drain`, then, from an
+elevated PowerShell, the installer script with the release you want, then
+`zoomies hosts uncordon`:
+
+```powershell
+& ([scriptblock]::Create((irm https://zoomies.sh/install.ps1))) -Mode agent -Version 'v1.4.0'
+```
+
+On a machine that is already enrolled the script stops the service, replaces
+`zoomies.exe`, keeps the credentials and starts the service again, with no
+token. A Windows host's card gives this command in place of `sudo zoomies
+upgrade`, which knows no Windows service. Doing it by hand is the same:
+replace `zoomies.exe`, then `sc.exe stop zoomies-agent` and
+`sc.exe start zoomies-agent`. A Windows agent runs the `process` backend, so the runner release it
 downloads is pinned by the pool's `runner_version` and the digests in the
 binary, and an agent behind the controller's release may not know a digest the
 controller's default asks for; upgrade the agent first on that platform.
