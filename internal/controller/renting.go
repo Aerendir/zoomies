@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/scheduler"
@@ -42,10 +44,10 @@ const (
 	// RentingUnserved is a pool no provider will rent for: a selector says no,
 	// or no provider builds a machine that suits it.
 	RentingUnserved RentingState = "unserved"
-	// RentingHeld and RentingOff are never decided here. The controller lays
-	// them over a verdict, because it knows what the pure planner does not:
-	// that a provider may not buy at the moment, or that renting is switched
-	// off.
+	// RentingHeld and RentingOff are never decided by the planner. The
+	// controller lays them over a verdict (overlayRenting), because it knows
+	// what the pure planner does not: that a provider may not buy at the
+	// moment, or that renting is switched off.
 	RentingHeld RentingState = "held"
 	RentingOff  RentingState = "off"
 )
@@ -82,7 +84,10 @@ type PoolRenting struct {
 	// Machines is, for renting, the machines this pool alone needs, at most
 	// what the provider rents this pass. Pools that share a machine each
 	// count it, so the figures are never to be added up. For on_its_way it is
-	// how many of the named provider's machines are coming.
+	// how many of the named provider's machines are coming. For held and off
+	// it is what the pass would have rented had nothing stood in the way,
+	// which is none for a pool a ceiling stopped or one the machines already
+	// on their way cover.
 	Machines int `json:"machines"`
 	// Since is when the oldest machine on its way for this pool was asked for.
 	// It is a field rather than a phrase in the summary because a sentence with
@@ -224,4 +229,330 @@ func chargedVerdict(p *store.Provider, d poolDemand, create, want int, shared bo
 		v.Fix, v.Setting = sentence(fix), setting
 	}
 	return v
+}
+
+// ---------------------------------------------------------------------------
+// The fleet's view
+// ---------------------------------------------------------------------------
+
+// The sentences the fleet says about itself, and the one a machine on its way
+// says once renting is switched off. The other sentences laid over a verdict
+// take a value, and are written where they are laid over it.
+const (
+	fleetNone         = "No provider is configured, so nothing is rented."
+	fleetOff          = "Renting is switched off: this controller is not allowed to rent machines, so work with nowhere to run waits for the hosts it has."
+	fleetOffFix       = "Turn on Rent machines in Settings, and set Machines the fleet may rent to the most you are willing to pay for."
+	fleetNoCeiling    = "Renting is on, but the fleet may rent no machines: a maximum of none is none."
+	fleetNoCeilingFix = "Set Machines the fleet may rent to the most machines you are willing to pay for at once."
+	fleetOn           = "Renting is on."
+	offOnItsWay       = "A machine for this pool was being built, but renting is switched off, so nothing is finishing it."
+)
+
+// RentingView is the whole of what the fleet says about renting machines: which
+// switch, if any, is holding it back, and the verdict on each pool the last
+// machine pass had something to say about, with the switches laid over it.
+//
+// The switches are read with the view and the verdicts are as old as the last
+// pass. An operator who has just switched renting on reads the page to see
+// that it took, so the view cannot wait for the loop to wake before it says
+// so; and the verdicts are never worked out again for a read, because the
+// decision that explains has to be the one that buys.
+type RentingView struct {
+	// State is "none" when no provider may rent (a demo fixture, or a provider
+	// whose own row is disabled, is not one that may), "off" when renting is
+	// switched off, "no_ceiling" when it is on and the fleet may rent no
+	// machines, and "on" otherwise.
+	State string `json:"state"`
+	// Summary is the state in one sentence, Fix what to change, and Setting
+	// the one setting the fix changes.
+	Summary string `json:"summary"`
+	Fix     string `json:"fix,omitempty"`
+	Setting string `json:"setting,omitempty"`
+	// Enabled, Paused and MaxMachines are provider.enabled, provider.paused
+	// and provider.max_machines as they stand.
+	Enabled     bool `json:"enabled"`
+	Paused      bool `json:"paused"`
+	MaxMachines int  `json:"max_machines"`
+	// SuggestedMaxMachines is the fleet ceiling a page offers to set: the
+	// ceilings of the providers that may rent, added up, and never less than
+	// one, so that the click that switches renting on cannot leave a fleet
+	// that may rent nothing.
+	SuggestedMaxMachines int `json:"suggested_max_machines,omitempty"`
+	// Owned is how many machines still own a resource, and so are still being
+	// paid for, as the last pass counted them: zero before the first.
+	Owned int `json:"owned"`
+	// DecidedAt is when the pass the verdicts come from ran, and absent before
+	// the first one.
+	DecidedAt *time.Time `json:"decided_at,omitempty"`
+	// Pools is never nil, so that a page is sent an empty list rather than
+	// null before the first pass.
+	Pools []PoolRenting `json:"pools"`
+}
+
+// rentingReport is what one machine pass decided about renting, kept for the
+// reads until the next pass. A pass replaces it whole and nothing changes it
+// after, so a reader that has taken it from under the lock may keep it.
+type rentingReport struct {
+	// At is when the pass ran.
+	At time.Time
+	// Pools is the planner's verdicts, before anything is laid over them,
+	// with the demo fixture's pools left out.
+	Pools []PoolRenting
+	// Providers is every provider the pass read but the demo fixture, and
+	// Usable those of them whose own row is enabled: the ones that may rent.
+	// A disabled row stays in Providers because the planner may still charge
+	// a pool to it, and the view then has to say why that buys nothing.
+	Providers []*store.Provider
+	Usable    []*store.Provider
+	// Owned is how many machines of those providers own a resource.
+	Owned int
+}
+
+// rentingInput is everything buildRentingView reads, gathered by the caller so
+// that the view is a function of it alone.
+type rentingInput struct {
+	// Report is the last pass's, or nil before the first one.
+	Report *rentingReport
+	// Usable is the providers that may rent: the report's, or the database's
+	// before there is a report.
+	Usable []*store.Provider
+	// Enabled, Paused and MaxMachines are the switches as they stand.
+	Enabled     bool
+	Paused      bool
+	MaxMachines int
+	// Held is what provisioningHeld says of each provider the pass read, by
+	// id, a row-disabled one included. It is gathered only while renting is
+	// on: while it is off every provider would answer with the switch, and the
+	// overlay says that in words of its own.
+	Held map[string]string
+}
+
+// buildRentingView says which switch is holding renting back, and lays the
+// switches over the last pass's verdicts.
+func buildRentingView(in rentingInput) RentingView {
+	out := RentingView{
+		Enabled: in.Enabled, Paused: in.Paused, MaxMachines: in.MaxMachines,
+		Pools: []PoolRenting{},
+	}
+	for _, p := range in.Usable {
+		out.SuggestedMaxMachines += max(p.MaxMachines, 0)
+	}
+	out.SuggestedMaxMachines = max(out.SuggestedMaxMachines, 1)
+	switch {
+	case len(in.Usable) == 0:
+		out.State, out.Summary = "none", fleetNone
+	case !in.Enabled:
+		out.State, out.Summary, out.Fix, out.Setting = "off", fleetOff, fleetOffFix, "provider.enabled"
+	case in.MaxMachines <= 0:
+		out.State, out.Summary, out.Fix, out.Setting = "no_ceiling", fleetNoCeiling, fleetNoCeilingFix, "provider.max_machines"
+	default:
+		out.State, out.Summary = "on", fleetOn
+	}
+	if in.Report == nil {
+		return out
+	}
+	out.Owned = in.Report.Owned
+	at := in.Report.At
+	out.DecidedAt = &at
+	// With no provider that may rent, nothing is rented whatever a pool needs,
+	// and the fleet's own sentence is the whole answer. A verdict the planner
+	// reached against a disabled row would send an operator to the renting
+	// switch, or promise a machine, for a provider that rents nothing either way.
+	if len(in.Usable) == 0 {
+		return out
+	}
+	for _, v := range in.Report.Pools {
+		out.Pools = append(out.Pools, overlayRenting(v, in.Enabled, in.Held))
+	}
+	return out
+}
+
+// overlayRenting lays over one of the planner's verdicts what the pure planner
+// cannot know: that renting is switched off, or that the provider charged with
+// the pool may not buy at the moment.
+//
+// Switched off, a purchase says how many machines it would have been, a
+// ceiling that would also have stopped it is still named, and a machine on its
+// way is stranded, because nothing finishes a machine while renting is off.
+// Each names the one setting that changes it. A pool waiting on its hosts, or
+// one no provider serves, is in the same place whichever way the switch is, and
+// is told what it would have been told anyway.
+//
+// Switched on, a purchase the provider may not make is held rather than
+// renting, and the fix a partial purchase named goes with it: raising a ceiling
+// does nothing for a provider that is paused.
+func overlayRenting(v PoolRenting, enabled bool, held map[string]string) PoolRenting {
+	if enabled {
+		if why := held[v.ProviderID]; why != "" && v.State == RentingBuying {
+			v.State, v.Summary, v.Fix, v.Setting = RentingHeld, "Not renting: "+why+".", "", ""
+		}
+		return v
+	}
+	switch v.State {
+	case RentingBuying:
+		v.Summary = fmt.Sprintf("Would rent %s for this pool, but renting is switched off.", plural(v.Machines, "machine"))
+	case RentingCeiling:
+		v.Summary = "Renting is switched off, and " + v.Because + "."
+	case RentingOnItsWay:
+		// The machines were counted as coming, and while renting is off
+		// nothing brings them. Nor are they machines the pass would rent, so
+		// the pool would rent none.
+		v.Summary, v.Machines = offOnItsWay, 0
+	default:
+		return v
+	}
+	v.State, v.Fix, v.Setting = RentingOff, fleetOffFix, "provider.enabled"
+	return v
+}
+
+// Renting is the fleet's renting view as it stands: the switches now, laid over
+// the last machine pass's verdicts. It reads the database only when there is
+// no report to read, for the providers that say whether there is anything to
+// rent from at all.
+func (c *Controller) Renting(ctx context.Context) (RentingView, error) {
+	in := c.rentingNow()
+	if in.Report == nil {
+		usable, err := c.usableProviders(ctx)
+		if err != nil {
+			return RentingView{}, err
+		}
+		in.Usable = usable
+	}
+	return buildRentingView(in), nil
+}
+
+// rentingFor is one pool's verdict with the switches laid over it, or nil when
+// the last pass had nothing to say about the pool. It is the view's own entry
+// for the pool, so a page explaining one pool and the page listing them all
+// cannot disagree, and it reads no database, so a page explaining a pool can
+// ask it for every pool it shows.
+func (c *Controller) rentingFor(poolID string) *PoolRenting {
+	in := c.rentingNow()
+	if in.Report == nil {
+		return nil
+	}
+	for _, v := range buildRentingView(in).Pools {
+		if v.PoolID == poolID {
+			return &v
+		}
+	}
+	return nil
+}
+
+// rentingNow gathers what the view is built from: the last pass's report, and
+// the switches as they stand with what holds each provider back at this moment.
+func (c *Controller) rentingNow() rentingInput {
+	c.mu.Lock()
+	report := c.renting
+	c.mu.Unlock()
+	cfg := c.cfg()
+	in := rentingInput{
+		Report:      report,
+		Enabled:     cfg.Provider.Enabled,
+		Paused:      cfg.Provider.Paused,
+		MaxMachines: cfg.Provider.MaxMachines,
+	}
+	if report == nil {
+		return in
+	}
+	in.Usable = report.Usable
+	if in.Enabled {
+		now := c.Now()
+		in.Held = make(map[string]string, len(report.Providers))
+		for _, p := range report.Providers {
+			if why := c.provisioningHeld(p, now); why != "" {
+				in.Held[p.ID] = why
+			}
+		}
+	}
+	return in
+}
+
+// usableProviders is the providers that may rent, in name order. It is the
+// last pass's list when there is a report, so that the fleet's state and the
+// verdicts it carries agree about which providers there are, and the
+// database's when there is not. The list is the caller's own to keep.
+func (c *Controller) usableProviders(ctx context.Context) ([]*store.Provider, error) {
+	c.mu.Lock()
+	report := c.renting
+	c.mu.Unlock()
+	if report != nil {
+		return slices.Clone(report.Usable), nil
+	}
+	rows, err := c.st.ListProviders(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing providers: %w", err)
+	}
+	return usableRows(rows), nil
+}
+
+// usableRows is the providers among rows that may rent: neither a demo fixture
+// nor disabled on its own row.
+//
+// The row is asked, never provisioningHeld (Review Focus 1). With renting off,
+// that answers with the switch for a disabled row as for every other, and a
+// fleet whose only provider is disabled would read as one waiting for renting
+// to be switched on, when switching it on would rent nothing.
+func usableRows(rows []*store.Provider) []*store.Provider {
+	var out []*store.Provider
+	for _, p := range rows {
+		if p != nil && p.Enabled && !IsDemoID(p.ID) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// noteRenting keeps what this pass decided about renting for the reads until
+// the next, and sends again each provider whose held sentence the pass finds
+// changed. It is called with machines.mu held.
+//
+// The report is replaced under c.mu rather than machines.mu, which a pass holds
+// for as long as it takes: a page asking why nothing is rented must not wait
+// on a hypervisor.
+//
+// Held is computed rather than stored, so no row write announces that it has
+// moved: a provider's page open when renting was switched on would otherwise go
+// on saying it was off until somebody reloaded it. A provider with no sentence
+// from an earlier pass has nothing to differ from, and is only remembered.
+func (c *Controller) noteRenting(ctx context.Context, env *machineEnv, plan MachinePlan) {
+	report := &rentingReport{At: env.now}
+	for _, p := range env.rows {
+		if !IsDemoID(p.ID) {
+			report.Providers = append(report.Providers, p)
+		}
+	}
+	report.Usable = usableRows(report.Providers)
+	for _, v := range plan.Pools {
+		if !IsDemoID(v.PoolID) {
+			report.Pools = append(report.Pools, v)
+		}
+	}
+	for _, m := range env.list {
+		if m.Owns() {
+			report.Owned++
+		}
+	}
+	c.mu.Lock()
+	c.renting = report
+	c.mu.Unlock()
+
+	held := make(map[string]string, len(report.Providers))
+	for _, p := range report.Providers {
+		held[p.ID] = c.provisioningHeld(p, env.now)
+		if was, ok := c.machines.lastHeld[p.ID]; ok && was != held[p.ID] {
+			c.publishProvider(ctx, p)
+		}
+	}
+	c.machines.lastHeld = held
+}
+
+// forgetRenting drops the report once the fleet has no provider other than the
+// demo fixture, so that the view reads the providers for itself rather than
+// describing ones that have gone. It is called with machines.mu held.
+func (c *Controller) forgetRenting() {
+	c.mu.Lock()
+	c.renting = nil
+	c.mu.Unlock()
+	c.machines.lastHeld = nil
 }
