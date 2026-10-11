@@ -30,9 +30,9 @@
 
   const MODE = 'updates.mode';
   const OPTIONS = [
-    { value: 'off', label: 'Off', name: 'Updates off' },
-    { value: 'manual', label: 'Manual', name: 'Manual updates' },
-    { value: 'auto', label: 'Auto', name: 'Automatic updates' },
+    { value: 'off', label: 'Off', name: 'No updates are applied' },
+    { value: 'manual', label: 'Manual', name: 'Updates are applied by hand' },
+    { value: 'auto', label: 'Auto', name: 'Updates are applied as they arrive' },
   ] as const;
 
   let settings = $state<Settings | null>(null);
