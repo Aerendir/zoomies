@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -475,7 +476,8 @@ func (c *Controller) rentingNow() rentingInput {
 // usableProviders is the providers that may rent, in name order. It is the
 // last pass's list when there is a report, so that the fleet's state and the
 // verdicts it carries agree about which providers there are, and the
-// database's when there is not. The list is the caller's own to keep.
+// database's when there is not. The slice is the caller's own to keep; the
+// rows in it may be the report's, and are only to be read.
 func (c *Controller) usableProviders(ctx context.Context) ([]*store.Provider, error) {
 	c.mu.Lock()
 	report := c.renting
@@ -493,10 +495,10 @@ func (c *Controller) usableProviders(ctx context.Context) ([]*store.Provider, er
 // usableRows is the providers among rows that may rent: neither a demo fixture
 // nor disabled on its own row.
 //
-// The row is asked, never provisioningHeld (Review Focus 1). With renting off,
-// that answers with the switch for a disabled row as for every other, and a
-// fleet whose only provider is disabled would read as one waiting for renting
-// to be switched on, when switching it on would rent nothing.
+// The row is asked, never provisioningHeld. With renting off, that answers
+// with the switch for a disabled row as for every other, and a fleet whose
+// only provider is disabled would read as one waiting for renting to be
+// switched on, when switching it on would rent nothing.
 func usableRows(rows []*store.Provider) []*store.Provider {
 	var out []*store.Provider
 	for _, p := range rows {
@@ -508,12 +510,12 @@ func usableRows(rows []*store.Provider) []*store.Provider {
 }
 
 // noteRenting keeps what this pass decided about renting for the reads until
-// the next, and sends again each provider whose held sentence the pass finds
-// changed. It is called with machines.mu held.
+// the next, and sends again, as the database has it now, each provider whose
+// held sentence the pass finds changed. It is called with machines.mu held.
 //
-// The report is replaced under c.mu rather than machines.mu, which a pass holds
-// for as long as it takes: a page asking why nothing is rented must not wait
-// on a hypervisor.
+// The report is guarded by c.mu alone, taken here inside machines.mu and never
+// the other way round, so that a page asking why nothing is rented waits on
+// nothing a hypervisor holds up.
 //
 // Held is computed rather than stored, so no row write announces that it has
 // moved: a provider's page open when renting was switched on would otherwise go
@@ -546,9 +548,24 @@ func (c *Controller) noteRenting(ctx context.Context, env *machineEnv, plan Mach
 	held := make(map[string]string, len(report.Providers))
 	for _, p := range report.Providers {
 		held[p.ID] = c.provisioningHeld(p, env.now)
-		if was, ok := c.machines.lastHeld[p.ID]; ok && was != held[p.ID] {
-			c.publishProvider(ctx, p)
+		was, ok := c.machines.lastHeld[p.ID]
+		if !ok || was == held[p.ID] {
+			continue
 		}
+		// The row as it is now, not the pass's own copy. That was read when the
+		// pass began, and anything written since (an operator's edit or check,
+		// or the breaker, which reads afresh on purpose) has gone out in a
+		// frame of its own that the older row would overwrite on every open
+		// page. A provider deleted since has had its deletion announced, and
+		// sending it again would bring it back.
+		fresh, err := c.st.GetProvider(ctx, p.ID)
+		if err != nil {
+			if !errors.Is(err, store.ErrNotFound) {
+				c.log.Warn("could not read a provider to send it again", "provider", p.ID, "error", err)
+			}
+			continue
+		}
+		c.publishProvider(ctx, fresh)
 	}
 	c.machines.lastHeld = held
 }

@@ -86,6 +86,77 @@ func TestAPassWhileRentingIsOffSendsWhatItWorkedOut(t *testing.T) {
 	nextOfKind(t, sub, events.KindProblems)
 }
 
+// A fenced fleet decides and does nothing, and its verdicts have to say which.
+// A pool the pass would have rented for is held, in the fence's own words,
+// rather than read as a machine on order: an operator recovering from a backup
+// sees what the fleet would do the moment the fence is lifted, and that it is
+// the fence, not renting, that stops it now.
+func TestAPassWhileFencedKeepsItsVerdictAndSaysTheFenceHoldsIt(t *testing.T) {
+	h := newHarness(t)
+	h.enableProviders(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux-x64")
+	h.providerRow(t, "lab")
+	h.queueWork(t)
+	h.fence("restored from a backup taken on Tuesday")
+	h.machinePass(t)
+
+	if got := len(h.machines()); got != 0 {
+		t.Fatalf("a fenced fleet planned %d machines", got)
+	}
+	if calls := h.fake.Calls(); len(calls) != 0 {
+		t.Fatalf("a fenced fleet asked the provider for %v", calls)
+	}
+	fence := h.c.mutationsHeld()
+	if !strings.Contains(fence, "fenced for recovery") {
+		t.Fatalf("precondition: the fence's own sentence is %q, which does not say so", fence)
+	}
+	view := h.renting(t)
+	if len(view.Pools) != 1 {
+		t.Fatalf("pools = %+v, want the pool's verdict: the pass decides while fenced", view.Pools)
+	}
+	for _, v := range view.Pools {
+		if v.State != RentingHeld || v.Summary != "Not renting: "+fence+"." {
+			t.Errorf("pool %s's verdict is %s, %q; want held, in the fence's own words", v.PoolName, v.State, v.Summary)
+		}
+	}
+	if got := h.c.rentingFor(pool.ID); got == nil || *got != view.Pools[0] {
+		t.Errorf("rentingFor = %+v, want %+v", got, view.Pools[0])
+	}
+}
+
+// A transfer's drain holds back the applying of a plan, not the deciding of it.
+// A verdict left from before the drain would go on describing work the fleet
+// wanted then, so each pass during the drain replaces it with what the fleet
+// wants now (with its pools stopped, nothing), and buys nothing.
+func TestAPassWhileATransferDrainsKeepsAFreshVerdictAndBuysNothing(t *testing.T) {
+	h := newHarness(t)
+	pool, _ := h.rentingOffFleet(t)
+	before := h.renting(t)
+	if before.DecidedAt == nil || len(before.Pools) != 1 {
+		t.Fatalf("precondition: the pass before the drain left %+v, want the pool's verdict", before)
+	}
+
+	h.c.transferDraining.Store(true)
+	h.enableProviders(t)
+	h.advance(time.Minute)
+	h.machinePass(t)
+
+	view := h.renting(t)
+	if view.DecidedAt == nil || !view.DecidedAt.After(*before.DecidedAt) {
+		t.Fatalf("decided at %v, want a decision later than the one before the drain, %v", view.DecidedAt, *before.DecidedAt)
+	}
+	if got := h.c.rentingFor(pool.ID); got != nil {
+		t.Fatalf("the verdict from before the drain is still shown: %+v", got)
+	}
+	if got := len(h.machines()); got != 0 {
+		t.Fatalf("a pass while a transfer drains planned %d machines", got)
+	}
+	if got := h.callsTo("allocate"); got != 0 {
+		t.Fatalf("a pass while a transfer drains asked the provider to allocate %d times", got)
+	}
+}
+
 // The verdict is the last pass's and the switches are read with the view. An
 // operator who has just switched renting on reads the page to see that it
 // took, often before the loop has woken; told renting was still off, they would
@@ -167,7 +238,7 @@ func TestTheDemoFixtureIsNotInTheRentingView(t *testing.T) {
 		h := newHarness(t)
 		h.c.UpdateConfig(func(c *config.Config) { c.Provider.MaxMachines = 10 })
 		inst := h.installation()
-		real := h.pool(inst, "linux-x64")
+		realPool := h.pool(inst, "linux-x64")
 		demo := &store.Pool{
 			ID: "pool_demolab", Name: "demo-lab", InstallationID: inst.ID,
 			Labels:  []string{"self-hosted", "linux", "x64", "fixture"},
@@ -202,7 +273,7 @@ func TestTheDemoFixtureIsNotInTheRentingView(t *testing.T) {
 		for _, v := range h.renting(t).Pools {
 			pools = append(pools, v.PoolID)
 		}
-		if want := []string{real.ID}; !slices.Equal(pools, want) {
+		if want := []string{realPool.ID}; !slices.Equal(pools, want) {
 			t.Fatalf("the view has verdicts for %v, want only the real pool's %v", pools, want)
 		}
 		if got := h.c.rentingFor(demo.ID); got != nil {
@@ -250,6 +321,77 @@ func TestAChangeOfWhatIsHeldRepublishesTheProviders(t *testing.T) {
 	}
 	if held, _ := frame["held"].(string); held != heldRentingOff {
 		t.Fatalf("with renting switched off again the provider is held for %q, want %q", held, heldRentingOff)
+	}
+}
+
+// The frame a changed held sentence sends is the provider as it is now. The
+// pass read its rows when it began, and anything written since (an operator's
+// edit or check, or the breaker) has gone out in a frame of its own, which the
+// older row would overwrite on every open page. A provider deleted since has
+// had its deletion announced, and sending it again would bring it back.
+func TestAChangeOfWhatIsHeldSendsTheProviderAsItIsNow(t *testing.T) {
+	// Each case runs one pass while renting is off, so there is a sentence to
+	// differ from, then reads what the next pass begins with, changes the
+	// provider behind that pass's back, switches renting on, and lets the pass
+	// finish noting what it decided.
+	for _, tc := range []struct {
+		name   string
+		change func(t *testing.T, h *harness, row *store.Provider)
+		// sent is what the frame must show, or nil when no frame may arrive.
+		sent func(t *testing.T, frame map[string]any)
+	}{
+		{
+			name: "a provider checked since the pass began",
+			change: func(t *testing.T, h *harness, row *store.Provider) {
+				if err := h.st.SetProviderChecked(h.ctx, row.ID, h.c.Now(), "", ""); err != nil {
+					t.Fatalf("SetProviderChecked: %v", err)
+				}
+			},
+			sent: func(t *testing.T, frame map[string]any) {
+				if frame["last_check_at"] == nil {
+					t.Fatalf("the frame is the provider as the pass first read it, without the check made since: %v", frame)
+				}
+			},
+		},
+		{
+			name: "a provider deleted since the pass began",
+			change: func(t *testing.T, h *harness, row *store.Provider) {
+				if err := h.st.DeleteProvider(h.ctx, row.ID); err != nil {
+					t.Fatalf("DeleteProvider: %v", err)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			row := h.providerRow(t, "lab")
+			h.machinePass(t)
+
+			rows, err := h.st.ListProviders(h.ctx)
+			if err != nil {
+				t.Fatalf("ListProviders: %v", err)
+			}
+			env, err := h.c.machineSnapshot(h.ctx, rows)
+			if err != nil {
+				t.Fatalf("machineSnapshot: %v", err)
+			}
+			tc.change(t, h, row)
+			h.c.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+			sub := h.listen(events.KindProviderUpdated)
+			h.c.machines.mu.Lock()
+			h.c.noteRenting(h.ctx, env, DecideMachines(env.demand()))
+			h.c.machines.mu.Unlock()
+
+			if tc.sent == nil {
+				nothingFor(t, sub)
+				return
+			}
+			frame := nextOfKind(t, sub, events.KindProviderUpdated)
+			if frame["id"] != row.ID {
+				t.Fatalf("the frame is about %v, want provider %s", frame["id"], row.ID)
+			}
+			tc.sent(t, frame)
+		})
 	}
 }
 
@@ -411,5 +553,33 @@ func TestTheRentingViewOfAFleetWhoseOnlyProviderIsDisabledIsNone(t *testing.T) {
 	}
 	if len(usable) != 0 {
 		t.Errorf("usable providers = %v, want none", usable)
+	}
+}
+
+// A fleet whose last provider has gone has nothing to rent from, and the view
+// says so from the next pass on, rather than going on describing the provider
+// and the pools it would have rented for: the report the earlier pass left is
+// dropped, and the view reads the providers for itself until a pass leaves
+// another.
+func TestTheRentingViewForgetsTheLastProviderOnceItHasGone(t *testing.T) {
+	h := newHarness(t)
+	pool, row := h.rentingOffFleet(t)
+	if view := h.renting(t); view.State != "off" || len(view.Pools) != 1 {
+		t.Fatalf("precondition: the first pass left %+v, want renting off with the pool's verdict", view)
+	}
+
+	if err := h.st.DeleteProvider(h.ctx, row.ID); err != nil {
+		t.Fatalf("DeleteProvider: %v", err)
+	}
+	h.machinePass(t)
+	view := h.renting(t)
+	if view.State != "none" || view.Summary != wantFleetNone {
+		t.Errorf("with the provider gone the state is %q (%q), want none", view.State, view.Summary)
+	}
+	if len(view.Pools) != 0 || view.DecidedAt != nil {
+		t.Errorf("with the provider gone the view still has pools %+v decided at %v, want neither", view.Pools, view.DecidedAt)
+	}
+	if got := h.c.rentingFor(pool.ID); got != nil {
+		t.Errorf("rentingFor = %+v, want nothing", got)
 	}
 }
