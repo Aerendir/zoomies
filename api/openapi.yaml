@@ -5536,6 +5536,102 @@ paths:
               schema: { $ref: "#/components/schemas/AssistantProvider" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /assistant/repairs/repositories:
+    get:
+      operationId: listEliRepairRepositories
+      tags: [assistant]
+      summary: Discover repositories for repair setup
+      x-zoomies-role: admin
+      parameters:
+        - name: installation_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliRepairRepositories" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/readiness:
+    get:
+      operationId: getEliReadiness
+      tags: [assistant]
+      summary: Check personal repair readiness without invoking a model
+      x-zoomies-role: viewer
+      parameters:
+        - name: repo
+          in: query
+          required: false
+          schema: { type: string }
+        - name: pull_number
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: run_id
+          in: query
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliReadiness" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/opportunities:
+    get:
+      operationId: listEliOpportunities
+      tags: [assistant]
+      summary: List repair offers accessible to the linked GitHub account
+      x-zoomies-role: viewer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliOpportunityList" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/opportunities/{id}:
+    post:
+      operationId: actEliOpportunity
+      tags: [assistant]
+      summary: Accept or dismiss a repair offer
+      x-zoomies-role: viewer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EliOpportunityAction" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliOpportunityResult" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /assistant/repairs:
     get:
       operationId: listEliRepairs
@@ -12576,6 +12672,85 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
+    EliRepairDetails:
+      type: object
+      properties:
+        model: { type: string }
+        stage: { type: string }
+        failure_code: { type: string }
+        source_bytes: { type: integer }
+        steps:
+          type: array
+          nullable: true
+          items:
+            type: object
+            required: [input_tokens, output_tokens, usage_reported, request_bytes, elapsed_ms]
+            properties:
+              input_tokens: { type: integer }
+              output_tokens: { type: integer }
+              usage_reported: { type: boolean }
+              request_bytes: { type: integer }
+              elapsed_ms: { type: integer }
+    EliRepairRepositories:
+      type: object
+      required: [items, total, capped, missing_permissions]
+      properties:
+        items: { type: array, items: { type: string } }
+        total: { type: integer }
+        capped: { type: boolean }
+        missing_permissions: { type: array, items: { type: string } }
+    EliReadiness:
+      type: object
+      required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers]
+      properties:
+        ready: { type: boolean }
+        repo: { type: string }
+        pull_number: { type: integer }
+        head_sha: { type: string }
+        provider: { type: string }
+        model: { type: string }
+        allow_workflows: { type: boolean }
+        remaining: { type: integer }
+        reset_at: { type: string, format: date-time }
+        blockers:
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            properties:
+              code: { type: string }
+              message: { type: string }
+    EliOpportunity:
+      type: object
+      required: [id, repo, installation_id, pull_number, head_sha, run_id, title, state, created_at, updated_at]
+      properties:
+        id: { type: string }
+        repo: { type: string }
+        installation_id: { type: string }
+        pull_number: { type: integer }
+        head_sha: { type: string }
+        run_id: { type: integer }
+        title: { type: string }
+        state: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    EliOpportunityList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/EliOpportunity" } }
+    EliOpportunityAction:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [accept, dismiss] }
+    EliOpportunityResult:
+      type: object
+      properties:
+        repair:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/EliRepair" }]
+
     EliIdentity:
       type: object
       required: [user_id, github_user_id, github_login, confirmed]
@@ -12603,6 +12778,7 @@ components:
         provider_id: { type: string }
         enabled: { type: boolean }
         automatic: { type: boolean }
+        ask_first: { type: boolean, default: false }
         allow_workflows: { type: boolean }
         daily_limit: { type: integer }
 
@@ -12613,11 +12789,13 @@ components:
         repo: { type: string }
         pull_number: { type: integer }
         instruction: { type: string }
+        head_sha: { type: string, description: PR head reviewed by the requester }
 
     EliRepair:
       type: object
       required: [id, installation_id, repo, head_sha, commit_sha, user_id, github_login, provider_id, trigger, state, message, pull_number, job_id, run_id, github_user_id, comment_id, created_at, updated_at]
       properties:
+        details: { $ref: "#/components/schemas/EliRepairDetails" }
         id: { type: string }
         installation_id: { type: string }
         repo: { type: string }

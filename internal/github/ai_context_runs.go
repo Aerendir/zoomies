@@ -148,6 +148,7 @@ func (c *appClient) ContextJobErrors(ctx context.Context, repo string, jobID int
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Range", "bytes=-8388608")
 	httpClient := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, err := httpClient.Do(req)
 	if err != nil {
@@ -157,10 +158,10 @@ func (c *appClient) ContextJobErrors(ctx context.Context, repo string, jobID int
 	if res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusGone {
 		return nil, nil
 	}
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusPartialContent {
 		return nil, fmt.Errorf("github: read context job log: unexpected status %d", res.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, maxContextLog))
+	body, err := readContextLogTail(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("github: read context job log: %w", err)
 	}
@@ -198,6 +199,18 @@ func errorLines(log string) []string {
 			}
 		}
 		out = append(out, clip(strings.TrimPrefix(line, "##[error]")))
+	}
+	if len(out) == 0 {
+		for i, line := range lines {
+			lower := strings.ToLower(line)
+			if strings.Contains(lower, "error:") || strings.Contains(lower, "assertionerror") || strings.Contains(lower, "--- fail:") || strings.Contains(lower, "panic:") || strings.Contains(lower, "traceback") || strings.Contains(lower, "failed:") {
+				for _, v := range lines[max(0, i-2):min(len(lines), i+6)] {
+					if strings.TrimSpace(v) != "" {
+						out = append(out, clip(stripLogTimestamp(v)))
+					}
+				}
+			}
+		}
 	}
 	// The last of them are the ones that ended the job.
 	if len(out) > maxContextErrorLines {
@@ -274,3 +287,32 @@ func (c *appClient) ContextArtifactUsage(ctx context.Context, repo string) (*aic
 }
 
 var _ ContextRunReader = (*appClient)(nil)
+
+// Servers that honour Range return just the tail. A bounded streaming fallback
+// keeps late evidence without retaining the entire log in memory.
+func readContextLogTail(r io.Reader) ([]byte, error) {
+	tail := make([]byte, 0, maxContextLog)
+	buf := make([]byte, 64<<10)
+	total := 0
+	for {
+		n, err := r.Read(buf)
+		total += n
+		if total > 64<<20 {
+			return nil, fmt.Errorf("job log exceeds the bounded download limit; inspect its failed step on GitHub")
+		}
+		if n > 0 {
+			if len(tail)+n > maxContextLog {
+				drop := len(tail) + n - maxContextLog
+				copy(tail, tail[drop:])
+				tail = tail[:len(tail)-drop]
+			}
+			tail = append(tail, buf[:n]...)
+		}
+		if err == io.EOF {
+			return tail, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+}

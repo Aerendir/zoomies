@@ -192,6 +192,7 @@ func (c *appClient) RepairSource(ctx context.Context, repo string, p RepairPull,
 	var changed []struct {
 		Filename string `json:"filename"`
 		Status   string `json:"status"`
+		Patch    string `json:"patch"`
 	}
 	if err := c.repairRequest(ctx, http.MethodGet, fmt.Sprintf("%s/pulls/%d/files?per_page=100", base, p.Number), nil, &changed); err != nil {
 		return nil, err
@@ -201,6 +202,10 @@ func (c *appClient) RepairSource(ctx context.Context, repo string, p RepairPull,
 	}
 	total := 0
 	for _, f := range changed {
+		if len(source.Snapshot.Diff) < 32<<10 {
+			patch := f.Filename + "\n" + f.Patch + "\n"
+			source.Snapshot.Diff += prrepair.Redact(patch[:min(len(patch), (32<<10)-len(source.Snapshot.Diff))])
+		}
 		if f.Status == "removed" || !prrepair.AllowedPath(f.Filename, workflows) {
 			continue
 		}
@@ -212,14 +217,14 @@ func (c *appClient) RepairSource(ctx context.Context, repo string, p RepairPull,
 		// will be refused too.
 		var unusable *prrepair.ReadError
 		if errors.As(err, &unusable) && unusable.Err == nil {
-			source.Snapshot.Skipped = append(source.Snapshot.Skipped, fmt.Sprintf("%s: larger than %d KiB or not plain text", f.Filename, prrepair.MaxFileBytes/1024))
+			source.Snapshot.Skipped = append(source.Snapshot.Skipped, fmt.Sprintf("%s: larger than %d KiB or not plain text", f.Filename, prrepair.MaxBlobBytes/1024))
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		if total+len(file.Content) > prrepair.MaxSourceBytes {
-			source.Snapshot.Skipped = append(source.Snapshot.Skipped, fmt.Sprintf("%s: left out, the PR's source is over the %d KiB budget", f.Filename, prrepair.MaxSourceBytes/1024))
+		if total+len(file.Content) > 4<<20 {
+			source.Snapshot.Skipped = append(source.Snapshot.Skipped, fmt.Sprintf("%s: left out, the PR's source is over the %d KiB budget", f.Filename, 4096))
 			continue
 		}
 		total += len(file.Content)
@@ -251,15 +256,21 @@ func (s *RepairSource) ReadFile(ctx context.Context, name string) (prrepair.File
 	if err := s.client.repairRequest(ctx, http.MethodGet, base+"/git/blobs/"+e.SHA, nil, &blob); err != nil {
 		return prrepair.File{}, err
 	}
-	if blob.Size > prrepair.MaxFileBytes || blob.Encoding != "base64" {
-		return prrepair.File{}, &prrepair.ReadError{Path: name}
+	if blob.Size > prrepair.MaxBlobBytes {
+		return prrepair.File{}, &prrepair.ReadError{Path: name, Reason: "file_size", Bytes: blob.Size}
+	}
+	if blob.Encoding != "base64" {
+		return prrepair.File{}, &prrepair.ReadError{Path: name, Reason: "unsupported_encoding"}
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(blob.Content, "\n", ""))
 	if err != nil {
 		return prrepair.File{}, fmt.Errorf("source file could not be decoded")
 	}
-	if len(raw) > prrepair.MaxFileBytes || !utf8.ValidString(string(raw)) || strings.ContainsRune(string(raw), 0) {
-		return prrepair.File{}, &prrepair.ReadError{Path: name}
+	if len(raw) > prrepair.MaxBlobBytes {
+		return prrepair.File{}, &prrepair.ReadError{Path: name, Reason: "file_size", Bytes: len(raw)}
+	}
+	if !utf8.ValidString(string(raw)) || strings.ContainsRune(string(raw), 0) {
+		return prrepair.File{}, &prrepair.ReadError{Path: name, Reason: "unsupported_text"}
 	}
 	return prrepair.File{Path: name, Content: string(raw), Mode: e.Mode}, nil
 }

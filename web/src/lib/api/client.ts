@@ -1321,3 +1321,18 @@ export const setEliIdentity = (body: Body<'setEliIdentity'>) =>
 
 export const setEliRepairConsent = (body: Body<'setEliRepairConsent'>) =>
   api.put('/assistant/repairs/consent', { body });
+
+export const listEliRepairRepositories = (
+  query: Query<'listEliRepairRepositories'>,
+  signal?: AbortSignal,
+) =>
+  api.get<Result<'listEliRepairRepositories'>>('/assistant/repairs/repositories', {
+    query,
+    signal,
+  });
+export const getEliReadiness = (query: Query<'getEliReadiness'>, signal?: AbortSignal) =>
+  api.get<Result<'getEliReadiness'>>('/assistant/repairs/readiness', { query, signal });
+export const listEliOpportunities = () =>
+  api.get<Result<'listEliOpportunities'>>('/assistant/repairs/opportunities');
+export const actEliOpportunity = (id: string, body: Body<'actEliOpportunity'>) =>
+  api.post<Result<'actEliOpportunity'>>(`/assistant/repairs/opportunities/${enc(id)}`, { body });

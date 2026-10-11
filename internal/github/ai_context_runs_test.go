@@ -312,3 +312,20 @@ func TestOnlyAnAddressGitHubCouldSensiblyNameIsFetched(t *testing.T) {
 		t.Error("a missing address was fetched")
 	}
 }
+
+func TestContextLogTailKeepsAFailureAfterEightMiB(t *testing.T) {
+	body, err := readContextLogTail(strings.NewReader(strings.Repeat("x", 9<<20) + "\n##[error]late failure\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := errorLines(string(body))
+	if len(body) > maxContextLog || !strings.Contains(strings.Join(got, "\n"), "late failure") {
+		t.Fatal("late evidence lost")
+	}
+}
+func TestUnannotatedTestFailuresKeepTheStackContext(t *testing.T) {
+	got := errorLines("test checkout\nAssertionError: expected 2 got 1\n  at checkout.spec.ts:51\n")
+	if !strings.Contains(strings.Join(got, "\n"), "checkout.spec.ts:51") {
+		t.Fatalf("evidence: %v", got)
+	}
+}

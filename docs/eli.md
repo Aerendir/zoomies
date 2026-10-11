@@ -298,24 +298,37 @@ when authentication is enabled. The authentication-disabled development demo
 uses its built-in installation provider because it has no personal accounts.
 Provider address restrictions and the Local models only setting apply to both
 scopes. Removing a user removes their personal providers. Deleting an
-installation provider removes repository policies that reference it.
+installation provider leaves repository policies in place; automatic repairs stop until an administrator chooses another installation provider.
 
 ## Set up PR repairs
 
-1. Add an installation provider under Settings, Eli AI Assistant, Installation providers.
-2. Open Repository repair policies. Choose a repository, its GitHub installation
-   and provider, then enable repairs. Automatic repairs are a separate opt-in.
-3. Set the attempt budget, from 1 to 50 per rolling 24 hours. Explicit and
+1. Open **Eli repairs** from the navigation, or **Review a repair with Eli**
+   beside a failed job. Paste a PR link to check readiness without invoking a model.
+2. In **Repository repair policies**, choose a GitHub installation, search its
+   repositories and select the ones to enable together. Owner and installation
+   details come from discovery. Each selected repository reports its own save result.
+3. Choose **Ask me first**, **Manual only** or **Automatic**. New setup recommends
+   Ask me first; existing policies retain their behaviour. The enable switch turns
+   a policy off. Only Automatic requires an installation provider.
+4. Set the attempt budget, from 1 to 50 per rolling 24 hours. Explicit and
    automatic attempts share this repository budget. Each personal account also
    has a limit of 10 explicit attempts per rolling 24 hours.
-4. Under Link a GitHub account, verify that the person owns the account, choose
-   their Zoomies user and a repository where they have write permission, and
-   link it. Zoomies resolves and records the numeric GitHub ID. A login rename
-   never assigns another person's key to a requester.
-5. Each requester confirms **Allow this GitHub account to request repairs using
-   my provider** on their own Eli AI Assistant settings page, and has an enabled
-   personal provider. Administrators cannot confirm on their behalf.
-   Changing a link clears this confirmation.
+5. An administrator verifies account ownership, selects the Zoomies user and a
+   discovered repository where their GitHub account has write permission, then
+   links the account once. Each requester confirms **Allow this GitHub account to
+   request repairs using my provider** and adds an enabled personal provider.
+   Administrators cannot give that consent on their behalf. Changing the link
+   clears consent; repository selection does not create another identity link.
+6. Return to the original PR and check readiness again. Review the payer, model,
+   workflow permission and remaining allowance before choosing **Repair with Eli**.
+
+Ask me first groups failed jobs into one persistent offer per PR head. The
+Overview shows available offers; Eli repairs lets you review or dismiss them.
+Offers do not invoke a model or spend attempts. Dismissal is personal and applies
+only to that commit. A bounded reconciliation every five minutes looks back at
+recent failed jobs, including failures that predate setup. Access and the pinned
+head are checked again before acceptance. Existing closed, superseded or now-green
+PR offers are retired during reconciliation. External notifications are not sent.
 
 The GitHub App needs **Contents: write**, **Pull requests: write**,
 **Issues: write**, **Actions: read**, **Checks: read** and **Commit statuses: read**
@@ -347,14 +360,28 @@ uses the comment text and does not require GitHub mention notification routing.
 The durable queue deduplicates webhook retries and charges attempts at
 admission. The worker reads the PR's pinned commit, changed text files, repository
 inventory and bounded failed-job evidence. It asks the selected model for a
-strict JSON plan, with at most six model turns and eight edits. Source is capped
-at 128 KiB, individual files at 32 KiB, and replacement content at 64 KiB. A
-changed file over the file cap, or not plain text (a regenerated reference of a
-few thousand lines, say), is left out and named to the model as unavailable
-rather than stopping the repair, and so are the changed files past the source
-budget; the model fixes what it can read. When the source cannot be read at all,
-the comment says why: the repository's inventory is too large, the PR changes
-too many files, or GitHub refused the read.
+strict JSON plan, with at most six model turns and eight changed files. Text blobs
+up to 512 KiB stay on the controller; the model receives windows of at most
+32 KiB, prioritising files and line locations named by failure evidence. Unique
+source supplied is capped at 128 KiB and the full transcript is checked against a
+192 KiB byte allowance before every model call. These are conservative application
+bounds, not a measurement of the model's token capacity. Repeated and overlapping
+reads return only new source. The PR's bounded diff is included.
+
+For large files, Eli returns exact before/after edits instead of rewriting the
+whole file. The controller requires unique, non-overlapping preimages in source
+already supplied to the model and preserves every untouched byte. Complete
+replacement of a partially read file is refused. Targeted edit text is capped at
+64 KiB; there are at most 32 targeted edits. Unsupported blobs are named and
+skipped. A bounded log tail and unannotated test-error context help retain the
+failure evidence. Very large inventories, PRs or logs can still exceed limits.
+
+Repair history records the stage, model, source bytes and per-call input/output
+usage when the provider reports it, including usage received before a failure.
+Missing usage is shown as unknown. Request bytes and elapsed time are recorded
+separately from token counts. Output truncation and provider rate limits receive
+specific advice. Failed attempts offer readiness review and copyable investigation
+details; deterministic source limits should be addressed before retrying.
 Recognisable provider/GitHub tokens and private-key headers are redacted before
 model use. These filters cannot identify every possible secret, so use a
 provider permitted to process your repository and job logs.
@@ -379,7 +406,7 @@ another attempt on an Eli commit. A maintainer can request another attempt.
 
 Queued work survives restart. A repair interrupted during publication has an
 uncertain outcome, so it is marked interrupted and never replayed automatically.
-Inspect the PR before asking again. Settings, Eli AI Assistant shows repair history;
+Inspect the PR before asking again. Eli repairs and Settings, Eli AI Assistant show repair history;
 ordinary users see their own requests and administrators see the whole history.
 
 Model-generated fixes still need review. The limits constrain cost and the

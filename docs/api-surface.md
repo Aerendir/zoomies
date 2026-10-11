@@ -359,11 +359,15 @@ running beside it, and the gateway's Tailcat address is handled the same way:
 | DELETE | `/api/v1/assistant/personal/providers/{id}` | viewer | Removes one. The body carries its name, typed to confirm; a mismatch is a 409. |
 | POST | `/api/v1/assistant/personal/providers/{id}/check` | viewer | Runs the check and one token of completion, and records the result on the row. Audited, because it uses the key. |
 | POST | `/api/v1/assistant/personal/providers/{id}/default` | viewer | Makes this the provider that answers, and the previous default stops being it in the same write. |
+| GET | `/api/v1/assistant/repairs/repositories` | admin | Discovers installation repositories with `installation_id`, `q` and `offset`; returns up to 50 names, total, discovery-cap notice and missing permissions. |
+| GET | `/api/v1/assistant/repairs/readiness` | viewer | Personal account only. Checks `repo` and `pull_number` or `run_id`, returning blockers, resolved PR head, payer, model and remaining allowance without a model call. |
+| GET | `/api/v1/assistant/repairs/opportunities` | viewer | Personal account only. Lists pending offers after checking the linked identity's current repository write access. |
+| POST | `/api/v1/assistant/repairs/opportunities/{id}` | viewer | Personal account only. `action: accept` revalidates access and the pinned head and queues one personal repair; `dismiss` hides this head for this person. |
 | GET | `/api/v1/assistant/repairs` | viewer | The latest 100 repairs. Administrators see all; other users see their own explicit requests. |
-| POST | `/api/v1/assistant/repairs` | viewer | Queues a repair for `repo`, `pull_number` and `instruction` using the caller’s personal provider (their default, or the first usable one they own). Requires a linked GitHub identity, current write access and an enabled repository policy. Returns 202. |
+| POST | `/api/v1/assistant/repairs` | viewer | Queues a repair for `repo`, `pull_number` and `instruction`, with optional `head_sha` to pin the reviewed head using the caller’s personal provider (their default, or the first usable one they own). Requires a linked GitHub identity, current write access and an enabled repository policy. Returns 202. |
 | GET | `/api/v1/assistant/repairs/settings` | viewer | Own GitHub account link; administrators also see all links and repository policies. |
 | PUT | `/api/v1/assistant/repairs/consent` | viewer | Confirms or revokes use of the caller’s personal provider by their linked GitHub account. Body carries `github_user_id` and `enabled`; another user or a stale numeric ID cannot be confirmed. Returns 204. |
-| PUT | `/api/v1/assistant/repairs/policy` | admin | Sets repository, installation, installation provider, enabled, automatic, workflow-edit opt-in and daily attempt budget (1 to 50). |
+| PUT | `/api/v1/assistant/repairs/policy` | admin | Sets repository, installation, optional installation provider (required for automatic mode), enabled, automatic, ask_first, workflow-edit opt-in and daily attempt budget (1 to 50). |
 | PUT | `/api/v1/assistant/repairs/identity` | admin | Verifies repository write permission and stores the GitHub numeric identity for a Zoomies user. An empty `github_login` removes the link (204). Verify account ownership before linking. |
 | GET | `/api/v1/machines` | viewer | Paged, filtered by `?provider=`, `?pool=`, `?host=`, `?state=`, `?q=` and `?include_deleted=`. |
 | GET | `/api/v1/machines/{id}` | viewer | Includes the phase timeline the detail page reads as a life rather than a row of timestamps. |
