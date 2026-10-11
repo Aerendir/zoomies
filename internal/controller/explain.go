@@ -183,6 +183,7 @@ func (c *Controller) explainWhy(ctx context.Context, job *store.Job, out *JobExp
 
 func (c *Controller) explainCompleted(job *store.Job, out *JobExplanation) {
 	defer explainOOM(job, out)
+	defer explainScratchFull(job, out)
 	switch {
 	case job.FleetFailed():
 		out.Summary = "The runner this job was on stopped before the job finished."

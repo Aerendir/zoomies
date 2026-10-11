@@ -300,3 +300,59 @@ func TestLiveRunnerCountReadsOnlyThePartialIndex(t *testing.T) {
 		t.Fatalf("the live runner count does not read its partial index:\n%s", joined)
 	}
 }
+
+// How full each of a job's in-memory folders got is kept on the job the way
+// its memory peak is: raised by every sample and never lowered, only while
+// GitHub says the job is in progress on that runner. A folder that filled is
+// what the explanation reads from after the runner, and the folder, are gone.
+func TestAJobKeepsTheFullestEachInMemoryFolderGot(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	_, pool, host := seedPool(t, s)
+	r := &Runner{PoolID: pool.ID, HostID: host.ID, Name: "full", State: RunnerBusy}
+	if err := s.CreateRunner(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	started := s.Now()
+	job, err := s.UpsertJob(ctx, &Job{GitHubJobID: 77, Repo: "acme/widgets", Workflow: "CI", JobName: "build",
+		State: JobInProgress, PoolID: pool.ID, RunnerID: r.ID, QueuedAt: started, StartedAt: &started, Matched: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sample := range [][]ScratchPeak{
+		{{Path: "/tmp", PeakMB: 400, SizeMB: 1024}, {Path: "/home/runner/_work", PeakMB: 300, SizeMB: 4096}},
+		{{Path: "/tmp", PeakMB: 962, SizeMB: 1024}},
+		{{Path: "/tmp", PeakMB: 10, SizeMB: 1024}, {Path: "/home/runner/_work", PeakMB: 250, SizeMB: 4096}},
+	} {
+		if err := s.RecordJobScratchPeaks(ctx, r.ID, sample); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ScratchPeaks{{Path: "/home/runner/_work", PeakMB: 300, SizeMB: 4096}, {Path: "/tmp", PeakMB: 962, SizeMB: 1024}}
+	if len(got.ScratchPeaks) != 2 || got.ScratchPeaks[0] != want[0] || got.ScratchPeaks[1] != want[1] {
+		t.Fatalf("scratch peaks = %+v, want %+v: the fullest each folder got, by path", got.ScratchPeaks, want)
+	}
+	fullest, fraction, ok := got.ScratchPeaks.Fullest()
+	if !ok || fullest.Path != "/tmp" || fraction < 0.93 || fraction > 0.95 {
+		t.Fatalf("fullest = %+v at %.2f, %v; want /tmp at about 0.94", fullest, fraction, ok)
+	}
+
+	// A sample after the job is over charges nothing to it.
+	done := s.Now()
+	if _, err := s.UpsertJob(ctx, &Job{GitHubJobID: 77, Repo: job.Repo, State: JobCompleted, Conclusion: "failure", StartedAt: &started, CompletedAt: &done}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordJobScratchPeaks(ctx, r.ID, []ScratchPeak{{Path: "/tmp", PeakMB: 1024, SizeMB: 1024}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetJob(ctx, job.ID); got.ScratchPeaks[1].PeakMB != 962 {
+		t.Fatalf("scratch peaks = %+v after the job ended, want them untouched", got.ScratchPeaks)
+	}
+	if _, _, ok := (ScratchPeaks{}).Fullest(); ok {
+		t.Fatal("no folders is no fullest folder")
+	}
+}

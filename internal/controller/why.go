@@ -28,6 +28,7 @@ const (
 	WhyRunnerStartupFailure WhyClass = "runner-startup-failure"
 	WhyHostLost             WhyClass = "host-lost"
 	WhyDisk                 WhyClass = "disk"
+	WhyScratchFull          WhyClass = "scratch-full"
 	WhyWorkflowFailure      WhyClass = "workflow-failure"
 	WhyHeldByGitHub         WhyClass = "held-by-github"
 	WhyRunning              WhyClass = "running"
@@ -168,6 +169,18 @@ func classify(s whySnapshot) whyVerdict {
 		v.Confidence = WhyLow
 		v.ConfidenceReason = fmt.Sprintf("the fleet lost the runner (%s) without recording why", job.FaultKind)
 		v.NextSteps = []NextStep{{Text: "Open the runner's record for what it said as it went.", Kind: "read", Link: runnerLink(job.RunnerID)}}
+
+	case job.State == store.JobCompleted && scratchFilledFor(job):
+		// A folder the pool keeps in memory ran out of room under the job.
+		// GitHub recorded an ordinary failure; the folder's ceiling is the
+		// pool's setting, which makes this the fleet's to say.
+		peak, fraction, _ := scratchFilled(job)
+		v.Class = WhyScratchFull
+		v.ProblemCode = "jobs.scratch_full"
+		v.Confidence = WhyMedium
+		v.ConfidenceReason = fmt.Sprintf("%s was %d%% full at the last sample before the job failed; the fill itself falls between samples", scratchName(peak.Path), scratchPercent(fraction))
+		v.Evidence = append(v.Evidence, scratchEvidence(peak, fraction)...)
+		v.NextSteps = []NextStep{{Text: capitalise(scratchFullFix(job.PoolID)), Kind: "change", Link: poolLink}, rerun}
 
 	case job.State == store.JobCompleted:
 		classifyConclusion(s, &v)

@@ -164,13 +164,14 @@ the same answer, from the controller's own explanation:
 
 The answer is a **class** from a closed set (`oom`, `timeout`, `cancelled`,
 `queued-unmatched`, `queued-blocked`, `queued-capacity`, `queued`,
-`runner-startup-failure`, `host-lost`, `disk`, `workflow-failure`,
+`runner-startup-failure`, `host-lost`, `disk`, `scratch-full`, `workflow-failure`,
 `held-by-github`, `running`, `succeeded` or `unknown`), how sure the fleet is
 and, when it is not sure, what was missing; the **evidence** the class rests
 on, each a fact you can check; the runner's last lines up to the one that
 decided it; the catalogue code to read on, whose entry says what to change and
 how to see that the change worked; and the next steps in order. A fleet that
-caused the failure says so (`host-lost`, `runner-startup-failure`, `oom`), and
+caused the failure says so (`host-lost`, `runner-startup-failure`, `oom`,
+`scratch-full`), and
 one that did not says that too (`workflow-failure`), so a person reads a
 verdict before it reads a log, and the log only to confirm it. `unknown` is a
 verdict as well: the explanation is still printed, with what the fleet would

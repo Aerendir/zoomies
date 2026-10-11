@@ -1,0 +1,13 @@
+-- How full each of a job's in-memory folders got, kept the way its memory peak
+-- is: a JSON list of {path, peak_mb, size_mb}, one entry per folder the runner
+-- was created with in memory, raised by every resource sample while GitHub
+-- said the job was in progress and never lowered.
+--
+-- It is the one fact about a full folder that outlives the failure. A compiler
+-- deletes its work directory as the link fails and the runner's output is the
+-- runner's own diagnostics, so by the time the job is reported failed nothing
+-- else says the folder was 96% full a sample earlier. Empty is "never
+-- measured": a job from before this migration, a runner with no folder in
+-- memory, an agent too old to measure, or a host whose /proc does not show the
+-- container.
+ALTER TABLE jobs ADD COLUMN scratch_peaks TEXT NOT NULL DEFAULT '';

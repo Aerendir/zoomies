@@ -8087,6 +8087,30 @@ export interface components {
              * @description The most memory, in MB, the job's runner was measured using while the job ran. Absent when never measured.
              */
             peak_memory_mb?: number;
+            /** @description How full each in-memory folder of the job's runner got while the job ran, raised by every sample and never lowered. Absent when none was measured: a pool with no folder in memory, an agent too old to measure, or a host whose /proc does not show the container. A folder near its ceiling on a failed job is what the explanation reads a full folder from (`scratch-full`, `jobs.scratch_full`). */
+            scratch_peaks?: {
+                /**
+                 * @description Which folder it is
+                 * @enum {string}
+                 */
+                kind?: "work" | "tmp" | "daemon";
+                /** @description A name for the folder: Work folder, Temporary folder, Docker image store. */
+                label?: string;
+                /** @description Where it is in the container. */
+                path: string;
+                /**
+                 * Format: int64
+                 * @description The most that was written in it at any sample.
+                 */
+                peak_mb: number;
+                /**
+                 * Format: int64
+                 * @description Its ceiling.
+                 */
+                size_mb: number;
+                /** @description The peak as a share of the ceiling */
+                percent: number;
+            }[];
             /** @description True when the kernel killed the job's runner, or one of its steps (exit 137), for its memory limit. It is the fleet's failure rather than the workflow's, and the one `scheduler.history_sizing` corrects for: the next run of the job is placed for half as much memory again as this one's peak. Absent when false. */
             oom_killed?: boolean;
             /**

@@ -288,6 +288,7 @@ var publicSentences = map[string]string{
 	"host.version_behind":                           "A machine is running an older agent than the controller.",
 	"installation.unhealthy":                        "The fleet has lost a permission it needs on GitHub, so jobs from some repositories cannot start.",
 	"jobs.oom_killed":                               "A job ran out of memory on its machine, so it failed through no fault of its own.",
+	"jobs.scratch_full":                             "A job filled a folder its machine keeps in memory, so it failed through no fault of its own.",
 	"jobs.runner_lost":                              "A runner stopped while running a job, so that job may fail or need a re-run.",
 	"jobs.label_advice":                             "Some workflows ask for a machine size their jobs do not need, or need more than they ask for.",
 	"jobs.unmatched":                                "Some jobs ask for runner labels this fleet does not offer, so they will wait until the workflow or the fleet changes.",

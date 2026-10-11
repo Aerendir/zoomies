@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "1a1f9d0",
+  "generated_from": "2c1d037",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -1590,6 +1590,20 @@
       "fix": "A job's runner stopped under it, so the failure is the fleet's rather than the workflow's. When most of them share one category, the detail says so and the fix is that category's.",
       "verify": "The next run of the job finishes on a runner that outlives it: `zoomies jobs list --ours --since 1h` shows nothing new, and the entry leaves the list.",
       "status_sentence": "A runner stopped while running a job, so that job may fail or need a re-run.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-pools-jobs-and-runners"
+    },
+    {
+      "id": "jobs.scratch_full",
+      "kind": "problem",
+      "title": "jobs.scratch_full",
+      "category": "capacity",
+      "severity": "warning",
+      "detection": "runtime",
+      "detects": "A job failed on a runner whose in-memory folder (its work folder, `/tmp` or the Docker image store, kept in memory by its pool) was at least 90% full at a sample before the job ended. A job that writes past a folder's ceiling fails a step with \"no space left on device\"; GitHub records an ordinary failure, the runner's own output never carries a step's words, and a compiler deletes its work directory as the link fails, so the agent's samples are the only evidence and the fill itself falls between them, which is why the job's explanation is sure to medium. The entry is per pool, because the folder's size, and whether it is in memory at all, is the pool's setting: give the folder room by raising the pool's memory per runner (the folder is fitted larger), typing a larger size for it, or keeping it on disk (Placement: Auto, or `--tmpfs-tmp=false` for `/tmp`). See [Keeping the work folder in memory](hosts-and-pools.md#keeping-the-work-folder-in-memory).",
+      "fix": "A job failed on a runner whose in-memory folder (its work folder, `/tmp` or the Docker image store, kept in memory by its pool) was at least 90% full at a sample before the job ended. A job that writes past a folder's ceiling fails a step with \"no space left on device\"; GitHub records an ordinary failure, the runner's own output never carries a step's words, and a compiler deletes its work directory as the link fails, so the agent's samples are the only evidence and the fill itself falls between them, which is why the job's explanation is sure to medium. The entry is per pool, because the folder's size, and whether it is in memory at all, is the pool's setting: give the folder room by raising the pool's memory per runner (the folder is fitted larger), typing a larger size for it, or keeping it on disk (Placement: Auto, or `--tmpfs-tmp=false` for `/tmp`). See [Keeping the work folder in memory](hosts-and-pools.md#keeping-the-work-folder-in-memory).",
+      "verify": "The next run of the job on the pool completes, its page shows every folder under 90%, and the entry leaves the list after an hour.",
+      "status_sentence": "A job filled a folder its machine keeps in memory, so it failed through no fault of its own.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-pools-jobs-and-runners"
     },

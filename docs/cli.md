@@ -259,8 +259,8 @@ summary per job, small enough to read a hundred of.
 answered from the controller's explanation: the sentence, then the **class**
 from a closed set (`oom`, `timeout`, `cancelled`, `queued-unmatched`,
 `queued-blocked`, `queued-capacity`, `queued`, `runner-startup-failure`,
-`host-lost`, `disk`, `workflow-failure`, `held-by-github`, `running`,
-`succeeded` or `unknown`) with how sure the fleet is and, when it is not sure,
+`host-lost`, `disk`, `scratch-full`, `workflow-failure`, `held-by-github`,
+`running`, `succeeded` or `unknown`) with how sure the fleet is and, when it is not sure,
 what was missing; the **evidence** the class rests on, each a fact you can
 check; the runner's last lines up to the one that decided it; the catalog code
 to read on; and the next steps in order. `jobs why` is the same command, found
