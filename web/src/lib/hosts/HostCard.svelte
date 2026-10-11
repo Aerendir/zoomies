@@ -861,7 +861,7 @@
             {/if}
             {#if host.upgrade_command}
               <p>
-                Running runner containers stay in place. The host reports its new version on the
+                Running runners stay in place. The host reports its new version on the
                 next heartbeat.
               </p>
               <pre><code>{host.upgrade_command}</code></pre>

@@ -38,3 +38,17 @@ func TestHostUpgradeCommandsMatchTheControllerWithoutDowngradingAheadAgents(t *t
 		})
 	}
 }
+
+// A Windows agent is not offered sudo or zoomies upgrade, which knows no
+// Windows service. It is offered the installer script, which upgrades an
+// enrolled machine without a token, so the command never enrols it twice.
+func TestHostUpgradeOnWindowsIsTheInstallerScript(t *testing.T) {
+	cmd, version, note := hostUpgrade(&store.Host{OS: "windows", Version: "1.0"}, "1.2.3")
+	want := "& ([scriptblock]::Create((irm https://zoomies.sh/install.ps1))) -Mode agent -Version 'v1.2.3'"
+	if cmd != want {
+		t.Fatalf("command = %q, want %q", cmd, want)
+	}
+	if version != "1.2.3" || !strings.Contains(note, "administrator") {
+		t.Fatalf("version %q, note %q", version, note)
+	}
+}
