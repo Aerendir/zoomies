@@ -86,11 +86,12 @@ type MachinePlan struct {
 	// money was never the obstacle, so it is not a ProviderPlan's Blocked: an
 	// operator raising a ceiling would be sent to the wrong screen.
 	Unserved []UnservedPool `json:"unserved,omitempty"`
-	// Pools is the verdict on each pool the scheduler could not place and the
-	// fleet's free slots do not cover: what this pass decided about renting for
-	// it and why, one a pool, in pool name order. It is the planner's reading
-	// alone. Whether renting is switched on, or a provider may buy at the
-	// moment, is for the controller to lay over it.
+	// Pools is a verdict for each pool the planner has something to say
+	// about: what this pass decided about renting for it and why, one a pool,
+	// in pool name order. A pool the scheduler is placing runners for has
+	// none, and neither has one the fleet's free slots cover. It is the
+	// planner's reading alone. Whether renting is switched on, or a provider
+	// may buy at the moment, is for the controller to lay over it.
 	Pools []PoolRenting `json:"pools,omitempty"`
 }
 
@@ -219,9 +220,18 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		if !ok || (!pp.BlockedAtCapacity && !pp.BlockedNoEligibleHost) {
 			// A pool the scheduler could not place for a reason a machine
 			// does not answer is still given a verdict: from the queue it
-			// looks exactly like one nothing was rented for.
+			// looks exactly like one nothing was rented for. Told to wait,
+			// it is promised a machine once its hosts are full, so a pool no
+			// provider could ever serve is told that instead. It is a verdict
+			// only: MachinePlan.Unserved is the pools whose work a machine
+			// would answer, and this pool's waits on its hosts.
 			if ok && pp.Blocked != "" && pp.Desired > pp.Current {
-				verdicts = append(verdicts, waitingVerdict(pool, pp, queued[pool.ID]))
+				if providerFor(providers, synth, pool, owned, s.Now) == nil {
+					v, _ := unservedVerdict(providers, synth, pool, s.Now, pp.Desired-pp.Current, queued[pool.ID])
+					verdicts = append(verdicts, v)
+				} else {
+					verdicts = append(verdicts, waitingVerdict(pool, pp, queued[pool.ID]))
+				}
 			}
 			continue
 		}
@@ -245,7 +255,10 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		}
 		// owed is what the free slots leave short, for machines on their way
 		// to cover. They are walked oldest first, so the first one credited is
-		// the oldest of those that do.
+		// the oldest of those that do, and its provider is the one a verdict
+		// names. coming counts that provider's machines alone: a sentence that
+		// named one provider and counted another's would send an operator
+		// looking for a machine it is not building.
 		owed, coming := short, 0
 		var oldest *store.Machine
 		for _, m := range machines {
@@ -262,7 +275,9 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			if oldest == nil {
 				oldest = m
 			}
-			coming++
+			if m.ProviderID == oldest.ProviderID {
+				coming++
+			}
 		}
 		if short <= 0 {
 			// A pool the free slots cover is told nothing; one that machines
@@ -274,12 +289,11 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		}
 		p := providerFor(providers, synth, pool, owned, s.Now)
 		if p == nil {
-			if u, ok := unservedBy(providers, synth, pool, s.Now); ok {
-				unserved = append(unserved, u)
-				verdicts = append(verdicts, unservedSelectorVerdict(pool, u, short, queued[pool.ID]))
-			} else {
-				verdicts = append(verdicts, unservedFitVerdict(pool, providers[0], synth[providers[0].ID], short, queued[pool.ID]))
+			v, refused := unservedVerdict(providers, synth, pool, s.Now, short, queued[pool.ID])
+			if refused != nil {
+				unserved = append(unserved, *refused)
 			}
+			verdicts = append(verdicts, v)
 			// No provider's machines would be allowed to run this pool, so its
 			// blockage is not one money can fix. BlockedNoEligibleHost is a
 			// hint that a machine might help, never an instruction to buy one.
@@ -345,7 +359,7 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			plan.BlockedFix = fix
 		}
 		for _, d := range ds {
-			verdicts = append(verdicts, chargedVerdict(p, d, create, want, because, fix, setting))
+			verdicts = append(verdicts, chargedVerdict(p, d, create, because, fix, setting))
 		}
 		out.Providers = append(out.Providers, plan)
 	}

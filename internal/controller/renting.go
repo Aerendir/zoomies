@@ -34,7 +34,8 @@ const (
 	// machine does not answer: a host that could run it is cordoned, silent,
 	// incompatible, held or still starting runners. Mending a host is cheaper
 	// than renting one, so nothing is rented until every host that could run
-	// the pool is full.
+	// the pool is full. A pool no provider could ever serve is unserved
+	// instead, because waiting would promise it a machine that never comes.
 	RentingWaiting RentingState = "waiting"
 	// RentingCeiling is a pool whose machine a limit stopped.
 	RentingCeiling RentingState = "ceiling"
@@ -70,14 +71,18 @@ type PoolRenting struct {
 	ProviderName string `json:"provider_name,omitempty"`
 	// Queued is the queued jobs the pool claims, counted as the purchase
 	// sentence counts them, so that a job two pools could run is counted for
-	// one. Short is the runner slots it is missing: the scheduler's own
-	// shortfall for a pool that is waiting, what the free slots on hosts that
-	// could run it leave for one with machines on the way, and what those
-	// machines leave as well for every other.
+	// one. Short is the runner slots it is missing. For a pool the scheduler
+	// is waiting on hosts for, that is the scheduler's own shortfall, whether
+	// the verdict is waiting or, because no provider could serve it,
+	// unserved. Otherwise it is what the free slots on hosts that could run
+	// it leave and, for every state but on_its_way, what the machines on
+	// their way leave as well.
 	Queued int `json:"queued"`
 	Short  int `json:"short"`
-	// Machines is, for renting, how many machines the provider rents this
-	// pass, and for on_its_way, how many are coming.
+	// Machines is, for renting, the machines this pool alone needs, at most
+	// what the provider rents this pass. Pools that share a machine each
+	// count it, so the figures are never to be added up. For on_its_way it is
+	// how many of the named provider's machines are coming.
 	Machines int `json:"machines"`
 	// Since is when the oldest machine on its way for this pool was asked for.
 	// It is a field rather than a phrase in the summary because a sentence with
@@ -158,37 +163,38 @@ func onItsWayVerdict(pool *store.Pool, p *store.Provider, coming int, since time
 	}
 }
 
-// unservedSelectorVerdict is a pool a selector keeps from a provider whose
-// machines would suit it. That was somebody's choice, so the refusal is quoted
-// with its own fix.
-func unservedSelectorVerdict(pool *store.Pool, refused UnservedPool, short, queued int) PoolRenting {
-	return PoolRenting{
-		PoolID: pool.ID, PoolName: pool.Name, State: RentingUnserved,
-		Summary: "No provider will rent for this pool. " + sentence(refused.Why),
-		Fix:     sentence(refused.Fix),
-		Queued:  queued, Short: short,
+// unservedVerdict is the verdict on a pool no provider will rent for, with the
+// selector's refusal when that is the reason, for the caller that also lists
+// it. Both places a pool can turn out unserved ask this one function, so the
+// two cannot come to say different things.
+//
+// A selector that says no was somebody's choice, so it is quoted with its own
+// fix. Otherwise no provider builds a machine the pool could use, and the first
+// provider by name is the example given: every provider's machine has failed a
+// test of shape to get here, so the first one's mismatch always has something
+// to say. There is always a first, because DecideMachines decides nothing for
+// a fleet with no provider.
+func unservedVerdict(providers []*store.Provider, synth map[string]*store.Host, pool *store.Pool, now time.Time, short, queued int) (PoolRenting, *UnservedPool) {
+	v := PoolRenting{PoolID: pool.ID, PoolName: pool.Name, State: RentingUnserved, Queued: queued, Short: short}
+	if refused, ok := unservedBy(providers, synth, pool, now); ok {
+		v.Summary = "No provider will rent for this pool. " + sentence(refused.Why)
+		v.Fix = sentence(refused.Fix)
+		return v, &refused
 	}
-}
-
-// unservedFitVerdict is a pool for which no provider builds a machine it could
-// use. The first provider by name is the example given: every provider's
-// machine has failed a test of shape to get here, so the first one's mismatch
-// always has something to say.
-func unservedFitVerdict(pool *store.Pool, first *store.Provider, machine *store.Host, short, queued int) PoolRenting {
-	return PoolRenting{
-		PoolID: pool.ID, PoolName: pool.Name, State: RentingUnserved,
-		Summary: "No provider builds a machine this pool could use. " + first.Name + ": " + machineFit(machine, pool),
-		Fix:     unservedFitFix,
-		Queued:  queued, Short: short,
-	}
+	first := providers[0]
+	v.Summary = "No provider builds a machine this pool could use. " + first.Name + ": " + machineFit(synth[first.ID], pool)
+	v.Fix = unservedFitFix
+	return v, nil
 }
 
 // chargedVerdict is a pool whose shortfall was charged to p, once every
-// ceiling has had its say. The pools charged to one provider share its
-// purchase: the machines it rents cover them together, and the ceiling that
-// stopped one stopped them all, so create, want and the ceiling's words are
-// the provider's rather than the pool's.
-func chargedVerdict(p *store.Provider, d poolDemand, create, want int, because, fix, setting string) PoolRenting {
+// ceiling has had its say. create and the ceiling's words are the provider's,
+// decided once for every pool charged to it, but each pool quotes its own
+// share: the machines it alone needs, and as many of those as create covers.
+// The provider's whole order would tell a pool one slot short that it needs
+// two machines.
+func chargedVerdict(p *store.Provider, d poolDemand, create int, because, fix, setting string) PoolRenting {
+	need := ceilDiv(d.slots, providerSlots(p))
 	v := PoolRenting{
 		PoolID: d.poolID, PoolName: d.pool, ProviderID: p.ID, ProviderName: p.Name,
 		Queued: d.queued, Short: d.slots,
@@ -198,14 +204,14 @@ func chargedVerdict(p *store.Provider, d poolDemand, create, want int, because, 
 		v.State, v.Because = RentingCeiling, because
 		v.Summary = "Not renting: " + because + "."
 		v.Fix, v.Setting = sentence(fix), setting
-	case create < want:
+	case create < need:
 		v.State, v.Machines = RentingBuying, create
 		v.Summary = fmt.Sprintf("Renting %d of the %d machines it needs from %s, which covers this pool: %s. The rest are held back: %s.",
-			create, want, p.Name, poolReason(d), because)
+			create, need, p.Name, poolReason(d), because)
 		v.Fix, v.Setting = sentence(fix), setting
 	default:
-		v.State, v.Machines = RentingBuying, create
-		v.Summary = fmt.Sprintf("Renting %s from %s, which covers this pool: %s.", plural(create, "machine"), p.Name, poolReason(d))
+		v.State, v.Machines = RentingBuying, need
+		v.Summary = fmt.Sprintf("Renting %s from %s, which covers this pool: %s.", plural(need, "machine"), p.Name, poolReason(d))
 	}
 	return v
 }

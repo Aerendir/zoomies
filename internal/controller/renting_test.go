@@ -167,6 +167,22 @@ func TestEveryVerdictStateSaysItsSentence(t *testing.T) {
 			},
 		},
 		{
+			// A provider's own limit is on its own form rather than in
+			// Settings, so no setting is named.
+			name: "renting part of what it needs, held back by what the provider may build at once",
+			snapshot: func() MachineSnapshot {
+				s := snapshot(0, 4, 4, "nowhere")
+				s.Providers[0].MaxCreatesInFlight = 1
+				return s
+			},
+			want: PoolRenting{
+				State:        RentingBuying,
+				Summary:      "Renting 1 of the 2 machines it needs from lab, which covers this pool: 4 runner slots short with 4 jobs queued, and no host in the fleet can run it. The rest are held back: lab may build only 1 machine at a time.",
+				Fix:          "Raise this provider's maximum creates in flight.",
+				ProviderName: "lab", Queued: 4, Short: 4, Machines: 1,
+			},
+		},
+		{
 			name: "one machine on its way",
 			snapshot: func() MachineSnapshot {
 				s := snapshot(0, 2, 2, "nowhere")
@@ -199,6 +215,29 @@ func TestEveryVerdictStateSaysItsSentence(t *testing.T) {
 				Summary:      "2 machines from lab are on the way for this pool, so the next runners start there.",
 				ProviderName: "lab", Queued: 3, Short: 4, Machines: 2,
 				Since: ptrTime(machineNow.Add(-6 * time.Minute)),
+			},
+		},
+		{
+			// Two providers' machines cover the pool between them, and the
+			// sentence names one provider, so it counts only that provider's:
+			// "2 machines from alpha-lab" would send an operator looking for a
+			// machine alpha-lab is not building.
+			name: "machines from two providers on their way",
+			snapshot: func() MachineSnapshot {
+				s := snapshot(0, 4, 4, "nowhere")
+				alpha, beta := demandProvider("alpha-lab"), demandProvider("beta-lab")
+				s.Providers = []*store.Provider{beta, alpha}
+				s.Machines = []*store.Machine{
+					demandMachine("mach_beta", beta, store.MachinePlanned, time.Minute),
+					demandMachine("mach_alpha", alpha, store.MachineCreating, 5*time.Minute),
+				}
+				return s
+			},
+			want: PoolRenting{
+				State:        RentingOnItsWay,
+				Summary:      "1 machine from alpha-lab is on the way for this pool, so the next runners start there.",
+				ProviderName: "alpha-lab", Queued: 4, Short: 4, Machines: 1,
+				Since: ptrTime(machineNow.Add(-5 * time.Minute)),
 			},
 		},
 		{
@@ -282,6 +321,23 @@ func TestEveryVerdictStateSaysItsSentence(t *testing.T) {
 				Queued:  1, Short: 1,
 			},
 		},
+		{
+			// Handed over out of order, so the provider named is the first by
+			// name and not the first in the slice.
+			name: "no provider of two builds a machine that suits it",
+			snapshot: func() MachineSnapshot {
+				s := snapshot(0, 1, 1, "nowhere")
+				s.Pools[0].Backend = store.BackendProcess
+				s.Providers = []*store.Provider{demandProvider("beta-lab"), demandProvider("alpha-lab")}
+				return s
+			},
+			want: PoolRenting{
+				State:   RentingUnserved,
+				Summary: "No provider builds a machine this pool could use. alpha-lab: The machines it builds run docker, and this pool needs process.",
+				Fix:     "Give a provider machines that suit this pool, or change the pool.",
+				Queued:  1, Short: 1,
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := tc.snapshot()
@@ -350,6 +406,175 @@ func TestTwoProvidersThatServeOnePoolGiveOneVerdict(t *testing.T) {
 	}
 	if got := plan.Pools[0].ProviderName; got != "alpha-lab" {
 		t.Fatalf("charged to %q, want alpha-lab, the first by name", got)
+	}
+}
+
+// One provider buying for several pools makes one purchase for all of them,
+// and each pool is told its own share of it. Quoting the provider's whole
+// order to every pool would tell a pool one slot short that it needs two
+// machines. The provider's own order is still the group's, because it is one
+// purchase.
+func TestPoolsThatShareAProviderEachQuoteTheirOwnShareOfThePurchase(t *testing.T) {
+	// queuedFor is n queued jobs that only the pool advertising label claims.
+	queuedFor := func(label string, n int) []*store.Job {
+		jobs := demandJobs(n)
+		for _, j := range jobs {
+			j.ID += "_" + label
+			j.Labels = append(j.Labels, label)
+		}
+		return jobs
+	}
+	for _, tc := range []struct {
+		name   string
+		limits func(*MachineLimits)
+		// create and wanted are the provider's own order.
+		create, wanted int
+		want           []PoolRenting
+	}{
+		{
+			name:   "the fleet may build one machine at a time",
+			limits: func(l *MachineLimits) { l.MaxCreatesInFlight = 1 },
+			create: 1, wanted: 2,
+			want: []PoolRenting{
+				{
+					PoolID: "pool_alpha", PoolName: "alpha", State: RentingBuying,
+					Summary:    "Renting 1 machine from lab, which covers this pool: 1 runner slot short with 1 job queued, and no host in the fleet can run it.",
+					ProviderID: "prv_lab", ProviderName: "lab", Queued: 1, Short: 1, Machines: 1,
+				},
+				{
+					PoolID: "pool_beta", PoolName: "beta", State: RentingBuying,
+					Summary:    "Renting 1 of the 2 machines it needs from lab, which covers this pool: 3 runner slots short with 3 jobs queued, and no host in the fleet can run it. The rest are held back: provider.max_creates_in_flight allows only 1 machine at a time.",
+					Fix:        "Raise provider.max_creates_in_flight.",
+					Setting:    "provider.max_creates_in_flight",
+					ProviderID: "prv_lab", ProviderName: "lab", Queued: 3, Short: 3, Machines: 1,
+				},
+			},
+		},
+		{
+			name:   "no ceiling bites",
+			limits: func(*MachineLimits) {},
+			create: 2, wanted: 2,
+			want: []PoolRenting{
+				{
+					PoolID: "pool_alpha", PoolName: "alpha", State: RentingBuying,
+					Summary:    "Renting 1 machine from lab, which covers this pool: 1 runner slot short with 1 job queued, and no host in the fleet can run it.",
+					ProviderID: "prv_lab", ProviderName: "lab", Queued: 1, Short: 1, Machines: 1,
+				},
+				{
+					PoolID: "pool_beta", PoolName: "beta", State: RentingBuying,
+					Summary:    "Renting 2 machines from lab, which covers this pool: 3 runner slots short with 3 jobs queued, and no host in the fleet can run it.",
+					ProviderID: "prv_lab", ProviderName: "lab", Queued: 3, Short: 3, Machines: 2,
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := demandProvider("lab")
+			alpha, beta := demandPool("alpha", "linux", "x64", "alpha"), demandPool("beta", "linux", "x64", "beta")
+			limits := demandLimits()
+			tc.limits(&limits)
+			s := MachineSnapshot{
+				Now: machineNow, Pools: []*store.Pool{alpha, beta}, Providers: []*store.Provider{p},
+				Jobs:   append(queuedFor("alpha", 1), queuedFor("beta", 3)...),
+				Limits: limits,
+				Plan: scheduler.Plan{Pools: []scheduler.PoolPlan{
+					demandPoolPlan(alpha, 0, 1, 1, "nowhere"),
+					demandPoolPlan(beta, 0, 3, 3, "nowhere"),
+				}},
+			}
+
+			plan := DecideMachines(s)
+			if !slices.Equal(plan.Pools, tc.want) {
+				t.Errorf("verdicts:\n got %+v\nwant %+v", plan.Pools, tc.want)
+			}
+			if got := planFor(t, plan, p.ID); got.Create != tc.create || got.Wanted != tc.wanted {
+				t.Errorf("provider create/wanted = %d/%d, want %d/%d", got.Create, got.Wanted, tc.create, tc.wanted)
+			}
+		})
+	}
+}
+
+// A pool the scheduler is waiting on hosts for is told that a machine follows
+// once they are full, which is only true if some provider could build one it
+// could use. Where none could, that would promise a machine that never comes,
+// so the pool is told what is really in the way. It is a verdict only:
+// MachinePlan.Unserved is the pools whose work a machine would answer, and
+// this pool's waits on its hosts, so that list and the purchase stay as they
+// were.
+func TestAPoolNoProviderCouldServeIsToldSoRatherThanToWait(t *testing.T) {
+	// The plan is what the scheduler says of a pool with one host busy and one
+	// cordoned: blocked, in a way an uncordon or a finished job clears, so
+	// neither capacity flag is set. A fleet whose only host is cordoned is one
+	// with no eligible host instead, and never takes this branch.
+	waitingOn := func(pool *store.Pool) scheduler.PoolPlan {
+		pp := demandPoolPlan(pool, 1, 2, 1, "")
+		pp.Blocked = "no host can take a new " + string(pool.Backend) + " runner (1 cordoned, 1 at capacity)"
+		return pp
+	}
+	for _, tc := range []struct {
+		name     string
+		pool     func(*store.Pool)
+		provider func(*store.Provider)
+		want     PoolRenting
+	}{
+		{
+			name:     "no provider builds a machine it could use",
+			pool:     func(p *store.Pool) { p.Backend = store.BackendProcess },
+			provider: func(*store.Provider) {},
+			want: PoolRenting{
+				State:   RentingUnserved,
+				Summary: "No provider builds a machine this pool could use. lab: The machines it builds run docker, and this pool needs process.",
+				Fix:     "Give a provider machines that suit this pool, or change the pool.",
+				Queued:  1, Short: 1,
+			},
+		},
+		{
+			name:     "a selector rules the provider out",
+			pool:     func(*store.Pool) {},
+			provider: func(p *store.Provider) { p.PoolSelector = store.StringMap{"tier": "large"} },
+			want: PoolRenting{
+				State:   RentingUnserved,
+				Summary: "No provider will rent for this pool. Provider lab only rents for pools matching tier=large, and pool alpha does not have tier=large.",
+				Fix:     "Edit the provider's pool selector, or give the pool the label tier=large.",
+				Queued:  1, Short: 1,
+			},
+		},
+		{
+			name:     "a provider could serve it",
+			pool:     func(*store.Pool) {},
+			provider: func(*store.Provider) {},
+			want: PoolRenting{
+				State:   RentingWaiting,
+				Summary: "Not renting yet: no host can take a new docker runner (1 cordoned, 1 at capacity). A machine is rented only once every host that could run this pool is full.",
+				Fix:     "Wait for those hosts to clear, or uncordon, repair or remove the ones that are unavailable.",
+				Queued:  1, Short: 1,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := demandProvider("lab")
+			tc.provider(p)
+			pool := demandPool("alpha", "linux", "x64")
+			tc.pool(pool)
+			s := MachineSnapshot{
+				Now: machineNow, Pools: []*store.Pool{pool}, Providers: []*store.Provider{p},
+				Jobs: demandJobs(1), Limits: demandLimits(),
+				Plan: scheduler.Plan{Pools: []scheduler.PoolPlan{waitingOn(pool)}},
+			}
+
+			plan := DecideMachines(s)
+			want := tc.want
+			want.PoolID, want.PoolName = pool.ID, pool.Name
+			if got := theVerdict(t, plan); got != want {
+				t.Errorf("verdict:\n got %+v\nwant %+v", got, want)
+			}
+			if len(plan.Unserved) != 0 {
+				t.Errorf("unserved = %+v, want none: this pool's work waits on its hosts, not on a machine", plan.Unserved)
+			}
+			if got := planFor(t, plan, p.ID); got.Create != 0 || got.Reason != "" || got.Blocked != "" {
+				t.Errorf("provider plan = %+v, want nothing bought and nothing said", got)
+			}
+		})
 	}
 }
 
