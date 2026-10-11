@@ -509,7 +509,7 @@ func (c *Client) classify(cl call, resp *http.Response, err error, sentRequest b
 		}
 		return fail(provider.FailurePermission, fmt.Sprintf("grant %s on %s to the API token %q: pveum acl modify %s --tokens '%s' --roles <role with %s>",
 			privilege, path, c.tokenID, path, c.tokenID, privilege))
-	case resp.StatusCode == http.StatusNotFound:
+	case resp.StatusCode == http.StatusNotFound, looksLikeMissingGuest(msg):
 		return fail(provider.FailureNotFound, "")
 	case resp.StatusCode == http.StatusBadRequest, resp.StatusCode == http.StatusNotImplemented:
 		return fail(provider.FailureConfig, "the cluster refused the parameters of this call; the provider's settings are what decide them")
@@ -713,6 +713,18 @@ var quotaWords = []string{
 	"limit reached",
 	"exceeds",
 	"maximum number",
+}
+
+// looksLikeMissingGuest is Proxmox's answer for a guest that is not there. It is
+// not a 404: a node answers HTTP 500 with "Configuration file
+// 'nodes/pve-1/qemu-server/9000.conf' does not exist", the path of the file it
+// looked for. Read as the server fault it resembles, it made every create fail
+// before anything was cloned, because Create asks what is at an identifier
+// first and proceeds only on "not found". It is a missing guest whatever the
+// verb: the call changed nothing, so nothing is ambiguous about it.
+func looksLikeMissingGuest(msg string) bool {
+	m := strings.ToLower(msg)
+	return strings.Contains(m, "configuration file") && strings.Contains(m, "does not exist")
 }
 
 func looksLikeQuota(msg string) bool { return containsAny(strings.ToLower(msg), quotaWords) }

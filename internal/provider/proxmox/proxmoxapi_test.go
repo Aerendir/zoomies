@@ -279,6 +279,13 @@ func TestEveryRefusalBecomesTheCategoryTheReconcilerDecidesOn(t *testing.T) {
 		{"a rejected token", false, http.StatusUnauthorized, "authentication failure", provider.FailureAuth},
 		{"a privilege the token lacks", false, http.StatusForbidden, "Permission check failed (/vms/9000, VM.Clone)", provider.FailurePermission},
 		{"a guest that is not there", false, http.StatusNotFound, "Configuration file does not exist", provider.FailureNotFound},
+		// What a node really sends for a guest that is not there: a 500, not a
+		// 404. Classed as a refused read it stopped every create before the
+		// clone, because Create proceeds only when the identifier is "not found".
+		{"a guest that is not there, as a node really says it, on a read", false, http.StatusInternalServerError,
+			"Configuration file 'nodes/elitedesk-node1/qemu-server/9000.conf' does not exist", provider.FailureNotFound},
+		{"a guest that is not there, as a node really says it, on a change", true, http.StatusInternalServerError,
+			"Configuration file 'nodes/elitedesk-node1/qemu-server/9000.conf' does not exist", provider.FailureNotFound},
 		{"a parameter Proxmox will not take", true, http.StatusBadRequest, "invalid format - value does not look like a valid bridge name", provider.FailureConfig},
 		{"an endpoint this release does not have", false, http.StatusNotImplemented, "method not implemented", provider.FailureConfig},
 		{"a storage with no room", true, http.StatusInternalServerError, "unable to create image: storage 'local-lvm' is full (no space left on device)", provider.FailureQuota},
