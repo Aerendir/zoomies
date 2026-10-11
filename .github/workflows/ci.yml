@@ -232,19 +232,6 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      # Go keeps every package it compiles in its work directory until the command
-      # exits, and by default that is under /tmp. On the Zoomies pool /tmp is an
-      # in-memory folder (tmpfs.tmp, auto, which sizes it at 1 GB) and so is the
-      # runner's _work, so $RUNNER_TEMP is no better. With tailscale.com in the
-      # module graph a cold go vet, go test -race or staticcheck compiles more than
-      # 1 GB and dies with "write /tmp/go-build...: no space left on device".
-      # ~/.cache is on the container's disk. The go command does not create
-      # GOTMPDIR, so this step does.
-      - name: Keep Go's work directory on disk
-        run: |
-          mkdir -p "$HOME/.cache/go-tmp"
-          echo "GOTMPDIR=$HOME/.cache/go-tmp" >> "$GITHUB_ENV"
-
       # go:embed needs the directory to exist even when the UI is not built.
       # Every shard needs the stub, the docs shard too: its tests ask the binary
       # for its own command list with `go run ../../cmd/zoomies commands`, which
@@ -668,14 +655,6 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: true
-      # See the go job: Go's work directory must not be under /tmp on this pool.
-      # Packages that never compiled leave staticcheck reporting their
-      # declarations as unused, so a full disk reads as a long list of U1000
-      # findings rather than as the error it is.
-      - name: Keep Go's work directory on disk
-        run: |
-          mkdir -p "$HOME/.cache/go-tmp"
-          echo "GOTMPDIR=$HOME/.cache/go-tmp" >> "$GITHUB_ENV"
       - name: Stub the embedded UI
         timeout-minutes: 1
         run: make ui-stub
@@ -863,16 +842,6 @@ jobs:
         with:
           name: webdist
           path: internal/api/webdist
-      # The Go shards' reason, above: on the Zoomies pool /tmp is a 1 GB
-      # in-memory folder, and the linker writes its output into Go's work
-      # directory, which defaults to /tmp, before it moves it. The darwin/amd64
-      # link has outgrown that and died twice running with "link: mapping output
-      # file failed: no space left on device", while the other four targets still
-      # fit. Every pull request that changes Go would have hit it.
-      - name: Keep Go's work directory on disk
-        run: |
-          mkdir -p "$HOME/.cache/go-tmp"
-          echo "GOTMPDIR=$HOME/.cache/go-tmp" >> "$GITHUB_ENV"
       - env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
