@@ -29,13 +29,16 @@ Zoomies created it, knows it did, and is the only thing allowed to delete it.
     other backends and other bootstrap routes are untested too, not "probably
     fine", and this page will say so until they are not.
 
-    Renting machines is off until you turn it on: `provider.enabled` defaults to
-    `false`, and `provider.max_machines` defaults to **zero, which rents
-    nothing**; a maximum of none is none, exactly as it is for a pool's
-    `max_runners`. Set both in the same edit, or the fleet will look enabled and
-    buy nothing. That is deliberate: the alternative reading, where an unset
-    number means "as many as it takes", puts the one setting that decides the
-    size of an invoice behind a value somebody can forget.
+    Renting machines is off until an administrator turns it on. The Providers
+    page says so at the top and offers a button that switches it on, and the
+    setting applies at once, with no restart. Two settings decide it, and both
+    must be set: `provider.enabled` defaults to `false`, and
+    `provider.max_machines` defaults to **zero, which rents nothing**, because a
+    maximum of none is none, exactly as it is for a pool's `max_runners`. A fleet
+    with one and not the other looks ready and buys nothing. That is deliberate:
+    the alternative reading, where an unset number means "as many as it takes",
+    puts the one setting that decides the size of an invoice behind a value
+    somebody can forget.
 
 ## What you need
 
@@ -355,6 +358,31 @@ renting is switched on, the most the fleet may rent, and for each pool with work
 waiting what to change. `providers_available` alone is not the whole story, and
 `provider.paused` is still worth a look when nothing there explains a pool that
 buys nothing.
+
+## Why is no machine rented?
+
+A pool with work waiting and no machine coming for it looks the same on every
+screen whatever the reason, and the reasons call for opposite things. The
+controller keeps one verdict per pool from its last machine pass and shows that
+same sentence everywhere, with the one thing to change. The verdict is kept even
+while renting is switched off, so it can say what would have been rented.
+
+| State | What it means | What to change |
+| --- | --- | --- |
+| `renting` | The pass is renting machines for this pool, all it is short of or as many as the ceilings allow. When a purchase is shared by several pools and only part of it is made, the sentence says the rest is held back (`rentingShared`). | Nothing, unless the sentence says the rest is held back, in which case raise the ceiling it names. |
+| `on_its_way` | Machines already being built cover the pool, so the next runners start there. | Nothing; wait for them. |
+| `waiting` | The scheduler could not place the pool for a reason a machine does not answer: a host that could run it is cordoned, silent, incompatible, held or still starting runners. A machine is rented only once every host that could run the pool is full. | Wait for those hosts to clear, or uncordon, repair or remove the ones that are unavailable. |
+| `ceiling` | A limit stopped the purchase: the fleet's maximum, a provider's own, or a pool's. The sentence names which. | Raise the limit it names. |
+| `unserved` | No provider will rent for this pool: a selector says no, or no provider builds a machine the pool could use. | Change the selector the sentence quotes, give a provider machines that suit the pool, or change the pool. |
+| `held` | A provider may not buy at the moment, for the reason the sentence gives. | Clear the reason, for example resume a paused provider. |
+| `off` | Renting is switched off, so nothing is rented. The sentence says what would have been rented, or that a machine being built is not being finished. | Turn on **Rent machines** in Settings, and set **Machines the fleet may rent** to the most you are willing to pay for. |
+
+The verdict is shown on the Providers page, as a notice at the top and in each
+provider's **Pools** tab; on the pool's page, as its capacity problem; in the job
+drawer, in the explanation of why a job is waiting; and in the problems drawer,
+as `provider.renting_off` while renting is switched off with work waiting. Eli
+and any MCP client read it as the `renting` key of `list_providers`, and it is
+`GET /api/v1/providers/renting`.
 
 ## What happens when a pool runs out of hosts
 

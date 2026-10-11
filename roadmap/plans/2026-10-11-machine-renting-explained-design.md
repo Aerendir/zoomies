@@ -1,6 +1,6 @@
 # Explain, and enable, machine renting: design
 
-**Status:** design approved in conversation (approach A); this written spec awaits the owner's review before any plan or code.
+**Status:** implemented (approach A), on draft pull request eyupio/zoomies#880.
 **Date:** 11 October 2026.
 
 ## Goal
