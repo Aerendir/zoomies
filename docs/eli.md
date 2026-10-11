@@ -120,6 +120,12 @@ its name (a code that is not in the catalog, a route that refused), which is the
 part worth reading. A call Eli makes twice with the same arguments is answered
 from the first without being run or shown again.
 
+The questions an empty conversation offers come from the fleet when Eli can
+read it: the open one first, then the worst open problem by name, the jobs
+waiting, the jobs that failed and the host that is unwell, filled out from a
+fixed few on a quiet fleet. Without fleet access they are about Zoomies in
+general, so the first press is never a refusal.
+
 Every question also carries the situation: the time, your role (so "ask an
 administrator" is advice Eli knows whether you can act on), and the page you
 asked from. Through a provider that may read the fleet that is the page's path,
@@ -209,6 +215,24 @@ a hostile name can do is mislead an answer: check what you act on.
 * Every signed-in user can ask through their own API provider; controller subscription tools require an administrator. Every chat is written to the audit log as
   `assistant.chat` with the provider, the model, whether the fleet could be read
   and the tools used, and never with what was said.
+
+## Measuring Eli
+
+A prompt change is measured before it is trusted. `internal/api/eli_eval_test.go`
+holds recorded scenarios against the fake fleet: a job the kernel killed for
+memory, a pool with jobs waiting and no host to run them, and a job whose name
+carries an instruction planted where a pull request could put one. Each names
+the question, the tools a good answer rests on, the tools it must not touch, how
+many looks it should take, and the claims it must not repeat.
+
+Every test run plays them with a scripted model, which proves the loop, the
+tools and the fences do what the scenarios expect. To play them against a real
+model, set `ELI_EVAL_URL`, `ELI_EVAL_KEY` and `ELI_EVAL_MODEL` to an
+OpenAI-compatible provider and run `make test-eli-eval`: the report says, per
+scenario, what the model looked at and what it answered, and the run fails only
+on the hard rules, a forbidden tool or a followed instruction. Which tool a model
+reaches for first is a score to read and compare between prompt changes, not a
+verdict to break the build on.
 
 ## If it is not there
 
@@ -310,7 +334,13 @@ The durable queue deduplicates webhook retries and charges attempts at
 admission. The worker reads the PR's pinned commit, changed text files, repository
 inventory and bounded failed-job evidence. It asks the selected model for a
 strict JSON plan, with at most six model turns and eight edits. Source is capped
-at 128 KiB, individual files at 32 KiB, and replacement content at 64 KiB.
+at 128 KiB, individual files at 32 KiB, and replacement content at 64 KiB. A
+changed file over the file cap, or not plain text (a regenerated reference of a
+few thousand lines, say), is left out and named to the model as unavailable
+rather than stopping the repair, and so are the changed files past the source
+budget; the model fixes what it can read. When the source cannot be read at all,
+the comment says why: the repository's inventory is too large, the PR changes
+too many files, or GitHub refused the read.
 Recognisable provider/GitHub tokens and private-key headers are redacted before
 model use. These filters cannot identify every possible secret, so use a
 provider permitted to process your repository and job logs.
