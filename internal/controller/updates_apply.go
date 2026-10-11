@@ -180,9 +180,6 @@ func (c *Controller) requestControllerUpdate(ctx context.Context, by UpdateActor
 	if c.updateMode() == updates.ModeOff {
 		return nil, "", ErrUpdateModeOff
 	}
-	if _, ok := version.Release(version.Version); !ok {
-		return nil, "", ErrUpdateNotARelease
-	}
 	helper := c.probeUpdateHelper()
 	if !helper.ready {
 		return nil, "", fmt.Errorf("%w: %s", ErrUpdateHelperMissing, helper.refusal)
@@ -297,7 +294,9 @@ func (c *Controller) controllerTarget(tag string) (string, error) {
 				ErrUpdateNothingNewer, tag, runtime.GOOS, runtime.GOARCH)
 		}
 	}
-	if version.CompareBuilds(version.Version, pick.Tag) != version.SkewBehind {
+	// A build that is not from a release has no place in the order, and the
+	// person pressing the button has chosen to move it onto one.
+	if _, fromRelease := version.Release(version.Version); fromRelease && version.CompareBuilds(version.Version, pick.Tag) != version.SkewBehind {
 		return "", fmt.Errorf("%w: this controller runs %s, and %s is not newer", ErrUpdateNothingNewer, version.Version, pick.Tag)
 	}
 	return pick.Tag, nil

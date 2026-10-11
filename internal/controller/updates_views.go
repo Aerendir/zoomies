@@ -220,11 +220,7 @@ func (c *Controller) UpdatesView(ctx context.Context) (*UpdatesView, error) {
 	// complete release exists, which nobody has been told: a list with nothing in
 	// it is an answer, and not having asked is not.
 	listRead := state != nil && state.Releases != nil
-	// A build that is not from a release is told so whether or not the list has
-	// been read. One from main never reads it, because it follows the head of main
-	// in every mode, so promising a read would be false for as long as it ran; and
-	// the rule has the better sentence for any of them.
-	if mode != updates.ModeOff && fromRelease && !listRead {
+	if mode != updates.ModeOff && !listRead {
 		view.Reason = unreadReason(cfg.CheckInterval)
 		return view, nil
 	}
@@ -234,8 +230,7 @@ func (c *Controller) UpdatesView(ctx context.Context) (*UpdatesView, error) {
 		releases = state.Releases
 	}
 	// A list that was never read goes in as nil only where the rule does not
-	// depend on it: it decides off first, and a build that is not from a release
-	// before it asks what the list holds. A list left over from when updating was
+	// depend on it: it decides off first. A list left over from when updating was
 	// on offers nothing once it is off, for the same reason.
 	target := updates.Choose(updates.ChooseInput{
 		Mode: mode, Soak: cfg.Soak, Now: c.Now(), Running: version.Version,

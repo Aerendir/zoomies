@@ -2672,18 +2672,14 @@ const maxProblemSentence = 300
 func (c *Controller) controllerUpdateProblems() []Problem {
 	sight := c.updateSightNow()
 	var out []Problem
-	// Only a release build can be updated by the button, and RequestControllerUpdate
-	// refuses any other before it looks for the helper, so for a build from main a
-	// missing helper changes nothing and the warning would name a fix that does
-	// nothing. Nor is one that can never be installed a warning: nothing is to be
-	// done about it, and Settings → Updates says why and how to upgrade instead.
-	_, fromRelease := version.Release(version.Version)
-	if mode := c.updateMode(); mode != updates.ModeOff && fromRelease && sight.helper == HelperMissing {
+	// One that can never be installed is not a warning: nothing is to be done
+	// about it, and Settings → Updates says why and how to upgrade instead.
+	if mode := c.updateMode(); mode != updates.ModeOff && sight.helper == HelperMissing {
 		out = append(out, Problem{
 			Code:     "controller.update_helper_missing",
 			Severity: config.SeverityWarning,
 			Title:    "this controller has no update helper, so it cannot update itself",
-			Detail: fmt.Sprintf("updates.mode is %s, so this release build of Zoomies may be asked to update itself, but the update helper that would replace its binary "+
+			Detail: fmt.Sprintf("updates.mode is %s, so this build of Zoomies may be asked to update itself, but the update helper that would replace its binary "+
 				"is not installed on its host. Nothing else is affected: runners, pools and jobs carry on.", mode),
 			Fix: "have somebody with root on the controller's host run `" + helperInstallCommand + "`, " +
 				"or set updates.mode to off if this controller is to be upgraded by hand with `zoomies upgrade`.",

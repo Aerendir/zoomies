@@ -107,28 +107,40 @@ func TestChooseNeverOffersADowngrade(t *testing.T) {
 }
 
 // A controller on :dev is stamped main-sha-abc1234 and is usually ahead of the
-// newest release, so "a release is available" would tell it to downgrade. The
-// release below is newer than any version a person would compare, which leaves
-// only the build to explain why it is left alone. The release is still reported
-// as the newest, because the status shows what is out there even for a build it
-// will not touch.
-func TestChooseRefusesABuildThatIsNotFromARelease(t *testing.T) {
+// newest release, so a release is offered to it as a replacement and never as
+// the next step: nothing orders the two, and the sentence says it may be a step
+// back. Only a person takes it, in auto as in manual, so no wait is attached.
+func TestChooseOffersABuildThatIsNotFromAReleaseTheNewestToReplaceIt(t *testing.T) {
 	newest := published("v9.9.9", noon.Add(-72*time.Hour))
 	for _, running := range []string{"main-sha-abc1234", "dev", "v0.2-beta-5-gabc1234", "some-fork-build", ""} {
 		for _, mode := range []Mode{ModeManual, ModeAuto} {
 			t.Run(string(mode)+" "+strconv.Quote(running), func(t *testing.T) {
 				got := Choose(asking(mode, running, noon, newest))
-				if got.Newer || got.DueBy(noon.AddDate(1, 0, 0)) {
-					t.Errorf("offered %q to the build %q", got.Release.Tag, running)
+				if !got.Newer || !got.Replaces || !got.DueAt.IsZero() {
+					t.Errorf("got %+v, want v9.9.9 offered as a replacement with no wait", got)
 				}
 				if got.Release.Tag != "v9.9.9" {
-					t.Errorf("Release = %q, want the newest, v9.9.9, reported although it is not offered", got.Release.Tag)
+					t.Errorf("Release = %q, want the newest, v9.9.9", got.Release.Tag)
 				}
-				if !strings.Contains(got.Reason, "not from a release") {
-					t.Errorf("Reason = %q, want it to say the build is not from a release", got.Reason)
+				for _, want := range []string{"v9.9.9", "not from a release", "step back", "only when someone asks"} {
+					if !strings.Contains(got.Reason, want) {
+						t.Errorf("Reason = %q, want it to contain %q", got.Reason, want)
+					}
 				}
 			})
 		}
+	}
+}
+
+// With nothing complete to replace it with, a build that is not from a release
+// is told that and not offered a release that cannot be installed.
+func TestChooseHasNothingToOfferABuildThatIsNotFromAReleaseWithoutACompleteRelease(t *testing.T) {
+	got := Choose(asking(ModeManual, "main-sha-abc1234", noon))
+	if got.Newer || got.Replaces {
+		t.Errorf("got %+v, want nothing offered", got)
+	}
+	if !strings.Contains(got.Reason, "No complete release") {
+		t.Errorf("Reason = %q, want it to say no complete release is available", got.Reason)
 	}
 }
 

@@ -182,14 +182,23 @@ test('the state is the word the controller opens its own sentence with', () => {
         target: null,
         checked_at: null,
       }),
-      'Left alone',
+      'Not read yet',
       'neutral',
     ],
     [
-      'a build from a describe that did read the list',
+      'a build from a describe that read the list and found nothing complete',
       status({ running: { version: 'dev', release: false }, latest: null, target: null }),
-      'Left alone',
+      'Nothing to take',
       'neutral',
+    ],
+    [
+      'a build from main with a release on offer to replace it',
+      status({
+        running: { version: 'main-sha-abc1234', release: false },
+        target: { tag: 'v1.3.2', newer: true, due_at: null },
+      }),
+      'Available',
+      'accent',
     ],
     [
       'a list nobody has read',
@@ -275,7 +284,10 @@ test('a release is linked only when its address is an https one', () => {
 
 test('a build is told apart by whether it came from a release', () => {
   assert.equal(buildText(true), 'From a release');
-  assert.equal(buildText(false), 'Not from a release, so updates leave it alone');
+  assert.equal(
+    buildText(false),
+    'Not from a release, so an update moves it onto the newest release',
+  );
 });
 
 // The settings list omits platform-scoped rows below that role, so a link sent
@@ -430,17 +442,13 @@ test('no button is offered below the platform role, and the page says which role
   });
 });
 
-test('no button is offered while updating is off, for a build that is not a release, or with nothing newer', () => {
+test('no button is offered while updating is off or with nothing newer', () => {
   const none = (status: UpdatesStatus) => {
     const offer = controllerOffer(status, true);
     assert.equal(offer.kind, 'none');
     return offer.kind === 'none' ? offer.sentence : '';
   };
   assert.match(none(updatable({ mode: 'off' })), /^Updating is off\./);
-  assert.match(
-    none(updatable({ running: { version: 'dev', release: false } })),
-    /not from a release/,
-  );
   assert.match(
     none(updatable({ target: { tag: 'v1.3.0', newer: false, due_at: null } })),
     /No newer release is on offer/,
@@ -523,6 +531,22 @@ test('the confirmation names the release and says what the restart does to jobs 
   assert.match(lines, /If the release changes the database, a copy of it is kept first/);
   assert.match(lines, /A release that changes nothing there takes none\./);
   assert.doesNotMatch(`${words.description}\n${lines}`, /\u2014| -- /);
+});
+
+test('a build that is not from a release is warned that the update may take it back', () => {
+  const words = confirmControllerUpdate('v1.3.2', 'main-sha-abc1234', false);
+  assert.match(words.consequences.join('\n'), /not from a release/);
+  assert.match(words.consequences.join('\n'), /older code/);
+  assert.deepEqual(
+    controllerOffer(
+      updatable({
+        running: { version: 'dev', release: false },
+        target: { tag: 'v1.3.2', newer: true, due_at: null },
+      }),
+      true,
+    ),
+    { kind: 'offer', tag: 'v1.3.2' },
+  );
 });
 
 test('the restart state is worded for an update, never for a restore', () => {

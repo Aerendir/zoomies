@@ -730,7 +730,9 @@ func (f *fleetCollector) collectUpdates(ctx context.Context, gauge func(*prometh
 		return
 	}
 	waiting := 0.0
-	if status.Target != nil && status.Target.Newer {
+	// A build that is not from a release is offered a replacement, which is not a
+	// newer release and would hold an alert on it open for as long as it ran.
+	if status.Target != nil && status.Target.Newer && status.Running.Release {
 		waiting = 1
 	}
 	gauge(descUpdateAvailable, waiting)

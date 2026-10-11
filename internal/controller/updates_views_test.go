@@ -303,30 +303,31 @@ func TestTheStatusNamesTheSettingThatStopsTheListBeingRead(t *testing.T) {
 	}
 }
 
-// A build from main never reads the list: it follows the head of main in every
-// mode, because it is usually ahead of the newest release. Saying that the list
-// is about to be read would be wrong for as long as it ran, and would hide the
-// true and more useful sentence, that updates leave it alone.
-func TestTheStatusLeavesABuildThatIsNotFromAReleaseAlone(t *testing.T) {
-	const alone = "This build is not from a release"
+// A build from main reads the list once updates are on, like any other, because
+// the newest release can replace it by hand. Until it has, the status says the
+// list is unread; after, it offers the release as a replacement and says it may
+// be a step back. Off decides before the build is looked at.
+func TestTheStatusOffersABuildThatIsNotFromAReleaseTheNewestToReplaceIt(t *testing.T) {
+	const offer = "Available: v1.3.2 can replace this build"
+	const unread = "Zoomies has not read the release list yet."
 	for _, tc := range []struct {
 		version string
 		mode    string
 		read    bool
 		reason  string
+		newer   bool
 	}{
-		{"main-sha-abc1234", "manual", false, alone},
-		{"dev", "manual", false, alone},
-		{"dev", "manual", true, alone},
+		{"main-sha-abc1234", "manual", false, unread, false},
+		{"dev", "manual", true, offer, true},
 		// What `git describe` gives a local build: a release tag with commits on
 		// top. It reads like a release and is not one that can be downloaded.
-		{"v1.3.0-5-gabc1234", "manual", false, alone},
-		{"v1.3.0-5-gabc1234", "manual", true, alone},
-		{"main-sha-abc1234", "auto", false, alone},
-		{"main-sha-abc1234", "auto", true, alone},
-		// Off decides before the build is looked at, so it says that and not the
-		// sentence about the build: nothing is offered either way.
-		{"main-sha-abc1234", "off", false, "Updates are off."},
+		{"v1.3.0-5-gabc1234", "manual", false, unread, false},
+		{"v1.3.0-5-gabc1234", "manual", true, offer, true},
+		{"main-sha-abc1234", "auto", false, unread, false},
+		// Auto offers it and never takes it: the planner leaves a replacement to a
+		// person, so the sentence is the rule's and there is nothing due.
+		{"main-sha-abc1234", "auto", true, offer, true},
+		{"main-sha-abc1234", "off", false, "Updates are off.", false},
 	} {
 		name := tc.version + ", " + tc.mode + ", list not read"
 		if tc.read {
@@ -348,8 +349,11 @@ func TestTheStatusLeavesABuildThatIsNotFromAReleaseAlone(t *testing.T) {
 			if !strings.HasPrefix(got.Reason, tc.reason) {
 				t.Errorf("reason = %q, want it to begin %q", got.Reason, tc.reason)
 			}
-			if got.Target != nil && got.Target.Newer {
-				t.Errorf("target = %+v, want nothing to take: a build that is ahead of the releases would be taken back", got.Target)
+			if newer := got.Target != nil && got.Target.Newer; newer != tc.newer {
+				t.Errorf("target = %+v, want newer %v", got.Target, tc.newer)
+			}
+			if got.Target != nil && got.Target.DueAt != nil {
+				t.Errorf("target = %+v, want no wait: a replacement is never taken by itself", got.Target)
 			}
 		})
 	}

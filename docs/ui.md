@@ -783,8 +783,10 @@ settings that only the platform role changes, on the Configuration page; this
 page shows them to everybody, because an administrator is not sent those rows
 and still has to be able to tell what the controller is set to do. Last is the
 build the controller is running and whether it came from a release. One built
-from `main` is left alone, since it is usually ahead of the newest release and
-an update would take it back.
+from `main` is offered the newest release as a replacement, with a warning in
+the confirmation that it may take the controller back to older code, since a
+build from `main` is usually ahead of the newest release. Auto never takes it:
+only a person pressing the button does.
 
 ![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
 ![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }

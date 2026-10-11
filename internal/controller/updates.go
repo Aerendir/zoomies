@@ -151,6 +151,11 @@ func (c *Controller) checkForRelease(ctx context.Context) error {
 	defer cancel()
 	if _, ok := developmentCommit(version.Version); ok {
 		c.checkForMain(ctx)
+		// The list too once updates are on, because a build from main can now be
+		// moved onto the newest release by hand.
+		if c.updateMode() != updates.ModeOff {
+			return c.checkForReleaseList(ctx)
+		}
 		return nil
 	}
 	if c.updateMode() != updates.ModeOff {
