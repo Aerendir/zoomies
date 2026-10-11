@@ -27,6 +27,7 @@
   import { fleet } from '$lib/state/fleet.svelte';
   import Duration from '$lib/components/Duration.svelte';
   import { catalogLink, evidenceRows, stepAction } from './why';
+  import Button from '$lib/components/Button.svelte';
   import AskEli from '$lib/assistant/AskEli.svelte';
   import { jobContext } from '$lib/assistant/contexts';
 
@@ -183,6 +184,10 @@
     <!-- The verdict above is the snapshot Eli is handed; with no verdict yet,
          the job's own facts are, and Eli can fetch the explanation itself. -->
     <AskEli context={jobContext(job, why, mode)} />
+    {#if failed && !ours && job.repo && job.github_run_id}<Button
+        href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
+        >Review a repair with Eli</Button
+      >{/if}
 
     {#if !failed && counts}
       <dl class="counts">

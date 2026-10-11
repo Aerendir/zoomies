@@ -935,6 +935,10 @@ func routeTable(ids fixtureIDs) []route {
 		// switch off is a 422, which is an answer and not a refusal of the
 		// caller, and it dials nothing.
 		// A chat with nothing to say is a 422 before any model is asked.
+		{method: "GET", path: "/api/v1/assistant/repairs/repositories", role: store.RoleAdmin, action: auth.ActionAssistantWrite},
+		{method: "GET", path: "/api/v1/assistant/repairs/readiness", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true},
+		{method: "GET", path: "/api/v1/assistant/repairs/opportunities", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true},
+		{method: "POST", path: "/api/v1/assistant/repairs/opportunities/missing", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true, body: map[string]any{"action": "dismiss"}},
 		{method: "GET", path: "/api/v1/assistant/repairs", role: store.RoleViewer, action: auth.ActionAssistantOwn},
 		{method: "PUT", path: "/api/v1/assistant/repairs/consent", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true, body: map[string]any{}},
 		{method: "GET", path: "/api/v1/assistant/repairs/settings", role: store.RoleViewer, action: auth.ActionAssistantOwn},

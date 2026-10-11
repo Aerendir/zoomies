@@ -122,7 +122,7 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 		r.Instruction = command[:min(len(command), 4000)]
 		r.DedupKey = fmt.Sprintf("comment:%s:%d", r.Repo, p.Comment.ID)
 	case "workflow_job":
-		if !policy.Automatic {
+		if !policy.Automatic && !policy.AskFirst {
 			return nil
 		}
 		e, err := github.ParseWorkflowJob(body)
@@ -163,6 +163,9 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 		if pull.HeadSHA != e.HeadSHA {
 			return nil
 		}
+		if policy.AskFirst && !policy.Automatic {
+			return c.st.OfferEliRepair(ctx, store.EliRepairOpportunity{Repo: r.Repo, InstallationID: inst.ID, PullNumber: pull.Number, HeadSHA: pull.HeadSHA, RunID: e.RunID, Title: pull.Title})
+		}
 		r.PullNumber = pull.Number
 		r.JobID = e.JobID
 		r.RunID = e.RunID
@@ -182,18 +185,42 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 }
 
 type repairModel struct {
-	provider assistant.Provider
-	model    string
+	provider   assistant.Provider
+	model      string
+	record     func(store.EliRepairStep)
+	sourceUsed func(int)
+	maxTokens  int
+}
+
+func (m repairModel) SourceUsed(n int) {
+	if m.sourceUsed != nil {
+		m.sourceUsed(n)
+	}
 }
 
 func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
+	step := store.EliRepairStep{RequestBytes: len(prrepair.SystemPrompt)}
+	started := time.Now()
+	defer func() {
+		step.ElapsedMS = time.Since(started).Milliseconds()
+		if m.record != nil {
+			m.record(step)
+		}
+	}()
+	for _, v := range messages {
+		step.RequestBytes += len(v.Content)
+	}
 	turns := make([]assistant.Message, 0, len(messages))
 	for _, v := range messages {
 		turns = append(turns, assistant.Message{Role: assistant.Role(v.Role), Content: v.Content})
 	}
-	stream, err := m.provider.Chat(ctx, assistant.Request{Model: m.model, System: prrepair.SystemPrompt, Messages: turns, MaxTokens: 12000})
+	limit := m.maxTokens
+	if limit <= 0 {
+		limit = 12000
+	}
+	stream, err := m.provider.Chat(ctx, assistant.Request{Model: m.model, System: prrepair.SystemPrompt, Messages: turns, MaxTokens: limit})
 	if err != nil {
-		return "", fmt.Errorf("the configured provider could not start a repair response")
+		return "", repairProviderError(err)
 	}
 	defer stream.Close()
 	var out strings.Builder
@@ -203,8 +230,16 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 		if !ok {
 			break
 		}
+		if ev.Usage != nil && ev.Usage.Reported {
+			step.InputTokens = ev.Usage.InputTokens
+			step.OutputTokens = ev.Usage.OutputTokens
+			step.UsageReported = true
+		}
+		if ev.Cut {
+			return "", fmt.Errorf("provider output limit reached: choose a model with more output room or request a smaller fix")
+		}
 		if ev.Err != nil {
-			return "", fmt.Errorf("the configured provider stopped during the repair")
+			return "", repairProviderError(ev.Err)
 		}
 		if ev.ToolCall != nil {
 			return "", fmt.Errorf("the provider returned an unsupported tool call instead of a repair plan")
@@ -233,6 +268,7 @@ func (c *Controller) repairLoop(ctx context.Context) {
 	}
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
+	nextOffers := time.Time{}
 	for {
 		if ctx.Err() != nil {
 			return
@@ -242,6 +278,10 @@ func (c *Controller) repairLoop(ctx context.Context) {
 				c.runEliRepair(ctx, row)
 			}
 			c.checkEliRepairs(ctx)
+			if time.Now().After(nextOffers) {
+				c.reconcileEliOpportunities(ctx)
+				nextOffers = time.Now().Add(5 * time.Minute)
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -342,6 +382,7 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 	fail := func(message string) {
 		r.State = "failed"
 		r.Message = prrepair.Redact(message)
+		r.Details.FailureCode = repairFailureCode(message)
 		_ = c.persistEliRepair(ctx, r)
 		c.repairNotice(ctx, client, r, r.Message)
 	}
@@ -400,11 +441,13 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 			return
 		}
 	}
-	if strings.HasPrefix(r.DedupKey, "ui:") && assistant.Subscription(assistant.Kind(provider.Kind)) && !r.RequesterAdmin {
+	if (strings.HasPrefix(r.DedupKey, "ui:") || strings.HasPrefix(r.DedupKey, "offer:")) && assistant.Subscription(assistant.Kind(provider.Kind)) && !r.RequesterAdmin {
 		fail("The requesting credential needs administrator permission to run subscription tools.")
 		return
 	}
 	r.ProviderID = provider.ID
+	r.Details.Model = provider.Model
+	r.Details.Stage = "evidence"
 	_ = c.persistEliRepair(ctx, r)
 	// An eyes reaction is the quickest thing to show on the comment that asked,
 	// and it is best effort: a repair never fails because GitHub refused one.
@@ -414,13 +457,6 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		}
 	}
 	c.repairNotice(ctx, client, r, "Investigating this PR using "+provider.Name+". The repair is limited to one commit and will leave normal review in place.")
-	source, err := client.RepairSource(ctx, r.Repo, pull, policy.AllowWorkflows)
-	if err != nil {
-		// The reason is the useful part: "within Eli's repair limits" named
-		// neither the limit nor the file, and the person could not act on it.
-		fail(fmt.Sprintf("The PR source could not be read: %s.", strings.TrimSuffix(err.Error(), ".")))
-		return
-	}
 	failures, err := client.RepairFailures(ctx, r.Repo, pull, r.JobID)
 	if err != nil {
 		fail("Failed-job evidence could not be read. Check the App's Actions read permission.")
@@ -430,13 +466,26 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		fail("The failed job has no usable error evidence. No code was changed.")
 		return
 	}
+	r.Details.Stage = "source"
+	_ = c.persistEliRepair(ctx, r)
+	source, err := client.RepairSource(ctx, r.Repo, pull, policy.AllowWorkflows)
+	if err != nil {
+		// The reason is the useful part: "within Eli's repair limits" named
+		// neither the limit nor the file, and the person could not act on it.
+		fail(fmt.Sprintf("The PR source could not be read: %s.", strings.TrimSuffix(err.Error(), ".")))
+		return
+	}
 	source.Snapshot.Failures = failures
 	p, err := c.OpenAssistantProvider(provider, "")
 	if err != nil {
 		fail("The configured model provider could not be opened.")
 		return
 	}
-	plan, err := prrepair.Generate(ctx, repairModel{provider: p, model: provider.Model}, source, source.Snapshot, r.Instruction, policy.AllowWorkflows)
+	r.Details.Stage = "prepare_fix"
+	plan, err := prrepair.Generate(ctx, repairModel{provider: p, model: provider.Model, maxTokens: provider.MaxOutputTokens, sourceUsed: func(n int) { r.Details.SourceBytes = n }, record: func(step store.EliRepairStep) {
+		r.Details.Steps = append(r.Details.Steps, step)
+		_ = c.persistEliRepair(ctx, r)
+	}}, source, source.Snapshot, r.Instruction, policy.AllowWorkflows)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -480,6 +529,8 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		fail("The repair stopped before publication.")
 		return
 	}
+	r.Details.Stage = "publish"
+	_ = c.persistEliRepair(ctx, r)
 	sha, err := client.CommitRepair(ctx, r.Repo, pull, plan)
 	if err != nil {
 		fail("The repair could not advance the PR branch. It may have changed, or the App may lack Contents write permission. No force push was attempted.")
@@ -489,6 +540,7 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 	published := c.Now()
 	r.PublishedAt = &published
 	r.State = "checking"
+	r.Details.Stage = "watch_ci"
 	r.Message = plan.Summary + " CI has not been verified yet."
 	if err := c.persistEliRepair(ctx, r); err != nil {
 		c.log.Error("could not record the published Eli repair", "repair", r.ID)
@@ -565,6 +617,13 @@ func (c *Controller) checkEliRepairs(ctx context.Context) {
 
 // RequestEliRepair is the same owner-scoped operation as a GitHub mention, reachable from the UI.
 func (c *Controller) RequestEliRepair(ctx context.Context, userID, repo string, pull int, instruction string, requesterAdmin bool) (*store.EliRepair, error) {
+	return c.RequestPinnedEliRepair(ctx, userID, repo, pull, instruction, "", requesterAdmin)
+}
+func (c *Controller) RequestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead string, requesterAdmin bool) (*store.EliRepair, error) {
+	return c.requestPinnedEliRepair(ctx, userID, repo, pull, instruction, expectedHead, "", requesterAdmin)
+}
+func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead, dedup string, requesterAdmin bool) (*store.EliRepair, error) {
+	repo = normaliseRepairRepo(repo)
 	if pull < 1 || len(instruction) > 4000 {
 		return nil, store.ErrConflict
 	}
@@ -606,6 +665,9 @@ func (c *Controller) RequestEliRepair(ctx context.Context, userID, repo string, 
 	if err != nil {
 		return nil, store.ErrConflict
 	}
+	if expectedHead != "" && pr.HeadSHA != expectedHead {
+		return nil, fmt.Errorf("%w: the PR has a newer commit; review it before requesting a repair", store.ErrConflict)
+	}
 	provider, err := c.personalChatProvider(ctx, "", userID)
 	if err != nil {
 		return nil, err
@@ -617,6 +679,52 @@ func (c *Controller) RequestEliRepair(ctx context.Context, userID, repo string, 
 		instruction = "Fix the underlying issue in this PR using the failed-job evidence."
 	}
 	row := &store.EliRepair{Repo: repo, InstallationID: inst.ID, PullNumber: pull, HeadSHA: pr.HeadSHA, UserID: userID, GitHubUserID: identity.GitHubUserID, GitHubLogin: identity.GitHubLogin, ProviderID: provider.ID, Trigger: "mention", RequesterAdmin: requesterAdmin, Instruction: instruction, DedupKey: fmt.Sprintf("ui:%s:%d:%s:%s", repo, pull, pr.HeadSHA, userID)}
+	if dedup != "" {
+		row.DedupKey = dedup
+	}
 	_, err = c.st.EnqueueEliRepair(ctx, row, policy.DailyLimit)
 	return row, err
+}
+
+func repairFailureCode(message string) string {
+	switch {
+	case strings.Contains(message, "rate limit"):
+		return "rate_limited"
+	case strings.Contains(message, "provider credentials"):
+		return "provider_credentials"
+	case strings.Contains(message, "output limit"):
+		return "output_limit"
+	case strings.Contains(message, "budget") || strings.Contains(message, "allowance") || strings.Contains(message, "input limit") || strings.Contains(message, "context limit"):
+		return "context_limit"
+	case strings.Contains(message, "read") || strings.Contains(message, "source"):
+		return "source_unavailable"
+	case strings.Contains(message, "provider"):
+		return "provider_unavailable"
+	case strings.Contains(message, "permission") || strings.Contains(message, "account"):
+		return "setup_needed"
+	default:
+		return "unsupported_fix"
+	}
+}
+
+func repairProviderError(err error) error {
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "context length") || strings.Contains(message, "context window") {
+		return fmt.Errorf("the provider context limit was reached; narrow the investigation or choose a model with more input room")
+	}
+	var status interface{ HTTPStatus() int }
+	if errors.As(err, &status) {
+		switch status.HTTPStatus() {
+		case 429:
+			return fmt.Errorf("the provider rate limited this repair; check quota or try again later")
+		case 401, 403:
+			return fmt.Errorf("the provider credentials were refused; update or test your provider in Eli settings")
+		case 404:
+			return fmt.Errorf("the provider model or endpoint was not found; check your provider settings")
+		}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("the provider timed out; try again later")
+	}
+	return fmt.Errorf("the provider could not complete this repair; test its connection in Eli settings")
 }

@@ -32,7 +32,8 @@
   that died under a job is the fleet's failure and is named as such, not the
   workflow's.
 
-  Nothing on this page polls. The fleet cache subscribes to `stats`, `scaling`,
+  Fleet panels use the event stream; personal repair offers reconcile once a minute.
+  The fleet cache subscribes to `stats`, `scaling`,
   `problems.updated`, `runner.*`, `pool.*` and `host.*`; the panels below add
   `job.updated` for the matrix and the running jobs, and the feed adds
   whichever kinds its categories are switched on for. A
@@ -41,6 +42,7 @@
   only how an operator settles the question of whether they have.
 -->
 <script lang="ts">
+  import RepairOffers from '$lib/repairs/RepairOffers.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Switch from '$lib/components/Switch.svelte';
@@ -125,6 +127,7 @@
     {#if !setupPending}<FleetActivity bind:this={activity} />{/if}
     <FleetMetrics {loading} />
     <ProblemsSummary {loading} {setupPending} />
+    <RepairOffers />
     <div class="split">
       <PoolUtilisation {loading} />
       <div class="feed">

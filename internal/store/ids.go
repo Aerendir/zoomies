@@ -29,6 +29,7 @@ const (
 	// PrefixAssistantConversation names one person's saved chat with Eli.
 	PrefixAssistantConversation = "asc"
 	PrefixEliRepair             = "erf"
+	PrefixEliOpportunity        = "eop"
 	// PrefixProviderSetup names a short-lived Proxmox connection enrolment.
 	PrefixProviderSetup = "pvs"
 	// PrefixBackupRemote names an offsite backup destination kept in the

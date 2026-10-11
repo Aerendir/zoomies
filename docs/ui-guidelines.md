@@ -554,20 +554,21 @@ fixed, because muscle memory is the point:
 7. **Hosts**: where runners can go
 8. **Providers**: the infrastructure that machines are rented from
 9. **Installations**: GitHub App connections
-10. **Migrate repositories**: move repositories off GitHub's runners onto this
+10. **Eli repairs**: review failed PR offers, configure repository policies and follow repair outcomes.
+11. **Migrate repositories**: move repositories off GitHub's runners onto this
     fleet. The navigation shortens it to *Migrate*, because a nav label has to
     fit beside an icon in a 232px column; every other place that names the page
     (its heading, the palette, the shortcut sheet, the browser title) uses the
     full name.
-11. **Kennel Club**: which repositories could hurt the fleet or stop its CI
+12. **Kennel Club**: which repositories could hurt the fleet or stop its CI
     ([Kennel Club](kennel-club.md)). It is a section of pages, like Settings:
     *Standards* (the Overview and the list of Repositories, and each
     repository's own page) and, under *For assistants*, **AI Context**,
     preparing repositories for AI coding assistants, where explicit source access
     is separate from fleet permissions. AI Context has no section of its own, and
     `/ai-context` still reaches it.
-12. **Audit**: who did what
-13. **Settings**: a section of pages rather than one page: your account and
+13. **Audit**: who did what
+14. **Settings**: a section of pages rather than one page: your account and
     appearance; users and API tokens; the configuration, backups, updates and about.
     Each has an address of its own (`/settings/users`), the section's own rail
     lists them beside the page, and `/settings` alone goes to the first of

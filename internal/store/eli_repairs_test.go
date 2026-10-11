@@ -184,3 +184,97 @@ func TestEliMigrationPreservesExistingProviderOwnershipAndFleetConsent(t *testin
 		t.Fatalf("lost subscription: %+v %v", own, err)
 	}
 }
+
+func TestManualRepairPoliciesNeedNoInstallationPayerAndOffersSpendNoAttempts(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	inst, _, _ := seedPool(t, s)
+	policy := EliRepairPolicy{Repo: "acme/repo", InstallationID: inst.ID, Enabled: true, AskFirst: true, DailyLimit: 5}
+	if err := s.SetEliRepairPolicy(ctx, policy); err != nil {
+		t.Fatal(err)
+	}
+	policies, err := s.EliRepairPolicies(ctx)
+	if err != nil || len(policies) != 1 || !policies[0].AskFirst || policies[0].ProviderID != "" {
+		t.Fatalf("policy: %+v %v", policies, err)
+	}
+	user := &User{Username: "owner", Role: RoleViewer}
+	if err := s.CreateUser(ctx, user); err != nil {
+		t.Fatal(err)
+	}
+	offer := EliRepairOpportunity{Repo: policy.Repo, InstallationID: inst.ID, PullNumber: 1, HeadSHA: "old", RunID: 1}
+	for range 3 {
+		if err := s.OfferEliRepair(ctx, offer); err != nil {
+			t.Fatal(err)
+		}
+	}
+	offers, err := s.EliRepairOpportunities(ctx, user.ID)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("offers %+v %v", offers, err)
+	}
+	rows, _ := s.ListEliRepairs(ctx)
+	if len(rows) != 0 {
+		t.Fatal("offers created charged attempts")
+	}
+	if err := s.DismissEliOpportunity(ctx, offers[0].ID, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.OfferEliRepair(ctx, offer); err != nil {
+		t.Fatal(err)
+	}
+	own, _ := s.EliRepairOpportunities(ctx, user.ID)
+	others, _ := s.EliRepairOpportunities(ctx, "another")
+	if len(own) != 0 || len(others) != 1 {
+		t.Fatal("dismissal was not personal or was undone by redelivery")
+	}
+	offer.HeadSHA = "new"
+	if err := s.OfferEliRepair(ctx, offer); err != nil {
+		t.Fatal(err)
+	}
+	own, _ = s.EliRepairOpportunities(ctx, user.ID)
+	if len(own) != 1 || own[0].HeadSHA != "new" {
+		t.Fatal("new head suppressed by old dismissal")
+	}
+	if err := s.SetEliOpportunityState(ctx, own[0].ID, "accepted"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.OfferEliRepair(ctx, offer); err != nil {
+		t.Fatal(err)
+	}
+	own, _ = s.EliRepairOpportunities(ctx, user.ID)
+	if len(own) != 0 {
+		t.Fatal("accepted offer reopened")
+	}
+}
+func TestRepairDetailsPreserveReportedAndUnknownUsage(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	row := &EliRepair{Repo: "acme/repo", DedupKey: "details"}
+	if _, err := s.EnqueueEliRepair(ctx, row, 5); err != nil {
+		t.Fatal(err)
+	}
+	row.Details = EliRepairDetails{Model: "test", Stage: "prepare_fix", SourceBytes: 123, Steps: []EliRepairStep{{InputTokens: 10, OutputTokens: 5, UsageReported: true}, {UsageReported: false}}}
+	if err := s.SaveEliRepair(ctx, row); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.ListEliRepairs(ctx)
+	if err != nil || len(rows) != 1 || len(rows[0].Details.Steps) != 2 || !rows[0].Details.Steps[0].UsageReported || rows[0].Details.Steps[1].UsageReported || rows[0].Details.Steps[0].InputTokens != 10 {
+		t.Fatalf("usage %+v %v", rows, err)
+	}
+}
+
+func TestConcurrentOfferAcceptancesCannotChargeDifferentPeople(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	first := &EliRepair{Repo: "acme/repo", DedupKey: "offer:one", UserID: "one"}
+	if _, err := s.EnqueueEliRepair(ctx, first, 5); err != nil {
+		t.Fatal(err)
+	}
+	second := &EliRepair{Repo: "acme/repo", DedupKey: "offer:one", UserID: "two"}
+	if _, err := s.EnqueueEliRepair(ctx, second, 5); !errors.Is(err, ErrConflict) {
+		t.Fatalf("another owner accepted: %v", err)
+	}
+	rows, _ := s.ListEliRepairs(ctx)
+	if len(rows) != 1 {
+		t.Fatal("duplicate attempt charged")
+	}
+}

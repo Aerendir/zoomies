@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -19,33 +20,49 @@ type EliRepairPolicy struct {
 	InstallationID string `json:"installation_id"`
 	ProviderID     string `json:"provider_id"`
 	Enabled        bool   `json:"enabled"`
+	AskFirst       bool   `json:"ask_first"`
 	Automatic      bool   `json:"automatic"`
 	AllowWorkflows bool   `json:"allow_workflows"`
 	DailyLimit     int    `json:"daily_limit"`
 }
+type EliRepairStep struct {
+	InputTokens   int   `json:"input_tokens"`
+	OutputTokens  int   `json:"output_tokens"`
+	UsageReported bool  `json:"usage_reported"`
+	RequestBytes  int   `json:"request_bytes"`
+	ElapsedMS     int64 `json:"elapsed_ms"`
+}
+type EliRepairDetails struct {
+	Model       string          `json:"model"`
+	Stage       string          `json:"stage"`
+	FailureCode string          `json:"failure_code,omitempty"`
+	SourceBytes int             `json:"source_bytes"`
+	Steps       []EliRepairStep `json:"steps"`
+}
 type EliRepair struct {
-	PublishedAt    *time.Time `json:"-"`
-	RequesterAdmin bool       `json:"-"`
-	ID             string     `json:"id"`
-	DedupKey       string     `json:"-"`
-	InstallationID string     `json:"installation_id"`
-	Repo           string     `json:"repo"`
-	PullNumber     int        `json:"pull_number"`
-	JobID          int64      `json:"job_id"`
-	RunID          int64      `json:"run_id"`
-	HeadSHA        string     `json:"head_sha"`
-	CommitSHA      string     `json:"commit_sha"`
-	UserID         string     `json:"user_id"`
-	GitHubUserID   int64      `json:"github_user_id"`
-	GitHubLogin    string     `json:"github_login"`
-	ProviderID     string     `json:"provider_id"`
-	Trigger        string     `json:"trigger"`
-	Instruction    string     `json:"-"`
-	State          string     `json:"state"`
-	Message        string     `json:"message"`
-	CommentID      int64      `json:"comment_id"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	Details        EliRepairDetails `json:"details"`
+	PublishedAt    *time.Time       `json:"-"`
+	RequesterAdmin bool             `json:"-"`
+	ID             string           `json:"id"`
+	DedupKey       string           `json:"-"`
+	InstallationID string           `json:"installation_id"`
+	Repo           string           `json:"repo"`
+	PullNumber     int              `json:"pull_number"`
+	JobID          int64            `json:"job_id"`
+	RunID          int64            `json:"run_id"`
+	HeadSHA        string           `json:"head_sha"`
+	CommitSHA      string           `json:"commit_sha"`
+	UserID         string           `json:"user_id"`
+	GitHubUserID   int64            `json:"github_user_id"`
+	GitHubLogin    string           `json:"github_login"`
+	ProviderID     string           `json:"provider_id"`
+	Trigger        string           `json:"trigger"`
+	Instruction    string           `json:"-"`
+	State          string           `json:"state"`
+	Message        string           `json:"message"`
+	CommentID      int64            `json:"comment_id"`
+	CreatedAt      time.Time        `json:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at"`
 }
 
 func (s *Store) SetEliIdentity(ctx context.Context, in EliIdentity) error {
@@ -77,12 +94,12 @@ func (s *Store) SetEliRepairPolicy(ctx context.Context, p EliRepairPolicy) error
 	if p.DailyLimit < 1 || p.DailyLimit > 50 {
 		return ErrConflict
 	}
-	_, err := s.exec(ctx, `INSERT INTO eli_repair_policies(repo,installation_id,provider_id,enabled,automatic,allow_workflows,daily_limit,updated_at) VALUES(?,?,?,?,?,?,?,?)
- ON CONFLICT(repo) DO UPDATE SET installation_id=excluded.installation_id,provider_id=excluded.provider_id,enabled=excluded.enabled,automatic=excluded.automatic,allow_workflows=excluded.allow_workflows,daily_limit=excluded.daily_limit,updated_at=excluded.updated_at`, p.Repo, p.InstallationID, p.ProviderID, boolInt(p.Enabled), boolInt(p.Automatic), boolInt(p.AllowWorkflows), p.DailyLimit, ms(s.Now()))
+	_, err := s.exec(ctx, `INSERT INTO eli_repair_policies(repo,installation_id,provider_id,enabled,automatic,ask_first,allow_workflows,daily_limit,updated_at) VALUES(?,?,NULLIF(?,''),?,?,?,?,?,?)
+ ON CONFLICT(repo) DO UPDATE SET installation_id=excluded.installation_id,provider_id=excluded.provider_id,enabled=excluded.enabled,automatic=excluded.automatic,ask_first=excluded.ask_first,allow_workflows=excluded.allow_workflows,daily_limit=excluded.daily_limit,updated_at=excluded.updated_at`, p.Repo, p.InstallationID, p.ProviderID, boolInt(p.Enabled), boolInt(p.Automatic), boolInt(p.AskFirst), boolInt(p.AllowWorkflows), p.DailyLimit, ms(s.Now()))
 	return wrapWrite(err)
 }
 func (s *Store) EliRepairPolicies(ctx context.Context) ([]EliRepairPolicy, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT repo,installation_id,provider_id,enabled,automatic,allow_workflows,daily_limit FROM eli_repair_policies ORDER BY repo`)
+	rows, err := s.read.QueryContext(ctx, `SELECT repo,installation_id,COALESCE(provider_id,''),enabled,automatic,ask_first,allow_workflows,daily_limit FROM eli_repair_policies ORDER BY repo`)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +107,7 @@ func (s *Store) EliRepairPolicies(ctx context.Context) ([]EliRepairPolicy, error
 	out := []EliRepairPolicy{}
 	for rows.Next() {
 		var p EliRepairPolicy
-		if err := rows.Scan(&p.Repo, &p.InstallationID, &p.ProviderID, &p.Enabled, &p.Automatic, &p.AllowWorkflows, &p.DailyLimit); err != nil {
+		if err := rows.Scan(&p.Repo, &p.InstallationID, &p.ProviderID, &p.Enabled, &p.Automatic, &p.AskFirst, &p.AllowWorkflows, &p.DailyLimit); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -98,13 +115,17 @@ func (s *Store) EliRepairPolicies(ctx context.Context) ([]EliRepairPolicy, error
 	return out, rows.Err()
 }
 
-const eliRepairCols = `id,dedup_key,installation_id,repo,pull_number,job_id,run_id,head_sha,commit_sha,user_id,github_user_id,github_login,provider_id,trigger,requester_admin,instruction,state,message,comment_id,published_at,created_at,updated_at`
+const eliRepairCols = `id,dedup_key,installation_id,repo,pull_number,job_id,run_id,head_sha,commit_sha,user_id,github_user_id,github_login,provider_id,trigger,requester_admin,instruction,state,message,comment_id,published_at,created_at,updated_at,details`
 
 func scanEliRepair(row interface{ Scan(...any) error }) (*EliRepair, error) {
 	var v EliRepair
 	var created, updated int64
 	var published sql.NullInt64
-	err := row.Scan(&v.ID, &v.DedupKey, &v.InstallationID, &v.Repo, &v.PullNumber, &v.JobID, &v.RunID, &v.HeadSHA, &v.CommitSHA, &v.UserID, &v.GitHubUserID, &v.GitHubLogin, &v.ProviderID, &v.Trigger, &v.RequesterAdmin, &v.Instruction, &v.State, &v.Message, &v.CommentID, &published, &created, &updated)
+	var details string
+	err := row.Scan(&v.ID, &v.DedupKey, &v.InstallationID, &v.Repo, &v.PullNumber, &v.JobID, &v.RunID, &v.HeadSHA, &v.CommitSHA, &v.UserID, &v.GitHubUserID, &v.GitHubLogin, &v.ProviderID, &v.Trigger, &v.RequesterAdmin, &v.Instruction, &v.State, &v.Message, &v.CommentID, &published, &created, &updated, &details)
+	if err == nil {
+		err = json.Unmarshal([]byte(details), &v.Details)
+	}
 	v.CreatedAt, v.UpdatedAt = at(created), at(updated)
 	v.PublishedAt = atp(published)
 	return &v, err
@@ -120,6 +141,9 @@ func (s *Store) EnqueueEliRepair(ctx context.Context, r *EliRepair, limit int) (
 			saved, err := scanEliRepair(tx.QueryRowContext(ctx, `SELECT `+eliRepairCols+` FROM eli_repairs WHERE id=?`, existing))
 			if err != nil {
 				return err
+			}
+			if strings.HasPrefix(r.DedupKey, "offer:") && saved.UserID != r.UserID {
+				return ErrConflict
 			}
 			// A new explicit UI request may retry a finished failure. Webhook delivery
 			// keys remain permanent, and an in-flight UI request is still idempotent.
@@ -155,7 +179,7 @@ func (s *Store) EnqueueEliRepair(ctx context.Context, r *EliRepair, limit int) (
 		r.State = "queued"
 		r.CreatedAt = s.Now()
 		r.UpdatedAt = r.CreatedAt
-		_, err = tx.ExecContext(ctx, `INSERT INTO eli_repairs (`+eliRepairCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.DedupKey, r.InstallationID, r.Repo, r.PullNumber, r.JobID, r.RunID, r.HeadSHA, r.CommitSHA, r.UserID, r.GitHubUserID, r.GitHubLogin, r.ProviderID, r.Trigger, boolInt(r.RequesterAdmin), r.Instruction, r.State, r.Message, r.CommentID, msp(r.PublishedAt), ms(r.CreatedAt), ms(r.UpdatedAt))
+		_, err = tx.ExecContext(ctx, `INSERT INTO eli_repairs (`+eliRepairCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.DedupKey, r.InstallationID, r.Repo, r.PullNumber, r.JobID, r.RunID, r.HeadSHA, r.CommitSHA, r.UserID, r.GitHubUserID, r.GitHubLogin, r.ProviderID, r.Trigger, boolInt(r.RequesterAdmin), r.Instruction, r.State, r.Message, r.CommentID, msp(r.PublishedAt), ms(r.CreatedAt), ms(r.UpdatedAt), repairDetailsJSON(r.Details))
 		added = err == nil
 		return err
 	})
@@ -198,7 +222,7 @@ func (s *Store) NextEliRepair(ctx context.Context) (*EliRepair, error) {
 }
 func (s *Store) SaveEliRepair(ctx context.Context, r *EliRepair) error {
 	r.UpdatedAt = s.Now()
-	_, err := s.exec(ctx, `UPDATE eli_repairs SET pull_number=?,head_sha=?,commit_sha=?,user_id=?,provider_id=?,state=?,message=?,comment_id=?,published_at=?,updated_at=? WHERE id=?`, r.PullNumber, r.HeadSHA, r.CommitSHA, r.UserID, r.ProviderID, r.State, r.Message, r.CommentID, msp(r.PublishedAt), ms(r.UpdatedAt), r.ID)
+	_, err := s.exec(ctx, `UPDATE eli_repairs SET pull_number=?,head_sha=?,commit_sha=?,user_id=?,provider_id=?,state=?,message=?,comment_id=?,published_at=?,updated_at=?,details=? WHERE id=?`, r.PullNumber, r.HeadSHA, r.CommitSHA, r.UserID, r.ProviderID, r.State, r.Message, r.CommentID, msp(r.PublishedAt), ms(r.UpdatedAt), repairDetailsJSON(r.Details), r.ID)
 	return err
 }
 
@@ -244,3 +268,5 @@ func (s *Store) ConfirmEliIdentity(ctx context.Context, userID string, githubID 
 	}
 	return err
 }
+
+func repairDetailsJSON(v EliRepairDetails) string { b, _ := json.Marshal(v); return string(b) }

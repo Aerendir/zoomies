@@ -64,6 +64,7 @@ export const SECTIONS = [
   { path: '/hosts', label: 'Hosts' },
   { path: '/providers', label: 'Providers' },
   { path: '/installations', label: 'Installations' },
+  { path: '/repairs', label: 'Eli repairs' },
   { path: '/migrate', label: 'Migrate', heading: 'Migrate repositories' },
   { path: '/kennel', label: 'Kennel Club' },
   { path: '/audit', label: 'Audit' },

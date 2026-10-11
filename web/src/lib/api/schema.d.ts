@@ -3605,6 +3605,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assistant/repairs/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Discover repositories for repair setup */
+        get: operations["listEliRepairRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check personal repair readiness without invoking a model */
+        get: operations["getEliReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/opportunities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List repair offers accessible to the linked GitHub account */
+        get: operations["listEliOpportunities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/opportunities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept or dismiss a repair offer */
+        post: operations["actEliOpportunity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/repairs": {
         parameters: {
             query?: never;
@@ -9524,6 +9592,65 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        EliRepairDetails: {
+            model?: string;
+            stage?: string;
+            failure_code?: string;
+            source_bytes?: number;
+            steps?: {
+                input_tokens: number;
+                output_tokens: number;
+                usage_reported: boolean;
+                request_bytes: number;
+                elapsed_ms: number;
+            }[] | null;
+        };
+        EliRepairRepositories: {
+            items: string[];
+            total: number;
+            capped: boolean;
+            missing_permissions: string[];
+        };
+        EliReadiness: {
+            ready: boolean;
+            repo: string;
+            pull_number: number;
+            head_sha: string;
+            provider: string;
+            model: string;
+            allow_workflows: boolean;
+            remaining: number;
+            /** Format: date-time */
+            reset_at?: string;
+            blockers: {
+                code: string;
+                message: string;
+            }[];
+        };
+        EliOpportunity: {
+            id: string;
+            repo: string;
+            installation_id: string;
+            pull_number: number;
+            head_sha: string;
+            run_id: number;
+            title: string;
+            state: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        EliOpportunityList: {
+            items: components["schemas"]["EliOpportunity"][];
+        };
+        EliOpportunityAction: {
+            /** @enum {string} */
+            action: "accept" | "dismiss";
+        };
+        EliOpportunityResult: {
+            repair?: components["schemas"]["EliRepair"] | null;
+        };
         EliIdentity: {
             user_id: string;
             github_user_id: number;
@@ -9542,6 +9669,8 @@ export interface components {
             provider_id: string;
             enabled: boolean;
             automatic: boolean;
+            /** @default false */
+            ask_first: boolean;
             allow_workflows: boolean;
             daily_limit: number;
         };
@@ -9549,8 +9678,11 @@ export interface components {
             repo: string;
             pull_number: number;
             instruction: string;
+            /** @description PR head reviewed by the requester */
+            head_sha?: string;
         };
         EliRepair: {
+            details?: components["schemas"]["EliRepairDetails"];
             id: string;
             installation_id: string;
             repo: string;
@@ -16430,6 +16562,108 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    listEliRepairRepositories: {
+        parameters: {
+            query?: {
+                installation_id?: string;
+                q?: string;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliRepairRepositories"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    getEliReadiness: {
+        parameters: {
+            query?: {
+                repo?: string;
+                pull_number?: number;
+                run_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliReadiness"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    listEliOpportunities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliOpportunityList"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    actEliOpportunity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EliOpportunityAction"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliOpportunityResult"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     listEliRepairs: {

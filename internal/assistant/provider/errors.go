@@ -15,6 +15,8 @@ type HTTPError struct {
 	Message string
 }
 
+func (e *HTTPError) HTTPStatus() int { return e.Status }
+
 func (e *HTTPError) Error() string { return e.Message }
 
 // StatusError turns a response that is not a success into an error written

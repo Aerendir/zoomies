@@ -135,7 +135,7 @@ func TestRepairSourceRefusesSymlinksAndSubmodules(t *testing.T) {
 // source is read, and the repair goes on; the same when the source as a whole
 // reaches its budget. Only GitHub refusing is a failure.
 func TestRepairSourceLeavesOutAFileItMayNotHaveAndNamesIt(t *testing.T) {
-	big := strings.Repeat("x", prrepair.MaxFileBytes+1)
+	big := strings.Repeat("x", prrepair.MaxBlobBytes+1)
 	blob := func(content string) string {
 		return `{"encoding":"base64","size":` + itoa(len(content)) + `,"content":"` + base64.StdEncoding.EncodeToString([]byte(content)) + `"}`
 	}
@@ -164,7 +164,7 @@ func TestRepairSourceLeavesOutAFileItMayNotHaveAndNamesIt(t *testing.T) {
 	if len(src.Snapshot.Files) != 1 || src.Snapshot.Files[0].Path != "main.go" {
 		t.Errorf("files read = %+v", src.Snapshot.Files)
 	}
-	if len(src.Snapshot.Skipped) != 1 || !strings.HasPrefix(src.Snapshot.Skipped[0], "skills/reference.md: ") || !strings.Contains(src.Snapshot.Skipped[0], "32 KiB") {
+	if len(src.Snapshot.Skipped) != 1 || !strings.HasPrefix(src.Snapshot.Skipped[0], "skills/reference.md: ") || !strings.Contains(src.Snapshot.Skipped[0], "512 KiB") {
 		t.Errorf("skipped = %v", src.Snapshot.Skipped)
 	}
 }

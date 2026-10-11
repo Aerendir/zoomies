@@ -66,6 +66,7 @@ export const SECTIONS: readonly NavItem[] = [
   { path: '/hosts', label: 'Hosts', icon: HardDrive, key: 'h', group: 'Infrastructure' },
   { path: '/providers', label: 'Providers', icon: Cloud, key: 'v', group: 'Infrastructure' },
   { path: '/installations', label: 'Installations', icon: Plug, key: 'i', group: 'GitHub' },
+  { path: '/repairs', label: 'Eli repairs', icon: GitPullRequestArrow, key: 'e', group: 'GitHub' },
   { path: '/migrate', label: 'Migrate', icon: GitPullRequestArrow, key: 'm', group: 'GitHub' },
   { path: '/kennel', label: 'Kennel Club', icon: Trophy, key: 'k', group: 'GitHub' },
   { path: '/audit', label: 'Audit', icon: ScrollText, key: 'a', group: 'Administration' },
