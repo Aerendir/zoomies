@@ -1654,6 +1654,13 @@ type Job struct {
 	// it, for its memory limit while this job ran. A killed job's peak is the
 	// limit it hit rather than what it needed, which the profile allows for.
 	OOMKilled bool `json:"oom_killed,omitempty"`
+	// ScratchPeaks is how full each in-memory folder of the job's runner got
+	// while the job ran, raised by every sample and never lowered. Nil is
+	// "never measured". A folder that filled fails a step with "no space left
+	// on device", which GitHub records as an ordinary failure and the runner's
+	// own output never carries; this is what lets the explanation name the
+	// folder and the setting instead.
+	ScratchPeaks ScratchPeaks `json:"scratch_peaks,omitempty"`
 	// OutputTail is the last lines the runner wrote before a faulted exit, at
 	// most OutputTailLines of them. It is never serialised raw: the explanation
 	// quotes a scrubbed excerpt, and nothing else shows it.

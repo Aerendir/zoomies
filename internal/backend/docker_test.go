@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -1136,7 +1137,7 @@ func TestDockerStatsReportsSamplingFailureToTheAgent(t *testing.T) {
 	if StatusCode(err) != http.StatusInternalServerError {
 		t.Fatalf("the sampler needs the failure to retain its previous reading: %v", err)
 	}
-	if got != (Stats{}) {
+	if !reflect.DeepEqual(got, Stats{}) {
 		t.Fatalf("stats = %+v", got)
 	}
 }

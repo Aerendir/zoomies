@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -527,7 +528,7 @@ func TestDinDStatsLoseTheWholeReadingWhenTheSidecarCannotBeSampled(t *testing.T)
 	})
 	b := dockerBackendFor(t, f, DockerOptions{})
 	got, err := b.Stats(context.Background(), "c1")
-	if err == nil || got != (Stats{}) {
+	if err == nil || !reflect.DeepEqual(got, Stats{}) {
 		t.Fatalf("stats = %+v, err = %v; want the reading lost and the failure reported", got, err)
 	}
 }

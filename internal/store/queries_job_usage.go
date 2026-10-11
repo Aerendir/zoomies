@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 )
 
 // JobUsageKey names one job the way its history is kept: the same job of the
@@ -203,4 +204,54 @@ func (s *Store) SetJobOutputTail(ctx context.Context, runnerID string, lines []s
 		return err
 	})
 	return jobID, err
+}
+
+// RecordJobScratchPeaks raises how full each in-memory folder of the job in
+// progress on a runner has been to one sample of its folders. The same shape
+// as RecordJobUsage: only a job GitHub says is in progress, and a peak is only
+// ever raised, so a late or repeated sample lowers nothing. It is a read and a
+// write in one transaction because the column holds every folder at once.
+func (s *Store) RecordJobScratchPeaks(ctx context.Context, runnerID string, sample []ScratchPeak) error {
+	if runnerID == "" || len(sample) == 0 {
+		return nil
+	}
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		var id string
+		var have ScratchPeaks
+		err := tx.QueryRowContext(ctx, `SELECT id, scratch_peaks FROM jobs WHERE state = 'in_progress' AND runner_id = ?
+			ORDER BY queued_at DESC LIMIT 1`, runnerID).Scan(&id, &have)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE jobs SET scratch_peaks = ? WHERE id = ?`, have.Raise(sample), id)
+		return err
+	})
+}
+
+// FailedJobsWithScratchSince is the jobs that failed since a moment and had an
+// in-memory folder measured while they ran, newest first, at most limit of
+// them. Whether a folder was full is the caller's reading of the peaks; this
+// only finds the jobs that have any.
+func (s *Store) FailedJobsWithScratchSince(ctx context.Context, since time.Time, limit int) ([]*Job, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.read.QueryContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE state = 'completed' AND `+failedConclusionSQL()+`
+		AND scratch_peaks != '' AND completed_at >= ? ORDER BY completed_at DESC LIMIT ?`, ms(since), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Job
+	for rows.Next() {
+		j, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
 }

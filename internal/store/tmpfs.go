@@ -1,6 +1,11 @@
 package store
 
-import "fmt"
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"sort"
+)
 
 // A pool's RAM-backed scratch space. A runner's work folder and /tmp normally
 // live on its container's writable layer, which is on the host's Docker data
@@ -501,4 +506,101 @@ func (s RunnerScratch) InMemory() int {
 		}
 	}
 	return n
+}
+
+// ScratchPeak is the fullest one in-memory folder of a job's runner got while
+// the job ran: the folder by its path in the container, the most that was
+// written in it at any sample, and its ceiling.
+type ScratchPeak struct {
+	Path   string `json:"path"`
+	PeakMB int64  `json:"peak_mb"`
+	SizeMB int64  `json:"size_mb"`
+}
+
+// Fraction is how full the folder got, as a share of its ceiling.
+func (p ScratchPeak) Fraction() float64 {
+	if p.SizeMB <= 0 {
+		return 0
+	}
+	return float64(p.PeakMB) / float64(p.SizeMB)
+}
+
+// ScratchPeaks is a job's folders, one entry per path, kept as JSON in a TEXT
+// column. Nil is never measured.
+type ScratchPeaks []ScratchPeak
+
+// Scan reads the column; an empty column is nil, as a job before the peaks
+// were kept has.
+func (s *ScratchPeaks) Scan(v any) error {
+	*s = nil
+	switch t := v.(type) {
+	case nil:
+		return nil
+	case []byte:
+		if len(t) == 0 {
+			return nil
+		}
+		return json.Unmarshal(t, s)
+	case string:
+		if t == "" {
+			return nil
+		}
+		return json.Unmarshal([]byte(t), s)
+	default:
+		return fmt.Errorf("cannot scan %T into ScratchPeaks", v)
+	}
+}
+
+// Value writes the column: nothing measured is the empty string the column
+// defaults to, so a row written and a row never touched read the same.
+func (s ScratchPeaks) Value() (driver.Value, error) {
+	if len(s) == 0 {
+		return "", nil
+	}
+	b, err := json.Marshal([]ScratchPeak(s))
+	return string(b), err
+}
+
+// Raise merges one sample into the peaks: a folder seen before keeps the
+// larger of its peak and the sample, a folder new to the job is added, and
+// the ceiling follows the sample, which is the mount's own figure. The result
+// is ordered by path, so two readings of one job compare equal.
+func (s ScratchPeaks) Raise(sample []ScratchPeak) ScratchPeaks {
+	byPath := map[string]ScratchPeak{}
+	for _, p := range s {
+		byPath[p.Path] = p
+	}
+	for _, p := range sample {
+		if p.Path == "" || p.SizeMB <= 0 {
+			continue
+		}
+		have, ok := byPath[p.Path]
+		if !ok || p.PeakMB > have.PeakMB {
+			have.PeakMB = p.PeakMB
+		}
+		have.Path, have.SizeMB = p.Path, p.SizeMB
+		byPath[p.Path] = have
+	}
+	out := make(ScratchPeaks, 0, len(byPath))
+	for _, p := range byPath {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// Fullest is the folder that came nearest its ceiling, and how near, as a
+// share of it. False when nothing was measured.
+func (s ScratchPeaks) Fullest() (ScratchPeak, float64, bool) {
+	var best ScratchPeak
+	fraction, found := -1.0, false
+	for _, p := range s {
+		if f := p.Fraction(); !found || f > fraction {
+			best, fraction, found = p, f, true
+		}
+	}
+	if !found {
+		return ScratchPeak{}, 0, false
+	}
+	return best, fraction, true
 }

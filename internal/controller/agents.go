@@ -1589,6 +1589,14 @@ func (c *Controller) applyReports(ctx context.Context, hostID string, reports []
 						c.log.Debug("could not record a pair's peaks", "runner", r.ID, "error", err)
 					}
 				}
+				// How full each in-memory folder is, kept as the fullest it
+				// got: the one fact about a folder that filled which outlives
+				// the failure, since the folder is empty again by then.
+				if use := rep.Stats.Scratch; len(use) > 0 {
+					if err := c.st.RecordJobScratchPeaks(ctx, r.ID, scratchSample(use)); err != nil {
+						c.log.Debug("could not record a job's in-memory folders", "runner", r.ID, "error", err)
+					}
+				}
 				// How often the runner was held back by its CPU quota, which is
 				// what tells a job that wants more CPU from one that is merely
 				// busy. An agent that sends no counters leaves the job as it was.

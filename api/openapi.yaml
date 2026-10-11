@@ -10993,6 +10993,24 @@ components:
           type: integer
           format: int64
           description: The most memory, in MB, the job's runner was measured using while the job ran. Absent when never measured.
+        scratch_peaks:
+          type: array
+          description: >-
+            How full each in-memory folder of the job's runner got while the job ran, raised by
+            every sample and never lowered. Absent when none was measured: a pool with no folder
+            in memory, an agent too old to measure, or a host whose /proc does not show the
+            container. A folder near its ceiling on a failed job is what the explanation reads a
+            full folder from (`scratch-full`, `jobs.scratch_full`).
+          items:
+            type: object
+            required: [path, peak_mb, size_mb, percent]
+            properties:
+              kind: { type: string, enum: [work, tmp, daemon], description: Which folder it is, when the path is one of the runner's. }
+              label: { type: string, description: "A name for the folder: Work folder, Temporary folder, Docker image store." }
+              path: { type: string, description: Where it is in the container. }
+              peak_mb: { type: integer, format: int64, description: The most that was written in it at any sample. }
+              size_mb: { type: integer, format: int64, description: Its ceiling. }
+              percent: { type: integer, description: The peak as a share of the ceiling, rounded. }
         oom_killed:
           type: boolean
           description: >-

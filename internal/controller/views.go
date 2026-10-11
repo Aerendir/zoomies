@@ -474,6 +474,10 @@ type JobView struct {
 	PeakCPUs     float64 `json:"peak_cpus,omitempty"`
 	PeakMemoryMB int64   `json:"peak_memory_mb,omitempty"`
 	OOMKilled    bool    `json:"oom_killed,omitempty"`
+	// ScratchPeaks is how full each in-memory folder of the job's runner got
+	// while the job ran, absent when none was measured. A folder near its
+	// ceiling on a failed job is what the explanation reads a full folder from.
+	ScratchPeaks []ScratchPeakView `json:"scratch_peaks,omitempty"`
 	// GrantedCPUs and GrantedMemoryMB are the guaranteed size of the machine
 	// the job ran on -- for a docker-in-docker runner, the runner and its daemon
 	// together -- and GrantedSource says where that size came from: the pool,
@@ -620,6 +624,7 @@ func NewJobView(j *store.Job, poolName string) JobView {
 		PeakCPUs:          j.PeakCPUs,
 		PeakMemoryMB:      j.PeakMemoryMB,
 		OOMKilled:         j.OOMKilled,
+		ScratchPeaks:      scratchPeakViews(j.ScratchPeaks),
 		SizeClass:         j.SizeClass,
 		SizeBasis:         j.SizeBasis,
 		SizeReason:        j.SizeReason,

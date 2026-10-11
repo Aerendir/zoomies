@@ -192,6 +192,7 @@ var problemAudience = map[string]Audience{
 	"host.update_unavailable":           AudienceFleet,
 	"installation.unhealthy":            AudienceFleet,
 	"jobs.oom_killed":                   AudienceFleet,
+	"jobs.scratch_full":                 AudienceFleet,
 	"jobs.runner_lost":                  AudienceFleet,
 	"jobs.label_advice":                 AudienceFleet,
 	"jobs.unmatched":                    AudienceFleet,
@@ -1873,6 +1874,9 @@ func (c *Controller) jobProblems(ctx context.Context, out *[]Problem) error {
 		return err
 	}
 	if err := c.oomKilledProblems(ctx, out, faulted); err != nil {
+		return err
+	}
+	if err := c.scratchFullProblems(ctx, out); err != nil {
 		return err
 	}
 	all, err := c.unmatchedQueuedJobs(ctx)

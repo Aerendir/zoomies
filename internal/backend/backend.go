@@ -126,6 +126,11 @@ type Stats struct {
 	// runner it is not watching: a pool with the valve off, a runner with no
 	// memory limit, an agent too old to have one.
 	MemoryValve *MemoryValveSample `json:"memory_valve,omitempty"`
+	// Scratch is each in-memory folder's use at this sample, measured through
+	// the container's root. Nil from a backend that cannot measure, a host
+	// whose /proc does not show the container, and an agent that predates it,
+	// all of which a controller reads as "not measured", never as empty.
+	Scratch []ScratchUse `json:"scratch,omitempty"`
 }
 
 // MemoryValveSample is what the memory valve has done for one runner, as its
