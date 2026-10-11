@@ -2091,8 +2091,15 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 		hosts []*store.Host
 		// pool and runners are optional: the rows about memory and CPU need a
 		// pool that states a size and a runner already holding part of a host.
-		pool           *store.Pool
-		runners        []*store.Runner
+		pool    *store.Pool
+		runners []*store.Runner
+		// neverRunnable and couldRun are host ids, and say which hosts the row
+		// is about. The answer depends on which of them the pool could ever run
+		// on, so each row states it and the loop checks it: a fixture that
+		// drifts into a host that quietly became runnable would otherwise
+		// still pass, for the wrong reason.
+		neverRunnable  []string
+		couldRun       []string
 		atCapacity     bool
 		noEligibleHost bool
 	}{
@@ -2111,13 +2118,92 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 			noEligibleHost: true,
 		},
 		{
+			// A host that could never run the pool is not part of the question
+			// "is the fleet full?": it would be the same host however long
+			// anything waited, so it is not counted either way. The other host
+			// is out of slots, and a finished job clears that. Counting the
+			// host that never could is what made a Windows box beside a busy
+			// Linux fleet read as a fleet that was not full, so no machine was
+			// rented for the pool.
 			name: "one host busy and one that could never run it",
 			hosts: func() []*store.Host {
 				other := testHost("host_b", 8, 0)
 				other.Backends = store.StringSlice{"process"}
 				return []*store.Host{testHost("host_a", 1, 1), other}
 			}(),
-			// Neither: one host is only busy, so a finished job would clear it.
+			neverRunnable: []string{"host_b"},
+			atCapacity:    true,
+		},
+		{
+			// Silence is weather and a backend is not, so a host that is both is
+			// out of the question: the day its agent comes back it still could
+			// not run this pool.
+			name: "one host busy and a silent host that could never run it",
+			hosts: func() []*store.Host {
+				other := testHost("host_b", 8, 0)
+				other.Backends = store.StringSlice{"process"}
+				other.LastHeartbeat = ago(10 * time.Minute)
+				return []*store.Host{testHost("host_a", 1, 1), other}
+			}(),
+			neverRunnable: []string{"host_b"},
+			atCapacity:    true,
+		},
+		{
+			// The counterpart of the two rows above, and the reason the question
+			// is asked of the configuration and not of the weather. A cordoned
+			// host could run the pool the moment somebody uncordons it, so the
+			// fleet is not full: it has a host that is being held back. Calling
+			// it full would put a machine on the bill for a pool that needed an
+			// operator to uncordon a host they already have.
+			name: "one host busy and one cordoned that could run it",
+			hosts: func() []*store.Host {
+				other := testHost("host_b", 8, 0)
+				other.Cordoned = true
+				return []*store.Host{testHost("host_a", 1, 1), other}
+			}(),
+			couldRun: []string{"host_a", "host_b"},
+			// Neither: a finished job would not clear this, an uncordon would.
+		},
+		{
+			// A silent agent may be back within the minute, and until it is
+			// there is a host that could run the pool which is not busy, only
+			// out of contact.
+			name: "one host busy and one silent that could run it",
+			hosts: func() []*store.Host {
+				other := testHost("host_b", 8, 0)
+				other.LastHeartbeat = ago(10 * time.Minute)
+				return []*store.Host{testHost("host_a", 1, 1), other}
+			}(),
+			couldRun: []string{"host_a", "host_b"},
+			// Neither: the silent host is a repair, not a reason to rent.
+		},
+		{
+			// An agent this controller cannot talk to is excluded from placement
+			// so that its runners keep working, and an upgrade puts it straight
+			// back. It is unavailable, not unable.
+			name: "one host busy and one incompatible that could run it",
+			hosts: func() []*store.Host {
+				other := testHost("host_b", 8, 0)
+				other.Incompatible = true
+				return []*store.Host{testHost("host_a", 1, 1), other}
+			}(),
+			couldRun: []string{"host_a", "host_b"},
+			// Neither: the incompatible host is an upgrade, not a reason to rent.
+		},
+		{
+			// A host at its disk reserve refuses every pool, however little the
+			// pool asks for, and a finishing job gives no disk back (a runner
+			// leaves its caches behind on purpose). Waiting for a job is not what
+			// would clear it, so it is out of the question like a host that is
+			// too small, and the busy host is the whole of the fleet that
+			// could run the pool.
+			name: "one host busy and one with no disk left",
+			hosts: []*store.Host{
+				testHost("host_a", 1, 1),
+				sized("host_b", 8, 8, 16*1024, store.MinHostReserveDiskMB/2),
+			},
+			neverRunnable: []string{"host_b"},
+			atCapacity:    true,
 		},
 		{
 			// A pressure hold is the most transient blockage there is: a job
@@ -2145,6 +2231,10 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 				other.Backends = store.StringSlice{"process"}
 				return []*store.Host{h, other}
 			}(),
+			// The held host is the only one that could run the pool, and it has
+			// slots, so there is nothing here to call full.
+			couldRun:      []string{"host_a"},
+			neverRunnable: []string{"host_b"},
 			// Neither: the held host clears itself.
 		},
 		{
@@ -2163,9 +2253,12 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 			atCapacity: true,
 		},
 		{
-			// And a throttle on one host does not excuse the rest: the others
-			// are wrong in a way no waiting fixes, but this one is not, so
-			// there is still something to wait for.
+			// And a throttle on one host does not turn the other into a reason
+			// to call the fleet something else. A host that could never run the
+			// pool is not part of the question, and the other host is out of
+			// slots until its throttle lifts, which it does on its own. That is
+			// a full fleet, not one that no host could ever run, so
+			// BlockedNoEligibleHost stays off.
 			name: "one host throttled and one that could never run it",
 			hosts: func() []*store.Host {
 				h := testHost("host_a", 4, 1)
@@ -2174,7 +2267,26 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 				other.Backends = store.StringSlice{"process"}
 				return []*store.Host{h, other}
 			}(),
-			// Neither: the throttled host clears itself.
+			neverRunnable: []string{"host_b"},
+			atCapacity:    true,
+		},
+		{
+			// Every fleet that was reported full before is still reported full,
+			// whatever its hosts could run. This one is throttled back to no
+			// slots and is also too small for the pool, so it is not a host that
+			// could run it and the second half of the test has nothing to count.
+			// The first half, kept as it was, is what gives it the answer it has
+			// always had.
+			name: "a throttled host too small for the pool, alone",
+			hosts: func() []*store.Host {
+				h := sized("host_a", 4, 4, 4*1024, 200*1024)
+				h.ActiveRunners = 1
+				h.Throttle = store.HostThrottle{Level: store.MaxThrottleLevel}
+				return []*store.Host{h}
+			}(),
+			pool:          limited("linux", 0, 6*1024),
+			neverRunnable: []string{"host_a"},
+			atCapacity:    true,
 		},
 		{
 			// A host with a free slot whose memory is promised to a runner
@@ -2205,6 +2317,39 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 			atCapacity: true,
 		},
 		{
+			// Resources promised to a runner that will finish are a wait like a
+			// full slot is, so beside a host that could never run the pool they
+			// are still the whole of the fleet that could.
+			name: "one host's memory promised to a runner that will finish and one that could never run it",
+			hosts: func() []*store.Host {
+				h := sized("host_a", 8, 16, 8*1024+store.MinHostReserveMemoryMB, 200*1024)
+				h.ActiveRunners = 1
+				other := testHost("host_b", 8, 0)
+				other.Backends = store.StringSlice{"process"}
+				return []*store.Host{h, other}
+			}(),
+			pool:          limited("linux", 0, 6*1024),
+			runners:       []*store.Runner{onHost(testRunner("r1", limited("linux", 0, 6*1024), store.RunnerBusy, 0), "host_a")},
+			couldRun:      []string{"host_a"},
+			neverRunnable: []string{"host_b"},
+			atCapacity:    true,
+		},
+		{
+			name: "one host's CPU promised to a runner that will finish and one that could never run it",
+			hosts: func() []*store.Host {
+				h := sized("host_a", 8, 8, 64*1024, 200*1024)
+				h.ActiveRunners = 1
+				other := testHost("host_b", 8, 0)
+				other.Backends = store.StringSlice{"process"}
+				return []*store.Host{h, other}
+			}(),
+			pool:          limited("linux", 6, 1024),
+			runners:       []*store.Runner{onHost(testRunner("r1", limited("linux", 6, 1024), store.RunnerBusy, 0), "host_a")},
+			couldRun:      []string{"host_a"},
+			neverRunnable: []string{"host_b"},
+			atCapacity:    true,
+		},
+		{
 			// Memory the host has lost to something that is not ours is not
 			// returned by any job of ours finishing, so it stays what it was:
 			// neither flag, and the pool is simply skipped until it eases.
@@ -2221,6 +2366,21 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 			if pool == nil {
 				pool = testPool("linux-x64", "linux")
 			}
+			assertCouldRun := func(ids []string, want bool) {
+				t.Helper()
+				for _, id := range ids {
+					i := slices.IndexFunc(tc.hosts, func(h *store.Host) bool { return h.ID == id })
+					if i < 0 {
+						t.Fatalf("the row names %s, which is not one of its hosts", id)
+					}
+					if got := HostCouldRun(tc.hosts[i], pool); got != want {
+						t.Fatalf("HostCouldRun(%s) = %v, want %v: the fixture is not the host the row says it is", id, got, want)
+					}
+				}
+			}
+			assertCouldRun(tc.neverRunnable, false)
+			assertCouldRun(tc.couldRun, true)
+
 			pp := only(t, Decide(snap([]*store.Pool{pool}, tc.runners,
 				[]*store.Job{queued("j1", time.Minute, "linux")}, tc.hosts)))
 
@@ -2247,5 +2407,26 @@ func TestAMemoryCommittedFleetKeepsTheAdviceAboutMemory(t *testing.T) {
 	pp := only(t, Decide(snap([]*store.Pool{p}, runners, []*store.Job{queued("j1", time.Minute, "linux")}, []*store.Host{h})))
 	if !strings.Contains(pp.BlockedFix, "lower this pool's limits") {
 		t.Errorf("BlockedFix = %q, want the advice about the pool's limits", pp.BlockedFix)
+	}
+}
+
+// A busy Linux host beside a Windows one that only offers the process backend
+// is a full fleet, and the operator is told what a full fleet is told. The
+// advice used to be the catch-all ("uncordon one, or relax the pool's host
+// selector"), which sends them looking for a fault in a fleet that only needs a
+// job to finish or a host to be added; and the same miscount kept the machine
+// loop from being asked to rent one.
+func TestAMixedFleetAdvisesWaitingOrAddingAHost(t *testing.T) {
+	windows := testHost("host_b", 8, 0)
+	windows.Backends = store.StringSlice{"process"}
+
+	pp := only(t, Decide(snap([]*store.Pool{testPool("linux-x64", "linux")}, nil,
+		[]*store.Job{queued("j1", time.Minute, "linux")}, []*store.Host{testHost("host_a", 1, 1), windows})))
+
+	if !pp.BlockedAtCapacity {
+		t.Errorf("BlockedAtCapacity = false, want the fleet reported as full when its only host that could run the pool is busy (%s)", pp.Blocked)
+	}
+	if !strings.Contains(pp.BlockedFix, "wait for a job to finish") {
+		t.Errorf("BlockedFix = %q, want the advice for a full fleet", pp.BlockedFix)
 	}
 }
