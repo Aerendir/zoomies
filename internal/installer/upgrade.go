@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -114,6 +115,9 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	if !opts.Check {
 		lockPath := filepath.Join(opts.ConfigDir, "upgrade.lock")
 		lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if errors.Is(err, fs.ErrNotExist) && os.Geteuid() != 0 && runtime.GOOS == "linux" {
+			return fmt.Errorf("installer: there is no deployment in %s for this account to upgrade: %w; a deployment set up with sudo lives in /etc/zoomies, so run \"sudo zoomies upgrade\"", opts.ConfigDir, err)
+		}
 		if err != nil {
 			return fmt.Errorf("installer: cannot reserve this deployment for upgrade: %w; if an earlier upgrade was interrupted, remove %s only after checking it has stopped", err, lockPath)
 		}
