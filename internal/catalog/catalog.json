@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "1a1f9d0",
+  "generated_from": "ad5f491",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2255,8 +2255,8 @@
       "category": "capacity",
       "severity": "error with jobs waiting, warning without",
       "detection": "runtime",
-      "detects": "The pool cannot start the runners it wants. The entry carries the scheduler's own reason: no host matches its selector, every host is full, or every host is cordoned.",
-      "fix": "The pool cannot start the runners it wants. The entry carries the scheduler's own reason: no host matches its selector, every host is full, or every host is cordoned.",
+      "detects": "The pool cannot start the runners it wants. The entry carries the scheduler's own reason: no host matches its selector, every host that could run it is full, or every host is cordoned.",
+      "fix": "The pool cannot start the runners it wants. The entry carries the scheduler's own reason: no host matches its selector, every host that could run it is full, or every host is cordoned.",
       "verify": "A runner starts for the pool: `zoomies runners list --pool \u003cpool-id\u003e` shows one past `provisioning`, and the entry leaves the list.",
       "status_sentence": "No machine has room for some jobs right now, so they wait until one frees up or a machine is added.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
