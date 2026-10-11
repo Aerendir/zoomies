@@ -678,24 +678,7 @@ func TestTheDemoProvidersFixtureIsNeverRentedFrom(t *testing.T) {
 	h.enableProviders(t)
 	inst := h.installation()
 	h.pool(inst, "linux-x64")
-
-	demo := &store.Provider{
-		ID:                 "prv_demofixture",
-		Kind:               store.ProviderFake,
-		Name:               "demo-pve",
-		Endpoint:           "https://pve.acme.example:8006",
-		Settings:           store.StringMap{"zone": "zone-a"},
-		MachineLabels:      store.StringMap{},
-		MachineCapacity:    2,
-		MachineBackend:     store.BackendDocker,
-		MaxMachines:        5,
-		MaxCreatesInFlight: 5,
-		IdleTimeout:        store.Duration(15 * time.Minute),
-		Enabled:            true,
-	}
-	if err := h.st.CreateProvider(h.ctx, demo); err != nil {
-		t.Fatalf("CreateProvider: %v", err)
-	}
+	h.demoProviderFixture(t)
 	h.queueWork(t)
 
 	for range 3 {
@@ -725,6 +708,32 @@ func TestTheDemoProvidersFixtureIsNeverRentedFrom(t *testing.T) {
 	if ms[0].ProviderID != lab.ID {
 		t.Errorf("the machine was rented from %s, want the real provider %s", ms[0].ProviderID, lab.ID)
 	}
+}
+
+// demoProviderFixture writes a provider with the demo fixture's kind of id and
+// in every other way one that could be rented from: enabled, with room under
+// its ceiling, and machines the docker pools these tests make could run on. Only
+// its being a fixture keeps it out.
+func (h *harness) demoProviderFixture(t *testing.T) *store.Provider {
+	t.Helper()
+	demo := &store.Provider{
+		ID:                 "prv_demofixture",
+		Kind:               store.ProviderFake,
+		Name:               "demo-pve",
+		Endpoint:           "https://pve.acme.example:8006",
+		Settings:           store.StringMap{"zone": "zone-a"},
+		MachineLabels:      store.StringMap{},
+		MachineCapacity:    2,
+		MachineBackend:     store.BackendDocker,
+		MaxMachines:        5,
+		MaxCreatesInFlight: 5,
+		IdleTimeout:        store.Duration(15 * time.Minute),
+		Enabled:            true,
+	}
+	if err := h.st.CreateProvider(h.ctx, demo); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+	return demo
 }
 
 // A resource is not ours because our row points at its identifier.

@@ -84,6 +84,11 @@ type machineRuntime struct {
 	// cursor is the recovery sweep's keyset position, owned by the pass that
 	// mu serialises.
 	cursor string
+	// lastHeld is each provider's held sentence as the last pass found it, by
+	// id, so that a pass finding one changed sends the provider again: held is
+	// computed, and no row write would announce it. Owned by the pass that mu
+	// serialises, like cursor.
+	lastHeld map[string]string
 
 	cacheMu sync.Mutex
 	cache   map[string]*builtProvider
@@ -157,6 +162,11 @@ func (c *Controller) machineLoop(ctx context.Context) {
 				}
 			}
 		case <-c.machineSettingsChanged:
+			// A settings change inside machineFirstPass brings the first pass
+			// forward. That is deliberate: somebody who has just switched
+			// renting on is watching for it to take, and the worst an early
+			// pass can do is rent a machine for work a host about to report
+			// back would have taken, which scale-down then releases.
 			if !timer.Stop() {
 				select {
 				case <-timer.C:
@@ -187,29 +197,15 @@ func (c *Controller) machineInterval() time.Duration {
 // tests and the API can force a pass and know it has finished, which a nudge
 // deliberately cannot promise.
 //
-// The order is the design. Recovery runs before demand on every pass, so a
-// restart is simply the pass where nothing was in memory and there is no
-// separate startup path to get wrong. Ownership is swept before anything is
-// decided, so a resource that vanished under us is known about before the
+// The order is the design. Recovery runs before demand on every pass that may
+// act, so a restart is simply the pass where nothing was in memory and there
+// is no separate startup path to get wrong. Ownership is swept before anything
+// is decided, so a resource that vanished under us is known about before the
 // fleet works out whether to buy another. And nothing is created until every
 // machine already on the way has been counted.
 func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	c.machines.mu.Lock()
 	defer c.machines.mu.Unlock()
-
-	// Provider and runner mutations share the same authority boundary.
-	if !c.mayAct() {
-		return nil
-	}
-	// Off is off, whoever asked. The loop runs whether or not renting is
-	// switched on, so that switching it on is a setting and not a restart, and
-	// while it is off a pass rents, drains and deletes nothing. That holds for
-	// a pass forced by a test or an API call as much as for the loop's own:
-	// renting a machine spends money, and nothing should start doing that
-	// because a release added the ability to.
-	if !c.cfg().Provider.Enabled {
-		return nil
-	}
 
 	rows, err := c.st.ListProviders(ctx)
 	if err != nil {
@@ -219,14 +215,14 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	// is a name that does not resolve. Left in, an instance seeded for a demo
 	// and then switched on would spend every pass dialling it, fill the
 	// problems drawer with a provider nobody configured, and count its two
-	// fictional machines against the fleet's ceiling -- the same reason the
+	// fictional machines against the fleet's ceiling: the same reason the
 	// credential prober and the registration reaper skip the fixtures they
 	// would otherwise reach out on behalf of.
 	//
 	// Filtered here rather than at each step so that recovery, the sweep, the
-	// plan and the machine loop all agree about which providers exist: a
-	// fixture that were visible to one of them and not the others is worse
-	// than one visible to all.
+	// plan, the renting view and the machine loop all agree about which
+	// providers exist: a fixture that were visible to one of them and not the
+	// others is worse than one visible to all.
 	providers := rows[:0:0]
 	for _, p := range rows {
 		if !IsDemoID(p.ID) {
@@ -234,6 +230,7 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 		}
 	}
 	if len(providers) == 0 {
+		c.forgetRenting()
 		return nil
 	}
 
@@ -241,11 +238,29 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Off is off, whoever asked, and a controller that may not act is held as
+	// well: provider and runner mutations share the same authority boundary.
+	// The pass still decides and keeps the verdict, as a fenced scheduling
+	// pass does, so that an operator can tell "nothing to do" from "not
+	// allowed to"; it recovers, sweeps, rents, drains and deletes nothing. That
+	// holds for a pass forced by a test or an API call as much as for the
+	// loop's own: renting a machine spends money, and nothing should start
+	// doing that because a release added the ability to.
+	if !c.mayAct() || !c.cfg().Provider.Enabled {
+		c.noteRenting(ctx, env, DecideMachines(env.demand()))
+		c.publishDerived(ctx)
+		return nil
+	}
 
 	c.recoverMachineOperations(ctx, env)
 	c.sweepProviders(ctx, env)
+	// Decided and kept whether or not a transfer is draining, so that a verdict
+	// from before the drain does not go on describing a purchase no pass will
+	// make; the drain holds back only the applying of the plan.
+	plan := DecideMachines(env.demand())
+	c.noteRenting(ctx, env, plan)
 	if !c.transferDraining.Load() {
-		c.applyMachinePlan(ctx, env, DecideMachines(env.demand()))
+		c.applyMachinePlan(ctx, env, plan)
 	}
 	c.stepMachines(ctx, env)
 	c.publishDerived(ctx)
@@ -388,6 +403,16 @@ func (c *Controller) mutationsHeld() string {
 // rent nothing. It answers for a nil provider as well: it is a fact about the
 // controller and not about any one row.
 func (c *Controller) provisioningHeld(p *store.Provider, now time.Time) string {
+	return c.provisioningHeldWith(p, now, true)
+}
+
+// provisioningHeldWith is provisioningHeld with one choice: whether a provider
+// standing down says how long it has left. The provider's own card wants the
+// countdown, and is sent again each pass it moves. A sentence that reaches the
+// problems list may carry no clock, because the list is sent again whenever it
+// differs and a countdown differs on every read, so a held verdict asks for the
+// sentence without one.
+func (c *Controller) provisioningHeldWith(p *store.Provider, now time.Time, countdown bool) string {
 	if held := c.mutationsHeld(); held != "" {
 		return held
 	}
@@ -415,6 +440,9 @@ func (c *Controller) provisioningHeld(p *store.Provider, now time.Time) string {
 	case !p.Enabled:
 		return fmt.Sprintf("%s is disabled, so it is offered no new demand", p.Name)
 	case p.PausedUntil != nil && now.Before(*p.PausedUntil):
+		if !countdown {
+			return fmt.Sprintf("%s is standing down after %s in a row", p.Name, plural(p.ConsecutiveFailures, "failure"))
+		}
 		return fmt.Sprintf("%s is standing down after %s in a row; trying again in %s",
 			p.Name, plural(p.ConsecutiveFailures, "failure"), roundDuration(p.PausedUntil.Sub(now)))
 	}

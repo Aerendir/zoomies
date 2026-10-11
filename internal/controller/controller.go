@@ -358,6 +358,13 @@ type Controller struct {
 	// unserved is the pools a selector kept every provider from renting for,
 	// by name, so the log says so once per change.
 	unserved map[string]string
+	// renting is what the last machine pass decided about renting; see
+	// renting.go. It is nil before the first pass and after forgetRenting.
+	// mu alone guards it: a pass replaces it while holding machines.mu, taking
+	// mu inside that and never the other way round, and a reader takes mu and
+	// nothing else, so a page asking why nothing is rented never waits on a
+	// pass, which holds machines.mu for as long as a hypervisor takes.
+	renting *rentingReport
 	// hostHealthy remembers each host's last known health so that only a flip
 	// publishes an event.
 	hostHealthy map[string]bool
