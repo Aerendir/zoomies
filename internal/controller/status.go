@@ -283,6 +283,7 @@ var publicSentences = map[string]string{
 	"host.resources_unknown":                        "A machine has not reported how much room it has, so it is used cautiously.",
 	"host.shared_folder_unmounted":                  "A machine keeps no tool cache, so jobs there download their tools again and start slower.",
 	"host.runtime_recovering":                       "A machine's container runtime is recovering, so it is taking no new jobs for now.",
+	"host.scratch_unmeasured":                       "A machine cannot tell how full its in-memory folders get, so a job that fills one fails without saying why.",
 	"host.throttled":                                "A machine is busy enough that it is taking new jobs more slowly.",
 	"host.unhealthy":                                "A machine has stopped checking in, so fewer jobs can run at once.",
 	"host.version_behind":                           "A machine is running an older agent than the controller.",

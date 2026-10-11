@@ -8091,7 +8091,7 @@ export interface components {
              * @description The most memory, in MB, the job's runner was measured using while the job ran. Absent when never measured.
              */
             peak_memory_mb?: number;
-            /** @description How full each in-memory folder of the job's runner got while the job ran, raised by every sample and never lowered. Absent when none was measured: a pool with no folder in memory, an agent too old to measure, or a host whose /proc does not show the container. A folder near its ceiling on a failed job is what the explanation reads a full folder from (`scratch-full`, `jobs.scratch_full`). */
+            /** @description How full each in-memory folder of the job's runner got while the job ran, raised by every sample and never lowered. Absent when none was measured: a pool with no folder in memory, an agent too old to measure, or a host that could not measure them (`host.scratch_unmeasured` says why). A folder near its ceiling on a failed job is what the explanation reads a full folder from (`scratch-full`, `jobs.scratch_full`). */
             scratch_peaks?: {
                 /**
                  * @description Which folder it is
@@ -10625,6 +10625,23 @@ export interface components {
                 near_limit?: boolean;
                 raises?: number;
             };
+            /** @description How full each in-memory folder of the runner's containers was at the sample, measured by a `df` run in the container. Absent when the runner keeps nothing in memory, when the folders could not be measured (`scratch_unmeasured` says why), and from an agent that predates it. */
+            scratch?: {
+                /** @description Where the folder is mounted in the container. */
+                path: string;
+                /** Format: int64 */
+                used_bytes: number;
+                /**
+                 * Format: int64
+                 * @description The folder's ceiling.
+                 */
+                size_bytes: number;
+            }[];
+            /**
+             * @description Why in-memory folders that exist were not measured at this sample: the engine refused to run a command in the container, the image has no `df`, `df` printed something unreadable, or the engine did not answer in time. Absent when they were measured, when there were none, and from an agent that predates it. A host where every runner reports one is named by `host.scratch_unmeasured`.
+             * @enum {string}
+             */
+            scratch_unmeasured?: "exec_refused" | "no_df" | "unreadable" | "timed_out";
             /** @description For a docker-in-docker pair, what each container used on its own, beside the limits it was created with. Absent for a single container and from an agent that predates it. The controller judges how the pair's slot is divided from it (`pool.daemon_share_suggested`). */
             halves?: {
                 runner?: components["schemas"]["WorkloadHalfUse"];

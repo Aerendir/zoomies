@@ -10998,9 +10998,9 @@ components:
           description: >-
             How full each in-memory folder of the job's runner got while the job ran, raised by
             every sample and never lowered. Absent when none was measured: a pool with no folder
-            in memory, an agent too old to measure, or a host whose /proc does not show the
-            container. A folder near its ceiling on a failed job is what the explanation reads a
-            full folder from (`scratch-full`, `jobs.scratch_full`).
+            in memory, an agent too old to measure, or a host that could not measure them
+            (`host.scratch_unmeasured` says why). A folder near its ceiling on a failed job is what
+            the explanation reads a full folder from (`scratch-full`, `jobs.scratch_full`).
           items:
             type: object
             required: [path, peak_mb, size_mb, percent]
@@ -13813,6 +13813,28 @@ components:
             would_spill_bytes: { type: integer, format: int64 }
             near_limit: { type: boolean }
             raises: { type: integer }
+        scratch:
+          type: array
+          description: >-
+            How full each in-memory folder of the runner's containers was at the sample, measured by a
+            `df` run in the container. Absent when the runner keeps nothing in memory, when the folders
+            could not be measured (`scratch_unmeasured` says why), and from an agent that predates it.
+          items:
+            type: object
+            required: [path, used_bytes, size_bytes]
+            properties:
+              path: { type: string, description: Where the folder is mounted in the container. }
+              used_bytes: { type: integer, format: int64 }
+              size_bytes: { type: integer, format: int64, description: The folder's ceiling. }
+        scratch_unmeasured:
+          type: string
+          enum: [exec_refused, no_df, unreadable, timed_out]
+          description: >-
+            Why in-memory folders that exist were not measured at this sample: the engine refused to run
+            a command in the container, the image has no `df`, `df` printed something unreadable, or the
+            engine did not answer in time. Absent when they were measured, when there were none, and from
+            an agent that predates it. A host where every runner reports one is named by
+            `host.scratch_unmeasured`.
         halves:
           type: object
           description: For a docker-in-docker pair, what each container used on its own, beside the limits it was created with. Absent for a single container and from an agent that predates it. The controller judges how the pair's slot is divided from it (`pool.daemon_share_suggested`).

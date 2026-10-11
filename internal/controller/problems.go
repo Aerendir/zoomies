@@ -182,6 +182,7 @@ var problemAudience = map[string]Audience{
 	"host.resources_unknown":            AudienceFleet,
 	"host.shared_folder_unmounted":      AudienceFleet,
 	"host.runtime_recovering":           AudienceFleet,
+	"host.scratch_unmeasured":           AudienceFleet,
 	"host.throttled":                    AudienceFleet,
 	"host.unhealthy":                    AudienceFleet,
 	"host.os_health":                    AudienceFleet,
@@ -439,6 +440,7 @@ func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
 	gather("host resources", c.hostResourceProblems)
 	gather("in-memory folders", c.tmpfsAdviceProblems)
 	gather("in-memory folders by host", c.tmpfsHostProblems)
+	gather("in-memory folder measurement", c.scratchUnmeasuredProblems)
 	gather("the memory valve", c.memoryValveProblems)
 	gather("sidecar share by host", c.daemonShareHostProblems)
 	gather("sidecar share", c.daemonShareAdviceProblems)
