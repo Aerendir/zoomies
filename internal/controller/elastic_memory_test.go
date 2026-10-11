@@ -10,6 +10,7 @@ import (
 	"github.com/eyupio/zoomies/internal/backend"
 	"github.com/eyupio/zoomies/internal/events"
 	"github.com/eyupio/zoomies/internal/store"
+	"github.com/eyupio/zoomies/internal/version"
 )
 
 const mb = int64(1) << 20
@@ -638,5 +639,57 @@ func TestADecisionCodeFromAnAgentIsAMetricLabelOnlyIfItIsOneWeDefine(t *testing.
 		if got := valveOutcome(code); got != "unknown" {
 			t.Errorf("valveOutcome(%q) = %q, want unknown", code, got)
 		}
+	}
+}
+
+// The controller records the folders from its own placement rule, and the agent
+// on the host mounts them from its own copy of that rule. While the two run the
+// same build the row is what the runner was given. While they run different
+// builds, as they do for the hours after a release reaches the controller and
+// before every host has followed it, the row is the controller's estimate, and
+// the view has to say so: an operator read a 2 GB /tmp off a runner whose agent
+// had mounted 1 GB, and went looking for the fault in the wrong place.
+func TestAScratchRowSaysItIsAnEstimateWhileTheAgentRunsAnotherBuild(t *testing.T) {
+	was := version.Version
+	version.Version = "main-sha-1c5b8378"
+	t.Cleanup(func() { version.Version = was })
+
+	h := newHarness(t)
+	_, pool, host := h.fleet()
+	pool.Resources = store.Resources{MemoryMB: 16384}
+	pool.Tmpfs = store.TmpfsConfig{Tmp: store.TmpfsMount{Enabled: true, Auto: true}}
+	if err := h.st.UpdatePool(h.ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	host.Features = store.StringSlice{agent.FeatureTmpfs}
+	host.Version = "main-sha-503de486"
+	if err := h.st.SetHostReported(h.ctx, host); err != nil {
+		t.Fatal(err)
+	}
+	host, _ = h.st.GetHost(h.ctx, host.ID)
+	spec := backend.Spec{Resources: store.Resources{MemoryMB: 16384}, ResourcesSource: store.AllocationFromPool, Tmpfs: pool.Tmpfs}
+
+	r := h.valveRunner(pool, host, store.RunnerProvisioning)
+	h.c.recordScratch(h.ctx, r, pool, host, spec)
+	got, err := h.st.GetRunner(h.ctx, r.ID)
+	if err != nil || got.Scratch.ControllerVersion != "main-sha-1c5b8378" || got.Scratch.AgentVersion != "main-sha-503de486" {
+		t.Fatalf("scratch = %+v, %v; want the controller's and the agent's builds on the row", got.Scratch, err)
+	}
+	view := h.c.runnerView(h.ctx, got).Scratch
+	if view == nil || !view.Estimated || !strings.Contains(view.Note, "main-sha-503de486") || !strings.Contains(view.Note, "main-sha-1c5b8378") {
+		t.Fatalf("scratch view = %+v, want it marked an estimate with a note naming both builds", view)
+	}
+
+	// The same build on both sides is the runner's own answer, with nothing to add.
+	host.Version = "main-sha-1c5b8378"
+	if err := h.st.SetHostReported(h.ctx, host); err != nil {
+		t.Fatal(err)
+	}
+	host, _ = h.st.GetHost(h.ctx, host.ID)
+	r2 := h.valveRunner(pool, host, store.RunnerProvisioning)
+	h.c.recordScratch(h.ctx, r2, pool, host, spec)
+	got, _ = h.st.GetRunner(h.ctx, r2.ID)
+	if view := h.c.runnerView(h.ctx, got).Scratch; view == nil || view.Estimated || view.Note != "" {
+		t.Fatalf("scratch view = %+v, want no estimate when the agent runs the controller's build", view)
 	}
 }

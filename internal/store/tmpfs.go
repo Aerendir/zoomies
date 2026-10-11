@@ -477,6 +477,16 @@ func (f ScratchFolder) InMemory() bool { return f.SizeMB > 0 }
 // for one runner when it was created. Empty for a runner whose pool keeps none.
 type RunnerScratch struct {
 	Folders []ScratchFolder `json:"folders,omitempty"`
+	// ControllerVersion is the build that worked the folders out, and
+	// AgentVersion the build of the agent on the host, which mounts them from
+	// its own copy of the placement rule. While the two are the same build the
+	// row is what the runner was given; while they differ, as they do for the
+	// hours after a release reaches the controller and before every host has
+	// followed it, it is the controller's estimate, and whoever reads it has to
+	// be told. Empty on rows from before the builds were recorded, and on a row
+	// written with no host to ask.
+	ControllerVersion string `json:"controller_version,omitempty"`
+	AgentVersion      string `json:"agent_version,omitempty"`
 }
 
 // Any reports whether the pool asked for any folder to be kept in memory.

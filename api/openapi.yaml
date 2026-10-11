@@ -10172,6 +10172,14 @@ components:
         folders:
           type: array
           items: { $ref: "#/components/schemas/ScratchFolder" }
+        estimated:
+          type: boolean
+          description: >-
+            The folders were worked out by a build other than the one that mounted them. The
+            controller records them from its own placement rule and the agent on the host mounts
+            them from its own copy of that rule, so while a fleet runs two builds the row can say
+            2 GB of a folder the agent mounted at 1 GB. Absent while the two are the same build.
+        note: { type: string, description: The sentence for `estimated`, naming both builds. }
 
     ScratchFolder:
       type: object

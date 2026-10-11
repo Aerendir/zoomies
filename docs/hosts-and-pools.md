@@ -758,6 +758,14 @@ Auto never silently changes what a pool is. Where it kept a folder on disk,
 information, and says what would put the folder in memory there: bigger runners
 on that host, or smaller folders.
 
+A runner's row records its folders when it is created, from the controller's
+placement rule; the agent on the host mounts them from its own copy of that
+rule. While the two run the same build the row is what the runner was given.
+While they run different builds, as they do between a release reaching the
+controller and every host following it, the row is the controller's estimate,
+and the runner's folders say so, naming both builds: an agent that has not yet
+taken a release that changed the sizes still mounts what its own build says.
+
 **The memory limit.** Zoomies never raises the pool's setting for you, because
 it is also what the scheduler charges the host for and changing it changes how
 many runners fit. It proposes instead. (A running container's limit is a
