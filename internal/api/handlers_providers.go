@@ -96,10 +96,10 @@ func (s *Server) handleProviderPairings(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleProviderRenting answers GET /api/v1/providers/renting: whether this
-// controller is renting machines and, for each pool the last machine pass found
-// work waiting for, what it decided and why. GET /meta's providers_available is
+// controller is renting machines and, for each pool the last machine pass had
+// something to say about, what it decided and why. GET /meta's providers_available is
 // the coarse flag for whether renting is possible at all; this is the answer
-// behind it, the one place a page learns why nothing is being rented.
+// behind it, and the answer the problem list and a pool's page repeat.
 //
 // It is the controller's view as it is. The sentences, the switches and the
 // verdicts are worked out where the machines are decided, so that what the

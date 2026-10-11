@@ -12963,13 +12963,13 @@ components:
       type: object
       required: [state, summary, enabled, paused, max_machines, owned, pools]
       description: >-
-        Whether this fleet is renting machines and what it decided about each pool with
-        work waiting. The switches are read when the request is made; the verdicts are
+        Whether this fleet is renting machines and what it decided about each pool it had
+        something to say about. The switches are read when the request is made; the verdicts are
         the last machine pass's.
       properties:
         state:
           type: string
-          enum: [none, off, no_ceiling, on]
+          enum: [none, "off", no_ceiling, "on"]
           description: >-
             Which switch, if any, is holding renting back. `none`: no provider may rent
             (none is configured, or every one is disabled on its own row), so there is
@@ -13013,7 +13013,7 @@ components:
         pool_name: { type: string }
         state:
           type: string
-          enum: [renting, on_its_way, waiting, ceiling, unserved, held, off]
+          enum: [renting, on_its_way, waiting, ceiling, unserved, held, "off"]
           description: >-
             `renting`: machines are being rented for the pool, all it is short of or as
             many as the ceilings allow. `on_its_way`: machines already being built
@@ -13046,8 +13046,8 @@ components:
           description: >-
             The runner slots the pool is missing once the free slots on the hosts that
             could run it are counted. Except for `on_its_way`, the machines already on
-            their way are counted too. For `waiting` it is the scheduler's own
-            shortfall.
+            their way are counted too. For `waiting`, and for `unserved` when the
+            scheduler is waiting on hosts, it is the scheduler's own shortfall.
         machines:
           type: integer
           description: >-

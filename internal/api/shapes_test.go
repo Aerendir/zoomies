@@ -414,8 +414,8 @@ func TestResponsesMatchTheSpecShapes(t *testing.T) {
 		if err := json.Unmarshal(fleet["pools"], &pools); err != nil || len(pools) == 0 {
 			t.Fatalf("the pass left no verdict on the one pool with work waiting, so PoolRenting is unchecked (%v): %s", err, truncate(resp.body))
 		}
-		for _, pool := range pools {
-			assertShape(t, doc, "PoolRenting", pool)
+		for _, verdict := range pools {
+			assertShape(t, doc, "PoolRenting", verdict)
 		}
 		var verdict map[string]json.RawMessage
 		if err := json.Unmarshal(pools[0], &verdict); err != nil {

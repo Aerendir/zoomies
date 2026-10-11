@@ -9816,7 +9816,7 @@ export interface components {
             /** @description What to change */
             fix?: string;
         };
-        /** @description Whether this fleet is renting machines and what it decided about each pool with work waiting. The switches are read when the request is made; the verdicts are the last machine pass's. */
+        /** @description Whether this fleet is renting machines and what it decided about each pool it had something to say about. The switches are read when the request is made; the verdicts are the last machine pass's. */
         Renting: {
             /**
              * @description Which switch, if any, is holding renting back. `none`: no provider may rent (none is configured, or every one is disabled on its own row), so there is nothing to switch on. `off`: `provider.enabled` is off, so no machine is created from any provider. `no_ceiling`: renting is on but `provider.max_machines` is zero, and a maximum of none is none. `on`: renting is on and the fleet may rent.
@@ -9873,7 +9873,7 @@ export interface components {
             provider_name?: string;
             /** @description The queued jobs the pool claims, counted so that a job two pools could run is counted for one. */
             queued: number;
-            /** @description The runner slots the pool is missing once the free slots on the hosts that could run it are counted. Except for `on_its_way`, the machines already on their way are counted too. For `waiting` it is the scheduler's own shortfall. */
+            /** @description The runner slots the pool is missing once the free slots on the hosts that could run it are counted. Except for `on_its_way`, the machines already on their way are counted too. For `waiting`, and for `unserved` when the scheduler is waiting on hosts, it is the scheduler's own shortfall. */
             short: number;
             /** @description For `renting`, the machines this pool alone needs, at most what the provider rents this pass; pools that share a machine each count it, so the figures are never to be added up. For `on_its_way`, how many of the named provider's machines are coming. For `held` and `off`, what the pass would have rented had nothing stood in the way, which is none for a pool a ceiling stopped or one the machines on their way cover. */
             machines: number;

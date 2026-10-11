@@ -463,6 +463,9 @@ func TestTheRentingRouteSaysWhyNothingIsRentedWhileRentingIsOff(t *testing.T) {
 	if got.PoolID != pool.ID || got.PoolName != pool.Name || got.ProviderName != "lab" {
 		t.Errorf("the verdict is about pool %s (%s) and provider %q, want %s (%s) and lab", got.PoolID, got.PoolName, got.ProviderName, pool.ID, pool.Name)
 	}
+	if got.Machines != 1 || !strings.HasPrefix(got.Summary, "Would rent 1 machine") {
+		t.Errorf("the verdict says %q for %d machines, want it to say 1 machine would be rented (the ceiling of 10 leaves the switch as the only thing in the way)", got.Summary, got.Machines)
+	}
 	if got.State != controller.RentingOff || got.Setting != "provider.enabled" || got.Summary == "" || got.Fix == "" {
 		t.Errorf("the pool is %q (setting %q) with summary %q and fix %q, want off, provider.enabled and words for both",
 			got.State, got.Setting, got.Summary, got.Fix)
