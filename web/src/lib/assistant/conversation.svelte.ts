@@ -9,6 +9,8 @@
  */
 import { ApiError, streamAssistantChat } from '$lib/api/client';
 import { supportHint } from '$lib/errors';
+import { router } from '$lib/router';
+import { prefs } from '$lib/state/prefs.svelte';
 import { hiddenNote } from './redaction';
 import { splitFollowUps, type EliContext, type Suggestion } from './prompts';
 
@@ -40,6 +42,8 @@ export interface Turn {
 export interface ToolLook {
   name: string;
   status: 'running' | 'done' | 'failed';
+  /** Why a look failed, in one line, when the controller says. */
+  reason?: string;
 }
 
 function failure(cause: unknown): string {
@@ -47,15 +51,17 @@ function failure(cause: unknown): string {
 }
 
 /** Record a look: a new one when it starts, and the end of the last one still running. */
-function note(answer: Turn, name: string, status: ToolLook['status']): void {
+function note(answer: Turn, name: string, status: ToolLook['status'], reason?: string): void {
   const looks = (answer.tools ??= []);
   if (status === 'running') {
     looks.push({ name, status });
     return;
   }
   const open = looks.findLast((l) => l.name === name && l.status === 'running');
-  if (open) open.status = status;
-  else looks.push({ name, status });
+  if (open) {
+    open.status = status;
+    if (reason) open.reason = reason;
+  } else looks.push({ name, status, ...(reason ? { reason } : {}) });
 }
 
 export class Conversation {
@@ -94,6 +100,10 @@ export class Conversation {
       await streamAssistantChat(
         {
           messages: [...history, { role: 'user', content: question }],
+          // Where the question was asked from, so "here" means something, and
+          // how this person wants the answer written.
+          page: router.pathname,
+          style: prefs.eliStyle,
           ...(this.#provider ? { provider_id: this.#provider } : {}),
         },
         (frame) => {
@@ -102,7 +112,7 @@ export class Conversation {
             answer.content = splitFollowUps(raw).text;
           } else if (frame.kind === 'usage')
             answer.tokens = `${frame.inputTokens} in, ${frame.outputTokens} out`;
-          else if (frame.kind === 'tool') note(answer, frame.name, frame.status);
+          else if (frame.kind === 'tool') note(answer, frame.name, frame.status, frame.reason);
           else if (frame.kind === 'done') {
             answer.suggestions = splitFollowUps(raw).suggestions;
             answer.by = `${frame.provider}, ${frame.model}`;

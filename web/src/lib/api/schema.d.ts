@@ -3155,7 +3155,8 @@ export interface paths {
          *     `{"text": ...}` as the model writes, one `usage` frame with
          *     `{"input_tokens", "output_tokens"}` when the provider reports them (summed over
          *     every round when the assistant looked at the fleet), `tool` frames with
-         *     `{"name", "status"}` as it looks (`running`, then `done` or `failed`), and a final
+         *     `{"name", "status"}` as it looks (`running`, then `done` or `failed`, a failed look
+         *     carrying `reason`, one line saying why), and a final
          *     `done` frame with the provider's name and the model, `fleet_access` (whether the
          *     fleet could be read through this provider), the `tools` it used, `cut` (true when
          *     the provider stopped the answer at its output ceiling before the model had
@@ -3360,7 +3361,8 @@ export interface paths {
          * @description Answers a conversation as a `text/event-stream`: `delta` frames carrying
          *     `{"text": ...}` as the model writes, one `usage` frame with
          *     `{"input_tokens", "output_tokens"}` when the provider reports them, `tool` frames
-         *     reporting read-only fleet lookups when enabled, and a final `done` frame with
+         *     reporting read-only fleet lookups when enabled (a failed look carries `reason`,
+         *     one line saying why), and a final `done` frame with
          *     the provider's name, model, `fleet_access`, `tools`, `redacted` (how many
          *     `credentials` and `emails` were replaced with a marker before the model saw the
          *     latest question and what the tools returned), `cut` (true when the provider
@@ -9371,12 +9373,37 @@ export interface components {
         AssistantChatRequest: {
             /** @description The provider to ask. Omit for the default. A disabled provider is not one to ask. */
             provider_id?: string;
+            /**
+             * @description The path of the page the question is asked from, such as `/hosts/host_x`, so the
+             *     model knows what "here" is. A path starting with `/`, or omitted. Through a provider
+             *     that may read the fleet it goes as it is; through one that may not, only the section
+             *     (`the hosts page`), so nothing of the fleet reaches a provider the switch is off for.
+             */
+            page?: string;
+            style?: components["schemas"]["AssistantStyle"];
             /** @description The conversation so far, oldest first, ending in a `user` message. At most 40 messages, 8 KiB each and 32 KiB in all. */
             messages: {
                 /** @enum {string} */
                 role: "user" | "assistant";
                 content: string;
             }[];
+        };
+        /**
+         * @description How the person wants Eli's answers written. It is the person's choice, kept in
+         *     their preferences and sent with each question, not the provider's: it is about
+         *     who reads the answer. Empty fields take the default.
+         */
+        AssistantStyle: {
+            /**
+             * @description `short` (the default) is the answer and what to do, under about two hundred words with no headings; `medium` adds the reasons and the evidence, around four hundred words; `long` is the full picture, with what was ruled out and headings where they help.
+             * @enum {string}
+             */
+            length?: "" | "short" | "medium" | "long";
+            /**
+             * @description `plain` is for someone who runs the fleet but is not a CI specialist, terms explained and no commands unless asked; `balanced` (the default) is for an operator, plain words with the exact names of what to act on; `technical` is for an engineer, exact names and figures and no explanation of common terms.
+             * @enum {string}
+             */
+            tone?: "" | "plain" | "balanced" | "technical";
         };
         AssistantProvider: {
             id: string;
@@ -9738,6 +9765,7 @@ export interface components {
             table_layouts?: {
                 [key: string]: components["schemas"]["TableLayoutPreference"];
             };
+            assistant?: components["schemas"]["AssistantStyle"];
         };
         ProblemDismissal: {
             /** @description The UI's identity for one problem, or `type:<code>` for every problem of one kind. Opaque to the controller. */

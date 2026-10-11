@@ -115,7 +115,27 @@ will buy for and why one will not, and where each machine got to. That last part
 what lets Eli answer "why is this pool full and not renting?" from the fleet and not
 from a guess. A setting only an administrator can read, such as `provider.enabled`,
 is not something Eli can see, and it is told to say so. When it looks, the panel
-says what it looked at, under the answer.
+says what it looked at, under the answer, and a look that failed says why beside
+its name (a code that is not in the catalog, a route that refused), which is the
+part worth reading. A call Eli makes twice with the same arguments is answered
+from the first without being run or shown again.
+
+Every question also carries the situation: the time, your role (so "ask an
+administrator" is advice Eli knows whether you can act on), and the page you
+asked from. Through a provider that may read the fleet that is the page's path,
+and one line more: how many hosts, pools, runners and jobs there are, and how
+many problems of each severity with their codes. Through a provider that may not,
+it is only the section of the UI ("the hosts page"), and nothing of the fleet.
+How much Eli says, and for whom, is your choice, under *How Eli answers* in
+Settings, Eli AI Assistant, My providers. The default is short: the answer
+first, at most one short list, under about two hundred words, no headings and
+no recap of what it was told. Medium adds the reasons and the evidence; long is
+the full picture, including what Eli ruled out. The voice is plain (terms
+explained, no commands unless asked), balanced (plain words with the exact names
+of what to act on, the default) or technical (exact names and figures, common
+terms not explained). The choice is kept with your account, so it holds on the
+phone as at the desk, and Eli gives more when a question asks for it, whatever
+it says.
 
 Eli does not get the tools that change the fleet, and it does not get the ones that
 read a repository's source. It reads as the person asking, through the same routes
@@ -220,7 +240,8 @@ The panel remembers its size preset and side in this browser. Minimise it while
 working and reopen the same conversation. Conversation text stays in memory and
 is cleared on sign-out; it is not saved to browser storage.
 
-Ask Eli actions on host, runner and problem views send the displayed context
+Ask Eli actions on host, runner, pool and problem views, on a job's Why panel in the
+drawer, on a Kennel Club finding and on the Usage report send the displayed context
 and a relevant question. Eli sees this snapshot, and can use read-only fleet tools when enabled for its provider. After an
 answer, follow-on prompts use the conversation's topic and skip questions
 already asked. Extend `web/src/lib/assistant/prompts.ts` with a narrative topic;
