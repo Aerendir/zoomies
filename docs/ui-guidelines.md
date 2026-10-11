@@ -992,7 +992,7 @@ ranges:
 * `< 768px` (**phone.** The navigation becomes a bar along the bottom edge
   carrying the four sections a fleet is watched with) Overview, Pools, Runners,
   Workflows; each under its own word, plus a **More** button opening a sheet from
-  the bottom edge that lists all thirteen, with the account, the theme and sign
+  the bottom edge that lists all fourteen, with the account, the theme and sign
   out above them. An icon-only target for every section across a 412px screen is
   about 32px apart and told apart only by a glyph, which is not a navigation an
   operator can use one-handed at 3am. The sheet is a modal overlay like any other:

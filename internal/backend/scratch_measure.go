@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"path/filepath"
+	"path"
 	"sort"
 	"strconv"
 )
@@ -27,14 +27,18 @@ type ScratchUse struct {
 // for is left out rather than reported as empty: a containerised agent that
 // does not share the host's pid namespace cannot see the root at all, and a
 // made-up zero would read as a folder with room. No process is no folders.
+//
+// The paths are joined with forward slashes whatever the agent was built for:
+// /proc and the mount paths inside the container are Linux paths, and an agent
+// compiled elsewhere must still name the same folder it would on the host.
 func measureScratch(pid int, paths []string, statfs func(path string) (used, size int64, ok bool)) []ScratchUse {
 	if pid <= 0 || len(paths) == 0 {
 		return nil
 	}
-	root := filepath.Join("/proc", strconv.Itoa(pid), "root")
+	root := path.Join("/proc", strconv.Itoa(pid), "root")
 	var out []ScratchUse
 	for _, p := range paths {
-		used, size, ok := statfs(filepath.Join(root, p))
+		used, size, ok := statfs(path.Join(root, p))
 		if !ok || size <= 0 {
 			continue
 		}

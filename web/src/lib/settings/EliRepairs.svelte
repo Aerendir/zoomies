@@ -85,6 +85,17 @@
       error = cause instanceof ApiError ? cause.message : 'Could not read PR repairs.';
     }
   }
+  /**
+   * What the page header's Refresh means here: read everything again, offers
+   * included. The timer reads offers at most once a minute, because they rarely
+   * change and the check behind them asks GitHub about the person's access; a
+   * press of the button is the one time somebody is asking right now.
+   */
+  export async function reload(): Promise<void> {
+    offersReadAt = 0;
+    await refresh();
+    await adminChoices();
+  }
   async function adminChoices(): Promise<void> {
     if (!admin) return;
     try {
