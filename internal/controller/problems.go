@@ -1646,7 +1646,7 @@ func (c *Controller) withRenting(poolID, detail, fix string) (string, string) {
 	}
 	detail += " " + v.Aside()
 	if v.Fix != "" && v.State != RentingWaiting {
-		fix = v.Fix + " " + fix
+		fix = v.Fix + " " + capitalise(fix)
 	}
 	return detail, fix
 }
