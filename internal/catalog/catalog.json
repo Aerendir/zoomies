@@ -2739,6 +2739,20 @@
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
     },
     {
+      "id": "provider.renting_off",
+      "kind": "problem",
+      "title": "provider.renting_off",
+      "category": "reliability",
+      "severity": "info, or **warning** with a pool waiting on it or machines still rented",
+      "detection": "runtime",
+      "detects": "A provider is configured and enabled, but `provider.enabled` is false, so this controller is not allowed to rent machines. A pool that runs out of room waits for the hosts it has, and machines already rented are not drained, deleted or checked. A provider that is disabled on its own page, or the demo fixture, does not raise it.",
+      "fix": "Turn on Rent machines in Settings, and set Machines the fleet may rent to the most you are willing to pay for.",
+      "verify": null,
+      "status_sentence": "Machines are not being rented, so jobs wait for the machines the fleet already has.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
+    },
+    {
       "id": "provider.scale_down_fast",
       "kind": "problem",
       "title": "provider.scale_down_fast",

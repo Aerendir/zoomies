@@ -229,7 +229,9 @@ than about what any one setting says.
 
 Every code here is silent while `provider.enabled` is false, which is the
 default. A deployment that does not rent machines is not told how to bound
-something it is not doing.
+something it is not doing. The one exception is the runtime code
+`provider.renting_off`, which exists to say that a configured provider is
+being held back by that very switch.
 
 | Code | Severity | Setting | What to do |
 | --- | --- | --- | --- |
@@ -358,7 +360,9 @@ something it is not doing.
 
 ## Runtime: infrastructure providers
 
-Raised only when a [provider](providers.md) is configured. The three that name a
+Raised only when a [provider](providers.md) is configured, and silent while
+`provider.enabled` is false, except for `provider.renting_off`, which is raised
+because it is false. The three that name a
 machine link to it, because the machine's own page carries the failure in the
 words of whatever refused it, Proxmox's task error for a clone, the guest's own
 standard error for a bootstrap.
@@ -375,6 +379,7 @@ standard error for a bootstrap.
 | `provider.delete_pending` | warning | A delete was issued and the resource has not been confirmed gone. Something is still costing money. | Check the provider. A delete is only complete when an inspection cannot find the resource; a 200 from the delete call is not that. |
 | `provider.unservable` | warning | No pool could ever place a runner on this provider's machines, so anything it rents is money for nothing. | Match the provider's machine shape, labels and platform to a pool, or disable it. |
 | `provider.template_unverified` | warning | The provider's settings changed and its prerequisites have not been checked since. | Run the check. It creates nothing. |
+| `provider.renting_off` | info, or **warning** with a pool waiting on it or machines still rented | A provider is configured and enabled, but `provider.enabled` is false, so this controller is not allowed to rent machines. A pool that runs out of room waits for the hosts it has, and machines already rented are not drained, deleted or checked. A provider that is disabled on its own page, or the demo fixture, does not raise it. | Turn on Rent machines in Settings, and set Machines the fleet may rent to the most you are willing to pay for. |
 | `provider.provisioning_paused` | info | The kill switch is on. Draining, deleting, recovery and ownership checks all continue; only creation is held. | Nothing, unless you did not mean it. |
 | `provider.contract_unsupported` | error | A provider declares a contract version this build does not speak. Machines it already owns stay visible, drainable and deletable; a version mismatch must never strand a running machine. | Upgrade whichever side is behind; the message names both numbers. |
 
@@ -521,6 +526,7 @@ against it in both directions, word for word.
 | `provider.preflight_failed` | A machine provider failed its checks, so no new machines can be added from it. |
 | `provider.provisioning_paused` | Adding machines is paused, so jobs wait for the machines the fleet already has. |
 | `provider.quota_exhausted` | A machine provider has no more room for the fleet, so jobs wait for the machines it has. |
+| `provider.renting_off` | Machines are not being rented, so jobs wait for the machines the fleet already has. |
 | `provider.template_unverified` | A machine template has not been checked yet. |
 | `provider.unreachable` | A machine provider cannot be reached, so no new machines can be added from it. |
 | `provider.unservable` | Some jobs need machines no provider can supply. |

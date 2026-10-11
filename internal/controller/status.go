@@ -344,6 +344,7 @@ var publicSentences = map[string]string{
 	"provider.preflight_failed":                     "A machine provider failed its checks, so no new machines can be added from it.",
 	"provider.provisioning_paused":                  "Adding machines is paused, so jobs wait for the machines the fleet already has.",
 	"provider.quota_exhausted":                      "A machine provider has no more room for the fleet, so jobs wait for the machines it has.",
+	"provider.renting_off":                          "Machines are not being rented, so jobs wait for the machines the fleet already has.",
 	"provider.template_unverified":                  "A machine template has not been checked yet.",
 	"provider.unreachable":                          "A machine provider cannot be reached, so no new machines can be added from it.",
 	"provider.unservable":                           "Some jobs need machines no provider can supply.",
