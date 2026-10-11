@@ -1151,11 +1151,13 @@ input,
   }
 }
 
-/* The closing call to action is the identity's own ground: Zoomies Black in
-   both themes, the animated lockup on the left, and the one place on the page
-   the pure brand blue is allowed to glow. The primary button is white here
-   rather than blue -- the brand is a monochrome mark with blue as an accent,
-   and the accent is already spent on the glow behind the logo. */
+/* The closing call to action follows the scheme, like the controller's UI: the
+   black lockup on a light panel in the light theme, the white lockup on Zoomies
+   Black in the dark one. Either way it is the one place on the page the brand
+   blue is allowed to glow. The primary button is the panel's inverse rather
+   than blue -- the brand is a monochrome mark with blue as an accent, and the
+   accent is already spent on the glow behind the logo. The dark values are the
+   defaults below; the light scheme overrides them after the rules they feed. */
 .zoomies-cta {
   position: relative;
   isolation: isolate;
@@ -1241,6 +1243,57 @@ input,
   background: #e9ecf1;
   border-color: #e9ecf1;
   color: var(--z-brand-black);
+}
+
+/* One lockup per scheme (overrides/partials/animated-logo.html): white art for
+   the dark panel, black for the light one. The hidden one is never fetched. */
+[data-md-color-scheme='default'] .zoomies-brand__fallback--dark,
+[data-md-color-scheme='slate'] .zoomies-brand__fallback--light {
+  display: none;
+}
+
+/* The light panel: white on the page's cool ground, the same blue glow behind
+   the black lockup, and ink-coloured text and buttons. */
+[data-md-color-scheme='default'] .zoomies-cta {
+  border-color: rgba(11, 12, 14, 0.1);
+  background:
+    radial-gradient(60% 80% at 15% 50%, rgba(47, 128, 237, 0.14) 0%, transparent 70%),
+    radial-gradient(45% 40% at 90% 100%, rgba(34, 211, 238, 0.07) 0%, transparent 70%),
+    #ffffff;
+  color: var(--md-default-fg-color);
+  box-shadow: 0 30px 80px -40px rgba(47, 128, 237, 0.3);
+}
+[data-md-color-scheme='default'] .zoomies-cta::before {
+  background-image: radial-gradient(rgba(11, 12, 14, 0.1) 1px, transparent 1.3px);
+}
+[data-md-color-scheme='default'] .zoomies-cta .zoomies-brand__art {
+  filter: drop-shadow(0 16px 40px rgba(47, 128, 237, 0.18));
+}
+[data-md-color-scheme='default'] .md-typeset .zoomies-cta .title {
+  color: var(--md-default-fg-color);
+}
+[data-md-color-scheme='default'] .md-typeset .zoomies-cta .lede {
+  color: var(--md-default-fg-color--light);
+}
+[data-md-color-scheme='default'] .md-typeset .zoomies-cta .md-button {
+  border-color: rgba(11, 12, 14, 0.16);
+  background: rgba(11, 12, 14, 0.04);
+  color: var(--md-default-fg-color);
+}
+[data-md-color-scheme='default'] .md-typeset .zoomies-cta .md-button:is(:hover, :focus-visible) {
+  background: rgba(11, 12, 14, 0.08);
+  border-color: rgba(11, 12, 14, 0.3);
+  color: var(--md-default-fg-color);
+}
+[data-md-color-scheme='default'] .md-typeset .zoomies-cta .md-button--primary {
+  background: var(--z-brand-black);
+  border-color: var(--z-brand-black);
+  color: #ffffff;
+}
+[data-md-color-scheme='default'] .md-typeset .zoomies-cta .md-button--primary:is(:hover, :focus-visible) {
+  background: #23262d;
+  border-color: #23262d;
+  color: #ffffff;
 }
 
 /* ------------------------------------------------------------------------ */

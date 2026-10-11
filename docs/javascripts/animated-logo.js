@@ -9,7 +9,10 @@
     dispose();
     const root = document.querySelector("[data-zoomies-brand]");
     if (!root) return;
-    const image = root.querySelector("img");
+    // One lockup per colour scheme; the other is display: none and never loads.
+    const image =
+      [...root.querySelectorAll("img")].find((img) => img.offsetParent) ||
+      root.querySelector("img");
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     let alive = true;
     let ready = false;
