@@ -11,6 +11,12 @@ func updateTask(id, updateID, tag string) Task {
 	return Task{ID: id, Kind: TaskUpdateAgent, UpdateID: updateID, UpdateTag: tag}
 }
 
+func TestValidateTaskAcceptsAnUpdateTaskForTheDevChannel(t *testing.T) {
+	if err := validateTask(updateTask("task-1", "upd_1", "dev")); err != nil {
+		t.Errorf("an update task naming the dev channel was refused: %v", err)
+	}
+}
+
 func TestValidateTaskAcceptsAnUpdateTaskWithAnIDAndAValidTag(t *testing.T) {
 	if err := validateTask(updateTask("task-1", "upd_1", "v1.3.5")); err != nil {
 		t.Errorf("an update task naming an attempt and a release tag was refused: %v", err)
@@ -21,7 +27,7 @@ func TestValidateTaskAcceptsAnUpdateTaskWithAnIDAndAValidTag(t *testing.T) {
 // whoever is working out why a host did not update, and has to say what was wrong
 // and what to do about it.
 func TestValidateTaskRefusesAnUpdateTaskWithABadTag(t *testing.T) {
-	for _, tag := range []string{"", "latest", "dev", "1.3.5", "V1.3.5", "v1.3", "v1.3.5-rc1", " v1.3.5", "v1.3.5\n", "v1.3.5; reboot"} {
+	for _, tag := range []string{"", "latest", "Dev", "main-sha-abc1234", "1.3.5", "V1.3.5", "v1.3", "v1.3.5-rc1", " v1.3.5", "v1.3.5\n", "v1.3.5; reboot"} {
 		t.Run(tag, func(t *testing.T) {
 			err := validateTask(updateTask("task-1", "upd_1", tag))
 			if err == nil {

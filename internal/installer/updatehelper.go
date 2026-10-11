@@ -351,7 +351,14 @@ func (h *updateHelper) act(ctx context.Context, r updates.Request, started time.
 		return refuse(err)
 	}
 	result := updates.Result{ID: r.ID, Tag: r.Tag, From: installed, StartedAt: started}
-	switch version.CompareBuilds(installed, r.Tag) {
+	skew := version.CompareBuilds(installed, r.Tag)
+	if r.Tag == updates.DevTag {
+		// The dev channel moves under its name, so there is no order to read; the
+		// controller decided this host is behind the build it runs, and the
+		// engine fetches whatever the channel carries now.
+		skew = version.SkewBehind
+	}
+	switch skew {
 	case version.SkewNone, version.SkewAhead:
 		// A downgrade is a no-op, and the engine would restart the service and
 		// pull images even for the release already installed.
@@ -376,7 +383,11 @@ func (h *updateHelper) act(ctx context.Context, r updates.Request, started time.
 		result.Error = fmt.Sprintf("zoomies upgrade finished, but then %v", err)
 		return result
 	}
-	switch version.CompareBuilds(after, r.Tag) {
+	skew = version.CompareBuilds(after, r.Tag)
+	if r.Tag == updates.DevTag && version.IsMainBuild(after) {
+		skew = version.SkewNone
+	}
+	switch skew {
 	case version.SkewNone, version.SkewAhead:
 		result.OK, result.To = true, after
 	default:
@@ -396,7 +407,7 @@ func (h *updateHelper) installedRelease(ctx context.Context, tag string) (string
 	if len(v) > maxVersionBytes {
 		return "", fmt.Errorf("%s reported a version of %d bytes, longer than any release's, so the helper cannot tell what is installed", h.opts.BinaryPath, len(v))
 	}
-	if _, ok := version.Release(v); !ok {
+	if _, ok := version.Release(v); !ok && !(tag == updates.DevTag && version.IsMainBuild(v)) {
 		return "", fmt.Errorf("this host runs %q, which is not a release build, so the helper cannot tell whether %s is newer; update it by hand with \"sudo zoomies upgrade --version %s\"", v, tag, tag)
 	}
 	return v, nil
