@@ -298,7 +298,7 @@ func newPlanner(s Snapshot) *planner {
 			strings.Compare(strings.Join(a.Assets, "\n"), strings.Join(b.Assets, "\n")))
 	})
 	p.choice = Choose(ChooseInput{Mode: s.Mode, Soak: s.Soak, Now: s.Now, Running: s.Running, Releases: p.releases, GOOS: s.GOOS, GOARCH: s.GOARCH})
-	p.target, _ = TargetTag(s.Running)
+	p.target, _ = HostTarget(s.Running)
 	if r := s.Rollout; r != nil && (r.State == rolloutRunning || r.State == rolloutHalted) {
 		p.rollout = r
 	}
@@ -505,7 +505,7 @@ func (p *planner) controller() bool {
 // advance moves the running rollout on by one host, or ends it.
 func (p *planner) advance() {
 	r := p.rollout
-	if !ValidTag(r.Target) {
+	if !ValidTarget(r.Target) {
 		p.say("The open rollout's target is not a release tag, so it updates nothing. Cancel it and start another.")
 		return
 	}
@@ -515,7 +515,16 @@ func (p *planner) advance() {
 		p.say(reason)
 		return
 	}
-	switch version.CompareBuilds(r.Target, p.target) {
+	skew := CompareTargets(r.Target, p.target)
+	if skew == version.SkewDiffers && (version.IsMainBuild(r.Target) || version.IsMainBuild(p.target)) {
+		// Main builds have no order, so a rollout to one that is not the
+		// controller's is not behind it or past it, only stale.
+		reason := fmt.Sprintf("The controller now runs %s, not this rollout's %s, so the rollout is cancelled; hosts follow the controller's build in a new one.", p.target, r.Target)
+		p.act(Action{Kind: ActionCancelRollout, Reason: reason})
+		p.say(reason)
+		return
+	}
+	switch skew {
 	case version.SkewNone:
 	case version.SkewBehind:
 		next := "hosts follow " + p.target + " in a new one."
@@ -569,7 +578,7 @@ func (p *planner) start() {
 	// A person who cancelled a rollout meant it to stop. Starting the same one
 	// on the next pass would undo them ten seconds later.
 	if lr := p.s.LastRollout; lr != nil && lr.State == rolloutCanceled && lr.CancelledBy != "" &&
-		version.CompareBuilds(lr.Target, p.target) == version.SkewNone {
+		CompareTargets(lr.Target, p.target) == version.SkewNone {
 		p.say(fmt.Sprintf("The rollout to %s was cancelled by hand, so auto will not start another rollout to %s until a newer release is out or somebody starts one.", p.target, p.target))
 		return
 	}
@@ -681,10 +690,14 @@ func (p *planner) assess(h HostFacts) (standing, string) {
 	// hyphen as a pre-release, so a describe build such as 1.3.5-3-gabcdef1,
 	// which is ahead of v1.3.5, would otherwise read as behind it and be taken
 	// back. The version is the agent's word, so it is not repeated.
-	if _, ok := TargetTag(h.Version); !ok {
+	if version.IsMainBuild(p.target) {
+		if HostSkew(h.Version, p.target) == version.SkewDiffers {
+			return standSkipped, name + " runs a build that is neither a release nor one from main, so it is left alone."
+		}
+	} else if _, ok := TargetTag(h.Version); !ok {
 		return standSkipped, name + " does not run a release build, so automatic updating leaves it alone."
 	}
-	switch version.CompareBuilds(h.Version, p.target) {
+	switch HostSkew(h.Version, p.target) {
 	case version.SkewNone:
 		return standCurrent, ""
 	case version.SkewAhead:
@@ -750,7 +763,7 @@ func (p *planner) retryIn(failedAt time.Time) span {
 // tagOr is tag when it is a release tag and fallback when it is not, so that a
 // sentence never repeats text that only claimed to be one.
 func tagOr(tag, fallback string) string {
-	if ValidTag(tag) {
+	if ValidTarget(tag) {
 		return tag
 	}
 	return fallback

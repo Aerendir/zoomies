@@ -122,6 +122,10 @@ var describeSuffix = regexp.MustCompile(`-\d+-g[0-9a-f]{7,}(-dirty)?$`)
 // the stamp is still what makes two concrete builds distinguishable.
 var mainBuild = regexp.MustCompile(`^main-sha-[0-9a-f]{7,}$`)
 
+// IsMainBuild says whether v is stamped from a commit on main, such as
+// main-sha-abc1234. Two such builds cannot be ordered, only told apart.
+func IsMainBuild(v string) bool { return mainBuild.MatchString(strings.TrimSpace(v)) }
+
 // Release reports the release a build came from, and whether it came from one
 // at all.
 //
