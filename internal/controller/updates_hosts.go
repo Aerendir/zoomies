@@ -31,8 +31,9 @@ type HostUpdateView struct {
 	// State is the latest attempt's state while it says something about the
 	// host: requested, succeeded, failed, timed_out or cancelled. It is none when
 	// there is no such attempt, including one that failed before the host
-	// reached its release some other way, and unsupported in its place for a
-	// host behind the controller that the helper can never be installed on.
+	// reached its release some other way (attemptIsHistory says what counts as
+	// that), and unsupported in its place for a host behind the controller that
+	// the helper can never be installed on.
 	State string `json:"state"`
 	// Reason is the sentence the card shows. For an attempt that ended without
 	// the update it is the reason recorded for it, often the helper's own, which
@@ -183,6 +184,34 @@ func hostBehind(h *store.Host, target string) bool {
 func hostTarget() string {
 	tag, _ := updates.HostTarget(version.Version)
 	return tag
+}
+
+// attemptIsHistory says whether an attempt that ended without the update has
+// stopped saying anything about a host whose agent reports running. target is
+// what the controller would take the host to now, empty when it is neither a
+// release nor a build from main. The card and the problems list both ask it, so
+// that neither shows a failure the other has forgotten.
+//
+// An attempt is history once the host runs the release or build it asked for, or
+// a later release, however the host got there. That cannot be the whole rule for
+// a build from main, because two of them cannot be ordered: a host an operator
+// brought to a later build by hand (sudo zoomies upgrade, after the helper
+// refused the update) is never "at least" the build the attempt asked for, and
+// its failure would stay for ever beside a card that says there is nothing to
+// update and offers no button to press. So an attempt at a build from main is
+// also history when the host runs at least what the controller would take it to
+// now, since nothing is left to do for it. That is judged against the controller
+// as it is now, so it can stop holding: once the controller moves to a newer
+// build the host is behind again, and the failure shows until a new attempt
+// opens, as after any failure of a host that is behind.
+//
+// An attempt at a release is judged by that release alone, as it always was, so
+// that a host on an older release keeps its failure.
+func attemptIsHistory(a store.UpdateAttempt, running, target string) bool {
+	if runsAtLeast(running, a.ToVersion) {
+		return true
+	}
+	return version.IsMainBuild(a.ToVersion) && runsAtLeast(running, target)
 }
 
 // hostCannotUpdateError is a refusal that reads as the card's own sentence and is
@@ -637,9 +666,10 @@ func (c *Controller) hostUpdateView(h *store.Host) *HostUpdateView {
 	case store.UpdateSucceeded:
 		out.State, out.AttemptID = a.State, a.ID
 	case store.UpdateFailed, store.UpdateTimedOut, store.UpdateCancelled:
-		// Once the host is on that release some other way, the failure is
-		// history and the card says what is true now.
-		if runsAtLeast(h.Version, a.ToVersion) {
+		// Once the host has got there some other way, by hand for instance, the
+		// failure is history and the card says what is true now. attemptIsHistory
+		// says what getting there is.
+		if attemptIsHistory(a, h.Version, target) {
 			return out
 		}
 		out.State, out.AttemptID = a.State, a.ID

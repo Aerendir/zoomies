@@ -1033,6 +1033,134 @@ func TestTheCardForgetsAFailureOnceTheHostRunsTheRelease(t *testing.T) {
 	}
 }
 
+// endedHostAttempt asks for an update of a host that runs hostThen while the
+// controller runs asked, then ends the attempt as state says, as the helper
+// refusing it or the ninety minutes running out would. The ending is written to
+// the store and seen by the loop, which is all the card and the problems list
+// read; what brings about each ending is covered where it is decided.
+func (h *harness) endedHostAttempt(name, asked, hostThen, state string) (*store.Host, store.UpdateAttempt) {
+	h.t.Helper()
+	h.inMode("manual")
+	withVersion(h.t, asked)
+	host := h.agentHost(name, hostThen, agent.FeatureSelfUpdate)
+	a := h.requestHost(host)
+	if ok, err := h.st.FinishUpdateAttempt(h.ctx, a.ID, state, "the update helper refused the request"); err != nil || !ok {
+		h.t.Fatalf("ending the attempt as %s: ended %v, err %v", state, ok, err)
+	}
+	h.c.lookAtHostUpdates(h.ctx)
+	return host, h.attempt(a.ID)
+}
+
+// hostUpdateFailedRaised says whether the problems list carries host.update_failed
+// for one host.
+func (h *harness) hostUpdateFailedRaised(hostID string) bool {
+	h.t.Helper()
+	ps, err := h.c.Problems(h.ctx)
+	if err != nil {
+		h.t.Fatalf("Problems: %v", err)
+	}
+	for _, p := range ps {
+		if p.Code == "host.update_failed" && p.TargetID == hostID {
+			return true
+		}
+	}
+	return false
+}
+
+// A failed update stops saying anything about a host once the host is where the
+// controller would take it now, and the card and the problems list must say so
+// together. A build from main is the hard case: two of them cannot be ordered, so
+// a host brought to a later build by hand, once the helper had refused the
+// update, never counted as having reached the build the attempt asked for. Its
+// card went on saying the update failed beside the sentence that there was
+// nothing to update, with no button to press, and the error stayed in the list.
+func TestAFailedHostUpdateIsHistoryOnceTheHostRunsWhatTheControllerWouldTakeItToNow(t *testing.T) {
+	const (
+		startedOn = "main-sha-1c5b8378" // the host's build when the update was asked for
+		askedFor  = "main-sha-1e745d25" // the controller's build then, so the attempt's target
+		runsNow   = "main-sha-ae3d0dfa" // the controller's build when the card is read
+	)
+	for _, tc := range []struct {
+		name string
+		// asked and hostThen are what the controller and the host ran when the
+		// update was asked for; the attempt's target is what the controller would
+		// have taken the host to then.
+		asked, hostThen string
+		// controller and host are what each runs when the card is read.
+		controller, host string
+		history          bool
+	}{
+		{"a host on the controller's current build from main shows no failure", askedFor, startedOn, runsNow, runsNow, true},
+		{"a host on some other build from main keeps it", askedFor, startedOn, runsNow, "main-sha-5ca1ab1e", false},
+		{"a host that never moved keeps it", askedFor, startedOn, runsNow, startedOn, false},
+		{"a host on the build it was asked for is history, whatever the controller runs now", askedFor, startedOn, runsNow, askedFor, true},
+		{"a controller that is neither a release nor a build from main leaves nothing to compare with", askedFor, startedOn, "1.3.5-3-gabcdef1", runsNow, false},
+		// CompareBuilds calls anything equal to an empty version, so this is the row
+		// that notices a comparison made without checking there is a target.
+		{"a controller with no target keeps the failure even of a host on a release", askedFor, startedOn, "1.3.5-3-gabcdef1", "1.4.0", false},
+		{"a host on the release the controller has since moved to is history", askedFor, startedOn, "1.4.0", "1.4.0", true},
+		{"a host on a later release than the controller's is history", askedFor, startedOn, "1.4.0", "1.4.1", true},
+		{"a host on an older release than the controller's keeps it", askedFor, startedOn, "1.4.0", "1.3.9", false},
+
+		// A controller on a release is judged as it always was.
+		{"a host on the release it was asked for is history as before", "1.3.5", "1.3.4", "1.3.5", "1.3.5", true},
+		{"a host on a later release is history as before", "1.3.5", "1.3.4", "1.3.5", "1.3.6", true},
+		{"a host on an older release keeps it", "1.3.5", "1.3.4", "1.3.5", "1.3.4", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, state := range []string{store.UpdateFailed, store.UpdateTimedOut} {
+				t.Run(state, func(t *testing.T) {
+					h := newHarness(t)
+					host, a := h.endedHostAttempt("vm-1", tc.asked, tc.hostThen, state)
+					if u := h.view(host.ID).Update; u.State != state || u.AttemptID != a.ID {
+						t.Fatalf("before the host moves the card says %+v, want the %s attempt, or the rest proves nothing", u, state)
+					}
+					if !h.hostUpdateFailedRaised(host.ID) {
+						t.Fatal("before the host moves the problems list is silent, or the rest proves nothing")
+					}
+
+					withVersion(t, tc.controller)
+					h.agentBeat(host, tc.host, nil)
+
+					u := h.view(host.ID).Update
+					shown := u.State == state && u.AttemptID == a.ID
+					raised := h.hostUpdateFailedRaised(host.ID)
+					if shown != raised {
+						t.Errorf("the card shows the failure: %v, the problems list raises it: %v; they must say the same", shown, raised)
+					}
+					if shown == tc.history {
+						t.Errorf("with the controller on %s and the host on %s the card says %+v, want history %v", tc.controller, tc.host, u, tc.history)
+					}
+					if tc.history && (u.State != HostUpdateNone || u.AttemptID != "") {
+						t.Errorf("the card says %+v, want no attempt once the failure is history", u)
+					}
+				})
+			}
+		})
+	}
+}
+
+// A host that joins again has its old attempt cancelled, and a cancelled attempt
+// shares the card's rule for a failed one: once the host runs the controller's
+// build the card says what is true now.
+func TestACancelledHostUpdateIsHistoryOnceTheHostRunsTheControllersBuildFromMain(t *testing.T) {
+	h := newHarness(t)
+	host, a := h.endedHostAttempt("vm-1", "main-sha-1e745d25", "main-sha-1c5b8378", store.UpdateCancelled)
+	if u := h.view(host.ID).Update; u.State != store.UpdateCancelled || u.AttemptID != a.ID {
+		t.Fatalf("before the host moves the card says %+v, want the cancelled attempt, or the rest proves nothing", u)
+	}
+
+	withVersion(t, "main-sha-ae3d0dfa")
+	h.agentBeat(host, "main-sha-ae3d0dfa", nil)
+	if u := h.view(host.ID).Update; u.State != HostUpdateNone || u.AttemptID != "" {
+		t.Errorf("the card says %+v, want no attempt for a host on the controller's build", u)
+	}
+	h.agentBeat(host, "main-sha-5ca1ab1e", nil)
+	if u := h.view(host.ID).Update; u.State != store.UpdateCancelled {
+		t.Errorf("the card says %+v, want the cancelled attempt kept for a host on some other build from main", u)
+	}
+}
+
 // The agent inside the controller is updated with it, and a host whose agent
 // speaks another protocol has a louder entry of its own; neither is also a note
 // that it cannot be updated from here.
