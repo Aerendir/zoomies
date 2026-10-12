@@ -161,6 +161,7 @@ nav:
       - Run your first job: quickstart.md
       - Docker Compose: compose.md
       - Deploying on a PaaS: paas.md
+      - Deploying on InstaPods: instapods.md
       - One-click deployment: marketplace.md
   - Run your fleet:
       - Web UI tour: ui.md
