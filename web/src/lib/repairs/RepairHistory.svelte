@@ -36,6 +36,7 @@
     batches,
     clearConsequences,
     clearReport,
+    clearSummary,
     filtered,
     isActive,
     listQuery,
@@ -53,6 +54,8 @@
   const GRID = 'eli-repairs';
   /** Long enough that a word is typed before it is searched for. */
   const PAUSE_MS = 300;
+  /** Long enough for a live region to be seen empty before it is written to. */
+  const ANNOUNCE_AFTER_MS = 100;
 
   let filters = $state<RepairFilters>({ ...NO_REPAIR_FILTERS });
   /** What the box holds, which runs ahead of `filters.repo` by the pause. */
@@ -107,6 +110,19 @@
   let report = $state<{ cleared: number; skipped: { label: string; error: string }[] } | null>(
     null,
   );
+  /**
+   * What a screen reader is told about the last clear. A live region says
+   * something when its text changes, and two clears can end in the same words,
+   * so it is emptied first and written a beat later.
+   */
+  let announcement = $state('');
+  let announcing: ReturnType<typeof setTimeout> | undefined;
+
+  function announce(words: string): void {
+    clearTimeout(announcing);
+    announcement = '';
+    announcing = setTimeout(() => (announcement = words), ANNOUNCE_AFTER_MS);
+  }
 
   async function load(): Promise<void> {
     reading?.abort();
@@ -245,6 +261,7 @@
       cleared: outcome.cleared,
       skipped: outcome.skipped.map((s) => ({ label: names.get(s.id) ?? s.id, error: s.error })),
     };
+    announce(clearSummary(outcome.cleared, outcome.skipped.length));
     unchoose();
     for (const id of left) chosen.add(id);
     // The page the operator was on may have gone with the rows.
@@ -290,6 +307,8 @@
       ? `${formatNumber(chosen.size)} of ${formatNumber(everything.total)} selected`
       : `${formatNumber(chosen.size)} selected`,
   );
+  /** What a screen reader hears of the selection: the count and nothing to press. */
+  const counted = $derived(chosen.size > 0 ? howMany : '');
 
   onMount(() => {
     void load();
@@ -297,6 +316,7 @@
     return () => {
       clearInterval(timer);
       clearTimeout(pause);
+      clearTimeout(announcing);
       latest++;
       reading?.abort();
       taken?.abort();
@@ -306,6 +326,16 @@
 
 <section class="card" aria-labelledby="repair-history-heading">
   <h4 id="repair-history-heading">Recent repairs</h4>
+  <!--
+    The card's two live regions, in the page from the start and empty until there
+    is something to say. A region that is inserted already holding its words is
+    announced by some screen readers and not by others, and the outcome of a clear
+    arrives after the button that caused it has gone. Nothing a person presses is
+    inside either: a box or a button in a live region is announced by name
+    whenever it appears.
+  -->
+  <output class="sr-only" aria-live="polite">{counted}</output>
+  <output class="sr-only" aria-live="polite">{announcement}</output>
   {#if showFilters}
     <div class="filters">
       <Field id="repair-filter" label="Show"
@@ -372,7 +402,7 @@
       />
     {/if}
   {:else}
-    <div class="bar" role="group" aria-label="Repair selection" aria-live="polite">
+    <div class="bar" role="group" aria-label="Repair selection">
       <Checkbox
         checked={allShownChosen}
         indeterminate={shownChosen > 0 && !allShownChosen}

@@ -1,5 +1,5 @@
 import type { Query } from '../api/types';
-import { formatNumber } from '../format';
+import { formatNumber, pluralise } from '../format';
 
 /*
   What the Recent repairs history needs to know that is not about drawing it:
@@ -121,6 +121,15 @@ export function clearReport(
   }
   for (const id of unattempted) report.skipped.push({ id, error: 'not attempted' });
   return report;
+}
+
+/**
+ * What a clear did, in one line: what the outcome shows and what a screen
+ * reader is told. One function so the two cannot say different things.
+ */
+export function clearSummary(cleared: number, skipped: number): string {
+  const done = `${pluralise(cleared, 'repair')} cleared from the history`;
+  return skipped > 0 ? `${done}, ${formatNumber(skipped)} skipped` : done;
 }
 
 /**

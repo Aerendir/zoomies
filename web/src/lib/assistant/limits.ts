@@ -12,8 +12,6 @@
  */
 
 export const MESSAGE_LIMIT_BYTES = 8 << 10;
-export const CONVERSATION_LIMIT_BYTES = 32 << 10;
-export const CONVERSATION_LIMIT_MESSAGES = 40;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');

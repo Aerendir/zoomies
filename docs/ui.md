@@ -687,9 +687,12 @@ set to *Ask me first*, one per pull request head; each can be reviewed, which
 checks readiness (the payer, the model, the remaining allowance and anything
 that would stop the repair) before a model is asked anything, or dismissed for
 that commit. Pasting a pull request link does the same for a pull request Eli
-has not offered on. Below that is the history: every repair, with its state
-(queued, investigating, waiting for CI, passed, or why it stopped), and a
-failed one can be sent again. Administrators set the **Repository repair
+has not offered on. Below that is the history, a page at a time and filtered by
+state, repository and what began the repair, with each repair's state (queued,
+investigating, waiting for CI, passed, or why it stopped); a failed one can be
+sent again. Repairs can be chosen and cleared from the history, which hides them
+and does nothing else: a cleared repair leaves the list and its total, but still
+counts towards the daily limit. Administrators set the **Repository repair
 policies** here, choosing an installation, the repositories to enable together,
 whether Eli asks first, waits to be told or repairs automatically, and the
 daily attempt budget, and link each requester's GitHub account to their Zoomies
