@@ -228,6 +228,11 @@ func TestStorageRefusesPublicDirectoriesAndSymlinkEscapes(t *testing.T) {
 	if err := os.Mkdir(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// Mkdir honours the process umask, so explicitly make the fixture public
+	// even on a workspace that creates all new directories privately.
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := OpenDiskStorage(dir); err == nil {
 		t.Fatal("public source directory accepted")
 	}

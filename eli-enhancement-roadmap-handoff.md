@@ -32,7 +32,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 on-demand collector | Merged | [#938](https://github.com/eyupio/zoomies/pull/938), following the merged foundations | Collector/assembly/core/reader race tests and changed-package vet pass; selects the existing job's installation, bounds collection, respects installation holds and labels the window basis |
 | E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
 | E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and model scenarios remain |
-| E1 contextual UI and scripted scenarios | Draft PR, not merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
+| E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
 
@@ -70,6 +70,14 @@ Current implementation plans:
 - [Admission and read-only API](roadmap/plans/2026-10-12-eli-pr-delay-api.md).
 - [CLI and agent tools](roadmap/plans/2026-10-12-eli-pr-delay-agent-tools.md).
 - [Contextual UI and scripted scenarios](roadmap/plans/2026-10-12-eli-pr-delay-ui.md).
+- [Validation fixture correction](roadmap/plans/2026-10-12-eli-validation-fixtures.md).
+
+The full-suite rerun found a storage fixture that relied on a permissive umask.
+This workspace uses `0077`, so requesting `0755` through Mkdir created a private
+`0700` directory and defeated the refusal test's setup. The fixture now explicitly
+sets `0755`; all aicontext package race tests pass after that correction. The rest
+of the full suite is still running. Record its final result, including failures,
+before claiming full-suite verification.
 
 The next agent should start from the stack tip, check which parent PRs have
 merged and preserve each PR's focused diff. Never merge or retarget a parent
