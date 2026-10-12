@@ -54,6 +54,13 @@ type WaitJob struct {
 	RunnerRequestedAt, RunnerRegisteredAt *time.Time
 	// StartedAt is nil while the job is still waiting at Until.
 	StartedAt *time.Time
+	// RunnerKept is a job taken by a runner its pool keeps between jobs, one
+	// asked for before the job was queued, whose stamps the caller leaves
+	// out: that runner's startup is not this job's, and whether it was busy
+	// or idle when the job became eligible is not recorded. The wait after
+	// eligibility then goes to the pool's conditions, as for a job whose
+	// runner is gone, but its record is not missing and is not counted so.
+	RunnerKept bool
 }
 
 // PoolConditions is what held a pool back over the period.
@@ -127,7 +134,10 @@ type QueueWaitEvidence struct {
 	// NoRunnerRecord counts jobs that started after waiting past
 	// eligibility with no runner request on record (its runner pruned), so
 	// that wait could not be split into startup and GitHub's delay.
-	NoRunnerRecord   int  `json:"no_runner_record"`
+	NoRunnerRecord int `json:"no_runner_record"`
+	// RunnerKept counts jobs that started after waiting past eligibility on
+	// a runner their pool keeps between jobs, which cannot be split either.
+	RunnerKept       int  `json:"runner_kept"`
 	JobsTruncated    bool `json:"jobs_truncated"`
 	RunnersTruncated bool `json:"runners_truncated"`
 	PoolsCut         int  `json:"pools_cut"`
@@ -223,8 +233,11 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 		if t.causes == nil {
 			t.causes = map[WaitCause]int64{}
 		}
-		phases, noRecord := splitWait(j, s.Until, t.timeline)
-		if noRecord {
+		phases, unsplit := splitWait(j, s.Until, t.timeline)
+		switch {
+		case unsplit && j.RunnerKept:
+			e.RunnerKept++
+		case unsplit:
 			e.NoRunnerRecord++
 		}
 		// Each job's phases are rounded to whole seconds before they are
@@ -318,6 +331,10 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 			reasons = append(reasons, fmt.Sprintf("%d of %d jobs that waited have no runner record, so their wait after eligibility could not be split into runner startup and GitHub's delay",
 				e.NoRunnerRecord, e.Waited))
 		}
+		if e.RunnerKept*10 > e.Waited {
+			reasons = append(reasons, fmt.Sprintf("%d of %d jobs that waited ran on a runner their pool keeps, which was there before them and may have been busy or idle, so their wait after eligibility is put down to the pool's conditions rather than split into runner startup and GitHub's delay",
+				e.RunnerKept, e.Waited))
+		}
 		f.Confidence = High
 		if len(reasons) > 0 {
 			// The truncation reason carries a semicolon of its own, so a bare
@@ -345,7 +362,9 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 // splitWait walks one job's wait phase by phase. Every stamp is clamped into
 // the wait and no phase starts before the previous one ended, so stamps out
 // of order (at-least-once deliveries, two clocks) give an empty phase rather
-// than a negative one, and the phases always meet end to end.
+// than a negative one, and the phases always meet end to end. The bool says
+// the job started after waiting past eligibility with no runner stamps, so
+// that wait could not be split into startup and GitHub's delay.
 func splitWait(j WaitJob, until time.Time, timeline []segment) (map[WaitCause]time.Duration, bool) {
 	causes := map[WaitCause]time.Duration{}
 	start, end := j.QueuedAt, until

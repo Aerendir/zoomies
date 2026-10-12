@@ -43,6 +43,10 @@ type CompareRequest struct {
 // on it.
 var ErrTooFewReleases = errors.New("fewer than two releases completed a job in this period, so there is no pair to compare; name the releases with a and b, widen the period, or compare by period")
 
+// ErrSameRelease is a release comparison asked to compare a release with
+// itself, which would read as a release that held still.
+var ErrSameRelease = errors.New("a and b name the same release, so there is nothing to compare; name two different releases, or leave a out to compare with the release before b")
+
 // analysisExcluded is what a comparison leaves out of every figure: jobs
 // that stop when somebody says so, not when the work is done (spec 5.2).
 var analysisExcluded = []string{"cancelled", "skipped"}
@@ -63,9 +67,30 @@ func (c *Controller) checkAnalysisWindow(w AnalysisWindow) error {
 	}
 	if limit := c.cfg().Limits.JobStatsSpan(); w.Until.Sub(w.Since) > limit {
 		return fmt.Errorf("the period from since to until is %s, and an analysis covers at most %s; narrow it, or raise limits.job_stats_window",
-			w.Until.Sub(w.Since).Round(time.Hour), limit)
+			daysAndHours(w.Until.Sub(w.Since)), daysAndHours(limit))
 	}
 	return nil
+}
+
+// daysAndHours says a length the way limits.job_stats_window is thought of,
+// "91 days and 3 hours", rounded to the hour; a Go duration's "2187h0m0s" is
+// right and unreadable.
+func daysAndHours(d time.Duration) string {
+	unit := func(n int64, one string) string {
+		if n == 1 {
+			return "1 " + one
+		}
+		return fmt.Sprintf("%d %ss", n, one)
+	}
+	h := int64(d.Round(time.Hour) / time.Hour)
+	switch days, hours := h/24, h%24; {
+	case days == 0:
+		return unit(hours, "hour")
+	case hours == 0:
+		return unit(days, "day")
+	default:
+		return unit(days, "day") + " and " + unit(hours, "hour")
+	}
 }
 
 // minutesIn is a limit no per-minute read of one pool or one host over
@@ -165,7 +190,8 @@ func (c *Controller) queueWaitSnapshot(ctx context.Context, w AnalysisWindow, po
 // and the wait after eligibility cannot be read as GitHub's hand-off to a
 // runner that was ready either: it may have been busy with another job. Its
 // stamps are left out, so the wait goes to the pool's own conditions or to
-// none. A warm runner of an ephemeral pool also came before its job, but it
+// none, and RunnerKept says why, so the finding does not call the runner's
+// record missing. A warm runner of an ephemeral pool also came before its job, but it
 // was idle and waiting for exactly one, so its hand-off is GitHub's, and the
 // breakdown already gives a runner that was there an empty startup.
 func waitJob(j store.JobWait, p *store.Pool) analysis.WaitJob {
@@ -174,7 +200,7 @@ func waitJob(j store.JobWait, p *store.Pool) analysis.WaitJob {
 		FirstStartFailureAt: j.FirstStartFailureAt, RunnerRequestedAt: j.RunnerRequestedAt, RunnerRegisteredAt: j.RunnerRegisteredAt,
 		StartedAt: j.StartedAt}
 	if p != nil && !p.Ephemeral && j.RunnerRequestedAt != nil && j.RunnerRequestedAt.Before(j.QueuedAt) {
-		out.RunnerRequestedAt, out.RunnerRegisteredAt = nil, nil
+		out.RunnerRequestedAt, out.RunnerRegisteredAt, out.RunnerKept = nil, nil, true
 	}
 	return out
 }
@@ -256,10 +282,14 @@ func atCeiling(spans []store.RunnerSpan, maxRunners int, w AnalysisWindow) []ana
 // A runner that failed before it registered held none (P8): the scheduler
 // gives a failed runner no slot, and counting the starts that kept failing
 // would send the reader to raise a ceiling rather than to fix the starts. A
+// runner known only from a session that never registered may have been one
+// of them, and is left out with them. A
 // finished row whose end was never stamped has no known life, and is left out
 // rather than counted as alive for ever.
 func runnerLife(s store.RunnerSpan, w AnalysisWindow) (time.Time, time.Time, bool) {
-	if s.RegisteredAt == nil && (s.State == store.RunnerFailed || s.FaultKind != "") {
+	// A session keeps no state or fault, so one that never registered may
+	// be a failed start too, and is held to the same rule.
+	if s.RegisteredAt == nil && (s.State == store.RunnerFailed || s.FaultKind != "" || s.State == "") {
 		return time.Time{}, time.Time{}, false
 	}
 	to := w.Until
@@ -464,10 +494,16 @@ func (c *Controller) releaseSides(ctx context.Context, req CompareRequest, w Ana
 	if err != nil {
 		return a, b, fmt.Errorf("reading releases: %w", err)
 	}
+	if req.A != "" && req.A == req.B {
+		return a, b, ErrSameRelease
+	}
+	// pick is the latest release that ran jobs, not already named and, when
+	// before is set, whose last job came before it: with only B named, A is
+	// the release before B, so a change reads in the direction time ran.
 	named := map[string]bool{req.A: true, req.B: true}
-	pick := func() string {
+	pick := func(before *time.Time) string {
 		for _, s := range spans {
-			if s.Version != store.UnknownVersion && !named[s.Version] {
+			if s.Version != store.UnknownVersion && !named[s.Version] && (before == nil || s.Last.Before(*before)) {
 				named[s.Version] = true
 				return s.Version
 			}
@@ -476,10 +512,16 @@ func (c *Controller) releaseSides(ctx context.Context, req CompareRequest, w Ana
 	}
 	va, vb := req.A, req.B
 	if vb == "" {
-		vb = pick()
+		vb = pick(nil)
 	}
 	if va == "" {
-		va = pick()
+		// A named B with no jobs here has no place in time to be before, so
+		// its other side is simply the latest other release.
+		var before *time.Time
+		if i := slices.IndexFunc(spans, func(s store.VersionSpan) bool { return s.Version == vb }); i >= 0 && req.B != "" {
+			before = &spans[i].Last
+		}
+		va = pick(before)
 	}
 	if va == "" || vb == "" {
 		return a, b, ErrTooFewReleases
@@ -584,7 +626,21 @@ func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time
 func (c *Controller) periodSide(ctx context.Context, label string, w AnalysisWindow, cut *time.Time) (analysis.CompareSide, error) {
 	side := analysis.CompareSide{Label: label, Since: w.Since, Until: w.Until}
 	if cut != nil && w.Since.Before(*cut) {
-		counts, from, _, err := c.st.InstallationCountsBetween(ctx, w.Since, w.Until)
+		// A day the roll-up has absorbed is read whole, so a side ending
+		// partway through one would count that day's later hours, which are
+		// the other side's. It ends at that day's midnight instead, and says
+		// so; a day not yet absorbed is read from the rows, to the instant.
+		to := w.Until
+		if midnight := w.Until.Truncate(24 * time.Hour); !midnight.Equal(w.Until) {
+			rolled, err := c.st.InstallationRollupUntil(ctx)
+			if err != nil {
+				return side, fmt.Errorf("reading the usage roll-up: %w", err)
+			}
+			if rolled.After(midnight) {
+				to = later(w.Since, midnight)
+			}
+		}
+		counts, from, _, err := c.st.InstallationCountsBetween(ctx, w.Since, to)
 		if err != nil {
 			return side, fmt.Errorf("reading the usage roll-up: %w", err)
 		}
@@ -592,7 +648,7 @@ func (c *Controller) periodSide(ctx context.Context, label string, w AnalysisWin
 			side.Figures.Jobs += n.RanHere
 			side.Figures.FleetFailed += n.FleetFault
 		}
-		side.Since, side.CountsOnly = from, true
+		side.Since, side.Until, side.CountsOnly = from, to, true
 	} else {
 		figures, err := c.jobFigures(ctx, store.JobFilter{Since: &w.Since, Until: &w.Until})
 		if err != nil {

@@ -391,6 +391,29 @@ func TestAJobWithNoRunnerRecordIsNotSplitIntoStartupAndGitHubDelay(t *testing.T)
 	}
 }
 
+// A pool that keeps its runners hands a job to one that was there before it,
+// busy or idle, so its wait after eligibility cannot be split either; but its
+// runner is on record, and saying the record is missing would send the reader
+// looking for a pruned runner that is still running.
+func TestAJobOnARunnerItsPoolKeepsIsNotALostRecord(t *testing.T) {
+	pool := linuxPool()
+	pool.AtCeiling = []Interval{{From: waitBase.Add(-time.Minute), To: waitBase.Add(5 * time.Minute)}}
+	s := waitSnapshot(linuxJobs(10, func(j *WaitJob) { j.RunnerKept, j.StartedAt = true, at(5*time.Minute) }), pool)
+	f, err := QueueWait(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Evidence.NoRunnerRecord != 0 || f.Evidence.RunnerKept != 10 {
+		t.Errorf("no runner record %d, runner kept %d; want 0 and 10", f.Evidence.NoRunnerRecord, f.Evidence.RunnerKept)
+	}
+	if f.Dominant != string(CausePoolCeiling) || f.Confidence != Medium {
+		t.Errorf("dominant %q at %s, want pool_ceiling at medium", f.Dominant, f.Confidence)
+	}
+	if want := "10 of 10 jobs that waited ran on a runner their pool keeps, which was there before them and may have been busy or idle, so their wait after eligibility is put down to the pool's conditions rather than split into runner startup and GitHub's delay"; f.ConfidenceReason != want {
+		t.Errorf("reason\n got %q\nwant %q", f.ConfidenceReason, want)
+	}
+}
+
 func TestATruncatedReadIsNeverHighConfidence(t *testing.T) {
 	for _, c := range []struct {
 		name   string

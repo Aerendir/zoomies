@@ -683,6 +683,28 @@ func TestATruncatedJobReadKeepsHostPressureFromHigh(t *testing.T) {
 	}
 }
 
+// A cut read kept the newest jobs, so a host with no failures among them, or
+// only a few, may have had more among the ones not read; the sentence says
+// what was read and not more.
+func TestACutJobReadNeverSaysTheHostHadNoFailures(t *testing.T) {
+	for _, c := range []struct {
+		jobs            []HostJob
+		summary, reason string
+	}{
+		{nil, "demo-builder-2 had no failures, OOM kills or slow startups among the newest 5000 jobs it ran in this period; the older ones were not read.",
+			"there were no failures, OOM kills or slow startups to compare with its load among the newest 5000 jobs it ran; also, the period held more than 5000 jobs on this host; the newest 5000 were read, so narrow since"},
+		{failedIn(1), "demo-builder-2 had only 1 failure, OOM kill or slow startup among the newest 5000 jobs it ran in this period: too few to say whether they follow its load; the older ones were not read.",
+			"only 1 failure, OOM kill or slow startup: too few to say whether they follow its load; also, the period held more than 5000 jobs on this host; the newest 5000 were read, so narrow since"},
+	} {
+		s := pressSnapshot(loadMinutes(120, 20, 2.5, 0.5), c.jobs)
+		s.JobsTruncated = true
+		f := mustPressure(t, s)
+		if f.Summary != c.summary || f.ConfidenceReason != c.reason || f.Confidence != Low {
+			t.Errorf("got %s\n %q\n %q\nwant\n %q\n %q", f.Confidence, f.Summary, f.ConfidenceReason, c.summary, c.reason)
+		}
+	}
+}
+
 func TestEveryMediumReasonIsGivenJoined(t *testing.T) {
 	f := mustPressure(t, pressSnapshot(loadMinutes(120, 20, 2.5, 0.5)[:96], failedIn(1, 4, 7)))
 	if want := "only 3 failures came in a measured minute, too few to be sure of the pattern; also, samples cover 80% of the period"; f.ConfidenceReason != want {

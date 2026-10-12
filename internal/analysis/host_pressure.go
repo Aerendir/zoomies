@@ -315,10 +315,18 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 		gap = fmt.Sprintf("; %d of %d fell where the host sent no samples", e.Unmeasured, len(events))
 		theMeasured = func(what string) string { return fmt.Sprintf("the %d %s in measured minutes", len(measured), what) }
 	}
+	// A cut job read kept the newest jobs, so "none" or "only two" is true of
+	// those alone: the sentences say so, and the reason says why.
+	among, older, cut := "", "", ""
+	if s.JobsTruncated {
+		among = fmt.Sprintf(" among the newest %d jobs it ran", MaxReadJobs)
+		older = "; the older ones were not read"
+		cut = fmt.Sprintf("; also, the period held more than %d jobs on this host; the newest %d were read, so narrow since", MaxReadJobs, MaxReadJobs)
+	}
 	switch {
 	case len(events) == 0:
-		f.Confidence, f.ConfidenceReason = Low, "there were no failures, OOM kills or slow startups to compare with its load"
-		f.Summary = fmt.Sprintf("%s had no failures, OOM kills or slow startups in this period.", host)
+		f.Confidence, f.ConfidenceReason = Low, "there were no failures, OOM kills or slow startups to compare with its load"+among+cut
+		f.Summary = fmt.Sprintf("%s had no failures, OOM kills or slow startups%s in this period%s.", host, among, older)
 	case e.Minutes == 0:
 		f.Confidence = Low
 		f.ConfidenceReason = "no samples with its load, CPU or memory cover this period: an agent too old to report them sends none, " +
@@ -330,8 +338,8 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 			NextStep{Setting: "retention.samples", Text: "If the period is older than retention.samples keeps, its samples are gone; ask about a more recent period, or keep samples longer for next time."})
 	case len(events) < minPressureEvents:
 		few := fmt.Sprintf("only %s: too few to say whether they follow its load", anyBad(len(events)))
-		f.Confidence, f.ConfidenceReason = Low, few
-		f.Summary = fmt.Sprintf("%s had only %s in this period: too few to say whether they follow its load.", host, anyBad(len(events)))
+		f.Confidence, f.ConfidenceReason = Low, few+cut
+		f.Summary = fmt.Sprintf("%s had only %s%s in this period: too few to say whether they follow its load%s.", host, anyBad(len(events)), among, older)
 	case len(measured) < minPressureEvents:
 		f.Confidence = Low
 		f.ConfidenceReason = fmt.Sprintf("only %d of its %s came in a minute with a sample: too few to say whether they follow its load",

@@ -319,6 +319,10 @@ func TestARunnerThatFailedBeforeRegisteringHoldsNoPlaceUnderTheCeiling(t *testin
 		{RequestedAt: at(12), State: store.RunnerRemoved, RegisteredAt: ptr(at(13)), EndedAt: ptr(at(30))},
 		// A runner that registered and failed later held its place until then.
 		{RequestedAt: at(14), State: store.RunnerFailed, RegisteredAt: ptr(at(15)), EndedAt: ptr(at(40))},
+		// Known only from a session that never registered: a start whose
+		// outcome is not on record may have failed, and a failed start held
+		// no place (P8).
+		{RequestedAt: at(16), EndedAt: ptr(at(50))},
 		// Finished with its end never stamped: no known life, so not alive
 		// for ever.
 		{RequestedAt: at(20), State: store.RunnerRemoved, RegisteredAt: ptr(at(21))},
@@ -352,6 +356,16 @@ func TestARunnerOfAPoolThatKeepsItsRunnersIsNotTheJobsOwnStartup(t *testing.T) {
 	}
 	if got.Dominant != string(analysis.CausePoolCeiling) {
 		t.Errorf("dominant %q (%s), want pool_ceiling: the one runner was the whole pool", got.Dominant, got.Summary)
+	}
+	// Its runner is on record, so the finding must not say it is missing;
+	// what it cannot say is whether the runner was busy.
+	if e := got.Evidence; e.NoRunnerRecord != 0 || e.RunnerKept != 6 {
+		t.Errorf("no runner record %d, runner kept %d; want 0 and 6", e.NoRunnerRecord, e.RunnerKept)
+	}
+	if want := "only 6 jobs waited: too few to call one cause dominant; also, 6 of 6 jobs that waited ran on a runner their pool keeps, " +
+		"which was there before them and may have been busy or idle, so their wait after eligibility is put down to the pool's conditions " +
+		"rather than split into runner startup and GitHub's delay"; got.Confidence != analysis.Medium || got.ConfidenceReason != want {
+		t.Errorf("confidence %s (%q), want medium (%q)", got.Confidence, got.ConfidenceReason, want)
 	}
 
 	warm := f.pool("warm", nil)
@@ -834,6 +848,9 @@ func TestAnalyseStartupFailuresPlacesEachFailureWhenItFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.audit("host.throttle", host.ID, 1, at(50), "")
+	// Created in the period, its request delivered after it: not a start the
+	// period holds.
+	f.runner(pool.ID, host.ID, at(100), func(r *store.Runner) { r.CreateTaskIssuedAt = ptr(at(400)) })
 
 	snap, err := f.c.startupSnapshot(f.ctx, analysisPeriod, "", "")
 	if err != nil {
@@ -846,6 +863,11 @@ func TestAnalyseStartupFailuresPlacesEachFailureWhenItFailed(t *testing.T) {
 		t.Fatalf("attempts %d, want the 7 asked for in the period", len(snap.Attempts))
 	}
 	for _, a := range snap.Attempts {
+		// A start is placed when it registered; without the stamp it would
+		// be placed at its request.
+		if a.Outcome == analysis.StartStarted && (a.RegisteredAt == nil || !a.RegisteredAt.Equal(at(5))) {
+			t.Errorf("started attempt %+v, want its registration", a)
+		}
 		if a.Outcome == analysis.StartFailed && (a.EndedAt == nil || a.FaultKind != string(store.FaultImage) || a.HostName != "vm-b" || a.PoolName != pool.Name) {
 			t.Errorf("failed attempt %+v, want its end, fault and names", a)
 		}
@@ -879,5 +901,85 @@ func TestAnalyseStartupFailuresPlacesEachFailureWhenItFailed(t *testing.T) {
 	}
 	if coded == 0 {
 		t.Errorf("steps %+v name no code to link", got.NextSteps)
+	}
+}
+
+// The roll-up keeps whole UTC days, and the day a counts-only side ends on
+// is read whole once it is rolled up. Its end is then that day's midnight,
+// as its start is the midnight before it: read to the end of the day, it
+// would count the jobs of the other side's first hours as well, and say it
+// had not.
+func TestACountsOnlySideEndsAtTheLastMidnightTheRollUpRead(t *testing.T) {
+	f := newAnalysisFleet(t)
+	f.c.UpdateConfig(func(c *config.Config) { c.Retention.Jobs = 48 * time.Hour })
+	// 33 hours: B from 03:00 yesterday, A from 18:00 the day before that.
+	w := AnalysisWindow{Since: analysisNow.Add(-33 * time.Hour), Until: analysisNow}
+	day := func(d, h int) time.Time {
+		return analysisNow.Truncate(24*time.Hour).AddDate(0, 0, d).Add(time.Duration(h) * time.Hour)
+	}
+	ranHere := func(q time.Time) {
+		f.job("", q, func(j *store.Job) {
+			ran(q.Add(time.Minute), q.Add(5*time.Minute), "success")(j)
+			j.RunnerID = "run_" + q.Format("0102150405")
+		})
+	}
+	ranHere(day(-4, 5)) // the fleet's first record, before A's first day
+	for i := range 5 {
+		ranHere(day(-2, 6).Add(time.Duration(i) * time.Minute)) // A's, on a whole day
+	}
+	ranHere(day(-1, 1)) // A's, after the last midnight it can read whole
+	for i := range 7 {
+		ranHere(day(-1, 5).Add(time.Duration(i) * time.Minute)) // B's
+	}
+	if _, err := f.st.RollUpInstallations(f.ctx, analysisNow, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: w.Since, Until: w.Until})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := got.Evidence.A, got.Evidence.B
+	if !a.CountsOnly || !a.Since.Equal(day(-3, 0)) || !a.Until.Equal(day(-1, 0)) || a.Figures.Jobs != 5 {
+		t.Errorf("A = counts only %v, %v to %v, %d jobs; want 5 jobs from %v to %v", a.CountsOnly, a.Since, a.Until, a.Figures.Jobs, day(-3, 0), day(-1, 0))
+	}
+	if b.CountsOnly || !b.Since.Equal(w.Since) || b.Figures.Jobs != 7 {
+		t.Errorf("B = counts only %v from %v, %d jobs; want the job rows' 7 from %v", b.CountsOnly, b.Since, b.Figures.Jobs, w.Since)
+	}
+}
+
+// With only B named, A is the release before it, so a change reads in the
+// direction time ran; a release with none before it, or the same release
+// on both sides, is refused with what to change.
+func TestOnlyBNamedIsComparedWithTheReleaseBeforeIt(t *testing.T) {
+	f := newAnalysisFleet(t)
+	f.release("v1.3.1", at(0), 3)
+	f.release("v1.3.2", at(60), 3)
+	f.release("v1.3.3", at(120), 3)
+	req := func(a, b string) CompareRequest {
+		return CompareRequest{A: a, B: b, Since: analysisPeriod.Since, Until: analysisPeriod.Until}
+	}
+	got, err := f.c.AnalyseCompare(f.ctx, req("", "v1.3.2"))
+	if err != nil || got.Evidence.A.Label != "v1.3.1" || got.Evidence.B.Label != "v1.3.2" {
+		t.Errorf("b v1.3.2: A %q, B %q, %v; want v1.3.1 then v1.3.2", got.Evidence.A.Label, got.Evidence.B.Label, err)
+	}
+	if _, err := f.c.AnalyseCompare(f.ctx, req("", "v1.3.1")); !errors.Is(err, ErrTooFewReleases) {
+		t.Errorf("b the oldest release: %v, want ErrTooFewReleases", err)
+	}
+	if _, err := f.c.AnalyseCompare(f.ctx, req("v1.3.2", "v1.3.2")); !errors.Is(err, ErrSameRelease) {
+		t.Errorf("a and b the same: %v, want ErrSameRelease", err)
+	}
+}
+
+// The routes refuse a long period first; anyone else is told in the units
+// the setting is written in, not as a Go duration.
+func TestAPeriodTooLongIsRefusedInDaysAndHours(t *testing.T) {
+	f := newAnalysisFleet(t)
+	_, err := f.c.AnalyseQueueWait(f.ctx, AnalysisWindow{Since: analysisNow.Add(-(91*24 + 3) * time.Hour), Until: analysisNow}, "")
+	if err == nil || !strings.Contains(err.Error(), "91 days and 3 hours") || !strings.Contains(err.Error(), "at most 90 days") ||
+		!strings.Contains(err.Error(), "limits.job_stats_window") || strings.Contains(err.Error(), "0s") {
+		t.Errorf("error %v, want the period and the limit in days and hours", err)
+	}
+	if _, err := f.c.AnalyseQueueWait(f.ctx, AnalysisWindow{Since: analysisNow, Until: analysisNow}, ""); err == nil {
+		t.Error("a period with no length was accepted")
 	}
 }
