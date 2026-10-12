@@ -1,11 +1,15 @@
 package mcp
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // hostileJobName is what a pull request's author could name a job.
@@ -143,9 +147,11 @@ func TestAWindowIsCutAtTheBlockCeilingAndSaysWhereToContinue(t *testing.T) {
 	}
 	body := `{"items":[` + strings.Join(items, ",") + `],"next":"k3.5","complete":true,"truncated":false,"timed_out":false}`
 
-	// Room for two lines and not a third.
+	// Room for two lines and the trailer, and not a third. The limit is for the
+	// whole block, so the trailer is counted in it.
 	one := "2026-10-12T09:30:00Z job.updated job:job_1 id=job_1 state=queued\n"
-	lines, untrusted, next, err := renderFrames([]byte(body), 2*len(one)+10)
+	limit := 2*len(one) + len("truncated: continue from k3.2\n") + 5
+	lines, untrusted, next, err := renderFrames([]byte(body), limit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,8 +164,20 @@ func TestAWindowIsCutAtTheBlockCeilingAndSaysWhereToContinue(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimRight(lines, "\n"), "truncated: continue from k3.2") {
 		t.Errorf("the last line does not say where to continue:\n%s", lines)
 	}
+	if len(lines) > limit {
+		t.Errorf("the block is %d bytes, over its %d byte limit:\n%s", len(lines), limit, lines)
+	}
 	if untrusted != "" {
 		t.Errorf("an untrusted block with nothing to quote: %q", untrusted)
+	}
+
+	// An incomplete window carries a head line, which also counts.
+	incomplete := strings.Replace(body, `"complete":true`, `"complete":false`, 1)
+	for limit := 400; limit < 600; limit += 7 {
+		lines, _, _, _ := renderFrames([]byte(incomplete), limit)
+		if len(lines) > limit && strings.Count(lines, "job.updated") > 1 {
+			t.Fatalf("limit %d: the block is %d bytes:\n%s", limit, len(lines), lines)
+		}
 	}
 
 	// Whole, nothing is cut and the cursor is the route's.
@@ -182,7 +200,7 @@ func TestEachWindowToolReadsTheRouteItsDescriptionPromises(t *testing.T) {
 		tool, args, path string
 		query            map[string]string
 	}{
-		{"recent_events", `{}`, "GET /events/recent", map[string]string{}},
+		{"recent_events", `{}`, "GET /events/recent", map[string]string{"limit": "50"}},
 		{"wait_for_change", `{}`, "GET /events/recent", map[string]string{"wait": "20s"}},
 		{"scaling_decisions", `{"pool_id":"pool_1"}`, "GET /scaling-events", map[string]string{"pool_id": "pool_1", "limit": "50"}},
 		{"fleet_samples", `{}`, "GET /samples", map[string]string{"window": "1h"}},
@@ -262,5 +280,107 @@ func TestTheInstructionsTeachTheTwoCallWait(t *testing.T) {
 		if !strings.Contains(Instructions, want) {
 			t.Errorf("the instructions do not mention %q", want)
 		}
+	}
+}
+
+// rows builds n sample rows a minute apart, the oldest first as the routes send
+// them, each carrying host_id so they are the host route's shape too.
+func sampleRows(n int) string {
+	rows := make([]string, n)
+	for i := range rows {
+		at := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC).Add(time.Duration(i) * time.Minute).Format(time.RFC3339)
+		rows[i] = fmt.Sprintf(`{"host_id":"host_1","at":%q,"capacity":4,"active_runners":%d,"queued_jobs":1}`, at, i)
+	}
+	return `{"items":[` + strings.Join(rows, ",") + `]}`
+}
+
+func TestALongSamplesWindowIsCutToTheNewestTwoHundredRowsWithANote(t *testing.T) {
+	for name, args := range map[string]string{"fleet_samples": `{"window":"24h"}`, "host_samples": `{"window":"24h"}`} {
+		t.Run(name, func(t *testing.T) {
+			api := &kennelAPI{body: sampleRows(1440)}
+			out, err := kennelCall(t, kennelTool(t, name), api, args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(out) != 2 {
+				t.Fatalf("%d blocks, want the rows and a note", len(out))
+			}
+			var got struct {
+				Items []struct {
+					At     string `json:"at"`
+					Active int    `json:"active_runners"`
+				} `json:"items"`
+			}
+			if err := json.Unmarshal([]byte(out[0].Text), &got); err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Items) != 200 || got.Items[0].Active != 1240 || got.Items[199].Active != 1439 {
+				t.Errorf("kept %d rows from %d to %d, want the newest 200, 1240 to 1439", len(got.Items), got.Items[0].Active, got.Items[len(got.Items)-1].Active)
+			}
+			if len(out[0].Text) > maxWindowBlock {
+				t.Errorf("the rows are %d bytes, over the ceiling", len(out[0].Text))
+			}
+			if !strings.Contains(out[1].Text, "1440 rows") || !strings.Contains(out[1].Text, "newest 200") || !strings.Contains(out[1].Text, "Narrow window") {
+				t.Errorf("the note does not say what was cut or how to narrow it: %q", out[1].Text)
+			}
+			if name == "host_samples" && !strings.Contains(out[1].Text, "host_id") {
+				t.Errorf("the host note does not offer host_id: %q", out[1].Text)
+			}
+		})
+	}
+}
+
+// Rows are kept by their time and not by their place, so a route that sends
+// newest first still has its newest kept.
+func TestSamplesAreKeptByTimeWhateverOrderTheRouteSendsThem(t *testing.T) {
+	var doc struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(sampleRows(300)), &doc); err != nil {
+		t.Fatal(err)
+	}
+	slices.Reverse(doc.Items)
+	body, _ := json.Marshal(doc)
+	out, err := capSamples(body, "window")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out[0].Text, `"active_runners":99,`) || !strings.Contains(out[0].Text, `"active_runners":299,`) {
+		t.Errorf("the oldest rows were kept in place of the newest")
+	}
+}
+
+func TestAShortSamplesWindowIsPassedThroughUnchanged(t *testing.T) {
+	for _, name := range []string{"fleet_samples", "host_samples"} {
+		body := sampleRows(60)
+		out, err := kennelCall(t, kennelTool(t, name), &kennelAPI{body: body}, `{}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var want bytes.Buffer
+		if err := json.Compact(&want, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+		if len(out) != 1 || out[0].Text != want.String() {
+			t.Errorf("%s: a window under the cap was changed or annotated: %d blocks", name, len(out))
+		}
+	}
+}
+
+func TestSamplesTooManyBytesAreCutEvenUnderTwoHundredRows(t *testing.T) {
+	pad := strings.Repeat("x", 600)
+	rows := make([]string, 150)
+	for i := range rows {
+		rows[i] = fmt.Sprintf(`{"at":"2026-10-12T%02d:%02d:00Z","pad":%q}`, i/60, i%60, pad)
+	}
+	out, err := capSamples([]byte(`{"items":[`+strings.Join(rows, ",")+`]}`), "window")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 || len(out[0].Text) > maxWindowBlock || !strings.Contains(out[1].Text, "150 rows") {
+		t.Errorf("%d blocks, first %d bytes; want it cut to the ceiling with a note", len(out), len(out[0].Text))
+	}
+	if !strings.Contains(out[0].Text, `"at":"2026-10-12T02:29:00Z"`) {
+		t.Error("the newest row was dropped")
 	}
 }

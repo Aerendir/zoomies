@@ -217,7 +217,7 @@ Arguments:
 
 Fleet samples
 
-The fleet's minute-by-minute counts over a window, as the overview's sparklines draw them: jobs queued and running, runners by state and capacity. For how the fleet moved rather than where it is; fleet_status is where it is.
+The fleet's minute-by-minute counts over a window, as the overview's sparklines draw them: jobs queued and running, runners by state and capacity. For how the fleet moved rather than where it is; fleet_status is where it is. At most the newest 200 minutes are returned, with a note saying how many there were when the window held more; narrow window to see the rest.
 
 Arguments:
 
@@ -227,7 +227,7 @@ Arguments:
 
 Host samples
 
-One row per host per minute: its slots, what its agent measured (CPU, load average, available memory), what the scheduler had promised away on it, and its disk. A measurement the host had not made is absent rather than zero. Use it to tell a host that is full from one that is merely busy, or one that stopped reporting.
+One row per host per minute: its slots, what its agent measured (CPU, load average, available memory), what the scheduler had promised away on it, and its disk. A measurement the host had not made is absent rather than zero. Use it to tell a host that is full from one that is merely busy, or one that stopped reporting. At most the newest 200 rows are returned, across all hosts, with a note saying how many there were when the window held more; narrow window or since, or pass host_id, to see the rest.
 
 Arguments:
 

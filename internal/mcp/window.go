@@ -1,13 +1,16 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -28,7 +31,10 @@ var errRingShape = errors.New("the controller's recent events are not in the sha
 
 // trustedFrameFields are the payload fields a line carries. Each is something
 // the controller says (an id it minted, a state it holds, a code it chose), so
-// none can be written by a workflow. The fields a workflow does write are in
+// none can be written by a workflow. That includes a scaling frame's reason: it
+// is the scheduler's own sentence, built from pool names and repository names,
+// which follow GitHub's character rules, and nothing a workflow writes reaches
+// it. The fields a workflow does write are in
 // untrustedFrameFields, and a field in neither list is not shown: a new field
 // is untrusted until someone has read it that way.
 var trustedFrameFields = []string{"id", "state", "conclusion", "reason", "code", "severity", "healthy", "from", "to"}
@@ -139,7 +145,8 @@ func windowTools() []*tool {
 			Name:  "fleet_samples",
 			Title: "Fleet samples",
 			Description: "The fleet's minute-by-minute counts over a window, as the overview's sparklines draw them: jobs queued and running, runners by state and capacity. " +
-				"For how the fleet moved rather than where it is; fleet_status is where it is.",
+				"For how the fleet moved rather than where it is; fleet_status is where it is. " +
+				"At most the newest 200 minutes are returned, with a note saying how many there were when the window held more; narrow window to see the rest.",
 			InputSchema: object(nil, map[string]any{
 				"window": str("how far back, such as 30m or 6h (default 1h)"),
 			}),
@@ -150,7 +157,8 @@ func windowTools() []*tool {
 			Name:  "host_samples",
 			Title: "Host samples",
 			Description: "One row per host per minute: its slots, what its agent measured (CPU, load average, available memory), what the scheduler had promised away on it, and its disk. " +
-				"A measurement the host had not made is absent rather than zero. Use it to tell a host that is full from one that is merely busy, or one that stopped reporting.",
+				"A measurement the host had not made is absent rather than zero. Use it to tell a host that is full from one that is merely busy, or one that stopped reporting. " +
+				"At most the newest 200 rows are returned, across all hosts, with a note saying how many there were when the window held more; narrow window or since, or pass host_id, to see the rest.",
 			InputSchema: object(nil, map[string]any{
 				"window":  str("how far back, such as 30m or 6h (default 1h)"),
 				"since":   str("resume from this exact instant, an RFC 3339 timestamp or a duration ago; wins over window"),
@@ -254,6 +262,9 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 			Content{Type: "text", Text: untrusted},
 		)
 	}
+	// The text and the structured content keep separate cursors: the text's
+	// continue-from id (which a byte cut moves back to the last frame shown) and
+	// the body's own next. Each is consistent with what it sits beside.
 	return content, json.RawMessage(body), nil
 }
 
@@ -271,10 +282,18 @@ func renderFrames(body []byte, limit int) (lines, untrusted, next string, err er
 		head.WriteString("incomplete: the controller no longer holds events back to since, so some were missed; read the resources afresh and continue from next\n")
 	}
 	next = w.Next
+	// The head and the trailer count against the limit too, so the block is at
+	// most limit bytes whole. The trailer is sized for the longest id it could
+	// name, because where the cut falls is not known until it has fallen.
+	longest := len(token(w.Next))
+	for _, f := range w.Items {
+		longest = max(longest, len(token(f.ID)))
+	}
+	budget := limit - head.Len() - len("truncated: continue from ") - longest - 1
 	shown := 0
 	for _, f := range w.Items {
 		line, quotes := renderFrame(f)
-		if shown > 0 && (trusted.Len()+len(line) > limit || quoted.Len()+len(quotes) > limit) {
+		if shown > 0 && (trusted.Len()+len(line) > budget || quoted.Len()+len(quotes) > limit) {
 			next = w.Items[shown-1].ID
 			w.Truncated = true
 			break
@@ -399,7 +418,11 @@ func fleetSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, e
 	if a.Window == "" {
 		a.Window = "1h"
 	}
-	return getJSON(ctx, c, "/samples", url.Values{"window": {a.Window}})
+	body, err := c.Call(ctx, "GET", "/samples", url.Values{"window": {a.Window}})
+	if err != nil {
+		return nil, err
+	}
+	return capSamples(body, "window")
 }
 
 func hostSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -421,7 +444,11 @@ func hostSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, er
 	if err := setWindow(q, a.Since, ""); err != nil {
 		return nil, err
 	}
-	return getJSON(ctx, c, "/hosts/samples", q)
+	body, err := c.Call(ctx, "GET", "/hosts/samples", q)
+	if err != nil {
+		return nil, err
+	}
+	return capSamples(body, "window or since, or pass host_id")
 }
 
 func runnerTimeline(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -468,4 +495,65 @@ func listWorkflowRuns(ctx context.Context, c API, raw json.RawMessage) ([]Conten
 	}
 	q.Set("limit", strconv.Itoa(clamp(a.Limit, 20, 100)))
 	return getJSON(ctx, c, "/workflow-runs", q)
+}
+
+// maxWindowRows is the most rows a window tool hands a model.
+const maxWindowRows = 200
+
+// capSamples holds a samples answer to its newest maxWindowRows rows and
+// maxWindowBlock bytes. The routes have no limit of their own: a day of fleet
+// samples is about 1,440 rows and a host adds 60 an hour, which is more than a
+// model should be handed and more than Eli's result ceiling. A cut says how many
+// rows there were and how to ask for fewer, so a model never takes the newest
+// of a long window for all of it. An answer that fits goes through unchanged.
+func capSamples(body []byte, narrow string) ([]Content, error) {
+	var doc struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, errors.New("the controller's samples are not in the shape this tool expects; upgrade the controller and the CLI together")
+	}
+	whole := jsonContent(body)
+	if len(doc.Items) <= maxWindowRows && len(whole[0].Text) <= maxWindowBlock {
+		return whole, nil
+	}
+
+	at := make([]time.Time, len(doc.Items))
+	for i, row := range doc.Items {
+		var r struct {
+			At time.Time `json:"at"`
+		}
+		_ = json.Unmarshal(row, &r) // a row with no readable time counts as the oldest
+		at[i] = r.At
+	}
+	newest := make([]int, len(doc.Items))
+	for i := range newest {
+		newest[i] = i
+	}
+	sort.SliceStable(newest, func(a, b int) bool { return at[newest[a]].After(at[newest[b]]) })
+	newest = newest[:min(len(newest), maxWindowRows)]
+
+	for {
+		kept := append([]int(nil), newest...)
+		sort.Ints(kept) // back in the order the route sent them
+		rows := make([]json.RawMessage, len(kept))
+		for i, idx := range kept {
+			rows[i] = doc.Items[idx]
+		}
+		out, err := json.Marshal(map[string]any{"items": rows})
+		if err != nil {
+			return nil, err
+		}
+		var compact bytes.Buffer
+		if err := json.Compact(&compact, out); err != nil {
+			return nil, err
+		}
+		if compact.Len() <= maxWindowBlock || len(newest) <= 1 {
+			note := fmt.Sprintf("The window held %d rows and the newest %d are shown, at most %d rows and %d KiB. Narrow %s to see the rest.",
+				len(doc.Items), len(newest), maxWindowRows, maxWindowBlock>>10, narrow)
+			return []Content{{Type: "text", Text: compact.String()}, {Type: "text", Text: note}}, nil
+		}
+		// Too many bytes still: drop the oldest of what is kept until it fits.
+		newest = newest[:len(newest)-max(1, len(newest)/10)]
+	}
 }
