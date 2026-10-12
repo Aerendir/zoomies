@@ -348,6 +348,7 @@ test('the model is chosen from the provider’s own list once it has been loaded
 
 test('Eli is in the corner of every page, opens and closes from the keyboard, and keeps the conversation', async ({
   page,
+  isMobile,
 }) => {
   await goto(page, '/pools', 'Pools');
   const launcher = page.getByRole('button', { name: 'Ask Eli' });
@@ -361,10 +362,14 @@ test('Eli is in the corner of every page, opens and closes from the keyboard, an
   await expect(launcher).toBeFocused();
 
   // E opens it from anywhere that is not a box to type in, with the box ready.
+  // Not on a phone, where a focused box raises the keyboard over half the
+  // sheet before the operator has read a word: there the sheet itself takes
+  // focus and the box is one tap away.
   await page.keyboard.press('e');
   await expect(page.getByRole('dialog', { name: 'Eli assistant' })).toBeVisible();
   const message = page.getByRole('textbox', { name: 'Message' });
-  await expect(message).toBeFocused();
+  if (isMobile) await expect(page.getByRole('dialog', { name: 'Eli assistant' })).toBeFocused();
+  else await expect(message).toBeFocused();
   await message.fill('Does this survive a page change?');
   await message.press('Enter');
   await expect(page.getByRole('article', { name: 'Eli' })).toContainText('Does this survive');
@@ -804,6 +809,22 @@ test('on a phone the panel is a sheet with a margin, rounded corners and a scrim
   expect(rect.y).toBeGreaterThan(0);
   expect(rect.y + rect.height).toBeLessThan(viewport.height);
   expect(await panel.evaluate((el) => getComputedStyle(el).borderRadius)).not.toBe('0px');
+  // The sheet opens with focus on itself. Its message box used to take it, and
+  // a focused box raises the keyboard, which on a phone covered the lower
+  // half of the sheet and scrolled its header off the top of the screen.
+  await expect(panel).toBeFocused();
+  await expect(panel.getByRole('textbox', { name: 'Message' })).not.toBeFocused();
+  // The sheet is sized from the visual viewport, so the keyboard shortens it
+  // rather than hiding its head: with the keyboard down the two properties
+  // are the window itself, and the sheet is where the CSS alone would put it.
+  const sheet = await panel.evaluate((el) => ({
+    top: el.style.getPropertyValue('--z-eli-sheet-top'),
+    height: el.style.getPropertyValue('--z-eli-sheet-height'),
+  }));
+  expect(sheet.top).toBe('0px');
+  expect(sheet.height).toBe(
+    `${Math.round(await page.evaluate(() => window.visualViewport!.height))}px`,
+  );
   const scrim = page.locator('[data-eli-scrim]');
   await expect(scrim).toBeVisible();
   await scrim.click({ position: { x: 2, y: 2 } });
