@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "9c4bb8c",
+  "generated_from": "6511c40",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2648,7 +2648,7 @@
       "severity": "warning",
       "detection": "runtime",
       "detects": "A machine never reached ready, and carries the provider's own words for why.",
-      "fix": "Read the machine's page. Three machines failing in a row stand the provider down, so a bad template costs a few machines rather than fifty.",
+      "fix": "Its VM may still be running and billed: press Delete on the machine's page to destroy it. Release is for a machine that never got a VM. Three machines failing in a row stand the provider down, so a bad template costs a few machines rather than fifty.",
       "verify": null,
       "status_sentence": "A machine the fleet asked for did not arrive, so jobs may wait for room.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
