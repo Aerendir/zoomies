@@ -20,10 +20,12 @@ repairs](eli.md#set-up-pr-repairs) are a separate, opt-in workflow.
 ## What you can ask
 
 Use your actual repository, workflow or job ID in place of the examples below.
+For `get_job`, use the Zoomies `job_...` ID returned by `list_jobs`, not the
+numeric job ID in a GitHub Actions URL.
 
 | Your question | What the assistant can inspect | Useful tools |
 | --- | --- | --- |
-| “Why did job 123456 fail, and what should I try next?” | Job steps, timeline, the controller's failure classification, confidence, evidence and available runner logs | `get_job`, `get_catalog`, `get_runner_log` |
+| “Find this workflow's failed job with list_jobs, then explain its failure and what I should try next.” | The Zoomies job ID, steps, timeline, failure classification, confidence, evidence and available runner logs | `list_jobs`, `get_job`, `get_catalog`, `get_runner_log` |
 | “Why is this workflow waiting when the machines look idle?” | Job labels, claimed pool, eligible hosts, capacity, health and open problems | `list_jobs`, `list_pools`, `list_hosts`, `list_problems` |
 | “Would a different runner size help this build?” | Measured CPU and memory peaks, queue waits and execution times grouped by runner size | `label_advice`, `job_stats` |
 | “Which workflows used the most runner time this week?” | Usage over a chosen period, with configured cost assumptions and history limits | `get_usage` |

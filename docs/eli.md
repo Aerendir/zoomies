@@ -44,9 +44,12 @@ and watch GitHub's checks. It never merges the PR. Prefer your own assistant?
 authorised AI Context source reads to a connected client.
 
 **Try it without credentials:** [start the local demo](quickstart.md#just-looking),
-open Eli and ask about “the fleet”. Its built-in fixture provider reads the
-demo fleet and repeats what it found. Use a model you configure for normal
-conversations and repairs on your own instance.
+open **Settings → Eli AI Assistant**, edit the demo provider and enable
+**Let Eli read this fleet through this provider**. Then open Eli and ask about
+“the fleet”: the built-in fixture provider reads the demo data and repeats what
+it found. With the switch off it echoes your question without reading the
+fleet. Use a model you configure for normal conversations and repairs on your
+own instance.
 
 ## Setting it up
 
@@ -276,9 +279,10 @@ verdict to break the build on.
   provider live on this machine or your network, and `assistant.local_only` refuses
   any that does not.
 
-The demo model that ships with the demo fleet can be asked about "the fleet": it
-reads the fleet and repeats what it found, so the whole loop can be seen with no
-account and no key.
+The demo model that ships with the demo fleet can be asked about "the fleet"
+after you enable its fleet-read switch in Settings, Eli AI Assistant. It then
+reads the demo data and repeats what it found, so the lookup loop can be seen
+with no account and no key. With the switch off it only echoes the question.
 
 ## Personal conversations and PR repairs
 
