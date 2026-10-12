@@ -545,8 +545,8 @@ func TestMCPServesTheCatalogAsAResource(t *testing.T) {
 	if err := json.Unmarshal(s.request("resources/list", nil), &list); err != nil {
 		t.Fatal(err)
 	}
-	if len(list.Resources) != 1 || list.Resources[0].URI != "zoomies://catalog" || list.Resources[0].MimeType != "application/json" {
-		t.Errorf("resources = %+v, want the catalog index alone", list.Resources)
+	if len(list.Resources) != 2 || list.Resources[0].URI != "zoomies://catalog" || list.Resources[0].MimeType != "application/json" || list.Resources[1].URI != "zoomies://fleet/now" {
+		t.Errorf("resources = %+v, want the catalog index and the fleet as it is now", list.Resources)
 	}
 	var templates struct {
 		Templates []struct {
@@ -611,7 +611,7 @@ func TestMCPOffersPromptsForTheCommonQuestions(t *testing.T) {
 	for _, p := range list.Prompts {
 		names = append(names, p.Name)
 	}
-	for _, want := range []string{"why_did_job_fail", "review_fleet_health", "size_this_workflow"} {
+	for _, want := range []string{"why_did_job_fail", "review_fleet_health", "size_this_workflow", "what_changed"} {
 		if !containsString(names, want) {
 			t.Errorf("prompts must include %s, got %v", want, names)
 		}

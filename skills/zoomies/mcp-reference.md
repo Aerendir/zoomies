@@ -590,6 +590,10 @@ What an agent loads to learn the vocabulary before it works, without spending a 
 
 Resource: Catalog of problem codes and checks. Every problem code and Kennel Club check this fleet can report, by category. Read zoomies://catalog/{code} for one entry in full: what it means, what to change and how to see that it worked.
 
+### `zoomies://fleet/now`
+
+Resource: The fleet as it is now. The fleet at a glance as the controller counts it now: jobs queued and running, completed jobs by outcome, queue waits, runners by state and each pool's utilisation. The same answer as fleet_status with no window; call recent_events for what moved to get here.
+
 ### `zoomies://catalog/{code}`
 
 Resource template: One catalog entry. One problem code or check in full, by the code list_problems, get_job or kennel_findings show, such as pool.no_host or ci.no_timeout.
@@ -626,3 +630,13 @@ Arguments:
 
 * `repo` (string, required): the repository, as owner/name
 * `workflow` (string): one workflow's name, to narrow it
+
+### what_changed
+
+What changed lately?
+
+Say what moved in this fleet over a recent period, from its events and the scheduler's decisions, and what is still open.
+
+Arguments:
+
+* `period` (string): how far back to look, as a duration such as 10m or 2h (default 10m)
