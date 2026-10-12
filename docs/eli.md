@@ -356,8 +356,8 @@ setup. The history below uses labelled sample outcomes; no real PR was changed
 to produce these images. A stopped attempt explains what needs attention before
 you spend another attempt, while a passed repair still needs normal PR review.
 
-![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
-![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
 1. Open **Eli repairs** from the navigation, or **Review a repair with Eli**
    beside a failed job. Paste a PR link to check readiness without invoking a model.

@@ -700,8 +700,8 @@ user; the requester then confirms that their own provider pays for the repairs
 they ask for. [How repairs work](eli.md#set-up-pr-repairs). `g e` opens it
 from anywhere.
 
-![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
-![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
 **Check readiness** explains what must be set up before starting. This example
 asks for a confirmed GitHub account link and an enabled personal provider;
