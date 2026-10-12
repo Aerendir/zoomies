@@ -481,10 +481,13 @@ test.describe('with Kennel Club on', () => {
       return route.fulfill({ response: real, json: body });
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('This is not an all clear.')).toBeVisible();
-    await expect(page.getByText('Nothing open, and not an all clear')).toBeVisible();
-    await expect(page.getByText('Held for a rate limit')).toBeVisible();
-    await expect(page.getByText('Every check that is turned on ran')).toHaveCount(0);
+    // The standing's tooltip sentence is also in the page's hidden descriptions, so
+    // these read the page's own content and not that copy.
+    const content = page.locator('main');
+    await expect(content.getByText('This is not an all clear.')).toBeVisible();
+    await expect(content.getByText('Nothing open, and not an all clear')).toBeVisible();
+    await expect(content.getByText('Held for a rate limit')).toBeVisible();
+    await expect(content.getByText('Every check that is turned on ran')).toHaveCount(0);
   });
 
   // Best in show is the kennel word, so it follows the vocabulary switch like the
