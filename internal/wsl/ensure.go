@@ -16,6 +16,7 @@ const (
 	StatusChanged Status = "changed" // written or created
 	StatusSkipped Status = "skipped" // not applicable here, and why
 	StatusWarn    Status = "warning" // could not be done; what to do about it
+	StatusPending Status = "pending" // DryRun only: would be written or created
 )
 
 // Step is one thing Ensure checked.
@@ -42,6 +43,17 @@ func (r Report) Warnings() []Step {
 	return w
 }
 
+// Pending returns the steps a DryRun found would change something.
+func (r Report) Pending() []Step {
+	var p []Step
+	for _, s := range r.Steps {
+		if s.Status == StatusPending {
+			p = append(p, s)
+		}
+	}
+	return p
+}
+
 // Changed reports whether any step wrote something.
 func (r Report) Changed() bool {
 	for _, s := range r.Steps {
@@ -61,6 +73,10 @@ type Options struct {
 	User string
 	// ConfPath overrides /etc/wsl.conf, for tests.
 	ConfPath string
+	// DryRun reports what would change as StatusPending and writes nothing,
+	// creates no task and enables no linger. It only reads, which is what lets
+	// an installer show the operator the list before asking.
+	DryRun bool
 }
 
 // Ensure brings the distro's self-management into the wanted state, and does
@@ -82,7 +98,7 @@ func Ensure(ctx context.Context, sys System, opts Options) Report {
 	add(Step{Name: "wsl2", Status: StatusOK, Detail: "WSL2 detected, distro " + orUnknown(rep.Distro)})
 	add(ensureBootCommand(sys, opts))
 	add(ensureLinger(ctx, sys, opts))
-	for _, s := range ensureTasks(ctx, sys, rep.Distro) {
+	for _, s := range ensureTasks(ctx, sys, rep.Distro, opts.DryRun) {
 		add(s)
 	}
 	return rep
@@ -113,6 +129,10 @@ func ensureBootCommand(sys System, opts Options) Step {
 	want, changed := WithBootCommand(string(data), BootCommand(opts.Binary))
 	if !changed {
 		step.Status, step.Detail = StatusOK, "already in "+path
+		return step
+	}
+	if opts.DryRun {
+		step.Status, step.Detail = StatusPending, "set boot.command in "+path+" so the distro starts the agent's checks at boot"
 		return step
 	}
 	if sys.Geteuid() != 0 {
@@ -162,6 +182,10 @@ func ensureLinger(ctx context.Context, sys System, opts Options) Step {
 		step.Status, step.Detail = StatusOK, "enabled for "+user
 		return step
 	}
+	if opts.DryRun {
+		step.Status, step.Detail = StatusPending, "enable systemd linger for "+user+" so its services outlive login sessions"
+		return step
+	}
 	if _, err := sys.Run(ctx, "loginctl", "enable-linger", user); err != nil {
 		step.Status, step.Detail = StatusWarn, "loginctl enable-linger "+user+" failed: "+err.Error()
 		return step
@@ -170,7 +194,7 @@ func ensureLinger(ctx context.Context, sys System, opts Options) Step {
 	return step
 }
 
-func ensureTasks(ctx context.Context, sys System, distro string) []Step {
+func ensureTasks(ctx context.Context, sys System, distro string, dry bool) []Step {
 	skip := func(why string) []Step {
 		return []Step{{Name: "windows scheduled tasks", Status: StatusSkipped, Detail: why}}
 	}
@@ -180,16 +204,19 @@ func ensureTasks(ctx context.Context, sys System, distro string) []Step {
 	if !sys.Exists(SchtasksPath) {
 		return skip("Windows interop is off here (" + SchtasksPath + " is missing); enable [interop] in /etc/wsl.conf")
 	}
-	winScript, err := writeScript(ctx, sys, distro)
+	winScript, err := writeScript(ctx, sys, distro, dry)
 	if err != nil {
 		return []Step{{Name: "windows start script", Status: StatusWarn, Detail: err.Error()}}
 	}
 	steps := []Step{{Name: "windows start script", Status: StatusOK, Detail: winScript.detail}}
-	if winScript.changed {
+	switch {
+	case winScript.pending:
+		steps[0].Status, steps[0].Detail = StatusPending, "write the start script "+winScript.windowsPath
+	case winScript.changed:
 		steps[0].Status = StatusChanged
 	}
 	for _, spec := range taskSpecs() {
-		steps = append(steps, ensureTask(ctx, sys, spec, winScript.windowsPath))
+		steps = append(steps, ensureTask(ctx, sys, spec, winScript.windowsPath, dry))
 	}
 	return steps
 }
@@ -198,11 +225,12 @@ type scriptResult struct {
 	windowsPath string
 	detail      string
 	changed     bool
+	pending     bool
 }
 
 // writeScript puts the start script under %LOCALAPPDATA%, which needs no
 // elevation, writing it only when its content differs.
-func writeScript(ctx context.Context, sys System, distro string) (scriptResult, error) {
+func writeScript(ctx context.Context, sys System, distro string, dry bool) (scriptResult, error) {
 	var res scriptResult
 	out, err := sys.Run(ctx, CmdExePath, "/c", "echo", "%LOCALAPPDATA%")
 	if err != nil {
@@ -217,15 +245,19 @@ func writeScript(ctx context.Context, sys System, distro string) (scriptResult, 
 		return res, errors.New("translating " + local + " to a Linux path: " + err.Error())
 	}
 	dir := filepath.Join(strings.TrimSpace(string(unixOut)), "Zoomies")
-	if err := sys.MkdirAll(dir, 0o755); err != nil {
-		return res, errors.New("creating " + dir + ": " + err.Error())
-	}
 	path := filepath.Join(dir, scriptName)
 	want := startScript(distro)
 	res.windowsPath = local + `\Zoomies\` + scriptName
 	res.detail = res.windowsPath
 	if cur, err := sys.ReadFile(path); err == nil && string(cur) == want {
 		return res, nil
+	}
+	if dry {
+		res.pending = true
+		return res, nil
+	}
+	if err := sys.MkdirAll(dir, 0o755); err != nil {
+		return res, errors.New("creating " + dir + ": " + err.Error())
 	}
 	if err := sys.WriteFile(path, []byte(want), 0o644); err != nil {
 		return res, errors.New("writing " + path + ": " + err.Error())

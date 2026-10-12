@@ -347,6 +347,8 @@ func (i *Installer) Run(ctx context.Context) error {
 		if err := install(ctx, p); err != nil {
 			return err
 		}
+		offerWSLSelfManagement(ctx, wslOffer{Out: i.out, In: i.in, Interactive: i.interactive,
+			AssumeYes: i.opts.AssumeYes, Binary: i.opts.binaryPath()})
 		if i.opts.AfterHostSetup != nil {
 			return i.opts.AfterHostSetup(ctx, true, p.WorkDir)
 		}
