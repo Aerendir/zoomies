@@ -9,9 +9,9 @@ opening and fail clearly if the ledger cannot be opened.
 the e2e tag or any live cluster operations. Go formatting and diff checks pass.
 The original broad run completed: 44 packages passed; four permission/ledger
 issues and three package deadlines failed. Corrected package checks pass;
-API/controller/store reruns use thirty-minute budgets and remain in progress.
-Do not claim the original full command passed. Record the remaining outcomes
-in the handoff when they finish.
+Complete API/store reruns and a partition of all controller tests now pass.
+Do not claim the original full command passed; the final status below records
+the corrective coverage.
 
 ## Reproduce the extended controller checks
 
@@ -31,4 +31,14 @@ package deadline without an assertion failure. Partition its test list:
 This workspace retains the exact lists in
 `/workspace/eli-tooling/controller-shards.json` and logs in
 `controller-shard-0.log` and `controller-shard-1.log` in that directory.
-Record both outcomes before declaring the controller coverage complete.
+Both groups pass, in 801.357 and 844.029 seconds respectively, completing
+coverage of the listed controller tests.
+
+## Final validation status
+
+The broad run and corrective checks have finished. Every originally failing
+package has successful corrective race checks; controller coverage uses two
+disjoint groups spanning its complete 1329-test list. The original broad
+command did not pass. See the [completed validation record](../validation/2026-10-12-eli-pr-delay-validation.md)
+for results and limitations. This final status supersedes earlier running notes.
+No live model evaluation or performance experiment has run.
