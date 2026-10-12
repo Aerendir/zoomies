@@ -789,17 +789,16 @@ func (c *Controller) machineStateProblems(out *[]Problem, p *store.Provider, mac
 				Detail:   m.BootstrapError,
 				Fix: "the machine is running and is still being paid for. Check that the template carries the " +
 					"zoomies agent, installed and disabled, with no agent.json in it -- two machines sharing one " +
-					"agent identity is the failure that looks like a host flapping.",
+					"agent identity is the failure that looks like a host flapping. " + failedMachineCleanup(m),
 				TargetKind: "machine", TargetID: m.ID,
 			})
 		case m.State == store.MachineFailed:
 			*out = append(*out, Problem{
-				Code:     "provider.machine_failed",
-				Severity: config.SeverityWarning,
-				Title:    fmt.Sprintf("machine %s never reached ready", m.Name),
-				Detail:   firstNonEmpty(m.ProviderError, m.Message, "the machine was given up on without saying why"),
-				Fix: "the row is kept because the resource behind it may still exist. Release it once you have " +
-					"checked the provider's console.",
+				Code:       "provider.machine_failed",
+				Severity:   config.SeverityWarning,
+				Title:      fmt.Sprintf("machine %s never reached ready", m.Name),
+				Detail:     firstNonEmpty(m.ProviderError, m.Message, "the machine was given up on without saying why"),
+				Fix:        failedMachineCleanup(m),
 				TargetKind: "machine", TargetID: m.ID,
 			})
 		case m.State == store.MachineDeleting && deleteTimeout > 0 &&
@@ -819,6 +818,25 @@ func (c *Controller) machineStateProblems(out *[]Problem, p *store.Provider, mac
 			})
 		}
 	}
+}
+
+// failedMachineCleanup says what to do with a failed machine's row, and what it
+// may still be costing.
+//
+// A failed machine is kept because the resource behind it may still exist, and a
+// running VM is billed whether or not Zoomies has given up on it. Delete is the
+// action that ends that: it destroys the resource and waits for the provider to
+// confirm it gone. Release only forgets the row and leaves the VM running, which
+// is for a resource somebody has dealt with by hand, so it is not what a machine
+// that owns one is told to do. One that never got a resource has nothing to
+// delete.
+func failedMachineCleanup(m *store.Machine) string {
+	if m.Owns() {
+		return "its VM may still be running and being paid for. Press Delete on the machine's page to destroy it; " +
+			"Zoomies then waits for the provider to confirm it is gone. If you would rather look at it first, the " +
+			"provider's console has it."
+	}
+	return "nothing was created for it, so there is nothing to delete or pay for. Release the row to tidy it away."
 }
 
 func (c *Controller) capacityDeliveryProblems(ctx context.Context, out *[]Problem) error {
