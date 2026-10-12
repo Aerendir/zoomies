@@ -73,6 +73,9 @@ type repairFake struct {
 	unsupportedRun bool
 	noWrite        bool
 	reacted        []int64
+	// confused is the comments Eli put a confused face on, because it could not
+	// start the repair they asked for.
+	confused []int64
 	// comments is every text Eli posted or edited on the PR, in order.
 	comments []string
 	// sourceErr, when set, is what reading the PR's source fails with.
@@ -119,10 +122,14 @@ func (f *repairFake) RepairComment(_ context.Context, _ string, _ int, _ int64, 
 	return 1, nil
 }
 func (f *repairFake) RepairReact(_ context.Context, _ string, id int64, content string) error {
-	if content != "eyes" {
+	switch content {
+	case "eyes":
+		f.reacted = append(f.reacted, id)
+	case "confused":
+		f.confused = append(f.confused, id)
+	default:
 		return fmt.Errorf("unexpected reaction %q", content)
 	}
-	f.reacted = append(f.reacted, id)
 	return nil
 }
 func (f *repairFake) RepairChecks(context.Context, string, string) (string, error) {

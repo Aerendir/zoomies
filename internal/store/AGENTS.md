@@ -18,7 +18,9 @@ Scoped guidance for the store, read in addition to the root [AGENTS.md](../../AG
   evaluation that arrives after its repository was told not to be tracked,
   `ErrJoinTokenUsed` / `ErrJoinTokenExpired` for the two ways a join token that
   exists is still refused, and `ErrRolloutNotRunning` for a rollout's step
-  once that rollout is no longer running. Match with `errors.Is`. Refusals the auth service makes for a reason the caller can
+  once that rollout is no longer running, and `ErrEliRepoBudget` /
+`ErrEliPersonBudget` (each also an `ErrConflict`) for the two daily limits on a
+repair request. Match with `errors.Is`. Refusals the auth service makes for a reason the caller can
   act on are `auth.ErrInvalidInput`; the API answers those with a 422 and
   everything else with a 500 and a request ID.
 * **IDs are prefixed** (`pool_`, `run_`, `job_`, `usr_`…) via `store.NewID`, so a
