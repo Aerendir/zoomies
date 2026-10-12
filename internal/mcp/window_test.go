@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -209,6 +210,9 @@ func TestEachWindowToolReadsTheRouteItsDescriptionPromises(t *testing.T) {
 		{"runner_timeline", `{"runner_id":"run_1"}`, "GET /runners/run_1/timeline", map[string]string{}},
 		{"list_workflow_runs", `{"repo":"acme/app","workflow":"ci","branch":"main","state":"completed","conclusion":"failure","q":"x"}`, "GET /workflow-runs",
 			map[string]string{"repo": "acme/app", "workflow": "ci", "branch": "main", "state": "completed", "conclusion": "failure", "q": "x", "limit": "20"}},
+		{"list_webhook_deliveries", `{"status":"rejected"}`, "GET /webhook-deliveries", map[string]string{"status": "rejected", "limit": "50"}},
+		{"list_audit", `{"target_id":"pool_1","q":"drain","limit":500}`, "GET /audit", map[string]string{"target_id": "pool_1", "q": "drain", "limit": "200"}},
+		{"support_bundle", `{}`, "GET /diagnostics/bundle", map[string]string{}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.tool, func(t *testing.T) {
@@ -242,8 +246,8 @@ func TestOnlyTheTwoRingToolsAnswerStructuredContent(t *testing.T) {
 			t.Errorf("%s: structured = %v, want %v", tl.Name, tl.structured != nil, ring)
 		}
 	}
-	if len(windowTools()) != 7 {
-		t.Errorf("%d window tools, want 7", len(windowTools()))
+	if len(windowTools()) != 10 {
+		t.Errorf("%d window tools, want 10", len(windowTools()))
 	}
 }
 
@@ -382,5 +386,199 @@ func TestSamplesTooManyBytesAreCutEvenUnderTwoHundredRows(t *testing.T) {
 	}
 	if !strings.Contains(out[0].Text, `"at":"2026-10-12T02:29:00Z"`) {
 		t.Error("the newest row was dropped")
+	}
+}
+
+// bundleDoc is a support bundle with the sections an operator's agent asks about.
+const bundleDoc = `{"bundle_version":1,"generated_at":"2026-10-12T09:30:00Z","instance":{"version":"v1.2.3"},` +
+	`"problems":{"ok":false,"items":[{"code":"host_down"}]},"hosts":[{"id":"host_1"}],"jobs":[],"errors":[],` +
+	`"logs":{"note":"runner ids and the download route, no bodies"}}`
+
+func TestSupportBundleWithoutSectionsIsAnIndexOfSizes(t *testing.T) {
+	api := &kennelAPI{body: bundleDoc}
+	out, err := kennelCall(t, kennelTool(t, "support_bundle"), api, `{}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if api.got != "GET /diagnostics/bundle" || len(api.query) != 0 {
+		t.Errorf("read %q %v, want the bundle with no query", api.got, api.query)
+	}
+	var index map[string]int
+	if err := json.Unmarshal([]byte(out[0].Text), &index); err != nil {
+		t.Fatalf("the index is not {section: bytes}: %v\n%s", err, out[0].Text)
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(bundleDoc), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(index) != len(doc) {
+		t.Errorf("the index names %d sections, the bundle has %d: %v", len(index), len(doc), index)
+	}
+	for name, raw := range doc {
+		if index[name] != len(raw) {
+			t.Errorf("section %s: %d bytes in the index, want %d", name, index[name], len(raw))
+		}
+	}
+	if strings.Contains(out[0].Text, "host_down") || strings.Contains(out[0].Text, "host_1") {
+		t.Errorf("the index carries a section's contents:\n%s", out[0].Text)
+	}
+	if len(out) != 2 || !strings.Contains(out[1].Text, "no log bodies") || !strings.Contains(out[1].Text, "sections") {
+		t.Errorf("the index is not followed by the note on logs and how to ask for a section: %+v", out)
+	}
+}
+
+func TestSupportBundleReturnsOnlyTheSectionsAskedFor(t *testing.T) {
+	api := &kennelAPI{body: bundleDoc}
+	out, err := kennelCall(t, kennelTool(t, "support_bundle"), api, `{"sections":["problems","hosts"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out[0].Text), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got["problems"] == nil || got["hosts"] == nil {
+		t.Errorf("the answer has keys %v, want problems and hosts and no other", slices.Collect(maps.Keys(got)))
+	}
+	if !strings.Contains(out[0].Text, "host_down") || strings.Contains(out[0].Text, "v1.2.3") {
+		t.Errorf("the answer is not those two sections alone:\n%s", out[0].Text)
+	}
+	if len(out) != 1 {
+		t.Errorf("a whole answer was annotated: %+v", out)
+	}
+}
+
+func TestSupportBundleRefusesASectionItDoesNotHoldAndTooManySections(t *testing.T) {
+	tl := kennelTool(t, "support_bundle")
+	_, err := kennelCall(t, tl, &kennelAPI{body: bundleDoc}, `{"sections":["hosts","nonsense"]}`)
+	if err == nil || !strings.Contains(err.Error(), "nonsense") || !strings.Contains(err.Error(), "problems") {
+		t.Errorf("err = %v, want the unknown section named with the ones the bundle has", err)
+	}
+	api := &kennelAPI{body: bundleDoc}
+	_, err = kennelCall(t, tl, api, `{"sections":["a","b","c","d","e","f","g","h","i"]}`)
+	if err == nil || !strings.Contains(err.Error(), "at most 8") {
+		t.Errorf("err = %v, want nine sections refused", err)
+	}
+	if api.calls != 0 {
+		t.Error("a request for nine sections still read the bundle, which is audited")
+	}
+	if _, err := kennelCall(t, tl, &kennelAPI{body: `[1]`}, `{}`); err == nil {
+		t.Error("a bundle that is not an object was taken for one")
+	}
+}
+
+// A section is a table of rows, so one that is too large keeps the rows it has
+// room for and says so, rather than the whole answer going over the ceiling.
+func TestSupportBundleHoldsTheAnswerToTheCeilingAndSaysWhatWasCut(t *testing.T) {
+	pad := strings.Repeat("x", 500)
+	rows := make([]string, 400)
+	for i := range rows {
+		rows[i] = fmt.Sprintf(`{"id":"job_%d","pad":%q}`, i, pad)
+	}
+	body := `{"jobs":[` + strings.Join(rows, ",") + `],"hosts":[{"id":"host_1"}],"config":{"pad":"` + strings.Repeat("y", 100<<10) + `"}}`
+	out, err := kennelCall(t, kennelTool(t, "support_bundle"), &kennelAPI{body: body}, `{"sections":["jobs","hosts","config"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out[0].Text) > maxWindowBlock {
+		t.Errorf("the answer is %d bytes, over the %d ceiling", len(out[0].Text), maxWindowBlock)
+	}
+	var got struct {
+		Jobs   []json.RawMessage `json:"jobs"`
+		Hosts  []json.RawMessage `json:"hosts"`
+		Config json.RawMessage   `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(out[0].Text), &got); err != nil {
+		t.Fatalf("a cut section is not valid JSON: %v", err)
+	}
+	if len(got.Hosts) != 1 {
+		t.Error("a small section was cut to pay for large ones")
+	}
+	if len(got.Jobs) == 0 || len(got.Jobs) >= 400 || !strings.Contains(string(got.Jobs[0]), `"job_0"`) {
+		t.Errorf("%d jobs kept, want the first of them and not all 400", len(got.Jobs))
+	}
+	if len(out) != 2 || !strings.Contains(out[1].Text, "jobs") || !strings.Contains(out[1].Text, "400") || !strings.Contains(out[1].Text, "config") {
+		t.Errorf("what was cut is not said: %+v", out)
+	}
+}
+
+func TestTheOperatorReadsPassTheRoutesRefusalThrough(t *testing.T) {
+	const sentence = "this needs the admin role; ask an administrator or use a token that has it"
+	for _, name := range []string{"list_webhook_deliveries", "list_audit", "support_bundle"} {
+		t.Run(name, func(t *testing.T) {
+			api := &kennelAPI{err: statusRefusal{status: http.StatusForbidden, msg: sentence}}
+			_, err := kennelCall(t, kennelTool(t, name), api, `{}`)
+			if err == nil || err.Error() != sentence {
+				t.Errorf("err = %v, want the controller's sentence unchanged", err)
+			}
+			var se StatusError
+			if !errors.As(err, &se) || se.HTTPStatus() != http.StatusForbidden {
+				t.Errorf("the refusal lost its status: %v", err)
+			}
+		})
+	}
+}
+
+func TestTheAuditLogAsksForEveryFilterTheRouteTakes(t *testing.T) {
+	api := &kennelAPI{body: `{"items":[],"total":0,"limit":50,"offset":0}`}
+	args := `{"actor_id":["user_1","user_2"],"action":["pool.update"],"target_kind":["pool","host"],"target_id":"pool_1","q":"drain","since":"2026-10-12T00:00:00Z","until":"2026-10-12T09:00:00Z","limit":25}`
+	if _, err := kennelCall(t, kennelTool(t, "list_audit"), api, args); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string][]string{
+		"actor_id": {"user_1", "user_2"}, "action": {"pool.update"}, "target_kind": {"pool", "host"}, "target_id": {"pool_1"},
+		"q": {"drain"}, "since": {"2026-10-12T00:00:00Z"}, "until": {"2026-10-12T09:00:00Z"}, "limit": {"25"},
+	} {
+		if got := api.query[key]; !slices.Equal(got, want) {
+			t.Errorf("query %s = %v, want %v", key, got, want)
+		}
+	}
+	for key := range api.query {
+		if !slices.Contains([]string{"actor_id", "action", "target_kind", "target_id", "q", "since", "until", "limit"}, key) {
+			t.Errorf("query carries %s, which the tool does not offer", key)
+		}
+	}
+	if _, err := kennelCall(t, kennelTool(t, "list_audit"), &kennelAPI{}, `{"since":"lately"}`); err == nil {
+		t.Error("a since nobody can read was sent on")
+	}
+}
+
+// Audit rows carry before and after documents, so two hundred of them can pass
+// the ceiling; the newest rows are kept, whole, and the cut is said.
+func TestAnOperatorRowListIsHeldToTheCeilingWithTheNewestRowsAndANote(t *testing.T) {
+	pad := strings.Repeat("x", 1000)
+	rows := make([]string, 200)
+	for i := range rows {
+		rows[i] = fmt.Sprintf(`{"id":"aud_%d","action":"pool.update","after":%q}`, i, pad)
+	}
+	body := `{"items":[` + strings.Join(rows, ",") + `],"total":900,"limit":200,"offset":0}`
+	for _, name := range []string{"list_audit", "list_webhook_deliveries"} {
+		out, err := kennelCall(t, kennelTool(t, name), &kennelAPI{body: body}, `{"limit":200}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(out) != 2 || len(out[0].Text) > maxWindowBlock {
+			t.Fatalf("%s: %d blocks, first %d bytes; want it cut to the ceiling with a note", name, len(out), len(out[0].Text))
+		}
+		var got struct {
+			Items []struct {
+				ID string `json:"id"`
+			} `json:"items"`
+			Total int `json:"total"`
+		}
+		if err := json.Unmarshal([]byte(out[0].Text), &got); err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Items) == 0 || got.Items[0].ID != "aud_0" || got.Total != 900 {
+			t.Errorf("%s: the first row or the route's own total was lost: %+v", name, got)
+		}
+		if !strings.Contains(out[1].Text, "200 rows") || !strings.Contains(out[1].Text, "limit") {
+			t.Errorf("%s: the note does not say what was cut: %q", name, out[1].Text)
+		}
+	}
+	short := `{"items":[{"id":"aud_1"}],"total":1,"limit":50,"offset":0}`
+	out, _ := kennelCall(t, kennelTool(t, "list_audit"), &kennelAPI{body: short}, `{}`)
+	if len(out) != 1 || out[0].Text != short {
+		t.Errorf("an answer under the ceiling was changed: %+v", out)
 	}
 }

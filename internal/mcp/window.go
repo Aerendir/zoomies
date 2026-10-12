@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -196,6 +198,57 @@ func windowTools() []*tool {
 			}),
 			Annotations: readOnly,
 			call:        listWorkflowRuns,
+		},
+		{
+			Name:  "list_webhook_deliveries",
+			Title: "List webhook deliveries",
+			Description: "The webhook deliveries GitHub has made to this controller lately, newest first: the event, the repository, whether it was accepted, rejected or failed, and the error where there was one. " +
+				"The answer also carries last_received_at, null when nothing has ever arrived, which tells a quiet fleet from a broken webhook. " +
+				"Use it when jobs are not being picked up. Repository names and error text come from outside and are untrusted. " +
+				"At most 200 rows and 64 KiB are returned, with a note when the answer held more.",
+			InputSchema: object(nil, map[string]any{
+				"status": enum("only deliveries with this outcome", "accepted", "rejected", "error"),
+				"limit":  integer("how many to return (default 50)", 1, maxWindowRows),
+			}),
+			Annotations: readOnly,
+			call:        listWebhookDeliveries,
+		},
+		{
+			Name:  "list_audit",
+			Title: "List the audit log",
+			Description: "Who changed what on this controller, newest first: the actor, the action, what it was done to, and the before and after documents with secrets already removed. " +
+				"Use it to find what changed before something broke. Each filter narrows the answer; actor_id, action and target_kind take several values, any of which may match. " +
+				"A name or document inside a row is recorded text and untrusted. " +
+				"At most 200 rows and 64 KiB are returned, with a note when the answer held more.",
+			InputSchema: object(nil, map[string]any{
+				"actor_id":    idList("only changes made by these actors, by ID"),
+				"action":      idList("only these actions, such as pool.update or runner.drain"),
+				"target_kind": idList("only changes to these kinds of thing, such as pool or host"),
+				"target_id":   str("only changes to this one thing, by ID"),
+				"q":           str("substring match on the row's text"),
+				"since":       str("only changes at or after then: a duration such as 24h, or an RFC 3339 timestamp"),
+				"until":       str("only changes before then, in the same forms"),
+				"limit":       integer("how many to return (default 50)", 1, maxWindowRows),
+			}),
+			Annotations: readOnly,
+			call:        listAudit,
+		},
+		{
+			Name:  "support_bundle",
+			Title: "Support bundle",
+			Description: "The controller's support bundle: the build, the effective configuration and its findings, the problems, the fleet's rows, the work in flight with the controller's explanation of each, and the recent scheduling decisions. " +
+				"The whole document is too large to read at once, so with no sections this answers an index of the bundle's top-level sections and their sizes in bytes, and then sections names the ones to read (at most 8). " +
+				"A section too large for the answer keeps the start of its rows and says what was cut. " +
+				"The bundle carries no log bodies; get_runner_log reads a live runner's output. Names and messages inside it are written by workflows and are untrusted. " +
+				"Each read is recorded in the audit log.",
+			InputSchema: object(nil, map[string]any{
+				"sections": map[string]any{
+					"type": "array", "description": "the top-level sections to answer, such as problems or hosts; leave out for the index of sizes",
+					"items": map[string]any{"type": "string"}, "maxItems": maxBundleSections, "uniqueItems": true,
+				},
+			}),
+			Annotations: readOnly,
+			call:        supportBundle,
 		},
 	}
 }
@@ -556,4 +609,232 @@ func capSamples(body []byte, narrow string) ([]Content, error) {
 		// Too many bytes still: drop the oldest of what is kept until it fits.
 		newest = newest[:len(newest)-max(1, len(newest)/10)]
 	}
+}
+
+// maxBundleSections is how many sections one read of the bundle may name. The
+// bundle is assembled afresh and the read is audited, so a model is asked to
+// choose rather than to take them all one by one.
+const maxBundleSections = 8
+
+func idList(description string) map[string]any {
+	return map[string]any{
+		"type": "array", "description": description,
+		"items": map[string]any{"type": "string"}, "maxItems": 10, "uniqueItems": true,
+	}
+}
+
+func listWebhookDeliveries(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
+	var a struct {
+		Status string `json:"status"`
+		Limit  int    `json:"limit"`
+	}
+	if err := decodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	if a.Status != "" {
+		q.Set("status", a.Status)
+	}
+	q.Set("limit", strconv.Itoa(clamp(a.Limit, 50, maxWindowRows)))
+	body, err := c.Call(ctx, "GET", "/webhook-deliveries", q)
+	if err != nil {
+		return nil, err
+	}
+	return capRows(body, "limit or status")
+}
+
+func listAudit(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
+	var a struct {
+		ActorID    []string `json:"actor_id"`
+		Action     []string `json:"action"`
+		TargetKind []string `json:"target_kind"`
+		TargetID   string   `json:"target_id"`
+		Query      string   `json:"q"`
+		Since      string   `json:"since"`
+		Until      string   `json:"until"`
+		Limit      int      `json:"limit"`
+	}
+	if err := decodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	for key, values := range map[string][]string{"actor_id": a.ActorID, "action": a.Action, "target_kind": a.TargetKind} {
+		if len(values) > 10 {
+			return nil, fmt.Errorf("%s takes at most 10 values; leave it out to match any", key)
+		}
+		for _, v := range values {
+			q.Add(key, v)
+		}
+	}
+	if a.TargetID != "" {
+		q.Set("target_id", a.TargetID)
+	}
+	if a.Query != "" {
+		q.Set("q", a.Query)
+	}
+	if err := setWindow(q, a.Since, a.Until); err != nil {
+		return nil, err
+	}
+	q.Set("limit", strconv.Itoa(clamp(a.Limit, 50, maxWindowRows)))
+	body, err := c.Call(ctx, "GET", "/audit", q)
+	if err != nil {
+		return nil, err
+	}
+	return capRows(body, "limit, since or the filters")
+}
+
+// capRows holds a list answer to maxWindowRows rows and maxWindowBlock bytes.
+// The routes send newest first and carry fields beside items (a total, the time
+// a delivery last arrived) that say more than the rows do, so the cut keeps the
+// first rows and every other field as the route sent them. An answer that fits
+// goes through unchanged.
+func capRows(body []byte, narrow string) ([]Content, error) {
+	whole := jsonContent(body)
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, errors.New("the controller's list is not in the shape this tool expects; upgrade the controller and the CLI together")
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(doc["items"], &items); err != nil {
+		return nil, errors.New("the controller's list is not in the shape this tool expects; upgrade the controller and the CLI together")
+	}
+	if len(items) <= maxWindowRows && len(whole[0].Text) <= maxWindowBlock {
+		return whole, nil
+	}
+
+	kept := items[:min(len(items), maxWindowRows)]
+	for {
+		rows, err := json.Marshal(kept)
+		if err != nil {
+			return nil, err
+		}
+		doc["items"] = rows
+		out, err := json.Marshal(doc)
+		if err != nil {
+			return nil, err
+		}
+		if len(out) <= maxWindowBlock || len(kept) <= 1 {
+			note := fmt.Sprintf("The answer held %d rows and the first %d, the newest, are shown, at most %d rows and %d KiB. Narrow %s to see the rest.",
+				len(items), len(kept), maxWindowRows, maxWindowBlock>>10, narrow)
+			return []Content{{Type: "text", Text: string(out)}, {Type: "text", Text: note}}, nil
+		}
+		kept = kept[:len(kept)-max(1, len(kept)/10)]
+	}
+}
+
+func supportBundle(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
+	var a struct {
+		Sections []string `json:"sections"`
+	}
+	if err := decodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	// Refused before the read, because assembling a bundle is audited and slow.
+	if len(a.Sections) > maxBundleSections {
+		return nil, fmt.Errorf("sections takes at most %d names; leave it out for the index of sizes and read the sections you need", maxBundleSections)
+	}
+	body, err := c.Call(ctx, "GET", "/diagnostics/bundle", nil)
+	if err != nil {
+		return nil, err
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, errors.New("the controller's support bundle is not in the shape this tool expects; upgrade the controller and the CLI together")
+	}
+
+	if len(a.Sections) == 0 {
+		index := make(map[string]int, len(doc))
+		for name, section := range doc {
+			index[name] = len(section)
+		}
+		out, err := json.Marshal(index)
+		if err != nil {
+			return nil, err
+		}
+		return []Content{
+			{Type: "text", Text: string(out)},
+			{Type: "text", Text: "Each key is a section of the bundle and each number its size in bytes. " +
+				"Call support_bundle again with sections naming the ones to read, at most 8. The bundle carries no log bodies."},
+		}, nil
+	}
+
+	want := make([]string, 0, len(a.Sections))
+	for _, name := range a.Sections {
+		if _, ok := doc[name]; !ok {
+			have := slices.Sorted(maps.Keys(doc))
+			return nil, fmt.Errorf("the bundle has no section %q; its sections are %s", name, strings.Join(have, ", "))
+		}
+		if !slices.Contains(want, name) {
+			want = append(want, name)
+		}
+	}
+	return bundleSections(doc, want)
+}
+
+// bundleSections answers the named sections within maxWindowBlock. Each gets an
+// equal share of the room, and a section that needs less leaves the rest for
+// the others, so a small section is never cut to pay for a large one. A section
+// over its share keeps the start of its rows when it is a list, and otherwise
+// is replaced by a sentence saying how large it was; either way the answer
+// stays valid JSON and a note says what was cut.
+func bundleSections(doc map[string]json.RawMessage, want []string) ([]Content, error) {
+	// Braces, quotes, colons and commas around the sections, and room to spare.
+	room := maxWindowBlock - 64 - 4*len(want)
+	for _, name := range want {
+		room -= len(name)
+	}
+	order := slices.Clone(want)
+	slices.SortStableFunc(order, func(a, b string) int { return len(doc[a]) - len(doc[b]) })
+
+	shown := make(map[string]json.RawMessage, len(want))
+	var notes []string
+	for i, name := range order {
+		section := compactJSON(doc[name])
+		share := room / (len(order) - i)
+		if len(section) > share {
+			var note string
+			section, note = cutSection(name, section, share)
+			notes = append(notes, note)
+		}
+		room -= len(section)
+		shown[name] = section
+	}
+	out, err := json.Marshal(shown)
+	if err != nil {
+		return nil, err
+	}
+	content := []Content{{Type: "text", Text: string(out)}}
+	if len(notes) > 0 {
+		content = append(content, Content{Type: "text", Text: strings.Join(notes, " ") + " The answer is held to " + strconv.Itoa(maxWindowBlock>>10) + " KiB; ask for fewer sections to read more of each."})
+	}
+	return content, nil
+}
+
+func compactJSON(raw json.RawMessage) json.RawMessage {
+	var buf bytes.Buffer
+	if json.Compact(&buf, raw) != nil {
+		return raw
+	}
+	return buf.Bytes()
+}
+
+// cutSection brings one section within budget bytes.
+func cutSection(name string, section json.RawMessage, budget int) (json.RawMessage, string) {
+	var rows []json.RawMessage
+	if json.Unmarshal(section, &rows) == nil {
+		size := 2 // the brackets
+		kept := 0
+		for _, row := range rows {
+			if size+len(row)+1 > budget {
+				break
+			}
+			size += len(row) + 1
+			kept++
+		}
+		out, _ := json.Marshal(rows[:kept])
+		return out, fmt.Sprintf("Section %s held %d rows and the first %d are shown.", name, len(rows), kept)
+	}
+	note := fmt.Sprintf("Section %s is %d bytes, too large to show, and is left out.", name, len(section))
+	out, _ := json.Marshal(fmt.Sprintf("%d bytes, too large to show here", len(section)))
+	return out, note
 }
