@@ -1,12 +1,24 @@
 ---
 icon: material/alert-circle-outline
-title: Troubleshooting a Zoomies runner fleet
+title: Troubleshoot Zoomies and GitHub Actions jobs with Eli and MCP
 description: >-
-  The commands to run first when a Zoomies fleet misbehaves, the five things
-  that go wrong on a first run, and what a queued job means.
+  Diagnose fleet problems and failed or slow workflow jobs with Eli, MCP and
+  the CLI. Follow the evidence into fixes, PR repairs and measured optimisation.
 ---
 
 # Troubleshooting
+
+Use this page for both **Zoomies itself** and **the GitHub Actions jobs it
+runs**. A healthy controller can still run a failing test or a slow build; the
+useful next step depends on which part failed.
+
+| What you see | Start here |
+| --- | --- |
+| The controller will not start, sign-in fails or setup is incomplete | [When setup goes wrong](#when-setup-goes-wrong) and the local checks below |
+| A job is waiting for a runner | [Queued-job checks](queued-job.md) or ask Eli about the job and its pool |
+| A test, build or workflow step failed | [Investigate jobs with Eli and MCP](#investigate-jobs-with-eli-and-mcp) |
+| Jobs run, but take too long or use the wrong runner size | [Find a measured optimisation](#find-a-measured-optimisation) |
+| A failed PR needs a code change | [From diagnosis to a PR repair](#from-diagnosis-to-a-pr-repair) |
 
 Zoomies is built so that most of what goes wrong says so itself. The problems
 drawer (the count in the UI's top bar opens it) `GET /api/v1/problems` and
@@ -29,8 +41,9 @@ with `journalctl -u zoomies -n 50`; for Compose, use `docker compose logs --tail
 50 zoomies`. A fleet user without host access can share the problem code and
 request ID with the instance operator.
 
-This page is the rest: the things that go wrong before there is anything to
-look at, and the one symptom that has more causes than any other.
+If the controller is unavailable, Eli and MCP cannot read its live diagnostics.
+Use the local checks to get it serving first. Once it is reachable, the
+assistant paths below help investigate fleet faults and workflow failures.
 
 ## When setup goes wrong
 
@@ -74,6 +87,86 @@ user, with no container isolation and nothing cleaned up between jobs beyond the
 work directory. It is a reasonable choice for a machine that runs your own
 trusted workflows and a bad one for anything else; see
 [Security](security.md#agentbackend-process).
+
+## Investigate jobs with Eli and MCP
+
+### Start with the job's evidence
+
+1. Open **Jobs**, choose the job and read its **Why** section. It separates
+   workflow failures from runner and host faults, with the evidence, confidence
+   and next steps. In a terminal, `zoomies why <job>` gives the same explanation.
+2. Press **Ask Eli** beside that explanation to carry the displayed job context
+   into the conversation. Add a personal provider under **Settings → Eli AI
+   Assistant** and enable **Let Eli read this fleet through this provider** if
+   you want it to inspect more history, host state or available logs.
+3. Ask for the cause, the evidence and one next step. Follow the tool results
+   shown under Eli's answer; if a log is no longer available or the evidence
+   is incomplete, check the failed step and its log in GitHub Actions too.
+
+For example:
+
+> “Was this job a failing test, an out-of-memory kill or a runner fault? Show
+> the evidence and tell me what to check next.”
+
+Eli chat can explain the fleet and jobs with your permissions. It does not
+change settings, edit repository files or run tests. Use a model permitted to
+process the job names, context and logs you give it. [Eli's setup and data
+access](eli.md#what-eli-can-see) explains what the fleet-read switch enables.
+
+Prefer an assistant you already use? [Connect it through MCP](mcp.md). Ask
+it to inspect the job with `get_job`, read its problem code with `get_catalog`
+and request `get_runner_log` if the runner's log still exists. The MCP prompt
+`why_did_job_fail` provides this investigation order. Start with a viewer
+connection for diagnosis; operator access is needed for fleet actions such as
+re-running a job or adjusting a pool.
+
+### Find a measured optimisation
+
+Separate queue wait, runner startup and execution time before changing
+resources. A job that spends its time waiting needs a different remedy from
+a compile that starts promptly and runs out of memory.
+
+| Question to ask Eli or your MCP assistant | Evidence to compare | Where to make a change |
+| --- | --- | --- |
+| “Is this workflow slow before or after it starts?” | Queue, startup and execution times from `job_stats`, for the same workflow and period | [Capacity and placement](hosts-and-pools.md) or [startup stability](runner-startup-stability.md) |
+| “Does this job need more memory or a smaller runner?” | `label_advice` and measured CPU and memory peaks, compared by runner size | [Runner sizing](hosts-and-pools.md#sizing-from-job-history) and [size classes](auto-pools.md) |
+| “Would spare CPU help this build?” | CPU demand, quota throttling and host headroom under representative load | [Elastic CPU](elastic-cpu.md), observing before automatic boosts |
+| “Are repeated downloads or builds wasting time?” | The step timings and comparable cold and warm runs | [Persistent caches](persistent-caches.md), using the recipe for your tools |
+
+These questions guide an investigation, not a guarantee of a faster build.
+Record a baseline, change one thing and compare representative runs. If there
+are too few measurements, collect more runs before acting on a size recommendation.
+[Advanced operations](advanced.md#1-establish-a-baseline) gives the full order.
+
+To inspect the workflow or implementation as well as the fleet, grant your
+MCP connection [AI Context source access](connect-claude.md#verified-repository-source).
+Then ask it to read the relevant files at a stated commit and relate them to
+the failed step or slow stage. Eli's ordinary chat does not have those source
+tools; a code repair uses the separate workflow below.
+
+### From diagnosis to a PR repair
+
+For a failed job on an existing PR, open **Review a repair with Eli** beside
+the job, or paste the PR URL into **Eli repairs**. Review readiness, the model,
+who pays and the remaining attempt budget before choosing **Repair with Eli**.
+Repository repair policy, GitHub App permissions and requester consent must
+be in place; [set up PR repairs](eli.md#set-up-pr-repairs) covers them.
+
+A linked maintainer can also request a repair in a new PR comment:
+
+```text
+/eli fix the failing test
+```
+
+Eli reads bounded source and failed-job evidence, can publish a fix to the
+PR branch, and watches the resulting GitHub checks. It does not execute your
+code or run local tests, and it never merges the PR. Workflow-file edits need
+a separate opt-in; an infrastructure fault may need a fleet remedy rather
+than a code change. Review the diff and CI results before merging.
+
+Use this path for supported PR repairs. For broader workflow optimisation,
+use the diagnosis and source-reading paths to prepare a change for review;
+an MCP connection alone is not a general repository editing tool.
 
 ## A job that sits in the queue
 
