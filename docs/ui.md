@@ -33,20 +33,20 @@ The Eli conversation uses the built-in demo model and a real fleet lookup.
 Before any of them, the page everyone meets first, and often the only one met
 by people who did not install the controller. The form is on the right, under
 the address of the instance being signed in to, so telling a staging controller
-from a production one does not rest on reading the address bar. On the left, in
-Zoomies Black in either theme, is the full logo above **A fresh runner.
-For every job.**, a short description, and links to [zoomies.sh](https://zoomies.sh),
+from a production one does not rest on reading the address bar. On the left,
+the full logo sits on a rounded Zoomies Black stage in either theme. Below it
+are **A fresh runner. For every job.**, a short description, and links to [zoomies.sh](https://zoomies.sh),
 the source on GitHub and [EyUp.io](https://eyup.io), who make it. A failed
 sign-in says which kind of failure it was (wrong credentials, too many
 attempts, or a controller that cannot be reached) and caps lock is called out
-before it costs an attempt. On a phone the full logo keeps its black surround
+before it costs an attempt. On a phone the full logo keeps its rounded black stage
 above the form, the introductory copy is hidden and the links move below it.
 
-![The sign-in page: a Zoomies Black panel on the left holding the lockup, a short introduction and links to zoomies.sh, GitHub and EyUp.io; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
-![The sign-in page: a Zoomies Black panel on the left holding the lockup, a short introduction and links to zoomies.sh, GitHub and EyUp.io; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
+![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
+![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
 
-![The phone sign-in page: the full Zoomies logo on its black surround above the instance address and sign-in form](screenshots/sign-in-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
-![The phone sign-in page: the full Zoomies logo on its black surround above the instance address and sign-in form](screenshots/sign-in-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
+![The phone sign-in page: the full Zoomies logo on its rounded black stage above the instance address and sign-in form](screenshots/sign-in-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
+![The phone sign-in page: the full Zoomies logo on its rounded black stage above the instance address and sign-in form](screenshots/sign-in-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
 
 ## Overview
 

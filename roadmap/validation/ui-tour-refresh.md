@@ -2,12 +2,16 @@
 
 Captured on 12 October 2026 from the UI at
 `44f94c5301050d295b3a5b5eb70619b1e45b2dad`. The binary was built locally
-with Go 1.27.2 and the production Vite build. No application runtime code changed.
+with Go 1.27.2 and the production Vite build. The four desktop and phone login
+images were recaptured after the rounded logo stage landed on main at
+`24df801e246d9b53e8298e41196a9958944720eb`. That main update changed only the
+login screen's rendering; the other captured views are unchanged. This refresh
+does not change application runtime code.
 
 All 84 existing WebP screenshots were refreshed. Twelve images were added,
 covering six views in light and dark: phone sign-in, Eli chat, personal provider
 settings, PR repair history, repair readiness and repository repair setup.
-The desktop sign-in now shows the current full logo on its black surround.
+The desktop and phone sign-in show the current full logo on its rounded black stage.
 
 Eli chat uses a personal fake provider and the real `fleet_status` lookup.
 The fake model repeats the lookup result; it is not a sample of a hosted
