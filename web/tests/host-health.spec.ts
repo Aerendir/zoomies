@@ -1325,7 +1325,11 @@ test('a host that has only just joined is told to wait, with no command and no t
     const panel = page.getByRole('region', { name: 'No health report yet' });
     await expect(panel).toContainText('Waiting for this host’s first report.');
     await expect(panel).toContainText('This host joined');
-    await expect(page.getByText('No OS report has arrived from this host yet.')).toBeVisible();
+    // The header badge says the same thing in its tooltip, so the sentence is in the
+    // page twice; the one to read is the subtitle.
+    await expect(
+      page.locator('p.subtitle', { hasText: 'No OS report has arrived from this host yet.' }),
+    ).toBeVisible();
     await expect(panel.locator('pre')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /apply|tune/i })).toHaveCount(0);
     await expect(page.getByRole('main')).not.toContainText(/drain/i);

@@ -861,7 +861,7 @@ test('a runner contextual action asks Eli with its displayed snapshot', async ({
   });
   await goto(page, '/runners', 'Runners');
   await page.locator('main a[href^="/runners/"]').first().click();
-  await page.getByTitle('Share these displayed details with Eli and ask for guidance').click();
+  await page.locator('main .btn.ask-eli').first().click();
   const panel = page.getByRole('dialog', { name: 'Eli assistant' });
   await expect(panel.getByRole('article', { name: 'Eli' })).toContainText(
     'The built-in model heard:',

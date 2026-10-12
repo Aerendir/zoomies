@@ -17,6 +17,7 @@
   now, where the three options are visible and the one in force is marked.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import {
     Activity,
     BookOpen,
@@ -208,6 +209,7 @@
       icon: LogOut,
       separated: true,
       disabled: session.authDisabled,
+      reason: 'Authentication is off on this controller, so there is no session to end.',
       onSelect: () => void signOut(),
     },
   ]);
@@ -236,10 +238,18 @@
   </div>
 
   <div class="right">
-    <p class="connection" data-state={connection} title={connectionHint}>
-      <span class="dot" aria-hidden="true"></span>
-      <span class="connection-text" class:sr-only={connection === 'live'}>{connectionText}</span>
-    </p>
+    <!-- Live is a dot and nothing else, so the state is the heading. -->
+    <Tooltip
+      bare
+      title={connection === 'live' ? connectionText : undefined}
+      text={connectionHint}
+      placement="bottom"
+    >
+      <p class="connection" data-state={connection}>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="connection-text" class:sr-only={connection === 'live'}>{connectionText}</span>
+      </p>
+    </Tooltip>
     <output class="sr-only" aria-live="polite">Connection: {connectionText}</output>
 
     <ProblemsBell />

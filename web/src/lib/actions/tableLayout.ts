@@ -1,4 +1,5 @@
 import { prefs } from '../state/prefs.svelte';
+import { attachTip } from '../tooltip-attach';
 import { startColumnDrag, startColumnResize } from './columnGesture';
 
 export interface TableLayoutOptions {
@@ -164,8 +165,12 @@ export function tableLayout(node: HTMLTableElement, initial: TableLayoutOptions)
       grip.className = 'managed-table-move';
       grip.dataset.tableLayoutControl = 'true';
       grip.textContent = '⋮⋮';
-      grip.title = 'Drag to reposition; use left and right arrow keys for keyboard control';
       grip.setAttribute('aria-label', `Reposition ${label} column`);
+      disposers.push(
+        attachTip(grip, {
+          text: 'Drag to reposition; use left and right arrow keys for keyboard control',
+        }),
+      );
       const onGripKey = (event: KeyboardEvent): void => {
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
         event.preventDefault();
@@ -212,8 +217,10 @@ export function tableLayout(node: HTMLTableElement, initial: TableLayoutOptions)
       resize.type = 'button';
       resize.className = 'managed-table-resizer';
       resize.dataset.tableLayoutControl = 'true';
-      resize.title = 'Drag to resize; double-click to restore the default width';
       resize.setAttribute('aria-label', `Resize ${label} column`);
+      disposers.push(
+        attachTip(resize, { text: 'Drag to resize; double-click to restore the default width' }),
+      );
       const onPointerDown = (event: PointerEvent): void => {
         startColumnResize(event, heading.getBoundingClientRect().width, {
           move: (width) => {

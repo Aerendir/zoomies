@@ -6,6 +6,7 @@
   where it goes on hover, and carries no referrer.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import type { Block, Inline } from './markdown';
   import { parseMarkdown } from './markdown';
   import CodeBlock from './CodeBlock.svelte';
@@ -20,11 +21,13 @@
       />{:else if node.t === 'strong'}<strong>{@render inline(node.c)}</strong
       >{:else if node.t === 'em'}<em>{@render inline(node.c)}</em>{:else if node.t === 'code'}<code
         >{node.v}</code
-      >{:else if node.t === 'a'}<a
-        href={node.href}
-        title={node.href}
-        target="_blank"
-        rel="noopener noreferrer nofollow">{@render inline(node.c)}</a
+      >{:else if node.t === 'a'}<!-- Where the link goes, shown because what an assistant calls a link
+           and where it points are two different claims. --><Tooltip
+        bare
+        text={node.href}
+        ><a href={node.href} target="_blank" rel="noopener noreferrer nofollow"
+          >{@render inline(node.c)}</a
+        ></Tooltip
       >{/if}
   {/each}
 {/snippet}

@@ -14,6 +14,8 @@
      * not say what to change is a refusal that gets reported as a bug.
      */
     reason?: string;
+    /** The reason is a permission, so it is drawn with a padlock. */
+    lock?: boolean;
     onSelect: () => void;
   }
 </script>
@@ -45,6 +47,8 @@
   dialog meant to give focus back to could no longer take it.
 -->
 <script lang="ts">
+  import Tooltip from './Tooltip.svelte';
+
   interface Props {
     actions: readonly RowAction[];
     /** What these actions act on: "acme/api · build". It names the toolbar and every button. */
@@ -115,23 +119,29 @@
   {#each actions as action, index (action.id)}
     {@const Icon = action.icon}
     {@const refused = action.disabled ? (action.reason ?? '') : ''}
-    <button
-      type="button"
-      data-action-index={index}
-      class:danger={action.danger}
-      tabindex={index === tabStop ? 0 : -1}
-      aria-disabled={action.disabled ? 'true' : undefined}
-      aria-label={refused
-        ? `${action.label}: ${subject}. ${refused}`
-        : `${action.label}: ${subject}`}
-      title={refused || action.label}
-      onfocus={() => (active = index)}
-      onclick={() => {
-        if (!action.disabled) action.onSelect();
-      }}
-    >
-      <Icon size={14} aria-hidden="true" />
-    </button>
+    <!--
+      The verb is the heading, since the button is an icon; a refusal adds its
+      reason under it. The button's own name already carries the reason, so the
+      tooltip does not read it out a second time.
+    -->
+    <Tooltip bare title={action.label} reason={refused} lock={action.lock}>
+      <button
+        type="button"
+        data-action-index={index}
+        class:danger={action.danger}
+        tabindex={index === tabStop ? 0 : -1}
+        aria-disabled={action.disabled ? 'true' : undefined}
+        aria-label={refused
+          ? `${action.label}: ${subject}. ${refused}`
+          : `${action.label}: ${subject}`}
+        onfocus={() => (active = index)}
+        onclick={() => {
+          if (!action.disabled) action.onSelect();
+        }}
+      >
+        <Icon size={14} aria-hidden="true" />
+      </button>
+    </Tooltip>
   {/each}
 </div>
 

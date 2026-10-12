@@ -13,6 +13,7 @@
   reports, and every row it adds says whose runner has it.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { readableJobText } from '$lib/jobs/name';
   import { CircleSlash, ExternalLink } from '@lucide/svelte';
   import { listJobs } from '$lib/api/client';
@@ -176,18 +177,14 @@
         <li class="row">
           <div class="what">
             {#if job.html_url}
-              <a
-                class="title"
-                href={job.html_url}
-                target="_blank"
-                rel="noreferrer noopener"
-                title="Open this run on GitHub"
-              >
-                <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
-                <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
-                <ExternalLink size={12} aria-hidden="true" />
-                <span class="sr-only">Opens on GitHub in a new tab</span>
-              </a>
+              <Tooltip bare text="Open this run on GitHub">
+                <a class="title" href={job.html_url} target="_blank" rel="noreferrer noopener">
+                  <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
+                  <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
+                  <ExternalLink size={12} aria-hidden="true" />
+                  <span class="sr-only">Opens on GitHub in a new tab</span>
+                </a>
+              </Tooltip>
             {:else}
               <span class="title">
                 <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
@@ -206,7 +203,7 @@
               <span class="muted">{runnerName(job)}</span>
             {/if}
             {#if !ranHere(job)}
-              <Badge status={ELSEWHERE} size="sm" title={ELSEWHERE.hint} />
+              <Badge status={ELSEWHERE} size="sm" help={ELSEWHERE.hint} />
             {/if}
           </p>
           <p class="elapsed">

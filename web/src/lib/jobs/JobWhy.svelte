@@ -18,6 +18,7 @@
   the pool and belong beside the wait.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { ExternalLink, RotateCcw, TriangleAlert } from '@lucide/svelte';
   import type { Job, JobExplanation } from '$lib/api/types';
   import { getJobExplanation } from '$lib/api/client';
@@ -160,10 +161,12 @@
 
     {#if why}
       <p class="chips">
-        <span class="chip" title={why.confidence_reason || undefined}>
-          <span class="chip-label">Class</span>
-          {why.class} · {why.confidence}
-        </span>
+        <Tooltip bare text={why.confidence_reason ?? ''}>
+          <span class="chip">
+            <span class="chip-label">Class</span>
+            {why.class} · {why.confidence}
+          </span>
+        </Tooltip>
         {#if why.problem_code}
           {#if readOn}
             <a class="chip link" href={readOn} target="_blank" rel="noopener noreferrer">

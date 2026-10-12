@@ -665,8 +665,13 @@ test('the matrix is one tab stop, walked with the arrow keys, with a tooltip on 
   await expect(stop).toHaveCount(1);
   await expect(stop).toHaveAttribute('aria-label', WITH_JOBS);
 
+  // Reached the way the keyboard reaches it: a script's focus after a click is not
+  // keyboard focus, and the card opens for the keyboard only.
   await stop.focus();
-  const tip = page.locator('.tip:popover-open');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(stop).toBeFocused();
+  const tip = page.locator('.bubble:popover-open');
   await expect(tip, 'focus opens the tooltip').toBeVisible();
   await expect(tip).toContainText(WITH_JOBS);
   await expect(tip).toContainText('Queued');
@@ -678,7 +683,7 @@ test('the matrix is one tab stop, walked with the arrow keys, with a tooltip on 
   const focused = grid.locator('[role="gridcell"]:focus');
   await expect(focused).toHaveCount(1);
   expect(await focused.getAttribute('aria-label')).not.toBe(before);
-  await expect(page.locator('.tip:popover-open')).toContainText(
+  await expect(page.locator('.bubble:popover-open')).toContainText(
     (await focused.getAttribute('aria-label'))!.split('.')[0]!,
   );
   // And back, so the rest of the test is about today.
@@ -687,7 +692,7 @@ test('the matrix is one tab stop, walked with the arrow keys, with a tooltip on 
 
   // Escape lets go of the tooltip and nothing else: the page is still here.
   await page.keyboard.press('Escape');
-  await expect(page.locator('.tip:popover-open')).toHaveCount(0);
+  await expect(page.locator('.bubble:popover-open')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 });
 

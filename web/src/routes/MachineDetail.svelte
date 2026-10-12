@@ -151,7 +151,7 @@
   >
     {#snippet meta()}
       <p class="summary">
-        <Badge {status} size="sm" title={status.hint} />
+        <Badge {status} size="sm" help={status.hint} />
         {#if m.message}<span>{m.message}</span>{/if}
       </p>
     {/snippet}

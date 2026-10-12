@@ -13,11 +13,13 @@
   leaves someone driving the page by voice with nothing to ask for.
 -->
 <script lang="ts">
+  import Tooltip from './Tooltip.svelte';
+
   export interface SegmentedOption<T extends string = string> {
     value: T;
     /** What the button says: short, since there are several in a row. */
     label: string;
-    /** The full name, for the tooltip and assistive technology. */
+    /** The full name, for the shared tooltip and assistive technology. */
     name?: string;
   }
 
@@ -43,15 +45,17 @@
 </script>
 
 <div class="segmented {className}" role="group" aria-label={label}>
-  {#each options as option (option.value)}
-    <button
-      type="button"
-      aria-pressed={value === option.value}
-      aria-label={option.name ? `${option.label}, ${option.name}` : undefined}
-      title={option.name}
-      {disabled}
-      onclick={() => onchange(option.value)}>{option.label}</button
-    >
+  {#each options as option, i (option.value)}
+    <Tooltip bare text={option.name ?? ''}>
+      <button
+        type="button"
+        class:first={i === 0}
+        aria-pressed={value === option.value}
+        aria-label={option.name ? `${option.label}, ${option.name}` : undefined}
+        {disabled}
+        onclick={() => onchange(option.value)}>{option.label}</button
+      >
+    </Tooltip>
   {/each}
 </div>
 
@@ -83,7 +87,9 @@
       background-color var(--z-motion-fast) var(--z-ease),
       color var(--z-motion-fast) var(--z-ease);
   }
-  button:first-child {
+  /* Each button sits in its own layout-less tooltip wrapper, so none of them is
+     the first child of the group; the first one says so itself. */
+  button.first {
     border-left: 0;
   }
   button:disabled {

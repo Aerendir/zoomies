@@ -329,11 +329,9 @@ test('a host under sustained pressure is throttled, says why, and an operator ca
 
     await goto(page, '/hosts', 'Hosts');
     const card = page.getByRole('article', { name, exact: true });
-    // The badge carries the step in its title, so hovering answers "how bad".
-    await expect(card.getByText('Throttled', { exact: true })).toHaveAttribute(
-      'title',
-      /^Throttled, step 1 of 3/,
-    );
+    // The badge carries the step in its tooltip, so hovering answers "how bad".
+    await card.getByText('Throttled', { exact: true }).hover();
+    await expect(page.locator('.bubble:popover-open')).toContainText(/^Throttled, step 1 of 3/);
     await expect(card).toContainText(
       "throttled to 3 of 4 slots (step 1 of 3) after sustained pressure: the 1-minute load average is 20.0, at least twice the host's 8 CPUs",
     );
@@ -351,7 +349,7 @@ test('a host under sustained pressure is throttled, says why, and an operator ca
     await page.getByRole('menuitem', { name: 'Lift the throttle' }).click();
     await expect(card).toContainText(/0 of 4 slots in use/);
     await expect(card).not.toContainText('throttled from');
-    await expect(card.getByTitle(/^Throttled, step/)).toHaveCount(0);
+    await expect(card.getByText(/^Throttled, step/)).toHaveCount(0);
     await expect(page.getByText(`Throttle lifted on ${name}`)).toBeVisible();
     await expectNoReload(page);
 

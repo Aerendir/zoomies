@@ -226,9 +226,12 @@
       variant="secondary"
       icon={CircleSlash}
       disabled={terminal || liveState === 'draining'}
-      title={terminal
-        ? 'This runner has already finished.'
-        : 'Finish the current job, then exit. Nothing is interrupted.'}
+      help="Finish the current job, then exit. Nothing is interrupted."
+      reason={terminal
+        ? 'This runner has already finished, so there is nothing to drain.'
+        : liveState === 'draining'
+          ? 'This runner is already draining. It leaves when its job ends.'
+          : undefined}
       onclick={() => ask('drain')}
     >
       Drain

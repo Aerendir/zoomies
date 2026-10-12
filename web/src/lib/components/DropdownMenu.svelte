@@ -21,12 +21,21 @@
   import { layers } from '../keys';
   import Button from './Button.svelte';
   import IconButton from './IconButton.svelte';
+  import Tooltip from './Tooltip.svelte';
 
   export interface MenuItem {
     id: string;
     label: string;
     icon?: LucideIcon;
     disabled?: boolean;
+    /**
+     * Why a disabled item cannot be chosen now, and what to do about it. An item
+     * with a reason stays in the arrow keys' path and can be hovered, marked
+     * `aria-disabled` rather than `disabled`, so the reason can be reached.
+     */
+    reason?: string;
+    /** The reason is a permission, so it is drawn with a padlock. */
+    lock?: boolean;
     /** Renders in the danger colour and is separated from the safe items. */
     danger?: boolean;
     /** Draw a rule above this item. */
@@ -104,7 +113,12 @@
   let typed = '';
   let typedTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const enabled = $derived(items.filter((i) => !i.disabled));
+  /** Whether the arrow keys stop here: it can be chosen, or it has a reason to be read. */
+  function reachable(item: MenuItem | undefined): boolean {
+    return Boolean(item) && (!item!.disabled || Boolean(item!.reason));
+  }
+
+  const enabled = $derived(items.filter(reachable));
 
   function toggle(): void {
     if (open) close();
@@ -114,7 +128,7 @@
   function show(): void {
     if (disabled || items.length === 0) return;
     open = true;
-    active = items.findIndex((i) => !i.disabled);
+    active = items.findIndex(reachable);
     if (active < 0) active = 0;
   }
 
@@ -135,7 +149,7 @@
     let next = active;
     for (let i = 0; i < items.length; i++) {
       next = (next + delta + items.length) % items.length;
-      if (!items[next]?.disabled) break;
+      if (reachable(items[next])) break;
     }
     active = next;
     focusActive();
@@ -176,14 +190,14 @@
       case 'Home':
         event.preventDefault();
         event.stopPropagation();
-        active = items.findIndex((i) => !i.disabled);
+        active = items.findIndex(reachable);
         focusActive();
         break;
       case 'End':
         event.preventDefault();
         event.stopPropagation();
         for (let i = items.length - 1; i >= 0; i--) {
-          if (!items[i]?.disabled) {
+          if (reachable(items[i])) {
             active = i;
             break;
           }
@@ -202,7 +216,7 @@
     typed += key.toLowerCase();
     if (typedTimer) clearTimeout(typedTimer);
     typedTimer = setTimeout(() => (typed = ''), 600);
-    const found = items.findIndex((i) => !i.disabled && i.label.toLowerCase().startsWith(typed));
+    const found = items.findIndex((i) => reachable(i) && i.label.toLowerCase().startsWith(typed));
     if (found >= 0) {
       active = found;
       focusActive();
@@ -387,23 +401,38 @@
               {/if}
             </a>
           {:else}
-            <button
-              type="button"
-              role="menuitem"
-              class="item"
-              class:danger={item.danger}
-              data-index={row.index}
-              tabindex={row.index === active ? 0 : -1}
-              disabled={item.disabled}
-              onclick={() => choose(item)}
+            <!--
+              A disabled item with a reason is `aria-disabled`, so it can still be
+              hovered and reached with the arrow keys; the reason is the point.
+            -->
+            {@const refused = item.disabled && Boolean(item.reason)}
+            <Tooltip
+              bare
+              reason={refused ? item.reason : undefined}
+              lock={item.lock}
+              placement="left"
+              edge="[role='menu']"
             >
-              {#if item.icon}
-                {@const ItemIcon = item.icon}
-                <ItemIcon size={14} aria-hidden="true" />
-              {/if}
-              <span>{item.label}</span>
-              {#if item.hint}<kbd class="hint" aria-hidden="true">{item.hint}</kbd>{/if}
-            </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="item"
+                class:danger={item.danger}
+                class:refused
+                data-index={row.index}
+                tabindex={row.index === active ? 0 : -1}
+                disabled={item.disabled && !refused}
+                aria-disabled={refused ? 'true' : undefined}
+                onclick={() => choose(item)}
+              >
+                {#if item.icon}
+                  {@const ItemIcon = item.icon}
+                  <ItemIcon size={14} aria-hidden="true" />
+                {/if}
+                <span>{item.label}</span>
+                {#if item.hint}<kbd class="hint" aria-hidden="true">{item.hint}</kbd>{/if}
+              </button>
+            </Tooltip>
           {/if}
         {/if}
       {/each}
@@ -455,18 +484,19 @@
     text-align: left;
     cursor: pointer;
   }
-  .item:hover:not(:disabled),
+  .item:hover:not(:disabled):not(.refused),
   .item:focus-visible {
     background: var(--z-surface-hover);
   }
-  .item:disabled {
+  .item:disabled,
+  .item.refused {
     color: var(--z-text-subtle);
     cursor: not-allowed;
   }
   .item.danger {
     color: var(--z-danger);
   }
-  .item.danger:hover:not(:disabled) {
+  .item.danger:hover:not(:disabled):not(.refused) {
     background: var(--z-danger-subtle);
   }
   a.item {

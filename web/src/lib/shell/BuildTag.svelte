@@ -6,6 +6,7 @@
   whatever page the operator happens to be on.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { session } from '../state/session.svelte';
   import { buildLabel } from './build';
 
@@ -13,16 +14,18 @@
 </script>
 
 {#if build}
-  <p class="build" title={build.title}>
-    <span class="kind">{build.kind}</span>
-    {#if build.href}
-      <a class="name" href={build.href} target="_blank" rel="noopener noreferrer"
-        >{build.name}<span class="sr-only"> (opens in a new tab)</span></a
-      >
-    {:else}
-      <span class="name">{build.name}</span>
-    {/if}
-  </p>
+  <Tooltip bare text={build.title} placement="right" edge=".nav">
+    <p class="build">
+      <span class="kind">{build.kind}</span>
+      {#if build.href}
+        <a class="name" href={build.href} target="_blank" rel="noopener noreferrer"
+          >{build.name}<span class="sr-only"> (opens in a new tab)</span></a
+        >
+      {:else}
+        <span class="name">{build.name}</span>
+      {/if}
+    </p>
+  </Tooltip>
 {/if}
 
 <style>

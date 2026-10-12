@@ -149,10 +149,11 @@
     {@const reason = refused[id]}
     <li>
       {#if canDelete}
-        <span class="pick" title={why || undefined}>
+        <span class="pick">
           <Checkbox
             checked={why === '' && ticked.includes(id)}
             disabled={why !== '' || id === ''}
+            reason={why || undefined}
             ariaLabel={why === ''
               ? `Select ${machine.name}`
               : `${machine.name} cannot be selected. ${why}`}
