@@ -31,8 +31,9 @@ type HostUpdateView struct {
 	// State is the latest attempt's state while it says something about the
 	// host: requested, succeeded, failed, timed_out or cancelled. It is none when
 	// there is no such attempt, including one that failed before the host
-	// reached its release some other way, and unsupported in its place for a
-	// host behind the controller that the helper can never be installed on.
+	// reached its release some other way (attemptIsHistory says what counts as
+	// that), and unsupported in its place for a host behind the controller that
+	// the helper can never be installed on.
 	State string `json:"state"`
 	// Reason is the sentence the card shows. For an attempt that ended without
 	// the update it is the reason recorded for it, often the helper's own, which
@@ -183,6 +184,40 @@ func hostBehind(h *store.Host, target string) bool {
 func hostTarget() string {
 	tag, _ := updates.HostTarget(version.Version)
 	return tag
+}
+
+// attemptIsHistory says whether an attempt that ended without the update has
+// stopped saying anything about a host whose agent reports running. target is
+// what the controller would take the host to now, empty when it is neither a
+// release nor a build from main. The card and the problems list both ask it, so
+// that neither shows a failure the other has forgotten.
+//
+// An attempt is history once the host runs the release or build it asked for, or
+// a later release, however the host got there. That cannot be the whole rule when
+// a build from main is on either side, because CompareBuilds orders one against
+// nothing: a host an operator brought to a later build by hand (sudo zoomies
+// upgrade, after the helper refused the update) is never "at least" the build the
+// attempt asked for, and a host on the build the controller has since moved to is
+// never "at least" a release it was asked for before. The failure would stay for
+// ever beside a card that says there is nothing to update and offers no button to
+// press. So when the attempt or the controller's target is a build from main, the
+// attempt is also history when the host runs at least what the controller would
+// take it to now, since nothing is left to do for it. That is judged against the
+// controller as it is now, so it can stop holding: once the controller moves to a
+// newer build the host is behind again, and the failure shows until a new attempt
+// opens, as after any failure of a host that is behind.
+//
+// Two releases are ordered, so an attempt at a release under a controller on a
+// release is judged by that release alone, as it always was, and a host on an
+// older release keeps its failure.
+func attemptIsHistory(a store.UpdateAttempt, running, target string) bool {
+	if runsAtLeast(running, a.ToVersion) {
+		return true
+	}
+	if !version.IsMainBuild(a.ToVersion) && !version.IsMainBuild(target) {
+		return false
+	}
+	return runsAtLeast(running, target)
 }
 
 // hostCannotUpdateError is a refusal that reads as the card's own sentence and is
@@ -469,6 +504,13 @@ func hostReportOutcome(a store.UpdateAttempt, running string, rep *agent.UpdateR
 		return "", "", false
 	}
 	if rep.OK {
+		if channelMovedOn(a, running, rep) {
+			return store.UpdateFailed, fmt.Sprintf("The update helper on the host installed %s from the dev channel and its agent runs it, "+
+				"but this controller ran %s when the update was asked for, so the channel served a different build from the controller's. "+
+				"The channel has moved on since this controller was built, or main CI has not published that build yet. "+
+				"Once the controller and the channel agree (zoomies upgrade on the controller's host, or wait for main CI), update this host again.",
+				reportedVersion(running), a.ToVersion), true
+		}
 		return store.UpdateFailed, fmt.Sprintf("The update helper on the host says %s is installed, but its agent still reports %s, so the new release is not the one running. "+
 			"Restart the zoomies agent on the host, and look at journalctl -u zoomies-update there if it does not come back on %s.",
 			a.ToVersion, reportedVersion(running), a.ToVersion), true
@@ -477,6 +519,21 @@ func hostReportOutcome(a store.UpdateAttempt, running string, rep *agent.UpdateR
 		return store.UpdateFailed, msg, true
 	}
 	return store.UpdateFailed, "The update helper on the host says the update failed, and gave no reason. Look at journalctl -u zoomies-update on the host.", true
+}
+
+// channelMovedOn says whether a helper's success took a host to a build from main
+// other than the one the controller asked for. A controller built from main asks
+// for its own exact build, but the helper can only name the dev channel, and the
+// channel moves with every push, so the host can land on a different build from
+// the controller's: a later one, or an earlier one when main CI has not yet
+// published the controller's. Builds from main cannot be ordered, so which is not
+// known. The helper's account and the agent agree on that build, which is what
+// tells it from an agent that never restarted, and it is the only case the
+// moved-channel sentence is true of.
+func channelMovedOn(a store.UpdateAttempt, running string, rep *agent.UpdateReport) bool {
+	running = strings.TrimSpace(running)
+	return version.IsMainBuild(a.ToVersion) && version.IsMainBuild(running) &&
+		running != strings.TrimSpace(a.ToVersion) && strings.TrimSpace(rep.To) == running
 }
 
 // reportedSentence is text an agent relayed, made fit to keep. The agent cleans
@@ -637,9 +694,10 @@ func (c *Controller) hostUpdateView(h *store.Host) *HostUpdateView {
 	case store.UpdateSucceeded:
 		out.State, out.AttemptID = a.State, a.ID
 	case store.UpdateFailed, store.UpdateTimedOut, store.UpdateCancelled:
-		// Once the host is on that release some other way, the failure is
-		// history and the card says what is true now.
-		if runsAtLeast(h.Version, a.ToVersion) {
+		// Once the host has got there some other way, by hand for instance, the
+		// failure is history and the card says what is true now. attemptIsHistory
+		// says what getting there is.
+		if attemptIsHistory(a, h.Version, target) {
 			return out
 		}
 		out.State, out.AttemptID = a.State, a.ID

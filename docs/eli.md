@@ -260,12 +260,15 @@ a hostile name can do is mislead an answer: check what you act on.
   your own provider and asks again: a thinking model at high effort can spend
   the ceiling on reasoning and send no words at all. Lowering the provider's
   reasoning effort is the cheaper cure.
-* A conversation is at most 40 messages, 8 KiB each and 32 KiB in all. The box
-  shows the size of what you are typing from 6 KiB, and a message over 8 KiB
-  cannot be sent until you cut it. **Keep the end** (the usual choice for a log,
-  whose failure is at the end) or **Keep the start** trims it at a line break and
-  says how much it took off, and **Undo** puts it back. Nothing is cut until you
-  choose. If the controller refuses a message anyway, or a conversation has
+* A conversation is at most 40 messages and 32 KiB in all, and a message you
+  write is at most 8 KiB. Eli's own answers have no limit of their own, only the
+  32 KiB, so a long answer never stops you asking the next question; a
+  conversation that has grown past 32 KiB takes **Start a new conversation**.
+  The box shows the size of what you are typing from 6 KiB, and a message over
+  8 KiB cannot be sent until you cut it. **Keep the end** (the usual choice for
+  a log, whose failure is at the end) or **Keep the start** trims it at a line
+  break and says how much it took off, and **Undo** puts it back. Nothing is cut
+  until you choose. If the controller refuses a message anyway, or a conversation has
   outgrown what one request carries, your words come back in the box with the
   reason, and **Start a new conversation** takes them into a fresh thread.
 * Signed-in conversations are saved to your account, with the retention and
@@ -274,6 +277,22 @@ a hostile name can do is mislead an answer: check what you act on.
 * Every signed-in user can ask through their own API provider; controller subscription tools require an administrator. Every chat is written to the audit log as
   `assistant.chat` with the provider, the model, whether the fleet could be read
   and the tools used, and never with what was said.
+
+## PR check delay
+
+Read **PR check delay** from a job drawer before asking Eli to explain the
+snapshot. Supply a PR number in the selected job's repository. The selected
+job fixes the installation and head; a changed head needs a job from the
+current revision. The card shows protection/observation coverage and unknown
+phases explicitly. Ask Eli shares those labelled facts without requesting a
+fresh diagnostic. A fresh `get_pr_delay` tool read requires fleet access and
+uses the same shared admission allowance as the UI and CLI.
+
+The scripted evaluation harness includes unknown queue/startup timing, a missing
+required check and a head change during collection, with instruction text
+planted in the target branch. These scenarios prove the tool/transport path and
+evidence fences; they do not measure an unscripted model's reasoning. Live model
+evaluation remains a separate recorded check.
 
 ## Measuring Eli
 
@@ -424,8 +443,17 @@ whichever GitHub user happens to own that name, who is not part of your
 repository, and a slash command notifies nobody.
 
 Commands must begin a line outside a quote or code block. Only new comments by
-human users trigger a repair. Edited comments, ordinary issues, bots and
-unlinked users do not. Both triggers use the existing signed webhook endpoint.
+human users trigger a repair. Edited comments, ordinary issues and bots do not.
+Both triggers use the existing signed webhook endpoint.
+
+A command from someone with write access that Eli cannot act on is answered, not
+dropped: Eli puts a confused face on the comment and replies on the PR with the
+reason. The reason is one of these: the GitHub account is not linked to a Zoomies
+user, or its owner has not allowed it; the Zoomies account is disabled; or the
+repository's attempt budget or the person's own limit is used up. A command from
+anyone without write access is ignored without a word, so a stranger's comment
+never makes the App post. The repository budget is shared with automatic repairs,
+which on a repository whose CI fails often can use it up before anyone asks.
 The App's own GitHub handle (for example `@zoomies-eyupio2`, the name GitHub
 autocompletes) works too, once Zoomies has learned the App's slug. Recognition
 uses the comment text and does not require GitHub mention notification routing.
@@ -508,10 +536,14 @@ editing surface; they do not prove a patch correct. Provider errors, quota
 exhaustion or unsupported model output stop a repair without trying another
 user's credentials.
 
-A repair offers the model no tools; every step is a JSON object. A model that
-answers with a tool call anyway is told, as the result of that call, that it has
-no tools and which JSON replies it may send, and is asked once more. Most models
-comply. One that calls a tool again stops the repair, and Eli's comment names the
-tool it asked for, so you can tell a model that ignores its instructions, which
-a different model or provider fixes, from a prompt that was wrong. Both turns
-appear in the repair history.
+A repair offers the model no tools; every step is a JSON object. Some models
+take the names of those replies (`read`, `windows`, `edits`, `files`,
+`cannot_fix`) for functions and call them. A call named after a reply says what
+that reply would have, so Eli reads it as the reply and the repair goes on; the
+same checks apply to it as to JSON the model typed. Any other tool call is
+answered, as the result of that call, with the fact that it has no tools and which
+JSON replies it may send, and the model is asked once more. Most models comply.
+One that calls a tool again stops the repair, and Eli's comment names the tool it
+asked for and the names of its arguments, so you can tell a model that ignores its instructions, which a
+different model or provider fixes, from a prompt that was wrong. Every model turn
+appears in the repair history.

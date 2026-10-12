@@ -184,14 +184,14 @@ func (s *Store) EnqueueEliRepair(ctx context.Context, r *EliRepair, limit int) (
 			return err
 		}
 		if limit < 1 || count >= limit {
-			return ErrConflict
+			return ErrEliRepoBudget
 		}
 		if r.UserID != "" {
 			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM eli_repairs WHERE user_id=? AND created_at>=?`, r.UserID, ms(s.Now().Add(-24*time.Hour))).Scan(&count); err != nil {
 				return err
 			}
-			if count >= 10 {
-				return ErrConflict
+			if count >= EliPersonDailyLimit {
+				return ErrEliPersonBudget
 			}
 		}
 		r.ID = NewID(PrefixEliRepair)

@@ -42,6 +42,7 @@
   import JobSteps from './JobSteps.svelte';
   import JobTimeline from './JobTimeline.svelte';
   import JobWhy from './JobWhy.svelte';
+  import JobPRDelay from './JobPRDelay.svelte';
 
   interface Props {
     open?: boolean;
@@ -360,6 +361,12 @@
         <dt>Job ID</dt>
         <dd><CopyButton value={job.id ?? ''} label="Copy the job ID" showValue /></dd>
       </dl>
+
+      {#if open && job.id && session.can('viewer')}
+        {#key `${job.id}:${job.head_sha ?? ''}`}
+          <JobPRDelay jobId={job.id} headSHA={job.head_sha} />
+        {/key}
+      {/if}
 
       {#if steps.length > 0 || running}
         <section class="section" aria-labelledby="job-steps-heading">

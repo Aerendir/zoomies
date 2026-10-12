@@ -31,9 +31,13 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 snapshot assembly | Merged | [#935](https://github.com/eyupio/zoomies/pull/935), following its merged parents | Focused controller/analysis race tests pass; verifies repository/installation/run/job joins, preserves incomplete evidence, and separates check reporting from job execution |
 | E1 on-demand collector | Merged | [#938](https://github.com/eyupio/zoomies/pull/938), following the merged foundations | Collector/assembly/core/reader race tests and changed-package vet pass; selects the existing job's installation, bounds collection, respects installation holds and labels the window basis |
 | E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
-| E1 CLI and agent tools | Draft PR, not merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and model scenarios remain |
-| E1 contextual UI and model scenarios | Not started | Follows CLI and agent tools | Add an explicit on-demand card and scripted Eli evidence scenarios; no live model evaluation has run |
+| E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and model scenarios remain |
+| E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
+| E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Full-suite rerun result still pending |
+| E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
+| E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; affected install/upgrade race checks pass |
+| E7 ledger fixture isolation | Draft PR, not merged | [#965](https://github.com/eyupio/zoomies/pull/965), following merged validation parents | Proxmox ledger package race tests pass with a temporary directory and checked opening error; no live e2e cluster run |
 | E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
 
 The first validation attempt was blocked by a missing Go compiler and shell
@@ -69,6 +73,36 @@ Current implementation plans:
 - [On-demand collection](roadmap/plans/2026-10-12-eli-pr-delay-collector.md).
 - [Admission and read-only API](roadmap/plans/2026-10-12-eli-pr-delay-api.md).
 - [CLI and agent tools](roadmap/plans/2026-10-12-eli-pr-delay-agent-tools.md).
+- [Contextual UI and scripted scenarios](roadmap/plans/2026-10-12-eli-pr-delay-ui.md).
+- [Validation fixture correction](roadmap/plans/2026-10-12-eli-validation-fixtures.md).
+- [Fallback-copy mode preservation](roadmap/plans/2026-10-12-eli-copy-mode-validation.md).
+- [Installer fixture permissions](roadmap/plans/2026-10-12-eli-installer-fixture-validation.md).
+- [Ledger fixture isolation](roadmap/plans/2026-10-12-eli-ledger-fixture-validation.md).
+
+The full-suite rerun found a storage fixture that relied on a permissive umask.
+This workspace uses `0077`, so requesting `0755` through Mkdir created a private
+`0700` directory and defeated the refusal test's setup. The fixture now explicitly
+sets `0755`; all aicontext package race tests pass after that correction. The original full run also reached the API package's ten-minute deadline while
+creating a test database. A complete API race rerun has a thirty-minute budget.
+The backend's mode-copy fixture exposed masked destination permissions; explicitly
+setting source 0755 still failed before the fix. The fallback copy now restores
+source permissions after copying, and the backend package race tests pass.
+The installer previous-binary fixture had the same umask assumption: its source
+was 0700 rather than the asserted 0755. Explicit fixture chmod corrects that
+setup; the affected install/upgrade race checks pass. The controller package
+also reached the ten-minute package deadline and is rerunning with thirty
+minutes. The original broad run completed with 44 passing packages. It failed in seven
+packages: storage fixture, fallback-copy mode, installer fixture, Proxmox ledger
+fixture, and the API/controller/store ten-minute deadlines. The ledger test had
+omitted its temporary-directory override and ignored the opening error; it now
+uses the existing fixture helper and checks that error. The complete normal
+Proxmox package race tests pass (no live e2e tag or cluster run). The complete API race rerun passes with its thirty-minute budget (1380.705 seconds).
+The complete store race rerun also passes (1122.901 seconds). Controller reached
+its thirty-minute package deadline, with no assertion failure reported, at a
+newly started webhook test. Its 1329 listed tests are now split into disjoint
+665/664 groups, covering the full list with separate race-test budgets. The corrected fixture
+and backend checks pass separately; the original full command did not pass. Record its final result, including failures,
+before claiming full-suite verification.
 
 The next agent should start from the stack tip, check which parent PRs have
 merged and preserve each PR's focused diff. Never merge or retarget a parent

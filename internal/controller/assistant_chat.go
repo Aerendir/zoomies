@@ -20,7 +20,10 @@ import (
 // send, and on what comes back, is the only ceiling a person meets. Redaction and
 // the tool loop have their own, in assistant_tools.go.
 const (
-	assistantChatMaxMessages     = 40
+	assistantChatMaxMessages = 40
+	// assistantChatMaxMessageBytes is the most a person may type or paste in one
+	// message. It does not apply to Eli's own answers (see overMessageLimit):
+	// those are bounded by the total below, because the person cannot cut them.
 	assistantChatMaxMessageBytes = 8 << 10
 	assistantChatMaxTotalBytes   = 32 << 10
 	assistantChatMaxTokens       = 8192
@@ -263,15 +266,26 @@ const assistantStartAgain = "so start a new conversation and paste again only wh
 // "8 KiB is too much, you sent 8 KiB" reads as a bug.
 func kib(n int) string { return fmt.Sprintf("%.1f KiB", float64(n)/1024) }
 
-// oversizeMessage is the refusal for one message past its limit. The newest is
-// the one the person has just written and can cut; an older one is not on their
-// screen to cut, so the refusal says which it is and the cure is a new thread.
+// overMessageLimit is whether a message is too big to be one. The limit is on
+// what a person writes: they can cut a paste, but not an answer, and a long
+// answer is the ordinary result of pasting a long log. Holding answers to it
+// refused the next question for words the person never typed, and the cure
+// offered (paste less) was no cure at all. An answer still counts toward the
+// conversation's total, which stays the ceiling on what one request sends.
+func overMessageLimit(role string, size int) bool {
+	return role == string(assistant.RoleUser) && size > assistantChatMaxMessageBytes
+}
+
+// oversizeMessage is the refusal for one message past its limit, which is always
+// one the person wrote (see overMessageLimit). The newest is the one they have
+// just written and can cut; an older one is not on their screen to cut, so the
+// refusal says which it is and the cure is a new thread.
 func oversizeMessage(size int, newest bool) string {
 	limit := assistantChatMaxMessageBytes >> 10
 	if newest {
 		return fmt.Sprintf("your message is %s; Eli reads at most %d KiB in one message, so paste only the lines around the error, or send the rest in a second message", kib(size), limit)
 	}
-	return fmt.Sprintf("an earlier message in this conversation is %s; Eli reads at most %d KiB in one message, %s", kib(size), limit, assistantStartAgain)
+	return fmt.Sprintf("an earlier message of yours in this conversation is %s; Eli reads at most %d KiB in one message from you, %s", kib(size), limit, assistantStartAgain)
 }
 
 // ValidateAssistantChat says what is wrong with a conversation, or returns the
@@ -298,7 +312,7 @@ func ValidateAssistantChat(in []AssistantChatMessage) ([]assistant.Message, erro
 			return nil, &AssistantChatInvalid{field, "a message cannot be empty"}
 		case !utf8.ValidString(text):
 			return nil, &AssistantChatInvalid{field, "a message must be text"}
-		case len(text) > assistantChatMaxMessageBytes:
+		case overMessageLimit(m.Role, len(text)):
 			return nil, &AssistantChatInvalid{field, oversizeMessage(len(text), i == len(in)-1)}
 		}
 		total += len(text)
@@ -337,8 +351,8 @@ func ValidateAssistantTranscript(in []AssistantChatMessage) ([]AssistantChatMess
 			return nil, &AssistantChatInvalid{field, "a message cannot be empty"}
 		case !utf8.ValidString(text):
 			return nil, &AssistantChatInvalid{field, "a message must be text"}
-		case len(text) > assistantChatMaxMessageBytes:
-			return nil, &AssistantChatInvalid{field, fmt.Sprintf("a message is at most %d KiB", assistantChatMaxMessageBytes>>10)}
+		case overMessageLimit(m.Role, len(text)):
+			return nil, &AssistantChatInvalid{field, fmt.Sprintf("a question is at most %d KiB", assistantChatMaxMessageBytes>>10)}
 		}
 		total += len(text)
 		out = append(out, AssistantChatMessage{Role: m.Role, Content: text})

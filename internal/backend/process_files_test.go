@@ -81,6 +81,11 @@ func TestCopyFileKeepsContentsAndMode(t *testing.T) {
 	if err := os.WriteFile(src, []byte("the program"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The source mode is part of the copy contract, independent of the umask
+	// that happened to create this fixture.
+	if err := os.Chmod(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	dst := filepath.Join(dir, "copy")
 	if err := copyFile(src, dst); err != nil {
