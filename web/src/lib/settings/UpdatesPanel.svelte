@@ -97,12 +97,17 @@
   // looks like from here. `connecting` is not that, it is how every page load
   // begins, so only a stream that was up and went is taken for one. Held so that
   // the restart state stays up until the stream is back, however briefly it
-  // flickers, and dropped as soon as no attempt is open.
+  // flickers, and dropped as soon as no attempt is open. The stream reads
+  // `offline` until the shell has started it, which on a slow load is after this
+  // panel has mounted, so a stream that has not yet been live is not one that
+  // went.
   let restarting = $state(false);
+  let wasLive = false;
   $effect(() => {
+    if (updates.stream === 'live') wasLive = true;
     if (!attemptText?.open) {
       restarting = false;
-    } else if (updates.stream === 'reconnecting' || updates.stream === 'offline') {
+    } else if (wasLive && (updates.stream === 'reconnecting' || updates.stream === 'offline')) {
       restarting = true;
     }
   });
