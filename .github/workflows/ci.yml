@@ -140,6 +140,9 @@ jobs:
               # lints them, and the rest shard holds the tests that read
               # deploy/.
               deploy/instapods/*) installer=true; rest=true ;;
+              # Workflows for the demo organisation to copy. Nothing here runs
+              # them; internal/docs reads them like any other prose.
+              deploy/demo-org/*) docs=true ;;
               deploy/*|docker-compose.yml|.dockerignore) deploy=true; rest=true ;;
               # The check each built runner image is run through.
               test/runner-image/*) deploy=true; installer=true ;;

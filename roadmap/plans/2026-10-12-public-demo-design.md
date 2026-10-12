@@ -174,7 +174,9 @@ flowchart LR
    failure views have something in them. **No secrets**: a visitor reads every
    log. Set the organisation's Actions policy to require approval for every
    outside contributor, because the runners are processes in a pod rather than
-   throwaway containers. `runs-on` names the demo pool's labels.
+   throwaway containers. `runs-on` names the demo pool's labels. The
+   workflows, a keep-alive and the organisation's settings are in
+   `deploy/demo-org/`.
 2. **Keep the schedules alive.** GitHub disables a scheduled workflow after
    sixty days without repository activity. A monthly workflow in one repository
    commits a timestamp to each, or the owner re-enables them from the API.
