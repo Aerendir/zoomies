@@ -1,0 +1,36 @@
+# A job that takes long enough to watch. Copy it into one zoomies-demo
+# repository as .github/workflows/long-job.yml.
+#
+# Most of the demo's jobs finish in a minute or two, which is how a fleet
+# should look, but it means a visitor who arrives between runs sees nothing
+# moving. This one runs for about eight minutes with steady output, so there
+# is nearly always a busy runner and a log that is still being written.
+name: long job
+
+on:
+  schedule:
+    - cron: "35 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: long-job
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    runs-on: zoomies-demo
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Soak test
+        run: |
+          step=1
+          while [ "$step" -le 48 ]; do
+            printf 'soak %2d/48: %d requests, p95 %d ms\n' "$step" $((step * 250)) $((40 + step % 9))
+            sleep 10
+            step=$((step + 1))
+          done
+          echo "soak complete"

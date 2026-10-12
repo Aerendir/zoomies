@@ -518,6 +518,8 @@ already has the database.
   at the next sign-in.
 * *Authentication switched off* (`security.disable_auth`) asks for nothing at
   all.
+* *A public view* (`security.public_view`) asks nothing of somebody who only
+  reads the fleet; anything else still needs an account, and its second step.
 
 ---
 
@@ -728,6 +730,25 @@ its own is not enough: loopback behind a reverse proxy is the deployment this
 documentation recommends, and it is reachable by the whole internet. With
 nothing in front of it, this is a warning, because it is genuinely useful for
 local development.
+
+### `security.public_view: true`
+
+A request with no credential is a visitor: the viewer role narrowed to reading
+pools, hosts, runners, jobs, usage, runner logs, installations, webhook
+deliveries, Kennel Club and the problems list. It is a fixed list of read
+scopes, so a read added to the product later is hidden from visitors until
+somebody adds it to the list, and every change is refused with 403. The audit
+log, accounts, tokens, settings, AI context and Eli are not on it, and the event
+stream sends a frame only to somebody who could fetch what it carries.
+
+A token that is presented and wrong is still refused with 401. A session cookie
+that no longer checks out becomes a visitor and is cleared, because the person
+holding it could not otherwise sign out of a session that has ended.
+
+This is a **warning** wherever it is on, never a refusal: a public fleet is a
+deliberate choice. Turn it off anywhere a stranger should not see your runner
+names, repositories and logs. [Public view](public-view.md) explains what a
+visitor sees and what running one costs.
 
 ### `server.allowed_origins: "*"`
 

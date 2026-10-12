@@ -182,8 +182,23 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// sent. The browser's EventSource gives up on a non-200 rather than
 	// retrying, which is what an instance with no room wants from it.
 	limit := s.cfg().Limits.EventSubscribers
+	visitor := auth.IsVisitor(Identity(ctx))
+	if visitor {
+		// A crowd of visitors is held to a ceiling of its own and never
+		// counted against the one the people who run the fleet need.
+		opts.Class = visitorStreams
+		opts.ClassLimit = s.cfg().Limits.VisitorEventSubscribers
+	}
 	sub, ok := bus.SubscribeWithin(subCtx, opts, limit)
 	if !ok {
+		if visitor {
+			limitReached(w, &controller.LimitError{
+				Setting: "limits.visitor_event_subscribers", Limit: opts.ClassLimit,
+				What: "live-update streams for visitors",
+				Free: "reload in a minute, since every page still works without live updates",
+			})
+			return
+		}
 		limitReached(w, &controller.LimitError{
 			Setting: "limits.event_subscribers", Limit: limit, What: "live-update streams",
 			Free: "close a browser tab that is no longer needed",
@@ -211,6 +226,12 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(s.streamHeartbeat)
 	defer ticker.Stop()
 
+	// Who the frames are chosen for. Resolved when the stream opens and again
+	// on every heartbeat, which is when the stream re-checks its credential
+	// anyway, rather than once per frame: a busy fleet sends many frames a
+	// second, and each resolution of a session is a database read.
+	reader := Identity(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -222,6 +243,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 				// the response makes the client reconnect with its last event
 				// ID and catch up, which is better than silently going stale.
 				return
+			}
+			if !frameReadable(reader, ev.Kind) {
+				continue
 			}
 			data := ev.Data
 			if ev.Kind == events.KindProblems {
@@ -318,6 +342,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		case <-ticker.C:
 			if s.endIfRevoked(stream, r, auth.ActionEventsRead) {
 				return
+			}
+			if fresh, err := s.resolveIdentity(r); err == nil {
+				reader = fresh
 			}
 			if err := stream.comment("heartbeat"); err != nil {
 				return

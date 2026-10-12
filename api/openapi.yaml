@@ -8610,6 +8610,12 @@ components:
         bootstrap_required: { type: boolean, description: True when no user exists yet. `/readyz` carries the same field, so a provisioner can wait on one endpoint. }
         tailcat_available: { type: boolean, description: Whether private enrolment is enabled and the controller has its encryption key. Relay connectivity is checked at enrolment. }
         auth_disabled: { type: boolean, description: True when authentication has been switched off in the configuration. }
+        public_view:
+          type: boolean
+          description: >-
+            True when `security.public_view` is on: a caller with no credential
+            reads the fleet as a visitor, whose session has the kind `public`.
+            False whenever authentication is switched off.
         oidc_enabled: { type: boolean }
         oidc_label: { type: string, examples: ["Sign in with Okta"], description: "`oidc.label`, or \"Sign in with\" and the issuer's host." }
         password_login_hidden:
@@ -13313,7 +13319,12 @@ components:
     Identity:
       type: object
       properties:
-        kind: { type: string, enum: [user, token, agent, system] }
+        kind:
+          type: string
+          enum: [user, token, agent, system, public]
+          description: >-
+            `public` is a public view's visitor: no account, the viewer role
+            narrowed to reading the fleet, refused every change.
         id: { type: string }
         name: { type: string }
         role: { $ref: "#/components/schemas/Role" }

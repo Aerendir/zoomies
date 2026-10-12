@@ -74,6 +74,7 @@ import {
 } from '../feed/entries';
 import { fleet } from './fleet.svelte';
 import { prefs } from './prefs.svelte';
+import { session } from './session.svelte';
 
 /** How much of the recent past one tab holds. Well past what any panel shows. */
 const CAPACITY = 200;
@@ -388,6 +389,9 @@ class Feed {
    */
   async #seed(id: FeedCategoryID): Promise<void> {
     if (id !== 'jobs' && id !== 'outcomes' && id !== 'audit' && id !== 'automatic') return;
+    // The audit log is not shown to a public view's visitor, so there is no
+    // past to backfill these two from; the stream withholds them as well.
+    if ((id === 'audit' || id === 'automatic') && session.visitor) return;
     // The jobs the fetch asks for depend on the Overview's own switch, so the
     // mode is part of what "already seeded" means: asking for every runner's
     // jobs after opening on this fleet's own is a second, different past.
