@@ -1,6 +1,6 @@
 # A live public demo, and the public view it needs: design
 
-**Status:** approved approach; the public view is being built on this branch.
+**Status:** approved approach; the public view is built on this branch, and the demo is hosted on InstaPods.
 **Date:** 12 October 2026.
 
 ## Goal
@@ -42,7 +42,8 @@ Taken with the owner on 12 October 2026, one question at a time.
 | What the demo is | **A live fleet**, not the fixture hosted. Visitors watch real jobs. |
 | How visitors get in | **No sign-in.** A new public view: an anonymous request is a visitor. |
 | What it runs | **A public demo organisation's scheduled workflows**, not this repository's CI, so a stranger's pull request never runs on it. |
-| Where it lives | **One VM** installed with `zoomies init`: controller and embedded agent in one process, Docker runners beside it. |
+| Where it lives | **InstaPods, two pods** (revised the same day from one VM). A web pod runs the controller with the public view; a worker pod with no public address runs `zoomies agent` on the process backend, because pods offer no Docker. Jobs never share a pod with the database or the GitHub App key. |
+| How a pod gets Zoomies | **A published release, downloaded and checked against its checksums** by the pod's build command, not compiled there: the Go preset has neither Go 1.27 nor Node for the UI. `dev` until the public view ships in a release. |
 | Eli and MCP | **MCP read-only for anyone. Eli stays out of the public view.** Chatting is an administrator's action and spends a model provider's money; the local demo's fixture provider remains the way to try Eli without a key. |
 | What this branch does | **The design, then the public view in the product, with its docs.** The VM, the organisation and DNS are the owner's, from the runbook below. |
 
@@ -154,26 +155,47 @@ below it as *or run the demo on your own machine*.
 
 ## The demo deployment (runbook, the owner's)
 
+`docs/instapods.md` is the general guide to running Zoomies on InstaPods, and
+`deploy/instapods/` holds the build and start scripts both pods run. The demo
+is that guide with these choices:
+
+```mermaid
+flowchart LR
+    gh["GitHub: the zoomies-demo organisation"] -->|webhooks| web["web pod: zoomies controller,<br/>public view on"]
+    worker["worker pod: zoomies agent,<br/>process backend"] -->|"long-polls, outbound only"| web
+    worker -->|"registers runners, runs jobs"| gh
+    visitors["visitors and their assistants"] -->|"https, no sign-in"| web
+```
+
 1. **Organisation.** Create `zoomies-demo` on GitHub with three or four public
    repositories, each with a workflow on `schedule` (every ten minutes, offset
-   per repository) and `workflow_dispatch`: a short build, a matrix of a few
-   jobs, one longer job, and one that fails on purpose now and then so the
+   per repository) and `workflow_dispatch` only: a short build, a matrix of a
+   few jobs, one longer job, and one that fails on purpose now and then so the
    failure views have something in them. **No secrets**: a visitor reads every
-   log. `runs-on` names the demo pool's labels.
+   log. Set the organisation's Actions policy to require approval for every
+   outside contributor, because the runners are processes in a pod rather than
+   throwaway containers. `runs-on` names the demo pool's labels.
 2. **Keep the schedules alive.** GitHub disables a scheduled workflow after
    sixty days without repository activity. A monthly workflow in one repository
    commits a timestamp to each, or the owner re-enables them from the API.
-3. **The VM.** One small Linux VM (2 to 4 vCPU, 8 GB) with Docker. Install with
-   `curl -fsSL https://zoomies.sh/install.sh | sh`, create the GitHub App for
-   the organisation from the setup page, and create one pool sized to the VM.
-4. **Name and TLS.** `demo.zoomies.sh` pointing at the VM, with the controller's
-   own ACME or a reverse proxy in front. The proxy rate-limits per address and
-   caps open connections, because a visitor holds an event stream open and
-   `limits.event_subscribers` is shared with whoever runs the demo.
-5. **Turn it on.** Set `security.public_view` in Settings, restart, check the
-   problems list carries `auth.public_view` and nothing worse, then open the
-   address in a private window.
-6. **Flip the button.** Change **Try the demo** in `docs/index.md` as section 7
+3. **The web pod.** A Go-preset pod on the Build plan, connected to
+   `github.com/eyupio/zoomies` with auto-deploy off, using the guide's install,
+   build and start commands for the controller. Set `ZOOMIES_EXTERNAL_URL` to
+   the pod's address (or `https://demo.zoomies.sh` once the custom domain is
+   attached), `ZOOMIES_ENCRYPTION_KEY`, `ZOOMIES_VERSION=dev` and
+   `ZOOMIES_PUBLIC_VIEW=true`. Create the first account, connect the GitHub App
+   for the organisation, and create one pool for the process backend.
+4. **The worker pod.** A second Go-preset pod, converted to a worker so it has
+   no public address, using the guide's commands for the agent, with
+   `ZOOMIES_CONTROLLER_URL` and a join token from **Hosts, Add a host**. Size it
+   for the jobs: Grow (2 vCPU, 4 GB) runs two at a time comfortably.
+5. **Name and limits.** Attach `demo.zoomies.sh` to the web pod. A visitor holds
+   an event stream open and `limits.event_subscribers` is shared with whoever
+   runs the demo, so raise it to what the plan carries and watch it.
+6. **Check it.** The problems list carries `auth.public_view` and nothing worse;
+   a private window lands on the Overview with the read-only line; an assistant
+   pointed at `/mcp` with no credential lists pools.
+7. **Flip the button.** Change **Try the demo** in `docs/index.md` as section 7
    says.
 
 ## Tests
@@ -210,6 +232,11 @@ with `openapi_spec.go` and `schema.d.ts` regenerated, and `mkdocs.yml`.
   `limits.event_subscribers`; the runbook puts a rate limit in front. Watching a
   running job's log asks the agent for a stream, so the demo pool stays small.
 - **A demo workflow that prints a secret.** The organisation holds none.
+- **Jobs that are processes, not containers.** Pods offer no Docker, so a job
+  runs as the worker pod's user and a later job can see what an earlier one
+  left outside its work directory. Bounded by running only the organisation's
+  own scheduled workflows, requiring approval for outside contributors, and
+  keeping the worker pod free of anything but the agent's own token.
 
 ## Not included
 
