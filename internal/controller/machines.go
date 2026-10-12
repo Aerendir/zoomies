@@ -1095,7 +1095,11 @@ func (c *Controller) stepPlanned(ctx context.Context, env *machineEnv, pr *machi
 	if id == "" {
 		id = ref.Name
 	}
-	if err := c.st.SetMachineResource(ctx, m.ID, ref.Zone, id, owner.Fingerprint, owner.ControllerID); err != nil {
+	err = c.st.SetMachineResource(ctx, m.ID, ref.Zone, id, owner.Fingerprint, owner.ControllerID)
+	if errors.Is(err, store.ErrConflict) && c.releaseStaleHolder(ctx, env, pr, m, ref.Zone, id) {
+		err = c.st.SetMachineResource(ctx, m.ID, ref.Zone, id, owner.Fingerprint, owner.ControllerID)
+	}
+	if err != nil {
 		return err
 	}
 	c.transitionMachine(ctx, env, m, store.MachineCreating,
