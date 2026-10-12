@@ -26,9 +26,9 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | --- | --- | --- | --- |
 | Handoff document | Merged | [#928](https://github.com/eyupio/zoomies/pull/928) | Planning baseline published; this status section tracks subsequent implementation |
 | E0 reconciliation | Completed for the first E1 slices | Upstream refreshed to `d382fb7a`; ZF-242 allocated in ROADMAP.md | Confirmed the analysis package was absent; preserve ZF-240/241 ownership and reconcile again before route integration |
-| E1 calculation core | Draft PR, not merged | [#931](https://github.com/eyupio/zoomies/pull/931), base `main` | Go 1.27.2 formatting, analysis race tests and vet pass; no runtime surface yet |
-| E1 bounded GitHub evidence | Draft PR, not merged | [#933](https://github.com/eyupio/zoomies/pull/933), base #931's branch | Full GitHub/analysis package race tests and vet pass; target-branch protection, bounded check reads, currentness recheck and explicit coverage |
-| E1 snapshot assembly | Implemented locally, PR pending | Branch `codex/eli-merge-delay-snapshot`, based on #933 | Focused controller/analysis race tests pass; verifies repository/installation/run/job joins, preserves incomplete evidence, and separates check reporting from job execution |
+| E1 calculation core | Merged | [#931](https://github.com/eyupio/zoomies/pull/931) | Go 1.27.2 formatting, analysis race tests and vet pass; no runtime surface yet |
+| E1 bounded GitHub evidence | Merged | [#933](https://github.com/eyupio/zoomies/pull/933), following #931 | Full GitHub/analysis package race tests and vet pass; target-branch protection, bounded check reads, currentness recheck and explicit coverage |
+| E1 snapshot assembly | Draft PR, not merged | [#935](https://github.com/eyupio/zoomies/pull/935), base `main` after its parents merged | Focused controller/analysis race tests pass; verifies repository/installation/run/job joins, preserves incomplete evidence, and separates check reporting from job execution |
 | E1 route and product integration | Not started | Follows snapshot assembly | Authorised evidence collection, REST/OpenAPI, MCP/CLI and contextual UI/Eli remain; the first three slices do not expose a feature in the product |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Full repository tests are running for snapshot assembly; no live model evaluation or performance experiment has run |
@@ -37,6 +37,14 @@ The first validation attempt was blocked by a missing Go compiler and shell
 network access. Explicit per-command network access resolved connectivity;
 the official Go 1.27.2 release was installed in `/tmp` with its published SHA-256
 verified. Do not carry the old toolchain blocker into later assignments.
+
+Full checks initially exhausted the 5 GB `/tmp` filesystem. Build cache and
+temporary build/test directories now use `/workspace/eli-tooling`, while the
+toolchain remains in `/tmp/eli-toolchain/go`. Use
+`GOCACHE=/workspace/eli-tooling/go-cache`, `GOPATH=/tmp/eli-go-path`,
+`GOTMPDIR=/workspace/eli-tooling/tmp` and `TMPDIR=/workspace/eli-tooling/tmp`
+for subsequent checks in this workspace. Interrupted full checks did not pass;
+their rerun is tracked separately from the successful focused tests.
 
 Current implementation plans:
 

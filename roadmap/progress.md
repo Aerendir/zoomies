@@ -11,7 +11,7 @@ in the same pull request as the work.
 
 | Package | Status | Evidence |
 | --- | --- | --- |
-| ZF-242 | `in_progress` | Calculation core in draft PR #931 and bounded GitHub evidence in draft PR #933. Go 1.27.2 formatting, package race tests and vet pass for both foundations. The stacked [snapshot assembler](plans/2026-10-12-eli-pr-delay-snapshot.md) verifies repository/installation/run/job identity and separates check reporting delay from execution; focused controller/analysis race tests pass. [Live handoff status](../eli-enhancement-roadmap-handoff.md#execution-status-updated-12-october-2026). Authorised collection, REST, MCP/CLI and UI integration remain. |
+| ZF-242 | `in_progress` | Calculation core merged in #931 and bounded GitHub evidence merged in #933. Go 1.27.2 formatting, package race tests and vet pass for both foundations. [Snapshot assembly](plans/2026-10-12-eli-pr-delay-snapshot.md) in draft PR #935 verifies repository/installation/run/job identity and separates check reporting delay from execution; focused controller/analysis race tests pass. [Live handoff status](../eli-enhancement-roadmap-handoff.md#execution-status-updated-12-october-2026) records full-check resource limits and reruns. Authorised collection, REST, MCP/CLI and UI integration remain. |
 
 ## How to read a row
 
