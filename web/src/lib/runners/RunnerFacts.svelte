@@ -6,6 +6,7 @@
   does with a container ID is paste it into a shell.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import type { RunnerDetail } from '$lib/api/types';
   import { formatNumber, shortId } from '$lib/format';
   import CopyButton from '$lib/components/CopyButton.svelte';
@@ -103,7 +104,9 @@
     <div class="row">
       <dt>Container</dt>
       <dd class="with-copy">
-        <span class="mono" title={runner.container_id}>{shortId(runner.container_id, 6)}</span>
+        <Tooltip bare text={runner.container_id}>
+          <span class="mono">{shortId(runner.container_id, 6)}</span>
+        </Tooltip>
         <CopyButton value={runner.container_id} label="Copy the container ID" size="sm" />
       </dd>
     </div>
@@ -120,7 +123,9 @@
     <div class="row">
       <dt>Runner ID</dt>
       <dd class="with-copy">
-        <span class="mono" title={runner.id}>{shortId(runner.id)}</span>
+        <Tooltip bare text={runner.id}>
+          <span class="mono">{shortId(runner.id)}</span>
+        </Tooltip>
         <CopyButton value={runner.id} label="Copy the runner ID" size="sm" />
       </dd>
     </div>

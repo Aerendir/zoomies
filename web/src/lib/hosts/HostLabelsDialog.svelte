@@ -21,6 +21,7 @@
   import Button from '$lib/components/Button.svelte';
   import Dialog from '$lib/components/Dialog.svelte';
   import Field from '$lib/components/Field.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import LabelMapEditor from './LabelMapEditor.svelte';
   import { SIZE_CLASSES, labelsFromRows, overrideNote, tagRows } from './tags';
 
@@ -120,7 +121,9 @@
         {#if workedOut.length > 0}
           <ul class="tags">
             {#each workedOut as row (row.key)}
-              <li class="mono" title={row.hint}>{row.text}</li>
+              <li class="mono">
+                <Tooltip bare text={row.hint ?? ''}><span>{row.text}</span></Tooltip>
+              </li>
             {/each}
           </ul>
         {/if}

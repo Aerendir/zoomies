@@ -6,6 +6,7 @@
   dangerous switched on -- is answerable without opening a row.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import PoolPressure from '$lib/insights/PoolPressure.svelte';
   import {
     FileDown,
@@ -359,6 +360,8 @@
           // keeping -- the switch only reports, or the pool belongs to another
           // installation -- is a leftover, and goes like any other.
           disabled: pool.auto?.kept === true,
+          reason:
+            'The controller would make this pool again. Pause it to take it out of use, or set scheduler.auto_pools to shadow or off first.',
           onSelect: () => askDelete(pool),
         },
       ];
@@ -541,6 +544,7 @@
       {
         id: 'ephemeral',
         header: 'Lifetime',
+        help: 'Whether a runner takes one job and is then removed, or is kept and reused for more.',
         priority: 'wide',
         value: (row) => (row.ephemeral === false ? 'Reused' : 'One job'),
       },
@@ -583,13 +587,15 @@
 
 {#snippet nameCell(pool: Pool)}
   <span class="name-line">
-    <a class="pool-name" href="/pools/{pool.id}" title={pool.name ?? undefined}>
-      {pool.name ?? 'unnamed'}
-    </a>
+    <Tooltip bare whenTruncated text={pool.name ?? ''}>
+      <a class="pool-name" href="/pools/{pool.id}">
+        {pool.name ?? 'unnamed'}
+      </a>
+    </Tooltip>
     {#if pool.auto}
       <!-- The accent a host's "Embedded" badge has, never a status colour: that
            the controller keeps a pool is a fact about it, not a state it is in. -->
-      <Badge tone="accent" label="Automatic" size="sm" dot={false} title={pool.auto.summary} />
+      <Badge tone="accent" label="Automatic" size="sm" dot={false} help={pool.auto.summary} />
     {/if}
   </span>
 {/snippet}

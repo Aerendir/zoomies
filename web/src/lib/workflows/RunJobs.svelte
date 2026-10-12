@@ -12,6 +12,7 @@
   attempt that failed and was re-run is still the reason somebody is looking.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { readableJobText } from '$lib/jobs/name';
   import { CircleX, RotateCcw } from '@lucide/svelte';
   import {
@@ -302,14 +303,14 @@
             <td data-label="State">
               <span class="state">
                 <StateCell status={jobStatus(job.state, job.conclusion)} />
-                {#if queue}<Badge status={queue} size="sm" title={queue.hint} />{/if}
+                {#if queue}<Badge status={queue} size="sm" help={queue.hint} />{/if}
                 {#if fleetFailed(job)}
-                  <Badge status={RUNNER_LOST} size="sm" title={job.fault_fix || RUNNER_LOST.hint} />
+                  <Badge status={RUNNER_LOST} size="sm" help={job.fault_fix || RUNNER_LOST.hint} />
                 {/if}
                 {#if stuckUnmatched(job)}
-                  <Badge status={UNMATCHED} size="sm" title={UNMATCHED.hint} />
+                  <Badge status={UNMATCHED} size="sm" help={UNMATCHED.hint} />
                 {:else if job.hosted && job.matched === false}
-                  <Badge status={HOSTED} size="sm" title={HOSTED.hint} />
+                  <Badge status={HOSTED} size="sm" help={HOSTED.hint} />
                 {/if}
               </span>
             </td>
@@ -338,16 +339,13 @@
             </td>
             <td data-label="Failed at" class:empty={!fleetFailed(job) && !job.failed_step}>
               {#if fleetFailed(job)}
-                <span class="failed-at danger" title={job.runner_fault || job.fault_fix}>
-                  {failedAt(job)}
-                </span>
+                <Tooltip bare text={job.runner_fault || job.fault_fix || ''}>
+                  <span class="failed-at danger">{failedAt(job)}</span>
+                </Tooltip>
               {:else if job.failed_step}
-                <span
-                  class="failed-at"
-                  title="Step {job.failed_step.number}: {job.failed_step.name}"
-                >
-                  {job.failed_step.name}
-                </span>
+                <Tooltip bare text="Step {job.failed_step.number}: {job.failed_step.name}">
+                  <span class="failed-at">{job.failed_step.name}</span>
+                </Tooltip>
               {:else}
                 <span class="quiet">--</span>
               {/if}

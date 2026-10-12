@@ -6,6 +6,7 @@
   is a plain anchor rather than the Button component, which has no target.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { ExternalLink } from '@lucide/svelte';
 
   interface Props {
@@ -41,29 +42,30 @@
 </script>
 
 {#if href}
-  <a
-    {href}
-    target="_blank"
-    rel="noopener noreferrer"
-    class="link {variant} {className}"
-    class:numbered={!!runNumber}
-    {onclick}
-    title={showLabel ? undefined : accessibleLabel}
-    aria-label={showLabel ? undefined : accessibleLabel}
-  >
-    {#if showLabel}<span>{label}</span>{/if}
-    {#if runNumber}<span class="run-number">#{runNumber}</span>{/if}
-    <ExternalLink size={variant === 'button' ? 14 : 13} aria-hidden="true" />
-  </a>
+  <!-- Icon only, the link shows no name of its own, so its name is the heading. -->
+  <Tooltip bare title={showLabel ? undefined : accessibleLabel}>
+    <a
+      {href}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="link {variant} {className}"
+      class:numbered={!!runNumber}
+      {onclick}
+      aria-label={showLabel ? undefined : accessibleLabel}
+    >
+      {#if showLabel}<span>{label}</span>{/if}
+      {#if runNumber}<span class="run-number">#{runNumber}</span>{/if}
+      <ExternalLink size={variant === 'button' ? 14 : 13} aria-hidden="true" />
+    </a>
+  </Tooltip>
 {:else if runNumber}
-  <span
-    class="run-number plain"
-    title="GitHub run #{runNumber}, but Zoomies recorded no run URL for it"
-  >
-    #{runNumber}
-  </span>
+  <Tooltip bare text="GitHub run #{runNumber}, but Zoomies recorded no run URL for it">
+    <span class="run-number plain">#{runNumber}</span>
+  </Tooltip>
 {:else}
-  <span class="absent" title="Zoomies did not record a run URL for this job">--</span>
+  <Tooltip bare text="Zoomies did not record a run URL for this job">
+    <span class="absent">--</span>
+  </Tooltip>
 {/if}
 
 <style>

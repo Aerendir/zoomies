@@ -13,6 +13,7 @@
   somebody else as a link rather than as a description of which boxes to tick.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import AskEli from '$lib/assistant/AskEli.svelte';
   import { usageContext } from '$lib/assistant/contexts';
   import InstallationReport from '$lib/usage/InstallationReport.svelte';
@@ -455,8 +456,10 @@
           {@const rowKind = kind(row.key)}
           <!-- svelte-ignore a11y_no_redundant_roles -->
           <tr role="row">
-            <th role="rowheader" scope="row" class="key" title={row.key || undefined}>
-              <span class="name" class:muted={rowKind !== 'live'}>{label(row.key)}</span>
+            <th role="rowheader" scope="row" class="key">
+              <Tooltip bare text={row.key || ''}>
+                <span class="name" class:muted={rowKind !== 'live'}>{label(row.key)}</span>
+              </Tooltip>
               {#if rowKind === 'gone'}
                 <span class="tag">deleted</span>
               {:else if rowKind === 'unattributed'}

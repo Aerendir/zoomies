@@ -34,6 +34,7 @@
   import DropdownMenu from '$lib/components/DropdownMenu.svelte';
   import type { MenuItem } from '$lib/components/DropdownMenu.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import UtilisationBar from '$lib/components/UtilisationBar.svelte';
   import BackendList from './BackendList.svelte';
   import HostMemoryPool from './HostMemoryPool.svelte';
@@ -368,6 +369,9 @@
     return parts.join(' · ');
   });
 
+  const OPERATOR_ONLY =
+    'Only operators can change hosts. Ask an administrator for the operator role.';
+
   const actions = $derived<MenuItem[]>([
     {
       id: 'usage',
@@ -379,6 +383,8 @@
       label: host.cordoned ? 'Uncordon this host' : 'Cordon this host',
       icon: ServerCog,
       disabled: !canOperate,
+      reason: OPERATOR_ONLY,
+      lock: true,
       onSelect: () => oncordon(host, !host.cordoned),
     },
     // Only while there is one to lift: an action that says "lift the
@@ -390,6 +396,8 @@
             label: 'Lift the throttle',
             icon: CircleDashed,
             disabled: !canOperate,
+            reason: OPERATOR_ONLY,
+            lock: true,
             onSelect: () => onthrottle(host),
           },
         ]
@@ -399,6 +407,8 @@
       label: 'Adjust capacity and reserve',
       icon: Gauge,
       disabled: !canOperate,
+      reason: OPERATOR_ONLY,
+      lock: true,
       onSelect: () => oncapacity(host),
     },
     {
@@ -406,6 +416,8 @@
       label: 'Set runner sizes',
       icon: Ruler,
       disabled: !canOperate,
+      reason: OPERATOR_ONLY,
+      lock: true,
       onSelect: () => onsizes(host),
     },
     {
@@ -413,6 +425,8 @@
       label: 'Rename this host',
       icon: PencilLine,
       disabled: !canOperate,
+      reason: OPERATOR_ONLY,
+      lock: true,
       onSelect: () => onrename(host),
     },
     {
@@ -420,6 +434,8 @@
       label: 'Edit tags',
       icon: Pencil,
       disabled: !canOperate,
+      reason: OPERATOR_ONLY,
+      lock: true,
       onSelect: () => onedit(host),
     },
     {
@@ -432,6 +448,11 @@
       danger: true,
       separated: true,
       disabled: !canAdmin || host.embedded === true,
+      reason:
+        host.embedded === true
+          ? 'This agent runs inside the controller process, so it cannot be removed.'
+          : 'Only administrators can remove hosts. Ask an administrator.',
+      lock: host.embedded !== true,
       onSelect: () => {
         if (machine?.id) navigate(`/machines/${machine.id}`);
         else ondelete(host);
@@ -447,13 +468,13 @@
         <a href="/hosts/{host.id}">{host.name || host.id}</a>
       </h3>
       <div class="badges">
-        <Badge {status} size="sm" title={status.hint} />
+        <Badge {status} size="sm" help={status.hint} />
         <a
           class="health-link"
           href={line.href}
           aria-label="Host health for {host.name || host.id}: {health.label}"
           aria-describedby={line.text ? `host-${host.id}-health` : undefined}
-          ><Badge tone={health.tone} size="sm" title={health.hint}
+          ><Badge tone={health.tone} size="sm" help={health.hint}
             >{health.label}<ChevronRight size={12} aria-hidden="true" /></Badge
           ></a
         >
@@ -467,7 +488,7 @@
             label="Tailcat host"
             size="sm"
             dot={false}
-            title="Private encrypted agent connection. No public host address or inbound port required. Health is shown separately."
+            help="Private encrypted agent connection. No public host address or inbound port required. Health is shown separately."
           />
         {/if}
         {#if host.embedded}
@@ -476,7 +497,7 @@
             label="Embedded"
             size="sm"
             dot={false}
-            title="This agent runs inside the controller process, so it cannot be removed."
+            help="This agent runs inside the controller process, so it cannot be removed."
           />
         {/if}
         {#if host.incompatible}
@@ -485,7 +506,7 @@
             label="Incompatible"
             size="sm"
             dot={false}
-            title={host.incompatible_reason ||
+            help={host.incompatible_reason ||
               'This agent speaks a protocol the controller does not, so no new runner is placed here.'}
           />
         {:else if skew}
@@ -493,7 +514,7 @@
                in a state, it is a fact worth knowing. The status palette is a
                fixed mapping and reusing one here would teach it a second
                meaning. -->
-          <Badge tone={skew.tone} label={skew.label} size="sm" dot={false} title={skew.hint} />
+          <Badge tone={skew.tone} label={skew.label} size="sm" dot={false} help={skew.hint} />
         {/if}
         {#if !host.resources_known}
           <!-- Not a fault: an agent too old to measure its machine is placed by
@@ -504,7 +525,7 @@
             label="Size unknown"
             size="sm"
             dot={false}
-            title="This agent has not reported the machine's CPUs, memory or disk, so this host is placed by its slot count alone. Upgrade the agent and the figures appear on its next heartbeat."
+            help="This agent has not reported the machine's CPUs, memory or disk, so this host is placed by its slot count alone. Upgrade the agent and the figures appear on its next heartbeat."
           />
         {/if}
         {#if sizeClass}
@@ -517,7 +538,7 @@
             label="{classWord(sizeClass.class)} class"
             size="sm"
             dot={false}
-            title={sizeClass.reason}
+            help={sizeClass.reason}
           />
         {/if}
         {#if cannotLendCPU}
@@ -530,7 +551,7 @@
             label="Cannot lend CPU"
             size="sm"
             dot={false}
-            title={`This agent cannot move a live runner's CPU quota, so a runner of an elastic pool placed here is held at its guaranteed share. Upgrade the agent${host.upgrade_command ? '; the command is at the foot of this card' : ''}.`}
+            help={`This agent cannot move a live runner's CPU quota, so a runner of an elastic pool placed here is held at its guaranteed share. Upgrade the agent${host.upgrade_command ? '; the command is at the foot of this card' : ''}.`}
           />
         {/if}
         {#if machine}
@@ -543,7 +564,7 @@
             label={machineLabel}
             size="sm"
             dot={false}
-            title="Zoomies created this host. Deleting the machine removes the resource too; removing the host here would leave it running, and on the bill."
+            help="Zoomies created this host. Deleting the machine removes the resource too; removing the host here would leave it running, and on the bill."
           />
         {/if}
       </div>
@@ -555,17 +576,15 @@
   <p class="meta">
     {#if platform}<span>{platform}</span>{/if}
     {#if size}<span class="tabular">{size}</span>{/if}
-    {#if disk && diskHref}<a
-        class="tabular disk"
-        class:low={diskLow}
-        href={diskHref}
-        title="Free space on the filesystem holding the work directory, as the agent last reported it. The host's Work directory free space check reads the same filesystem and can be a minute or two older. Select to open it."
-        >{disk}</a
-      >{:else if disk}<span
-        class="tabular"
-        class:low={diskLow}
-        title="Disk on the filesystem holding the work directory, as the agent last reported it."
-        >{disk}</span
+    {#if disk && diskHref}<Tooltip
+        bare
+        text="Free space on the filesystem holding the work directory, as the agent last reported it. The host's Work directory free space check reads the same filesystem and can be a minute or two older. Select to open it."
+        ><a class="tabular disk" class:low={diskLow} href={diskHref}>{disk}</a></Tooltip
+      >{:else if disk}<Tooltip
+        bare
+        text="Disk on the filesystem holding the work directory, as the agent last reported it."
+        ><button type="button" class="tabular help-term" class:low={diskLow}>{disk}</button
+        ></Tooltip
       >{/if}
     {#if host.version}<span>agent {host.version}</span>{/if}
     {#if host.version_channel}<span class="mono">channel :{host.version_channel}</span>{/if}
@@ -653,8 +672,10 @@
       {#if host.usage.load_average_1m !== undefined}
         <!-- The runnable queue, which is what catches a machine that has
              stopped keeping up while its CPU figure sits at 100. -->
-        <span class="tabular" title="One-minute load average, against {host.cpus ?? '?'} CPUs"
-          >load {round(host.usage.load_average_1m)}</span
+        <Tooltip bare text="One-minute load average, against {host.cpus ?? '?'} CPUs"
+          ><button type="button" class="tabular help-term"
+            >load {round(host.usage.load_average_1m)}</button
+          ></Tooltip
         >
       {/if}
       <span>Measured <RelativeTime value={host.usage.sampled_at} plain /></span>
@@ -796,7 +817,9 @@
     {:else}
       <ul class="labels" aria-label="Tags set on {host.name || host.id}">
         {#each ownTags as tag (tag.key)}
-          <li class="mono" title={tag.hint || undefined}>{tag.text}</li>
+          <li class="mono">
+            <Tooltip bare text={tag.hint ?? ''}><span>{tag.text}</span></Tooltip>
+          </li>
         {/each}
       </ul>
     {/if}
@@ -811,7 +834,9 @@
         data-testid="host-derived-tags"
       >
         {#each derivedTags as tag (tag.key)}
-          <li class="mono" title={tag.hint}>{tag.text}</li>
+          <li class="mono">
+            <Tooltip bare text={tag.hint ?? ''}><span>{tag.text}</span></Tooltip>
+          </li>
         {/each}
       </ul>
     {/if}

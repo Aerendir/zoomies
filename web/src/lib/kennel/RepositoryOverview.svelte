@@ -9,6 +9,7 @@
   not run them.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { untrack } from 'svelte';
   import { getJobStats, listJobs } from '$lib/api/client';
   import type { JobStats, KennelRepository } from '$lib/api/types';
@@ -236,7 +237,9 @@
                     {#if row.known}
                       <a href="/pools/{encodeURIComponent(row.id)}">{row.name}</a>
                     {:else}
-                      <span class="gone" title="The fleet no longer has this pool">{row.name}</span>
+                      <Tooltip bare text="The fleet no longer has this pool">
+                        <span class="gone">{row.name}</span>
+                      </Tooltip>
                     {/if}
                     <span class="count"
                       >{#if row.id}<a href={jobs({ pool_id: row.id })}
@@ -259,9 +262,9 @@
                     {#if row.known}
                       <a href="/hosts/{encodeURIComponent(row.id)}">{row.name}</a>
                     {:else}
-                      <span class="gone" title="The fleet has no record of this host for these jobs"
-                        >{row.name}</span
-                      >
+                      <Tooltip bare text="The fleet has no record of this host for these jobs">
+                        <span class="gone">{row.name}</span>
+                      </Tooltip>
                     {/if}
                     <span class="count"
                       >{#if row.id}<a href={jobs({ host_id: row.id })}

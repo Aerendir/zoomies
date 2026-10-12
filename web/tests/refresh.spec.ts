@@ -98,7 +98,7 @@ test('R refreshes the page, without taking the letter from anything else', async
     }).observe(el, { attributes: true, attributeFilter: ['aria-busy'] });
   });
   await page.keyboard.press('r');
-  await expect(refresh).toHaveAttribute('title', /^Refreshed /);
+  await expect(refresh).toHaveAccessibleDescription(/^Refreshed /);
   await expect(refresh).not.toHaveAttribute('aria-busy', 'true');
   const seen = await page.evaluate(
     () => (window as unknown as { __refreshSeen: { busy: boolean } }).__refreshSeen.busy,
@@ -124,11 +124,11 @@ test('the refresh says when it last landed', async ({ page }) => {
   // and the honest answer is a time, not a spinner.
   await goto(page, '/hosts', 'Hosts');
   const refresh = refreshButton(page);
-  await expect(refresh).toHaveAttribute('title', /Fetch this page again/);
+  await expect(refresh).toHaveAccessibleDescription(/Fetch this page again/);
 
   await refresh.click();
   await expect(refresh).not.toHaveAttribute('aria-busy', 'true');
-  await expect(refresh).toHaveAttribute('title', /^Refreshed .+\. Fetch it again\./);
+  await expect(refresh).toHaveAccessibleDescription(/^Refreshed .+\. Fetch this page again\./);
 });
 
 async function joinHost(page: Page): Promise<string> {
@@ -174,7 +174,7 @@ test('Refresh on a host page re-reads the fleet rather than a copy the page igno
     );
     await refresh.click();
     await listed;
-    await expect(refresh).toHaveAttribute('title', /^Refreshed .+\. Fetch it again\./);
+    await expect(refresh).toHaveAccessibleDescription(/^Refreshed .+\. Fetch this page again\./);
   } finally {
     await page.request.delete(`/api/v1/hosts/${hostId}`);
   }
@@ -197,7 +197,7 @@ test('Refresh on a host page says so when the fleet could not be re-read', async
     );
     await refresh.click();
     await expect(page.getByRole('button', { name: /retry|try again/i })).toBeVisible();
-    await expect(refresh).not.toHaveAttribute('title', /^Refreshed /);
+    await expect(refresh).not.toHaveAccessibleDescription(/^Refreshed /);
   } finally {
     await page.unroute('**/api/v1/hosts');
     await page.request.delete(`/api/v1/hosts/${hostId}`);

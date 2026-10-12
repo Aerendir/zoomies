@@ -227,7 +227,7 @@ test('analytics supports keyboard inspection, group focus and matching CSV expor
   const square = matrix.locator('[role="gridcell"][tabindex="0"]');
   await square.focus();
   await expect(square).toBeFocused();
-  await expect(page.locator('.tip:popover-open')).toContainText('Queued');
+  await expect(page.locator('.bubble:popover-open')).toContainText('Queued');
   await square.press('Enter');
   // The report opens on a day, so a square is an hour and the detail is one.
   await expect(matrix.getByRole('region', { name: 'Selected hour' })).toContainText('Queued');

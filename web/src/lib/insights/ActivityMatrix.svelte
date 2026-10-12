@@ -29,10 +29,12 @@
   a bar shows the same floating figures a square does, and clicking one asks
   `links` the question a square's own list already answers, so a bar goes
   wherever "Jobs that day" or "Failed jobs" would -- the red segment of a bar
-  to the failures, the rest of it to the day. Nothing here reaches for a
-  tooltip library: the one popover card above already carries a square's whole
-  story, an hour is the same card asked about a narrower moment, and a second
-  widget would say nothing it does not.
+  to the failures, the rest of it to the day. The one card carries a square's
+  whole story and an hour is the same card asked about a narrower moment. It is
+  drawn on the shared tooltip bubble and answers to the shared controller, with
+  one difference: it opts out of the wait, because people scrub across the grid
+  and a card that arrives a quarter of a second behind the pointer is always
+  one square late.
 
   The band is the grid, the aside beside it, and the key under both. A grid
   with at least as many columns as rows grows its square until it fills the
@@ -71,10 +73,11 @@
   import { SvelteMap } from 'svelte/reactivity';
   import { X } from '@lucide/svelte';
   import { formatNumber, formatPercent } from '$lib/format';
-  import { layers } from '$lib/keys';
   import { router } from '$lib/router';
+  import { tooltips, type Bubble } from '$lib/tooltip';
   import IconButton from '$lib/components/IconButton.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
+  import TooltipBubble from '$lib/components/TooltipBubble.svelte';
   import {
     addDays,
     calendar,
@@ -503,13 +506,11 @@
         select(cell.index);
         return;
       case 'Escape':
-        // One thing at a time, innermost first: the tooltip, then the
-        // selection. The shell's own Escape closes overlays, and there is
-        // no overlay here, so the key is taken only when it did something.
-        if (tip) {
-          event.stopPropagation();
-          hideTip();
-        } else if (selected !== null) {
+        // One thing at a time, innermost first: the card, then the selection.
+        // The card has already been put away by the time this runs: the
+        // shared tooltip controller hears Escape first and stops it when it
+        // closed something, so what reaches here is the selection's.
+        if (selected !== null) {
           event.stopPropagation();
           select(null);
         }
@@ -659,16 +660,20 @@
     /** The square's index in the series, or null for a bar in the detail. */
     index: number | null;
   }
-  let tip = $state<Tip | null>(null);
-  let tipEl = $state<HTMLDivElement | null>(null);
-  let hoverAnchor: HTMLElement | null = null;
+  /** What the pointer or the keyboard is on, whether or not the card is up. */
+  let target = $state<Tip | null>(null);
+  /** Whether the shared controller has the card up. */
+  let shown = $state(false);
+  const tip = $derived(shown ? target : null);
+  const bubble: Bubble = {
+    show: () => (shown = true),
+    hide: () => (shown = false),
+  };
+  $effect(() => () => tooltips.release(bubble));
 
-  function showTip(next: Tip): void {
-    tip = next;
-  }
-  function hideTip(): void {
-    tip = null;
-  }
+  // One card for the whole grid, drawn on the shared bubble and answering to
+  // the shared controller. The squares are scrubbed across, so the card opts
+  // out of the wait: it is there the moment the pointer is, and moves with it.
   function enter(
     el: HTMLElement,
     bucket: ActivityBucket,
@@ -676,75 +681,31 @@
     which: Interval,
     index: number | null = null,
   ): void {
-    hoverAnchor = el;
-    showTip({ bucket, at, interval: which, anchor: el, index });
+    target = { bucket, at, interval: which, anchor: el, index };
+    tooltips.hover(bubble, 'none');
   }
-  function leave(el: HTMLElement): void {
-    hoverAnchor = null;
-    // A square the keyboard is on keeps its tooltip when the pointer wanders
-    // off; one a mouse clicked does not, or every selection would leave a
-    // card hanging over the grid.
-    if (tip?.anchor === el && !el.matches(':focus-visible')) hideTip();
+  function leave(): void {
+    tooltips.unhover(bubble);
   }
-  function blur(el: HTMLElement): void {
-    if (tip?.anchor === el && hoverAnchor !== el) hideTip();
+  /** The keyboard's focus, and only that: a click focuses a square too. */
+  function focusSquare(
+    el: HTMLElement,
+    bucket: ActivityBucket,
+    at: Date,
+    which: Interval,
+    index: number,
+  ): void {
+    if (!el.matches(':focus-visible')) return;
+    target = { bucket, at, interval: which, anchor: el, index };
+    tooltips.focus(bubble);
   }
-
-  // One floating card for the whole grid, in the browser's top layer so the
-  // frame's own scrolling cannot clip it, positioned above its square and
-  // flipped below when the top of the window is too close.
-  $effect(() => {
-    if (!tip || !tipEl) return;
-    const anchor = tip.anchor;
-    const card = tipEl;
-    void tip.bucket;
-    const layer = layers.push('tooltip', hideTip);
-    card.showPopover();
-
-    function position(): void {
-      const rect = anchor.getBoundingClientRect();
-      const width = document.documentElement.clientWidth;
-      const height = document.documentElement.clientHeight;
-      if (rect.bottom <= 0 || rect.top >= height || rect.right <= 0 || rect.left >= width) {
-        hideTip();
-        return;
-      }
-      for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
-        const style = getComputedStyle(parent);
-        const clip = parent.getBoundingClientRect();
-        if (
-          (/auto|scroll|hidden|clip/.test(style.overflowX) &&
-            (rect.right <= clip.left || rect.left >= clip.right)) ||
-          (/auto|scroll|hidden|clip/.test(style.overflowY) &&
-            (rect.bottom <= clip.top || rect.top >= clip.bottom))
-        ) {
-          hideTip();
-          return;
-        }
-      }
-      const gap = parseFloat(getComputedStyle(card).paddingLeft);
-      const bounds = card.getBoundingClientRect();
-      const above = rect.top - bounds.height - gap;
-      const y = above >= gap ? above : rect.bottom + gap;
-      const x = rect.left + (rect.width - bounds.width) / 2;
-      card.style.left = `${Math.max(gap, Math.min(x, width - bounds.width - gap))}px`;
-      card.style.top = `${Math.max(gap, Math.min(y, height - bounds.height - gap))}px`;
-    }
-
-    position();
-    document.addEventListener('scroll', position, true);
-    window.addEventListener('resize', position);
-    const observer = new ResizeObserver(position);
-    observer.observe(anchor);
-    observer.observe(card);
-    return () => {
-      layers.remove(layer);
-      observer.disconnect();
-      document.removeEventListener('scroll', position, true);
-      window.removeEventListener('resize', position);
-      if (card.matches(':popover-open')) card.hidePopover();
-    };
-  });
+  function blurSquare(event: FocusEvent): void {
+    // Arrowing from one square to the next is a blur and a focus in a row; the
+    // card moves with the focus rather than going away and coming back.
+    const next = event.relatedTarget;
+    if (next instanceof Node && grid?.contains(next)) return;
+    tooltips.blur(bubble);
+  }
 
   /* -- words ---------------------------------------------------------------- */
 
@@ -913,10 +874,16 @@
                         aria-selected={selected === cell.index}
                         onmouseenter={(e) =>
                           enter(e.currentTarget, cell.bucket, cell.date, interval, cell.index)}
-                        onmouseleave={(e) => leave(e.currentTarget)}
+                        onmouseleave={leave}
                         onfocus={(e) =>
-                          enter(e.currentTarget, cell.bucket, cell.date, interval, cell.index)}
-                        onblur={(e) => blur(e.currentTarget)}
+                          focusSquare(
+                            e.currentTarget,
+                            cell.bucket,
+                            cell.date,
+                            interval,
+                            cell.index,
+                          )}
+                        onblur={blurSquare}
                         onclick={() => {
                           focusIndex = cell.index;
                           select(cell.index);
@@ -1044,9 +1011,8 @@
                   class:clickable={goesSomewhere}
                   data-outside={outside(at) || null}
                   role="presentation"
-                  title={describe(h, at, 'hour')}
                   onmouseenter={(e) => enter(e.currentTarget, h, at, 'hour')}
-                  onmouseleave={(e) => leave(e.currentTarget)}
+                  onmouseleave={leave}
                   onclick={goesSomewhere ? (e) => clickHour(e, h, at) : undefined}
                 >
                   {#if done > 0}
@@ -1098,43 +1064,51 @@
   {#if tip}
     {@const b = tip.bucket}
     {@const split = OUTCOMES.filter((o) => b[o.key] > 0)}
-    <div bind:this={tipEl} class="tip" popover="manual" role="presentation" aria-hidden="true">
-      <p class="tip-title">{intervalName(tip.at, tip.interval)}</p>
-      <p class="tip-head">{headline(b)}</p>
-      {#if split.length}
-        <div class="split">
-          {#each split as o (o.key)}<span data-tone={o.tone} style:flex={b[o.key]}></span>{/each}
-        </div>
-        <ul class="outcomes">
-          {#each split as o (o.key)}
-            <li><i data-tone={o.tone}></i>{o.label} <strong>{formatNumber(b[o.key])}</strong></li>
-          {/each}
-        </ul>
-      {/if}
-      <dl class="figures">
-        {#each figures(b) as [label, value] (label)}
-          <div>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
+    <TooltipBubble
+      anchor={tip.anchor}
+      placement="top"
+      size="card"
+      interactive={false}
+      onclose={() => tooltips.dismiss(bubble)}
+    >
+      <div class="tip">
+        <p class="tip-title">{intervalName(tip.at, tip.interval)}</p>
+        <p class="tip-head">{headline(b)}</p>
+        {#if split.length}
+          <div class="split">
+            {#each split as o (o.key)}<span data-tone={o.tone} style:flex={b[o.key]}></span>{/each}
           </div>
-        {/each}
-      </dl>
-      {#if tip.interval === interval}
-        <p class="tip-hint">
-          {tip.index !== null && tip.index === selected
-            ? 'Selected'
-            : hourly && interval !== 'hour'
-              ? 'Select for the hours and the jobs'
-              : 'Select for the jobs'}
-        </p>
-      {:else if tip.interval === 'hour' && links}
-        <p class="tip-hint">
-          {b.failed > 0
-            ? 'Click the red for its failed jobs, elsewhere for the day'
-            : 'Click for the day'}
-        </p>
-      {/if}
-    </div>
+          <ul class="outcomes">
+            {#each split as o (o.key)}
+              <li><i data-tone={o.tone}></i>{o.label} <strong>{formatNumber(b[o.key])}</strong></li>
+            {/each}
+          </ul>
+        {/if}
+        <dl class="figures">
+          {#each figures(b) as [label, value] (label)}
+            <div>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          {/each}
+        </dl>
+        {#if tip.interval === interval}
+          <p class="tip-hint">
+            {tip.index !== null && tip.index === selected
+              ? 'Selected'
+              : hourly && interval !== 'hour'
+                ? 'Select for the hours and the jobs'
+                : 'Select for the jobs'}
+          </p>
+        {:else if tip.interval === 'hour' && links}
+          <p class="tip-hint">
+            {b.failed > 0
+              ? 'Click the red for its failed jobs, elsewhere for the day'
+              : 'Click for the day'}
+          </p>
+        {/if}
+      </div>
+    </TooltipBubble>
   {/if}
 </div>
 
@@ -1656,24 +1630,10 @@
   }
 
   /* -- the tooltip ------------------------------------------------------ */
+  /* The surface is the shared bubble's. What is here is the card's own padding,
+     which brings the bubble's to the twelve pixels the card has always had. */
   .tip {
-    position: fixed;
-    inset: auto;
-    margin: 0;
-    z-index: var(--z-layer-dropdown);
-    width: max-content;
-    max-width: min(300px, calc(100vw - var(--z-space-4)));
-    max-height: calc(100dvh - var(--z-space-4));
-    overflow-y: auto;
-    padding: var(--z-space-3);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-md);
-    background: var(--z-surface-raised);
-    color: var(--z-text);
-    box-shadow: var(--z-shadow-md);
-    font-size: var(--z-text-xs);
-    line-height: var(--z-leading-xs);
-    pointer-events: none;
+    padding: var(--z-space-2) var(--z-space-1);
   }
   .tip-title {
     margin: 0;
