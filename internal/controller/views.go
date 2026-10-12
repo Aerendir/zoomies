@@ -1774,6 +1774,11 @@ type ProviderView struct {
 	// CAPEM is the certificate this controller trusts for the endpoint instead of
 	// the system's.
 	CAPEM string `json:"ca_pem,omitempty"`
+	// MachineCAPEM is the certificate a machine built here trusts for this
+	// controller, and nothing else when it is set. A different certificate from
+	// CAPEM in general, and returned for the same reason: a form can only keep
+	// what it is shown.
+	MachineCAPEM string `json:"machine_ca_pem,omitempty"`
 	// Connection is how the endpoint is reached: "direct" over the network,
 	// or "tailcat" through a gateway beside the provider. The gateway's
 	// address is sealed on the row and, like the credential, has no field
@@ -1847,6 +1852,7 @@ func (c *Controller) ProviderView(p *store.Provider, machines []*store.Machine) 
 		Endpoint:              p.Endpoint,
 		InsecureSkipVerify:    p.InsecureSkipVerify,
 		CAPEM:                 certificateAuthority(p.CAPEM),
+		MachineCAPEM:          certificateAuthority(p.MachineCAPEM),
 		Connection:            providerConnection(p),
 		Settings:              emptyMap(p.Settings),
 		CredentialsConfigured: len(p.CredentialsEnc) > 0,

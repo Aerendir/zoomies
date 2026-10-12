@@ -506,3 +506,23 @@ func ids(events []Event) []uint64 {
 	}
 	return out
 }
+
+func TestMatchesIsTheOneRuleForKindsAndTopics(t *testing.T) {
+	ev := Event{Kind: KindJobUpdated, Topic: "job:job_1"}
+	for _, tc := range []struct {
+		name string
+		opts SubscribeOptions
+		want bool
+	}{
+		{"no filter takes everything", SubscribeOptions{}, true},
+		{"a listed kind", SubscribeOptions{Kinds: []Kind{KindRunnerUpdated, KindJobUpdated}}, true},
+		{"an unlisted kind", SubscribeOptions{Kinds: []Kind{KindRunnerUpdated}}, false},
+		{"a topic prefix", SubscribeOptions{TopicPrefix: "job:"}, true},
+		{"another topic prefix", SubscribeOptions{TopicPrefix: "runner:"}, false},
+		{"both must hold", SubscribeOptions{Kinds: []Kind{KindJobUpdated}, TopicPrefix: "runner:"}, false},
+	} {
+		if got := tc.opts.Matches(ev); got != tc.want {
+			t.Errorf("%s: Matches = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

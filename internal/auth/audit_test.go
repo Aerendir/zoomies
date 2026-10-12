@@ -148,6 +148,87 @@ func TestRedactKeepsFlagsAndSurvivesNil(t *testing.T) {
 	}
 }
 
+// A private key pasted into a box meant for a certificate is a credential
+// whatever the box is called, and the audit trail is readable by every
+// signed-in viewer. Redacting by field name cannot see it, because nothing in
+// "ca_pem" says secret, so the value is judged too: a PEM private key block
+// anywhere in a string blanks the whole string.
+func TestRedactBlanksAPrivateKeyWhateverTheFieldIsCalled(t *testing.T) {
+	const certificate = "-----BEGIN CERTIFICATE-----\nbm90IGEgcmVhbCBjZXJ0\n-----END CERTIFICATE-----"
+	keys := map[string]string{
+		"pkcs8":                  "-----BEGIN PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END PRIVATE KEY-----",
+		"rsa":                    "-----BEGIN RSA PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END RSA PRIVATE KEY-----",
+		"ec":                     "-----BEGIN EC PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END EC PRIVATE KEY-----",
+		"encrypted":              "-----BEGIN ENCRYPTED PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END ENCRYPTED PRIVATE KEY-----",
+		"openssh":                "-----BEGIN OPENSSH PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END OPENSSH PRIVATE KEY-----",
+		"pgp":                    "-----BEGIN PGP PRIVATE KEY BLOCK-----\nbm90IGEgcmVhbCBrZXk=\n-----END PGP PRIVATE KEY BLOCK-----",
+		"after a certificate":    certificate + "\n-----BEGIN PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END PRIVATE KEY-----",
+		"in the middle of notes": "kept for later:\n-----BEGIN PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END PRIVATE KEY-----\nthanks",
+	}
+	for name, key := range keys {
+		t.Run(name, func(t *testing.T) {
+			type box struct {
+				CAPEM string `json:"ca_pem"`
+			}
+			out := Redact(box{CAPEM: key}).(map[string]any)
+			if out["ca_pem"] != redactedMarker {
+				t.Errorf("ca_pem = %q; want the key blanked", out["ca_pem"])
+			}
+			// Wherever the value sits, not only in a struct field.
+			nested := Redact(map[string]any{"settings": map[string]string{"notes": key}, "list": []string{key}}).(map[string]any)
+			if got := nested["settings"].(map[string]any)["notes"]; got != redactedMarker {
+				t.Errorf("a key in a map value survived: %q", got)
+			}
+			if got := nested["list"].([]any)[0]; got != redactedMarker {
+				t.Errorf("a key in a slice element survived: %q", got)
+			}
+		})
+	}
+}
+
+// Judging the value must not cost the audit trail the things it is for: a
+// certificate is public, and a sentence that only mentions a key is not one.
+func TestRedactKeepsACertificateAndTextThatOnlyMentionsAKey(t *testing.T) {
+	const certificate = "-----BEGIN CERTIFICATE-----\nbm90IGEgcmVhbCBjZXJ0\n-----END CERTIFICATE-----"
+	out := Redact(map[string]string{
+		"ca_pem": certificate,
+		"note":   "rotate the private key by hand, then paste -----BEGIN CERTIFICATE----- here",
+	}).(map[string]any)
+	if out["ca_pem"] != certificate {
+		t.Errorf("a certificate was changed: %q", out["ca_pem"])
+	}
+	if out["note"] == redactedMarker {
+		t.Errorf("a sentence that only mentions a private key was blanked: %q", out["note"])
+	}
+}
+
+// The certificate boxes on a provider are the real case: an upgrade copies
+// whatever ca_pem held into machine_ca_pem, so a key pasted there by mistake is
+// now in both, and the form tells an operator with a public certificate to empty
+// the new one. The change is still recorded, as "something was there and is
+// gone", and what was there is not.
+func TestAProviderHoldingAPastedKeyIsAuditedWithoutIt(t *testing.T) {
+	const key = "-----BEGIN PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END PRIVATE KEY-----"
+	before := &store.Provider{ID: "prov_1", Name: "lab", CAPEM: key, MachineCAPEM: key}
+	after := &store.Provider{ID: "prov_1", Name: "lab", CAPEM: key, MachineCAPEM: ""}
+
+	b, a := Diff(before, after)
+	raw, err := json.Marshal([]any{b, a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "PRIVATE KEY") || strings.Contains(string(raw), "bm90IGEgcmVhbCBrZXk") {
+		t.Fatalf("the audit entry carries the key: %s", raw)
+	}
+	bm, ok := b.(map[string]any)
+	if !ok || bm["machine_ca_pem"] != redactedMarker {
+		t.Errorf("before = %#v; want machine_ca_pem recorded as %s", b, redactedMarker)
+	}
+	if am, ok := a.(map[string]any); !ok || am["machine_ca_pem"] != "" {
+		t.Errorf("after = %#v; want machine_ca_pem recorded as empty", a)
+	}
+}
+
 func TestIsSensitiveName(t *testing.T) {
 	sensitive := []string{"password", "PasswordHash", "new_password", "token", "TokenHash",
 		"api_token", "client_secret", "WebhookSecretEnc", "private_key", "jit_config",

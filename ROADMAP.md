@@ -1673,6 +1673,30 @@ is pure and its decisions are table tests.
 
 Depends on ZF-240, ZF-231, ZF-226. Size M.
 
+### ZF-242: explain a PR's observed required-check delay
+
+**Classification: new; M; started 12 October at the owner's request.**
+Eli enhancement handoff track E1. Start with a pure, bounded calculation over
+an explicitly pinned PR head, target branch, applicable required-check identities
+and observed job attempts. This extends the analysis boundary ZF-241 establishes;
+it does not duplicate the recent-window work or infer a dependency graph from
+timestamps.
+
+**First slice:** `internal/analysis/merge_delay.go` and behavioural/purity tests.
+Opaque check identities preserve Kennel's required-name privacy boundary. Partial
+protection or observations, ambiguous producers/matrix mappings, missing checks
+and changed heads remain explicit. Queue and startup intervals are disjoint;
+unknown phases remain unknown. Observed check completion is not merge readiness.
+
+**Next slices:** authorised target-branch protection/PR reads, snapshot assembly,
+a read-only REST contract, MCP/CLI adapters and a contextual UI/Eli result.
+Keep these behind their own implementation plans rather than announcing a live
+feature from the pure core alone.
+
+Plan and baseline evidence: [E1 calculation core](roadmap/plans/2026-10-12-eli-merge-delay-core.md).
+The core needs no ZF-240 transport. Integration reuses ZF-241 and ZF-236 contracts
+where present. No publication, model call, job dispatch or new authority.
+
 ## 9. Kept for the day somebody asks
 
 Nothing here is authorised by planning alone. Each starts when a fleet
@@ -1808,6 +1832,7 @@ every package in section 8 was re-read on 19 September against the code.
 | 18 | ZF-239 slice 2, the controller's side of a shared App, with no network | An `own` installation is unchanged; a `shared` one completes a repair against the fake relay and holds no private key |
 | 19 | ZF-240 the fleet as it moves, over MCP | One call answers what changed; a second with the cursor blocks until a seeded event; Eli's three scenarios hold and the admin reads are left off its list |
 | 20 | ZF-241 the analyses | Each seeded cause is named as dominant at high confidence; a small sample is said to be small; the card and the tool show one answer |
+| 21 | ZF-242 PR required-check delay, starting with its independent pure core | Pinned heads and coverage survive every surface; missing/ambiguous checks stay visible; no merge-readiness claim |
 | - | ZF-239 slices 3 to 5, the relay itself | After the owner's answers and a ruling on delivery rule 15 |
 | - | ZF-215, ZF-212, ZF-403's rotation, and section 9 | When a fleet asks |
 

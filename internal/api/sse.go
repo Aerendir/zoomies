@@ -154,6 +154,33 @@ func (s *Server) endIfRevoked(stream *sseWriter, r *http.Request, action auth.Ac
 	return true
 }
 
+// subscribeStream takes one of the live-update slots the caller is held to,
+// for the stream and for a wait on GET /events/recent alike, or says why there
+// is none. A crowd of a public view's visitors is held to a ceiling of its own
+// and never counted against the one the people who run the fleet need.
+func (s *Server) subscribeStream(ctx context.Context, id *auth.Identity, opts events.SubscribeOptions) (*events.Subscription, *controller.LimitError) {
+	limit := s.cfg().Limits.EventSubscribers
+	visitor := auth.IsVisitor(id)
+	if visitor {
+		opts.Class = visitorStreams
+		opts.ClassLimit = s.cfg().Limits.VisitorEventSubscribers
+	}
+	if sub, ok := s.ctrl.Events().SubscribeWithin(ctx, opts, limit); ok {
+		return sub, nil
+	}
+	if visitor {
+		return nil, &controller.LimitError{
+			Setting: "limits.visitor_event_subscribers", Limit: opts.ClassLimit,
+			What: "live-update streams for visitors",
+			Free: "reload in a minute, since every page still works without live updates",
+		}
+	}
+	return nil, &controller.LimitError{
+		Setting: "limits.event_subscribers", Limit: limit, What: "live-update streams",
+		Free: "close a browser tab that is no longer needed",
+	}
+}
+
 // handleEvents streams every change the operator would want to see.
 //
 // There is no polling anywhere in the UI, so this endpoint is the whole of the
@@ -181,28 +208,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// Refused before the stream starts, while a status code can still be
 	// sent. The browser's EventSource gives up on a non-200 rather than
 	// retrying, which is what an instance with no room wants from it.
-	limit := s.cfg().Limits.EventSubscribers
-	visitor := auth.IsVisitor(Identity(ctx))
-	if visitor {
-		// A crowd of visitors is held to a ceiling of its own and never
-		// counted against the one the people who run the fleet need.
-		opts.Class = visitorStreams
-		opts.ClassLimit = s.cfg().Limits.VisitorEventSubscribers
-	}
-	sub, ok := bus.SubscribeWithin(subCtx, opts, limit)
-	if !ok {
-		if visitor {
-			limitReached(w, &controller.LimitError{
-				Setting: "limits.visitor_event_subscribers", Limit: opts.ClassLimit,
-				What: "live-update streams for visitors",
-				Free: "reload in a minute, since every page still works without live updates",
-			})
-			return
-		}
-		limitReached(w, &controller.LimitError{
-			Setting: "limits.event_subscribers", Limit: limit, What: "live-update streams",
-			Free: "close a browser tab that is no longer needed",
-		})
+	sub, refused := s.subscribeStream(subCtx, Identity(ctx), opts)
+	if refused != nil {
+		limitReached(w, refused)
 		return
 	}
 
@@ -247,94 +255,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			if !frameReadable(reader, ev.Kind) {
 				continue
 			}
-			data := ev.Data
-			if ev.Kind == events.KindProblems {
-				// The same two lists the REST route serves, chosen per
-				// subscriber. Resolved per frame rather than once at
-				// connect, for the reason the pool frames are: a viewer may
-				// keep the stream open across a demotion.
-				id, err := s.resolveIdentity(r)
-				platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
-				filtered, ok := problemsFor(data, platform)
-				if !ok && !platform {
-					// Unfilterable, and this subscriber is not entitled to
-					// the unfiltered list. Unlike the pool frames below,
-					// passing it through would hand the fleet the whole of
-					// the platform's list rather than leak one field, so the
-					// frame is dropped instead. The drawer keeps what it had
-					// until the next change, and GET /problems -- which
-					// filters the same way -- repairs it on any reload.
-					continue
-				}
-				data = filtered
-			}
-			if ev.Kind == events.KindTransfer {
-				// A transfer's preparation names runners, hosts and jobs
-				// the route itself only shows the process operator, so the
-				// frame goes to that audience and nobody below it. Resolved
-				// per frame, as the others are.
-				id, err := s.resolveIdentity(r)
-				if err != nil || id == nil || !id.Role.AtLeast(store.RolePlatform) {
-					continue
-				}
-			}
-			if ev.Kind == events.KindUpdates {
-				// The same status GET /updates serves this caller, chosen per
-				// subscriber. Resolved per frame, like the problems list, for the
-				// reason it is: a platform account may keep the stream open
-				// across a demotion.
-				id, err := s.resolveIdentity(r)
-				platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
-				filtered, ok := updatesFor(data, platform)
-				if !ok && !platform {
-					// Unfilterable, and the unfiltered frame is exactly what this
-					// subscriber is not entitled to, so it is dropped. The page
-					// keeps what it had until the next change, and GET /updates
-					// repairs it on any reload.
-					continue
-				}
-				data = filtered
-			}
-			if ev.Kind == events.KindHostUpdated {
-				// The same host GET /hosts serves this caller: the bus carries the
-				// platform's form, and the reason an ended update recorded, which
-				// can name a path on the host, is withheld from everybody else.
-				// Resolved per frame, replay included, like the update status.
-				id, err := s.resolveIdentity(r)
-				platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
-				filtered, ok := hostsFor(data, platform)
-				if !ok && !platform {
-					// Unfilterable, so possibly carrying exactly what is withheld.
-					// The card keeps what it had until the next change, and
-					// GET /hosts repairs it on any reload.
-					continue
-				}
-				data = filtered
-			}
-			if ev.Kind == events.KindAudit {
-				// The same row GET /audit serves this caller, resolved per
-				// frame for the reason the others are. A frame that will not
-				// decode is dropped rather than passed through: the whole
-				// document is exactly what the filter exists to withhold.
-				var row store.AuditEvent
-				if err := json.Unmarshal(data, &row); err != nil {
-					continue
-				}
-				id, _ := s.resolveIdentity(r)
-				filtered, err := json.Marshal(auditRowFor(row, id))
-				if err != nil {
-					continue
-				}
-				data = filtered
-			}
-			if ev.Kind == events.KindPoolCreated || ev.Kind == events.KindPoolUpdated {
-				// A viewer may keep watching after a demotion, but must not
-				// keep the environment access they opened this stream with.
-				// Resolve each pool frame, including replay, and fail closed.
-				id, err := s.resolveIdentity(r)
-				if err != nil || !auth.Allowed(id, auth.ActionPoolsWrite) {
-					data = withoutEnvValues(data)
-				}
+			data, ok := s.frameFor(r, ev)
+			if !ok {
+				continue
 			}
 			if err := stream.event(string(ev.Kind), bus.WireID(ev.ID), data); err != nil {
 				return
@@ -357,6 +280,105 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// frameFor is one event as this caller may be shown it: the payload narrowed to
+// their audience, or false when the frame is not theirs to see at all.
+//
+// It is shared by the live stream and GET /events/recent, so the two cannot
+// disagree about who is entitled to what. A second route that read the same ring
+// without these checks would be the way round every one of them.
+func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
+	data := []byte(ev.Data)
+	if ev.Kind == events.KindProblems {
+		// The same two lists the REST route serves, chosen per
+		// subscriber. Resolved per frame rather than once at
+		// connect, for the reason the pool frames are: a viewer may
+		// keep the stream open across a demotion.
+		id, err := s.resolveIdentity(r)
+		platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
+		filtered, ok := problemsFor(data, platform)
+		if !ok && !platform {
+			// Unfilterable, and this subscriber is not entitled to
+			// the unfiltered list. Unlike the pool frames below,
+			// passing it through would hand the fleet the whole of
+			// the platform's list rather than leak one field, so the
+			// frame is dropped instead. The drawer keeps what it had
+			// until the next change, and GET /problems -- which
+			// filters the same way -- repairs it on any reload.
+			return nil, false
+		}
+		data = filtered
+	}
+	if ev.Kind == events.KindTransfer {
+		// A transfer's preparation names runners, hosts and jobs
+		// the route itself only shows the process operator, so the
+		// frame goes to that audience and nobody below it. Resolved
+		// per frame, as the others are.
+		id, err := s.resolveIdentity(r)
+		if err != nil || id == nil || !id.Role.AtLeast(store.RolePlatform) {
+			return nil, false
+		}
+	}
+	if ev.Kind == events.KindUpdates {
+		// The same status GET /updates serves this caller, chosen per
+		// subscriber. Resolved per frame, like the problems list, for the
+		// reason it is: a platform account may keep the stream open
+		// across a demotion.
+		id, err := s.resolveIdentity(r)
+		platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
+		filtered, ok := updatesFor(data, platform)
+		if !ok && !platform {
+			// Unfilterable, and the unfiltered frame is exactly what this
+			// subscriber is not entitled to, so it is dropped. The page
+			// keeps what it had until the next change, and GET /updates
+			// repairs it on any reload.
+			return nil, false
+		}
+		data = filtered
+	}
+	if ev.Kind == events.KindHostUpdated {
+		// The same host GET /hosts serves this caller: the bus carries the
+		// platform's form, and the reason an ended update recorded, which
+		// can name a path on the host, is withheld from everybody else.
+		// Resolved per frame, replay included, like the update status.
+		id, err := s.resolveIdentity(r)
+		platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
+		filtered, ok := hostsFor(data, platform)
+		if !ok && !platform {
+			// Unfilterable, so possibly carrying exactly what is withheld.
+			// The card keeps what it had until the next change, and
+			// GET /hosts repairs it on any reload.
+			return nil, false
+		}
+		data = filtered
+	}
+	if ev.Kind == events.KindAudit {
+		// The same row GET /audit serves this caller, resolved per
+		// frame for the reason the others are. A frame that will not
+		// decode is dropped rather than passed through: the whole
+		// document is exactly what the filter exists to withhold.
+		var row store.AuditEvent
+		if err := json.Unmarshal(data, &row); err != nil {
+			return nil, false
+		}
+		id, _ := s.resolveIdentity(r)
+		filtered, err := json.Marshal(auditRowFor(row, id))
+		if err != nil {
+			return nil, false
+		}
+		data = filtered
+	}
+	if ev.Kind == events.KindPoolCreated || ev.Kind == events.KindPoolUpdated {
+		// A viewer may keep watching after a demotion, but must not
+		// keep the environment access they opened this stream with.
+		// Resolve each pool frame, including replay, and fail closed.
+		id, err := s.resolveIdentity(r)
+		if err != nil || !auth.Allowed(id, auth.ActionPoolsWrite) {
+			data = withoutEnvValues(data)
+		}
+	}
+	return data, true
 }
 
 func heartbeatPayload(s *Server) []byte {

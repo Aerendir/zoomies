@@ -163,6 +163,7 @@ type providerInput struct {
 	Name               *string             `json:"name"`
 	Endpoint           *string             `json:"endpoint"`
 	CAPEM              *string             `json:"ca_pem"`
+	MachineCAPEM       *string             `json:"machine_ca_pem"`
 	InsecureSkipVerify *bool               `json:"insecure_skip_verify"`
 	Settings           *map[string]string  `json:"settings"`
 	Credential         *string             `json:"credential"`
@@ -223,8 +224,21 @@ func (in *providerInput) apply(p *store.Provider) []fieldError {
 	if in.Endpoint != nil {
 		p.Endpoint = strings.TrimSpace(*in.Endpoint)
 	}
+	// Checked when the request names them, and not otherwise: a provider that
+	// already holds something that is no certificate (it was accepted before this
+	// was checked) must still be renamed, paused and resumed, or the form that
+	// fixes it would be locked.
 	if in.CAPEM != nil {
 		p.CAPEM = strings.TrimSpace(*in.CAPEM)
+		if problem := controller.CertificateProblem(p.CAPEM); problem != "" {
+			add("ca_pem", problem)
+		}
+	}
+	if in.MachineCAPEM != nil {
+		p.MachineCAPEM = strings.TrimSpace(*in.MachineCAPEM)
+		if problem := controller.CertificateProblem(p.MachineCAPEM); problem != "" {
+			add("machine_ca_pem", problem)
+		}
 	}
 	if in.InsecureSkipVerify != nil {
 		p.InsecureSkipVerify = *in.InsecureSkipVerify

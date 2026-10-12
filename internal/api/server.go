@@ -65,6 +65,11 @@ type Server struct {
 	// streamHeartbeat is Options.StreamHeartbeat, defaulted.
 	streamHeartbeat time.Duration
 
+	// recentWaitCap is the longest GET /events/recent holds a request for the
+	// next change, whatever `wait` asked for. Tests lower it so the cap is
+	// something they can observe without waiting for the shipped one.
+	recentWaitCap time.Duration
+
 	// sso is single sign-on: the provider once discovery has worked, or why
 	// it has not. See sso.go.
 	sso ssoState
@@ -118,6 +123,7 @@ func New(opts Options) (*Server, error) {
 		log:             log,
 		manifests:       newManifestStates(opts.Controller.Now),
 		streamHeartbeat: beat,
+		recentWaitCap:   maxRecentWait,
 		oidcRetry:       oidcRetryMin,
 	}
 

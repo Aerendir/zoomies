@@ -1717,6 +1717,70 @@ paths:
               schema: { type: string }
         "409": { $ref: "#/components/responses/LimitReached" }
 
+  /events/recent:
+    get:
+      operationId: recentEvents
+      tags: [overview]
+      summary: What happened since an event id, as JSON
+      description: >-
+        The events the stream would replay after an id, as one JSON answer, for a caller that
+        cannot hold a stream open. It reads the same buffer with the same ids, the same `kinds`
+        and `topic` filters and the same narrowing by audience as `GET /events`, so a cursor
+        taken from either is good for both. `since` is an event id exactly as the stream sends
+        it (`<epoch>.<sequence>`), or a duration such as `10m` for the events no older than
+        that; absent, it is everything the buffer holds. `next` is the id of the last event
+        looked at, or the newest the buffer holds when nothing matched, so a first call always
+        returns a cursor to pass back. `complete` is false when the buffer no longer reaches
+        back to `since` (or `since` is from another run of the controller, in which case the
+        answer starts at the buffer's start): the caller missed events it will not be given
+        and should fetch the resources afresh. `truncated` is true when more matched than
+        `limit`, the oldest being returned, so a caller pages forward from `next`. With `wait`
+        and nothing to return yet, the request is held for the next matching event and answers
+        with it and anything queued behind it, or with `timed_out` true and no items when the
+        wait ends (at most 25 seconds, whatever was asked). A held request counts against
+        `limits.event_subscribers` as a stream does, or a public view's visitor's against
+        `limits.visitor_event_subscribers`. Each event is returned only to a caller who could
+        read it from its own route, as the stream sends it.
+      x-zoomies-role: viewer
+      parameters:
+        - name: since
+          in: query
+          description: >-
+            An event id as the stream sends it, or a duration such as `10m`. A value that is
+            neither is a 400 naming this parameter.
+          schema: { type: string, examples: ["k3f9a2.1204", "10m"] }
+        - name: kinds
+          in: query
+          description: Comma-separated event kinds to return. Omit for all.
+          schema: { type: string, examples: ["job.updated,runner.updated"] }
+        - name: topic
+          in: query
+          description: Topic prefix filter, e.g. `job:`.
+          schema: { type: string }
+        - name: limit
+          in: query
+          description: How many events at most. Default 50, at most 200.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: wait
+          in: query
+          description: >-
+            How long to hold the request for the next matching event when there is none yet,
+            as a duration such as `20s`. Default `0`, which answers at once. Read as 25 seconds
+            when it asks for more.
+          schema: { type: string, default: "0", examples: ["20s"] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecentEvents" }
+        "400":
+          description: "`since` or `wait` could not be read. `error.field` names it."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409": { $ref: "#/components/responses/LimitReached" }
+
   # ==========================================================================
   # Installations
   # ==========================================================================
@@ -8885,6 +8949,44 @@ components:
         busy_runners: { type: integer }
         total_runners: { type: integer }
 
+    RecentEvents:
+      type: object
+      required: [items, next, complete, truncated, timed_out]
+      properties:
+        items:
+          type: array
+          description: Oldest first.
+          items: { $ref: "#/components/schemas/EventFrame" }
+        next:
+          type: string
+          description: The cursor to pass as `since` on the next call.
+          examples: ["k3f9a2.1206"]
+        complete:
+          type: boolean
+          description: >-
+            False when the buffer no longer reached back to `since`, so events were missed
+            that this answer cannot contain.
+        truncated: { type: boolean, description: More matched than `limit`. }
+        timed_out: { type: boolean, description: The wait ended with nothing to return. }
+
+    EventFrame:
+      type: object
+      required: [id, kind, topic, at, data]
+      properties:
+        id:
+          type: string
+          description: "`<epoch>.<sequence>`, as the stream sends it."
+          examples: ["k3f9a2.1205"]
+        kind: { type: string, examples: ["job.updated"] }
+        topic: { type: string, description: "Narrows the kind, e.g. `job:job_k3f9qz2m`. May be empty.", examples: ["job:job_k3f9qz2m"] }
+        at: { type: string, format: date-time }
+        data:
+          type: object
+          additionalProperties: true
+          description: >-
+            The resource view the stream carries for this kind; `{}` for an event that
+            carries none, as on the stream.
+
     ScalingEvent:
       type: object
       properties:
@@ -12510,6 +12612,15 @@ components:
             a form can only keep what it is shown, and a box that opens empty would clear it
             on the next save. Absent when none is set, and when what is stored is not
             entirely certificates.
+        machine_ca_pem:
+          type: string
+          description: >-
+            The certificate a machine built by this provider trusts for this controller, and
+            nothing else when it is set. A different certificate from `ca_pem` in general: a
+            cluster's own authority has no reason to have signed the controller. Empty leaves
+            a machine on its own trust store, which is right for a controller on a public
+            certificate. Returned for the same reason `ca_pem` is, and absent when none is
+            set and when what is stored is not entirely certificates.
         connection:
           type: string
           enum: [direct, tailcat]
@@ -12615,7 +12726,14 @@ components:
         kind: { $ref: "#/components/schemas/ProviderKindName" }
         name: { type: string }
         endpoint: { type: string }
-        ca_pem: { type: string, description: The certificate to trust for this endpoint, instead of turning verification off. }
+        ca_pem: { type: string, description: The certificate to trust for this endpoint, instead of turning verification off. Certificates only; a private key is refused with a 422 naming this field. }
+        machine_ca_pem:
+          type: string
+          description: >-
+            The certificate a machine built by this provider trusts for this controller, and nothing
+            else. Leave it out, or empty, for a machine to use its own trust store, which is right for a
+            controller on a public certificate. Certificates only; a private key is refused with a 422
+            naming this field. An edit that does not name it leaves it alone.
         insecure_skip_verify: { type: boolean }
         connection:
           type: string
