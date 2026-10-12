@@ -7,6 +7,12 @@ authorised and in what order; this file says where it has got to. This is not
 a second roadmap: do not add, reorder or authorise work here. Keep it current
 in the same pull request as the work.
 
+## Eli enhancement work started 12 October 2026
+
+| Package | Status | Evidence |
+| --- | --- | --- |
+| ZF-242 | `in_progress` | Pure pinned-head required-check delay calculation and behavioural/purity tests. [First-slice plan](plans/2026-10-12-eli-merge-delay-core.md) records scope and validation: Go 1.27.2 formatting, package race tests and vet pass after installing the official toolchain and refreshing upstream. Readers, REST, MCP/CLI and UI integration remain to be implemented. |
+
 ## How to read a row
 
 **Status** is one of:
