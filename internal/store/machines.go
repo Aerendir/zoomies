@@ -46,6 +46,13 @@ type Provider struct {
 	Endpoint           string `json:"endpoint,omitempty"`
 	CAPEM              string `json:"ca_pem,omitempty"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty"`
+	// MachineCAPEM is the other direction: the certificate a machine built here
+	// trusts for this controller, and nothing else when it is set. Empty leaves
+	// the machine on its own trust store, which is right for a controller on a
+	// public certificate. It was CAPEM's job as well until the two were
+	// separated, and they are different certificates in general: a cluster's
+	// authority has no reason to have signed the controller.
+	MachineCAPEM string `json:"machine_ca_pem,omitempty"`
 	// Settings holds the non-secret answers to the provider's own SettingSpecs
 	// -- which node, which storage, which template. It is a map rather than a
 	// column per key so that a second provider needs no migration.

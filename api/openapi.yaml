@@ -12397,6 +12397,15 @@ components:
             a form can only keep what it is shown, and a box that opens empty would clear it
             on the next save. Absent when none is set, and when what is stored is not
             entirely certificates.
+        machine_ca_pem:
+          type: string
+          description: >-
+            The certificate a machine built by this provider trusts for this controller, and
+            nothing else when it is set. A different certificate from `ca_pem` in general: a
+            cluster's own authority has no reason to have signed the controller. Empty leaves
+            a machine on its own trust store, which is right for a controller on a public
+            certificate. Returned for the same reason `ca_pem` is, and absent when none is
+            set and when what is stored is not entirely certificates.
         connection:
           type: string
           enum: [direct, tailcat]
@@ -12502,7 +12511,14 @@ components:
         kind: { $ref: "#/components/schemas/ProviderKindName" }
         name: { type: string }
         endpoint: { type: string }
-        ca_pem: { type: string, description: The certificate to trust for this endpoint, instead of turning verification off. }
+        ca_pem: { type: string, description: The certificate to trust for this endpoint, instead of turning verification off. Certificates only; a private key is refused with a 422 naming this field. }
+        machine_ca_pem:
+          type: string
+          description: >-
+            The certificate a machine built by this provider trusts for this controller, and nothing
+            else. Leave it out, or empty, for a machine to use its own trust store, which is right for a
+            controller on a public certificate. Certificates only; a private key is refused with a 422
+            naming this field. An edit that does not name it leaves it alone.
         insecure_skip_verify: { type: boolean }
         connection:
           type: string
