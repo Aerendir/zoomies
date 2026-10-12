@@ -65,9 +65,18 @@ const inGroup = (group: string | null, state: string) =>
         ? state === 'succeeded'
         : true;
 
+type Answer = { items: ReturnType<typeof repair>[]; total: number };
+
 async function mockHistory(page: Page, count = 120) {
-  const model = { rows: Array.from({ length: count }, (_, i) => repair(i)) };
   const seen: URLSearchParams[] = [];
+  const model = {
+    rows: Array.from({ length: count }, (_, i) => repair(i)),
+    seen,
+    /** While set, the next answers wait for it, so a test can look at a read in flight. */
+    gate: null as Promise<void> | null,
+    /** Replaces the model's own answer, for a server that says something odd. */
+    answer: null as ((query: URLSearchParams) => Answer) | null,
+  };
   await page.route(
     (url) => url.pathname === '/api/v1/assistant/repairs',
     async (route) => {
@@ -76,6 +85,8 @@ async function mockHistory(page: Page, count = 120) {
       if (request.method() !== 'GET') return route.fallback();
       const query = new URL(request.url()).searchParams;
       seen.push(query);
+      if (model.gate) await model.gate;
+      if (model.answer) return route.fulfill({ json: model.answer(query) });
       const repo = (query.get('repo') ?? '').trim().toLowerCase();
       const matches = model.rows.filter(
         (r) =>
@@ -90,7 +101,7 @@ async function mockHistory(page: Page, count = 120) {
       });
     },
   );
-  return { ...model, seen };
+  return model;
 }
 
 /** Every list request made after `from`, as plain objects. */
@@ -249,5 +260,80 @@ test('a page emptied under the operator steps back instead of showing an empty l
   await expect(pagination).toContainText('1–50 of 50 repairs');
   await expect(historyOf(page).getByRole('article')).toHaveCount(50);
   await expect(historyOf(page).getByText('No repairs')).toHaveCount(0);
+  await noSidewaysScroll(page);
+});
+
+// The controls are what the operator is using to widen the search, and the
+// history is not empty, so neither may go while the wider answer is on its way:
+// the filters were reset a moment before the answer to the narrow ones was
+// replaced, and the page must go by what it last heard, not what it has asked.
+test('widening an empty filtered result keeps the controls and never calls the history empty', async ({
+  page,
+}) => {
+  const model = await mockHistory(page);
+  // Every repair has passed, so "Needs attention" matches nothing.
+  model.rows = model.rows.filter((r) => r.state === 'succeeded');
+  await goto(page, '/repairs', 'Eli repairs');
+  const history = historyOf(page);
+  const show = history.getByLabel('Show', { exact: true });
+  const repository = history.getByLabel('Repository', { exact: true });
+  await expect(history.getByRole('article')).toHaveCount(12);
+
+  // Widening by the Show control.
+  await show.selectOption('attention');
+  await expect(history.getByText('No repairs match these filters')).toBeVisible();
+  const control = await show.elementHandle();
+  let release!: () => void;
+  model.gate = new Promise<void>((resolve) => (release = resolve));
+  let from = model.seen.length;
+  await show.selectOption('all');
+  await expect.poll(() => asked(model.seen, from)).toContainEqual({ limit: '50', offset: '0' });
+  await expect(show).toBeVisible();
+  await expect(show).toHaveValue('all');
+  await expect(history.getByText('No repairs yet')).toHaveCount(0);
+  expect(await control!.evaluate((el) => el.isConnected)).toBe(true);
+  release();
+  model.gate = null;
+  await expect(history.getByRole('article')).toHaveCount(12);
+
+  // Widening by Clear filters.
+  await repository.fill('none');
+  await expect(history.getByText('No repairs match these filters')).toBeVisible();
+  const box = await repository.elementHandle();
+  model.gate = new Promise<void>((resolve) => (release = resolve));
+  from = model.seen.length;
+  await history.getByRole('button', { name: 'Clear filters' }).click();
+  await expect.poll(() => asked(model.seen, from)).toContainEqual({ limit: '50', offset: '0' });
+  await expect(repository).toBeVisible();
+  await expect(repository).toHaveValue('');
+  await expect(history.getByText('No repairs yet')).toHaveCount(0);
+  expect(await box!.evaluate((el) => el.isConnected)).toBe(true);
+  release();
+  model.gate = null;
+  await expect(history.getByRole('article')).toHaveCount(12);
+  await noSidewaysScroll(page);
+});
+
+// A server that answers an in-range page with no rows would send a page that
+// steps back to the same offset round and round, one read after another. The
+// step must go somewhere lower or stop.
+test('a page that comes back empty at an offset that is in range is not read again in a loop', async ({
+  page,
+}) => {
+  await page.clock.install();
+  const model = await mockHistory(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const pagination = paginationOf(page);
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(pagination).toContainText('51–100 of 120 repairs');
+
+  model.answer = () => ({ items: [], total: 120 });
+  const from = model.seen.length;
+  await page.clock.fastForward(10_000);
+  await expect.poll(() => asked(model.seen, from).length).toBeGreaterThan(0);
+  // Long enough for a loop to have made hundreds of reads.
+  await page.waitForTimeout(500);
+  expect(asked(model.seen, from).length).toBeLessThanOrEqual(2);
+  await expect(pagination).toContainText('of 120 repairs');
   await noSidewaysScroll(page);
 });
