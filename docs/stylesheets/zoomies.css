@@ -985,10 +985,10 @@ input,
    text colour, not the quieter one: it is small, and the quieter one is under
    4.5:1 on the light ground. */
 .md-typeset .zoomies-hero .prereq {
-  max-width: 34rem;
+  max-width: 38rem;
   margin: 0;
-  font-size: 0.66rem;
-  line-height: 1.5;
+  font-size: 0.74rem;
+  line-height: 1.6;
   color: var(--md-default-fg-color--light);
   text-wrap: balance;
 }
@@ -1021,6 +1021,60 @@ input,
   text-decoration: none;
 }
 
+/* Learning paths use the same surfaces as feature cards, with room for
+   ordered reading lists on the documentation hub. Zero-minimum tracks keep
+   long command names from widening the page on phones. */
+.zoomies-paths {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1.25rem 0 2rem;
+}
+.zoomies-paths--assistants {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.zoomies-paths > div {
+  min-width: 0;
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--z-line);
+  border-top: 2px solid var(--z-accent-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+}
+.md-typeset .zoomies-paths h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.md-typeset .zoomies-paths p,
+.md-typeset .zoomies-paths ol {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--md-default-fg-color--light);
+  overflow-wrap: anywhere;
+}
+.md-typeset .zoomies-paths > div > p:last-child {
+  margin-bottom: 0;
+}
+.md-typeset .zoomies-paths > div > p:last-child > a:only-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.2rem;
+  font-weight: 600;
+}
+.md-typeset .zoomies-paths a:focus-visible {
+  outline: 2px solid var(--z-accent);
+  outline-offset: 3px;
+  border-radius: var(--z-radius-sm);
+}
+@media screen and (max-width: 59.9375em) {
+  .zoomies-paths {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Feature cards: a three-across grid, each with an icon on the accent chip. */
 .zoomies-grid {
   display: grid;
@@ -1028,12 +1082,8 @@ input,
   gap: 0.9rem;
   margin: 1.5rem 0 2.5rem;
 }
-/* Nine cards divide into three columns and into nothing else that fits. The
-   auto-fit layout above counts four columns from 1366px up and laid the grid
-   out 4 / 4 / 1, leaving one card alone on the last row beside three empty
-   cells; asking for three says what the content is. Below this width the cards
-   stack or pair, and the card that would be left on its own takes the row --
-   the last one when the count is odd, however many cards the grid holds. */
+/* Keep the six feature cards in two rows on wide screens. Below this width
+   they stack or pair; an odd final card takes the row if more are added. */
 @media screen and (min-width: 48em) {
   .zoomies-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1192,13 +1242,17 @@ input,
   -webkit-mask-image: radial-gradient(50% 90% at 15% 50%, #000 20%, transparent 100%);
   mask-image: radial-gradient(50% 90% at 15% 50%, #000 20%, transparent 100%);
 }
-/* The sign-in page's treatment: the black logo, padded, on the Orbital haze
-   backdrop, whose edges are feathered into the panel so it reads as a galaxy
-   behind the dog rather than a picture. The same in both schemes; decoration
-   belongs to the backdrop, never to the artwork. */
+/* Keep the logo's own surround black in both schemes, as on the sign-in page.
+   The pale Orbital haze stays inside it rather than fading into a light CTA.
+   Decoration belongs to the backdrop, never to the artwork. */
 .zoomies-cta .zoomies-brand {
+  box-sizing: border-box;
   width: 16rem;
   max-width: 100%;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-brand-black);
 }
 .zoomies-cta .zoomies-brand__art {
   position: relative;

@@ -290,12 +290,13 @@ black chip rather than inverting it -- one asset, correct in both themes,
 legible at 24px. See [brand.md](brand.md), which lists every place the signed-in
 product carries the mark, the name or the descriptor.
 
-#### The sign-in panel
+#### The panel
 
-The sign-in page's brand panel is Zoomies Black in both themes, so what is
-drawn on it cannot follow the theme: the light theme's muted grey is 3.2:1 on
-black. These are declared once, never overridden per theme, and read by that
-panel alone. Measured on `#080808`:
+A panel is a ground that is Zoomies Black in both themes (the sign-in page's
+logo stage, the Appearance preview's), so what is drawn on it cannot follow
+the theme: the light theme's muted grey is 3.2:1 on black. These are declared
+once, never overridden per theme, and read on a panel alone. Measured on
+`#080808`:
 
 | Token | Value | Use | Contrast |
 | --- | --- | --- | --- |
@@ -1021,7 +1022,7 @@ with its browser chrome is often less) rather than grow a scrollbar on the one
 page that should fit without one. It is the only height query in the product,
 and it hides nothing a person needs to sign in.
 
-On a phone that page's brand panel becomes a band drawn to the very top of the
+On a phone that page's brand column becomes a band drawn to the very top of the
 screen, so it pads by `--z-safe-top`, the status bar's height, which is zero
 anywhere but an installed web app.
 
@@ -1293,7 +1294,13 @@ Minimising or navigating preserves the conversation and draft; a reload,
 sign-out or New conversation clears them. Chat uses the owner-scoped personal API and that user’s enabled default
 provider. Installation provider management retains its administrator gate.
 
-`web/src/lib/assistant/AskEli.svelte` is the shared contextual action. Supply an
+`web/src/lib/assistant/AskEli.svelte` is the shared contextual action. It wears
+the avatar's own tint (`--z-accent` on `--z-accent-subtle`, ringed by
+`--z-accent-border`), so the button on a page and the dog in the corner are
+plainly the same way to reach Eli, and it wiggles once when a page first shows
+it and again under the pointer so a person who has never noticed it does; a list
+of them arrives on three staggered beats rather than in unison, and reduced
+motion stops all of it. Supply an
 `EliContext` with a kind, title, optional question and an explicit map of displayed
 facts. Never pass a whole API object, credentials, environment variables or
 unrequested logs. Clicking the action opens Eli and asks with that snapshot.

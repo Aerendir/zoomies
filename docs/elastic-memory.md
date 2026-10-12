@@ -2,22 +2,24 @@
 icon: material/memory
 title: Elastic memory for GitHub Actions runners
 description: >-
-  Raise a running job's memory limit before the kernel kills it, using memory no
-  other runner was promised, with swap as a last resort. Configure and monitor
-  it.
+  Use spare host memory to raise a runner's limit, with swap as a last resort.
+  Learn the observation mode, resource boundaries and limits of protection
+  against out-of-memory failures.
 ---
 
 # Elastic memory
 
 A runner is given a memory limit when it is created, and a job that needs more
-than that is killed by the kernel the moment it asks: no warning, an exit code
-of 137, and a failed job that GitHub records as an ordinary failure. Most of the
-time the host the runner is on has gigabytes nobody was promised; a four-slot
+than that can be killed by the kernel: often an exit code of 137 and a failed
+job that GitHub records as an ordinary failure. Exit code 137 means SIGKILL;
+check the runner logs and memory evidence before attributing it to memory.
+Most of the time the host the runner is on has gigabytes nobody was promised; a four-slot
 machine with one busy runner is holding three runners' worth of memory for
 three runners that are not using it. **Elastic memory** is the valve between
 the two. It watches each runner's memory, and when a job is about to hit its
-limit it raises the limit, out of what is spare on the host, before the kernel
-has to choose.
+limit it can raise the limit using spare host memory. This can prevent some
+out-of-memory failures, but a sudden allocation or a host with no headroom can
+still leave the job without enough memory.
 
 Memory is not CPU, and the difference is the whole design. A CPU quota can be
 lent and taken back a heartbeat later without anyone noticing; a memory limit
@@ -27,8 +29,11 @@ runner is gone, and the host's side of the arithmetic (what is spare, and what
 the host keeps back for itself) is worked out with that in mind. [Elastic
 CPU zoomies](elastic-cpu.md) is the page for the CPU half.
 
-It is a pool setting, on in its watching form for every new container pool, and
-nothing is lent until somebody turns it on.
+It is a pool setting. Container pools created in the pool editor start in the
+observing mode; the native installer's first pool starts with it off. Nothing
+is lent until an operator chooses the automatic mode. [Advanced
+operations](advanced.md#3-tune-from-observation) gives an order for measuring
+and enabling it.
 
 ## What it promises
 

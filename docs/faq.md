@@ -129,10 +129,9 @@ images are built for, and the reference configuration is Linux amd64. macOS
 works for running a controller in development. A Windows host can join as an
 agent, with one PowerShell command from **Hosts → Add a host**, and run jobs
 with the `process` backend (actions/runner's own Windows build, as a process
-on the machine, with no container) which is new in 1.0
-and [not yet qualified](index.md#what-is-qualified): it is built and
-unit-tested, and the first test that runs on a real Windows host is what moves
-it. The [runner image catalogue](naming.md#the-runner-image) is the list of
+on the machine, with no container). It builds and is unit-tested, and a real
+host join and job were reported in a manual trial. [Written qualification is
+still pending](index.md#what-is-qualified). The [runner image catalogue](naming.md#the-runner-image) is the list of
 Linux distributions, and it is generated from the code that publishes them.
 
 ## Does it work with GitHub Enterprise Server?
