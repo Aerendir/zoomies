@@ -127,7 +127,11 @@ func TestAMachineIsRecordedBeforeItHasAnIdentifierAndPlacedWhenItDoes(t *testing
 
 // Removal is recorded per kind and identifier, and only once.
 func TestRemovalMarksTheOneResourceItNamesAndLeavesTheRestOutstanding(t *testing.T) {
-	l, _ := openLedger("run_jkl", "label", testEnv(), nil)
+	ledgerDir(t)
+	l, err := openLedger("run_jkl", "label", testEnv(), nil)
+	if err != nil {
+		t.Fatalf("opening the ledger: %v", err)
+	}
 	for _, r := range []struct {
 		kind     ResourceKind
 		id, name string
