@@ -31,8 +31,9 @@ Validation:
 - `go test -count=1 ./internal/docs/` passed.
 - `mkdocs build --strict` passed.
 - Screenshot script passed Prettier, ESLint and the Node syntax check.
-- All 96 WebP images decoded successfully; the 84 refreshed gallery images
-  were compared with their original PNG captures and preserve every pixel.
+- All 96 WebP images decoded successfully. The initial 84-image gallery
+  refresh was compared with its original PNG captures and preserved every
+  pixel; subsequent login captures use the same lossless encoding.
 - The UI tour and Eli guide passed 16 browser checks: light and dark at
   320, 390, 768 and 1440 pixels, with no horizontal overflow, correct theme
   images, successful image decoding and working tour shortcuts.
