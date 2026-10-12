@@ -427,8 +427,17 @@ whichever GitHub user happens to own that name, who is not part of your
 repository, and a slash command notifies nobody.
 
 Commands must begin a line outside a quote or code block. Only new comments by
-human users trigger a repair. Edited comments, ordinary issues, bots and
-unlinked users do not. Both triggers use the existing signed webhook endpoint.
+human users trigger a repair. Edited comments, ordinary issues and bots do not.
+Both triggers use the existing signed webhook endpoint.
+
+A command from someone with write access that Eli cannot act on is answered, not
+dropped: Eli puts a confused face on the comment and replies on the PR with the
+reason. The reason is one of these: the GitHub account is not linked to a Zoomies
+user, or its owner has not allowed it; the Zoomies account is disabled; or the
+repository's attempt budget or the person's own limit is used up. A command from
+anyone without write access is ignored without a word, so a stranger's comment
+never makes the App post. The repository budget is shared with automatic repairs,
+which on a repository whose CI fails often can use it up before anyone asks.
 The App's own GitHub handle (for example `@zoomies-eyupio2`, the name GitHub
 autocompletes) works too, once Zoomies has learned the App's slug. Recognition
 uses the comment text and does not require GitHub mention notification routing.

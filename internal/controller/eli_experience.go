@@ -86,7 +86,7 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 		if e != nil {
 			block("budget_unavailable", "Repair allowance could not be checked. Try again.")
 		} else {
-			out.Remaining = max(0, min(policy.DailyLimit-used, 10-personal))
+			out.Remaining = max(0, min(policy.DailyLimit-used, store.EliPersonDailyLimit-personal))
 			out.ResetAt = reset
 			if out.Remaining == 0 {
 				block("budget", "The repair allowance is exhausted. Wait until an attempt leaves the 24-hour window.")

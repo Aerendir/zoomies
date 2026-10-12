@@ -278,3 +278,30 @@ func TestConcurrentOfferAcceptancesCannotChargeDifferentPeople(t *testing.T) {
 		t.Fatal("duplicate attempt charged")
 	}
 }
+
+// A person who asked for a repair and was refused needs to know whether the
+// repository or they had used up the day, because the cures differ: an
+// administrator can raise the repository's limit, and only waiting clears one
+// person's. Both stay an ErrConflict for callers that do not care which.
+func TestARefusedRepairNamesTheLimitThatRefusedIt(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnqueueEliRepair(ctx, &EliRepair{Repo: "acme/repo", DedupKey: "a"}, 1); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.EnqueueEliRepair(ctx, &EliRepair{Repo: "acme/repo", DedupKey: "b"}, 1)
+	if !errors.Is(err, ErrEliRepoBudget) || !errors.Is(err, ErrConflict) || errors.Is(err, ErrEliPersonBudget) {
+		t.Fatalf("the repository's limit was reported as %v", err)
+	}
+
+	// Room in the repository, but one person has asked ten times today.
+	for i := 0; i < 10; i++ {
+		if _, err := s.EnqueueEliRepair(ctx, &EliRepair{Repo: "acme/other", DedupKey: fmt.Sprint("p", i), UserID: "one"}, 50); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = s.EnqueueEliRepair(ctx, &EliRepair{Repo: "acme/other", DedupKey: "p10", UserID: "one"}, 50)
+	if !errors.Is(err, ErrEliPersonBudget) || !errors.Is(err, ErrConflict) || errors.Is(err, ErrEliRepoBudget) {
+		t.Fatalf("one person's limit was reported as %v", err)
+	}
+}
