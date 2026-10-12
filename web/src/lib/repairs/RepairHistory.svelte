@@ -97,6 +97,12 @@
   let taking = $state(false);
   let taken: AbortController | null = null;
   let confirmOpen = $state(false);
+  /**
+   * The ids the dialog was opened for. The dialog counts these and a confirm
+   * clears exactly these, never the live set, so what is cleared is what the
+   * operator was told and nothing that landed behind the modal.
+   */
+  let toClear = $state<string[]>([]);
   /** What the last clear did, which stays until it is dismissed. */
   let report = $state<{ cleared: number; skipped: { label: string; error: string }[] } | null>(
     null,
@@ -193,31 +199,54 @@
     }
   }
 
+  function askToClear(): void {
+    toClear = [...chosen];
+    confirmOpen = true;
+  }
+
   /**
-   * Hides the chosen repairs from the history. The route answers for each id,
-   * so a repair that started running since it was listed is skipped and
+   * Hides the repairs the dialog counted from the history. The route answers for
+   * each id, so a repair that started running since it was listed is skipped and
    * reported rather than failing the lot.
    */
   async function clear(): Promise<boolean> {
-    const ids = [...chosen];
+    const ids = toClear;
     const names = new Map(items.map((r) => [r.id, `${r.repo} #${r.pull_number || '?'}`]));
     const results: { id: string; ok: boolean; error?: string }[] = [];
-    try {
-      // One request holds 500 ids at most, and a select-all plus a row from a
-      // later page can pass that.
-      for (const part of batches(ids, BULK_LIMIT))
+    let failure: unknown;
+    let sent = 0;
+    // One request holds 500 ids at most, and a select-all plus a row from a later
+    // page can pass that.
+    for (const part of batches(ids, BULK_LIMIT)) {
+      try {
         results.push(...(await bulkEliRepairAction({ action: 'clear', ids: part })).results);
-    } catch (cause) {
-      toasts.fromError(cause, 'Could not clear those repairs');
-      // Nothing was cleared, so the dialog and the selection stay for another go.
-      if (results.length === 0) return false;
+        sent += part.length;
+      } catch (cause) {
+        failure = cause;
+        break;
+      }
     }
-    const outcome = clearReport(results);
+    // Nothing was cleared, so the dialog and the selection stay for another go.
+    if (failure && sent === 0) {
+      toasts.fromError(failure, 'Could not clear those repairs');
+      return false;
+    }
+    // A request that fell over may or may not have been applied, so everything
+    // from it on is reported as not attempted and stays chosen. Trying again is
+    // safe: clearing a repair that is already cleared is a success.
+    const left = ids.slice(sent);
+    const outcome = clearReport(results, left);
+    if (failure)
+      toasts.fromError(
+        failure,
+        `Cleared ${formatNumber(outcome.cleared)} of ${formatNumber(ids.length)} repairs before a request failed`,
+      );
     report = {
       cleared: outcome.cleared,
       skipped: outcome.skipped.map((s) => ({ label: names.get(s.id) ?? s.id, error: s.error })),
     };
     unchoose();
+    for (const id of left) chosen.add(id);
     // The page the operator was on may have gone with the rows.
     offset = offsetAfterClear(offset, limit, total, outcome.cleared);
     void load();
@@ -238,6 +267,16 @@
 
   /** Nothing to filter in an empty history, so the controls wait for a repair. */
   const showFilters = $derived(filtered(answered) || total > 0);
+  /**
+   * The rows on show are still the previous filters' while a read for new ones is
+   * out. Nothing may be chosen from them: it would sit in the set under filters
+   * it does not belong to, and the bar would count a repair nobody can see ticked.
+   */
+  const waiting = $derived(
+    filters.group !== answered.group ||
+      filters.repo !== answered.repo ||
+      filters.trigger !== answered.trigger,
+  );
   /** The shown repairs that can be cleared: those Eli is not still on. */
   const clearableShown = $derived(items.filter((r) => !isActive(r.state)).map((r) => r.id));
   const shownChosen = $derived(clearableShown.filter((id) => chosen.has(id)).length);
@@ -337,8 +376,10 @@
       <Checkbox
         checked={allShownChosen}
         indeterminate={shownChosen > 0 && !allShownChosen}
-        disabled={clearableShown.length === 0}
-        reason={clearableShown.length === 0 ? 'Every repair shown is still running.' : undefined}
+        disabled={waiting || clearableShown.length === 0}
+        reason={!waiting && clearableShown.length === 0
+          ? 'Every repair shown is still running.'
+          : undefined}
         ariaLabel={items.length === 1
           ? 'Select the repair shown'
           : `Select the ${items.length} repairs shown`}
@@ -356,8 +397,13 @@
               >Select all {formatNumber(total)} matching</Button
             >
           {/if}
-          <Button size="sm" variant="secondary" onclick={() => (confirmOpen = true)}
-            >Clear from history</Button
+          <!-- The count is not settled while a select-all is out, so neither is what a clear would clear. -->
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={taking}
+            reason={taking ? 'Still choosing the matching repairs.' : undefined}
+            onclick={askToClear}>Clear from history</Button
           >
           <Button size="sm" variant="ghost" onclick={unchoose}>Clear selection</Button>
         </div>
@@ -370,6 +416,7 @@
         <RepairRow
           repair={r}
           selected={chosen.has(r.id)}
+          {waiting}
           onselect={(on) => choose(r.id, on)}
           {onretry}
         />
@@ -401,7 +448,7 @@
   bind:open={confirmOpen}
   title="Clear from history"
   description="The repairs stop showing in this list."
-  consequences={clearConsequences()}
+  consequences={clearConsequences(toClear.length)}
   confirmLabel="Clear from history"
   tone="default"
   onconfirm={clear}

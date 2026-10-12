@@ -132,12 +132,50 @@ test('a refusal that carries no reason still says that it was not cleared', () =
 });
 
 // The dialog is the only place an operator is told what clearing leaves
-// untouched, so its two sentences are held here rather than only in markup.
-test('the clear confirmation names what clearing does not change', () => {
-  assert.deepEqual(clearConsequences(), [
+// untouched, so its sentences are held here rather than only in markup. After a
+// select-all the count is the one thing they cannot see from where they stand:
+// most of the repairs are on other pages.
+test('the clear confirmation says how many go, that it cannot be undone here, and what stays', () => {
+  const kept = [
     "They still count towards each repository's daily limit.",
     'Eli will not repair its own commits from them again.',
+  ];
+  assert.deepEqual(clearConsequences(35), [
+    '35 repairs will stop showing in this list, and this cannot be undone from this page.',
+    ...kept,
   ]);
+  assert.deepEqual(
+    clearConsequences(500)[0],
+    '500 repairs will stop showing in this list, and this cannot be undone from this page.',
+  );
+  // One repair is not "1 repairs".
+  assert.deepEqual(clearConsequences(1), [
+    '1 repair will stop showing in this list, and this cannot be undone from this page.',
+    ...kept,
+  ]);
+});
+
+// A clear that stops part-way has cleared some and not tried the rest. Saying
+// "0 skipped" would leave the repairs it never reached nowhere on the screen.
+test('repairs a clear never reached are listed after the refused ones as not attempted', () => {
+  assert.deepEqual(
+    clearReport(
+      [
+        { id: 'rep-1', ok: true },
+        { id: 'rep-2', ok: false, error: 'still running' },
+      ],
+      ['rep-8', 'rep-9'],
+    ),
+    {
+      cleared: 1,
+      skipped: [
+        { id: 'rep-2', error: 'still running' },
+        { id: 'rep-8', error: 'not attempted' },
+        { id: 'rep-9', error: 'not attempted' },
+      ],
+    },
+  );
+  assert.deepEqual(clearReport([{ id: 'rep-1', ok: true }], []).skipped, []);
 });
 
 // The bulk route takes 1 to 500 ids and refuses a longer list outright, so a

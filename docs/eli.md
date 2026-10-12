@@ -474,7 +474,8 @@ from the first page and drops whatever was chosen. Choose repairs one at a time,
 or with the box above the list for every repair shown. Once every repair on the
 page is chosen and more match, **Select all** takes everything the filters match,
 up to 500 at a time, and says so when there are more than that. **Clear from
-history** hides the chosen repairs from this list and does nothing else. A
+history** asks first, saying how many repairs it will clear, and then hides them
+from this list and does nothing else. A
 cleared repair is kept: it still counts towards each repository's and each
 person's daily limit, it still stops Eli repairing its own commit, and it still
 stops Eli answering the same webhook delivery twice. It cannot be restored from
