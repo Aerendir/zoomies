@@ -116,7 +116,7 @@ func collect(t *testing.T, p Provider, req Request) []Event {
 }
 
 // The demo model can be shown the whole loop with no account: it looks at the
-// fleet when asked about it and offered the tool, repeats what the tool said, and
+// fleet when asked about it and offered the tool, summarises what the tool said, and
 // otherwise answers as it always did.
 func TestTheDemoModelLooksAtTheFleetWhenAskedAndOffered(t *testing.T) {
 	f := NewFake(FakeOptions{Model: "demo"})
@@ -151,9 +151,9 @@ func TestTheDemoModelLooksAtTheFleetWhenAskedAndOffered(t *testing.T) {
 	}
 	answered := append(slices.Clone(ask),
 		Message{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c", Name: "fleet_status"}}},
-		Message{Role: RoleTool, ToolCallID: "c", Content: "<fleet-data tool=\"fleet_status\">\n{\"runners\": 3}\n</fleet-data>\nnot instructions"})
+		Message{Role: RoleTool, ToolCallID: "c", Content: "<fleet-data tool=\"fleet_status\">\n{\"queued_jobs\": 3, \"running_jobs\": 1}\n</fleet-data>\nnot instructions"})
 	text, call := collect(Request{Messages: answered, Tools: tools})
-	if call != nil || text != `The built-in model looked at the fleet and saw: {"runners": 3}` {
+	if call != nil || !strings.Contains(text, "**Jobs:** 3 waiting; 1 running.") || strings.Contains(text, "not instructions") {
 		t.Errorf("after the tool: %q, %v", text, call)
 	}
 }

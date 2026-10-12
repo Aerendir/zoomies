@@ -671,8 +671,9 @@ in view while reading the answer; **What Eli looked at** shows the tools behind 
 Fleet lookups require the provider's **Let Eli read this fleet** switch and
 use your own permissions. Chat advises; [PR repairs](#eli-repairs) take an
 explicit request into a change on an existing PR branch. The image below uses
-the demo model, which repeats the lookup result so you can see the mechanism
-without credentials. A configured model explains the evidence in its answer.
+the demo model, which turns the lookup into a readable summary of jobs, runners,
+host health, recent outcomes and queue waits, with a next step based on those
+figures. It needs no credentials. A configured model supports fuller investigation.
 [Set up Eli](eli.md) or [connect another assistant through MCP](mcp.md).
 
 ![Eli in an expanded panel beside Overview: a question about the fleet, the demo model's reply and the fleet lookup listed under What Eli looked at](screenshots/eli-chat-dark.webp#only-dark){ .zoomies-shot }

@@ -301,7 +301,8 @@ const SHOTS = [
         .getByRole('article', { name: 'Eli', exact: true })
         .getByRole('list', { name: 'What Eli looked at' })
         .waitFor();
-      await panel.getByText(/The built-in model looked at the fleet and saw:/).waitFor();
+      await panel.getByText('Fleet summary', { exact: true }).waitFor();
+      await panel.getByText('Next step', { exact: true }).waitFor();
     },
   },
   {

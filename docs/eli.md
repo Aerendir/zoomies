@@ -46,8 +46,8 @@ authorised AI Context source reads to a connected client.
 **Try it without credentials:** [start the local demo](quickstart.md#just-looking),
 open **Settings → Eli AI Assistant**, edit the demo provider and enable
 **Let Eli read this fleet through this provider**. Then open Eli and ask about
-“the fleet”: the built-in fixture provider reads the demo data and repeats what
-it found. With the switch off it echoes your question without reading the
+“the fleet”: the built-in fixture provider reads the demo data and presents a
+formatted fleet summary with a next step. With the switch off it echoes your question without reading the
 fleet. Use a model you configure for normal conversations and repairs on your
 own instance.
 
@@ -281,7 +281,7 @@ verdict to break the build on.
 
 The demo model that ships with the demo fleet can be asked about "the fleet"
 after you enable its fleet-read switch in Settings, Eli AI Assistant. It then
-reads the demo data and repeats what it found, so the lookup loop can be seen
+reads the demo data and presents a readable summary, so the lookup loop can be seen
 with no account and no key. With the switch off it only echoes the question.
 
 ## Personal conversations and PR repairs
@@ -321,8 +321,8 @@ already asked. Extend `web/src/lib/assistant/prompts.ts` with a narrative topic;
 new page integrations pass an `EliContext` to `AskEli.svelte`.
 
 The [UI tour](ui.md#ask-eli) shows the current panel beside the fleet. This
-capture uses the built-in demo model and a real fleet lookup; it repeats the
-result to make the tool loop visible without credentials.
+capture uses the built-in demo model and a real fleet lookup. It presents the
+result with clear headings, labelled metrics and a next step, without credentials.
 
 ![Eli in an expanded panel beside Overview: a question about the fleet, the demo model's reply and the fleet lookup listed under What Eli looked at](screenshots/eli-chat-dark.webp#only-dark){ .zoomies-shot }
 ![Eli in an expanded panel beside Overview: a question about the fleet, the demo model's reply and the fleet lookup listed under What Eli looked at](screenshots/eli-chat-light.webp#only-light){ .zoomies-shot }
