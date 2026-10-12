@@ -13,6 +13,8 @@ in the same pull request as the work.
 | --- | --- | --- |
 | ZF-242 | `in_progress` | Core, reader, assembler, collector, admission/API, CLI/MCP and contextual UI/scripted scenarios merged in #931, #933, #935, #938, #943, #947 and #959. Validation corrections merged in #960, #961, #962 and #965. Six desktop/mobile browser tests plus two scrolling checks, focused UI checks, asset budgets and strict docs pass. The broad Go race run passed 44 packages; all seven failed packages now have successful corrective checks, using extended API/store budgets and disjoint controller groups covering all 1329 tests. The original broad command did not pass. [Validation evidence](validation/2026-10-12-eli-pr-delay-validation.md) and [live handoff](../eli-enhancement-roadmap-handoff.md#execution-status-updated-12-october-2026) record commands and limits. Live model evaluation and real performance experiments remain unrun; later enhancement tracks remain unstarted. |
 
+| ZF-243 | `in_progress` | First pure eligibility slice in the current PR. Fixed rule version, 30 completed attempts per arm, explicit workload/cache/host/selection caveats, failures and excluded attempt counts. [Plan](plans/2026-10-12-eli-comparison-eligibility.md). Measurement, authorised controller assembly and transports remain outstanding; no real experiment or model evaluation. |
+
 ## How to read a row
 
 **Status** is one of:

@@ -1731,6 +1731,32 @@ Plan and baseline evidence: [E1 calculation core](roadmap/plans/2026-10-12-eli-m
 The core needs no ZF-240 transport. Integration reuses ZF-241 and ZF-236 contracts
 where present. No publication, model call, job dispatch or new authority.
 
+### ZF-243: compare selected historical runner or workflow runs
+
+**Classification:** new. **Size:** M. **Started:** 12 October 2026, owner
+request to continue the Eli enhancement stack. Track E2 in the live handoff.
+
+**Why:** a period correlation does not establish matched workloads for a
+configuration experiment. Keep ZF-241's period/release finding separate.
+
+**Do:** begin with a pure, bounded eligibility snapshot of operator-selected
+existing attempts. Retain the hypothesis, initiating user, repository, evidence
+identifier, revisions, exact intended delta, inputs, test scope, image/resource
+identity, cache/host observations, window and fixed rule version. Keep failed
+attempts; count cancelled and superseded attempts separately. Missing coverage,
+unequal workloads, unknown cache/host state and small samples stay inconclusive.
+Then compute successful latency, all-attempt consumption, reliability, allocation
+and estimated cost separately, with counts and dispersion. Controller assembly
+verifies repository access and complete selection before transport integration.
+
+**Acceptance:** reproducible retained selections, explicit unknowns, duplicate
+attempt refusal, failures preserved, faster latency with higher consumption shown
+as a trade-off, and no causal or verified-improvement claim from historical data.
+Dispatch and publication are later, separately authorised work.
+
+**First slice:** [eligibility plan](roadmap/plans/2026-10-12-eli-comparison-eligibility.md).
+No new dependency, store query, route, model call, dispatch or publication.
+
 ## 9. Kept for the day somebody asks
 
 Nothing here is authorised by planning alone. Each starts when a fleet
@@ -1867,6 +1893,7 @@ every package in section 8 was re-read on 19 September against the code.
 | 19 | ZF-240 the fleet as it moves, over MCP, implemented, 12 October | One call answers what changed; a second with the cursor blocks until a seeded event; Eli's three scenarios hold and the three reads for whoever runs the fleet are left off its list |
 | 20 | ZF-241 the analyses | Each seeded cause is named as dominant at high confidence; a small sample is said to be small; the card and the tool show one answer |
 | 21 | ZF-242 PR required-check delay, starting with its independent pure core | Pinned heads and coverage survive every surface; missing/ambiguous checks stay visible; no merge-readiness claim |
+| 22 | ZF-243 selected historical comparison | Matched workloads and retained attempts; separate latency, consumption and reliability; incomplete evidence stays inconclusive |
 | - | ZF-239 slices 3 to 5, the relay itself | After the owner's answers and a ruling on delivery rule 15 |
 | - | ZF-215, ZF-212, ZF-403's rotation, and section 9 | When a fleet asks |
 
