@@ -699,3 +699,29 @@ func TestAPoolCoveredByFreeSlotsGetsNoVerdict(t *testing.T) {
 		t.Fatalf("verdicts = %+v, want none", plan.Pools)
 	}
 }
+
+// A fenced fleet creates and deletes nothing at any provider, so a machine that
+// was on its way is not being finished. Told it was on the way, an operator
+// would wait for runners that cannot start until the fence is lifted.
+func TestAFencedFleetDoesNotSayAMachineIsOnItsWay(t *testing.T) {
+	onItsWay := PoolRenting{
+		PoolID: "pool_alpha", PoolName: "alpha", State: RentingOnItsWay, ProviderID: "prv_lab",
+		ProviderName: "lab", Summary: "1 machine from lab is on the way for this pool, so the next runners start there.",
+		Queued: 2, Short: 2, Machines: 1,
+	}
+	view := buildRentingView(rentingInput{
+		Enabled: true, MaxMachines: 10, Fenced: true,
+		Usable: []*store.Provider{demandProvider("lab")},
+		Report: &rentingReport{Pools: []PoolRenting{onItsWay}},
+	})
+	if len(view.Pools) != 1 {
+		t.Fatalf("pools = %+v, want one", view.Pools)
+	}
+	got := view.Pools[0]
+	if got.State != RentingHeld {
+		t.Fatalf("state = %q (%q), want held: nothing finishes a machine while the fleet is fenced", got.State, got.Summary)
+	}
+	if !strings.Contains(got.Summary, "fenced") || strings.Contains(got.Summary, "on the way") {
+		t.Fatalf("summary = %q, want it to say the fleet is fenced and not that a machine is on the way", got.Summary)
+	}
+}
