@@ -51,6 +51,15 @@ const (
 	assistantToolResultBytes = 16 << 10
 )
 
+// AssistantWindowBlock is what Eli's toolbox asks the fleet window tools to hold
+// each block of an answer to. Under assistantToolResultBytes, the tools cut a
+// large window on whole rows, with a cursor naming the last row kept, before
+// the ceiling here would cut by bytes from the front: that keeps the end, which
+// starts inside a row and, for the events, sits under a cursor that has moved
+// past the rows it dropped. The quarter left over is room for hiding, which
+// writes "[redacted email]" over an address shorter than it.
+const AssistantWindowBlock = assistantToolResultBytes * 3 / 4
+
 // AssistantToolbox is the fleet's read tools as the person asking may use them.
 // The api package builds it over the same in-process routes, with the same
 // identity, that an MCP client of theirs would reach, so Eli can see nothing the

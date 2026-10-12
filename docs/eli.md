@@ -196,7 +196,10 @@ your question: runner, host, pool, job, workflow, repository and branch names,
 statuses, counts, a provider's address and the addresses of the machines it rented,
 and the end of a runner's log if Eli asks for it. A provider's credential is never
 part of it: the API reports only that one is configured. A tool's answer
-is cut at 16 KiB. The switch is still the main control: turn it on for a provider
+is cut at 16 KiB. The fleet's recent past is held to 12 KiB a block before
+that, on whole rows: events, samples, decisions and runs keep the first or
+newest rows that fit and say how many there were, and the cursor Eli is given
+names the last event it was shown, so reading on misses nothing. The switch is still the main control: turn it on for a provider
 only if that provider may be shown this.
 
 ### What is hidden first

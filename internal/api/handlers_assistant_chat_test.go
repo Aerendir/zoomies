@@ -2,10 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/eyupio/zoomies/internal/assistant/assistanttest"
 	"github.com/eyupio/zoomies/internal/config"
@@ -562,6 +564,203 @@ func TestALiveToolIsNotAnsweredFromTheCache(t *testing.T) {
 	done := got[len(got)-1]
 	if done.kind != "done" || !slices.Equal(anyStrings(done.data["tools"]), []string{"wait_for_change", "get_job", "wait_for_change"}) {
 		t.Errorf("done = %+v", done)
+	}
+}
+
+// A live tool is run every time it is asked, so the only thing between a model
+// that keeps waiting and an answer that never comes is the call limit. It holds
+// for a wait as for any other tool: the calls past it are refused with the limit
+// named, the toolbox is not asked again, and the answer ends.
+func TestAModelThatKeepsWaitingIsStoppedByTheCallLimit(t *testing.T) {
+	// controllerMaxCalls is the controller's assistantMaxCalls, said here
+	// because the limit is the behaviour under test, not a figure to look up.
+	const controllerMaxCalls = 12
+	h, cookie, srv := chatHarness(t)
+	allowFleetAccess(t, h, cookie, true)
+	// Four waits a round, word for word, every round: the limit is reached in
+	// the fourth round, well before the round limit could be what stops it.
+	wait := assistanttest.Call{Name: "wait_for_change", Arguments: `{}`}
+	srv.Script = []assistanttest.Round{{Calls: []assistanttest.Call{wait, wait, wait, wait}}}
+	resp := h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, readStream: true, body: chatBody("user", "Watch the fleet for me.")})
+	resp.mustStatus(t, http.StatusOK, "asking")
+	got := frames(t, resp.body)
+	var ran, refused int
+	for _, f := range got {
+		if f.kind != "tool" {
+			continue
+		}
+		switch f.data["status"] {
+		case "done":
+			ran++
+		case "failed":
+			if reason, _ := f.data["reason"].(string); strings.Contains(reason, "tool calls one question may take") {
+				refused++
+			} else {
+				t.Errorf("a wait failed for another reason: %v", f.data)
+			}
+		}
+	}
+	if ran != controllerMaxCalls || refused == 0 {
+		t.Errorf("%d waits ran and %d were refused, want %d and at least one", ran, refused, controllerMaxCalls)
+	}
+	done := got[len(got)-1]
+	if done.kind != "done" || len(anyStrings(done.data["tools"])) != controllerMaxCalls {
+		t.Errorf("done = %+v", done)
+	}
+}
+
+// fleetBlocks is a tool message taken apart into the text of each fleet-data
+// block, in order.
+func fleetBlocks(content string) []string {
+	var out []string
+	for _, part := range strings.Split(content, "</fleet-data>\n") {
+		if !strings.Contains(part, "<fleet-data tool=") {
+			continue
+		}
+		_, body, _ := strings.Cut(part, ">\n")
+		out = append(out, strings.TrimSuffix(body, "\n"))
+	}
+	return out
+}
+
+// toolMessage is what the model was told in answer to one call.
+func toolMessage(t *testing.T, req assistanttest.Recorded, callID string) string {
+	t.Helper()
+	msgs, _ := req.Body["messages"].([]any)
+	for _, m := range msgs {
+		msg, _ := m.(map[string]any)
+		if msg["tool_call_id"] == callID {
+			content, _ := msg["content"].(string)
+			return content
+		}
+	}
+	t.Fatalf("no answer to %s was sent to the model", callID)
+	return ""
+}
+
+// A window tool's answer can be far larger than the share of one question Eli
+// may put in front of a model. Cut by bytes from the front, the model would be
+// shown a fragment that starts inside a row, or the end of the events with a
+// cursor that has already moved past the ones it was not shown, and following
+// it would lose them for good. So what Eli is shown is whole rows, and the
+// cursor names the last of them.
+func TestEliIsShownWholeRowsOfALargeWindowAndACursorThatMatchesThem(t *testing.T) {
+	h, cookie, srv := chatHarness(t)
+	allowFleetAccess(t, h, cookie, true)
+
+	bus := h.ctrl.Events()
+	since := bus.WireID(bus.LastID())
+	idOf := map[string]string{}
+	long := strings.Repeat("x", 190)
+	for i := range 200 {
+		id := fmt.Sprintf("j%04d", i)
+		bus.Publish(events.KindJobUpdated, "job:"+id, map[string]any{
+			"id": id, "state": "queued", "job_name": long, "workflow": long, "repo": long, "head_branch": long,
+		})
+		idOf["job:"+id] = bus.WireID(bus.LastID())
+	}
+
+	host := h.host("build-1")
+	now := h.ctrl.Now().Truncate(time.Minute)
+	var samples []store.HostSample
+	for i := range 250 {
+		cpu, load, free, cpus, mem := 50.0, 1.5, int64(8000), 2.5, int64(4096)
+		samples = append(samples, store.HostSample{
+			HostID: host.ID, At: now.Add(-time.Duration(250-i) * time.Minute), Capacity: 4, ActiveRunners: 2,
+			CPUPercent: &cpu, LoadAverage1: &load, CPUs: 4, MemoryMB: 16384, MemoryAvailableMB: &free,
+			AllocatableCPUs: 4, AllocatableMemoryMB: 16000, ReservedCPUs: &cpus, ReservedMemoryMB: &mem,
+			DiskTotalMB: 100000, DiskFreeMB: 50000,
+		})
+	}
+	if err := h.st.RecordHostSamples(h.ctx, samples); err != nil {
+		t.Fatal(err)
+	}
+
+	pool := h.pool(h.installation(), "linux")
+	for i := range 200 {
+		e := &store.ScalingEvent{PoolID: pool.ID, PoolName: pool.Name, From: i, To: i + 1, Reason: fmt.Sprintf("decision %03d: ", i) + long}
+		if err := h.st.AppendScalingEvent(h.ctx, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srv.Script = []assistanttest.Round{
+		{Calls: []assistanttest.Call{
+			{Name: "recent_events", Arguments: `{"since":"` + since + `","limit":200}`},
+			{Name: "host_samples", Arguments: `{"window":"6h"}`},
+			{Name: "scaling_decisions", Arguments: `{"limit":200}`},
+		}},
+		{Text: "That is a lot of history."},
+	}
+	resp := h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, readStream: true, body: chatBody("user", "What has the fleet been doing?")})
+	resp.mustStatus(t, http.StatusOK, "asking")
+	reqs := chatRequests(srv)
+	if len(reqs) < 2 {
+		t.Fatalf("the model was asked %d times", len(reqs))
+	}
+
+	// The events: the lines start at the first event after since, and the
+	// cursor is the id of the last line shown, so reading on from it misses
+	// nothing. The names block starts on the first event's names.
+	ring := fleetBlocks(toolMessage(t, reqs[1], "call_0_0"))
+	if len(ring) != 3 {
+		t.Fatalf("recent_events was handed over as %d blocks, want lines, notice and names: %q", len(ring), ring)
+	}
+	for i, b := range ring {
+		if strings.HasPrefix(b, "[cut:") {
+			t.Errorf("block %d of recent_events was cut by bytes: %.120q", i, b)
+		}
+	}
+	lines := strings.Split(strings.TrimRight(ring[0], "\n"), "\n")
+	if fields := strings.Fields(lines[0]); len(fields) < 3 || fields[2] != "job:j0000" {
+		t.Errorf("the lines start at %.120q, want the first event after since", lines[0])
+	}
+	last := lines[len(lines)-1]
+	cursor, cut := strings.CutPrefix(last, "truncated: continue from ")
+	if !cut {
+		t.Fatalf("200 long events fitted whole, so nothing was tested: %.120q", last)
+	}
+	shown := strings.Fields(lines[len(lines)-2])
+	if len(shown) < 3 || idOf[shown[2]] != cursor {
+		t.Errorf("the cursor %s is not the last event shown (%v)", cursor, shown)
+	}
+	if !strings.HasPrefix(ring[2], "j0000: ") {
+		t.Errorf("the names start at %.80q, want the first event's", ring[2])
+	}
+
+	// The samples: one whole JSON document of the newest rows, and a note
+	// saying how many there were.
+	for _, call := range []string{"call_0_1", "call_0_2"} {
+		blocks := fleetBlocks(toolMessage(t, reqs[1], call))
+		if len(blocks) != 2 {
+			t.Fatalf("%s was handed over as %d blocks, want the rows and a note: %.200q", call, len(blocks), blocks)
+		}
+		var doc struct {
+			Items []json.RawMessage `json:"items"`
+		}
+		if err := json.Unmarshal([]byte(blocks[0]), &doc); err != nil {
+			t.Errorf("%s is not whole: %v: %.120q", call, err, blocks[0])
+			continue
+		}
+		if len(doc.Items) == 0 || !strings.Contains(blocks[1], "newest") {
+			t.Errorf("%s kept %d rows with the note %q", call, len(doc.Items), blocks[1])
+		}
+	}
+	newest := fleetBlocks(toolMessage(t, reqs[1], "call_0_1"))[0]
+	if !strings.Contains(newest, now.Add(-time.Minute).UTC().Format(time.RFC3339)) {
+		t.Errorf("the newest sample was not kept: %.200q", newest)
+	}
+	// The decisions keep the route's first rows, which are its newest.
+	var route struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(h.do(request{method: http.MethodGet, path: "/api/v1/scaling-events?limit=200", cookie: cookie}).body, &route); err != nil || len(route.Items) == 0 {
+		t.Fatalf("reading the scaling events: %v", err)
+	}
+	if decisions := fleetBlocks(toolMessage(t, reqs[1], "call_0_2"))[0]; !strings.HasPrefix(decisions, `{"items":[{"id":"`+route.Items[0].ID+`"`) {
+		t.Errorf("the newest decision, %s, was not kept first: %.200q", route.Items[0].ID, decisions)
 	}
 }
 

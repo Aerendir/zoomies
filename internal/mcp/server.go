@@ -105,6 +105,13 @@ type Options struct {
 	// Refusal is the sentence for an action tool asked for and not offered,
 	// said as a tool result so the model can tell the person what to change.
 	Refusal func(tool string) string
+	// WindowBlock is the most bytes one block of a fleet window tool's answer
+	// may hold; zero is the tools' own 64 KiB. A caller that holds blocks to a
+	// smaller ceiling of its own sets it under that ceiling, so the tools cut
+	// on whole rows, with a cursor that names the last row kept. A caller's own
+	// cut can only keep the end of the text, which starts inside a row and
+	// leaves a cursor that has moved past the rows it dropped.
+	WindowBlock int
 }
 
 // JSON-RPC error codes.
@@ -150,6 +157,8 @@ type Server struct {
 	// "no such tool".
 	actions map[string]bool
 	refusal func(string) string
+	// windowBlock is Options.WindowBlock, handed to each call on its context.
+	windowBlock int
 
 	writeMu sync.Mutex
 	out     io.Writer
@@ -167,11 +176,12 @@ func New(api API, opts Options) *Server {
 // the real surface does not have, through the same registration as the rest.
 func newServer(api API, opts Options, all []*tool) *Server {
 	s := &Server{
-		api:      api,
-		byName:   map[string]*tool{},
-		actions:  map[string]bool{},
-		refusal:  opts.Refusal,
-		inFlight: map[string]context.CancelFunc{},
+		api:         api,
+		byName:      map[string]*tool{},
+		actions:     map[string]bool{},
+		refusal:     opts.Refusal,
+		windowBlock: opts.WindowBlock,
+		inFlight:    map[string]context.CancelFunc{},
 	}
 	for _, t := range all {
 		if t.action {
@@ -388,6 +398,9 @@ func (s *Server) callTool(ctx context.Context, name string, arguments json.RawMe
 	args := arguments
 	if len(bytes.TrimSpace(args)) == 0 || string(bytes.TrimSpace(args)) == "null" {
 		args = json.RawMessage("{}")
+	}
+	if s.windowBlock > 0 {
+		ctx = context.WithValue(ctx, windowBlockKey{}, s.windowBlock)
 	}
 	content, value, err := t.run(ctx, s.api, args)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/eyupio/zoomies/internal/assistant"
 	"github.com/eyupio/zoomies/internal/auth"
+	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/mcp"
 )
 
@@ -20,7 +21,7 @@ type assistantToolbox struct {
 }
 
 func (s *Server) assistantToolbox(r *http.Request, as *auth.Identity) *assistantToolbox {
-	return &assistantToolbox{server: mcp.New(inProcessAPI{s: s, from: r, as: as, direct: true}, mcp.Options{})}
+	return &assistantToolbox{server: mcp.New(inProcessAPI{s: s, from: r, as: as, direct: true}, mcp.Options{WindowBlock: controller.AssistantWindowBlock})}
 }
 
 func (b *assistantToolbox) Tools() []assistant.Tool {

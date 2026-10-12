@@ -21,6 +21,21 @@ import (
 // workflow's names make it, so the bytes are bounded as well.
 const maxWindowBlock = 64 << 10
 
+// windowBlockKey carries a server's Options.WindowBlock to the window tools. It
+// travels on the context because the tools are plain functions over the API,
+// shared by every server, and only the block size differs between them.
+type windowBlockKey struct{}
+
+// windowBlock is the bytes one block of a window tool's answer may hold for
+// this call: the server's WindowBlock when it set one, and maxWindowBlock
+// otherwise.
+func windowBlock(ctx context.Context) int {
+	if n, ok := ctx.Value(windowBlockKey{}).(int); ok && n > 0 {
+		return min(n, maxWindowBlock)
+	}
+	return maxWindowBlock
+}
+
 // maxWindowValue bounds one quoted field. A frame is then a bounded number of
 // bytes however long a stranger made a branch name, so a cut always has a whole
 // frame to stand on.
@@ -300,7 +315,7 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 	if err != nil {
 		return nil, nil, err
 	}
-	lines, untrusted, _, err := renderFrames(body, maxWindowBlock)
+	lines, untrusted, _, err := renderFrames(body, windowBlock(ctx))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -458,7 +473,11 @@ func scalingDecisions(ctx context.Context, c API, raw json.RawMessage) ([]Conten
 		q.Set("pool_id", a.PoolID)
 	}
 	q.Set("limit", strconv.Itoa(clamp(a.Limit, 50, 200)))
-	return getJSON(ctx, c, "/scaling-events", q)
+	body, err := c.Call(ctx, "GET", "/scaling-events", q)
+	if err != nil {
+		return nil, err
+	}
+	return capRows(body, windowBlock(ctx), "limit or pass pool_id")
 }
 
 func fleetSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -475,7 +494,7 @@ func fleetSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, e
 	if err != nil {
 		return nil, err
 	}
-	return capSamples(body, "window")
+	return capSamples(body, windowBlock(ctx), "window")
 }
 
 func hostSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -501,7 +520,7 @@ func hostSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, er
 	if err != nil {
 		return nil, err
 	}
-	return capSamples(body, "window or since, or pass host_id")
+	return capSamples(body, windowBlock(ctx), "window or since, or pass host_id")
 }
 
 func runnerTimeline(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -547,19 +566,23 @@ func listWorkflowRuns(ctx context.Context, c API, raw json.RawMessage) ([]Conten
 		return nil, err
 	}
 	q.Set("limit", strconv.Itoa(clamp(a.Limit, 20, 100)))
-	return getJSON(ctx, c, "/workflow-runs", q)
+	body, err := c.Call(ctx, "GET", "/workflow-runs", q)
+	if err != nil {
+		return nil, err
+	}
+	return capRows(body, windowBlock(ctx), "limit, since or the filters")
 }
 
 // maxWindowRows is the most rows a window tool hands a model.
 const maxWindowRows = 200
 
-// capSamples holds a samples answer to its newest maxWindowRows rows and
-// maxWindowBlock bytes. The routes have no limit of their own: a day of fleet
+// capSamples holds a samples answer to its newest maxWindowRows rows and limit
+// bytes. The routes have no limit of their own: a day of fleet
 // samples is about 1,440 rows and a host adds 60 an hour, which is more than a
 // model should be handed and more than Eli's result ceiling. A cut says how many
 // rows there were and how to ask for fewer, so a model never takes the newest
 // of a long window for all of it. An answer that fits goes through unchanged.
-func capSamples(body []byte, narrow string) ([]Content, error) {
+func capSamples(body []byte, limit int, narrow string) ([]Content, error) {
 	var doc struct {
 		Items []json.RawMessage `json:"items"`
 	}
@@ -567,7 +590,7 @@ func capSamples(body []byte, narrow string) ([]Content, error) {
 		return nil, errors.New("the controller's samples are not in the shape this tool expects; upgrade the controller and the CLI together")
 	}
 	whole := jsonContent(body)
-	if len(doc.Items) <= maxWindowRows && len(whole[0].Text) <= maxWindowBlock {
+	if len(doc.Items) <= maxWindowRows && len(whole[0].Text) <= limit {
 		return whole, nil
 	}
 
@@ -601,9 +624,9 @@ func capSamples(body []byte, narrow string) ([]Content, error) {
 		if err := json.Compact(&compact, out); err != nil {
 			return nil, err
 		}
-		if compact.Len() <= maxWindowBlock || len(newest) <= 1 {
+		if compact.Len() <= limit || len(newest) <= 1 {
 			note := fmt.Sprintf("The window held %d rows and the newest %d are shown, at most %d rows and %d KiB. Narrow %s to see the rest.",
-				len(doc.Items), len(newest), maxWindowRows, maxWindowBlock>>10, narrow)
+				len(doc.Items), len(newest), maxWindowRows, limit>>10, narrow)
 			return []Content{{Type: "text", Text: compact.String()}, {Type: "text", Text: note}}, nil
 		}
 		// Too many bytes still: drop the oldest of what is kept until it fits.
@@ -640,7 +663,7 @@ func listWebhookDeliveries(ctx context.Context, c API, raw json.RawMessage) ([]C
 	if err != nil {
 		return nil, err
 	}
-	return capRows(body, "limit or status")
+	return capRows(body, windowBlock(ctx), "limit or status")
 }
 
 func listAudit(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -680,15 +703,15 @@ func listAudit(ctx context.Context, c API, raw json.RawMessage) ([]Content, erro
 	if err != nil {
 		return nil, err
 	}
-	return capRows(body, "limit, since or the filters")
+	return capRows(body, windowBlock(ctx), "limit, since or the filters")
 }
 
-// capRows holds a list answer to maxWindowRows rows and maxWindowBlock bytes.
+// capRows holds a list answer to maxWindowRows rows and limit bytes.
 // The routes send newest first and carry fields beside items (a total, the time
 // a delivery last arrived) that say more than the rows do, so the cut keeps the
 // first rows and every other field as the route sent them. An answer that fits
 // goes through unchanged.
-func capRows(body []byte, narrow string) ([]Content, error) {
+func capRows(body []byte, limit int, narrow string) ([]Content, error) {
 	whole := jsonContent(body)
 	var doc map[string]json.RawMessage
 	if err := json.Unmarshal(body, &doc); err != nil {
@@ -698,7 +721,7 @@ func capRows(body []byte, narrow string) ([]Content, error) {
 	if err := json.Unmarshal(doc["items"], &items); err != nil {
 		return nil, errors.New("the controller's list is not in the shape this tool expects; upgrade the controller and the CLI together")
 	}
-	if len(items) <= maxWindowRows && len(whole[0].Text) <= maxWindowBlock {
+	if len(items) <= maxWindowRows && len(whole[0].Text) <= limit {
 		return whole, nil
 	}
 
@@ -713,9 +736,9 @@ func capRows(body []byte, narrow string) ([]Content, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(out) <= maxWindowBlock || len(kept) <= 1 {
+		if len(out) <= limit || len(kept) <= 1 {
 			note := fmt.Sprintf("The answer held %d rows and the first %d, the newest, are shown, at most %d rows and %d KiB. Narrow %s to see the rest.",
-				len(items), len(kept), maxWindowRows, maxWindowBlock>>10, narrow)
+				len(items), len(kept), maxWindowRows, limit>>10, narrow)
 			return []Content{{Type: "text", Text: string(out)}, {Type: "text", Text: note}}, nil
 		}
 		kept = kept[:len(kept)-max(1, len(kept)/10)]

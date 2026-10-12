@@ -346,7 +346,7 @@ func TestSamplesAreKeptByTimeWhateverOrderTheRouteSendsThem(t *testing.T) {
 	}
 	slices.Reverse(doc.Items)
 	body, _ := json.Marshal(doc)
-	out, err := capSamples(body, "window")
+	out, err := capSamples(body, maxWindowBlock, "window")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +378,7 @@ func TestSamplesTooManyBytesAreCutEvenUnderTwoHundredRows(t *testing.T) {
 	for i := range rows {
 		rows[i] = fmt.Sprintf(`{"at":"2026-10-12T%02d:%02d:00Z","pad":%q}`, i/60, i%60, pad)
 	}
-	out, err := capSamples([]byte(`{"items":[`+strings.Join(rows, ",")+`]}`), "window")
+	out, err := capSamples([]byte(`{"items":[`+strings.Join(rows, ",")+`]}`), maxWindowBlock, "window")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -711,6 +711,33 @@ func TestSupportBundleShrinksAgainWhenTheFirstAttemptOvershoots(t *testing.T) {
 	for name, rows := range got {
 		if len(rows) == 0 {
 			t.Errorf("section %.10s... was cut to nothing", name)
+		}
+	}
+}
+
+// A caller with a smaller ceiling than the tools' own asks for it and gets it,
+// cut on whole rows; one that asks for more than the tools' own does not,
+// because 64 KiB is the most a window tool hands anyone.
+func TestAWindowBlockOnlyEverLowersTheToolsOwn(t *testing.T) {
+	rows := make([]string, 200)
+	for i := range rows {
+		rows[i] = fmt.Sprintf(`{"at":"2026-10-12T%02d:%02d:00Z","queued_jobs":%d,"note":"%s"}`, i/60, i%60, i, strings.Repeat("x", 400))
+	}
+	body := `{"items":[` + strings.Join(rows, ",") + `]}`
+	for _, tc := range []struct {
+		set, want int
+	}{
+		{0, maxWindowBlock},
+		{12 << 10, 12 << 10},
+		{1 << 20, maxWindowBlock},
+	} {
+		s := New(&kennelAPI{body: body}, Options{WindowBlock: tc.set})
+		blocks, failed, err := s.CallTool(t.Context(), "fleet_samples", json.RawMessage(`{}`))
+		if err != nil || failed || len(blocks) != 2 {
+			t.Fatalf("WindowBlock %d: %v %v %q", tc.set, err, failed, blocks)
+		}
+		if len(blocks[0]) > tc.want || len(blocks[0]) < tc.want*3/4 || !json.Valid([]byte(blocks[0])) {
+			t.Errorf("WindowBlock %d gave a %d-byte block (valid JSON %v), want whole rows filling most of %d", tc.set, len(blocks[0]), json.Valid([]byte(blocks[0])), tc.want)
 		}
 	}
 }
