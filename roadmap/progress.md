@@ -11,7 +11,7 @@ in the same pull request as the work.
 
 | Package | Status | Evidence |
 | --- | --- | --- |
-| ZF-242 | `in_progress` | Foundations and collector merged in #931, #933, #935 and #938. The [read-only API and admission slice](plans/2026-10-12-eli-pr-delay-api.md) adds the Jobs read gate, rolling installation allowance, one in-flight request and quota preflight, with generated contracts. Focused race, shape and route/spec tests pass. [Live handoff status](../eli-enhancement-roadmap-handoff.md#execution-status-updated-12-october-2026) records checks and remaining work. MCP/CLI, contextual UI/Eli and model scenarios remain. |
+| ZF-242 | `in_progress` | Foundations and collector merged in #931, #933, #935 and #938. The [read-only API and admission slice](plans/2026-10-12-eli-pr-delay-api.md) adds the Jobs read gate, rolling installation allowance, one in-flight request and quota preflight, with generated contracts. Focused race, shape and route/spec tests pass. [Live handoff status](../eli-enhancement-roadmap-handoff.md#execution-status-updated-12-october-2026) records checks and remaining work. The [CLI and agent-tool slice](plans/2026-10-12-eli-pr-delay-agent-tools.md) adds one-request wrappers and refuses public visitors before installation reads. Focused race and generated-reference tests pass. Contextual UI and model scenarios remain. |
 
 ## How to read a row
 

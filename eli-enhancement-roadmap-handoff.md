@@ -30,8 +30,9 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 bounded GitHub evidence | Merged | [#933](https://github.com/eyupio/zoomies/pull/933), following #931 | Full GitHub/analysis package race tests and vet pass; target-branch protection, bounded check reads, currentness recheck and explicit coverage |
 | E1 snapshot assembly | Merged | [#935](https://github.com/eyupio/zoomies/pull/935), following its merged parents | Focused controller/analysis race tests pass; verifies repository/installation/run/job joins, preserves incomplete evidence, and separates check reporting from job execution |
 | E1 on-demand collector | Merged | [#938](https://github.com/eyupio/zoomies/pull/938), following the merged foundations | Collector/assembly/core/reader race tests and changed-package vet pass; selects the existing job's installation, bounds collection, respects installation holds and labels the window basis |
-| E1 admission and read-only API | Draft PR, not merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
-| E1 agent and UI integration | Not started | Follows the API contract | MCP/CLI, contextual UI/Eli and model scenarios remain; do not describe the UI experience as delivered from an API-only slice |
+| E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
+| E1 CLI and agent tools | Draft PR, not merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and model scenarios remain |
+| E1 contextual UI and model scenarios | Not started | Follows CLI and agent tools | Add an explicit on-demand card and scripted Eli evidence scenarios; no live model evaluation has run |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
 
@@ -67,6 +68,7 @@ Current implementation plans:
 - [Snapshot assembly](roadmap/plans/2026-10-12-eli-pr-delay-snapshot.md).
 - [On-demand collection](roadmap/plans/2026-10-12-eli-pr-delay-collector.md).
 - [Admission and read-only API](roadmap/plans/2026-10-12-eli-pr-delay-api.md).
+- [CLI and agent tools](roadmap/plans/2026-10-12-eli-pr-delay-agent-tools.md).
 
 The next agent should start from the stack tip, check which parent PRs have
 merged and preserve each PR's focused diff. Never merge or retarget a parent

@@ -2324,7 +2324,7 @@ export interface paths {
         };
         /**
          * Observed required-check delay for a job's PR head
-         * @description On-demand GitHub metadata reads using the selected job's installation. Requires the jobs:read token scope. Protection applies to the PR's actual target branch. Missing or partial evidence remains explicit; this is not full merge readiness or a dependency critical path. At most 20 admissions per installation per rolling hour, one in flight, with a quota preflight retaining half the reported core allowance. Admission counters are in-memory and reset on controller restart. No source or model is read.
+         * @description On-demand GitHub metadata reads using the selected job's installation. Requires a signed-in caller or jobs:read token; public visitors are refused before any installation read. Protection applies to the PR's actual target branch. Missing or partial evidence remains explicit; this is not full merge readiness or a dependency critical path. At most 20 admissions per installation per rolling hour, one in flight, with a quota preflight retaining half the reported core allowance. Admission counters are in-memory and reset on controller restart. No source or model is read.
          */
         get: operations["getJobPRDelay"];
         put?: never;
