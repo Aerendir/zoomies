@@ -409,3 +409,95 @@ func waitFor(t *testing.T, what string, ok func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// A page whose every frame is hidden from the caller is still a full page: the
+// ring holds more after it. Holding the request would let a frame published
+// meanwhile overtake what is already waiting, and the cursor would then step
+// past it for good.
+func TestAWaitDoesNotSkipFramesTheCallerCannotSeeOnATruncatedPage(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("watcher", store.RoleViewer)
+	bus := h.ctrl.Events()
+	bus.Publish(events.KindTransfer, "transfer:t", map[string]any{"id": "t"}) // hidden from a viewer
+	bus.Publish(events.KindJobUpdated, "job:visible", map[string]any{"id": "visible"})
+	hidden, visible := bus.WireID(1), bus.WireID(2)
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		bus.Publish(events.KindJobUpdated, "job:late", map[string]any{"id": "late"})
+	}()
+
+	for _, since := range []string{bus.Epoch() + ".0", "10m"} {
+		started := time.Now()
+		page := h.recent(t, cookie, "?limit=1&wait=5s&since="+url.QueryEscape(since))
+		if elapsed := time.Since(started); elapsed > time.Second {
+			t.Errorf("since=%s: took %v, want an answer at once while the ring holds more", since, elapsed)
+		}
+		if len(page.Items) != 0 || !page.Truncated || page.TimedOut || page.Next != hidden {
+			t.Errorf("since=%s: answered %+v, want no items, truncated, next %s", since, page, hidden)
+		}
+	}
+
+	// Following the cursor loses nothing.
+	second := h.recent(t, cookie, "?limit=1&since="+url.QueryEscape(hidden))
+	if len(second.Items) != 1 || second.Items[0].ID != visible {
+		t.Errorf("the page after the hidden frame = %v, want %s", second.ids(), visible)
+	}
+}
+
+// A cursor handed out on an empty ring must not later read as "the whole ring,
+// complete" after the ring has moved on.
+func TestACursorFromAnEmptyRingStaysHonestWhenTheRingMovesOn(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("watcher", store.RoleViewer)
+
+	first := h.recent(t, cookie, "?kinds=job.updated")
+	publishJobs(h, 300) // more than the ring keeps
+	got := h.recent(t, cookie, "?kinds=job.updated&limit=200&since="+url.QueryEscape(first.Next))
+	if got.Complete {
+		t.Errorf("a cursor from before 300 frames, in a ring that keeps fewer, was called complete (first item %s)", got.Items[0].ID)
+	}
+
+	// A restart is the same thing from the other side: the cursor is foreign and
+	// the ring is empty, but ids have been used up by frames that were never kept.
+	fresh := newHarness(t)
+	_, freshCookie := fresh.user("watcher", store.RoleViewer)
+	fbus := fresh.ctrl.Events()
+	for range 3 {
+		fbus.PublishTransient(events.KindScaling, "pool:p", map[string]any{})
+	}
+	foreign := fresh.recent(t, freshCookie, "?since=abc.7")
+	if foreign.Next != fbus.WireID(3) || foreign.Complete {
+		t.Fatalf("a foreign cursor on an empty ring answered next %q complete %v, want %s and incomplete", foreign.Next, foreign.Complete, fbus.WireID(3))
+	}
+	fbus.Publish(events.KindJobUpdated, "job:j", map[string]any{"id": "j"})
+	after := fresh.recent(t, freshCookie, "?since="+url.QueryEscape(foreign.Next))
+	if len(after.Items) != 1 || !after.Complete {
+		t.Errorf("following that cursor answered %+v, want the one frame, complete", after)
+	}
+}
+
+// The brief's other half of "a wait counts as a stream": a wait asked for while
+// every slot is taken is refused the way a stream is, before anything is held.
+func TestAWaitIsRefusedWhenTheStreamSlotsAreFull(t *testing.T) {
+	h := newHarness(t, func(c *config.Config) { c.Limits.EventSubscribers = 1 })
+	_, cookie := h.user("watcher", store.RoleViewer)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	frames, first := h.openStream(t, ctx, "/api/v1/events", cookie, nil)
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("the stream was refused: %d", first.StatusCode)
+	}
+	<-frames
+
+	started := time.Now()
+	res := h.do(request{method: http.MethodGet, path: "/api/v1/events/recent?wait=20s", cookie: cookie})
+	var env errorEnvelope
+	if res.status != http.StatusConflict || json.Unmarshal(res.body, &env) != nil ||
+		env.Error.Code != codeLimitReached || env.Error.Field != "limits.event_subscribers" {
+		t.Fatalf("a wait with the slots full = %d %s, want 409 limit_reached naming limits.event_subscribers", res.status, res.body)
+	}
+	if time.Since(started) > time.Second {
+		t.Error("the refusal waited instead of coming at once")
+	}
+}

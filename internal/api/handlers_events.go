@@ -49,14 +49,16 @@ type recentView struct {
 type recentSince struct {
 	// id is the sequence number to read after; zero is the whole ring.
 	id uint64
+	// fromStart says the caller named this run's very start (an id of zero in
+	// this epoch), which is a claim about the ring and not a request for
+	// "everything": the ring covers it only while it still holds the first event.
+	fromStart bool
 	// foreign says the id belongs to another run of the controller, so it names
 	// nothing here and the read starts from the ring's start, incomplete.
 	foreign bool
 	// window, when positive, selects by age instead: events at or after now minus
 	// window.
 	window time.Duration
-	// wire is the cursor to hand back when there is nothing newer to name.
-	wire string
 }
 
 // parseRecentSince reads `since`. A value with a dot in it, or made only of
@@ -66,7 +68,7 @@ type recentSince struct {
 func parseRecentSince(bus *events.Bus, raw string) (recentSince, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return recentSince{wire: bus.WireID(0)}, true
+		return recentSince{}, true
 	}
 	_, seq, dotted := strings.Cut(raw, ".")
 	if !dotted {
@@ -74,22 +76,13 @@ func parseRecentSince(bus *events.Bus, raw string) (recentSince, bool) {
 	}
 	if _, err := strconv.ParseUint(seq, 10, 64); err == nil {
 		id, same := bus.ParseWireID(raw)
-		out := recentSince{id: id, foreign: !same}
-		if same {
-			out.wire = bus.WireID(id)
-		} else {
-			// A cursor from another run names nothing here. Handing it back
-			// would keep the caller incomplete for good, so it is given this
-			// run's start instead.
-			out.wire = bus.WireID(0)
-		}
-		return out, true
+		return recentSince{id: id, foreign: !same, fromStart: same && id == 0}, true
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil || d <= 0 {
 		return recentSince{}, false
 	}
-	return recentSince{window: d, wire: bus.WireID(0)}, true
+	return recentSince{window: d}, true
 }
 
 // handleRecentEvents answers "what happened since this event id" as plain JSON,
@@ -132,7 +125,10 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 	// The cursor, taken once. A timed-out wait hands this back unchanged, which
 	// is what makes a poll loop that finds nothing idempotent.
 	view := s.readRecent(r, since, opts, limit)
-	if len(view.Items) > 0 || wait <= 0 {
+	// A truncated read is answered at once even when none of it is for this
+	// caller: more is waiting in the ring after the cursor it carries, and holding
+	// the request would let a newer frame overtake it.
+	if len(view.Items) > 0 || view.Truncated || wait <= 0 {
 		writeJSON(w, http.StatusOK, view)
 		return
 	}
@@ -154,7 +150,7 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 	// effect is in the ring but was never offered to the subscriber. Reading
 	// again, now that it is registered, closes that gap: anything later arrives
 	// on the channel.
-	if again := s.readRecent(r, since, opts, limit); len(again.Items) > 0 {
+	if again := s.readRecent(r, since, opts, limit); len(again.Items) > 0 || again.Truncated {
 		writeJSON(w, http.StatusOK, again)
 		return
 	}
@@ -215,6 +211,12 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 // readRecent is one read of the ring for the caller's cursor and filters.
 func (s *Server) readRecent(r *http.Request, since recentSince, opts events.SubscribeOptions, limit int) recentView {
 	bus := s.ctrl.Events()
+	// Taken before the ring is read, so that the cursor handed back when nothing
+	// matched can only be behind what was read, never past an event published in
+	// between. It is the bus's last id rather than the ring's newest: a transient
+	// frame uses an id without being ringed, and a cursor short of it would be
+	// read later as a gap.
+	mark := bus.LastID()
 
 	var (
 		items     []events.Event
@@ -226,6 +228,9 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 		items, complete, truncated = recentWithin(bus, since.window, time.Now(), opts, limit)
 	case since.foreign:
 		items, _, truncated = bus.Recent(0, opts, limit)
+	case since.fromStart:
+		items, _, truncated = bus.Recent(0, opts, limit)
+		complete = ringReachesStart(bus)
 	default:
 		items, complete, truncated = bus.Recent(since.id, opts, limit)
 	}
@@ -236,15 +241,22 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 			out.Items = append(out.Items, f)
 		}
 	}
-	switch {
-	case len(items) > 0:
+	if len(items) > 0 {
 		// The last event looked at, shown or not: a frame this caller may not
 		// see still has to be stepped over, or the next call would meet it again.
 		out.Next = bus.WireID(items[len(items)-1].ID)
-	default:
-		out.Next = newestID(bus, since)
+	} else {
+		out.Next = bus.WireID(mark)
 	}
 	return out
+}
+
+// ringReachesStart reports whether the ring still holds everything this run ever
+// numbered, which is what a cursor of zero claims. Like the window read it errs
+// towards false when a transient frame took the first id.
+func ringReachesStart(bus *events.Bus) bool {
+	all, _, _ := bus.Recent(0, events.SubscribeOptions{}, 0)
+	return len(all) == 0 || all[0].ID <= 1
 }
 
 // recentWithin selects the ringed events no older than window. The ring says
@@ -273,17 +285,6 @@ func recentWithin(bus *events.Bus, window time.Duration, now time.Time, opts eve
 		items, truncated = items[:limit], true
 	}
 	return items, complete, truncated
-}
-
-// newestID is the cursor to hand a caller when nothing matched: the newest event
-// the ring holds, so that its next call starts after everything already looked
-// at. With an empty ring it is the cursor the caller sent, or this run's start.
-func newestID(bus *events.Bus, since recentSince) string {
-	all, _, _ := bus.Recent(0, events.SubscribeOptions{}, 0)
-	if len(all) > 0 {
-		return bus.WireID(all[len(all)-1].ID)
-	}
-	return since.wire
 }
 
 // recentFrame renders one event for this caller, or reports that it is not
