@@ -388,10 +388,11 @@
      drawn on a near-black chip. */
   --z-mark-chip: var(--z-brand-black);
 
-  /* The sign-in page's brand panel, which is Zoomies Black in both themes.
-     What is drawn on it therefore cannot follow the theme -- the light
-     theme's muted grey on black is barely 3:1 -- so these are the dark
-     theme's values, fixed, and only that panel reads them. */
+  /* A panel: the rounded stage the sign-in page's lockup sits on, which is
+     Zoomies Black in both themes. What is drawn on it therefore cannot
+     follow the theme -- the light theme's muted grey on black is barely
+     3:1 -- so these are the dark theme's values, fixed, and only a panel
+     reads them. */
   --z-panel-bg: var(--z-brand-black);
   --z-panel-text: var(--z-brand-white);
   --z-panel-text-muted: var(--z-brand-cool-grey);

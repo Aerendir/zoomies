@@ -495,30 +495,48 @@ test('the sign-in form comes before the brand panel for a keyboard', async ({ pa
   await expect(page.locator('input[name="password"]')).toBeFocused();
 });
 
-test('the brand panel is Zoomies Black in both themes', async ({ page }) => {
-  // The panel is the brand's own ground, not a surface, so the theme does not
-  // reach it -- and neither may it reach the text on it. A panel that followed
-  // the light theme's muted grey would be 3:1 on black; one that followed the
-  // surface colour would put white text on white.
-  const read = () =>
-    page.locator('.tagline').evaluate((tagline) => {
-      let ground: Element | null = tagline;
-      while (ground && getComputedStyle(ground).backgroundColor === 'rgba(0, 0, 0, 0)') {
-        ground = ground.parentElement;
+test('the lockup sits on a rounded Zoomies Black stage in both themes', async ({ page }) => {
+  // The backdrop is a glow drawn for a dark ground, so the lockup's stage is
+  // the brand's own black whichever theme is on. The stage is a rounded square
+  // around the lockup and nothing more: the column it sits in, and the pitch
+  // under it, are a surface like the form's, so their text follows the theme
+  // rather than being fixed white (which the light theme would put on white).
+  const ground = (selector: string) =>
+    page.locator(selector).evaluate((start) => {
+      let el: Element | null = start;
+      while (el && getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)') {
+        el = el.parentElement;
       }
-      return {
-        text: getComputedStyle(tagline).color,
-        ground: ground ? getComputedStyle(ground).backgroundColor : '',
-      };
+      return el ? getComputedStyle(el).backgroundColor : '';
     });
-  for (const colorScheme of ['light', 'dark'] as const) {
+  const read = async () => ({
+    stage: await page.locator('.stage').evaluate((stage) => ({
+      ground: getComputedStyle(stage).backgroundColor,
+      radius: getComputedStyle(stage).borderTopLeftRadius,
+      wraps: stage.querySelector('img') !== null,
+    })),
+    column: await ground('.mark'),
+    pitch: await ground('.tagline'),
+    form: await ground('.form-column'),
+    text: await page.locator('.tagline').evaluate((el) => getComputedStyle(el).color),
+  });
+  const inTheme = async (colorScheme: 'light' | 'dark') => {
     await page.emulateMedia({ colorScheme });
     await page.goto('/login');
-    expect(await read(), `the panel in the ${colorScheme} theme`).toEqual({
-      text: 'rgb(255, 255, 255)',
+    const got = await read();
+    expect(got.stage, `the stage in the ${colorScheme} theme`).toEqual({
       ground: 'rgb(8, 8, 8)',
+      radius: '12px',
+      wraps: true,
     });
-  }
+    expect(got.column, `the column in the ${colorScheme} theme`).not.toBe('rgb(8, 8, 8)');
+    expect(got.pitch, `the pitch's ground in the ${colorScheme} theme`).toBe(got.form);
+    return got;
+  };
+  const light = await inTheme('light');
+  const dark = await inTheme('dark');
+  expect(light.text, 'the pitch follows the theme').not.toBe(dark.text);
+  expect(light.column, 'the column follows the theme').not.toBe(dark.column);
   // The original black artwork stays readable on the selected pale backdrop.
   await expect(page.getByRole('img', { name: 'Zoomies' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Zoomies', exact: true })).toHaveAttribute(
