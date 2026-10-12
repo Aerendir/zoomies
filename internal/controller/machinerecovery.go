@@ -379,9 +379,16 @@ func (c *Controller) settleGoneMachine(ctx context.Context, env *machineEnv, m *
 // the same evidence the sweep acts on, so a row that was already failed or
 // being deleted is settled here rather than failing the new machine on the
 // unique index and spending one of its attempts. Any other holder is left
-// alone, and the caller reports the conflict.
+// alone, and the caller reports the conflict. It answers true too when nobody
+// holds the id any more, because the sweep got there first.
 func (c *Controller) releaseStaleHolder(ctx context.Context, env *machineEnv, pr *machineProvider, m *store.Machine, zone, resourceID string) bool {
 	holder, err := c.st.GetMachineByResource(ctx, pr.row.ID, zone, resourceID)
+	if errors.Is(err, store.ErrNotFound) {
+		// Nobody holds it any more: the ownership sweep settled the stale row
+		// between the conflict and this look. The id is free, so the write is
+		// worth trying again.
+		return true
+	}
 	if err != nil || holder.ID == m.ID {
 		return false
 	}

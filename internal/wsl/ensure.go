@@ -179,9 +179,6 @@ func ensureLinger(ctx context.Context, sys System, opts Options) Step {
 		step.Status, step.Detail = StatusSkipped, "the agent's user is unknown (no installed zoomies-agent unit)"
 		return step
 	}
-	// The marker is a path inside the distro, so it is joined with slashes
-	// whatever this binary was built for; filepath would use backslashes on
-	// Windows and the check would never match.
 	if sys.Exists(path.Join(lingerDir, user)) {
 		step.Status, step.Detail = StatusOK, "enabled for "+user
 		return step

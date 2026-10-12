@@ -44,7 +44,10 @@ function repair(index: number) {
     user_id: 'user-1',
     github_login: 'octocat',
     provider_id: 'prov-1',
-    trigger: index % 2 === 0 ? 'automatic' : 'requested',
+    // The server stores a person's request as "mention", whatever way they asked;
+    // "requested" is only ever the filter's name for everything that is not
+    // automatic.
+    trigger: index % 2 === 0 ? 'automatic' : 'mention',
     state: STATES[index % STATES.length]!,
     message: `Repair number ${index + 1}`,
     pull_number: index + 1,
@@ -98,11 +101,16 @@ async function mockHistory(page: Page, count = 120) {
   /** What the same filters would list, which is also what they would select from. */
   const matching = (query: URLSearchParams) => {
     const repo = (query.get('repo') ?? '').trim().toLowerCase();
+    const trigger = query.get('trigger');
     return model.rows.filter(
       (r) =>
         inGroup(query.get('group'), r.state) &&
         r.repo.toLowerCase().includes(repo) &&
-        (!query.get('trigger') || r.trigger === query.get('trigger')),
+        (trigger === 'automatic'
+          ? r.trigger === 'automatic'
+          : trigger === 'requested'
+            ? r.trigger !== 'automatic'
+            : true),
     );
   };
   await page.route(
@@ -182,6 +190,12 @@ const tickOf = (page: Page, r: Row) =>
     exact: true,
   });
 const dialogOf = (page: Page) => page.getByRole('dialog', { name: 'Clear from history' });
+/**
+ * What a clear left on the card for a person to read. Not a live region: what a
+ * screen reader is told is written into one the card keeps mounted.
+ */
+const outcomeOf = (page: Page) =>
+  historyOf(page).getByRole('group', { name: 'Result of the last clear' });
 
 async function noSidewaysScroll(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -558,7 +572,7 @@ test('clearing says what it does, then clears and reports', async ({ page }) => 
   // The selection is spent, the report says what happened, and the list is the
   // server's again.
   await expect(bar).toContainText('Select repairs to clear them from the history');
-  const report = history.getByRole('status');
+  const report = outcomeOf(page);
   await expect(report).toContainText('2 repairs cleared from the history');
   await expect(report).toContainText('1 skipped');
   await report.getByText('Review skipped repairs').click();
@@ -591,9 +605,7 @@ test('a clear that fails keeps the selection and the dialog', async ({ page }) =
 
   model.bulkFails = null;
   await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
-  await expect(historyOf(page).getByRole('status')).toContainText(
-    '1 repair cleared from the history',
-  );
+  await expect(outcomeOf(page)).toContainText('1 repair cleared from the history');
   await expect(paginationOf(page)).toContainText('1–50 of 119 repairs');
   expect(model.bulk).toHaveLength(2);
 });
@@ -666,7 +678,7 @@ test('clearing the last row on the last page steps back a page', async ({ page }
 
   await expect(pagination).toContainText('1–50 of 50 repairs');
   await expect(history.getByRole('article')).toHaveCount(50);
-  await expect(history.getByRole('status')).toContainText('1 repair cleared from the history');
+  await expect(outcomeOf(page)).toContainText('1 repair cleared from the history');
   // Every read after the clear asked for the page that exists.
   const after = asked(model.seen, from);
   expect(after.length).toBeGreaterThan(0);
@@ -696,9 +708,7 @@ test('a selection past the bulk limit is cleared in requests the route accepts',
 
   await bar.getByRole('button', { name: 'Clear from history' }).click();
   await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
-  await expect(historyOf(page).getByRole('status')).toContainText(
-    '501 repairs cleared from the history',
-  );
+  await expect(outcomeOf(page)).toContainText('501 repairs cleared from the history');
   expect(model.bulk.map((b) => b.ids.length)).toEqual([500, 1]);
   expect(model.bulk.every((b) => b.action === 'clear')).toBe(true);
   // 499 are left, so the page it was on has gone and the list went to the last.
@@ -802,7 +812,7 @@ test('a clear that fails on a later request reports what went and keeps the rest
   await bar.getByRole('button', { name: 'Clear from history' }).click();
   await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
 
-  const report = history.getByRole('status');
+  const report = outcomeOf(page);
   await expect(report).toContainText('500 repairs cleared from the history');
   await expect(report).toContainText('1 skipped');
   await report.getByText('Review skipped repairs').click();
@@ -826,4 +836,89 @@ test('a clear that fails on a later request reports what went and keeps the rest
   await expect(report).toContainText('1 repair cleared from the history');
   expect(model.bulk.at(-1)).toEqual({ action: 'clear', ids: [late.id] });
   await noSidewaysScroll(page);
+});
+
+// A box or a button inside a live region is announced by name whenever it
+// appears, so the card announces words and nothing a person presses.
+test('no box or button on the history card sits inside a live region', async ({ page }) => {
+  await mockHistory(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const history = historyOf(page);
+  const live = history.locator('[aria-live]');
+
+  await tickOf(page, repair(3)).check();
+  await expect(barOf(page).getByRole('button', { name: 'Clear from history' })).toBeVisible();
+  await expect(live.getByRole('checkbox')).toHaveCount(0);
+  await expect(live.getByRole('button')).toHaveCount(0);
+  await expect(barOf(page)).not.toHaveAttribute('aria-live', /.*/);
+});
+
+// The outcome of a clear is the most consequential thing this page says, and it
+// arrives after the button that caused it has gone, because the selection is
+// spent. Some screen readers announce nothing for a live region that is inserted
+// already holding its words, so the words are written into regions that were
+// mounted, and empty, before anything happened.
+test('the count and the outcome are announced through live regions that were already mounted', async ({
+  page,
+}) => {
+  await mockHistory(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const history = historyOf(page);
+  const live = history.locator('[aria-live]');
+  const [selection, outcome] = [live.nth(0), live.nth(1)];
+
+  await expect(live).toHaveCount(2);
+  await expect(live).toHaveText(['', '']);
+
+  await tickOf(page, repair(3)).check();
+  await expect(selection).toHaveText('1 selected');
+  await expect(outcome).toHaveText('');
+
+  await barOf(page).getByRole('button', { name: 'Clear from history' }).click();
+  await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
+  await expect(outcome).toHaveText('1 repair cleared from the history');
+  // The selection is spent, and the count says nothing about it.
+  await expect(selection).toHaveText('');
+
+  // What is written is the words alone. The outcome a person reads and acts on,
+  // with its Dismiss button, is not itself a live region.
+  const visible = outcomeOf(page);
+  await expect(visible).toContainText('1 repair cleared from the history');
+  await expect(visible.getByRole('button', { name: 'Dismiss' })).toBeVisible();
+  await expect(visible).not.toHaveAttribute('aria-live', /.*/);
+  await expect(visible).not.toHaveAttribute('role', 'status');
+});
+
+// A live region announces a change. Two clears that end in the same words would
+// leave the text as it was, and the second would be said by nobody.
+test('a second clear that ends in the same words is announced again', async ({ page }) => {
+  await mockHistory(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const outcome = historyOf(page).locator('[aria-live]').nth(1);
+
+  const clearOne = async (r: Row) => {
+    await tickOf(page, r).check();
+    await barOf(page).getByRole('button', { name: 'Clear from history' }).click();
+    await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
+    await expect(dialogOf(page)).toHaveCount(0);
+  };
+
+  await clearOne(repair(3));
+  await expect(outcome).toHaveText('1 repair cleared from the history');
+  await outcome.evaluate((el) => {
+    const w = window as unknown as { writes: number };
+    w.writes = 0;
+    new MutationObserver((records) => (w.writes += records.length)).observe(el, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  });
+
+  await clearOne(repair(4));
+  // Emptied, then written: two changes, where an unchanged string would be none.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { writes: number }).writes))
+    .toBeGreaterThanOrEqual(2);
+  await expect(outcome).toHaveText('1 repair cleared from the history');
 });

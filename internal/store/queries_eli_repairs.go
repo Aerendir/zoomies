@@ -149,12 +149,24 @@ func (s *Store) EnqueueEliRepair(ctx context.Context, r *EliRepair, limit int) (
 			// keys remain permanent, and an in-flight UI request is still idempotent.
 			retry := strings.HasPrefix(r.DedupKey, "ui:") && (saved.State == "failed" || saved.State == "blocked" || saved.State == "interrupted" || saved.State == "unverified" || saved.State == "checks_failed" || saved.State == "superseded")
 			if !retry {
-				// Asking again for something already done brings it back into view.
-				// Without this a person who cleared the repair would be answered with
-				// a history that does not contain what they just asked for. This and
-				// the history queries are the only readers of cleared_at.
-				if _, err := tx.ExecContext(ctx, `UPDATE eli_repairs SET cleared_at=NULL WHERE id=? AND cleared_at IS NOT NULL`, saved.ID); err != nil {
-					return err
+				// A person asking again for something already done brings it back into
+				// view. Without this a person who cleared the repair would be answered
+				// with a history that does not contain what they just asked for. Only a
+				// key a person made counts: "ui:" is the page and "offer:" is an offer
+				// they accepted. A "comment:" duplicate is the webhook redelivering the
+				// same comment (only action "created" is admitted, keyed by comment id),
+				// and every later failing job on the same head hits the same
+				// "automatic:" key, so neither is anyone asking and neither may undo a
+				// clear. They still deduplicate here; the row just stays out of sight.
+				//
+				// cleared_at has three sites and no others: the history's where clause
+				// (reads), ClearEliRepairs (writes) and this un-clear (writes). The
+				// budget, the own-commit guard and the deduplication must go on counting
+				// a cleared row, so none of them may ever look at the column.
+				if strings.HasPrefix(r.DedupKey, "ui:") || strings.HasPrefix(r.DedupKey, "offer:") {
+					if _, err := tx.ExecContext(ctx, `UPDATE eli_repairs SET cleared_at=NULL WHERE id=? AND cleared_at IS NOT NULL`, saved.ID); err != nil {
+						return err
+					}
 				}
 				*r = *saved
 				return nil

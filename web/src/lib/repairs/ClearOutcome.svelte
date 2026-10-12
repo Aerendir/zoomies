@@ -2,11 +2,18 @@
   What a clear did: how many repairs left the history and, in a disclosure,
   which were skipped and why. The route answers 200 whatever it refused, so a
   partial failure is only visible if this says it.
+
+  It is a plain group and not a live region. It is inserted after the button
+  that caused it has gone, and a live region that arrives already holding its
+  words is announced by some screen readers and not by others. The card
+  announces the same summary through a region it keeps mounted, and this is
+  what a person reads and acts on.
 -->
 <script lang="ts">
   import { X } from '@lucide/svelte';
-  import { formatNumber, pluralise } from '$lib/format';
+  import { formatNumber } from '$lib/format';
   import Button from '$lib/components/Button.svelte';
+  import { clearSummary } from './history';
 
   /** A long list of skipped repairs would push the history off the screen. */
   const SHOWN = 50;
@@ -22,13 +29,9 @@
   } = $props();
 </script>
 
-<div class="outcome" role="status">
+<div class="outcome" role="group" aria-label="Result of the last clear">
   <div>
-    <strong
-      >{pluralise(cleared, 'repair')} cleared from the history{skipped.length
-        ? ` · ${formatNumber(skipped.length)} skipped`
-        : ''}</strong
-    >
+    <strong>{clearSummary(cleared, skipped.length)}</strong>
     {#if skipped.length}
       <details>
         <summary>Review skipped repairs</summary>

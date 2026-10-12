@@ -249,7 +249,7 @@ func TestClearReportsEachRowAndRepeatsAreHarmless(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []EliRepairClear{
-		{ID: ownRow, OK: true},
+		{ID: ownRow, OK: true, Changed: true},
 		{ID: activeRow, Error: "still running"},
 		{ID: otherPersonsRow, Error: "not found"},
 		{ID: "missing", Error: "not found"},
@@ -264,8 +264,10 @@ func TestClearReportsEachRowAndRepeatsAreHarmless(t *testing.T) {
 		t.Errorf("a stranger's row and a missing one must be indistinguishable")
 	}
 
-	if got, err = s.ClearEliRepairs(ctx, []string{ownRow}, "owner", true); err != nil || !slices.Equal(got, []EliRepairClear{{ID: ownRow, OK: true}}) {
-		t.Errorf("clearing a cleared repair is not harmless: %+v %v", got, err)
+	// Still ok, so the request is harmless, but this call changed nothing, and an
+	// audit row built from Changed must not say otherwise.
+	if got, err = s.ClearEliRepairs(ctx, []string{ownRow}, "owner", true); err != nil || !slices.Equal(got, []EliRepairClear{{ID: ownRow, OK: true, Changed: false}}) {
+		t.Errorf("clearing a cleared repair is not harmless, or claims to have changed it: %+v %v", got, err)
 	}
 	rows, _, _ := s.ListEliRepairsPage(ctx, EliRepairFilter{})
 	if !slices.Contains(repairIDs(rows), activeRow) || slices.Contains(repairIDs(rows), ownRow) {
@@ -274,8 +276,13 @@ func TestClearReportsEachRowAndRepeatsAreHarmless(t *testing.T) {
 
 	// An administrator reaches every row.
 	got, err = s.ClearEliRepairs(ctx, []string{otherPersonsRow}, "", false)
-	if err != nil || !slices.Equal(got, []EliRepairClear{{ID: otherPersonsRow, OK: true}}) {
+	if err != nil || !slices.Equal(got, []EliRepairClear{{ID: otherPersonsRow, OK: true, Changed: true}}) {
 		t.Errorf("an administrator could not clear another person's repair: %+v %v", got, err)
+	}
+	// An administrator clearing what is already cleared changes nothing either.
+	got, err = s.ClearEliRepairs(ctx, []string{ownRow}, "", false)
+	if err != nil || !slices.Equal(got, []EliRepairClear{{ID: ownRow, OK: true, Changed: false}}) {
+		t.Errorf("an administrator clearing an already cleared repair: %+v %v", got, err)
 	}
 	got, err = s.ClearEliRepairs(ctx, nil, "owner", true)
 	if err != nil || got == nil || len(got) != 0 {
@@ -288,7 +295,7 @@ func TestClearReportsEachRowAndRepeatsAreHarmless(t *testing.T) {
 func TestARequestForAClearedRepairBringsItBackIntoView(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	id := insertRepair(t, s, EliRepair{Repo: "acme/site", UserID: "owner", DedupKey: "comment:7"})
+	id := insertRepair(t, s, EliRepair{Repo: "acme/site", UserID: "owner", DedupKey: "ui:acme/site:7"})
 	if _, err := s.ClearEliRepairs(ctx, []string{id}, "owner", true); err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +303,7 @@ func TestARequestForAClearedRepairBringsItBackIntoView(t *testing.T) {
 		t.Fatalf("the repair should be hidden before it is asked for again, total %d", total)
 	}
 
-	again := &EliRepair{Repo: "acme/site", UserID: "owner", DedupKey: "comment:7"}
+	again := &EliRepair{Repo: "acme/site", UserID: "owner", DedupKey: "ui:acme/site:7"}
 	added, err := s.EnqueueEliRepair(ctx, again, 5)
 	if err != nil || added || again.ID != id {
 		t.Fatalf("the same request must answer with the saved row: added %v id %s (want %s), %v", added, again.ID, id, err)
@@ -304,6 +311,90 @@ func TestARequestForAClearedRepairBringsItBackIntoView(t *testing.T) {
 	rows, total, err := s.ListEliRepairsPage(ctx, EliRepairFilter{})
 	if err != nil || total != 1 || len(rows) != 1 || rows[0].ID != id {
 		t.Fatalf("the repair did not come back into view: %v total %d, %v", repairIDs(rows), total, err)
+	}
+}
+
+// Only a person asking again is a reason to show a repair again. A webhook
+// redelivers the same comment, and every later failing job on a head Eli has
+// already repaired hits the same automatic key; neither is anyone asking for
+// the repair, so neither may undo a clear. They still deduplicate: the row goes
+// on counting, it just stays out of sight.
+func TestOnlyAPersonAskingAgainBringsAClearedRepairBack(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  string
+		back bool
+	}{
+		{"a request from the page", "ui:acme/site:7", true},
+		{"an offer a person accepts again", "offer:opp_7", true},
+		{"a webhook redelivering the same comment", "comment:acme/site:7", false},
+		{"a later failing job on a head already repaired", "automatic:acme/site:abc123", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestStore(t)
+			ctx := context.Background()
+			id := insertRepair(t, s, EliRepair{Repo: "acme/site", UserID: "owner", DedupKey: tc.key})
+			if _, err := s.ClearEliRepairs(ctx, []string{id}, "owner", true); err != nil {
+				t.Fatal(err)
+			}
+
+			again := &EliRepair{Repo: "acme/site", UserID: "owner", DedupKey: tc.key}
+			added, err := s.EnqueueEliRepair(ctx, again, 5)
+			if err != nil || added || again.ID != id {
+				t.Fatalf("a repeat of %q must deduplicate onto the saved row: added %v id %s (want %s), %v", tc.key, added, again.ID, id, err)
+			}
+			_, total, err := s.ListEliRepairsPage(ctx, EliRepairFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if back := total == 1; back != tc.back {
+				t.Errorf("after a repeat of %q the repair is back in the history: %v, want %v (total %d)", tc.key, back, tc.back, total)
+			}
+			// Hidden or not, the row is still the ledger entry for the budget.
+			if repoCount, _, _, err := s.EliRepairBudget(ctx, "acme/site", "owner"); err != nil || repoCount != 1 {
+				t.Errorf("the budget stopped counting the repair: repo %d, %v", repoCount, err)
+			}
+		})
+	}
+}
+
+// An offer is one person's. Someone else asking with its key is refused before
+// anything else happens, and must not be able to bring the owner's cleared
+// repair back into view on the way.
+func TestAnotherPersonsOfferCannotBringAClearedRepairBack(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	id := insertRepair(t, s, EliRepair{Repo: "acme/site", UserID: "owner", DedupKey: "offer:opp_9"})
+	if _, err := s.ClearEliRepairs(ctx, []string{id}, "owner", true); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.EnqueueEliRepair(ctx, &EliRepair{Repo: "acme/site", UserID: "someone-else", DedupKey: "offer:opp_9"}, 5)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("another person using the offer's key: %v, want a conflict", err)
+	}
+	if _, total, _ := s.ListEliRepairsPage(ctx, EliRepairFilter{}); total != 0 {
+		t.Errorf("a refused request un-cleared the owner's repair, total %d", total)
+	}
+}
+
+// Select-all must offer exactly what the list shows, or a person clears rows
+// they could not see.
+func TestAClearedRepairIsLeftOutOfTheSelection(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	cleared := insertRepair(t, s, EliRepair{Repo: "acme/site", UserID: "owner"})
+	kept := insertRepair(t, s, EliRepair{Repo: "acme/site", UserID: "owner"})
+	if ids, total, err := s.EliRepairSelection(ctx, EliRepairFilter{}); err != nil || total != 2 || len(ids) != 2 {
+		t.Fatalf("before clearing: %v total %d, %v", ids, total, err)
+	}
+	if _, err := s.ClearEliRepairs(ctx, []string{cleared}, "owner", true); err != nil {
+		t.Fatal(err)
+	}
+
+	ids, total, err := s.EliRepairSelection(ctx, EliRepairFilter{})
+	if err != nil || total != 1 || !slices.Equal(ids, []string{kept}) {
+		t.Errorf("the selection after a clear is %v with a total of %d, want just %s: %v", ids, total, kept, err)
 	}
 }
 

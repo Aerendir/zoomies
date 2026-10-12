@@ -6,6 +6,7 @@ import {
   batches,
   clearConsequences,
   clearReport,
+  clearSummary,
   filtered,
   isActive,
   listQuery,
@@ -191,4 +192,11 @@ test('a selection past the bulk limit is cut into requests the route accepts', (
   assert.deepEqual(parts.flat(), ids);
   assert.deepEqual(batches(['a'], BULK_LIMIT), [['a']]);
   assert.deepEqual(batches([], BULK_LIMIT), []);
+});
+
+test('the summary of a clear counts what was cleared and what was skipped', () => {
+  assert.equal(clearSummary(1, 0), '1 repair cleared from the history');
+  assert.equal(clearSummary(2, 1), '2 repairs cleared from the history, 1 skipped');
+  assert.equal(clearSummary(0, 3), '0 repairs cleared from the history, 3 skipped');
+  assert.equal(clearSummary(1500, 1200), '1,500 repairs cleared from the history, 1,200 skipped');
 });

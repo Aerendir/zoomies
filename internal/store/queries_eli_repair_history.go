@@ -149,10 +149,16 @@ func (s *Store) EliRepairSelection(ctx context.Context, f EliRepairFilter) ([]st
 }
 
 // EliRepairClear is the outcome for one id of a clear.
+//
+// OK says the repair is now out of the history. Changed says this call is what
+// took it out: a repeat, or an administrator clearing what is already cleared,
+// is OK and not Changed. A client has no use for it; it exists so the audit row
+// names only what a request really changed, hence no JSON name.
 type EliRepairClear struct {
-	ID    string `json:"id"`
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	ID      string `json:"id"`
+	OK      bool   `json:"ok"`
+	Error   string `json:"error,omitempty"`
+	Changed bool   `json:"-"`
 }
 
 // ClearEliRepairs hides repairs from the history and does nothing else to
@@ -165,7 +171,8 @@ type EliRepairClear struct {
 //   - an id that does not exist and an id the caller may not see are both "not
 //     found", so the answer cannot be used to probe which ids are real;
 //   - a repair that is still queued, running or checking is "still running";
-//   - a repair that is already cleared is ok, so a repeated request is harmless.
+//   - a repair that is already cleared is ok but not Changed, so a repeated
+//     request is harmless and does not claim work it did not do.
 //
 // Only cleared_at is written. updated_at belongs to the repair, and clearing it
 // from the history is not a change to the repair.
@@ -193,11 +200,18 @@ func (s *Store) ClearEliRepairs(ctx context.Context, ids []string, ownerID strin
 			case active:
 				results = append(results, EliRepairClear{ID: id, Error: "still running"})
 			default:
-				// Keep the first clearing time if there already is one.
-				if _, err := tx.ExecContext(ctx, `UPDATE eli_repairs SET cleared_at=? WHERE id=? AND cleared_at IS NULL`, now, id); err != nil {
+				// Keep the first clearing time if there already is one. The same guard
+				// is what lets RowsAffected say whether this call was the one to clear
+				// it.
+				res, err := tx.ExecContext(ctx, `UPDATE eli_repairs SET cleared_at=? WHERE id=? AND cleared_at IS NULL`, now, id)
+				if err != nil {
 					return err
 				}
-				results = append(results, EliRepairClear{ID: id, OK: true})
+				n, err := res.RowsAffected()
+				if err != nil {
+					return err
+				}
+				results = append(results, EliRepairClear{ID: id, OK: true, Changed: n > 0})
 			}
 		}
 		return nil
