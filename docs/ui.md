@@ -3,17 +3,20 @@ icon: material/monitor-dashboard
 title: Zoomies web UI for GitHub Actions runners
 description: >-
   A page-by-page tour of the Zoomies web UI: Overview, pools, runners, jobs,
-  hosts, providers, the migration wizard and settings, in light and dark.
+  hosts, providers, Eli conversations, PR repairs and settings, in light and dark.
 ---
 
 # The UI
 
-Fourteen pages, one job each. Everything on them is live (every page updates in
+A tour from signing in to operating a fleet, asking Eli for help and repairing
+failed PR checks. Everything on the fleet pages is live (every page updates in
 place from the controller's event stream, so you never have to press refresh,
 though the same button sits at the top of each one for when you want to be sure)
 and nothing is reachable from the UI that is not reachable from the
 [REST API](api-surface.md). Light and dark follow your system until you
-choose one, and the screenshots below follow this site's.
+choose one, and the screenshots below follow this site's. Start with
+[Signing in](#signing-in), [Overview](#overview), [Jobs](#jobs),
+[Ask Eli](#ask-eli) or [Eli repairs](#eli-repairs).
 
 The fleet in them is the demo fixture the Playwright suite runs against: two
 pools, three hosts, a dozen runners across every state the controller knows,
@@ -21,6 +24,9 @@ and a morning's worth of jobs. `zoomies demo` runs a throwaway controller with
 the same fleet in it (nothing installed, nobody to sign in as) so you can
 walk through these pages yourself before connecting GitHub.
 `ZOOMIES_SEED_DEMO=true` writes it into an empty controller of your own.
+The repair history uses additional sample records, labelled in the images;
+they illustrate outcomes without making model calls or changing a GitHub PR.
+The Eli conversation uses the built-in demo model and a real fleet lookup.
 
 ## Signing in
 
@@ -28,16 +34,19 @@ Before any of them, the page everyone meets first, and often the only one met
 by people who did not install the controller. The form is on the right, under
 the address of the instance being signed in to, so telling a staging controller
 from a production one does not rest on reading the address bar. On the left, in
-Zoomies Black in either theme, is what this is: a line on what Zoomies does,
-three facts true of every installation, and links to [zoomies.sh](https://zoomies.sh),
+Zoomies Black in either theme, is the full logo above **A fresh runner.
+For every job.**, a short description, and links to [zoomies.sh](https://zoomies.sh),
 the source on GitHub and [EyUp.io](https://eyup.io), who make it. A failed
 sign-in says which kind of failure it was (wrong credentials, too many
 attempts, or a controller that cannot be reached) and caps lock is called out
-before it costs an attempt. On a phone the logo becomes a band above the form
-and the links move below it.
+before it costs an attempt. On a phone the full logo keeps its black surround
+above the form, the introductory copy is hidden and the links move below it.
 
 ![The sign-in page: a Zoomies Black panel on the left holding the lockup, a short introduction and links to zoomies.sh, GitHub and EyUp.io; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
 ![The sign-in page: a Zoomies Black panel on the left holding the lockup, a short introduction and links to zoomies.sh, GitHub and EyUp.io; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
+
+![The phone sign-in page: the full Zoomies logo on its black surround above the instance address and sign-in form](screenshots/sign-in-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
+![The phone sign-in page: the full Zoomies logo on its black surround above the instance address and sign-in form](screenshots/sign-in-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
 
 ## Overview
 
@@ -635,6 +644,23 @@ otherwise looks like a slow fleet.
 ![The Installations page: one connected organisation with its App, installation, API, pools and rate limit, above the webhook delivery log](screenshots/installations-dark.webp#only-dark){ .zoomies-shot }
 ![The Installations page: one connected organisation with its App, installation, API, pools and rate limit, above the webhook delivery log](screenshots/installations-light.webp#only-light){ .zoomies-shot }
 
+## Ask Eli
+
+Open **Ask Eli** from the corner of a fleet page, or use a contextual Ask Eli
+button on a job, runner, host or problem. Ask about a failed build, a queue
+delay or a possible optimisation. The expanded panel lets you keep the fleet
+in view while reading the answer; **What Eli looked at** shows the tools behind it.
+
+Fleet lookups require the provider's **Let Eli read this fleet** switch and
+use your own permissions. Chat advises; [PR repairs](#eli-repairs) take an
+explicit request into a change on an existing PR branch. The image below uses
+the demo model, which repeats the lookup result so you can see the mechanism
+without credentials. A configured model explains the evidence in its answer.
+[Set up Eli](eli.md) or [connect another assistant through MCP](mcp.md).
+
+![Eli in an expanded panel beside Overview: a question about the fleet, the demo model's reply and the fleet lookup listed under What Eli looked at](screenshots/eli-chat-dark.webp#only-dark){ .zoomies-shot }
+![Eli in an expanded panel beside Overview: a question about the fleet, the demo model's reply and the fleet lookup listed under What Eli looked at](screenshots/eli-chat-light.webp#only-light){ .zoomies-shot }
+
 ## Eli repairs
 
 Where a failed pull request check becomes a repair. **Needs attention** lists
@@ -652,6 +678,24 @@ daily attempt budget, and link each requester's GitHub account to their Zoomies
 user; the requester then confirms that their own provider pays for the repairs
 they ask for. [How repairs work](eli.md#set-up-pr-repairs). `g e` opens it
 from anywhere.
+
+![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+
+**Check readiness** explains what must be set up before starting. This example
+asks for a confirmed GitHub account link and an enabled personal provider;
+checking readiness does not call a model or spend a repair attempt.
+
+![PR repair readiness for acme/widgets: missing account and personal-provider setup, with buttons to finish setup or open provider settings](screenshots/eli-repair-readiness-dark.webp#only-dark){ .zoomies-shot }
+![PR repair readiness for acme/widgets: missing account and personal-provider setup, with buttons to finish setup or open provider settings](screenshots/eli-repair-readiness-light.webp#only-light){ .zoomies-shot }
+
+Administrators choose the repositories and **When should Eli help?** in
+**Repair setup**. Start with **Ask me first** to review offers before spending
+tokens. Workflow edits stay disabled until explicitly allowed, and the daily
+attempt budget bounds repair work.
+
+![PR repair setup: the repository policy form with Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-dark.webp#only-dark){ .zoomies-shot }
+![PR repair setup: the repository policy form with Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-light.webp#only-light){ .zoomies-shot }
 
 ## Migrate
 
@@ -754,6 +798,9 @@ The settings page also shows your verified GitHub account link, personal-provide
 consent and PR repair history. Administrators configure repository policies,
 installation providers and automatic repair budgets. See [Eli](eli.md) for setup,
 GitHub permissions and repair limits.
+
+![Eli AI Assistant settings: the personal provider area, the built-in demo model, provider controls and the card that opens Eli](screenshots/eli-providers-dark.webp#only-dark){ .zoomies-shot }
+![Eli AI Assistant settings: the personal provider area, the built-in demo model, provider controls and the card that opens Eli](screenshots/eli-providers-light.webp#only-light){ .zoomies-shot }
 
 ### Backups
 

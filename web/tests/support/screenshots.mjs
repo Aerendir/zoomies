@@ -274,6 +274,76 @@ const SHOTS = [
   { name: 'audit', path: '/audit', heading: 'Audit' },
   // The section's rail beside the page that has a table on it.
   { name: 'settings', path: '/settings/users', heading: 'Users' },
+  { name: 'eli-providers', path: '/settings/assistant', heading: 'Eli AI Assistant' },
+  {
+    name: 'eli-chat',
+    path: '/',
+    heading: 'Overview',
+    device: { viewport: DESKTOP, deviceScaleFactor: SCALE },
+    async prepare(page) {
+      const { items } = await (
+        await page.request.get('/api/v1/assistant/personal/providers')
+      ).json();
+      const demo = items.find((provider) => provider.kind === 'fake');
+      if (!demo) throw new Error('The demo model is missing');
+      const enabled = await page.request.patch(`/api/v1/assistant/personal/providers/${demo.id}`, {
+        headers: { Origin: BASE_URL },
+        data: { fleet_access: true },
+      });
+      if (!enabled.ok()) throw new Error(`enabling fleet access returned ${enabled.status()}`);
+      await page.getByRole('button', { name: 'Ask Eli', exact: true }).click();
+      const panel = page.getByRole('dialog', { name: 'Eli assistant' });
+      await panel.getByRole('button', { name: 'Expanded', exact: true }).click();
+      const message = panel.getByRole('textbox', { name: 'Message' });
+      await message.fill('How is the fleet doing right now?');
+      await message.press('Enter');
+      await panel
+        .getByRole('article', { name: 'Eli', exact: true })
+        .getByRole('list', { name: 'What Eli looked at' })
+        .waitFor();
+      await panel.getByText(/The built-in model looked at the fleet and saw:/).waitFor();
+    },
+  },
+  {
+    name: 'eli-repairs',
+    path: '/repairs',
+    heading: 'Eli repairs',
+    repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
+    async prepare(page) {
+      await page.locator('.history').getByText('Checks passed', { exact: true }).waitFor();
+      await page.getByText('Needs attention', { exact: true }).last().waitFor();
+    },
+  },
+  {
+    name: 'eli-repair-readiness',
+    path: '/repairs?repo=acme/widgets&pull=42',
+    heading: 'Eli repairs',
+    repairs: true,
+    async prepare(page) {
+      await page
+        .getByText('Link and confirm your GitHub account in repair setup.', { exact: true })
+        .waitFor();
+    },
+  },
+  {
+    name: 'eli-repair-setup',
+    path: '/repairs',
+    heading: 'Eli repairs',
+    repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
+    async prepare(page) {
+      await page.locator('#repair-setup > summary').click();
+      await page
+        .getByRole('group', { name: 'Select repositories', exact: true })
+        .getByRole('checkbox', { name: 'acme/widgets', exact: true })
+        .check();
+      await page.locator('#policy-installation').evaluate((el) => {
+        window.scrollBy(0, el.getBoundingClientRect().top - 220);
+      });
+      await page.mouse.move(0, 0);
+    },
+  },
   // The pool editor and the provider wizard. The docs discuss both at length
   // and photographed neither, so the only way to know what "the labels preview
   // the runs-on line" looks like was to install Zoomies and find out.
@@ -427,6 +497,13 @@ const SHOTS = [
     heading: 'Sign in to Zoomies',
     signedOut: true,
     device: { viewport: DESKTOP, deviceScaleFactor: SCALE },
+  },
+  {
+    name: 'sign-in-phone',
+    path: '/login',
+    heading: 'Sign in to Zoomies',
+    signedOut: true,
+    device: devices['Pixel 7'],
   },
   // Read-only monitoring on a phone is a stated requirement, so it is shown.
   { name: 'overview-phone', path: '/', heading: 'Overview', device: devices['Pixel 7'] },
@@ -657,7 +734,7 @@ async function turnOnKennelClub(context) {
  * `extraEnv` is the updates fixture for the shots of updating, and empty for
  * every other shot.
  */
-async function bootController(dir, extraEnv = {}) {
+async function bootController(dir, extraEnv = {}, expectSetup = true) {
   const child = spawn(binary, ['controller'], {
     // stdout is piped rather than ignored because the setup token is printed
     // there and nowhere else: the bootstrap route asks for it as proof that
@@ -699,7 +776,7 @@ async function bootController(dir, extraEnv = {}) {
       // Answering /healthz does not mean the token line has been flushed, so
       // both are waited for: bootstrapping without one is a 422 that reads
       // like a bug in the form rather than a race in this script.
-      if (res.ok && setupToken !== '') return { child, setupToken };
+      if (res.ok && (!expectSetup || setupToken !== '')) return { child, setupToken };
     } catch {
       /* not listening yet */
     }
@@ -763,7 +840,9 @@ function encodeWebp(pngDir) {
     'src, dst = map(pathlib.Path, sys.argv[1:3])',
     'for png in sorted(src.glob("*.png")):',
     '    out = dst / (png.stem + ".webp")',
-    '    Image.open(png).convert("RGB").save(out, lossless=True, quality=100, method=6)',
+    // Lossless WebP's quality controls compression effort, not image quality.
+    // This keeps every pixel while making a full-gallery refresh practical.
+    '    Image.open(png).convert("RGB").save(out, lossless=True, quality=80, method=4)',
     '    print(f"  {out.name}  {out.stat().st_size // 1024} KB")',
   ].join('\n');
   const run = spawnSync('python3', ['-u', '-c', script, pngDir, outDir], { stdio: 'inherit' });
@@ -809,9 +888,9 @@ function updatesEnv(dir) {
  * shots of updating are taken from a second one, since what it is told it runs
  * would otherwise show on every page.
  */
-async function capture(browser, scheme, pngDir, shots, { updates = false } = {}) {
+async function capture(browser, scheme, pngDir, shots, { updates = false, repairFixture } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'zoomies-screenshots-'));
-  const { child, setupToken } = await bootController(dir, updates ? updatesEnv(dir) : {});
+  let { child, setupToken } = await bootController(dir, updates ? updatesEnv(dir) : {});
   const baseURL = `http://127.0.0.1:${PORT}`;
   // en-GB, and a fixed one. Native date inputs render in the browser's locale,
   // and a runner with none set takes the machine's -- so the shipped
@@ -840,6 +919,34 @@ async function capture(browser, scheme, pngDir, shots, { updates = false } = {})
       throw new Error(`bootstrap returned ${created.status()}: ${await created.text()}`);
     }
     const cookies = await desktop.cookies();
+    if (shots.some((shot) => shot.name === 'eli-chat' || shot.name === 'eli-providers')) {
+      // Authenticated chat uses a personal provider. The demo's seeded
+      // installation provider remains available for the auth-disabled demo.
+      const made = await desktop.request.post('/api/v1/assistant/personal/providers', {
+        headers: { Origin: BASE_URL },
+        data: { name: 'Demo model (built in)', kind: 'fake', model: 'demo', fleet_access: true },
+      });
+      if (made.status() !== 201)
+        throw new Error(
+          `creating personal demo provider returned ${made.status()}: ${await made.text()}`,
+        );
+      const provider = await made.json();
+      const chosen = await desktop.request.post(
+        `/api/v1/assistant/personal/providers/${provider.id}/default`,
+        {
+          headers: { Origin: BASE_URL },
+        },
+      );
+      if (!chosen.ok()) throw new Error(`choosing demo provider returned ${chosen.status()}`);
+    }
+    if (repairFixture) {
+      // Seed only while the controller is stopped. Every sample is terminal
+      // before restart, so the repair worker cannot act on it.
+      await stopController(child);
+      const seeded = spawnSync(repairFixture, [join(dir, 'zoomies.db')], { stdio: 'inherit' });
+      if (seeded.error || seeded.status !== 0) throw new Error('seeding sample repairs failed');
+      ({ child } = await bootController(dir, {}, false));
+    }
     await pingWebhook(baseURL);
 
     if (updates) await joinHostsBehind(desktop.request);
@@ -891,12 +998,24 @@ const pngDir = mkdtempSync(join(tmpdir(), 'zoomies-screenshots-png-'));
 const browser = await chromium.launch(launchOptions);
 try {
   const wanted = SHOTS.filter((shot) => only.length === 0 || only.includes(shot.name));
-  const fleet = wanted.filter((shot) => !shot.updates);
+  const fleet = wanted.filter((shot) => !shot.updates && !shot.repairs);
   const updating = wanted.filter((shot) => shot.updates);
+  const repairing = wanted.filter((shot) => shot.repairs);
+  const repairFixture = join(pngDir, 'repair-fixture');
+  if (repairing.length > 0) {
+    const compiled = spawnSync(
+      process.env.GO ?? 'go',
+      ['build', '-o', repairFixture, './web/tests/support/repair-fixture'],
+      { cwd: root, stdio: 'inherit' },
+    );
+    if (compiled.error || compiled.status !== 0)
+      throw new Error('building the repair fixture failed');
+  }
   for (const scheme of ['dark', 'light']) {
     console.log(`capturing ${scheme}`);
     if (fleet.length > 0) await capture(browser, scheme, pngDir, fleet);
     if (updating.length > 0) await capture(browser, scheme, pngDir, updating, { updates: true });
+    if (repairing.length > 0) await capture(browser, scheme, pngDir, repairing, { repairFixture });
   }
   console.log(`encoding into ${outDir}`);
   encodeWebp(pngDir);
