@@ -849,3 +849,73 @@ func TestOwnershipIsRefusedOnTheNameBeforeItIsExcusedOnMissingMarks(t *testing.T
 		})
 	}
 }
+
+// A person who destroys a failed machine's VM by hand leaves its row naming the
+// VM id, and a hypervisor that hands out the lowest free id offers that one
+// again. The new machine used to fail on the unique index and spend an attempt,
+// and the provider's breaker counted it, until a sweep noticed the old VM was
+// gone. The provider has just said the id is free, so the stale row is settled
+// there and then.
+func TestAFailedMachinesIdOfferedAgainIsReleasedForTheNewMachine(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+
+	// The fake provider mints "101" first.
+	old := &store.Machine{ProviderID: row.ID, State: store.MachinePlanned}
+	if err := h.st.CreateMachine(h.ctx, old); err != nil {
+		t.Fatalf("CreateMachine: %v", err)
+	}
+	if err := h.st.SetMachineResource(h.ctx, old.ID, "zone-a", "101", "ours", h.c.controllerID()); err != nil {
+		t.Fatalf("SetMachineResource: %v", err)
+	}
+	for _, to := range []store.MachineState{store.MachineCreating, store.MachineFailed} {
+		if _, err := h.st.TransitionMachine(h.ctx, old.ID, to, "the agent never joined"); err != nil {
+			t.Fatalf("TransitionMachine to %s: %v", to, err)
+		}
+	}
+
+	h.machinePass(t)
+
+	var fresh *store.Machine
+	for _, m := range h.machines() {
+		if m.ID != old.ID {
+			fresh = m
+		}
+	}
+	if fresh == nil {
+		t.Fatal("no new machine was reserved for the queued work")
+	}
+	if fresh.ResourceID != "101" {
+		t.Fatalf("the new machine names %q (state %s, error %q); the id the provider offered was not given to it",
+			fresh.ResourceID, fresh.State, fresh.ProviderError)
+	}
+	if got := h.machineByID(t, old.ID); got.State != store.MachineDeleted || got.DeletedAt == nil {
+		t.Fatalf("the stale machine is %s with deleted_at %v, want deleted", got.State, got.DeletedAt)
+	}
+}
+
+// A machine that is working is never settled by a provider offering its id: that
+// would be taking a live machine's identity on the strength of a listing.
+func TestALiveMachinesIdOfferedAgainIsNotTaken(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+
+	live := &store.Machine{ProviderID: row.ID, State: store.MachinePlanned}
+	if err := h.st.CreateMachine(h.ctx, live); err != nil {
+		t.Fatalf("CreateMachine: %v", err)
+	}
+	if err := h.st.SetMachineResource(h.ctx, live.ID, "zone-a", "101", "ours", h.c.controllerID()); err != nil {
+		t.Fatalf("SetMachineResource: %v", err)
+	}
+	for _, to := range []store.MachineState{store.MachineCreating, store.MachineStarting} {
+		if _, err := h.st.TransitionMachine(h.ctx, live.ID, to, ""); err != nil {
+			t.Fatalf("TransitionMachine to %s: %v", to, err)
+		}
+	}
+
+	h.machinePass(t)
+
+	if got := h.machineByID(t, live.ID); got.State == store.MachineDeleted || got.DeletedAt != nil {
+		t.Fatalf("a working machine was settled as gone: %s", got.State)
+	}
+}

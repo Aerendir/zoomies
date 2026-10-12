@@ -41,7 +41,7 @@
   import IconButton from '../components/IconButton.svelte';
   import Logo from '../components/Logo.svelte';
   import Tooltip from '../components/Tooltip.svelte';
-  import { NAV_GROUPS, SECTIONS, isCurrentSection } from './sections';
+  import { isCurrentSection, navGroupsFor, sectionsFor } from './sections';
   import { buildLabel } from './build';
   import { session } from '../state/session.svelte';
   import BuildTag from './BuildTag.svelte';
@@ -57,7 +57,8 @@
 
   const phone = $derived(viewport.phone);
   const collapsed = $derived(prefs.navCollapsed && !phone);
-  const primary = SECTIONS.filter((item) => item.primary);
+  const primary = $derived(sectionsFor(session.visitor).filter((item) => item.primary));
+  const groups = $derived(navGroupsFor(session.visitor));
   const build = $derived(buildLabel(session.meta));
 
   function isCurrent(path: string): boolean {
@@ -138,7 +139,7 @@
     </div>
 
     <div class="groups">
-      {#each NAV_GROUPS as group, i (group.label ?? 'top')}
+      {#each groups as group, i (group.label ?? 'top')}
         <div class="group" class:pinned={group.label === 'Administration'}>
           {#if group.label}
             <!--

@@ -199,6 +199,7 @@ security:
   session_ttl: 168h                         # ZOOMIES_SESSION_TTL
   cookie_secure: null                       # ZOOMIES_COOKIE_SECURE (derived when unset)
   disable_auth: false                       # ZOOMIES_DISABLE_AUTH
+  public_view: false                        # ZOOMIES_PUBLIC_VIEW (anyone may read the fleet, see public-view.md)
   allow_private_egress: false               # ZOOMIES_ALLOW_PRIVATE_EGRESS (let the URLs it dials be private addresses)
   docker_in_docker_expected: false          # ZOOMIES_DOCKER_IN_DOCKER_EXPECTED
   rate_limit_logins: 10                     # ZOOMIES_RATE_LIMIT_LOGINS (per address per minute, and 5x that per account
@@ -326,6 +327,7 @@ limits:                         # fleet-wide ceilings; 0 is unlimited, and every
   runners: 0                    # ZOOMIES_LIMITS_RUNNERS           -- live runners across every pool
   join_tokens: 0                # ZOOMIES_LIMITS_JOIN_TOKENS       -- join tokens neither used nor expired
   event_subscribers: 0          # ZOOMIES_LIMITS_EVENT_SUBSCRIBERS -- open live-update streams (one per UI tab)
+  visitor_event_subscribers: 200  # ZOOMIES_LIMITS_VISITOR_EVENT_SUBSCRIBERS -- a public view's visitors' streams, a ceiling of their own
   job_stats_window: 2160h       # ZOOMIES_LIMITS_JOB_STATS_WINDOW  -- longest span one job statistics request may cover (90 days; 0 is this default, not unlimited)
 
 backup:
@@ -550,12 +552,13 @@ if you set `keep: 0` and never expect the page to say what is there.
 
 | Key | Environment | Takes effect | What it is |
 | --- | --- | --- | --- |
-| `limits.event_subscribers` | `ZOOMIES_LIMITS_EVENT_SUBSCRIBERS` | at once | Most live-update streams: The most live-update streams open at once. Every open tab of the UI holds one, so leave room for every operator's browser. 0 is unlimited. |
+| `limits.event_subscribers` | `ZOOMIES_LIMITS_EVENT_SUBSCRIBERS` | at once | Most live-update streams: The most live-update streams open at once for people signed in and API tokens. Every open tab of the UI holds one, so leave room for every operator's browser. A public view's visitors are not counted here. 0 is unlimited. |
 | `limits.hosts` | `ZOOMIES_LIMITS_HOSTS` | at once | Most hosts: The most hosts that may be enrolled at once; a join beyond it is refused. 0 is unlimited. A host joining again under its own name is not counted twice. |
 | `limits.job_stats_window` | `ZOOMIES_LIMITS_JOB_STATS_WINDOW` | at once | Longest job statistics window: The longest span of jobs one job statistics request may cover, from the API, the CLI or the MCP job_stats tool. A longer request is refused with this number in the message. 0 is the default of 90 days, not unlimited: the statistics are computed from the job rows on each request. Jobs older than retention.jobs no longer exist to be counted. |
 | `limits.join_tokens` | `ZOOMIES_LIMITS_JOIN_TOKENS` | at once | Most outstanding join tokens: The most join tokens that may be outstanding at once, counting those neither used nor expired; minting one beyond it is refused. 0 is unlimited. |
 | `limits.pools` | `ZOOMIES_LIMITS_POOLS` | at once | Most pools: The most pools this instance holds; creating one beyond it is refused. 0 is unlimited. |
 | `limits.runners` | `ZOOMIES_LIMITS_RUNNERS` | at once | Most runners: The most live runners across every pool. At the ceiling the scheduler creates no more, and each pool it held back says so in its scaling reason. 0 is unlimited. |
+| `limits.visitor_event_subscribers` | `ZOOMIES_LIMITS_VISITOR_EVENT_SUBSCRIBERS` | at once | Most visitors' live-update streams: The most live-update streams a public view's visitors may hold at once, all of them together. It is a ceiling of its own, so a crowd of visitors never takes the streams the people who run the fleet need. A visitor past it still reads every page, without live updates. 0 is unlimited. |
 
 Every limit is platform-scoped: it is how much of the controller's machine a
 fleet may spend, so on an instance several teams use, the account that runs the
@@ -705,6 +708,7 @@ the validator says so with `limits.loopback`.
 | `security.mcp_open_registration` | `ZOOMIES_MCP_OPEN_REGISTRATION` | live | Let MCP clients register themselves: Let an MCP client register itself (by dynamic client registration or a client ID metadata document) rather than only use a client an administrator created under Settings, MCP clients. A client that registers itself can do nothing until a person signs in and approves it. Off, only the clients an administrator created can ask. |
 | `security.mcp_admin_tools` | `ZOOMIES_MCP_ADMIN_TOOLS` | live | Offer administrator tools over MCP: Let an MCP token or connection whose role is administrator edit a host's name, labels and reserve, cordon it and lift its throttle, and read and change the tuning settings (scheduler, retention, runners, limits, logging, metrics, images, status, UI and the update check interval, never security, sign-in, GitHub, providers, the database, or the update mode and soak). Off, those tools are not offered and an agent that asks is told to turn this on. It changes nothing for a role below administrator. |
 | `security.auto_apply_remedies` | `ZOOMIES_AUTO_APPLY_REMEDIES` | live | Apply suggested changes automatically: Let the controller make the change a problem proposes -- a sidecar share, a smallest runner, a warm runner -- without anyone clicking it. A change is made only after the same proposal has stood unchanged for two hours, at most once a day for any one pool or host, and never one an administrator has undone. It runs as the pool's or host's own update, so every refusal that route makes still holds, and each change is recorded with what it replaced and can be undone from the problems page. Shadow, the default, works out what it would have changed and when, and records that without changing anything, so what turning it on would do can be read first (`would_apply` in `GET /problems/auto-applied`, and under Problems); off, the controller only proposes. `true` and `false` are still read as `on` and `off`. |
+| `security.public_view` | `ZOOMIES_PUBLIC_VIEW` | next restart | Public read-only view: Let anyone who can reach this controller read its fleet without signing in: pools, hosts, runners, jobs, usage and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind sign-in, and every change still needs somebody signed in. For a fleet that is meant to be public, such as a demo. See [Public view](public-view.md). |
 | `security.rate_limit_logins` | `ZOOMIES_RATE_LIMIT_LOGINS` | next restart | Login attempts per minute: Password attempts allowed per source address per minute, and five times that per account. |
 | `security.require_two_step` | `ZOOMIES_REQUIRE_TWO_STEP` | next restart | Require two-step verification: Make every account that signs in with a password set up an authenticator app at its next sign-in. Accounts that use single sign-on are not asked (their identity provider owns their second factor) and API tokens are unaffected. See [Two-step verification](two-step.md). |
 | `security.session_ttl` | `ZOOMIES_SESSION_TTL` | next restart | Session lifetime: How long a browser login lasts before it has to be made again. |

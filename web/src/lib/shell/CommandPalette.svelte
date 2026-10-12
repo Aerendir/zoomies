@@ -46,6 +46,7 @@
   import { runnerStatus } from '../status';
   import EmptyState from '../components/EmptyState.svelte';
   import Logo from '../components/Logo.svelte';
+  import { hiddenFromVisitors } from './sections';
 
   interface Props {
     open?: boolean;
@@ -65,6 +66,14 @@
     detail?: string;
     run: () => void;
   }
+
+  /** Where each "Go to" command a visitor might be kept from leads. */
+  const GO_PATHS: Readonly<Record<string, string>> = {
+    'go-migrate': '/migrate',
+    'go-ai-context': '/kennel/ai-context',
+    'go-audit': '/audit',
+    'go-settings': '/settings',
+  };
 
   /** Enough to find anything an operator is looking at, without a 5000-row scan. */
   const ENTITY_LIMIT = 300;
@@ -334,7 +343,13 @@
       }
     }
 
-    return out;
+    // A visitor is not offered the pages the sidebar hides from them, for the
+    // reason it hides them: each would only answer "sign in to see this".
+    if (!session.visitor) return out;
+    return out.filter((command) => {
+      const path = GO_PATHS[command.id];
+      return path === undefined || !hiddenFromVisitors(path);
+    });
   });
 
   /**
