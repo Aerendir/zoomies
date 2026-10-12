@@ -30,7 +30,7 @@ logo stays monochrome, always.
 
 | Name | Value | Where it is used |
 | --- | --- | --- |
-| Zoomies Black | `#080808` | Dark backgrounds and the sign-in brand panel |
+| Zoomies Black | `#080808` | Dark backgrounds and the sign-in page's logo stage |
 | White | `#FFFFFF` | Surfaces in the light theme, and the knockout mark |
 | Cool Grey | `#B9BCC2` | Secondary text in the dark theme |
 | Mid Grey | `#666A73` | Secondary text in the light theme |
@@ -152,22 +152,22 @@ container, so a phone does not overflow. The artwork carries its own clear
 space, so the canvas is deliberately larger than the dog inside it; that padding
 is part of the supplied file and is not cropped away.
 
-![The sign-in page: a Zoomies Black panel on the left holding the lockup, a short introduction and links to zoomies.sh, GitHub and EyUp.io; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
-![The sign-in page: a Zoomies Black panel on the left holding the lockup, a short introduction and links to zoomies.sh, GitHub and EyUp.io; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
+![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
+![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
 
-The sign-in page is the one screen where the brand gets a panel rather than a
+The sign-in page is the one screen where the brand gets a column rather than a
 shape. It is the page met by people who did not install the controller
-(somebody sent its address by the colleague who did) so the left of it is
-Zoomies Black in both themes and says what they are looking at: the lockup, a
-short introduction and links to
+(somebody sent its address by the colleague who did) so the left of it says
+what they are looking at: the lockup, a short introduction and links to
 [zoomies.sh](https://zoomies.sh), the source on GitHub and
-[EyUp.io](https://eyup.io). The original black artwork uses the backdrop selected in Appearance. The
-brand panel stays dark, while the form follows the selected theme. The panel
-uses fixed `--z-panel-*` text colours to remain readable in either theme.
+[EyUp.io](https://eyup.io). The original black artwork uses the backdrop
+selected in Appearance, and sits on a stage: a rounded square of Zoomies Black
+around the lockup, the same in both themes, because the backdrop is a glow
+drawn for a dark ground. The stage is as wide as the lockup and no wider; the
+column around it, and the words on it, follow the selected theme like the form.
 
-On a phone the panel comes apart: the full lockup and its selected backdrop stay above the form,
-scaling together to fit narrow screens, and the links move below the form in the theme's own
-colours. The first-run screen stays a card. Only the person who has just
+On a phone the column comes apart: the full lockup, its selected backdrop and its stage stay
+above the form, scaling together to fit narrow screens, and the links move below the form. The first-run screen stays a card. Only the person who has just
 installed the controller ever sees it, and they already know what it is.
 
 The running spaniel emblem carries Settings → About at 128px, its minimum size;
