@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BULK_LIMIT,
   NO_REPAIR_FILTERS,
+  batches,
+  clearConsequences,
+  clearReport,
   filtered,
   isActive,
   listQuery,
@@ -96,4 +100,57 @@ test('after a clear the offset steps back only when its page would be empty', ()
   assert.equal(offsetAfterClear(50, 50, 51, 51), 0);
   // Clearing more than the total says is as good as clearing all of it.
   assert.equal(offsetAfterClear(100, 50, 101, 500), 0);
+});
+
+// The bar says how many were cleared and the disclosure says which were not and
+// why, so the order of the skipped list is the order the operator chose in.
+test('a clear report counts what was cleared and lists the rest with their reasons in order', () => {
+  assert.deepEqual(
+    clearReport([
+      { id: 'rep-1', ok: true },
+      { id: 'rep-2', ok: false, error: 'still running' },
+      { id: 'rep-3', ok: true },
+      { id: 'rep-4', ok: false, error: 'not found' },
+    ]),
+    {
+      cleared: 2,
+      skipped: [
+        { id: 'rep-2', error: 'still running' },
+        { id: 'rep-4', error: 'not found' },
+      ],
+    },
+  );
+  assert.deepEqual(clearReport([]), { cleared: 0, skipped: [] });
+});
+
+// A refusal with no message would otherwise be listed as a bare id and leave an
+// operator wondering what was wrong with it.
+test('a refusal that carries no reason still says that it was not cleared', () => {
+  assert.deepEqual(clearReport([{ id: 'rep-9', ok: false }]).skipped, [
+    { id: 'rep-9', error: 'not cleared' },
+  ]);
+});
+
+// The dialog is the only place an operator is told what clearing leaves
+// untouched, so its two sentences are held here rather than only in markup.
+test('the clear confirmation names what clearing does not change', () => {
+  assert.deepEqual(clearConsequences(), [
+    "They still count towards each repository's daily limit.",
+    'Eli will not repair its own commits from them again.',
+  ]);
+});
+
+// The bulk route takes 1 to 500 ids and refuses a longer list outright, so a
+// selection that has grown past that is sent as several requests.
+test('a selection past the bulk limit is cut into requests the route accepts', () => {
+  assert.equal(BULK_LIMIT, 500);
+  const ids = Array.from({ length: 1201 }, (_, i) => `rep-${i}`);
+  const parts = batches(ids, BULK_LIMIT);
+  assert.deepEqual(
+    parts.map((part) => part.length),
+    [500, 500, 201],
+  );
+  assert.deepEqual(parts.flat(), ids);
+  assert.deepEqual(batches(['a'], BULK_LIMIT), [['a']]);
+  assert.deepEqual(batches([], BULK_LIMIT), []);
 });

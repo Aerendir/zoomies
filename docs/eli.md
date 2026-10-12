@@ -466,6 +466,22 @@ uncertain outcome, so it is marked interrupted and never replayed automatically.
 Inspect the PR before asking again. Eli repairs and Settings, Eli AI Assistant show repair history;
 ordinary users see their own requests and administrators see the whole history.
 
+The history is paged and filtered by the controller, so a repair from last month
+is as easy to reach as one from this morning. Filter it by state (all, needs
+attention, in progress or checks passed), by repository name, and by whether Eli
+was triggered automatically or by a request; any change of filter starts again
+from the first page and drops whatever was chosen. Choose repairs one at a time,
+or with the box above the list for every repair shown. Once every repair on the
+page is chosen and more match, **Select all** takes everything the filters match,
+up to 500 at a time, and says so when there are more than that. **Clear from
+history** hides the chosen repairs from this list and does nothing else. A
+cleared repair is kept: it still counts towards each repository's and each
+person's daily limit, it still stops Eli repairing its own commit, and it still
+stops Eli answering the same webhook delivery twice. It cannot be restored from
+the page. A repair that is queued, running or waiting on checks cannot be
+cleared until it finishes. Ordinary users clear only their own requests, and
+each clear is written to the audit log as `assistant.repair_clear`.
+
 Model-generated fixes still need review. The limits constrain cost and the
 editing surface; they do not prove a patch correct. Provider errors, quota
 exhaustion or unsupported model output stop a repair without trying another
