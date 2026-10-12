@@ -142,7 +142,19 @@ export function createTooltipController(
     if (was !== (next !== null)) hooks.onActive?.(next !== null);
   }
 
+  /**
+   * Whichever bubble takes over, the other waits are for something the person
+   * has moved on from: a pointer that rested on A and a Tab that has since
+   * reached B. A's timer must not come round later and put A's help over B.
+   */
+  function cancelOtherOpenings(except: Bubble): void {
+    for (const other of holds.keys()) {
+      if (other !== except) cancelOpening(other);
+    }
+  }
+
   function open(bubble: Bubble): void {
+    cancelOtherOpenings(bubble);
     cancelOpening(bubble);
     cancelClosing(bubble);
     if (current === bubble) return;
@@ -233,6 +245,7 @@ export function createTooltipController(
       return true;
     },
     adopt(bubble) {
+      cancelOtherOpenings(bubble);
       cancelOpening(bubble);
       cancelClosing(bubble);
       of(bubble).pinned = true;
