@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -437,16 +438,12 @@ func TestABootstrapThatFailsSaysWhatTheGuestSaid(t *testing.T) {
 
 // Three machines that never reach ready stand the provider down. This is what
 // stops a bad template burning fifty machines while nobody is looking.
-func TestThreeFailedBootstrapsStandTheProviderDown(t *testing.T) {
+func TestThreeMachinesThatNeverReachReadyStandTheProviderDown(t *testing.T) {
 	h := newHarness(t)
 	_, row := h.machineFleet(t)
-	h.fake.SetFailure("allocate", provider.FailureUnreachable, "dial tcp: connection refused")
 
-	for range breakerThreshold {
-		h.machinePass(t)
-		for _, m := range h.machines() {
-			h.pastBackoff(t, m.ID)
-		}
+	for i := range breakerThreshold {
+		h.c.noteProviderFailure(h.ctx, row.ID, &store.Machine{ID: fmt.Sprintf("mach_%d", i)})
 	}
 	got, err := h.st.GetProvider(h.ctx, row.ID)
 	if err != nil {
@@ -461,6 +458,33 @@ func TestThreeFailedBootstrapsStandTheProviderDown(t *testing.T) {
 	// A second before the stand-down expires, nothing may be bought from it.
 	if held := h.c.provisioningHeld(got, got.PausedUntil.Add(-time.Second)); held == "" {
 		t.Fatal("a stood-down provider is not held, so the next pass buys another machine")
+	}
+}
+
+// One machine that keeps failing the same step is one failure, not several. The
+// breaker's threshold is a number of machines; counting every retry stood the
+// provider down on a single stuck machine, and held back every other machine
+// the pool was waiting for.
+func TestOneMachineRetryingDoesNotStandTheProviderDown(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+	h.fake.SetFailure("allocate", provider.FailureUnreachable, "dial tcp: connection refused")
+
+	for range machineMaxAttempts - 1 {
+		h.machinePass(t)
+		for _, m := range h.machines() {
+			h.pastBackoff(t, m.ID)
+		}
+	}
+	got, err := h.st.GetProvider(h.ctx, row.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	if got.ConsecutiveFailures != 1 {
+		t.Fatalf("one machine retrying counted %d failures, want 1", got.ConsecutiveFailures)
+	}
+	if got.PausedUntil != nil {
+		t.Fatal("one stuck machine stood the whole provider down")
 	}
 }
 
