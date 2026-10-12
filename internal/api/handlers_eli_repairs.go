@@ -16,25 +16,17 @@ import (
 )
 
 func (s *Server) handleEliRepairs(w http.ResponseWriter, r *http.Request) {
-	var rows []*store.EliRepair
-	var err error
-	if Identity(r.Context()).Can(auth.ActionAssistantRead) {
-		rows, err = s.ctrl.Store().ListEliRepairs(r.Context())
-	} else {
-		rows, err = s.ctrl.Store().ListEliRepairsForOwner(r.Context(), Identity(r.Context()).UserID)
-	}
+	id := Identity(r.Context())
+	rows, _, err := s.ctrl.Store().ListEliRepairsPage(r.Context(), store.EliRepairFilter{
+		Scoped:  !id.Can(auth.ActionAssistantRead),
+		OwnerID: id.UserID,
+		Limit:   store.MaxEliRepairPage,
+	})
 	if err != nil {
 		s.internal(w, r, "listing Eli repairs", err)
 		return
 	}
-	admin := Identity(r.Context()).Can(auth.ActionAssistantRead)
-	out := []*store.EliRepair{}
-	for _, row := range rows {
-		if admin || row.UserID == Identity(r.Context()).UserID && row.UserID != "" {
-			out = append(out, row)
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": rows})
 }
 func (s *Server) handleEliRepairSettings(w http.ResponseWriter, r *http.Request) {
 	identities, err := s.ctrl.Store().EliIdentities(r.Context())

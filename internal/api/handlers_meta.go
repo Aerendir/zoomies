@@ -30,8 +30,11 @@ type metaResponse struct {
 	Commit            string `json:"commit,omitempty"`
 	BootstrapRequired bool   `json:"bootstrap_required"`
 	AuthDisabled      bool   `json:"auth_disabled"`
-	OIDCEnabled       bool   `json:"oidc_enabled"`
-	OIDCLabel         string `json:"oidc_label,omitempty"`
+	// PublicView says a caller with no credential reads the fleet as a
+	// visitor, so the sign-in page can offer to go back to looking.
+	PublicView  bool   `json:"public_view"`
+	OIDCEnabled bool   `json:"oidc_enabled"`
+	OIDCLabel   string `json:"oidc_label,omitempty"`
 	// PasswordLoginHidden says the sign-in page should offer single sign-on
 	// alone. It is true only while single sign-on is working, so a provider
 	// that is down never leaves the page with no way in; an administrator
@@ -86,6 +89,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		Commit:                      version.Commit,
 		BootstrapRequired:           needsBootstrap,
 		AuthDisabled:                s.cfg().Security.DisableAuth,
+		PublicView:                  s.cfg().Security.PublicView && !s.cfg().Security.DisableAuth,
 		OIDCEnabled:                 s.oidcProvider().Enabled(),
 		ExternalURL:                 s.cfg().Server.ExternalURL,
 		WebhookURL:                  s.cfg().WebhookURL(),

@@ -79,14 +79,48 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/**
+ * The pages a public view's visitor is not offered. Each is about the people
+ * who run the fleet or a change to it, the API refuses a visitor every one of
+ * them, and a link that can only lead to "sign in to see this" is a link the
+ * visitor learns to distrust along with the ones that work.
+ */
+const HIDDEN_FROM_VISITORS: readonly string[] = [
+  '/repairs',
+  '/migrate',
+  '/kennel/ai-context',
+  '/ai-context',
+  '/audit',
+  '/settings',
+];
+
+/** Whether a visitor is kept away from `path` and everything under it. */
+export function hiddenFromVisitors(path: string): boolean {
+  return HIDDEN_FROM_VISITORS.some((hidden) => path === hidden || path.startsWith(`${hidden}/`));
+}
+
+/** The sections this person is offered. */
+export function sectionsFor(visitor: boolean): readonly NavItem[] {
+  return visitor ? SECTIONS.filter((item) => !hiddenFromVisitors(item.path)) : SECTIONS;
+}
+
+function grouped(items: readonly NavItem[]): NavGroup[] {
+  return items.reduce<NavGroup[]>((groups, item) => {
+    const label = item.group ?? null;
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(item);
+    else groups.push({ label, items: [item] });
+    return groups;
+  }, []);
+}
+
 /** The sections as the sidebar lists them: consecutive entries under one heading. */
-export const NAV_GROUPS: readonly NavGroup[] = SECTIONS.reduce<NavGroup[]>((groups, item) => {
-  const label = item.group ?? null;
-  const last = groups[groups.length - 1];
-  if (last && last.label === label) last.items.push(item);
-  else groups.push({ label, items: [item] });
-  return groups;
-}, []);
+export const NAV_GROUPS: readonly NavGroup[] = grouped(SECTIONS);
+
+/** The sidebar's groups for this person, without a heading left empty. */
+export function navGroupsFor(visitor: boolean): readonly NavGroup[] {
+  return visitor ? grouped(sectionsFor(true)) : NAV_GROUPS;
+}
 
 /**
  * Pages that belong to a section without living under its path. The Jobs

@@ -59,18 +59,37 @@ class Session {
   get oidcEnabled(): boolean {
     return this.#meta?.oidc_enabled === true;
   }
+  /** This controller lets somebody with no credential look at its fleet. */
+  get publicView(): boolean {
+    return this.#meta?.public_view === true;
+  }
+  /**
+   * Nobody is signed in and this is a public view's visitor: the fleet can be
+   * read, and nothing about the people who run it, and nothing can be changed.
+   */
+  get visitor(): boolean {
+    return this.#identity?.kind === 'public';
+  }
   /** The administrator reset this password and it has to change before anything else. */
   get mustChangePassword(): boolean {
     return this.#identity?.must_change_password === true;
   }
   /** A display name for the user menu, falling back to something truthful. */
   get displayName(): string {
+    if (this.visitor) return 'Visitor';
     return this.#identity?.name ?? (this.authDisabled ? 'Authentication disabled' : 'Signed in');
   }
 
-  /** True when the caller's role is at least `needed`. Gates mutating actions. */
+  /**
+   * True when the caller's role is at least `needed`. Gates mutating actions.
+   *
+   * A visitor carries the viewer role narrowed to reading the fleet, so the
+   * role alone would offer them what a viewer has, Eli and their own tokens
+   * among it, and every one of those would answer 403. They are offered none.
+   */
   can(needed: Role): boolean {
     if (this.authDisabled) return true;
+    if (this.visitor) return false;
     return atLeast(this.#identity?.role, needed);
   }
 
