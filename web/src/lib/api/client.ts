@@ -34,6 +34,7 @@ export interface ApiErrorInit {
   field?: string;
   detail?: string;
   errors?: FieldError[];
+  retryAt?: number;
 }
 
 /**
@@ -46,6 +47,7 @@ export class ApiError extends Error {
   readonly field: string | undefined;
   readonly detail: string | undefined;
   readonly errors: FieldError[] | undefined;
+  readonly retryAt: number | undefined;
 
   constructor(init: ApiErrorInit) {
     super(init.message);
@@ -55,6 +57,7 @@ export class ApiError extends Error {
     this.field = init.field;
     this.detail = init.detail;
     this.errors = init.errors;
+    this.retryAt = init.retryAt;
   }
 
   /** Signed in, but not allowed. The server's message says which role is needed. */
@@ -174,7 +177,17 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
 
   if (response.status === 401 && !options.allow401) unauthorized?.();
 
-  throw new ApiError(errorFrom(response.status, payload));
+  throw new ApiError({
+    ...errorFrom(response.status, payload),
+    retryAt: retryAfterTime(response.headers.get('Retry-After')),
+  });
+}
+
+/** Keep a server's admission hold visible without scheduling another request. */
+export function retryAfterTime(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const at = /^\d+$/.test(value) ? now + Number(value) * 1000 : Date.parse(value);
+  return Number.isFinite(at) && at > now ? at : undefined;
 }
 
 interface ErrorBody {
@@ -471,6 +484,12 @@ export const getJobEvents = (id: string, signal?: AbortSignal) =>
 
 export const getJobExplanation = (id: string, signal?: AbortSignal) =>
   api.get<Result<'getJobExplanation'>>(`/jobs/${enc(id)}/explanation`, { signal });
+
+export const getJobPRDelay = (id: string, pullNumber: number, signal?: AbortSignal) =>
+  api.get<Result<'getJobPRDelay'>>(`/jobs/${enc(id)}/pr-delay`, {
+    query: { pull_number: pullNumber },
+    signal,
+  });
 
 export const cancelJobWorkflow = (id: string, body: Body<'cancelJobWorkflow'>) =>
   api.post<Result<'cancelJobWorkflow'>>(`/jobs/${enc(id)}/cancel`, { body });

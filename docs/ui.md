@@ -397,6 +397,16 @@ with what to write instead, and **Pin to** puts the job in the class its runs ca
 for without editing the workflow. Below it are the pins in force, each removable,
 and a form that pins a repository or one job.
 
+In a signed-in viewer's job drawer, **PR check delay** reads an explicit PR
+number from that job's repository. Press **Read PR delay** to take one bounded
+snapshot. Opening the drawer and fleet events do not refresh it. The card
+shows the pinned head, target branch, observation window, coverage and opaque
+required-check identities. Unknown queue/startup timings stay unknown;
+pre-start already includes both. Check results establish neither full merge
+readiness nor a dependency critical path. A refused allowance shows the
+server's wait before another manual request, without automatic retries.
+**Ask Eli** shares the displayed snapshot to explain its uncertainty.
+
 ## Usage
 
 Runner-hours, jobs and queue waits over a range (today, until you change

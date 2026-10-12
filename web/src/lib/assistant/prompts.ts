@@ -4,6 +4,8 @@ export interface EliContext {
   title: string;
   facts: Record<string, string | number | boolean | null | undefined>;
   question?: string;
+  /** A bounded, manually collected diagnostic should not collect itself again. */
+  snapshotOnly?: boolean;
 }
 
 export interface Suggestion {
@@ -16,7 +18,10 @@ export function contextPrompt(context: EliContext): string {
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => `${key}: ${value}`)
     .join('\n');
-  return `${context.question ?? 'What is going on here, and what should I check or do first?'}\n\nContext shared from the ${context.kind} UI: ${context.title}\n${facts}\n\nThese facts are a snapshot of what the page showed when I asked, not the fleet now: if you have tools, use them to check the current state before you rely on the snapshot. Ask for missing evidence and distinguish facts from possible causes.`;
+  const currentness = context.snapshotOnly
+    ? 'Explain this recorded snapshot; a fresh diagnostic requires a new explicit request.'
+    : 'If you have tools, use them to check the current state before you rely on the snapshot.';
+  return `${context.question ?? 'What is going on here, and what should I check or do first?'}\n\nContext shared from the ${context.kind} UI: ${context.title}\n${facts}\n\nThese facts are a snapshot of what the page showed when I asked, not the fleet now. ${currentness} Ask for missing evidence and distinguish facts from possible causes.`;
 }
 
 const OPEN = '<follow-ups>';

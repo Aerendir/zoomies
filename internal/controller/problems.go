@@ -2842,6 +2842,15 @@ func (c *Controller) controllerUpdateProblems() []Problem {
 // Only the latest counts, so a later success clears it and so does a new attempt
 // opening. One that failed but whose release this build has since reached, by
 // an upgrade done by hand, is history and not a problem.
+//
+// A host's failure is also history when it runs the build the controller would
+// take it to now (see attemptIsHistory), and that rule is deliberately not
+// borrowed here. The build to measure a controller against is the one it runs,
+// which it always matches, so on a controller built from main the rule would
+// forgive every failure the moment it was recorded. What is left is an upgrade by
+// hand to a build from main. That build cannot be ordered against the release the
+// attempt asked for, so the failure stays until a new attempt opens: guessing an
+// order would hide a real helper fault in an error.
 func failedUpdateProblem(a *store.UpdateAttempt) (Problem, bool) {
 	if a == nil || (a.State != store.UpdateFailed && a.State != store.UpdateTimedOut) {
 		return Problem{}, false
@@ -2916,7 +2925,7 @@ func (c *Controller) hostUpdateProblems(ctx context.Context, out *[]Problem) err
 	for _, h := range hosts {
 		label := naming.ForSentence(h.Name)
 		if a, ok := c.hostAttempt(h.ID); ok {
-			if p, ok := failedHostUpdateProblem(h, a); ok {
+			if p, ok := failedHostUpdateProblem(h, a, target); ok {
 				*out = append(*out, p)
 			}
 		}
@@ -2959,16 +2968,21 @@ func (c *Controller) hostUpdateProblems(ctx context.Context, out *[]Problem) err
 
 // failedHostUpdateProblem is the problem for a host's latest attempt, when that
 // attempt ended without the update happening. A new attempt supersedes it, and
-// so does the host reaching the release some other way.
+// so does the host reaching the release some other way, or, for an attempt at a
+// build from main, the build the controller would take it to now (see
+// attemptIsHistory, which the host's card asks as well).
+//
+// target is that build, empty when the controller is neither a release nor a
+// build from main.
 //
 // It never carries the attempt's own reason. The fleet's list is read by roles
 // that are not shown the helper's sentence, which can name a path on the host;
 // the host card gives it to the platform role.
-func failedHostUpdateProblem(h *store.Host, a store.UpdateAttempt) (Problem, bool) {
+func failedHostUpdateProblem(h *store.Host, a store.UpdateAttempt, target string) (Problem, bool) {
 	if a.State != store.UpdateFailed && a.State != store.UpdateTimedOut {
 		return Problem{}, false
 	}
-	if runsAtLeast(h.Version, a.ToVersion) {
+	if attemptIsHistory(a, h.Version, target) {
 		return Problem{}, false
 	}
 	how := "failed"

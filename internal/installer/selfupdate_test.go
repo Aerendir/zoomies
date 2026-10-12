@@ -42,6 +42,11 @@ func updateFixture(t *testing.T, srv *httptest.Server, current string) (SelfUpda
 	if err := os.WriteFile(bin, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The previous-binary assertion needs an actual 0755 source, even when
+	// the process umask makes newly written files private.
+	if err := os.Chmod(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	return SelfUpdateOptions{BinaryPath: bin, Current: current, BaseURL: srv.URL, goos: "linux", goarch: "amd64",
 		run: func(context.Context, string, ...string) (string, error) { return "", nil }}, bin
 }

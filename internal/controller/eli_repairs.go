@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,9 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 		return err
 	}
 	r := &store.EliRepair{InstallationID: inst.ID, Repo: policy.Repo, ProviderID: policy.ProviderID}
+	// refuse is set for a command a person typed, and answers it on the PR. The
+	// other triggers have nobody to answer.
+	var refuse func(reason string)
 	switch event {
 	case "issue_comment":
 		var p struct {
@@ -82,24 +86,32 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 		if err != nil {
 			return err
 		}
+		linked := false
 		for _, id := range identities {
-			if id.GitHubUserID == p.Comment.User.ID && id.Confirmed {
+			if id.GitHubUserID != p.Comment.User.ID {
+				continue
+			}
+			linked = true
+			if id.Confirmed {
 				r.UserID = id.UserID
 				break
 			}
 		}
-		// Unlinked strangers cannot consume another user's provider or fill the repair budget.
-		if r.UserID == "" {
-			return nil
-		}
-		user, err := c.st.GetUser(ctx, r.UserID)
-		if err != nil || user.Disabled {
-			return nil
-		}
+		// GitHub is asked who the commenter is, and whether they may write, before
+		// anything is said back. A command from someone who cannot write is dropped
+		// without a word, linked or not: a comment from anyone must not make the
+		// App post, and unlinked strangers cannot consume another user's provider or
+		// fill the repair budget. Everybody who gets past this is somebody Eli may
+		// answer, and a refusal below is never silent for them.
 		admissionCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		raw, err := c.ClientFor(admissionCtx, inst.ID)
 		if err != nil {
 			cancel()
+			if r.UserID == "" {
+				// Nothing is owed to a commenter Eli does not know, so a GitHub that
+				// cannot be reached is not a delivery worth redelivering for them.
+				return nil
+			}
 			return err
 		}
 		client, supported := raw.(github.RepairClient)
@@ -110,14 +122,37 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 		actor, err := client.RepairActor(admissionCtx, r.Repo, p.Comment.User.Login)
 		cancel()
 		if err != nil {
+			if r.UserID == "" {
+				return nil
+			}
 			return err
 		}
 		if actor.ID != p.Comment.User.ID || !actor.CanWrite {
 			return nil
 		}
-		r.PullNumber = p.Issue.Number
+		commentID, pull, login := p.Comment.ID, p.Issue.Number, p.Comment.User.Login
+		refuse = func(reason string) {
+			c.refuseRepairCommand(ctx, client, r.Repo, pull, commentID, reason)
+		}
+		if r.UserID == "" {
+			if linked {
+				refuse(repairNotAllowedReason(login))
+			} else {
+				refuse(repairNotLinkedReason(login))
+			}
+			return nil
+		}
+		user, err := c.st.GetUser(ctx, r.UserID)
+		if errors.Is(err, store.ErrNotFound) || err == nil && user.Disabled {
+			refuse(repairDisabledReason(login))
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		r.PullNumber = pull
 		r.GitHubUserID = p.Comment.User.ID
-		r.GitHubLogin = p.Comment.User.Login
+		r.GitHubLogin = login
 		r.Trigger = "mention"
 		r.Instruction = command[:min(len(command), 4000)]
 		r.DedupKey = fmt.Sprintf("comment:%s:%d", r.Repo, p.Comment.ID)
@@ -178,10 +213,60 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 	}
 	_, err = c.st.EnqueueEliRepair(ctx, r, policy.DailyLimit)
 	if errors.Is(err, store.ErrConflict) {
-		c.log.Info("Eli repair budget reached", "repo", r.Repo)
+		c.log.Info("Eli repair budget reached", "repo", r.Repo, "trigger", r.Trigger)
+		if refuse != nil {
+			refuse(repairBudgetReason(err, policy.DailyLimit))
+		}
 		return nil
 	}
 	return err
+}
+
+// refuseRepairCommand answers a command Eli recognised from somebody who may
+// write to the repository and then declined. Until it did, the person got
+// nothing: no reaction, no comment, and a delivery the log called accepted, so a
+// refusal looked exactly like a webhook that never arrived. The face is the
+// quick signal and the comment says why. Both are best effort, since a repair
+// that was never going to start has nothing to fail by a comment GitHub refused.
+func (c *Controller) refuseRepairCommand(ctx context.Context, client github.RepairClient, repo string, pull int, commentID int64, reason string) {
+	c.log.Info("Eli did not start a requested repair", "repo", repo, "pull", pull, "reason", reason)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := client.RepairReact(ctx, repo, commentID, "confused"); err != nil {
+		c.log.Warn("could not react to a refused repair request", "repo", repo, "pull", pull)
+	}
+	text := "### 🐶 Eli could not start that\n\n" + reason + "\n\n<sub>🐾 Zoomies. Ask again with `/eli fix` once that is sorted.</sub>"
+	if _, err := client.RepairComment(ctx, repo, pull, 0, text); err != nil {
+		c.log.Warn("could not tell a commenter why their repair did not start", "repo", repo, "pull", pull)
+	}
+}
+
+// The reasons below are written for the person who typed the command, and each
+// names what they or an administrator can do, because "no" with nothing to try
+// is the silence this replaces. Where the setup lives is the Eli AI Assistant
+// page, under Eli repairs.
+
+func repairNotLinkedReason(login string) string {
+	return fmt.Sprintf("Your GitHub account `@%s` is not linked to a Zoomies user, so Eli cannot tell whose provider and limits this request would use. Ask a Zoomies administrator to link it on the Eli AI Assistant page, under Eli repairs; you then allow the link there yourself, and can ask again.", login)
+}
+
+func repairNotAllowedReason(login string) string {
+	return fmt.Sprintf("Your GitHub account `@%s` is linked to a Zoomies user, but they have not allowed it to request repairs. They can turn on **Allow this GitHub account to request repairs using my provider** on the Eli AI Assistant page, under Eli repairs. An administrator cannot do that for them.", login)
+}
+
+func repairDisabledReason(login string) string {
+	return fmt.Sprintf("The Zoomies account linked to `@%s` is disabled or no longer exists, so Eli cannot act for it. Ask a Zoomies administrator to enable it or to link your GitHub account to another.", login)
+}
+
+// repairBudgetReason says which of the two limits refused the request. The
+// repository's is shared with automatic repairs, which on a repository whose CI
+// fails often can use it up before anyone asks, so it says so, and says who can
+// raise it.
+func repairBudgetReason(err error, repoLimit int) string {
+	if errors.Is(err, store.ErrEliPersonBudget) {
+		return fmt.Sprintf("You have already asked for %s in the last 24 hours, which is the limit for each person. Ask again when your oldest request is more than 24 hours old.", plural(store.EliPersonDailyLimit, "repair"))
+	}
+	return fmt.Sprintf("This repository has used its %s for the last 24 hours. Explicit requests and automatic repairs share that limit, and an attempt frees its place when it is more than 24 hours old. An administrator can raise the limit, up to 50, under Repository repair policies on the Eli AI Assistant page.", plural(repoLimit, "repair attempt"))
 }
 
 type repairModel struct {
@@ -201,13 +286,14 @@ func (m repairModel) SourceUsed(n int) {
 // Answer asks the model for the next repair step. A repair offers the model no
 // tools: every step is a JSON object the system prompt describes. Some models
 // answer with a tool call anyway (Ollama cloud did, for a repair whose only
-// failing check was an audit script), and giving up on the first one threw
-// away a repair the model would have finished. So the model is told once, the
-// way the chat loop tells a model that asks for a tool it was not given: a
-// result for the call it made, saying there are no tools and what to send
-// instead. A model that calls again is stopped, and the failure names the
-// tool, so an operator can tell a model ignoring its instructions from a
-// prompt that was wrong.
+// failing check was an audit script), because the prompt's own replies,
+// {"read":[...]} and {"windows":[...]}, look like functions to a model trained
+// to call them. A call named after a reply says what that reply would have, so
+// it is read as the reply, and the repair goes on. Any other call is answered
+// once, the way the chat loop answers a tool it was not given: a result for the
+// call it made, saying there are no tools and what to send instead. A model
+// that calls again is stopped, and the failure names the tool, so an operator
+// can tell a model ignoring its instructions from a prompt that was wrong.
 func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
 	turns := make([]assistant.Message, 0, len(messages)+2)
 	for _, v := range messages {
@@ -220,6 +306,13 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 		}
 		if len(calls) == 0 {
 			return text, nil
+		}
+		// Only when the model said nothing else: a call beside a reply of its own
+		// leaves two answers, and the one it wrote out is the one it meant.
+		if strings.TrimSpace(text) == "" {
+			if reply, ok := prrepair.ReplyFromCalls(repairCalls(calls)); ok {
+				return reply, nil
+			}
 		}
 		if attempt > 0 {
 			return "", fmt.Errorf("the provider answered with a tool call named %s, twice, instead of a repair plan; Eli offers no tools during a repair, so the model is ignoring its instructions: choose a model that keeps to a JSON reply, or test the provider in Eli settings", repairToolNames(calls))
@@ -297,6 +390,14 @@ func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (s
 	return out.String(), calls, nil
 }
 
+func repairCalls(calls []assistant.ToolCall) []prrepair.Call {
+	out := make([]prrepair.Call, len(calls))
+	for i, c := range calls {
+		out[i] = prrepair.Call{Name: c.Name, Arguments: c.Arguments}
+	}
+	return out
+}
+
 // repairToolRefusal is what a model is told for a tool it called during a
 // repair. It names the replies the system prompt allows, because a model that
 // reached for a tool was looking for a way to read or change a file and is
@@ -319,14 +420,35 @@ func repairToolName(name string) string {
 	return "`" + name + "`"
 }
 
+// repairToolNames names the tools a model called, and the names of the arguments
+// it gave each, never their values. A call the repair could not read as a reply
+// is fixed by teaching it that shape, and the shape is what the comment needs to
+// say to make that a one-line change instead of a guess.
 func repairToolNames(calls []assistant.ToolCall) string {
 	var names []string
 	seen := map[string]bool{}
 	for _, call := range calls {
-		if !seen[call.Name] {
-			seen[call.Name] = true
-			names = append(names, repairToolName(call.Name))
+		if seen[call.Name] {
+			continue
 		}
+		seen[call.Name] = true
+		name := repairToolName(call.Name)
+		var args map[string]json.RawMessage
+		if json.Unmarshal(call.Arguments, &args) == nil && len(args) > 0 {
+			keys := make([]string, 0, len(args))
+			for key := range args {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			if len(keys) > 6 {
+				keys = keys[:6]
+			}
+			for i, key := range keys {
+				keys[i] = repairToolName(key)
+			}
+			name += " (with " + strings.Join(keys, ", ") + ")"
+		}
+		names = append(names, name)
 	}
 	return strings.Join(names, ", ")
 }

@@ -3473,7 +3473,7 @@ export interface paths {
         put?: never;
         /**
          * Personal conversations, Keep a conversation
-         * @description Keeps a conversation under the signed-in account and answers with its id, which later saves of the same conversation name. The transcript is bounded like a chat request (40 messages, 8 KiB each, 32 KiB in all; roles user and assistant), may end with the answer, and is redacted the way the chat is before it is written, so a credential pasted into a question is not in the database. The title is the first question unless one is sent. A person keeps at most fifty; keeping another removes their oldest. A session with no account is refused with 403.
+         * @description Keeps a conversation under the signed-in account and answers with its id, which later saves of the same conversation name. The transcript is bounded like a chat request (40 messages and 32 KiB in all, and 8 KiB for each `user` message; roles user and assistant), may end with the answer, and is redacted the way the chat is before it is written, so a credential pasted into a question is not in the database. The title is the first question unless one is sent. A person keeps at most fifty; keeping another removes their oldest. A session with no account is refused with 403.
          */
         post: operations["personalCreateAssistantConversation"];
         delete?: never;
@@ -9295,7 +9295,7 @@ export interface components {
         /** @description The host's part in updating Zoomies from the web UI: whether it can be updated from here, why in a sentence, and its latest attempt while that attempt still says something about the host. Nothing in it moves with the clock or with a heartbeat. */
         HostUpdate: {
             /**
-             * @description The latest attempt's state: `requested` until the host reports the release or 90 minutes pass, then `succeeded`, `failed`, `timed_out`, or `cancelled` when the host was removed. `none` when there is no attempt to show, including one that failed before the host reached its release some other way. `unsupported` in place of `none` for a host behind the controller that the update helper can never be installed on (not Linux, no systemd, or a container under a rootless runtime): `reason` says which, and the host is updated with `upgrade_command`.
+             * @description The latest attempt's state: `requested` until the host reports the release or 90 minutes pass, then `succeeded`, `failed`, `timed_out`, or `cancelled` when the host was removed. `none` when there is no attempt to show, including one that failed before the host reached its release some other way. Where the attempt or the controller is on a build from main, which cannot be ordered against a release, it is also `none` once the host runs what the controller would take it to now. `unsupported` in place of `none` for a host behind the controller that the update helper can never be installed on (not Linux, no systemd, or a container under a rootless runtime): `reason` says which, and the host is updated with `upgrade_command`.
              * @enum {string}
              */
             state: "none" | "unsupported" | "requested" | "succeeded" | "failed" | "timed_out" | "cancelled";
@@ -9743,7 +9743,7 @@ export interface components {
              */
             page?: string;
             style?: components["schemas"]["AssistantStyle"];
-            /** @description The conversation so far, oldest first, ending in a `user` message. At most 40 messages, 8 KiB each and 32 KiB in all. */
+            /** @description The conversation so far, oldest first, ending in a `user` message. At most 40 messages and 32 KiB in all; a `user` message is at most 8 KiB, and an `assistant` message counts only toward the 32 KiB. */
             messages: {
                 /** @enum {string} */
                 role: "user" | "assistant";
@@ -9772,7 +9772,7 @@ export interface components {
         AssistantConversationInput: {
             /** @description Optional; the first question otherwise. */
             title?: string;
-            /** @description The conversation as the page holds it, oldest first. At most 40 messages, 8 KiB each and 32 KiB in all. */
+            /** @description The conversation as the page holds it, oldest first. At most 40 messages and 32 KiB in all; a `user` message is at most 8 KiB, and an `assistant` message counts only toward the 32 KiB. */
             messages: {
                 /** @enum {string} */
                 role: "user" | "assistant";
