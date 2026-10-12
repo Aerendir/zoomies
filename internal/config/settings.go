@@ -307,6 +307,11 @@ var registry = buildRegistry([]Setting{
 		RestartReason: "the authentication service takes its security settings when it is built",
 	},
 	{
+		Key: "security.public_view", Label: "Public read-only view", Env: "ZOOMIES_PUBLIC_VIEW", Kind: KindBool, Scope: ScopePlatform,
+		Summary:       "Let anyone who can reach this controller read its fleet without signing in: pools, hosts, runners, jobs, usage and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind sign-in, and every change still needs somebody signed in. For a fleet that is meant to be public, such as a demo.",
+		RestartReason: "the authentication service takes its security settings when it is built",
+	},
+	{
 		Key: "security.rate_limit_logins", Label: "Login attempts per minute", Env: "ZOOMIES_RATE_LIMIT_LOGINS", Kind: KindInt, Scope: ScopePlatform,
 		Summary:       "Password attempts allowed per source address per minute, and five times that per account.",
 		RestartReason: "the limiters are built with their limit when the authentication service is",

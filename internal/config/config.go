@@ -578,6 +578,13 @@ type Security struct {
 	// LikelyReachable, which counts an external URL or a trusted proxy as
 	// reachable even on a loopback bind.
 	DisableAuth bool `yaml:"disable_auth"`
+	// PublicView lets a request that carries no credential at all read the
+	// fleet as a visitor: pools, hosts, runners, jobs, usage and runner logs,
+	// and nothing about the people who run it. It exists for a fleet that is
+	// meant to be looked at by anyone, such as a public demo or an open-source
+	// project's CI, and every change still needs somebody signed in. A
+	// credential that is presented and wrong is still refused.
+	PublicView bool `yaml:"public_view"`
 	// RateLimitLogins caps password attempts per source address per minute.
 	RateLimitLogins int `yaml:"rate_limit_logins"`
 	// DockerInDockerExpected stops a pool that gives its jobs a private daemon

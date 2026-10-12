@@ -211,6 +211,12 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(s.streamHeartbeat)
 	defer ticker.Stop()
 
+	// Who the frames are chosen for. Resolved when the stream opens and again
+	// on every heartbeat, which is when the stream re-checks its credential
+	// anyway, rather than once per frame: a busy fleet sends many frames a
+	// second, and each resolution of a session is a database read.
+	reader := Identity(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -222,6 +228,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 				// the response makes the client reconnect with its last event
 				// ID and catch up, which is better than silently going stale.
 				return
+			}
+			if !frameReadable(reader, ev.Kind) {
+				continue
 			}
 			data := ev.Data
 			if ev.Kind == events.KindProblems {
@@ -318,6 +327,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		case <-ticker.C:
 			if s.endIfRevoked(stream, r, auth.ActionEventsRead) {
 				return
+			}
+			if fresh, err := s.resolveIdentity(r); err == nil {
+				reader = fresh
 			}
 			if err := stream.comment("heartbeat"); err != nil {
 				return

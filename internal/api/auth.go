@@ -129,6 +129,36 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			info.identity = id
 			info.log = info.log.With("identity", id.String())
 		}
+		s.forgetLapsedSession(w, r, id)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// forgetLapsedSession clears the session cookie of a browser that sent one and
+// was answered as a public view's visitor: the session behind it ran out or was
+// ended. Without this the browser presents the dead cookie on every request for
+// as long as it keeps it, and the person cannot sign out of it, because there is
+// nothing to sign out of.
+func (s *Server) forgetLapsedSession(w http.ResponseWriter, r *http.Request, id *auth.Identity) {
+	if !auth.IsVisitor(id) {
+		return
+	}
+	if _, err := r.Cookie(SessionCookie); err == nil {
+		s.clearSessionCookie(w)
+	}
+}
+
+// refuseVisitors closes the caller's own routes, the ones under /auth that
+// carry no action because each is somebody's own, to a public view's visitor.
+// A visitor has no password, no sessions, no preferences and no connections,
+// and signing out writes an audit row, so leaving these open would let an
+// anonymous loop fill the audit log.
+func (s *Server) refuseVisitors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth.IsVisitor(Identity(r.Context())) {
+			forbidden(w, "this is a read-only public view; sign in to do this")
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -142,6 +172,7 @@ func (s *Server) optionalAuth(next http.Handler) http.Handler {
 			if info := infoFrom(r.Context()); info != nil {
 				info.identity = id
 			}
+			s.forgetLapsedSession(w, r, id)
 		}
 		next.ServeHTTP(w, r)
 	})

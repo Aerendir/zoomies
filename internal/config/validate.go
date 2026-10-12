@@ -618,6 +618,20 @@ func (c *Config) Validate() Findings {
 			Fix: fix,
 		})
 	}
+	// A public view is the point of a demo and a surprise anywhere else, so it
+	// is said out loud like every other setting that widens who may look. With
+	// authentication off it would add nothing: every request is already an
+	// administrator, and auth.disabled says so.
+	if c.Security.PublicView && !c.Security.DisableAuth {
+		add(Finding{
+			Code: "auth.public_view", Severity: SeverityWarning, Setting: "security.public_view",
+			Title: "anyone can read this fleet without signing in",
+			Detail: "a request with no credential is a visitor, who reads pools, hosts, runners, jobs, usage " +
+				"and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind " +
+				"sign-in, and every change still needs somebody signed in.",
+			Fix: "turn security.public_view off unless this controller is meant to be public.",
+		})
+	}
 	// A session cookie without Secure is one a single plaintext request to the
 	// same host hands to anyone watching. Zoomies cannot see that a proxy in
 	// front terminates TLS, so it says so rather than guessing.
