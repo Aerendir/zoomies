@@ -8,11 +8,15 @@ import (
 )
 
 // FakeOptions shapes a fake provider. Reply, when set, is what it says for a
-// last user message; Fail, when set, is what every call returns.
+// last user message; Fail, when set, is what every call returns. Script, when
+// set, is what it answers a whole call with, ahead of its usage and end: it
+// sees the request, so a test can make the model misbehave on one turn and
+// answer the correction on the next, which Reply, seeing one message, cannot.
 type FakeOptions struct {
-	Model string
-	Reply func(last string) string
-	Fail  error
+	Model  string
+	Reply  func(last string) string
+	Fail   error
+	Script func(req Request) []Event
 }
 
 // Fake is a provider that answers without a network, for the demo fleet and
@@ -42,6 +46,8 @@ func (f *Fake) Chat(ctx context.Context, req Request) (Stream, error) {
 	last := lastUserMessage(req.Messages)
 	var events []Event
 	switch {
+	case f.opts.Script != nil:
+		events = f.opts.Script(req)
 	case hasTool(req.Tools, "echo"):
 		args, _ := json.Marshal(struct {
 			Text string `json:"text"`

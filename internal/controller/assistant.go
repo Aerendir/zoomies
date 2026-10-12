@@ -38,6 +38,9 @@ func (c *Controller) OpenAssistantProvider(row *store.AssistantProvider, apiKey 
 		}
 		apiKey = opened
 	}
+	if c.openProvider != nil {
+		return c.openProvider(row, apiKey)
+	}
 	return kinds.Open(assistant.Kind(row.Kind), kinds.Config{
 		BaseURL:   row.BaseURL,
 		APIKey:    apiKey,

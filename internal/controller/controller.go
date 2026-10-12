@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/agent"
+	"github.com/eyupio/zoomies/internal/assistant"
 	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/backend"
 	"github.com/eyupio/zoomies/internal/config"
@@ -168,7 +169,10 @@ type Controller struct {
 
 	metrics *metrics
 	clients *clientCache
-	queues  *taskQueues
+	// openProvider, when set, stands in for kinds.Open: a test puts a scripted
+	// model behind a provider row and runs the same path the worker runs.
+	openProvider func(row *store.AssistantProvider, apiKey string) (assistant.Provider, error)
+	queues       *taskQueues
 	// hostChecks is the last request to each host to check itself; see host_check.go.
 	hostChecks hostChecks
 	relay      *logRelay
