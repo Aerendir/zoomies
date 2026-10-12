@@ -122,9 +122,11 @@ so a new one cannot ship unmapped.
 ### 5. MCP
 
 `/mcp` authenticates through `auth.Authenticate`, so with the setting on an
-anonymous MCP client is a visitor. The tools list is already filtered by
-`auth.Allowed`, so it offers the read tools the visitor's scopes reach and
-nothing that changes the fleet or reads AI context. A person who wants more
+anonymous MCP client is a visitor. The tools that change the fleet are already
+offered only to a caller `auth.Allowed` lets use them, so a visitor is offered
+none. The read tools are offered to everyone by design, and the API refuses
+what a credential cannot read: a visitor calling an AI context tool is told the
+public view does not show it. A person who wants more
 connects with an API token in the `Authorization` header; MCP OAuth is not
 offered to an anonymous client on a public view, because an unauthenticated
 request is answered rather than challenged.

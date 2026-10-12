@@ -63,7 +63,7 @@ Conventions:
 | --- | --- | --- | --- |
 | GET | `/healthz` | - | Liveness. Always 200 once the process is serving. |
 | GET | `/readyz` | - | Readiness: database reachable, migrations applied. `schema` says which: how many, and the name of the latest, which is the only schema version there is. `bootstrap_required` says whether the instance still has no account, so a provisioner waits on this one endpoint for "can I use this yet"; it is reported, not a reason to answer 503, because the first-run page is what an instance with no account should be serving. |
-| GET | `/api/v1/meta` | - | Version, whether bootstrap is needed, whether OIDC is enabled, feature flags, and the fallback poller's state (`poller_enabled`, and `poller_last_poll_at` once it has completed a sweep). Safe to call before login; it is what the login page uses to decide what to render. |
+| GET | `/api/v1/meta` | - | Version, whether bootstrap is needed, whether OIDC is enabled, feature flags, and the fallback poller's state (`poller_enabled`, and `poller_last_poll_at` once it has completed a sweep). `public_view` says a caller with no credential reads the fleet as a visitor. Safe to call before login; it is what the login page uses to decide what to render. |
 | GET | `/metrics` | viewer¹ | Prometheus text format. ¹Unauthenticated when `metrics.public` is true. |
 | GET | `/api/v1/status` | —² | The fleet's name-free status: a projection, and the one response here that is deliberately not a resource's `GET` shape. `state` (`healthy`, `degraded` or `blocked`, from the worst of the fleet's own problems), `since`, `version`, `queued` and `running` as bands (`none`, `few`, `many`, `backed_up`), the median and p95 queue wait in whole minutes, `reasons` carrying `code`, `severity` and `since` and nothing else, and `explanations`, the public sentence for each of those codes from [Problem codes](problem-codes.md#what-the-status-page-says). No pool, host, repository, runner or job name, and never a platform problem. ²Decided by `status.mode`: 404 to everyone while it is `off`, the default; any signed-in role when `authenticated`; anyone when `public`. |
 | GET | `/status` | —² | The status page: its own small document, not a route of the app, which polls `/api/v1/status` every thirty seconds and never opens `/api/v1/events`, because every frame on that stream is a resource view and carries names. |
@@ -642,6 +642,14 @@ flowchart LR
 `provider.updated` · `provider.deleted` · `machine.updated` ·
 `machine.deleted` · `kennel.updated` · `kennel.deleted` · `kennel.summary` ·
 `updates.updated` · `transfer.updated` · `heartbeat` · `resync`
+
+A frame is sent only to a caller who could `GET` what it carries: `audit` to
+somebody who may read the audit log, `transfer.updated` to whoever may read
+backups, each resource's frames to whoever may read that resource. So a token
+scoped to `events:read` and `pools:read` receives pool frames and not the audit
+log, and a [public view](public-view.md)'s visitor receives the fleet and
+nothing about the people who run it. `heartbeat` and `resync` go to everyone.
+
 
 Every frame but `heartbeat` and `resync` carries an `id` of the form
 `<epoch>.<sequence>`, where the epoch names one run of the controller. A client

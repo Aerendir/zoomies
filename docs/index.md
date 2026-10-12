@@ -73,8 +73,8 @@ Size capacity, measure queue waits, tune resources and automate operations.
 
 </div>
 
-![Zoomies Overview showing queue and runner metrics, pool utilisation, startup timings and recent fleet activity](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
-![Zoomies Overview showing queue and runner metrics, pool utilisation, startup timings and recent fleet activity](screenshots/overview-light.webp#only-light){ .zoomies-shot }
+![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
+![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
 
 Watch jobs, capacity and scheduler decisions update in place. [Explore the web UI](ui.md).
 { .zoomies-shot-caption }
