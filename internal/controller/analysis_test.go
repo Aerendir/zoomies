@@ -363,7 +363,7 @@ func TestARunnerOfAPoolThatKeepsItsRunnersIsNotTheJobsOwnStartup(t *testing.T) {
 		t.Errorf("no runner record %d, runner kept %d; want 0 and 6", e.NoRunnerRecord, e.RunnerKept)
 	}
 	if want := "only 6 jobs waited: too few to call one cause dominant; also, 6 of 6 jobs that waited ran on a runner their pool keeps, " +
-		"which was there before them and may have been busy or idle, so their wait after eligibility is put down to the pool's conditions " +
+		"which was there before them and counts against its maximum runners whether busy or idle, so their wait after eligibility is put down to the pool's conditions " +
 		"rather than split into runner startup and GitHub's delay"; got.Confidence != analysis.Medium || got.ConfidenceReason != want {
 		t.Errorf("confidence %s (%q), want medium (%q)", got.Confidence, got.ConfidenceReason, want)
 	}
@@ -912,7 +912,7 @@ func TestAnalyseStartupFailuresPlacesEachFailureWhenItFailed(t *testing.T) {
 func TestACountsOnlySideEndsAtTheLastMidnightTheRollUpRead(t *testing.T) {
 	f := newAnalysisFleet(t)
 	f.c.UpdateConfig(func(c *config.Config) { c.Retention.Jobs = 48 * time.Hour })
-	// 33 hours: B from 03:00 yesterday, A from 18:00 the day before that.
+	// 33 hours: B from 03:00 yesterday, A from 18:00 three days ago.
 	w := AnalysisWindow{Since: analysisNow.Add(-33 * time.Hour), Until: analysisNow}
 	day := func(d, h int) time.Time {
 		return analysisNow.Truncate(24*time.Hour).AddDate(0, 0, d).Add(time.Duration(h) * time.Hour)
@@ -944,6 +944,93 @@ func TestACountsOnlySideEndsAtTheLastMidnightTheRollUpRead(t *testing.T) {
 	}
 	if b.CountsOnly || !b.Since.Equal(w.Since) || b.Figures.Jobs != 7 {
 		t.Errorf("B = counts only %v from %v, %d jobs; want the job rows' 7 from %v", b.CountsOnly, b.Since, b.Figures.Jobs, w.Since)
+	}
+	// The counts are named for the span they cover, and the hours between
+	// the two are said to be in neither.
+	if want := "5 jobs ran in the 2 days before and 7 in the last 33 hours: fewer than 30 on either side, so the two are not ranked."; got.Summary != want {
+		t.Errorf("summary\n got %q\nwant %q", got.Summary, want)
+	}
+	if want := "the jobs queued from 2026-10-11 00:00 UTC to 2026-10-11 03:00 UTC, between the two periods, are counted on neither side"; !strings.Contains(got.ConfidenceReason, want) {
+		t.Errorf("reason %q does not say %q", got.ConfidenceReason, want)
+	}
+}
+
+// A side under a day that ends on a midnight is read as the whole day before
+// that midnight: it overlaps nothing of the other side, and its name says
+// the 24 hours it covers, not the 6 asked for.
+func TestASubDayCountsOnlySideEndingOnAMidnightIsTheWholeDayItRead(t *testing.T) {
+	f := newAnalysisFleet(t)
+	f.c.UpdateConfig(func(c *config.Config) { c.Retention.Jobs = 40 * time.Hour })
+	day := func(d, h int) time.Time {
+		return analysisNow.Truncate(24*time.Hour).AddDate(0, 0, d).Add(time.Duration(h) * time.Hour)
+	}
+	ranHere := func(q time.Time) {
+		f.job("", q, func(j *store.Job) {
+			ran(q.Add(time.Minute), q.Add(5*time.Minute), "success")(j)
+			j.RunnerID = "run_" + q.Format("0102150405")
+		})
+	}
+	ranHere(day(-4, 5))
+	for i := range 2 {
+		ranHere(day(-2, 5).Add(time.Duration(i) * time.Minute)) // before A's own start, on its day
+	}
+	for i := range 3 {
+		ranHere(day(-2, 19).Add(time.Duration(i) * time.Minute))
+	}
+	ranHere(day(-1, 2)) // B's
+	if _, err := f.st.RollUpInstallations(f.ctx, analysisNow, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: day(-1, 0), Until: day(-1, 6)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := got.Evidence.A, got.Evidence.B
+	if !a.CountsOnly || !a.Since.Equal(day(-2, 0)) || !a.Until.Equal(day(-1, 0)) || a.Figures.Jobs != 5 || a.Label != "the 24 hours before" {
+		t.Errorf("A = %q, counts only %v, %v to %v, %d jobs; want the 24 hours before, its 5 jobs, %v to %v",
+			a.Label, a.CountsOnly, a.Since, a.Until, a.Figures.Jobs, day(-2, 0), day(-1, 0))
+	}
+	if b.Label != "the 6 hours to 2026-10-11 06:00 UTC" || b.Figures.Jobs != 1 {
+		t.Errorf("B = %q, %d jobs", b.Label, b.Figures.Jobs)
+	}
+	if strings.Contains(got.ConfidenceReason, "neither side") {
+		t.Errorf("sides that meet are said to leave hours out: %q", got.ConfidenceReason)
+	}
+}
+
+// A side under a day that ends off a midnight has no midnight inside it to
+// end on: the roll-up would read its whole day, the other side's hours
+// included, or nothing. It is refused with what to change.
+func TestASubDayCountsOnlySideEndingOffAMidnightIsRefused(t *testing.T) {
+	f := newAnalysisFleet(t)
+	f.c.UpdateConfig(func(c *config.Config) { c.Retention.Jobs = 30 * time.Hour })
+	day := func(d, h int) time.Time {
+		return analysisNow.Truncate(24*time.Hour).AddDate(0, 0, d).Add(time.Duration(h) * time.Hour)
+	}
+	for _, h := range []int{3, 10} {
+		q := day(-1, h)
+		f.job("", q, func(j *store.Job) {
+			ran(q.Add(time.Minute), q.Add(5*time.Minute), "success")(j)
+			j.RunnerID = "run_" + q.Format("0102150405")
+		})
+	}
+	if _, err := f.st.RollUpInstallations(f.ctx, analysisNow, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	for name, w := range map[string]AnalysisWindow{
+		"inside the day":           {Since: day(-1, 8), Until: day(-1, 14)},
+		"starting on its midnight": {Since: day(-1, 6), Until: day(-1, 12)},
+	} {
+		_, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: w.Since, Until: w.Until})
+		if !errors.Is(err, ErrWholeDaysOnly) {
+			t.Errorf("%s: %v, want ErrWholeDaysOnly", name, err)
+			continue
+		}
+		for _, want := range []string{"older than retention.jobs", "whole UTC days", "choose a period of at least a whole day, or one within retention.jobs"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: %q does not say %q", name, err, want)
+			}
+		}
 	}
 }
 
@@ -978,6 +1065,11 @@ func TestAPeriodTooLongIsRefusedInDaysAndHours(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "91 days and 3 hours") || !strings.Contains(err.Error(), "at most 90 days") ||
 		!strings.Contains(err.Error(), "limits.job_stats_window") || strings.Contains(err.Error(), "0s") {
 		t.Errorf("error %v, want the period and the limit in days and hours", err)
+	}
+	// Twenty minutes over is over, and never reads as the limit itself.
+	_, err = f.c.AnalyseQueueWait(f.ctx, AnalysisWindow{Since: analysisNow.Add(-90*24*time.Hour - 20*time.Minute), Until: analysisNow}, "")
+	if err == nil || !strings.Contains(err.Error(), "is 90 days and 1 hour, and an analysis covers at most 90 days") {
+		t.Errorf("twenty minutes over: %v", err)
 	}
 	if _, err := f.c.AnalyseQueueWait(f.ctx, AnalysisWindow{Since: analysisNow, Until: analysisNow}, ""); err == nil {
 		t.Error("a period with no length was accepted")

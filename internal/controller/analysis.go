@@ -47,6 +47,27 @@ var ErrTooFewReleases = errors.New("fewer than two releases completed a job in t
 // itself, which would read as a release that held still.
 var ErrSameRelease = errors.New("a and b name the same release, so there is nothing to compare; name two different releases, or leave a out to compare with the release before b")
 
+// ErrWholeDaysOnly is a by-period comparison one of whose sides is older than
+// retention.jobs and has no midnight inside it to end on. The roll-up keeps
+// whole UTC days, so such a side would read the other side's hours as its
+// own, or nothing at all. The error a caller sees is a wholeDaysError, which
+// says which side and what to change.
+var ErrWholeDaysOnly = errors.New("a period older than retention.jobs can only be read in whole UTC days")
+
+type wholeDaysError struct {
+	which        string
+	since, until time.Time
+}
+
+func (e wholeDaysError) Error() string {
+	const layout = "2006-01-02 15:04 UTC"
+	return fmt.Sprintf("%s, %s to %s, is older than retention.jobs, so it can only be read in whole UTC days from the usage roll-up, "+
+		"and it has no midnight inside it to end on; choose a period of at least a whole day, or one within retention.jobs",
+		e.which, e.since.UTC().Format(layout), e.until.UTC().Format(layout))
+}
+
+func (e wholeDaysError) Unwrap() error { return ErrWholeDaysOnly }
+
 // analysisExcluded is what a comparison leaves out of every figure: jobs
 // that stop when somebody says so, not when the work is done (spec 5.2).
 var analysisExcluded = []string{"cancelled", "skipped"}
@@ -67,22 +88,26 @@ func (c *Controller) checkAnalysisWindow(w AnalysisWindow) error {
 	}
 	if limit := c.cfg().Limits.JobStatsSpan(); w.Until.Sub(w.Since) > limit {
 		return fmt.Errorf("the period from since to until is %s, and an analysis covers at most %s; narrow it, or raise limits.job_stats_window",
-			daysAndHours(w.Until.Sub(w.Since)), daysAndHours(limit))
+			daysAndHours(w.Until.Sub(w.Since), true), daysAndHours(limit, false))
 	}
 	return nil
 }
 
 // daysAndHours says a length the way limits.job_stats_window is thought of,
-// "91 days and 3 hours", rounded to the hour; a Go duration's "2187h0m0s" is
-// right and unreadable.
-func daysAndHours(d time.Duration) string {
+// "91 days and 3 hours"; a Go duration's "2187h0m0s" is right and
+// unreadable. A period is rounded up to the hour and a limit down, so a
+// period over its limit never reads as equal to it.
+func daysAndHours(d time.Duration, up bool) string {
 	unit := func(n int64, one string) string {
 		if n == 1 {
 			return "1 " + one
 		}
 		return fmt.Sprintf("%d %ss", n, one)
 	}
-	h := int64(d.Round(time.Hour) / time.Hour)
+	h := int64(d / time.Hour)
+	if up && d%time.Hour != 0 {
+		h++
+	}
 	switch days, hours := h/24, h%24; {
 	case days == 0:
 		return unit(hours, "hour")
@@ -191,9 +216,10 @@ func (c *Controller) queueWaitSnapshot(ctx context.Context, w AnalysisWindow, po
 // runner that was ready either: it may have been busy with another job. Its
 // stamps are left out, so the wait goes to the pool's own conditions or to
 // none, and RunnerKept says why, so the finding does not call the runner's
-// record missing. A warm runner of an ephemeral pool also came before its job, but it
-// was idle and waiting for exactly one, so its hand-off is GitHub's, and the
-// breakdown already gives a runner that was there an empty startup.
+// record missing. A warm runner of an ephemeral pool also came before its
+// job, but it was idle and waiting for exactly one, so its hand-off is
+// GitHub's, and the breakdown already gives a runner that was there an empty
+// startup.
 func waitJob(j store.JobWait, p *store.Pool) analysis.WaitJob {
 	out := analysis.WaitJob{ID: j.ID, PoolID: j.PoolID, HostID: j.HostID, Repo: j.Repo, Workflow: j.Workflow, JobName: j.JobName,
 		QueuedAt: j.QueuedAt, HeldAt: j.HeldAt, ApprovedAt: j.ApprovedAt, EligibleAt: j.EligibleAt,
@@ -283,9 +309,9 @@ func atCeiling(spans []store.RunnerSpan, maxRunners int, w AnalysisWindow) []ana
 // gives a failed runner no slot, and counting the starts that kept failing
 // would send the reader to raise a ceiling rather than to fix the starts. A
 // runner known only from a session that never registered may have been one
-// of them, and is left out with them. A
-// finished row whose end was never stamped has no known life, and is left out
-// rather than counted as alive for ever.
+// of them, and is left out with them. A finished row whose end was never
+// stamped has no known life, and is left out rather than counted as alive
+// for ever.
 func runnerLife(s store.RunnerSpan, w AnalysisWindow) (time.Time, time.Time, bool) {
 	// A session keeps no state or fault, so one that never registered may
 	// be a failed start too, and is held to the same rule.
@@ -602,19 +628,31 @@ func (c *Controller) jobFigures(ctx context.Context, f store.JobFilter) (analysi
 // it begins.
 func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time.Time, cut *time.Time) (analysis.CompareSide, analysis.CompareSide, error) {
 	span := w.Until.Sub(w.Since)
-	words := periodWords(span)
-	lb := "the last " + words
+	a, err := c.periodSide(ctx, AnalysisWindow{Since: w.Since.Add(-span), Until: w.Since}, cut, "the earlier period")
+	if err != nil {
+		return a, analysis.CompareSide{}, err
+	}
+	b, err := c.periodSide(ctx, w, cut, "the period")
+	if err != nil {
+		return a, b, err
+	}
+	// Each side is named for the span its counts cover: one read from the
+	// roll-up covers whole days, and "the 33 hours before" over counts of two
+	// days would misname them.
+	words := func(s analysis.CompareSide) string {
+		if d := s.Until.Sub(s.Since); d > 0 {
+			return periodWords(d)
+		}
+		return periodWords(span)
+	}
+	a.Label = "the " + words(a) + " before"
+	b.Label = "the last " + words(b)
 	// "The last" is a promise about now; a period that ended earlier says
 	// when.
-	if now.Sub(w.Until) > time.Minute || w.Until.Sub(now) > time.Minute {
-		lb = "the " + words + " to " + w.Until.UTC().Format("2006-01-02 15:04 UTC")
+	if now.Sub(b.Until) > time.Minute || b.Until.Sub(now) > time.Minute {
+		b.Label = "the " + words(b) + " to " + b.Until.UTC().Format("2006-01-02 15:04 UTC")
 	}
-	b, err := c.periodSide(ctx, lb, w, cut)
-	if err != nil {
-		return analysis.CompareSide{}, b, err
-	}
-	a, err := c.periodSide(ctx, "the "+words+" before", AnalysisWindow{Since: w.Since.Add(-span), Until: w.Since}, cut)
-	return a, b, err
+	return a, b, nil
 }
 
 // periodSide is one period's jobs. One that starts before the retention line
@@ -623,13 +661,17 @@ func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time
 // counts are complete from, that midnight or the fleet's first record if it
 // is later, never a start the read did not keep to. It is never a side whose
 // jobs are cut short, because the roll-up keeps every day.
-func (c *Controller) periodSide(ctx context.Context, label string, w AnalysisWindow, cut *time.Time) (analysis.CompareSide, error) {
-	side := analysis.CompareSide{Label: label, Since: w.Since, Until: w.Until}
+func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, cut *time.Time, which string) (analysis.CompareSide, error) {
+	side := analysis.CompareSide{Since: w.Since, Until: w.Until}
 	if cut != nil && w.Since.Before(*cut) {
 		// A day the roll-up has absorbed is read whole, so a side ending
 		// partway through one would count that day's later hours, which are
-		// the other side's. It ends at that day's midnight instead, and says
-		// so; a day not yet absorbed is read from the rows, to the instant.
+		// the other side's. It ends at that day's midnight instead: its Until
+		// says so, its label names the span it covers, and the comparison's
+		// doubts name the hours between it and the other side. A side with
+		// no midnight inside it to end on cannot be read apart from the
+		// other, and is refused. A day not yet absorbed is read from the
+		// rows, to the instant.
 		to := w.Until
 		if midnight := w.Until.Truncate(24 * time.Hour); !midnight.Equal(w.Until) {
 			rolled, err := c.st.InstallationRollupUntil(ctx)
@@ -637,7 +679,10 @@ func (c *Controller) periodSide(ctx context.Context, label string, w AnalysisWin
 				return side, fmt.Errorf("reading the usage roll-up: %w", err)
 			}
 			if rolled.After(midnight) {
-				to = later(w.Since, midnight)
+				if !midnight.After(w.Since) {
+					return side, wholeDaysError{which: which, since: w.Since, until: w.Until}
+				}
+				to = midnight
 			}
 		}
 		counts, from, _, err := c.st.InstallationCountsBetween(ctx, w.Since, to)
@@ -664,7 +709,7 @@ func (c *Controller) periodSide(ctx context.Context, label string, w AnalysisWin
 }
 
 // periodWords is a period's length as a sentence names it after "the last":
-// "hour", "36 hours", "7 days", and anything else as Words gives it.
+// "hour", "36 hours", "2 days", and anything else as Words gives it.
 func periodWords(d time.Duration) string {
 	unit := func(n int64, one string) string {
 		if n == 1 {
@@ -673,7 +718,7 @@ func periodWords(d time.Duration) string {
 		return fmt.Sprintf("%d %ss", n, one)
 	}
 	switch {
-	case d%time.Hour == 0 && d <= 48*time.Hour:
+	case d%time.Hour == 0 && d < 48*time.Hour:
 		return unit(int64(d/time.Hour), "hour")
 	case d%(24*time.Hour) == 0:
 		return unit(int64(d/(24*time.Hour)), "day")

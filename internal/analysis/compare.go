@@ -248,6 +248,9 @@ func Compare(s CompareSnapshot) (CompareFinding, error) {
 	}
 	if small {
 		f.Confidence = Low
+		if gap := w.gap(s); gap != "" {
+			f.ConfidenceReason += "; also, " + gap
+		}
 		f.NextSteps = append(f.NextSteps, NextStep{Setting: "limits.job_stats_window", Text: fmt.Sprintf(
 			"Compare again once each side holds at least %d jobs, or over a longer period, up to limits.job_stats_window.", MinCompareJobs)})
 		return f, nil
@@ -496,6 +499,9 @@ func (w wording) doubts(s CompareSnapshot) []string {
 				"so its counts are defined differently from the job rows'")
 		}
 	}
+	if gap := w.gap(s); gap != "" {
+		out = append(out, gap)
+	}
 	for _, side := range []CompareSide{s.A, s.B} {
 		if side.JobsGoneBefore != nil {
 			out = append(out, fmt.Sprintf("%s's jobs from before %s are gone (retention.jobs keeps them for a set time, and raising it keeps more next time), so %s's figures cover only the jobs still kept",
@@ -519,6 +525,19 @@ func (w wording) doubts(s CompareSnapshot) []string {
 		}
 	}
 	return out
+}
+
+// gap names the hours a side read from the roll-up leaves out. The roll-up
+// keeps whole UTC days, so the earlier side ends at the last midnight it
+// read, and the jobs from there to the later side's start are in neither
+// count; the dates alone would be the only place that showed.
+func (w wording) gap(s CompareSnapshot) string {
+	if !s.A.CountsOnly || s.A.Until.IsZero() || !s.A.Until.Before(s.B.Since) {
+		return ""
+	}
+	const layout = "2006-01-02 15:04 UTC"
+	return fmt.Sprintf("the roll-up keeps whole UTC days, so the jobs queued from %s to %s, between the two periods, are counted on neither side",
+		s.A.Until.UTC().Format(layout), s.B.Since.UTC().Format(layout))
 }
 
 func slotWords(n float64) string {

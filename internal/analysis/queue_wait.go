@@ -332,7 +332,7 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 				e.NoRunnerRecord, e.Waited))
 		}
 		if e.RunnerKept*10 > e.Waited {
-			reasons = append(reasons, fmt.Sprintf("%d of %d jobs that waited ran on a runner their pool keeps, which was there before them and may have been busy or idle, so their wait after eligibility is put down to the pool's conditions rather than split into runner startup and GitHub's delay",
+			reasons = append(reasons, fmt.Sprintf("%d of %d jobs that waited ran on a runner their pool keeps, which was there before them and counts against its maximum runners whether busy or idle, so their wait after eligibility is put down to the pool's conditions rather than split into runner startup and GitHub's delay",
 				e.RunnerKept, e.Waited))
 		}
 		f.Confidence = High

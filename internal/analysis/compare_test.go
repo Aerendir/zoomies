@@ -486,6 +486,28 @@ func TestJobsGonePastRetentionMakeTheComparisonMedium(t *testing.T) {
 	}
 }
 
+// A side read from the roll-up ends at the last midnight it read whole, so
+// when that falls before the other side begins, the jobs between are in
+// neither count; an operator comparing the two must be told, because the
+// dates alone are the only other place it shows.
+func TestACountsOnlySideNamesTheHoursCountedOnNeitherSide(t *testing.T) {
+	gap := "the roll-up keeps whole UTC days, so the jobs queued from 2026-10-11 05:00 UTC to 2026-10-11 08:00 UTC, between the two periods, are counted on neither side"
+	for _, n := range []int{120, 15} {
+		s := periods(n, n)
+		s.A.Label, s.A.CountsOnly = "the 2 days before", true
+		s.A.Since, s.A.Until = compareBase.Add(-51*time.Hour), compareBase.Add(-3*time.Hour)
+		s.A.Figures = JobFigures{Jobs: n, FleetFailed: 1}
+		f := mustCompare(t, s)
+		if !strings.Contains(f.ConfidenceReason, gap) {
+			t.Errorf("%d jobs a side: reason %q does not name the hours counted on neither side", n, f.ConfidenceReason)
+		}
+		s.A.Until = s.B.Since
+		if f := mustCompare(t, s); strings.Contains(f.ConfidenceReason, "neither side") {
+			t.Errorf("%d jobs a side, sides that meet: reason %q names a gap", n, f.ConfidenceReason)
+		}
+	}
+}
+
 func TestAPeriodComparisonIsWordedForPeriods(t *testing.T) {
 	s := periods(120, 120)
 	s.B.Figures.Duration = spread(120, time.Minute, 9*time.Minute)

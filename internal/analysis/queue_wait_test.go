@@ -409,7 +409,7 @@ func TestAJobOnARunnerItsPoolKeepsIsNotALostRecord(t *testing.T) {
 	if f.Dominant != string(CausePoolCeiling) || f.Confidence != Medium {
 		t.Errorf("dominant %q at %s, want pool_ceiling at medium", f.Dominant, f.Confidence)
 	}
-	if want := "10 of 10 jobs that waited ran on a runner their pool keeps, which was there before them and may have been busy or idle, so their wait after eligibility is put down to the pool's conditions rather than split into runner startup and GitHub's delay"; f.ConfidenceReason != want {
+	if want := "10 of 10 jobs that waited ran on a runner their pool keeps, which was there before them and counts against its maximum runners whether busy or idle, so their wait after eligibility is put down to the pool's conditions rather than split into runner startup and GitHub's delay"; f.ConfidenceReason != want {
 		t.Errorf("reason\n got %q\nwant %q", f.ConfidenceReason, want)
 	}
 }
