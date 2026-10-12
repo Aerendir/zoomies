@@ -537,6 +537,58 @@ test('the certificate a provider trusts comes back into the edit form and goes o
   );
 });
 
+test("the certificate machines trust for the controller is kept apart from the cluster's", () => {
+  // They are different certificates: a cluster's own authority has no reason to
+  // have signed the controller. One box answering both made a controller on a
+  // public certificate unreachable for every machine it rented.
+  const cluster = '-----BEGIN CERTIFICATE-----\nY2x1c3Rlcg==\n-----END CERTIFICATE-----';
+  const controller = '-----BEGIN CERTIFICATE-----\nY29udHJvbGxlcg==\n-----END CERTIFICATE-----';
+  const draft = draftFromProvider({
+    id: 'prv_1',
+    kind: 'proxmox',
+    name: 'pve',
+    ca_pem: cluster,
+    machine_ca_pem: controller,
+  } as Provider);
+  assert.equal(draft.ca_pem, cluster);
+  assert.equal(draft.machine_ca_pem, controller, 'the box opens with what machines are given');
+
+  const saved = toProviderBody(draft, { complete: true });
+  assert.equal(saved.ca_pem, cluster);
+  assert.equal(saved.machine_ca_pem, controller, 'saving the form leaves it as it was');
+
+  const emptied = toProviderBody({ ...draft, machine_ca_pem: '' }, { complete: true });
+  assert.equal(
+    emptied.machine_ca_pem,
+    '',
+    "emptying it returns machines to their own trust store and leaves the cluster's alone",
+  );
+  assert.equal(emptied.ca_pem, cluster);
+
+  assert.equal(
+    'machine_ca_pem' in toProviderBody({ ...draft, machine_ca_pem: '' }),
+    false,
+    'a partial body that never mentions it leaves the stored one alone',
+  );
+});
+
+test('a new draft gives machines no certificate, so they use their own trust store', () => {
+  assert.equal(emptyDraft().machine_ca_pem, '');
+  assert.equal(
+    draftFromProvider({ id: 'prv_1', kind: 'proxmox', name: 'pve' } as Provider).machine_ca_pem,
+    '',
+  );
+});
+
+test("a rejection of the machines' certificate lands on the placement step with a name", () => {
+  assert.equal(
+    stepForField('machine_ca_pem'),
+    1,
+    'it sits with the controller address, on placement',
+  );
+  assert.ok(FIELD_LABELS.machine_ca_pem, 'the form names the box a rejection is about');
+});
+
 test('settings and labels are trimmed on the way out, and a nameless one is dropped', () => {
   const body = toProviderBody({
     ...emptyDraft(),

@@ -69,7 +69,7 @@ export const STEP_FIELDS: readonly (readonly string[])[] = [
     'ca_pem',
     'insecure_skip_verify',
   ],
-  ['settings'],
+  ['settings', 'machine_ca_pem'],
   [
     'machine_capacity',
     'machine_backend',
@@ -100,6 +100,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   tailcat_address: 'Private connection address',
   credential: 'Credential',
   ca_pem: 'Certificate authority',
+  machine_ca_pem: 'Certificate for machines',
   insecure_skip_verify: 'Certificate verification',
   settings: 'Placement settings',
   machine_capacity: 'Runner slots per machine',
@@ -141,6 +142,12 @@ export interface ProviderDraft {
   name: string;
   endpoint: string;
   ca_pem: string;
+  /**
+   * The certificate a machine built here trusts for the controller. Not the
+   * cluster's: that authority has no reason to have signed the controller, and
+   * a machine accepts only this one when it is set.
+   */
+  machine_ca_pem: string;
   insecure_skip_verify: boolean;
   /** How the controller reaches the address: 'direct' or 'tailcat'. */
   connection: string;
@@ -184,6 +191,7 @@ export function emptyDraft(): ProviderDraft {
     name: '',
     endpoint: '',
     ca_pem: '',
+    machine_ca_pem: '',
     insecure_skip_verify: false,
     connection: 'direct',
     tailcat_address: '',
@@ -226,6 +234,7 @@ export function draftFromProvider(provider: Provider): ProviderDraft {
     // certificate is neither, so an empty box means "none" and saving one would
     // clear what the connection depends on.
     ca_pem: provider.ca_pem ?? '',
+    machine_ca_pem: provider.machine_ca_pem ?? '',
     insecure_skip_verify: provider.insecure_skip_verify === true,
     connection: provider.connection === 'tailcat' ? 'tailcat' : 'direct',
     tailcat_configured: provider.connection === 'tailcat',
@@ -325,6 +334,8 @@ export function toProviderBody(
   if (draft.connection === 'tailcat' && draft.tailcat_address.trim() !== '')
     body.tailcat_address = draft.tailcat_address.trim();
   if (draft.ca_pem.trim() !== '' || complete) body.ca_pem = draft.ca_pem.trim();
+  if (draft.machine_ca_pem.trim() !== '' || complete)
+    body.machine_ca_pem = draft.machine_ca_pem.trim();
 
   const platform: NonNullable<ProviderInput['machine_platform']> = {};
   if (draft.machine_os !== '') platform.os = draft.machine_os as NonNullable<typeof platform.os>;

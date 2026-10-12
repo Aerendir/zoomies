@@ -1115,14 +1115,17 @@
             label="Certificate authority"
             hint="The certificate to trust for this address. Leave empty to use the system trust store."
             help={kind?.ca_source}
+            error={errors.ca_pem}
           >
-            {#snippet children({ id, describedBy })}
+            {#snippet children({ id, describedBy, invalid })}
               <Textarea
                 bind:value={draft.ca_pem}
                 {id}
                 {describedBy}
+                {invalid}
                 rows={3}
                 placeholder="-----BEGIN CERTIFICATE-----"
+                onblur={() => touch('ca_pem')}
               />
             {/snippet}
           </Field>
@@ -1179,6 +1182,24 @@
             </details>
           {/if}
         {/if}
+
+        <Field
+          label="Certificate machines trust for the controller"
+          hint="Written to each machine, which then accepts only this certificate from the controller. Leave it empty when the controller's certificate comes from a public authority, so machines use their own trust store. It is not the cluster's certificate on the Connect step, which is only for reaching the hypervisor."
+          error={errors.machine_ca_pem}
+        >
+          {#snippet children({ id, describedBy, invalid })}
+            <Textarea
+              bind:value={draft.machine_ca_pem}
+              {id}
+              {describedBy}
+              {invalid}
+              rows={3}
+              placeholder="-----BEGIN CERTIFICATE-----"
+              onblur={() => touch('machine_ca_pem')}
+            />
+          {/snippet}
+        </Field>
       {:else if step.id === 'machine'}
         {@render machineShape()}
       {:else if step.id === 'limits'}

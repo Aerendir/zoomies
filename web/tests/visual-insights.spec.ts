@@ -108,7 +108,19 @@ test('fleet activity draws the chosen figures together and reads a moment across
   // The rows are the reading as well as the legend: the figures they show
   // are the ones at the chosen moment, so the exact numbers are never only
   // in a card that follows the pointer.
-  const now = await rows.locator('.row').first().innerText();
+  // A bubble that happens to be open on the row (the pointer rests on its
+  // figure after the chip click) is help, not part of the reading, so it is
+  // left out of what is compared.
+  const reading = () =>
+    rows
+      .locator('.row')
+      .first()
+      .evaluate((row) => {
+        const copy = row.cloneNode(true) as HTMLElement;
+        copy.querySelectorAll('.bubble').forEach((bubble) => bubble.remove());
+        return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
+      });
+  const now = await reading();
   const slider = trend.getByRole('slider', { name: 'Inspect a moment' });
   await slider.fill('0');
   await expect(trend.getByRole('button', { name: 'Back to now' })).toBeVisible();
@@ -117,10 +129,10 @@ test('fleet activity draws the chosen figures together and reads a moment across
     /Queued jobs \d+, Running jobs \d+, Idle runners \d+/,
   );
   // The whole hour is seeded, so the oldest minute is a reading and not a gap.
-  await expect(rows.locator('.row').first()).not.toHaveText(now);
+  await expect.poll(reading).not.toBe(now);
   await trend.getByRole('button', { name: 'Back to now' }).click();
   await expect(trend.getByRole('button', { name: 'Back to now' })).toBeHidden();
-  await expect(rows.locator('.row').first()).toHaveText(now);
+  await expect.poll(reading).toBe(now);
 });
 
 /*
