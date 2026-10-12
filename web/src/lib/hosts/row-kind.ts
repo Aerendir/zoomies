@@ -59,3 +59,14 @@ export function previewCommand(check: DoctorResult): string | null {
   if (typeof id !== 'string' || id.length > CHECK_ID_MAX || !CHECK_ID.test(id)) return null;
   return ['sudo', 'zoomies', 'tune', ...flags, '--only', shellQuote(id), '--dry-run'].join(' ');
 }
+
+/**
+ * The text a person runs on the host to fix this row, or null when there is none
+ * to give. The agent's own by-hand command wins, being the one that fits what it
+ * found; a row tune can change falls back to the preview. Advice rows have
+ * neither, and the page says so rather than inventing a command for them.
+ */
+export function fixCommand(check: DoctorResult): string | null {
+  if (check.status !== 'warn' || check.accepted) return null;
+  return check.command || (check.actionable === true ? previewCommand(check) : null);
+}

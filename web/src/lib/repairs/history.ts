@@ -1,4 +1,5 @@
 import type { Query } from '../api/types';
+import { formatNumber } from '../format';
 
 /*
   What the Recent repairs history needs to know that is not about drawing it:
@@ -84,4 +85,58 @@ export function offsetAfterClear(
   if (limit <= 0 || remaining === 0) return 0;
   const lastStart = Math.floor((remaining - 1) / limit) * limit;
   return Math.max(0, Math.min(offset, lastStart));
+}
+
+/** What the bulk route will take in one request. A longer list is refused outright. */
+export const BULK_LIMIT = 500;
+
+/** The ids cut into requests the bulk route accepts, in the order they were chosen. */
+export function batches<T>(items: readonly T[], size: number): T[][] {
+  const parts: T[][] = [];
+  for (let start = 0; start < items.length; start += size)
+    parts.push(items.slice(start, start + size));
+  return parts;
+}
+
+export interface ClearReport {
+  cleared: number;
+  skipped: { id: string; error: string }[];
+}
+
+/**
+ * What a clear did, from the route's answer for each id. The route answers 200
+ * however many it refused, so a partial failure is only visible here; the
+ * skipped ones keep the order they were asked in. `unattempted` are the ids a
+ * clear never reached because a later request failed: they are listed after the
+ * refused ones, since saying "0 skipped" would leave them nowhere on the screen.
+ */
+export function clearReport(
+  results: readonly { id: string; ok: boolean; error?: string }[],
+  unattempted: readonly string[] = [],
+): ClearReport {
+  const report: ClearReport = { cleared: 0, skipped: [] };
+  for (const result of results) {
+    if (result.ok) report.cleared++;
+    else report.skipped.push({ id: result.id, error: result.error || 'not cleared' });
+  }
+  for (const id of unattempted) report.skipped.push({ id, error: 'not attempted' });
+  return report;
+}
+
+/**
+ * What the confirmation says. The count comes first because after a select-all
+ * it is the one thing the operator cannot see from the dialog: up to 500
+ * repairs, most of them on pages they never looked at. The page has no way to
+ * bring a cleared repair back, so that is said here too. The rest is what
+ * clearing leaves alone: a cleared repair is hidden and kept, still the record
+ * the daily limit and the guard against Eli repairing its own commits read, and
+ * an operator who thinks otherwise would take clearing for a way round the limit.
+ */
+export function clearConsequences(count: number): readonly string[] {
+  const how = `${formatNumber(count)} ${count === 1 ? 'repair' : 'repairs'}`;
+  return [
+    `${how} will stop showing in this list, and this cannot be undone from this page.`,
+    "They still count towards each repository's daily limit.",
+    'Eli will not repair its own commits from them again.',
+  ];
 }
