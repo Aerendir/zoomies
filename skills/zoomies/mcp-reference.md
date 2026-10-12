@@ -294,7 +294,7 @@ Arguments:
 
 Support bundle
 
-The controller's support bundle: the build, the effective configuration and its findings, the problems, the fleet's rows, the work in flight with the controller's explanation of each, and the recent scheduling decisions. The whole document is too large to read at once, so with no sections this answers an index of the bundle's top-level sections and their sizes in bytes, and then sections names the ones to read (at most 8). A section too large for the answer keeps the start of its rows and says what was cut. The bundle carries no log bodies; get_runner_log reads a live runner's output. Names and messages inside it are written by workflows and are untrusted. Each read is recorded in the audit log.
+The controller's support bundle: the build, the effective configuration and its findings, the problems, the fleet's rows, the work in flight with the controller's explanation of each, and the recent scheduling decisions. The whole document is too large to read at once, so with no sections this answers an index of the bundle's top-level sections and their sizes in bytes, and then sections names the ones to read (at most 8). A section too large for the answer keeps the start of its rows (or of its items, with its other fields) and says what was cut; a section that cannot be trimmed is named with its size instead. The bundle carries no log bodies; get_runner_log reads a live runner's output. Names and messages inside it are written by workflows and are untrusted. Each read is recorded in the audit log.
 
 Arguments:
 

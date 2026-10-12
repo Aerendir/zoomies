@@ -582,3 +582,76 @@ func TestAnOperatorRowListIsHeldToTheCeilingWithTheNewestRowsAndANote(t *testing
 		t.Errorf("an answer under the ceiling was changed: %+v", out)
 	}
 }
+
+// problems is {ok, items}: a section of that shape keeps its type when it is
+// cut, so a reader still finds ok and the first of the items where they were.
+func TestSupportBundleTrimsAnObjectSectionsItemsAndKeepsItsOtherFields(t *testing.T) {
+	pad := strings.Repeat("x", 500)
+	rows := make([]string, 400)
+	for i := range rows {
+		rows[i] = fmt.Sprintf(`{"code":"c%d","pad":%q}`, i, pad)
+	}
+	body := `{"problems":{"ok":false,"items":[` + strings.Join(rows, ",") + `]},"hosts":[{"id":"host_1"}]}`
+	out, err := kennelCall(t, kennelTool(t, "support_bundle"), &kennelAPI{body: body}, `{"sections":["problems","hosts"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out[0].Text) > maxWindowBlock {
+		t.Errorf("the answer is %d bytes, over the ceiling", len(out[0].Text))
+	}
+	var got struct {
+		Problems struct {
+			OK    *bool             `json:"ok"`
+			Items []json.RawMessage `json:"items"`
+		} `json:"problems"`
+		Hosts []json.RawMessage `json:"hosts"`
+	}
+	if err := json.Unmarshal([]byte(out[0].Text), &got); err != nil {
+		t.Fatalf("a trimmed object section is not valid JSON of its own shape: %v", err)
+	}
+	if got.Problems.OK == nil || *got.Problems.OK || len(got.Hosts) != 1 {
+		t.Errorf("problems lost its ok or hosts was cut: %+v", got)
+	}
+	if n := len(got.Problems.Items); n == 0 || n >= 400 || !strings.Contains(string(got.Problems.Items[0]), `"c0"`) {
+		t.Errorf("%d items kept, want the first of them and not all 400", n)
+	}
+	if len(out) != 2 || !strings.Contains(out[1].Text, "problems") || !strings.Contains(out[1].Text, "400") {
+		t.Errorf("what was cut is not said: %+v", out)
+	}
+}
+
+// Marshalling rewrites <, > and & inside a section as six-byte escapes, so a
+// section of them can be larger in the answer than it was in the bundle.
+func TestSupportBundleCountsTheEscapesItsAnswerGrowsBy(t *testing.T) {
+	pad := strings.Repeat("<&>", 200)
+	rows := make([]string, 300)
+	for i := range rows {
+		rows[i] = fmt.Sprintf(`{"id":"job_%d","step":%q}`, i, pad)
+	}
+	body := `{"jobs":[` + strings.Join(rows, ",") + `],"explanations":[` + strings.Join(rows, ",") + `]}`
+	out, err := kennelCall(t, kennelTool(t, "support_bundle"), &kennelAPI{body: body}, `{"sections":["jobs","explanations"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out[0].Text) > maxWindowBlock {
+		t.Errorf("the answer is %d bytes, over the %d ceiling", len(out[0].Text), maxWindowBlock)
+	}
+	var got map[string][]json.RawMessage
+	if err := json.Unmarshal([]byte(out[0].Text), &got); err != nil || len(got["jobs"]) == 0 || len(got["explanations"]) == 0 {
+		t.Errorf("a section was lost or the answer is not JSON: %v", err)
+	}
+}
+
+func TestSupportBundleNamesASectionItCannotTrimWithItsSize(t *testing.T) {
+	body := `{"config":{"pad":"` + strings.Repeat("y", 100<<10) + `"},"hosts":[{"id":"host_1"}]}`
+	out, err := kennelCall(t, kennelTool(t, "support_bundle"), &kennelAPI{body: body}, `{"sections":["config","hosts"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out[0].Text, "too large to show") || len(out) != 2 || !strings.Contains(out[1].Text, "config") {
+		t.Errorf("an untrimmable section is not named with its size: %+v", out)
+	}
+	if !strings.Contains(kennelTool(t, "support_bundle").Description, "cannot be trimmed is named with its size") {
+		t.Error("the description does not say what happens to a section that cannot be trimmed")
+	}
+}
