@@ -49,8 +49,9 @@ test('the throttled host says its step, its reason and what it was stepped down 
 }) => {
   await goto(page, '/hosts', 'Hosts');
   const card = page.getByRole('article', { name: STUCK.throttledHost, exact: true });
-  await expect(card.getByText('Throttled', { exact: true })).toHaveAttribute(
-    'title',
+  // The step is the badge's help, which the shared tooltip carries as the
+  // badge's accessible description rather than a title attribute.
+  await expect(card.getByText('Throttled', { exact: true })).toHaveAccessibleDescription(
     /^Throttled, step 2 of 3/,
   );
   await expect(card).toContainText(
