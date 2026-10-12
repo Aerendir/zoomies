@@ -47,6 +47,14 @@ repository config, with launchOptions.executablePath=/usr/bin/chromium and
 args=['--no-sandbox']. It is a verification helper, not a shipped configuration.
 An earlier scenario run overlapped a UI rebuild and failed on replaced embedded
 assets; the sequential rerun above passes.
-The full repository suite remains unverified after earlier interruptions; a fresh
-`go test -race -count=1 -p 2 ./...` is running with workspace build/cache paths.
-Record its result before replacing that status.
+The later broad run and corrective package checks are complete; the final
+validation status below records their results and limitations.
+
+## Final validation status
+
+The broad run and corrective checks have finished. Every originally failing
+package has successful corrective race checks; controller coverage uses two
+disjoint groups spanning its complete 1329-test list. The original broad
+command did not pass. See the [completed validation record](../validation/2026-10-12-eli-pr-delay-validation.md)
+for results and limitations. This final status supersedes earlier running notes.
+No live model evaluation or performance experiment has run.

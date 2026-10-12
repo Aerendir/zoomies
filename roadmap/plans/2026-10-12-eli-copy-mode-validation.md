@@ -17,6 +17,14 @@ copy's permissions consistent with the shared inode used by cloneTree.
 
 The original broad run retains its pre-fix storage/copy failures and reached
 the API package's ten-minute deadline while creating a test database. A complete
-API race rerun uses `-timeout 30m`. The full run and extended API run are still
-in progress; do not mark them passing until they finish. No live model run has
+API race rerun uses `-timeout 30m`. The broad and extended package runs have finished; see the final status below. No live model run has
 been performed. Keep the root handoff and progress record current.
+
+## Final validation status
+
+The broad run and corrective checks have finished. Every originally failing
+package has successful corrective race checks; controller coverage uses two
+disjoint groups spanning its complete 1329-test list. The original broad
+command did not pass. See the [completed validation record](../validation/2026-10-12-eli-pr-delay-validation.md)
+for results and limitations. This final status supersedes earlier running notes.
+No live model evaluation or performance experiment has run.
