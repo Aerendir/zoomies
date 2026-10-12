@@ -121,8 +121,9 @@ name is on `zoomies jobs get`. The last line is a cursor: pass it back as
 to get one. `--since` takes an event id exactly as the stream sends it, or a
 duration such as `10m`; left out, it is everything the controller still holds.
 `--kinds` and `--topic` filter as the stream's do, and `--limit` (`50`, at most
-`200`) says how many; when more matched, the oldest are shown and the last line
-says how to read on.
+`200`; a number outside that is refused) says how many; when more matched, the
+oldest are shown and the last line says how to read on, even when none of the
+batch was one you could read.
 
 With `--wait SECONDS` and nothing yet to show, the request is held for the next
 matching event. It answers with that event, or, when the wait runs out, with
@@ -132,8 +133,9 @@ asked, so a loop asks again with the cursor it was given. A held request counts
 against `limits.event_subscribers` as a stream does, and when the slots are full
 the controller refuses it with a sentence saying so.
 
-When the controller no longer holds events back to `--since` (or the id is from
-before it last restarted), the output begins by saying that events were missed.
+When the controller no longer holds events back to `--since`, the id is from
+before it last restarted, or a held request fell behind the events as they came,
+the output begins by saying that events may have been missed.
 Those events are gone: fetch the resources afresh with `zoomies status`,
 `zoomies jobs list` or `zoomies runners list` instead of treating what follows as
 everything. Each event is shown only to a caller who could read it from its own

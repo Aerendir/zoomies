@@ -56,6 +56,11 @@ var errRingShape = errors.New("the controller's recent events are not in the sha
 // is untrusted until someone has read it that way.
 var trustedFrameFields = []string{"id", "state", "conclusion", "reason", "code", "severity", "healthy", "from", "to"}
 
+// TrustedFrameFields is that list for the one other reader of these frames, the
+// command line, which shows the same fields for the same reason and must not
+// keep a copy that could drift. A copy is returned so a caller cannot change it.
+func TrustedFrameFields() []string { return slices.Clone(trustedFrameFields) }
+
 var untrustedFrameFields = []string{"name", "job_name", "workflow", "repo", "head_branch", "message"}
 
 type ringFrame struct {

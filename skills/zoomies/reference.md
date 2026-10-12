@@ -125,7 +125,7 @@ Flags:
   --ca-file                  PEM file holding the controller's certificate
   --insecure                 do not verify the controller's certificate
   --kinds                    only these kinds of event, comma-separated, such as job.updated,runner.updated
-  --limit=50                 how many events at most (200 at most)
+  --limit=50                 how many events at most (1 to 200)
   --output=table             table, json or yaml
   --since                    an event id as a previous call printed it, or a duration such as 10m; leave out for everything the controller still holds
   --timeout=30s              how long to wait for one request

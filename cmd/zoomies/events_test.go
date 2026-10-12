@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/eyupio/zoomies/internal/mcp"
 )
 
 // recentServer answers GET /events/recent with body and keeps the query it was
@@ -97,6 +99,31 @@ func TestEventsRecentPrintsAHostileTopicAsInertText(t *testing.T) {
 	assertNoTerminalControl(t, "events recent", out, 3)
 }
 
+// Nothing on a row is a workflow's to write, but the row also carries what the
+// event bus put there, and a payload field is trusted by its name and not by
+// its bytes. So a control character anywhere in a frame, in the kind, the
+// time, a trusted field's value or the cursor, is as inert as a name would be.
+func TestEventsRecentPrintsEveryFieldOfAFrameWithoutControlCharacters(t *testing.T) {
+	srv := recentServer(t, http.StatusOK, `{"items":[
+ {"id":"k.1","kind":"job.updated`+shortHostileJSON+`","topic":"job:job_1","at":"2026-10-12T09:00:01Z`+shortHostileJSON+`",
+  "data":{"id":"job_1","state":"queued\u001b[2K\u009b","code":"c\u202e","reason":"held`+shortHostileJSON+`"}}
+],"next":"k.1`+shortHostileJSON+`","complete":true,"truncated":false,"timed_out":false}`, nil)
+
+	out, _ := runCLI(t, "events", "recent", "--url", srv.URL)
+
+	// A header, the frame and the cursor: no newline in any of them added a row.
+	assertNoTerminalControl(t, "events recent", out, 3)
+}
+
+func TestEventsRecentPrintsAHostileCursorWithoutControlCharactersWhenNothingChanged(t *testing.T) {
+	srv := recentServer(t, http.StatusOK,
+		`{"items":[],"next":"k.1`+shortHostileJSON+`","complete":true,"truncated":false,"timed_out":true}`, nil)
+
+	out, _ := runCLI(t, "events", "recent", "--since", "k.1", "--wait", "5", "--url", srv.URL)
+
+	assertNoTerminalControl(t, "events recent", out, 2)
+}
+
 func TestEventsRecentSaysNothingChangedOnATimedOutWait(t *testing.T) {
 	var asked url.Values
 	srv := recentServer(t, http.StatusOK,
@@ -122,8 +149,16 @@ func TestEventsRecentSaysInWordsThatEventsWereMissed(t *testing.T) {
 
 	out, _ := runCLI(t, "events", "recent", "--since", "k.1", "--url", srv.URL)
 
-	if !strings.Contains(out, "missed") || !strings.Contains(out, "fresh") {
+	if !strings.Contains(out, "missed") || !strings.Contains(out, "afresh") {
 		t.Errorf("an incomplete answer does not tell the person events were missed and to fetch the resources afresh:\n%s", out)
+	}
+	// The route says "incomplete" for three reasons, and the person can act on
+	// each, so each is named: the cursor is older than what the controller holds,
+	// it is from before a restart, or a held request fell behind.
+	for _, cause := range []string{"no longer holds events back", "restarted", "fell behind"} {
+		if !strings.Contains(out, cause) {
+			t.Errorf("the sentence does not name the cause %q:\n%s", cause, out)
+		}
 	}
 }
 
@@ -136,6 +171,24 @@ func TestEventsRecentSaysWhenMoreMatchedThanTheLimit(t *testing.T) {
 
 	if !strings.Contains(out, "More matched than --limit") || !strings.Contains(out, "--since k.9") {
 		t.Errorf("a truncated answer does not say how to read on:\n%s", out)
+	}
+}
+
+func TestEventsRecentSaysMoreIsWaitingWhenNoneOfItIsVisible(t *testing.T) {
+	// Every frame of the batch was another audience's, so none is shown, but the
+	// route still says more matched than the limit.
+	srv := recentServer(t, http.StatusOK,
+		`{"items":[],"next":"k.40","complete":true,"truncated":true,"timed_out":false}`, nil)
+
+	out, _ := runCLI(t, "events", "recent", "--since", "k.1", "--url", srv.URL)
+
+	if strings.Contains(out, "no events") {
+		t.Errorf("a truncated answer with nothing visible says there are no events:\n%s", out)
+	}
+	for _, want := range []string{"More events are waiting", "--since k.40", "--limit"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the line does not say %q:\n%s", want, out)
+		}
 	}
 }
 
@@ -200,5 +253,41 @@ func TestEventsRecentHoldsAWaitToWhatTheRouteWillHold(t *testing.T) {
 	}
 	if !strings.Contains(out, "nothing changed in 25s") {
 		t.Errorf("the line names a wait the controller did not give:\n%s", out)
+	}
+}
+
+func TestEventsRecentRefusesALimitTheRouteWouldChange(t *testing.T) {
+	srv := recentServer(t, http.StatusOK, `{}`, nil)
+	for _, limit := range []string{"0", "-5", "201", "5000"} {
+		_, errOut, code := runCLIFailing(t, "events", "recent", "--limit", limit, "--url", srv.URL)
+		if code != exitUsage {
+			t.Errorf("--limit %s: exit code = %d, want %d", limit, code, exitUsage)
+		}
+		if !strings.Contains(errOut, "--limit") || !strings.Contains(errOut, "1 to 200") {
+			t.Errorf("--limit %s: the refusal does not name the flag and the range:\n%s", limit, errOut)
+		}
+	}
+}
+
+// The row's fields are the controller's own, and the MCP tool decides which
+// they are. The command reads that tool's list rather than keeping a copy that
+// a comment would have to keep in step, so a field added there shows here.
+func TestEventsRecentShowsEveryFieldTheMCPToolTrusts(t *testing.T) {
+	var data []string
+	for _, name := range mcp.TrustedFrameFields() {
+		data = append(data, `"`+name+`":"v_`+name+`"`)
+	}
+	srv := recentServer(t, http.StatusOK, `{"items":[{"id":"k.1","kind":"x.updated","topic":"x:1","at":"2026-10-12T09:00:01Z",
+ "data":{`+strings.Join(data, ",")+`,"job_name":"a-name"}}],"next":"k.1","complete":true,"truncated":false,"timed_out":false}`, nil)
+
+	out, _ := runCLI(t, "events", "recent", "--url", srv.URL)
+
+	for _, name := range mcp.TrustedFrameFields() {
+		if !strings.Contains(out, name+"=v_"+name) {
+			t.Errorf("the row does not show the trusted field %s:\n%s", name, out)
+		}
+	}
+	if strings.Contains(out, "a-name") {
+		t.Errorf("the row shows a field the MCP tool does not trust:\n%s", out)
 	}
 }

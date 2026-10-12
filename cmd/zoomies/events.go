@@ -8,12 +8,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eyupio/zoomies/internal/mcp"
 )
 
 // maxEventsWait is the longest the route holds a request, whatever it is asked.
 // The command clamps to it so that the line it prints on a quiet wait names the
 // time the controller actually waited.
 const maxEventsWait = 25
+
+// maxEventsLimit is the most events the route returns in one answer.
+const maxEventsLimit = 200
 
 // runEvents is `zoomies events ...`: what the controller published lately.
 func runEvents(ctx context.Context, e *env, args []string) error {
@@ -41,14 +46,6 @@ type recentEventsResponse struct {
 	TimedOut  bool          `json:"timed_out"`
 }
 
-// recentRowFields are the payload fields a row shows. Each is something the
-// controller says (an id it minted, a state it holds, a code it chose), so none
-// can have been written by a workflow. The names a workflow does write (job,
-// workflow and branch names, repositories, messages) are left off the row, and
-// a field in neither group is left off too: it is untrusted until someone has
-// read it that way. internal/mcp keeps the same list for the same reason.
-var recentRowFields = []string{"id", "state", "conclusion", "reason", "code", "severity", "healthy", "from", "to"}
-
 func eventsRecent(ctx context.Context, e *env, args []string) error {
 	fs := newFlagSet(e, "zoomies events recent [--since ID|DURATION] [--kinds a,b] [--topic prefix] [--limit N] [--wait SECONDS]",
 		"What the controller published lately, oldest first, one row for each event. "+
@@ -57,7 +54,7 @@ func eventsRecent(ctx context.Context, e *env, args []string) error {
 	since := fs.String("since", "", "an event id as a previous call printed it, or a duration such as 10m; leave out for everything the controller still holds")
 	kinds := fs.String("kinds", "", "only these kinds of event, comma-separated, such as job.updated,runner.updated")
 	topic := fs.String("topic", "", "only events about resources whose topic starts with this, such as job: or runner:")
-	limit := fs.Int("limit", 50, "how many events at most (200 at most)")
+	limit := fs.Int("limit", 50, fmt.Sprintf("how many events at most (1 to %d)", maxEventsLimit))
 	wait := fs.Int("wait", 0, fmt.Sprintf("seconds to hold for the next matching event when there is none yet (the controller holds %d at most)", maxEventsWait))
 	fs.example(
 		"zoomies events recent --since 10m",
@@ -70,6 +67,9 @@ func eventsRecent(ctx context.Context, e *env, args []string) error {
 	}
 	if err := fs.noMoreArgs(); err != nil {
 		return err
+	}
+	if *limit < 1 || *limit > maxEventsLimit {
+		return usagef("events recent", "--limit %d: ask for 1 to %d events; the controller would otherwise change it without saying", *limit, maxEventsLimit)
 	}
 	if *wait < 0 {
 		return usagef("events recent", "--wait %d: seconds to wait cannot be negative; use 0 to answer at once", *wait)
@@ -94,9 +94,7 @@ func eventsRecent(ctx context.Context, e *env, args []string) error {
 	if s := strings.TrimSpace(*topic); s != "" {
 		q.Set("topic", s)
 	}
-	if *limit > 0 {
-		q.Set("limit", strconv.Itoa(*limit))
-	}
+	q.Set("limit", strconv.Itoa(*limit))
 	if seconds > 0 {
 		// The route reads a duration, and a bare number is not one.
 		q.Set("wait", strconv.Itoa(seconds)+"s")
@@ -119,8 +117,11 @@ func eventsRecent(ctx context.Context, e *env, args []string) error {
 func printRecentEvents(p *printer, out recentEventsResponse, waited time.Duration) {
 	next := plain(out.Next)
 	if !out.Complete {
+		// The route says this for three reasons, and the person can act on any of
+		// them the same way, so each is named and the advice is one.
 		fmt.Fprintln(p.out, p.paint(colourYellow,
-			"Some events were missed: the controller no longer holds events back to the point you asked for. "+
+			"Some events may have been missed: the controller no longer holds events back to the point you asked for, "+
+				"that point is from before the controller last restarted, or this wait fell behind the events as they came. "+
 				"Fetch the resources afresh (zoomies status, zoomies jobs list, zoomies runners list) rather than trusting what follows to be everything."))
 	}
 	switch {
@@ -132,14 +133,20 @@ func printRecentEvents(p *printer, out recentEventsResponse, waited time.Duratio
 		p.table([]string{"at", "kind", "topic", "detail"}, rows)
 	case out.TimedOut:
 		p.note("nothing changed in %s", waited)
+	case out.Truncated:
+		// Everything in the batch was for another audience, so nothing is shown,
+		// but "no events" would be untrue: more is waiting past the cursor.
 	default:
 		p.note("no events")
 	}
-	if out.Truncated && len(out.Items) > 0 {
+	switch {
+	case out.Truncated && len(out.Items) > 0:
 		p.note("More matched than --limit allows, and the oldest are shown. Read on with --since %s", next)
-		return
+	case out.Truncated:
+		p.note("More events are waiting past this point, though none of this batch is one you can read. Read on with --since %s, or ask for more at once with a larger --limit.", next)
+	default:
+		p.note("next: %s   (pass it as --since to read on from here)", next)
 	}
-	p.note("next: %s   (pass it as --since to read on from here)", next)
 }
 
 // recentDetail is the controller's own fields of an event, as name=value. A
@@ -151,7 +158,7 @@ func recentDetail(data json.RawMessage) string {
 		return ""
 	}
 	var parts []string
-	for _, name := range recentRowFields {
+	for _, name := range mcp.TrustedFrameFields() {
 		raw := strings.TrimSpace(string(fields[name]))
 		if raw == "" {
 			continue
