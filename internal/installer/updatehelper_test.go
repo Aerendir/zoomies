@@ -368,6 +368,33 @@ func TestTheHelperAnswersARequestItsLimitsRefuse(t *testing.T) {
 	}
 }
 
+// The report this was written for: a host the helper had taken through the dev
+// channel twice answered every request after that with "tried 2 times", though
+// both had worked, and the controller showed its update as failed for good.
+// Each request an hour apart runs, a build further on every time.
+func TestTheHelperKeepsTakingAHostThroughTheDevChannel(t *testing.T) {
+	h := newHelperHost(t, "main-sha-aaaaaaa")
+	now := t0
+	h.opts.Now = func() time.Time { return now }
+	from := h.installed
+	for i, build := range []string{"main-sha-bbbbbbb", "main-sha-ccccccc", "main-sha-ddddddd", "main-sha-eeeeeee"} {
+		h.engine = func(string) (string, error) {
+			h.installed = build
+			return "Upgraded to the dev build\n", nil
+		}
+		h.ask(t, requestBody("upd_dev"+string(rune('a'+i)), updates.DevTag))
+		r := h.answer(t)
+		if !r.OK || r.From != from || r.To != build {
+			t.Fatalf("request %d: result = %+v, want an update from %s to %s", i+1, r, from, build)
+		}
+		from = build
+		now = now.Add(time.Hour)
+	}
+	if len(h.upgrades) != 4 {
+		t.Errorf("the engine ran %d times, want 4", len(h.upgrades))
+	}
+}
+
 // A request the helper will not even read is answered too, so that whoever
 // looks at the folder sees why, and the request is consumed so the path unit
 // does not fire on it again.
