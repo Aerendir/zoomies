@@ -12,15 +12,25 @@ export interface StoredMessage {
 }
 
 /**
- * What is kept of a thread: the words, in order, without the turn that failed
- * before it began and without the one still streaming. It is the same thing
- * the page sends the model as history, so a kept conversation resumes as it
- * was being read.
+ * What the model is told was said: the words, in order, without an answer that
+ * failed and without a question the controller refused. A question whose answer
+ * failed is still a question, and is kept. A refused one was never answered and
+ * cannot be: left in, every later question would carry it and be refused the
+ * same way, and the person could only start again.
+ */
+export function historyFor(turns: readonly Turn[]): StoredMessage[] {
+  return turns
+    .filter((t) => t.content && !t.error && !t.refused)
+    .map((t) => ({ role: t.role, content: t.content }));
+}
+
+/**
+ * What is kept of a thread: the same words, without the one still streaming. It
+ * is what the page sends the model as history, so a kept conversation resumes
+ * as it was being read.
  */
 export function transcript(turns: readonly Turn[]): StoredMessage[] {
-  return turns
-    .filter((t) => t.content && !t.error && !t.streaming)
-    .map((t) => ({ role: t.role, content: t.content }));
+  return historyFor(turns.filter((t) => !t.streaming));
 }
 
 /**
