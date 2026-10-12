@@ -434,7 +434,11 @@ as hostile. It refuses a request that is not a plain file owned by the service's
 account, a tag of any other shape, an attempt it has already seen, a third try
 at one release, or a second request inside ten minutes, and it does not start
 while `upgrade.lock` says an upgrade is already running. A release already
-installed, or an older one, is answered as done and nothing runs.
+installed, or an older one, is answered as done and nothing runs. The `dev`
+channel, which names whatever `main` built last, has no count of tries and is
+held to the ten minutes alone, because two updates through it are two updates
+and not two failures; a host that follows a controller built from `main` is
+taken through it each time that controller moves.
 
 Otherwise it runs the upgrade you would run, unattended, as
 `zoomies upgrade --version <tag> --non-interactive`, and never with `--yes`.

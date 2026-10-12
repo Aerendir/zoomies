@@ -391,6 +391,97 @@ func TestTheHelperRefusesATagTriedTwiceAlready(t *testing.T) {
 	}
 }
 
+// A release asked for twice may have been installed by the first, and asked for
+// again of a host that already has it, and the helper does not know which. The
+// sentence that refuses a third says what to check, and does not say that
+// anything failed.
+func TestTheSentenceAtTheLimitOnAReleaseDoesNotSayItFailed(t *testing.T) {
+	s := loadState(t, stateDir(t))
+	for i, id := range []string{"upd_aaaa", "upd_bbbb"} {
+		if err := s.admit(testRequest(id, "v1.3.5"), t0.Add(time.Duration(i)*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := s.admit(testRequest("upd_cccc", "v1.3.5"), t0.Add(3*time.Hour))
+	if err == nil {
+		t.Fatal("a third attempt at one release was admitted")
+	}
+	if strings.Contains(err.Error(), "it failed") || !strings.Contains(err.Error(), `sudo zoomies upgrade --version v1.3.5`) {
+		t.Errorf("the sentence should say what to run and claim no failure, got: %v", err)
+	}
+}
+
+// The dev channel is not one release: it names whatever main built last. A host
+// the helper had taken through it twice was shut out of it for good, with a
+// sentence that said something had failed when both updates had worked. Only
+// the interval holds it back, as it holds back a tag that is new every time.
+func TestTheHelperTakesAHostThroughTheDevChannelAgainAndAgain(t *testing.T) {
+	s := loadState(t, stateDir(t))
+	for i := range 10 {
+		id := "upd_" + strings.Repeat("d", i+1)
+		if err := s.admit(testRequest(id, updates.DevTag), t0.Add(time.Duration(i)*helperMinInterval)); err != nil {
+			t.Fatalf("dev request %d was refused: %v", i+1, err)
+		}
+	}
+	// The newest attempt is all the interval reads, so a service that keeps asking
+	// does not make the state grow until the helper refuses to load it.
+	newest := t0.Add(9 * helperMinInterval)
+	if got := s.Attempts[updates.DevTag]; len(got) != 1 || !got[0].Equal(newest) {
+		t.Errorf("the attempts kept for dev are %v, want only the newest, %v", got, newest)
+	}
+	err := s.admit(testRequest("upd_toosoon", updates.DevTag), newest.Add(time.Minute))
+	if err == nil || !strings.Contains(err.Error(), "at most one every") {
+		t.Errorf("a dev request a minute after the last was not held to the interval: %v", err)
+	}
+}
+
+// The state of a host the old count had shut out: two dev attempts, both of
+// which had worked. The helper that replaces the old one reads that state, and
+// admits the next request, so the host does not need its limits reset by hand
+// to be updated again.
+func TestAHostTheOldCountShutOutOfTheDevChannelIsLetBackIn(t *testing.T) {
+	dir := stateDir(t)
+	old := loadState(t, dir)
+	old.Attempts[updates.DevTag] = []time.Time{t0.Add(-40 * time.Hour), t0.Add(-36 * time.Hour)}
+	if err := old.save(); err != nil {
+		t.Fatal(err)
+	}
+	s := loadState(t, dir)
+	if err := s.admit(testRequest("upd_aaaa", updates.DevTag), t0); err != nil {
+		t.Fatalf("a host with two old dev attempts was still refused: %v", err)
+	}
+	if got := s.Attempts[updates.DevTag]; len(got) != 1 || !got[0].Equal(t0) {
+		t.Errorf("the attempts kept for dev are %v, want only the one just admitted", got)
+	}
+}
+
+// The count is of tries at a release. The dev channel does not use up a
+// release's attempts, and a release at its limit does not hold up the channel.
+func TestTheDevChannelAndAReleaseDoNotCountAgainstEachOther(t *testing.T) {
+	s := loadState(t, stateDir(t))
+	at := t0
+	admit := func(id, tag string) error {
+		at = at.Add(helperMinInterval)
+		return s.admit(testRequest(id, tag), at)
+	}
+	for _, id := range []string{"upd_deva", "upd_devb", "upd_devc"} {
+		if err := admit(id, updates.DevTag); err != nil {
+			t.Fatalf("dev request %s: %v", id, err)
+		}
+	}
+	for _, id := range []string{"upd_rela", "upd_relb"} {
+		if err := admit(id, "v1.3.5"); err != nil {
+			t.Fatalf("the channel used up an attempt at the release: %v", err)
+		}
+	}
+	if err := admit("upd_relc", "v1.3.5"); err == nil || !strings.Contains(err.Error(), "tried 2 times") {
+		t.Fatalf("the release was not held at its limit: %v", err)
+	}
+	if err := admit("upd_devd", updates.DevTag); err != nil {
+		t.Errorf("a release at its limit held up the dev channel: %v", err)
+	}
+}
+
 // The interval is across tags: a loop that names a new tag every time is still
 // one attempt per ten minutes.
 func TestTheHelperRefusesAnAttemptWithinTenMinutesOfTheLast(t *testing.T) {

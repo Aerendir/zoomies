@@ -30,7 +30,9 @@ import (
 // the folder, where the service cannot reset it.
 const (
 	// helperMaxAttemptsPerTag is where the helper stops and a person looks: two
-	// failures of one release are not going to be fixed by a third.
+	// failures of one release are not going to be fixed by a third. It counts
+	// the tries at one release, so the dev channel, which is not one, is left out
+	// of it (see admit).
 	helperMaxAttemptsPerTag = 2
 	// helperMinInterval spaces attempts on one host across every tag, so a loop
 	// that names a new tag each time is still one attempt in ten minutes.
@@ -309,6 +311,15 @@ func checkStateOwner(path string, info os.FileInfo) error {
 // whatever it decides, so the caller saves the state either way: a refused id
 // is still one that has been seen. Only an admitted request counts as an
 // attempt.
+//
+// The dev channel is the one tag that is not counted. It names whatever main
+// built last, so asking for it again asks for something else, and what was
+// asked of it before says nothing about this time. Counted like a release, two
+// updates through it shut a host out of the channel for good, with a sentence
+// that blamed a failure no one had had. It is held to the interval alone, as a
+// tag that is new every time is, and keeps its newest attempt and no more,
+// which is all the interval reads, so a service that keeps asking cannot make
+// the state grow.
 func (s *helperState) admit(r updates.Request, now time.Time) error {
 	if slices.Contains(s.Seen, r.ID) {
 		return fmt.Errorf("the request %s has been seen before, and the helper acts on a request once; the controller makes a new request for every attempt", r.ID)
@@ -318,11 +329,17 @@ func (s *helperState) admit(r updates.Request, now time.Time) error {
 		s.Seen = slices.Delete(s.Seen, 0, over)
 	}
 	tried := s.Attempts[r.Tag]
-	if len(tried) >= helperMaxAttemptsPerTag {
-		return fmt.Errorf("%s has been tried %d times on this host already, which is as many as the helper allows; find out why it failed, then run \"sudo zoomies upgrade --version %s\" on the host", r.Tag, len(tried), r.Tag)
+	dev := r.Tag == updates.DevTag
+	// The helper cannot tell a second try that failed from one asked of a host
+	// that already has the release, so the sentence does not say which it was.
+	if !dev && len(tried) >= helperMaxAttemptsPerTag {
+		return fmt.Errorf("%s has been tried %d times on this host already, which is as many as the helper allows; if the host is not on it, find out why, then run \"sudo zoomies upgrade --version %s\" on the host", r.Tag, len(tried), r.Tag)
 	}
 	if last, ok := s.lastAttempt(now); ok && now.Sub(last) < helperMinInterval {
 		return fmt.Errorf("the last update attempt on this host was at %s, and the helper starts at most one every %d minutes; ask again after %s", last.UTC().Format(time.RFC3339), int(helperMinInterval/time.Minute), last.Add(helperMinInterval).UTC().Format(time.RFC3339))
+	}
+	if dev {
+		tried = nil
 	}
 	s.Attempts[r.Tag] = append(tried, now)
 	for len(s.Attempts) > helperSeenIDs {
