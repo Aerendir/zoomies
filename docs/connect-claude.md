@@ -275,8 +275,9 @@ call them:
   `10m`; left out, it is everything the controller still holds. The last line
   is `next: <id>`, the cursor to read on from, or `truncated: continue from
   <id>` when more was waiting than one answer carries. A first line that starts `incomplete`
-  means the controller no longer holds events back that far, or the cursor is
-  from before it restarted: some were missed, so read the resources afresh.
+  means the controller no longer holds events back that far, the cursor is
+  from before it restarted, or a wait fell behind the events as they came: some
+  were missed, so read the resources afresh.
 * `wait_for_change` holds the call until the fleet next changes and answers in
   the same form; the next section says how.
 * `scaling_decisions` is the scheduler's recent decisions, newest first, each
@@ -325,7 +326,16 @@ next: k3f9a2.1207
 ```
 
 Passing each answer's `next` back keeps following the fleet, and `kinds` and
-`topic` narrow what counts as a change. When more happened between two calls
+`topic` narrow what counts as a change. With no `kinds`, a wait is for every
+kind of event that says something changed: it leaves out `stats`,
+`host.updated`, `kennel.summary` and `updates.updated`, which the controller
+sends as time passes (a host's card moves on every heartbeat, the Overview's
+counts and an update's countdown on every pass) when nothing has changed. Name
+them in `kinds` to wait for them. Those documents, with `problems.updated`, a
+transfer's preparation and a host or machine whose card moved with no row
+written, are worked out and sent only while something is listening: an open
+tab of the UI, a stream, or a held wait. So they are in what `recent_events`
+reads back only for the time somebody was watching. When more happened between two calls
 than one answer carries, the answer is cut and its last line is
 `truncated: continue from <id>` rather than `next: <id>`; the call after it
 answers at once with the rest, so pass the cursor back until an answer is not
@@ -343,10 +353,13 @@ Each answer is held to at most 200 events or rows and 64 KiB in each block of
 text, so one call never floods a conversation. Events are cut on whole events,
 and the cursor names the last one shown, so reading on from it misses nothing.
 Samples, decisions and runs keep the newest rows that fit and say how many there
-were, so Claude can narrow the window to see the rest. A runner's timeline is
-short and comes whole. [Eli](eli.md#what-eli-can-see), when it may read the
-fleet, is offered the same seven tools, with each answer held tighter, to
-12 KiB, on whole rows.
+were. The routes behind the samples and the decisions take no end to a window,
+so the older rows cut from them cannot be read through these tools; `host_id`
+shows more of one host's samples, and `pool_id` more of one pool's decisions.
+A runner's timeline is short and comes whole. [Eli](eli.md#what-eli-can-see),
+when it may read the fleet, is offered the same seven tools, with the window
+answers held tighter, to 12 KiB, on whole rows; a runner's timeline is held only
+by Eli's own 16 KiB ceiling on any one answer.
 
 #### Names a workflow wrote
 
@@ -360,12 +373,13 @@ an instruction. `list_workflow_runs` carries workflow and branch names in its
 rows, and its description says they are untrusted.
 
 `recent_events` and `wait_for_change` also return their answer as
-`structuredContent`, the route's own JSON described by the tool's
+`structuredContent`, in the route's own JSON described by the tool's
 `outputSchema`, for a client that parses an answer rather than reads it. That
-copy carries every event whole, workflow-written names included, outside the
-untrusted block, and it is the route's answer as it came: after a cut in the
-text it can still hold events the text left out, and its `next` is the route's.
-The schema's description of each event's `data` says the names in it are
+copy carries each event whole, workflow-written names included, outside the
+untrusted block. It holds the events the text shows and no others, with the
+text's cursor as `next`, and it is held to 64 KiB as the text is: when the
+events would not fit, both stop at the same event and say `truncated`. The
+schema's description of each event's `data` says the names in it are
 untrusted. A client that hands `structuredContent` to a model should treat those
 names as data, as the text answer marks them.
 

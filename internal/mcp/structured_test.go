@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -100,23 +101,25 @@ func TestAStructuredToolsTextIsAllEliSees(t *testing.T) {
 	}
 }
 
-// wait_for_change is the one real live tool: the window follows it as the fleet
-// changes, so a caller that remembers answers must ask it again. Any other tool
-// marked live is a claim that its answer goes stale, which should be made on
-// purpose and added here.
+// wait_for_change and recent_events are the real live tools: the window
+// follows them as the fleet changes, so the same cursor asked again later has
+// more to say and a caller that remembers answers must ask again. Any other
+// tool marked live is a claim that its answer goes stale, which should be made
+// on purpose and added here.
 func TestALiveToolIsMarkedOnItsDefinition(t *testing.T) {
 	live := map[string]bool{}
 	for _, d := range probeServer().Definitions() {
 		live[d.Name] = d.Live
 	}
-	for _, name := range []string{"window_probe", "wait_for_change"} {
+	realLive := []string{"window_probe", "wait_for_change", "recent_events"}
+	for _, name := range realLive {
 		if !live[name] {
 			t.Errorf("%s is not marked live", name)
 		}
 	}
 	for name, l := range live {
-		if l && name != "window_probe" && name != "wait_for_change" {
-			t.Errorf("%s is marked live, and only wait_for_change is meant to be", name)
+		if l && !slices.Contains(realLive, name) {
+			t.Errorf("%s is marked live, and only %v are meant to be", name, realLive)
 		}
 	}
 	if _, ok := live["fleet_status"]; !ok {

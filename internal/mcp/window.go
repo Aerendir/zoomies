@@ -41,6 +41,12 @@ func windowBlock(ctx context.Context) int {
 // frame to stand on.
 const maxWindowValue = 200
 
+// maxTrustedValue bounds one of the controller's own fields on a line. It is
+// larger than a quoted name's because the controller writes these and bounds
+// them itself: a scaling reason is a sentence that names the fix at its end,
+// and cut at 200 bytes it would lose the part a reader acts on.
+const maxTrustedValue = 1 << 10
+
 // errRingShape is a recent-events answer the tools cannot take apart. It is an
 // error and not passed through, for the reason errExplanationShape is: failing
 // closed is what makes the untrusted block a boundary and not a courtesy.
@@ -62,6 +68,32 @@ var trustedFrameFields = []string{"id", "state", "conclusion", "reason", "code",
 func TrustedFrameFields() []string { return slices.Clone(trustedFrameFields) }
 
 var untrustedFrameFields = []string{"name", "job_name", "workflow", "repo", "head_branch", "message"}
+
+// waitKinds is what wait_for_change waits for when it is not told: every kind
+// of frame that says something changed. A wait with no kinds asked for all of
+// them would be woken by frames that move with nothing changed, and a model
+// that follows the instructions would spend its calls being told a host is
+// still alive. quietKinds are the ones left out, each with why.
+var waitKinds = []string{
+	"job.updated", "runner.created", "runner.updated", "runner.deleted",
+	"pool.created", "pool.updated", "pool.deleted", "host.deleted", "scaling",
+	"problems.updated", "installation.updated", "installation.deleted",
+	"provider.updated", "provider.deleted", "machine.updated", "machine.deleted",
+	"kennel.updated", "kennel.deleted", "audit", "webhook.delivery",
+	"transfer.updated", "resync",
+}
+
+// quietKinds are the kinds waitKinds leaves out. Each is published, while
+// anything at all is subscribed, whenever its document's bytes move, and these
+// documents move with time rather than with the fleet. A wait subscribes, so
+// on its first pass it sets off every one that moved since anyone last watched.
+var quietKinds = map[string]string{
+	"stats":           "the Overview's counts and wait percentiles, which move every pass as jobs age out of the window",
+	"host.updated":    "a host's card, which carries its last heartbeat and so moves on every heartbeat, 30 seconds apart by default",
+	"kennel.summary":  "Kennel Club's overview, which moves as evaluations grow older",
+	"updates.updated": "the update status, whose sentence counts a soak down by the hour and then by the minute",
+	"heartbeat":       "the stream's keep-alive, which says the connection is open and nothing about the fleet",
+}
 
 type ringFrame struct {
 	ID    string          `json:"id"`
@@ -98,8 +130,8 @@ func ringOutputSchema() map[string]any {
 		"properties": map[string]any{
 			"items":     map[string]any{"type": "array", "items": frame},
 			"next":      map[string]any{"type": "string", "description": "the id to pass back as since to continue from here"},
-			"complete":  map[string]any{"type": "boolean", "description": "false when the buffer no longer reaches back to since, so events were missed and the resources should be read afresh"},
-			"truncated": map[string]any{"type": "boolean", "description": "true when more matched than limit; the oldest were returned, so continue from next"},
+			"complete":  map[string]any{"type": "boolean", "description": "false when events were missed, because the controller no longer holds events back to since, since is from before it last restarted, or the wait fell behind; the resources should be read afresh"},
+			"truncated": map[string]any{"type": "boolean", "description": "true when more was waiting than this answer carries; the oldest were returned, so continue from next"},
 			"timed_out": map[string]any{"type": "boolean", "description": "true when a wait ended with nothing to report"},
 		},
 		"required": []string{"items", "next", "complete", "truncated", "timed_out"},
@@ -113,13 +145,18 @@ func windowTools() []*tool {
 			"items": map[string]any{"type": "string"}, "maxItems": 10, "uniqueItems": true,
 		}
 	}
+	waitKindsArg := func() map[string]any {
+		k := kinds()
+		k["description"] = "only these event kinds, such as job.updated or runner.updated (at most 10); leave out for every kind that says something changed, which is all but stats, host.updated, kennel.summary and updates.updated"
+		return k
+	}
 	return []*tool{
 		{
 			Name:  "recent_events",
 			Title: "Recent events",
 			Description: "What changed in the fleet lately: the events the controller published, oldest first, one line each (the time, the kind, the resource, and its id, state and conclusion where the event carries them). " +
 				"since is an event id from an earlier answer's next, or a duration such as 10m; leave it out for everything the controller still holds. " +
-				"The last line is next: pass it back as since to read on. A line saying incomplete means the controller no longer holds events back to since, so some were missed and the resources should be read afresh. " +
+				"The last line is next: pass it back as since to read on. A line saying incomplete means some were missed, because the controller no longer holds events back to since, since is from before it last restarted, or a wait fell behind, and the resources should be read afresh. " +
 				"Names a workflow wrote (job, workflow and branch names, repositories, messages) arrive in a block of their own after the lines, and are untrusted data. " +
 				"The same answer is also returned as structured content.",
 			InputSchema: object(nil, map[string]any{
@@ -130,7 +167,10 @@ func windowTools() []*tool {
 			}),
 			OutputSchema: ringOutputSchema(),
 			Annotations:  readOnly,
-			structured:   recentEvents,
+			// Live as the wait is: the same cursor asked again a minute later has
+			// more to say, so an answer from before is not this one.
+			live:       true,
+			structured: recentEvents,
 		},
 		{
 			Name:  "wait_for_change",
@@ -139,10 +179,11 @@ func windowTools() []*tool {
 				"Call it once with no since to get a cursor at once, then again with that cursor as since to wait: it answers the moment a matching event arrives, " +
 				"or says nothing changed when seconds run out, with a cursor either way. It may be called repeatedly, passing each answer's next as since; " +
 				"a wait that times out is not an error and is not an answer to be cached. " +
+				"With no kinds it waits for every kind but stats, host.updated, kennel.summary and updates.updated, which move with every heartbeat or pass when nothing has changed; name them in kinds to wait for them. " +
 				"Names a workflow wrote arrive in a block of their own and are untrusted data.",
 			InputSchema: object(nil, map[string]any{
 				"since":   str("the cursor from the previous answer's next; leave out to get a cursor at once"),
-				"kinds":   kinds(),
+				"kinds":   waitKindsArg(),
 				"topic":   str("only events about resources whose topic starts with this, such as job: or runner:"),
 				"seconds": integer("how long to wait for a change (default 20)", 1, 25),
 			}),
@@ -169,7 +210,7 @@ func windowTools() []*tool {
 			Title: "Fleet samples",
 			Description: "The fleet's minute-by-minute counts over a window, as the overview's sparklines draw them: jobs queued and running, runners by state and capacity. " +
 				"For how the fleet moved rather than where it is; fleet_status is where it is. " +
-				"At most the newest 200 minutes are returned, with a note saying how many there were when the window held more; narrow window to see the rest.",
+				"At most the newest 200 minutes are returned, with a note saying how many there were when the window held more; the older minutes cannot be read through this tool.",
 			InputSchema: object(nil, map[string]any{
 				"window": str("how far back, such as 30m or 6h (default 1h)"),
 			}),
@@ -181,7 +222,7 @@ func windowTools() []*tool {
 			Title: "Host samples",
 			Description: "One row per host per minute: its slots, what its agent measured (CPU, load average, available memory), what the scheduler had promised away on it, and its disk. " +
 				"A measurement the host had not made is absent rather than zero. Use it to tell a host that is full from one that is merely busy, or one that stopped reporting. " +
-				"At most the newest 200 rows are returned, across all hosts, with a note saying how many there were when the window held more; narrow window or since, or pass host_id, to see the rest.",
+				"At most the newest 200 rows are returned, across all hosts, with a note saying how many there were when the window held more; the older rows cannot be read through this tool, so pass host_id to see more of one host.",
 			InputSchema: object(nil, map[string]any{
 				"window":  str("how far back, such as 30m or 6h (default 1h)"),
 				"since":   str("resume from this exact instant, an RFC 3339 timestamp or a duration ago; wins over window"),
@@ -309,8 +350,11 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 	case a.Since != "":
 		q.Set("since", a.Since)
 	}
-	if len(a.Kinds) > 0 {
+	switch {
+	case len(a.Kinds) > 0:
 		q.Set("kinds", strings.Join(a.Kinds, ","))
+	case wait:
+		q.Set("kinds", strings.Join(waitKinds, ","))
 	}
 	if a.Topic != "" {
 		q.Set("topic", a.Topic)
@@ -332,7 +376,10 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 	if err != nil {
 		return nil, nil, err
 	}
-	lines, untrusted, _, err := renderFrames(body, windowBlock(ctx))
+	// The structured copy is held to the tools' own block whatever the caller
+	// set: WindowBlock is a ceiling on the text a caller hands on, and the one
+	// caller that sets it hands on only the text.
+	lines, untrusted, kept, err := renderFrames(body, windowBlock(ctx), maxWindowBlock)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -352,26 +399,25 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 			Content{Type: "text", Text: untrusted},
 		)
 	}
-	// The text and the structured content keep separate cursors: the text's
-	// continue-from id (which a byte cut moves back to the last frame shown) and
-	// the body's own next. Each is consistent with what it sits beside.
-	return content, json.RawMessage(body), nil
+	return content, kept, nil
 }
 
 // renderFrames turns the ring route's answer into the lines a model reads, the
-// quoted names that go in a block of their own, and the id to continue from. It
-// stops adding frames when either block would pass limit, and says where to
-// continue; a frame is never half shown.
-func renderFrames(body []byte, limit int) (lines, untrusted, next string, err error) {
+// quoted names that go in a block of their own, and the answer as the structured
+// copy carries it. It stops adding frames when either block would pass limit,
+// or the structured copy would pass structuredLimit, and says where to
+// continue; a frame is never half shown. The structured copy holds the frames
+// the text shows and the text's cursor, so a client that reads either is told
+// the same thing, and neither can flood a conversation.
+func renderFrames(body []byte, limit, structuredLimit int) (lines, untrusted string, kept ringBody, err error) {
 	var w ringBody
 	if err := json.Unmarshal(body, &w); err != nil {
-		return "", "", "", errRingShape
+		return "", "", ringBody{}, errRingShape
 	}
-	var head, trusted, quoted strings.Builder
+	var head strings.Builder
 	if !w.Complete {
-		head.WriteString("incomplete: the controller no longer holds events back to since, so some were missed; read the resources afresh and continue from next\n")
+		head.WriteString("incomplete: some events were missed, because the controller no longer holds events back to since, since is from before it last restarted, or the wait fell behind; read the resources afresh and continue from next\n")
 	}
-	next = w.Next
 	// The head and the trailer count against the limit too, so the block is at
 	// most limit bytes whole. The trailer is sized for the longest id it could
 	// name, because where the cut falls is not known until it has fallen.
@@ -380,17 +426,40 @@ func renderFrames(body []byte, limit int) (lines, untrusted, next string, err er
 		longest = max(longest, len(token(f.ID)))
 	}
 	budget := limit - head.Len() - len("truncated: continue from ") - longest - 1
+
+	// The structured copy is measured the same way: its envelope with the
+	// longest id as next, and then each frame as it will be marshalled.
+	envelope, err := json.Marshal(ringBody{Items: []ringFrame{}, Next: strings.Repeat("x", longest), Complete: w.Complete, Truncated: true, TimedOut: w.TimedOut})
+	if err != nil {
+		return "", "", ringBody{}, err
+	}
+	structured := len(envelope)
+
+	var trusted, quoted strings.Builder
 	shown := 0
 	for _, f := range w.Items {
 		line, quotes := renderFrame(f)
-		if shown > 0 && (trusted.Len()+len(line) > budget || quoted.Len()+len(quotes) > limit) {
-			next = w.Items[shown-1].ID
-			w.Truncated = true
+		frame, err := json.Marshal(f)
+		if err != nil {
+			return "", "", ringBody{}, errRingShape
+		}
+		if shown > 0 && (trusted.Len()+len(line) > budget || quoted.Len()+len(quotes) > limit || structured+len(frame)+1 > structuredLimit) {
 			break
 		}
 		trusted.WriteString(line)
 		quoted.WriteString(quotes)
+		structured += len(frame) + 1
 		shown++
+	}
+
+	kept = w
+	kept.Items = w.Items[:shown:shown]
+	if kept.Items == nil {
+		kept.Items = []ringFrame{}
+	}
+	if shown < len(w.Items) {
+		kept.Next = w.Items[shown-1].ID
+		kept.Truncated = true
 	}
 	switch {
 	case shown == 0 && w.TimedOut:
@@ -398,12 +467,12 @@ func renderFrames(body []byte, limit int) (lines, untrusted, next string, err er
 	case shown == 0:
 		trusted.WriteString("no events\n")
 	}
-	if w.Truncated {
-		trusted.WriteString("truncated: continue from " + token(next) + "\n")
+	if kept.Truncated {
+		trusted.WriteString("truncated: continue from " + token(kept.Next) + "\n")
 	} else {
-		trusted.WriteString("next: " + token(next) + "\n")
+		trusted.WriteString("next: " + token(kept.Next) + "\n")
 	}
-	return head.String() + trusted.String(), strings.TrimRight(quoted.String(), "\n"), next, nil
+	return head.String() + trusted.String(), strings.TrimRight(quoted.String(), "\n"), kept, nil
 }
 
 // renderFrame is one frame's line and the lines of text a workflow wrote.
@@ -411,8 +480,14 @@ func renderFrame(f ringFrame) (line, quotes string) {
 	var data map[string]json.RawMessage
 	_ = json.Unmarshal(f.Data, &data) // a payload that is not an object has no fields to show
 
+	// To the second: the route's nanoseconds are ten bytes a line that no
+	// question about the fleet turns on, across up to 200 lines.
+	at := f.At
+	if t, err := time.Parse(time.RFC3339Nano, f.At); err == nil {
+		at = t.UTC().Format(time.RFC3339)
+	}
 	var b strings.Builder
-	b.WriteString(token(f.At) + " " + token(f.Kind) + " " + token(f.Topic))
+	b.WriteString(token(at) + " " + token(f.Kind) + " " + token(f.Topic))
 	for _, name := range trustedFrameFields {
 		if v, ok := scalar(data[name]); ok {
 			b.WriteString(" " + name + "=" + token(v))
@@ -429,7 +504,7 @@ func renderFrame(f ringFrame) (line, quotes string) {
 		if v, ok := scalar(data[name]); ok {
 			// Always quoted, so a newline in a name is two characters and cannot
 			// begin a line that looks like the controller's.
-			q.WriteString(token(about) + ": " + name + "=" + strconv.Quote(clip(v)) + "\n")
+			q.WriteString(token(about) + ": " + name + "=" + strconv.Quote(clip(v, maxWindowValue)) + "\n")
 		}
 	}
 	return b.String(), q.String()
@@ -458,7 +533,7 @@ func scalar(raw json.RawMessage) (string, bool) {
 // token is a value in a line: bare when it is plain, quoted when it holds a
 // space, a control character or a quote, so a field cannot run into the next.
 func token(s string) string {
-	s = clip(s)
+	s = clip(s, maxTrustedValue)
 	if s == "" {
 		return `""`
 	}
@@ -470,12 +545,12 @@ func token(s string) string {
 	return s
 }
 
-// clip holds a value to maxWindowValue bytes, on a rune boundary.
-func clip(s string) string {
-	if len(s) <= maxWindowValue {
+// clip holds a value to n bytes, on a rune boundary.
+func clip(s string, n int) string {
+	if len(s) <= n {
 		return s
 	}
-	s = s[:maxWindowValue]
+	s = s[:n]
 	for len(s) > 0 && !utf8.ValidString(s) {
 		s = s[:len(s)-1]
 	}
@@ -499,7 +574,7 @@ func scalingDecisions(ctx context.Context, c API, raw json.RawMessage) ([]Conten
 	if err != nil {
 		return nil, err
 	}
-	return capRows(body, windowBlock(ctx), "limit or pass pool_id")
+	return capRows(body, windowBlock(ctx), "The older decisions cannot be read through this tool; pass pool_id to see more of one pool.")
 }
 
 func fleetSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -516,7 +591,7 @@ func fleetSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, e
 	if err != nil {
 		return nil, err
 	}
-	return capSamples(body, windowBlock(ctx), "window")
+	return capSamples(body, windowBlock(ctx), "The older rows cannot be read through this tool.")
 }
 
 func hostSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -542,7 +617,7 @@ func hostSamples(ctx context.Context, c API, raw json.RawMessage) ([]Content, er
 	if err != nil {
 		return nil, err
 	}
-	return capSamples(body, windowBlock(ctx), "window or since, or pass host_id")
+	return capSamples(body, windowBlock(ctx), "The older rows cannot be read through this tool; pass host_id to see more of one host.")
 }
 
 func runnerTimeline(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -592,7 +667,7 @@ func listWorkflowRuns(ctx context.Context, c API, raw json.RawMessage) ([]Conten
 	if err != nil {
 		return nil, err
 	}
-	return capRows(body, windowBlock(ctx), "limit, since or the filters")
+	return capRows(body, windowBlock(ctx), "Pass repo, workflow or branch to see more of one of them.")
 }
 
 // maxWindowRows is the most rows a window tool hands a model.
@@ -602,9 +677,11 @@ const maxWindowRows = 200
 // bytes. The routes have no limit of their own: a day of fleet
 // samples is about 1,440 rows and a host adds 60 an hour, which is more than a
 // model should be handed and more than Eli's result ceiling. A cut says how many
-// rows there were and how to ask for fewer, so a model never takes the newest
-// of a long window for all of it. An answer that fits goes through unchanged.
-func capSamples(body []byte, limit int, narrow string) ([]Content, error) {
+// rows there were, so a model never takes the newest of a long window for all
+// of it, and more says what can and cannot be read instead: the route takes
+// no end to a window, so the rows cut, the oldest, are out of reach of any
+// narrower ask. An answer that fits goes through unchanged.
+func capSamples(body []byte, limit int, more string) ([]Content, error) {
 	var doc struct {
 		Items []json.RawMessage `json:"items"`
 	}
@@ -647,8 +724,8 @@ func capSamples(body []byte, limit int, narrow string) ([]Content, error) {
 			return nil, err
 		}
 		if compact.Len() <= limit || len(newest) <= 1 {
-			note := fmt.Sprintf("The window held %d rows and the newest %d are shown, at most %d rows and %d KiB. Narrow %s to see the rest.",
-				len(doc.Items), len(newest), maxWindowRows, limit>>10, narrow)
+			note := fmt.Sprintf("The window held %d rows and the newest %d are shown, at most %d rows and %d KiB. %s",
+				len(doc.Items), len(newest), maxWindowRows, limit>>10, more)
 			return []Content{{Type: "text", Text: compact.String()}, {Type: "text", Text: note}}, nil
 		}
 		// Too many bytes still: drop the oldest of what is kept until it fits.
@@ -685,7 +762,7 @@ func listWebhookDeliveries(ctx context.Context, c API, raw json.RawMessage) ([]C
 	if err != nil {
 		return nil, err
 	}
-	return capRows(body, windowBlock(ctx), "limit or status")
+	return capRows(body, windowBlock(ctx), "Pass status to see more of one outcome.")
 }
 
 func listAudit(ctx context.Context, c API, raw json.RawMessage) ([]Content, error) {
@@ -725,15 +802,16 @@ func listAudit(ctx context.Context, c API, raw json.RawMessage) ([]Content, erro
 	if err != nil {
 		return nil, err
 	}
-	return capRows(body, windowBlock(ctx), "limit, since or the filters")
+	return capRows(body, windowBlock(ctx), "Narrow since, until or the filters to see the rest.")
 }
 
 // capRows holds a list answer to maxWindowRows rows and limit bytes.
 // The routes send newest first and carry fields beside items (a total, the time
 // a delivery last arrived) that say more than the rows do, so the cut keeps the
-// first rows and every other field as the route sent them. An answer that fits
-// goes through unchanged.
-func capRows(body []byte, limit int, narrow string) ([]Content, error) {
+// first rows and every other field as the route sent them, and more says how
+// to reach what was cut, where anything can. An answer that fits goes through
+// unchanged.
+func capRows(body []byte, limit int, more string) ([]Content, error) {
 	whole := jsonContent(body)
 	var doc map[string]json.RawMessage
 	if err := json.Unmarshal(body, &doc); err != nil {
@@ -759,8 +837,8 @@ func capRows(body []byte, limit int, narrow string) ([]Content, error) {
 			return nil, err
 		}
 		if len(out) <= limit || len(kept) <= 1 {
-			note := fmt.Sprintf("The answer held %d rows and the first %d, the newest, are shown, at most %d rows and %d KiB. Narrow %s to see the rest.",
-				len(items), len(kept), maxWindowRows, limit>>10, narrow)
+			note := fmt.Sprintf("The answer held %d rows and the first %d, the newest, are shown, at most %d rows and %d KiB. %s",
+				len(items), len(kept), maxWindowRows, limit>>10, more)
 			return []Content{{Type: "text", Text: string(out)}, {Type: "text", Text: note}}, nil
 		}
 		kept = kept[:len(kept)-max(1, len(kept)/10)]
@@ -813,10 +891,10 @@ func supportBundle(ctx context.Context, c API, raw json.RawMessage) ([]Content, 
 			want = append(want, name)
 		}
 	}
-	return bundleSections(doc, want)
+	return bundleSections(doc, want, windowBlock(ctx))
 }
 
-// bundleSections answers the named sections within maxWindowBlock. Each gets an
+// bundleSections answers the named sections within block bytes. Each gets an
 // equal share of the room, and a section that needs less leaves the rest for
 // the others, so a small section is never cut to pay for a large one. A section
 // over its share keeps the start of its rows when it is a list, or the start of
@@ -828,33 +906,33 @@ func supportBundle(ctx context.Context, c API, raw json.RawMessage) ([]Content, 
 // to what it overshot until it fits: marshalling rewrites <, > and & in a section as
 // six-byte escapes, so a section can be larger in the answer than it was in
 // the bundle.
-func bundleSections(doc map[string]json.RawMessage, want []string) ([]Content, error) {
-	room := sectionRoom(want)
+func bundleSections(doc map[string]json.RawMessage, want []string, block int) ([]Content, error) {
+	room := sectionRoom(want, block)
 	for {
 		out, notes, err := fitSections(doc, want, room)
 		if err != nil {
 			return nil, err
 		}
-		if len(out) > maxWindowBlock && room > 0 {
+		if len(out) > block && room > 0 {
 			// In proportion, because the escapes grow with the rows kept and
 			// taking off the overshoot itself would take off far more than needed.
-			room = min(room-1, room*maxWindowBlock/len(out))
+			room = min(room-1, room*block/len(out))
 			continue
 		}
 		content := []Content{{Type: "text", Text: string(out)}}
 		if len(notes) > 0 {
-			content = append(content, Content{Type: "text", Text: strings.Join(notes, " ") + " The answer is held to " + strconv.Itoa(maxWindowBlock>>10) + " KiB; ask for fewer sections to read more of each."})
+			content = append(content, Content{Type: "text", Text: strings.Join(notes, " ") + " The answer is held to " + strconv.Itoa(block>>10) + " KiB; ask for fewer sections to read more of each."})
 		}
 		return content, nil
 	}
 }
 
 // sectionRoom is the bytes the sections may share before the answer is
-// measured: the block less the braces, quotes, colons and commas around them,
+// measured: block less the braces, quotes, colons and commas around them,
 // and a little to spare. Marshalling escapes a name as it does a section, so a
 // name with enough <, > or & in it overshoots this and the loop corrects it.
-func sectionRoom(want []string) int {
-	room := maxWindowBlock - 64 - 4*len(want)
+func sectionRoom(want []string, block int) int {
+	room := block - 64 - 4*len(want)
 	for _, name := range want {
 		room -= len(name)
 	}

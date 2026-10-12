@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	gotoken "go/token"
 	"maps"
 	"net/http"
 	"slices"
@@ -111,8 +114,8 @@ func TestWaitForChangeAsksTheRouteToWaitAndIsLive(t *testing.T) {
 	if !kennelTool(t, "wait_for_change").live {
 		t.Error("wait_for_change is not marked live, so Eli would answer a second wait from its cache")
 	}
-	if kennelTool(t, "recent_events").live {
-		t.Error("recent_events is marked live; a read of the past is the same read twice")
+	if !kennelTool(t, "recent_events").live {
+		t.Error("recent_events is not marked live, so Eli would answer a second read with the same cursor from its cache, though more may have happened since")
 	}
 	desc := kennelTool(t, "wait_for_change").Description
 	if !strings.Contains(desc, "no since") || !strings.Contains(desc, "repeatedly") {
@@ -180,12 +183,12 @@ func TestAWindowIsCutAtTheBlockCeilingAndSaysWhereToContinue(t *testing.T) {
 	// whole block, so the trailer is counted in it.
 	one := "2026-10-12T09:30:00Z job.updated job:job_1 id=job_1 state=queued\n"
 	limit := 2*len(one) + len("truncated: continue from k3.2\n") + 5
-	lines, untrusted, next, err := renderFrames([]byte(body), limit)
+	lines, untrusted, kept, err := renderFrames([]byte(body), limit, maxWindowBlock)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next != "k3.2" {
-		t.Errorf("next = %q, want the last frame that was shown", next)
+	if kept.Next != "k3.2" {
+		t.Errorf("next = %q, want the last frame that was shown", kept.Next)
 	}
 	if got := strings.Count(lines, "job.updated"); got != 2 {
 		t.Errorf("%d frames shown, want 2:\n%s", got, lines)
@@ -203,24 +206,24 @@ func TestAWindowIsCutAtTheBlockCeilingAndSaysWhereToContinue(t *testing.T) {
 	// An incomplete window carries a head line, which also counts.
 	incomplete := strings.Replace(body, `"complete":true`, `"complete":false`, 1)
 	for limit := 400; limit < 600; limit += 7 {
-		lines, _, _, _ := renderFrames([]byte(incomplete), limit)
+		lines, _, _, _ := renderFrames([]byte(incomplete), limit, maxWindowBlock)
 		if len(lines) > limit && strings.Count(lines, "job.updated") > 1 {
 			t.Fatalf("limit %d: the block is %d bytes:\n%s", limit, len(lines), lines)
 		}
 	}
 
 	// Whole, nothing is cut and the cursor is the route's.
-	lines, _, next, _ = renderFrames([]byte(body), maxWindowBlock)
-	if next != "k3.5" || strings.Contains(lines, "truncated") {
-		t.Errorf("a window that fits was cut: next=%q\n%s", next, lines)
+	lines, _, kept, _ = renderFrames([]byte(body), maxWindowBlock, maxWindowBlock)
+	if kept.Next != "k3.5" || strings.Contains(lines, "truncated") {
+		t.Errorf("a window that fits was cut: next=%q\n%s", kept.Next, lines)
 	}
 }
 
 func TestARouteThatTruncatedIsPassedOnWithItsCursor(t *testing.T) {
 	body := strings.Replace(windowBody(), `"truncated":false`, `"truncated":true`, 1)
-	lines, _, next, _ := renderFrames([]byte(body), maxWindowBlock)
-	if next != "k3.7" || !strings.Contains(lines, "truncated: continue from k3.7") {
-		t.Errorf("the route's own cut is not reported: next=%q\n%s", next, lines)
+	lines, _, kept, _ := renderFrames([]byte(body), maxWindowBlock, maxWindowBlock)
+	if kept.Next != "k3.7" || !kept.Truncated || !strings.Contains(lines, "truncated: continue from k3.7") {
+		t.Errorf("the route's own cut is not reported: next=%q\n%s", kept.Next, lines)
 	}
 }
 
@@ -353,8 +356,8 @@ func TestALongSamplesWindowIsCutToTheNewestTwoHundredRowsWithANote(t *testing.T)
 			if len(out[0].Text) > maxWindowBlock {
 				t.Errorf("the rows are %d bytes, over the ceiling", len(out[0].Text))
 			}
-			if !strings.Contains(out[1].Text, "1440 rows") || !strings.Contains(out[1].Text, "newest 200") || !strings.Contains(out[1].Text, "Narrow window") {
-				t.Errorf("the note does not say what was cut or how to narrow it: %q", out[1].Text)
+			if !strings.Contains(out[1].Text, "1440 rows") || !strings.Contains(out[1].Text, "newest 200") || !strings.Contains(out[1].Text, "cannot be read through this tool") {
+				t.Errorf("the note does not say what was cut and that the rest is out of reach: %q", out[1].Text)
 			}
 			if name == "host_samples" && !strings.Contains(out[1].Text, "host_id") {
 				t.Errorf("the host note does not offer host_id: %q", out[1].Text)
@@ -374,7 +377,7 @@ func TestSamplesAreKeptByTimeWhateverOrderTheRouteSendsThem(t *testing.T) {
 	}
 	slices.Reverse(doc.Items)
 	body, _ := json.Marshal(doc)
-	out, err := capSamples(body, maxWindowBlock, "window")
+	out, err := capSamples(body, maxWindowBlock, "The older rows cannot be read through this tool.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +409,7 @@ func TestSamplesTooManyBytesAreCutEvenUnderTwoHundredRows(t *testing.T) {
 	for i := range rows {
 		rows[i] = fmt.Sprintf(`{"at":"2026-10-12T%02d:%02d:00Z","pad":%q}`, i/60, i%60, pad)
 	}
-	out, err := capSamples([]byte(`{"items":[`+strings.Join(rows, ",")+`]}`), maxWindowBlock, "window")
+	out, err := capSamples([]byte(`{"items":[`+strings.Join(rows, ",")+`]}`), maxWindowBlock, "The older rows cannot be read through this tool.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +584,7 @@ func TestAnOperatorRowListIsHeldToTheCeilingWithTheNewestRowsAndANote(t *testing
 		rows[i] = fmt.Sprintf(`{"id":"aud_%d","action":"pool.update","after":%q}`, i, pad)
 	}
 	body := `{"items":[` + strings.Join(rows, ",") + `],"total":900,"limit":200,"offset":0}`
-	for _, name := range []string{"list_audit", "list_webhook_deliveries"} {
+	for name, advice := range map[string]string{"list_audit": "since, until", "list_webhook_deliveries": "status"} {
 		out, err := kennelCall(t, kennelTool(t, name), &kennelAPI{body: body}, `{"limit":200}`)
 		if err != nil {
 			t.Fatal(err)
@@ -601,7 +604,7 @@ func TestAnOperatorRowListIsHeldToTheCeilingWithTheNewestRowsAndANote(t *testing
 		if len(got.Items) == 0 || got.Items[0].ID != "aud_0" || got.Total != 900 {
 			t.Errorf("%s: the first row or the route's own total was lost: %+v", name, got)
 		}
-		if !strings.Contains(out[1].Text, "200 rows") || !strings.Contains(out[1].Text, "limit") {
+		if !strings.Contains(out[1].Text, "200 rows") || !strings.Contains(out[1].Text, advice) {
 			t.Errorf("%s: the note does not say what was cut: %q", name, out[1].Text)
 		}
 	}
@@ -717,7 +720,7 @@ func TestSupportBundleShrinksAgainWhenTheFirstAttemptOvershoots(t *testing.T) {
 		doc[name] = json.RawMessage(`[` + strings.Join(rows, ",") + `]`)
 	}
 
-	first, _, err := fitSections(doc, names, sectionRoom(names))
+	first, _, err := fitSections(doc, names, sectionRoom(names, maxWindowBlock))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -725,7 +728,7 @@ func TestSupportBundleShrinksAgainWhenTheFirstAttemptOvershoots(t *testing.T) {
 		t.Fatalf("the first attempt is %d bytes and fits, so this test never reaches the loop", len(first))
 	}
 
-	out, err := bundleSections(doc, names)
+	out, err := bundleSections(doc, names, maxWindowBlock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -766,6 +769,265 @@ func TestAWindowBlockOnlyEverLowersTheToolsOwn(t *testing.T) {
 		}
 		if len(blocks[0]) > tc.want || len(blocks[0]) < tc.want*3/4 || !json.Valid([]byte(blocks[0])) {
 			t.Errorf("WindowBlock %d gave a %d-byte block (valid JSON %v), want whole rows filling most of %d", tc.set, len(blocks[0]), json.Valid([]byte(blocks[0])), tc.want)
+		}
+	}
+}
+
+// busKinds is every kind internal/events declares, read from its source so a
+// kind added there has to be placed here, as waited for or as quiet, before
+// this passes. The package is not imported: the tools know the fleet only
+// through the API, and a kind is part of the API's contract.
+func busKinds(t *testing.T) []string {
+	t.Helper()
+	fset := gotoken.NewFileSet()
+	f, err := parser.ParseFile(fset, "../events/bus.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, decl := range f.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != gotoken.CONST {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			vs := spec.(*ast.ValueSpec)
+			if id, ok := vs.Type.(*ast.Ident); !ok || id.Name != "Kind" {
+				continue
+			}
+			for _, v := range vs.Values {
+				if lit, ok := v.(*ast.BasicLit); ok {
+					s, _ := strconv.Unquote(lit.Value)
+					out = append(out, s)
+				}
+			}
+		}
+	}
+	if len(out) < 20 {
+		t.Fatalf("read only %d kinds from the bus: %v", len(out), out)
+	}
+	return out
+}
+
+// A wait with no kinds is woken only by something changing. The quiet kinds
+// move with time while the fleet stands still, and a wait subscribing sets
+// them off, so a wait for every kind would come back within a pass to say a
+// host is still alive.
+func TestAWaitWithNoKindsLeavesOutOnlyTheFramesThatMoveWithNoChange(t *testing.T) {
+	want := []string{"heartbeat", "host.updated", "kennel.summary", "stats", "updates.updated"}
+	if got := slices.Sorted(maps.Keys(quietKinds)); !slices.Equal(got, want) {
+		t.Errorf("the quiet kinds are %v, want %v", got, want)
+	}
+	for _, k := range busKinds(t) {
+		_, quiet := quietKinds[k]
+		if waited := slices.Contains(waitKinds, k); waited == quiet {
+			t.Errorf("%s is waited for %v and quiet %v; it must be exactly one", k, waited, quiet)
+		}
+	}
+	for k, why := range quietKinds {
+		if why == "" {
+			t.Errorf("%s is left out with no reason", k)
+		}
+	}
+
+	api := &kennelAPI{body: `{"items":[],"next":"k1.1","complete":true,"truncated":false,"timed_out":true}`}
+	if _, err := kennelCall(t, kennelTool(t, "wait_for_change"), api, `{"since":"k1.1","seconds":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := api.query.Get("kinds"); got != strings.Join(waitKinds, ",") {
+		t.Errorf("a wait with no kinds asked for %q, want the change kinds", got)
+	}
+	if _, err := kennelCall(t, kennelTool(t, "wait_for_change"), api, `{"since":"k1.1","kinds":["host.updated"]}`); err != nil || api.query.Get("kinds") != "host.updated" {
+		t.Errorf("a wait that named its kinds asked for %q (%v), want host.updated", api.query.Get("kinds"), err)
+	}
+	if _, err := kennelCall(t, kennelTool(t, "recent_events"), api, `{}`); err != nil || api.query.Has("kinds") {
+		t.Errorf("recent_events with no kinds asked for %q (%v), want every kind", api.query.Get("kinds"), err)
+	}
+	desc := kennelTool(t, "wait_for_change").Description
+	for _, k := range []string{"stats", "host.updated", "kennel.summary", "updates.updated"} {
+		if !strings.Contains(desc, k) {
+			t.Errorf("the description does not say %s is left out unless asked for: %q", k, desc)
+		}
+	}
+}
+
+// ringFrames is a ring answer of n job frames, each carrying a large payload
+// the lines never show (an array is skipped) and the structured copy carries
+// whole.
+func ringFrames(n, payload int) string {
+	steps := `["` + strings.Repeat("s", payload) + `"]`
+	items := make([]string, n)
+	for i := range items {
+		items[i] = fmt.Sprintf(`{"id":"k3.%d","kind":"job.updated","topic":"job:job_%d","at":"2026-10-12T09:30:00Z","data":{"id":"job_%d","state":"queued","steps":%s}}`, i+1, i+1, i+1, steps)
+	}
+	return `{"items":[` + strings.Join(items, ",") + fmt.Sprintf(`],"next":"k3.%d","complete":true,"truncated":false,"timed_out":false}`, n)
+}
+
+// The structured copy is what a client that prefers values reads, and some
+// hand it straight to a model. It holds what the text holds and no more: the
+// same frames, the same cursor, and a bound, so neither form can flood a
+// conversation and the two never disagree about where to continue.
+func TestTheStructuredCopyHoldsTheFramesTheTextShowsWithOneCursor(t *testing.T) {
+	api := &kennelAPI{body: ringFrames(200, 2000)}
+	out, value, err := kennelTool(t, "recent_events").run(t.Context(), api, []byte(`{"limit":200}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) > maxWindowBlock {
+		t.Errorf("the structured copy is %d bytes, over the %d byte block", len(raw), maxWindowBlock)
+	}
+	var kept ringBody
+	if err := json.Unmarshal(raw, &kept); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(out[0].Text, "\n"), "\n")
+	cursor, cut := strings.CutPrefix(lines[len(lines)-1], "truncated: continue from ")
+	if !cut {
+		t.Fatalf("200 frames of 2 KiB were not cut:\n%.300s", out[0].Text)
+	}
+	if len(kept.Items) != len(lines)-1 || len(kept.Items) == 0 {
+		t.Errorf("the structured copy holds %d frames and the text %d", len(kept.Items), len(lines)-1)
+	}
+	if kept.Next != cursor || !kept.Truncated {
+		t.Errorf("the structured copy says next %q truncated %v, the text says continue from %q", kept.Next, kept.Truncated, cursor)
+	}
+	if kept.Items[len(kept.Items)-1].ID != cursor {
+		t.Errorf("the cursor %q is not the last frame kept, %q", cursor, kept.Items[len(kept.Items)-1].ID)
+	}
+
+	// An answer that fits is the route's whole, with the route's cursor.
+	api = &kennelAPI{body: windowBody()}
+	_, value, err = kennelTool(t, "recent_events").run(t.Context(), api, []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	whole, _ := value.(ringBody)
+	if len(whole.Items) != 1 || whole.Next != "k3.7" || whole.Truncated {
+		t.Errorf("an answer that fits was changed: %+v", whole)
+	}
+	// An empty answer is an empty list, as the schema promises, not null.
+	api = &kennelAPI{body: `{"items":[],"next":"k3.9","complete":true,"truncated":false,"timed_out":true}`}
+	_, value, _ = kennelTool(t, "wait_for_change").run(t.Context(), api, []byte(`{"since":"k3.9"}`))
+	if raw, _ := json.Marshal(value); !strings.Contains(string(raw), `"items":[]`) {
+		t.Errorf("an empty answer's structured copy is %s, want items to be an empty array", raw)
+	}
+}
+
+// The route says complete is false for three reasons, and a model told only
+// one of them reads a restart as a quiet buffer.
+func TestAnIncompleteWindowNamesEveryCauseTheRouteHas(t *testing.T) {
+	api := &kennelAPI{body: `{"items":[],"next":"k3.9","complete":false,"truncated":false,"timed_out":false}`}
+	out, err := kennelCall(t, kennelTool(t, "recent_events"), api, `{"since":"k2.1"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, _ := json.Marshal(ringOutputSchema())
+	for _, cause := range []string{"no longer holds events back to since", "before it last restarted", "fell behind"} {
+		if !strings.Contains(out[0].Text, cause) {
+			t.Errorf("the incomplete line does not say %q: %q", cause, out[0].Text)
+		}
+		if !strings.Contains(string(schema), cause) {
+			t.Errorf("the schema's complete does not say %q", cause)
+		}
+		if !strings.Contains(kennelTool(t, "recent_events").Description, cause) {
+			t.Errorf("recent_events's description does not say %q", cause)
+		}
+	}
+}
+
+func TestAWindowLineGivesTheTimeToTheSecond(t *testing.T) {
+	body := strings.Replace(windowBody(), `"at":"2026-10-12T09:30:00Z"`, `"at":"2026-10-12T09:30:00.123456789Z"`, 1)
+	out, err := kennelCall(t, kennelTool(t, "recent_events"), &kennelAPI{body: body}, `{}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out[0].Text, "2026-10-12T09:30:00Z job.updated") {
+		t.Errorf("the time is not to the second: %q", out[0].Text)
+	}
+}
+
+// A scaling reason is the controller's own sentence and names the fix at its
+// end; a name a workflow wrote is held short because a stranger chose its
+// length.
+func TestAControllersSentenceIsShownWholeWhereAWorkflowsNameIsClipped(t *testing.T) {
+	reason := "deferred for fairness across priorities: " + strings.Repeat("pool linux-large waits behind pool linux-small, ", 10) + "raise limits.runners to start more"
+	if len(reason) <= maxWindowValue || len(reason) > maxTrustedValue {
+		t.Fatalf("the reason is %d bytes; the test needs one between the two clips", len(reason))
+	}
+	data, _ := json.Marshal(map[string]any{"id": "sc_1", "reason": reason, "job_name": strings.Repeat("n", 600)})
+	body := `{"items":[{"id":"k3.1","kind":"scaling","topic":"pool:pool_1","at":"2026-10-12T09:30:00Z","data":` + string(data) + `}],` +
+		`"next":"k3.1","complete":true,"truncated":false,"timed_out":false}`
+	out, err := kennelCall(t, kennelTool(t, "recent_events"), &kennelAPI{body: body}, `{}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out[0].Text, "raise limits.runners to start more") {
+		t.Errorf("the end of the scheduler's sentence was cut: %q", out[0].Text)
+	}
+	if strings.Contains(out[2].Text, strings.Repeat("n", maxWindowValue+1)) || !strings.Contains(out[2].Text, "...") {
+		t.Errorf("a workflow's name was not clipped: %d bytes", len(out[2].Text))
+	}
+}
+
+// Options.WindowBlock is documented as the ceiling on every window tool's
+// answer, so the bundle is held to it too: a caller that sets it should not
+// find the one tool that ignores it.
+func TestSupportBundleIsHeldToTheServersWindowBlock(t *testing.T) {
+	rows := make([]string, 400)
+	for i := range rows {
+		rows[i] = fmt.Sprintf(`{"id":"job_%d","pad":%q}`, i, strings.Repeat("x", 200))
+	}
+	body := `{"jobs":[` + strings.Join(rows, ",") + `],"hosts":[{"id":"host_1"}]}`
+	s := New(&kennelAPI{body: body}, Options{WindowBlock: 8 << 10})
+	blocks, failed, err := s.CallTool(t.Context(), "support_bundle", json.RawMessage(`{"sections":["jobs","hosts"]}`))
+	if err != nil || failed || len(blocks) != 2 {
+		t.Fatalf("%v %v %q", err, failed, blocks)
+	}
+	if len(blocks[0]) > 8<<10 || !json.Valid([]byte(blocks[0])) {
+		t.Errorf("the answer is %d bytes (valid JSON %v), over the server's 8 KiB block", len(blocks[0]), json.Valid([]byte(blocks[0])))
+	}
+	if !strings.Contains(blocks[1], "held to 8 KiB") {
+		t.Errorf("the note does not name the block the answer was held to: %q", blocks[1])
+	}
+}
+
+// The samples and decisions keep the newest rows, and none of their routes
+// takes an end to the window, so a narrower window, a later since or a smaller
+// limit only returns rows the model already has. A note that told it to narrow
+// would spend its calls on that; it says instead that the older rows are out of
+// reach, and names the one filter that does show more.
+func TestACutNoteSaysTheOlderRowsCannotBeReadAndWhatShowsMore(t *testing.T) {
+	decisions := make([]string, 250)
+	for i := range decisions {
+		decisions[i] = fmt.Sprintf(`{"id":"sc_%d","reason":%q}`, i, strings.Repeat("r", 300))
+	}
+	for _, tc := range []struct {
+		tool, body, filter string
+	}{
+		{"fleet_samples", sampleRows(250), ""},
+		{"host_samples", sampleRows(250), "host_id"},
+		{"scaling_decisions", `{"items":[` + strings.Join(decisions, ",") + `]}`, "pool_id"},
+	} {
+		out, err := kennelCall(t, kennelTool(t, tc.tool), &kennelAPI{body: tc.body}, `{}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(out) != 2 {
+			t.Fatalf("%s was not cut: %d blocks", tc.tool, len(out))
+		}
+		note := out[1].Text
+		if strings.Contains(note, "Narrow") || !strings.Contains(note, "cannot be read through this tool") {
+			t.Errorf("%s's note does not say the older rows are out of reach: %q", tc.tool, note)
+		}
+		if tc.filter != "" && !strings.Contains(note, tc.filter) {
+			t.Errorf("%s's note does not name %s: %q", tc.tool, tc.filter, note)
+		}
+		if desc := kennelTool(t, tc.tool).Description; strings.Contains(desc, "narrow window") {
+			t.Errorf("%s's description still says to narrow the window: %q", tc.tool, desc)
 		}
 	}
 }

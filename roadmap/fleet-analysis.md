@@ -141,10 +141,16 @@ owner's choice, as section 2 says, not by their role; `list_audit` and
 `list_webhook_deliveries` answer any viewer, and only `support_bundle` needs
 an administrator. Only `recent_events` and `wait_for_change` carry
 `structuredContent` and an `outputSchema`; the other eight answer JSON as
-text. That structured copy is the route's body as it came, so it carries
-workflow-written names outside the untrusted block, and the schema's
-description of `data` says they are untrusted; `docs/connect-claude.md`
-tells a client that hands it to a model to treat them as data.
+text, with names inline where the rows carry them, and their descriptions say
+those names are untrusted, so the untrusted block is the two event tools'
+alone. That structured copy holds the frames the text shows, with the text's
+cursor, and is held to 64 KiB as the text is; it carries workflow-written
+names outside the untrusted block, and the schema's description of `data`
+says they are untrusted; `docs/connect-claude.md` tells a client that hands
+it to a model to treat them as data. Eli reads the window tools' text held to
+12 KiB a block, under its 16 KiB ceiling. `wait_for_change` with no `kinds`
+waits for every kind but `stats`, `host.updated`, `kennel.summary` and
+`updates.updated`, which move as time passes with nothing changed.
 
 ### 4.3 Eli
 
@@ -277,7 +283,9 @@ roll-up for counts and says the percentiles are unavailable.
 
 - Every tool is the documented route with the caller's own credential; an
   admin tool asked for by a viewer is the route's 403 with its sentence.
-- Workflow-written text is quoted only in untrusted blocks.
+- Workflow-written text is quoted only in untrusted blocks in the event
+  tools' text; the row tools and the structured copy carry it inline, and
+  say it is untrusted (section 4.2, as built).
 - The wait is bounded, counted and cancellable; a client that goes away
   cancels its context, which the bus watches.
 - Nothing new leaves the machine through Eli that a viewer's token could not
