@@ -106,6 +106,20 @@ provider's **CA certificate** field and the connection is verified against it.
 
 Take the certificate, not the key: `pve-root-ca.key` next to it is the thing
 that signs certificates, and Zoomies will tell you if you paste it by mistake.
+Both certificate boxes take certificates only, and a private key is refused when
+you save, with the box it was pasted into named.
+
+That certificate is for the connection from the controller to the cluster, and
+only that. A machine the provider builds has a different question to answer:
+which certificate to trust for the controller. By default it uses its own trust
+store, which is right when the controller's certificate comes from a public
+authority. If your controller serves a certificate from a private authority,
+paste that authority into **Certificate machines trust for the controller** on
+the Placement step, beside the address the machines use to reach it. It is
+written to each machine, which then accepts only that certificate from the
+controller. A provider set up before the two were separated was given its
+cluster's certificate in that box as well, because that is what its machines were
+told; if your controller is on a public certificate, empty the box.
 
 The alternative, `insecure_skip_verify`, turns off verification entirely and is
 a warning on the provider and in the problems drawer for as long as it is on.
