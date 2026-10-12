@@ -73,10 +73,37 @@ func checkJSONNames(t *testing.T, ty reflect.Type, seen map[reflect.Type]bool) {
 			continue
 		}
 		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
-		if name == "" || name == "-" || strings.IndexFunc(name, func(r rune) bool { return unicode.IsUpper(r) }) >= 0 {
-			t.Errorf("%s.%s has json name %q, want an explicit snake_case name", ty.Name(), f.Name, name)
+		if want := snakeCase(f.Name); name != want {
+			t.Errorf("%s.%s has json name %q, want %q", ty.Name(), f.Name, name, want)
 		}
 		checkJSONNames(t, f.Type, seen)
+	}
+}
+
+// snakeCase is a Go field name as the API spells it: JobID is job_id,
+// ConfidenceReason is confidence_reason, P50MS is p50_ms.
+func snakeCase(name string) string {
+	r := []rune(name)
+	var b strings.Builder
+	for i, c := range r {
+		if i > 0 && unicode.IsUpper(c) {
+			prev := r[i-1]
+			nextLower := i+1 < len(r) && unicode.IsLower(r[i+1])
+			if unicode.IsLower(prev) || unicode.IsDigit(prev) || (unicode.IsUpper(prev) && nextLower) {
+				b.WriteByte('_')
+			}
+		}
+		b.WriteRune(unicode.ToLower(c))
+	}
+	return b.String()
+}
+
+func TestSnakeCaseSpellsAFieldNameAsTheAPIDoes(t *testing.T) {
+	for name, want := range map[string]string{"JobID": "job_id", "ConfidenceReason": "confidence_reason",
+		"P50MS": "p50_ms", "Since": "since", "HTTPServer": "http_server"} {
+		if got := snakeCase(name); got != want {
+			t.Errorf("snakeCase(%q) = %q, want %q", name, got, want)
+		}
 	}
 }
 

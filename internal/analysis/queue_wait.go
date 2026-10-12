@@ -116,9 +116,14 @@ type QueueWaitEvidence struct {
 	// Pools is ordered by WaitSeconds, longest first, and cut to
 	// MaxEvidencePools; PoolsCut says how many were left out. Fleet, Jobs
 	// and WaitSeconds still count every pool.
-	Pools       []PoolWait `json:"pools"`
-	Jobs        int        `json:"jobs"`
-	WaitSeconds int64      `json:"wait_seconds"`
+	Pools []PoolWait `json:"pools"`
+	// Jobs counts every job read; Waited only those whose wait was more
+	// than nothing. Confidence and the sentences go by Waited, because on a
+	// healthy fleet most jobs start at once and say nothing about why the
+	// others waited.
+	Jobs        int   `json:"jobs"`
+	Waited      int   `json:"waited"`
+	WaitSeconds int64 `json:"wait_seconds"`
 	// NoRunnerRecord counts jobs that started after waiting past
 	// eligibility with no runner request on record (its runner pruned), so
 	// that wait could not be split into startup and GitHub's delay.
@@ -188,7 +193,7 @@ type poolTally struct {
 	conditions   PoolConditions
 	timeline     []segment
 	jobs         int
-	causes       map[WaitCause]time.Duration
+	causes       map[WaitCause]int64
 	waits        []LongWait
 	failedStarts bool
 }
@@ -207,7 +212,7 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 	for _, p := range s.Pools {
 		tallies[p.PoolID] = &poolTally{conditions: p, timeline: poolTimeline(p, s.Until)}
 	}
-	fleet := map[WaitCause]time.Duration{}
+	fleet := map[WaitCause]int64{}
 	e := QueueWaitEvidence{Jobs: len(s.Jobs), JobsTruncated: s.JobsTruncated, RunnersTruncated: s.RunnersTruncated}
 	for _, j := range s.Jobs {
 		t := tallies[j.PoolID]
@@ -216,23 +221,32 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 			tallies[j.PoolID] = t
 		}
 		if t.causes == nil {
-			t.causes = map[WaitCause]time.Duration{}
+			t.causes = map[WaitCause]int64{}
 		}
-		causes, noRecord := splitWait(j, s.Until, t.timeline)
+		phases, noRecord := splitWait(j, s.Until, t.timeline)
 		if noRecord {
 			e.NoRunnerRecord++
 		}
-		var total time.Duration
-		for c, d := range causes {
-			t.causes[c] += d
-			fleet[c] += d
-			total += d
+		// Each job's phases are rounded to whole seconds before they are
+		// added up, so a pool's row, the fleet's and a job's own all add up
+		// exactly; rounding each total separately would leave them a second
+		// or two apart.
+		causes := map[WaitCause]int64{}
+		var total int64
+		for c, d := range phases {
+			if sec := seconds(d); sec > 0 {
+				causes[c] = sec
+				t.causes[c] += sec
+				fleet[c] += sec
+				total += sec
+			}
 		}
 		t.jobs++
 		t.failedStarts = t.failedStarts || j.FirstStartFailureAt != nil
-		if w := seconds(total); w > 0 {
+		if total > 0 {
+			e.Waited++
 			t.waits = append(t.waits, LongWait{JobID: j.ID, Repo: j.Repo, Workflow: j.Workflow, JobName: j.JobName,
-				WaitSeconds: w, Cause: largest(causes)})
+				WaitSeconds: total, Cause: largest(causes)})
 		}
 	}
 
@@ -266,8 +280,8 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 		f.Confidence, f.ConfidenceReason = Low, "no jobs were queued in this period"
 		f.Summary = "No jobs were queued in this period."
 		return f, nil
-	case e.Jobs < 5 || e.WaitSeconds < 60:
-		little := fmt.Sprintf("%s waited, %s in all: too little to break down", count(e.Jobs, "job"), Words(total))
+	case e.Waited < 5 || e.WaitSeconds < 60:
+		little := fmt.Sprintf("%s waited, %s in all: too little to break down", count(e.Waited, "job"), Words(total))
 		f.Confidence, f.ConfidenceReason = Low, "only "+little
 		f.Summary = "Only " + little + "."
 		return f, nil
@@ -293,20 +307,22 @@ func QueueWait(s QueueWaitSnapshot) (QueueWaitFinding, error) {
 		if s.RunnersTruncated {
 			reasons = append(reasons, fmt.Sprintf("the period held more than %d runners; the newest %d were read, so narrow since", MaxReadJobs, MaxReadJobs))
 		}
-		if e.Jobs < 10 {
-			reasons = append(reasons, fmt.Sprintf("only %s waited: too few to call one cause dominant", count(e.Jobs, "job")))
+		if e.Waited < 10 {
+			reasons = append(reasons, fmt.Sprintf("only %s waited: too few to call one cause dominant", count(e.Waited, "job")))
 		}
 		if rawShare < 0.5 {
 			reasons = append(reasons, fmt.Sprintf("the largest cause, %s, took %d%% of the wait, not half",
 				causeAdvices[top.Cause].phrase, int(math.Round(rawShare*100))))
 		}
-		if e.NoRunnerRecord*10 > e.Jobs {
-			reasons = append(reasons, fmt.Sprintf("%d of %d jobs have no runner record, so their wait after eligibility could not be split into runner startup and GitHub's delay",
-				e.NoRunnerRecord, e.Jobs))
+		if e.NoRunnerRecord*10 > e.Waited {
+			reasons = append(reasons, fmt.Sprintf("%d of %d jobs that waited have no runner record, so their wait after eligibility could not be split into runner startup and GitHub's delay",
+				e.NoRunnerRecord, e.Waited))
 		}
 		f.Confidence = High
 		if len(reasons) > 0 {
-			f.Confidence, f.ConfidenceReason = Medium, strings.Join(reasons, "; ")
+			// The truncation reason carries a semicolon of its own, so a bare
+			// one between reasons would hide where the next begins.
+			f.Confidence, f.ConfidenceReason = Medium, strings.Join(reasons, "; also, ")
 		}
 	}
 
@@ -360,15 +376,25 @@ func splitWait(j WaitJob, until time.Time, timeline []segment) (map[WaitCause]ti
 	if j.HeldAt != nil {
 		phase(stamp(j.ApprovedAt, end), CauseHeldForReview)
 	}
-	if j.EligibleAt != nil {
+	stillWaiting := j.StartedAt == nil || !j.StartedAt.Before(until)
+	switch {
+	case j.EligibleAt != nil:
 		phase(stamp(j.EligibleAt, end), CauseUnmatched)
+	case j.RunnerRequestedAt == nil && stillWaiting:
+		// No pool has claimed it yet, and nothing was asked for it: the wait
+		// is the one jobs.unmatched is about.
+		phase(end, CauseUnmatched)
+		return causes, false
 	}
+	// A job that started with no eligible_at is a row from before the column
+	// was written, or an anomaly: something did claim it, so its wait is not
+	// unmatched, and without the stamp it stays with the conditions below.
 	if j.RunnerRequestedAt == nil {
 		// With no runner on record the wait after eligibility cannot be told
 		// apart into startup and GitHub's delay; only the pool's own
 		// conditions can still be named.
 		attribute(cursor, end, timeline, j.FirstStartFailureAt, add)
-		return causes, j.StartedAt != nil && end.After(cursor)
+		return causes, !stillWaiting && end.After(cursor)
 	}
 	// A runner requested or registered before the job was eligible was
 	// already there, so its phase is empty.
@@ -485,13 +511,13 @@ func covers(list []Interval, x time.Time) bool {
 	return i < len(list) && !list[i].From.After(x)
 }
 
-// shares turns durations into whole seconds and fractions, largest first.
-// The total is the sum of the rounded parts, so the rows always add up.
-func shares(d map[WaitCause]time.Duration) ([]CauseShare, int64) {
+// shares turns seconds into fractions, largest first. The total is the sum
+// of the parts, so the rows always add up.
+func shares(d map[WaitCause]int64) ([]CauseShare, int64) {
 	out := []CauseShare{}
 	var total int64
 	for _, c := range waitCauses {
-		if s := seconds(d[c]); s > 0 {
+		if s := d[c]; s > 0 {
 			out = append(out, CauseShare{Cause: c, Seconds: s})
 			total += s
 		}
@@ -503,7 +529,7 @@ func shares(d map[WaitCause]time.Duration) ([]CauseShare, int64) {
 	return out, total
 }
 
-func largest(d map[WaitCause]time.Duration) WaitCause {
+func largest(d map[WaitCause]int64) WaitCause {
 	var best WaitCause
 	for _, c := range waitCauses {
 		if d[c] > 0 && (best == "" || d[c] > d[best]) {
@@ -532,18 +558,19 @@ func waitStep(c WaitCause, t *poolTally) NextStep {
 	a := causeAdvices[c]
 	on, pool, saved := "that no pool claimed", "a pool", "0s"
 	if t != nil {
-		saved = Words(t.causes[c])
+		saved = Words(time.Duration(t.causes[c]) * time.Second)
 		if t.conditions.PoolID != "" {
 			pool = poolLabel(t.conditions)
 			on = "on " + pool
 		}
 	}
-	text := a.text
-	code := a.code
+	text, setting, code := a.text, a.setting, a.code
 	if c == CauseRunnerStartup && t != nil && t.failedStarts {
-		text, code = failingStartText, "pool.runners_failing"
+		// More warm runners on a pool whose starts fail is more failing
+		// starts, so no setting is named to raise.
+		text, setting, code = failingStartText, "", "pool.runners_failing"
 	}
-	return NextStep{Text: text(on, pool, saved), Setting: a.setting, Code: code}
+	return NextStep{Text: text(on, pool, saved), Setting: setting, Code: code}
 }
 
 // poolLabel names a pool by its name, or by its id once it has none; a

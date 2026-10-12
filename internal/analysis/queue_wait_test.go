@@ -170,7 +170,9 @@ func TestWaitAfterAFailedStartIsRunnerStartupAndPointsAtTheFailures(t *testing.T
 	if !slices.Equal(f.Evidence.Fleet, want) {
 		t.Fatalf("fleet %+v, want %+v", f.Evidence.Fleet, want)
 	}
-	if s := f.NextSteps[0]; s.Setting != "pool.min_runners" || s.Code != "pool.runners_failing" {
+	// More warm runners on a pool whose starts fail is more failing starts,
+	// so the step names no setting to raise.
+	if s := f.NextSteps[0]; s.Setting != "" || s.Code != "pool.runners_failing" || !strings.Contains(s.Text, "failed to start") {
 		t.Fatalf("first step %+v", s)
 	}
 }
@@ -246,10 +248,15 @@ func TestQueueWaitSaysWhyItIsOnlyMedium(t *testing.T) {
 	}{
 		{"few jobs", linuxJobs(7, startup), "only 7 jobs waited: too few to call one cause dominant"},
 		{"no cause took half", split, "the largest cause, runners starting, took 49% of the wait, not half"},
-		{"runner records gone", gone, "2 of 10 jobs have no runner record, so their wait after eligibility could not be split into runner startup and GitHub's delay"},
+		{"runner records gone", gone, "2 of 10 jobs that waited have no runner record, so their wait after eligibility could not be split into runner startup and GitHub's delay"},
+		// The truncation reason has a semicolon of its own, so a bare one
+		// between reasons would hide where the second begins.
+		{"truncated and few", linuxJobs(7, startup), "the period held more than 5000 jobs; the newest 5000 were read, so narrow since; also, only 7 jobs waited: too few to call one cause dominant"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			f, err := QueueWait(waitSnapshot(c.jobs, linuxPool()))
+			s := waitSnapshot(c.jobs, linuxPool())
+			s.JobsTruncated = c.name == "truncated and few"
+			f, err := QueueWait(s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -529,5 +536,165 @@ func TestAJobThatNeverWaitedIsNotAmongTheLongestWaits(t *testing.T) {
 	}
 	if f.Evidence.Pools[0].Jobs != 3 {
 		t.Errorf("pool counts %d jobs, want all 3", f.Evidence.Pools[0].Jobs)
+	}
+}
+
+func zeroWaitJobs(n int) []WaitJob {
+	out := make([]WaitJob, n)
+	for i := range out {
+		out[i] = WaitJob{ID: fmt.Sprintf("instant-%03d", i), PoolID: "pool_linux", QueuedAt: waitBase,
+			EligibleAt: at(0), RunnerRequestedAt: at(0), RunnerRegisteredAt: at(0), StartedAt: at(0)}
+	}
+	return out
+}
+
+// On a healthy fleet most jobs start at once. Counting them as jobs that
+// waited would call two slow jobs a clear pattern, and tell an operator that
+// "only 500 jobs waited" when 45 did.
+func TestConfidenceAndItsSentencesCountOnlyJobsThatWaited(t *testing.T) {
+	startup := ran(0, 30*time.Minute, 30*time.Minute)
+	gone := linuxJobs(10, func(j *WaitJob) {
+		ran(10*time.Second, 4*time.Minute+10*time.Second, 4*time.Minute+20*time.Second)(j)
+		if j.ID < "job-02" {
+			j.RunnerRequestedAt, j.RunnerRegisteredAt = nil, nil
+		}
+	})
+	for _, c := range []struct {
+		name       string
+		jobs       []WaitJob
+		waited     int
+		confidence Confidence
+		reason     string
+		summary    string
+	}{
+		{"two slow jobs among a hundred", append(zeroWaitJobs(98), linuxJobs(2, startup)...), 2, Low,
+			"only 2 jobs waited, 1h in all: too little to break down", "Only 2 jobs waited, 1h in all: too little to break down."},
+		{"45 brief waits among 500", append(zeroWaitJobs(455), linuxJobs(45, ran(0, time.Second, time.Second))...), 45, Low,
+			"only 45 jobs waited, 45s in all: too little to break down", "Only 45 jobs waited, 45s in all: too little to break down."},
+		{"seven waits among fifty", append(zeroWaitJobs(43), linuxJobs(7, startup)...), 7, Medium,
+			"only 7 jobs waited: too few to call one cause dominant", ""},
+		{"lost records among the waits", append(zeroWaitJobs(90), gone...), 10, Medium,
+			"2 of 10 jobs that waited have no runner record, so their wait after eligibility could not be split into runner startup and GitHub's delay", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f, err := QueueWait(waitSnapshot(c.jobs, linuxPool()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f.Evidence.Jobs != len(c.jobs) || f.Evidence.Waited != c.waited {
+				t.Errorf("read %d and waited %d, want %d and %d", f.Evidence.Jobs, f.Evidence.Waited, len(c.jobs), c.waited)
+			}
+			if f.Confidence != c.confidence || f.ConfidenceReason != c.reason {
+				t.Errorf("got %s (%q), want %s (%q)", f.Confidence, f.ConfidenceReason, c.confidence, c.reason)
+			}
+			if c.summary != "" && f.Summary != c.summary {
+				t.Errorf("summary %q, want %q", f.Summary, c.summary)
+			}
+		})
+	}
+}
+
+// A job no pool has claimed is the typo in runs-on that jobs.unmatched exists
+// for; calling its wait unexplained would send the reader to the wrong fix.
+func TestAJobNoPoolHasClaimedYetIsUnmatched(t *testing.T) {
+	var jobs []WaitJob
+	for i := 0; i < 10; i++ {
+		j := WaitJob{ID: fmt.Sprintf("unclaimed-%d", i), QueuedAt: waitBase}
+		if i == 0 {
+			// Started after the period ended: still waiting at Until.
+			j.StartedAt = at(3 * time.Hour)
+		}
+		jobs = append(jobs, j)
+	}
+	f, err := QueueWait(waitSnapshot(jobs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Dominant != string(CauseUnmatched) || f.Confidence != High || f.Evidence.NoRunnerRecord != 0 {
+		t.Errorf("got %q at %s (%q), %d without a record", f.Dominant, f.Confidence, f.ConfidenceReason, f.Evidence.NoRunnerRecord)
+	}
+	if want := "Jobs waited 20h in all; 100% of it was waiting for a pool to claim them."; f.Summary != want {
+		t.Errorf("summary\n got %q\nwant %q", f.Summary, want)
+	}
+	if s := f.NextSteps[0]; s.Setting != "pool.labels" || s.Code != "jobs.unmatched" || !strings.Contains(s.Text, "would have saved up to 20h") {
+		t.Errorf("first step %+v", s)
+	}
+	assertNoCommand(t, f.NextSteps)
+}
+
+// A job that started with no eligible_at is a row from before the column was
+// written, or an anomaly: something claimed it, so its wait is not
+// unmatched, and with no runner on record it cannot be split either.
+func TestAStartedJobWithNoEligibleStampIsUnattributed(t *testing.T) {
+	s := waitSnapshot([]WaitJob{{ID: "old-row", PoolID: "pool_linux", QueuedAt: waitBase, StartedAt: at(10 * time.Minute)}}, linuxPool())
+	f, err := QueueWait(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Evidence.NoRunnerRecord != 1 {
+		t.Errorf("NoRunnerRecord %d, want 1", f.Evidence.NoRunnerRecord)
+	}
+	if got, want := causeSeconds(t, s), map[WaitCause]int64{CauseUnattributed: 600}; !sameCauses(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestQueueWaitOffersAStepForEachCauseOfATenthOrMoreUpToThree(t *testing.T) {
+	ceiling := linuxPool()
+	ceiling.AtCeiling = []Interval{{From: waitBase, To: waitBase.Add(time.Hour)}}
+	five := linuxJobs(10, func(j *WaitJob) {
+		// held 100s, unmatched 60s, at the ceiling 50s, starting 40s, GitHub 10s
+		j.HeldAt, j.ApprovedAt, j.EligibleAt = at(0), at(100*time.Second), at(160*time.Second)
+		ran(210*time.Second, 250*time.Second, 260*time.Second)(j)
+	})
+	three := linuxJobs(10, func(j *WaitJob) {
+		// held 200s, starting 50s, GitHub 10s
+		j.HeldAt, j.ApprovedAt, j.EligibleAt = at(0), at(200*time.Second), at(200*time.Second)
+		ran(200*time.Second, 250*time.Second, 260*time.Second)(j)
+	})
+	for _, c := range []struct {
+		name  string
+		snap  QueueWaitSnapshot
+		codes []string
+	}{
+		{"four causes over a tenth", waitSnapshot(five, ceiling), []string{"", "jobs.unmatched", ""}},
+		{"two causes over a tenth", waitSnapshot(three, linuxPool()), []string{"", "pool.queue_wait_high"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f, err := QueueWait(c.snap)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var codes []string
+			for _, s := range f.NextSteps {
+				codes = append(codes, s.Code)
+			}
+			if !slices.Equal(codes, c.codes) {
+				t.Errorf("steps %+v, want codes %q", f.NextSteps, c.codes)
+			}
+		})
+	}
+}
+
+// The card shows each pool's row beside the total; rounding each pool's
+// sub-second remainders separately would make them disagree.
+func TestPoolRowsAddExactlyToTheFleetWait(t *testing.T) {
+	var jobs []WaitJob
+	var pools []PoolConditions
+	for _, id := range []string{"pool_a", "pool_b", "pool_c"} {
+		pools = append(pools, PoolConditions{PoolID: id, PoolName: id})
+		jobs = append(jobs, WaitJob{ID: id + "-job", PoolID: id, QueuedAt: waitBase, EligibleAt: at(0),
+			RunnerRequestedAt: at(0), RunnerRegisteredAt: at(0), StartedAt: at(1400 * time.Millisecond)})
+	}
+	f, err := QueueWait(waitSnapshot(jobs, pools...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum int64
+	for _, p := range f.Evidence.Pools {
+		sum += p.WaitSeconds
+	}
+	if sum != f.Evidence.WaitSeconds || f.Evidence.WaitSeconds != 3 {
+		t.Errorf("pools add to %ds and the fleet waited %ds, want both 3s", sum, f.Evidence.WaitSeconds)
 	}
 }
