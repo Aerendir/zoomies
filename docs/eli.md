@@ -536,10 +536,14 @@ editing surface; they do not prove a patch correct. Provider errors, quota
 exhaustion or unsupported model output stop a repair without trying another
 user's credentials.
 
-A repair offers the model no tools; every step is a JSON object. A model that
-answers with a tool call anyway is told, as the result of that call, that it has
-no tools and which JSON replies it may send, and is asked once more. Most models
-comply. One that calls a tool again stops the repair, and Eli's comment names the
-tool it asked for, so you can tell a model that ignores its instructions, which
-a different model or provider fixes, from a prompt that was wrong. Both turns
-appear in the repair history.
+A repair offers the model no tools; every step is a JSON object. Some models
+take the names of those replies (`read`, `windows`, `edits`, `files`,
+`cannot_fix`) for functions and call them. A call named after a reply says what
+that reply would have, so Eli reads it as the reply and the repair goes on; the
+same checks apply to it as to JSON the model typed. Any other tool call is
+answered, as the result of that call, with the fact that it has no tools and which
+JSON replies it may send, and the model is asked once more. Most models comply.
+One that calls a tool again stops the repair, and Eli's comment names the tool it
+asked for and the names of its arguments, so you can tell a model that ignores its instructions, which a
+different model or provider fixes, from a prompt that was wrong. Every model turn
+appears in the repair history.

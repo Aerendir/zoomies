@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -285,13 +286,14 @@ func (m repairModel) SourceUsed(n int) {
 // Answer asks the model for the next repair step. A repair offers the model no
 // tools: every step is a JSON object the system prompt describes. Some models
 // answer with a tool call anyway (Ollama cloud did, for a repair whose only
-// failing check was an audit script), and giving up on the first one threw
-// away a repair the model would have finished. So the model is told once, the
-// way the chat loop tells a model that asks for a tool it was not given: a
-// result for the call it made, saying there are no tools and what to send
-// instead. A model that calls again is stopped, and the failure names the
-// tool, so an operator can tell a model ignoring its instructions from a
-// prompt that was wrong.
+// failing check was an audit script), because the prompt's own replies,
+// {"read":[...]} and {"windows":[...]}, look like functions to a model trained
+// to call them. A call named after a reply says what that reply would have, so
+// it is read as the reply, and the repair goes on. Any other call is answered
+// once, the way the chat loop answers a tool it was not given: a result for the
+// call it made, saying there are no tools and what to send instead. A model
+// that calls again is stopped, and the failure names the tool, so an operator
+// can tell a model ignoring its instructions from a prompt that was wrong.
 func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
 	turns := make([]assistant.Message, 0, len(messages)+2)
 	for _, v := range messages {
@@ -304,6 +306,13 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 		}
 		if len(calls) == 0 {
 			return text, nil
+		}
+		// Only when the model said nothing else: a call beside a reply of its own
+		// leaves two answers, and the one it wrote out is the one it meant.
+		if strings.TrimSpace(text) == "" {
+			if reply, ok := prrepair.ReplyFromCalls(repairCalls(calls)); ok {
+				return reply, nil
+			}
 		}
 		if attempt > 0 {
 			return "", fmt.Errorf("the provider answered with a tool call named %s, twice, instead of a repair plan; Eli offers no tools during a repair, so the model is ignoring its instructions: choose a model that keeps to a JSON reply, or test the provider in Eli settings", repairToolNames(calls))
@@ -381,6 +390,14 @@ func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (s
 	return out.String(), calls, nil
 }
 
+func repairCalls(calls []assistant.ToolCall) []prrepair.Call {
+	out := make([]prrepair.Call, len(calls))
+	for i, c := range calls {
+		out[i] = prrepair.Call{Name: c.Name, Arguments: c.Arguments}
+	}
+	return out
+}
+
 // repairToolRefusal is what a model is told for a tool it called during a
 // repair. It names the replies the system prompt allows, because a model that
 // reached for a tool was looking for a way to read or change a file and is
@@ -403,14 +420,35 @@ func repairToolName(name string) string {
 	return "`" + name + "`"
 }
 
+// repairToolNames names the tools a model called, and the names of the arguments
+// it gave each, never their values. A call the repair could not read as a reply
+// is fixed by teaching it that shape, and the shape is what the comment needs to
+// say to make that a one-line change instead of a guess.
 func repairToolNames(calls []assistant.ToolCall) string {
 	var names []string
 	seen := map[string]bool{}
 	for _, call := range calls {
-		if !seen[call.Name] {
-			seen[call.Name] = true
-			names = append(names, repairToolName(call.Name))
+		if seen[call.Name] {
+			continue
 		}
+		seen[call.Name] = true
+		name := repairToolName(call.Name)
+		var args map[string]json.RawMessage
+		if json.Unmarshal(call.Arguments, &args) == nil && len(args) > 0 {
+			keys := make([]string, 0, len(args))
+			for key := range args {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			if len(keys) > 6 {
+				keys = keys[:6]
+			}
+			for i, key := range keys {
+				keys[i] = repairToolName(key)
+			}
+			name += " (with " + strings.Join(keys, ", ") + ")"
+		}
+		names = append(names, name)
 	}
 	return strings.Join(names, ", ")
 }
