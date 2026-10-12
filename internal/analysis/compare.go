@@ -32,12 +32,13 @@ type Spread struct {
 }
 
 // JobFigures is what one side's jobs did. The caller leaves out the
-// conclusions it names in CompareSnapshot.Excluded before counting.
+// conclusions it names in CompareSnapshot.Excluded before counting, which is
+// why there is no cancelled count: it would always read 0, and a 0 here
+// would look like a measurement of none cancelled.
 type JobFigures struct {
 	Jobs        int    `json:"jobs"`
 	Succeeded   int    `json:"succeeded"`
 	Failed      int    `json:"failed"`
-	Cancelled   int    `json:"cancelled"`
 	FleetFailed int    `json:"fleet_failed"`
 	OOMKilled   int    `json:"oom_killed"`
 	Duration    Spread `json:"duration"`
@@ -171,10 +172,10 @@ var regressionSteps = map[string]func(under, moved string) NextStep{
 	},
 	"failure": func(under, moved string) NextStep {
 		return NextStep{Code: "jobs.workflow_failing", Text: fmt.Sprintf(
-			"More jobs failed %s (%s); a failure the fleet did not cause is the workflow's, and the step it failed at says which.", under, moved)}
+			"More jobs failed %s (%s); a failure the fleet did not cause is the workflow's own, and the step each job failed at says what to fix.", under, moved)}
 	},
 	"oom": func(under, moved string) NextStep {
-		return NextStep{Code: "jobs.oom_killed", Text: fmt.Sprintf(
+		return NextStep{Code: "jobs.oom_killed", Setting: "pool.resources.memory_mb", Text: fmt.Sprintf(
 			"More jobs were killed for their memory limit %s (%s); the memory their pool gives them is what to raise.", under, moved)}
 	},
 }
@@ -229,7 +230,16 @@ func Compare(s CompareSnapshot) (CompareFinding, error) {
 	case nb == 0:
 		f.Summary, f.ConfidenceReason = w.oneRanNothing(w.b, w.a), w.ranNothing(w.b)
 	case small:
-		ran := w.ran(na, nb) + fmt.Sprintf(": fewer than %d on either side", MinCompareJobs)
+		// Name the short side: a release hours old beside one that ran
+		// hundreds of jobs is the commonest case, and "either side" would be
+		// false of the one that ran hundreds.
+		where := "on either side"
+		if na >= MinCompareJobs {
+			where = w.under(w.b)
+		} else if nb >= MinCompareJobs {
+			where = w.under(w.a)
+		}
+		ran := w.ran(na, nb) + fmt.Sprintf(": fewer than %d %s", MinCompareJobs, where)
 		f.Summary, f.ConfidenceReason = ran+", so the two are not ranked.", ran
 	}
 	if small {
@@ -484,8 +494,12 @@ func (w wording) doubts(s CompareSnapshot) []string {
 	}
 	for _, side := range []CompareSide{s.A, s.B} {
 		if side.JobsGoneBefore != nil {
-			out = append(out, fmt.Sprintf("jobs %s from before %s are gone under retention.jobs, so its figures cover only the jobs still kept",
-				w.under(side.Label), side.JobsGoneBefore.UTC().Format("2006-01-02 15:04 UTC")))
+			jobs, figures := side.Label+"'s jobs", side.Label+"'s figures"
+			if w.period() {
+				jobs, figures = "the jobs in "+side.Label, "that side's figures"
+			}
+			out = append(out, fmt.Sprintf("%s from before %s are gone (retention.jobs keeps them for a set time, and raising it keeps more next time), so %s cover only the jobs still kept",
+				jobs, side.JobsGoneBefore.UTC().Format("2006-01-02 15:04 UTC"), figures))
 		}
 	}
 	switch {

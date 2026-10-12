@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -87,6 +88,65 @@ func TestCompareRefusesToRankFewerThanThirtyJobsOnEitherSide(t *testing.T) {
 	}
 	if hasSetting(f.NextSteps, "updates.mode") || len(f.Codes) != 0 {
 		t.Errorf("a comparison that ranks nothing names a regression's steps: %+v, codes %v", f.NextSteps, f.Codes)
+	}
+	// The window is bounded by limits.job_stats_window, so a reader told to
+	// widen it is told where the ceiling is.
+	if len(f.NextSteps) != 1 || f.NextSteps[0].Setting != "limits.job_stats_window" {
+		t.Errorf("next steps %+v, want one naming limits.job_stats_window", f.NextSteps)
+	}
+}
+
+// The commonest comparison is a release a few hours old against the one
+// before it: hundreds of jobs on one side, a dozen on the other. Saying both
+// were short would be false of the side that ran hundreds.
+func TestASmallSampleNamesTheSideThatIsShort(t *testing.T) {
+	for _, c := range []struct {
+		snap CompareSnapshot
+		want string
+	}{
+		{releases(400, 12), "v1.3.2 ran 400 jobs and v1.3.3 ran 12 in this period: fewer than 30 under v1.3.3, so the two are not ranked."},
+		{releases(12, 400), "v1.3.2 ran 12 jobs and v1.3.3 ran 400 in this period: fewer than 30 under v1.3.2, so the two are not ranked."},
+		{releases(12, 15), "v1.3.2 ran 12 jobs and v1.3.3 ran 15 in this period: fewer than 30 on either side, so the two are not ranked."},
+		{periods(400, 12), "400 jobs ran in the 24 hours before and 12 in the last 24 hours: fewer than 30 in the last 24 hours, so the two are not ranked."},
+		{periods(12, 400), "12 jobs ran in the 24 hours before and 400 in the last 24 hours: fewer than 30 in the 24 hours before, so the two are not ranked."},
+	} {
+		f := mustCompare(t, c.snap)
+		if f.Summary != c.want {
+			t.Errorf("summary\n got %q\nwant %q", f.Summary, c.want)
+		}
+		if f.Confidence != Low || f.ConfidenceReason+", so the two are not ranked." != c.want {
+			t.Errorf("confidence %q, reason %q; want low, and the reason the summary gives", f.Confidence, f.ConfidenceReason)
+		}
+	}
+}
+
+// Each bar is met by a move of exactly its size: a quarter longer and the
+// floor apart both count, and a fleet exactly a quarter larger is still
+// like for like.
+func TestAMoveOfExactlyItsBarCounts(t *testing.T) {
+	s := releases(120, 120)
+	s.A.Figures.Duration = spread(120, 2*time.Minute, 5*time.Minute)
+	s.B.Figures.Duration = spread(120, 2*time.Minute+30*time.Second, 5*time.Minute) // 1.25 times, 30s apart
+	s.B.MeanSlots = slots(12.5)
+	f := mustCompare(t, s)
+	if got := change(t, f, "duration_p50").Direction; got != Regressed {
+		t.Errorf("duration p50 2m to 2m 30s is %s, want regressed", got)
+	}
+	if f.Confidence != High {
+		t.Errorf("10 and 12.5 slots: confidence %q (%q), want high", f.Confidence, f.ConfidenceReason)
+	}
+}
+
+// When two measures moved as far as each other, the measures' own order
+// decides the lead, so one snapshot always reads the same way.
+func TestATieLeadsWithTheMeasureListedFirst(t *testing.T) {
+	s := releases(120, 120)
+	s.B.Figures.Startup = spread(120, 8*time.Second, 30*time.Second)   // twice as long at p95
+	s.B.Figures.QueueWait = spread(120, 5*time.Second, 40*time.Second) // twice as long at p95
+	for range 5 {
+		if f := mustCompare(t, s); f.Dominant != "queue_wait_p95" {
+			t.Fatalf("dominant %q, want queue_wait_p95, listed before startup_p95, which doubled as well", f.Dominant)
+		}
 	}
 }
 
@@ -314,7 +374,21 @@ func TestARateMovesOnlyByFivePointsAndThreeEvents(t *testing.T) {
 		t.Errorf("failure_rate change %+v, want unit rate and a ratio of 1 (five points over five)", c)
 	}
 	if len(f.NextSteps) == 0 || f.NextSteps[0].Code != "jobs.workflow_failing" {
-		t.Errorf("next steps %+v, want the first to name jobs.workflow_failing", f.NextSteps)
+		t.Fatalf("next steps %+v, want the first to name jobs.workflow_failing", f.NextSteps)
+	}
+	if want := "More jobs failed under v1.3.3 (failure rate 0% to 5%); a failure the fleet did not cause is the workflow's own, and the step each job failed at says what to fix."; f.NextSteps[0].Text != want {
+		t.Errorf("step\n got %q\nwant %q", f.NextSteps[0].Text, want)
+	}
+}
+
+// The catalog's own fix for an OOM kill is the pool's memory, so the step
+// names that field rather than leaving the reader to find it.
+func TestAnOOMRegressionNamesThePoolsMemory(t *testing.T) {
+	s := releases(120, 120)
+	s.B.Figures.OOMKilled = 12
+	f := mustCompare(t, s)
+	if len(f.NextSteps) == 0 || f.NextSteps[0].Code != "jobs.oom_killed" || f.NextSteps[0].Setting != "pool.resources.memory_mb" {
+		t.Errorf("next steps %+v, want the first to name jobs.oom_killed and pool.resources.memory_mb", f.NextSteps)
 	}
 }
 
@@ -407,10 +481,8 @@ func TestJobsGonePastRetentionMakeTheComparisonMedium(t *testing.T) {
 	if f.Confidence != Medium {
 		t.Errorf("confidence %q, want medium", f.Confidence)
 	}
-	for _, want := range []string{"retention.jobs", "v1.3.2", "2026-10-09 14:00 UTC"} {
-		if !strings.Contains(f.ConfidenceReason, want) {
-			t.Errorf("reason %q does not say %q", f.ConfidenceReason, want)
-		}
+	if want := "v1.3.2's jobs from before 2026-10-09 14:00 UTC are gone (retention.jobs keeps them for a set time, and raising it keeps more next time), so v1.3.2's figures cover only the jobs still kept"; f.ConfidenceReason != want {
+		t.Errorf("reason\n got %q\nwant %q", f.ConfidenceReason, want)
 	}
 }
 
@@ -449,5 +521,18 @@ func TestCompareRefusesASnapshotItCannotRead(t *testing.T) {
 		if _, err := Compare(s); err == nil {
 			t.Errorf("%s: no error", name)
 		}
+	}
+}
+
+// Cancelled jobs are left out of the read, so a cancelled count would always
+// be 0, and a 0 in the evidence reads as a measurement of none cancelled.
+// What was left out is said once, in excluded.
+func TestASidesFiguresCarryNoCancelledCount(t *testing.T) {
+	body, err := json.Marshal(JobFigures{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), `"cancelled"`) {
+		t.Errorf("figures %s carry a cancelled count", body)
 	}
 }
