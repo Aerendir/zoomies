@@ -275,6 +275,22 @@ a hostile name can do is mislead an answer: check what you act on.
   `assistant.chat` with the provider, the model, whether the fleet could be read
   and the tools used, and never with what was said.
 
+## PR check delay
+
+Read **PR check delay** from a job drawer before asking Eli to explain the
+snapshot. Supply a PR number in the selected job's repository. The selected
+job fixes the installation and head; a changed head needs a job from the
+current revision. The card shows protection/observation coverage and unknown
+phases explicitly. Ask Eli shares those labelled facts without requesting a
+fresh diagnostic. A fresh `get_pr_delay` tool read requires fleet access and
+uses the same shared admission allowance as the UI and CLI.
+
+The scripted evaluation harness includes unknown queue/startup timing, a missing
+required check and a head change during collection, with instruction text
+planted in the target branch. These scenarios prove the tool/transport path and
+evidence fences; they do not measure an unscripted model's reasoning. Live model
+evaluation remains a separate recorded check.
+
 ## Measuring Eli
 
 A prompt change is measured before it is trusted. `internal/api/eli_eval_test.go`
