@@ -115,7 +115,10 @@ var prompts = []*prompt{
 			Name: "period", Description: "how far back to look, as a duration such as 10m or 2h (default " + defaultPeriod + ")", Required: false,
 		}},
 		check: func(a map[string]string) error {
-			if d, err := time.ParseDuration(period(a)); err != nil || d <= 0 {
+			// A sign would read oddly in "over the last +10m", and it is the
+			// only form ParseDuration takes that the sentence cannot carry.
+			p := period(a)
+			if d, err := time.ParseDuration(p); err != nil || d <= 0 || strings.HasPrefix(p, "+") {
 				return errors.New("period must be a duration such as 10m or 2h, got " + strconv.Quote(a["period"]))
 			}
 			return nil
@@ -125,7 +128,7 @@ var prompts = []*prompt{
 			return strings.Join([]string{
 				"Say what changed in this fleet over the last " + p + ", and what is still open.",
 				"1. Call recent_events with since " + p + ": the jobs, runners and hosts that moved, oldest first. If the answer says it is incomplete, events were missed; say so, and read fleet_status for where things stand instead of guessing at what was lost.",
-				"2. Call scaling_decisions and keep the decisions made within the last " + p + ": they say why pools grew, held or shrank, in the scheduler's own words. Set each beside the events it explains.",
+				"2. Call scaling_decisions and keep the decisions made within the last " + p + ": they say why pools grew, held or shrank, in the scheduler's own words. It returns 50 by default, so if the oldest is still inside the period, ask again with limit 200. Set each beside the events it explains.",
 				"3. Call list_problems for what the controller still thinks is wrong, and say which of it is new in this period and which was there before.",
 				"4. Answer in two parts: what moved, in the order it happened and with the reason where there is one, then what is still open and what to do about it. Say plainly when nothing moved.",
 				untrustedNote,

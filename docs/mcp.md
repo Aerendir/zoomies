@@ -121,8 +121,7 @@ MCP clients that support prompts can use these starting points:
 The resources `zoomies://catalog` and `zoomies://catalog/{code}` explain
 problem codes and repository checks. `zoomies://fleet/now` is the fleet's
 counts as they are this moment, read with your own token like `fleet_status`.
-To inspect the interface without a
-controller or credentials, run:
+To inspect the interface without a controller or credentials, run:
 
 ```sh
 zoomies mcp --describe
