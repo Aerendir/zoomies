@@ -12445,10 +12445,13 @@ components:
             The latest attempt's state: `requested` until the host reports the release or 90
             minutes pass, then `succeeded`, `failed`, `timed_out`, or `cancelled` when the host
             was removed. `none` when there is no attempt to show, including one that failed
-            before the host reached its release some other way. `unsupported` in place of `none`
-            for a host behind the controller that the update helper can never be installed on
-            (not Linux, no systemd, or a container under a rootless runtime): `reason` says
-            which, and the host is updated with `upgrade_command`.
+            before the host reached its release some other way. Where the attempt or the
+            controller is on a build from main, which cannot be ordered against a release, it
+            is also `none` once the host runs what the controller would take it to now.
+            `unsupported` in place of `none` for a host behind the controller that the update
+            helper can never be installed on (not Linux, no systemd, or a container under a
+            rootless runtime): `reason` says which, and the host is updated with
+            `upgrade_command`.
         reason:
           type: string
           description: >-
