@@ -8,6 +8,16 @@ description: >-
 
 # Zoomies API surface
 
+For a working fleet and connection setup, start with [advanced
+operations](advanced.md#6-automate-through-the-same-interfaces) or [CLI
+connections](cli.md#talking-to-a-controller). This page is the route reference;
+the [automation contract](automation.md) describes proposed stability guarantees
+and current limits.
+
+Quick jumps: [health](#meta-and-health), [authentication](#authentication),
+[pools](#pools), [hosts and agents](#hosts-and-agents),
+[backups](#backups), [events](#sse-event-kinds) and [CLI mapping](#cli-mapping).
+
 This is the authoritative list of endpoints. `internal/api` implements exactly
 this, `api/openapi.yaml` describes exactly this, and the UI's generated
 TypeScript client is derived from that document. **Nothing is reachable from the

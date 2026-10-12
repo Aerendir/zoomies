@@ -9,6 +9,19 @@ description: >-
 
 # Configuring Zoomies
 
+This is the settings reference. For a first installation, follow the
+[quick start](quickstart.md); for capacity planning and tuning, use [advanced
+operations](advanced.md).
+
+| Looking for… | Jump to |
+| --- | --- |
+| Why a setting has its current value | [The four layers](#the-four-layers) |
+| Controller address and webhooks | [`server.external_url`](#serverexternal_url) |
+| The encryption key for recovery | [`security.encryption_key`](#securityencryption_key) |
+| A key's environment variable or when it applies | [Every key](#every-key) |
+| Runner labels, images, sizing and limits for one pool | [Pool settings](#pool-settings) |
+| Jobs that need Docker | [Jobs that build container images](#jobs-that-build-container-images) |
+
 Almost every setting lives in the fleet's own SQLite database and is changed on
 the **Settings → Configuration** page. A change made there is kept: it survives
 a restart, it is written to the audit trail, and it applies to this controller

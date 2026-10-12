@@ -9,6 +9,17 @@ description: >-
 
 # Hosts and pools
 
+New to the terminology? [The fundamentals](fundamentals.md) explain hosts,
+pools, workflow labels and capacity with one complete test workflow.
+
+| Your task | Jump to |
+| --- | --- |
+| Join a machine | [Adding a host](#adding-a-host) |
+| Create a runner recipe | [Adding a pool](#adding-a-pool) |
+| Set runner size and concurrency | [How big a runner is](#how-big-a-runner-is-and-how-many-there-are) |
+| Explain placement or a pool with no eligible host | [How a runner is placed](#how-a-runner-is-placed) |
+| Choose a platform or topology | [Worked shapes](#worked-shapes) |
+
 **Adding a home-lab or private host?** Choose **Private connection · Tailcat**
 in Add a host for built-in encrypted connectivity without public host IPs or
 port forwarding. [Private host setup and how it works](private-hosts.md).
