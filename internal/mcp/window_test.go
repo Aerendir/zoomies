@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -653,5 +654,63 @@ func TestSupportBundleNamesASectionItCannotTrimWithItsSize(t *testing.T) {
 	}
 	if !strings.Contains(kennelTool(t, "support_bundle").Description, "cannot be trimmed is named with its size") {
 		t.Error("the description does not say what happens to a section that cannot be trimmed")
+	}
+}
+
+// A null items is not an empty list: cutting it as one would rewrite the field
+// and report "0 rows" that the controller never sent.
+func TestCuttingASectionWhoseItemsIsNullDoesNotInventAnEmptyList(t *testing.T) {
+	section := json.RawMessage(`{"ok":true,"items":null,"pad":"` + strings.Repeat("y", 1000) + `"}`)
+	// A budget the section's own bytes meet, so only treating null as a list
+	// could take the object path.
+	out, note := cutSection("problems", section, len(section))
+	if strings.Contains(note, "held") || strings.Contains(string(out), `"items":[]`) {
+		t.Errorf("null items was treated as a list: note %q, out %.80s", note, out)
+	}
+	if !strings.Contains(note, "too large to show") {
+		t.Errorf("an untrimmable section is not named with its size: %q", note)
+	}
+}
+
+// Sixty-four bytes of slack and four per section are what the first attempt
+// allows for the answer's own punctuation. Section names are escaped when the
+// answer is marshalled, so names full of < overshoot that on the first attempt,
+// and the loop has to bring the answer back within the ceiling.
+func TestSupportBundleShrinksAgainWhenTheFirstAttemptOvershoots(t *testing.T) {
+	var names []string
+	doc := map[string]json.RawMessage{}
+	for i := range maxBundleSections {
+		name := strings.Repeat("<", 100) + strconv.Itoa(i)
+		rows := make([]string, 200)
+		for j := range rows {
+			rows[j] = fmt.Sprintf(`{"id":"r%d","pad":%q}`, j, strings.Repeat("x", 300))
+		}
+		names = append(names, name)
+		doc[name] = json.RawMessage(`[` + strings.Join(rows, ",") + `]`)
+	}
+
+	first, _, err := fitSections(doc, names, sectionRoom(names))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) <= maxWindowBlock {
+		t.Fatalf("the first attempt is %d bytes and fits, so this test never reaches the loop", len(first))
+	}
+
+	out, err := bundleSections(doc, names)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out[0].Text) > maxWindowBlock {
+		t.Errorf("the answer is %d bytes, over the %d ceiling", len(out[0].Text), maxWindowBlock)
+	}
+	var got map[string][]json.RawMessage
+	if err := json.Unmarshal([]byte(out[0].Text), &got); err != nil || len(got) != len(names) {
+		t.Fatalf("the answer lost a section or is not JSON: %v (%d sections)", err, len(got))
+	}
+	for name, rows := range got {
+		if len(rows) == 0 {
+			t.Errorf("section %.10s... was cut to nothing", name)
+		}
 	}
 }

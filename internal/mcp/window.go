@@ -784,11 +784,7 @@ func supportBundle(ctx context.Context, c API, raw json.RawMessage) ([]Content, 
 // six-byte escapes, so a section can be larger in the answer than it was in
 // the bundle.
 func bundleSections(doc map[string]json.RawMessage, want []string) ([]Content, error) {
-	// Braces, quotes, colons and commas around the sections, and room to spare.
-	room := maxWindowBlock - 64 - 4*len(want)
-	for _, name := range want {
-		room -= len(name)
-	}
+	room := sectionRoom(want)
 	for {
 		out, notes, err := fitSections(doc, want, room)
 		if err != nil {
@@ -806,6 +802,18 @@ func bundleSections(doc map[string]json.RawMessage, want []string) ([]Content, e
 		}
 		return content, nil
 	}
+}
+
+// sectionRoom is the bytes the sections may share before the answer is
+// measured: the block less the braces, quotes, colons and commas around them,
+// and a little to spare. Marshalling escapes a name as it does a section, so a
+// name with enough <, > or & in it overshoots this and the loop corrects it.
+func sectionRoom(want []string) int {
+	room := maxWindowBlock - 64 - 4*len(want)
+	for _, name := range want {
+		room -= len(name)
+	}
+	return room
 }
 
 // fitSections is one attempt at the answer with room bytes to share out.
@@ -851,7 +859,9 @@ func cutSection(name string, section json.RawMessage, budget int) (json.RawMessa
 	}
 	// An object with a list in items, as problems is, keeps its other fields.
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(section, &fields) == nil && json.Unmarshal(fields["items"], &rows) == nil {
+	// A null items is no list: it unmarshals to nothing without error, and
+	// rewriting it as [] would report rows that were never there.
+	if json.Unmarshal(section, &fields) == nil && string(fields["items"]) != "null" && json.Unmarshal(fields["items"], &rows) == nil {
 		fields["items"] = json.RawMessage("[]")
 		bare, _ := json.Marshal(fields)
 		kept := rowsWithin(rows, budget-len(bare))
