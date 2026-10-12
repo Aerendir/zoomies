@@ -787,6 +787,7 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "POST", path: "/api/v1/problems/auto-applied/missing/undo", role: store.RoleOperator, action: auth.ActionProblemsApply},
 		{method: "GET", path: "/api/v1/scaling-events", role: store.RoleViewer, action: auth.ActionStatsRead},
 		{method: "GET", path: "/api/v1/events", role: store.RoleViewer, action: auth.ActionEventsRead},
+		{method: "GET", path: "/api/v1/events/recent", role: store.RoleViewer, action: auth.ActionEventsRead},
 		{method: "GET", path: "/api/v1/usage", role: store.RoleViewer, action: auth.ActionUsageRead},
 		{method: "GET", path: "/api/v1/usage.csv", role: store.RoleViewer, action: auth.ActionUsageRead},
 		{method: "GET", path: "/api/v1/updates", role: store.RoleViewer, action: auth.ActionUpdatesRead},

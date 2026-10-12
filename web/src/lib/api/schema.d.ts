@@ -1294,6 +1294,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What happened since an event id, as JSON
+         * @description The events the stream would replay after an id, as one JSON answer, for a caller that cannot hold a stream open. It reads the same buffer with the same ids, the same `kinds` and `topic` filters and the same narrowing by audience as `GET /events`, so a cursor taken from either is good for both. `since` is an event id exactly as the stream sends it (`<epoch>.<sequence>`), or a duration such as `10m` for the events no older than that; absent, it is everything the buffer holds. `next` is the id of the last event looked at, or the newest the buffer holds when nothing matched, so a first call always returns a cursor to pass back. `complete` is false when the buffer no longer reaches back to `since` (or `since` is from another run of the controller, in which case the answer starts at the buffer's start): the caller missed events it will not be given and should fetch the resources afresh. `truncated` is true when more matched than `limit`, the oldest being returned, so a caller pages forward from `next`. With `wait` and nothing to return yet, the request is held for the next matching event and answers with it and anything queued behind it, or with `timed_out` true and no items when the wait ends (at most 25 seconds, whatever was asked). A held request counts against `limits.event_subscribers` as a stream does.
+         */
+        get: operations["recentEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/installations": {
         parameters: {
             query?: never;
@@ -6072,6 +6092,41 @@ export interface components {
             idle_runners?: number;
             busy_runners?: number;
             total_runners?: number;
+        };
+        RecentEvents: {
+            /** @description Oldest first. */
+            items: components["schemas"]["EventFrame"][];
+            /**
+             * @description The cursor to pass as `since` on the next call.
+             * @example k3f9a2.1206
+             */
+            next: string;
+            /** @description False when the buffer no longer reached back to `since`, so events were missed that this answer cannot contain. */
+            complete: boolean;
+            /** @description More matched than `limit`. */
+            truncated: boolean;
+            /** @description The wait ended with nothing to return. */
+            timed_out: boolean;
+        };
+        EventFrame: {
+            /**
+             * @description `<epoch>.<sequence>`, as the stream sends it.
+             * @example k3f9a2.1205
+             */
+            id: string;
+            /** @example job.updated */
+            kind: string;
+            /**
+             * @description Narrows the kind, e.g. `job:job_k3f9qz2m`. May be empty.
+             * @example job:job_k3f9qz2m
+             */
+            topic: string;
+            /** Format: date-time */
+            at: string;
+            /** @description The resource view the stream carries for this kind. */
+            data: {
+                [key: string]: unknown;
+            };
         };
         ScalingEvent: {
             id?: string;
@@ -12840,6 +12895,47 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": string;
+                };
+            };
+            409: components["responses"]["LimitReached"];
+        };
+    };
+    recentEvents: {
+        parameters: {
+            query?: {
+                /** @description An event id as the stream sends it, or a duration such as `10m`. A value that is neither is a 400 naming this parameter. */
+                since?: string;
+                /** @description Comma-separated event kinds to return. Omit for all. */
+                kinds?: string;
+                /** @description Topic prefix filter, e.g. `job:`. */
+                topic?: string;
+                /** @description How many events at most. Default 50, at most 200. */
+                limit?: number;
+                /** @description How long to hold the request for the next matching event when there is none yet, as a duration such as `20s`. Default `0`, which answers at once. Read as 25 seconds when it asks for more. */
+                wait?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentEvents"];
+                };
+            };
+            /** @description `since` or `wait` could not be read. `error.field` names it. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             409: components["responses"]["LimitReached"];
