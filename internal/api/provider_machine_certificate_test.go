@@ -120,3 +120,46 @@ func TestRenamingAProviderIsNotRefusedForACertificateItAlreadyHolds(t *testing.T
 	h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie,
 		body: map[string]any{"name": "proxmox-lab-2"}}).mustStatus(t, http.StatusOK, "rename a provider holding text that is no certificate")
 }
+
+// The audit trail is read by every signed-in viewer and redacts by field name,
+// which says nothing about a box called machine_ca_pem. An upgrade copies
+// whatever ca_pem held into it, so a key pasted there by mistake long ago is
+// copied too, and clearing the new box (which the docs tell an operator with a
+// public certificate to do) would write that key into the audit as the "before".
+func TestClearingAMachineCertificateThatHoldsAKeyDoesNotAuditTheKey(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.user("admin", store.RoleAdmin)
+	viewer, _ := h.user("viewer", store.RoleViewer)
+	cookie := h.session(admin)
+	prov := h.provider("proxmox-lab")
+	row, err := h.st.GetProvider(h.ctx, prov.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	row.CAPEM, row.MachineCAPEM = pastedKey, pastedKey // what the upgrade copy leaves behind
+	if err := h.st.UpdateProvider(h.ctx, row); err != nil {
+		t.Fatalf("UpdateProvider: %v", err)
+	}
+
+	h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie,
+		body: map[string]any{"machine_ca_pem": ""}}).mustStatus(t, http.StatusOK, "clear the machines' certificate")
+
+	res := h.do(request{method: http.MethodGet, path: "/api/v1/audit?action=provider.update", cookie: h.session(viewer)})
+	res.mustStatus(t, http.StatusOK, "read the audit as a viewer")
+	var events page[store.AuditEvent]
+	res.into(t, &events)
+	recorded := false
+	for _, e := range events.Items {
+		for _, picture := range []string{e.Before, e.After} {
+			if strings.Contains(picture, "PRIVATE KEY") || strings.Contains(picture, "bm90IGEgcmVhbCBrZXk") {
+				t.Errorf("a viewer can read the pasted key in the audit: %s", picture)
+			}
+		}
+		if strings.Contains(e.Before, "machine_ca_pem") {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Errorf("the change to machine_ca_pem is not in the audit at all: %s", truncate(res.body))
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -159,8 +160,28 @@ var nameExceptions = []string{
 	"file", "path", "url", "type", "kind", "hint",
 }
 
+// privateKeyBlock matches the opening line of a PEM private key: PKCS#8, RSA,
+// EC, encrypted, OpenSSH, and a PGP key block. A certificate's header does not
+// match it, and neither does a sentence that only mentions a private key, which
+// has no "-----BEGIN" in front of it.
+var privateKeyBlock = regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY`)
+
+// holdsPrivateKey reports whether a string contains a PEM private key block.
+//
+// A name cannot say so. A box meant for a certificate is called "ca_pem", which
+// reads as public, and a key pasted into it by mistake is exactly as secret as
+// one pasted into a field called "private_key". The audit trail is readable by
+// every signed-in viewer, so the value is judged as well as the name.
+func holdsPrivateKey(s string) bool {
+	// The cheap test first: this runs on every string in every audit payload.
+	return strings.Contains(s, "PRIVATE KEY") && privateKeyBlock.MatchString(s)
+}
+
 // Redact returns a copy of v -- as maps, slices and scalars -- with every value
-// whose field or key name looks like a credential replaced by "[redacted]".
+// whose field or key name looks like a credential replaced by "[redacted]", and
+// every string that contains a PEM private key block blanked whatever its field
+// is called. The whole string goes, not the block: what surrounds a pasted key
+// is no more worth keeping than the key.
 //
 // It works on the shape a JSON document would have, not on the Go types, so the
 // audit trail matches what the API shows. Fields tagged `json:"-"` are dropped
@@ -228,6 +249,9 @@ func redactValue(rv reflect.Value, depth int) any {
 	default:
 		if !rv.CanInterface() {
 			return nil
+		}
+		if rv.Kind() == reflect.String && holdsPrivateKey(rv.String()) {
+			return redactedMarker
 		}
 		return rv.Interface()
 	}
