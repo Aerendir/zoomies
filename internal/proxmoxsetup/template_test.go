@@ -244,3 +244,14 @@ func TestGrantTokenGrantsTheUserAndTheTokenOnEveryPath(t *testing.T) {
 		}
 	}
 }
+
+// A template whose /etc/machine-id is missing boots clones that never get an
+// address: systemd-networkd's DHCP client cannot start without one. The file
+// has to be left empty, which is also how systemd knows to make a fresh id.
+func TestImagePreparationLeavesAnEmptyMachineIDForEachCloneToFill(t *testing.T) {
+	clean := strings.Index(prepareTemplateImage, "cloud-init clean --logs --machine-id")
+	empty := strings.Index(prepareTemplateImage, ": > /etc/machine-id")
+	if clean < 0 || empty < 0 || empty < clean {
+		t.Fatalf("the machine id is not left empty after the cleanup (cleanup at %d, truncate at %d)", clean, empty)
+	}
+}
