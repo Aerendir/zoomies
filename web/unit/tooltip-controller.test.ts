@@ -287,6 +287,32 @@ test('a bubble opened by its owner is adopted, and closes whatever was showing',
   assert.equal(ctl.current, null);
 });
 
+test('a wait still pending on another trigger does not take the bubble from the one the keyboard is on', () => {
+  // The pointer rests on A, starting its 250ms. Before it is over, Tab moves
+  // focus to B, which opens at once. A's timer must not later fire, close B and
+  // show help for a control the keyboard has left.
+  const { clock, ctl, a, b } = setup();
+  ctl.hover(a);
+  clock.advance(OPEN_DELAY - 100);
+  ctl.focus(b);
+  assert.equal(b.open, true);
+  clock.advance(1_000);
+  assert.equal(b.open, true, 'B is still the one showing');
+  assert.equal(a.open, false, 'and A never came');
+  assert.equal(ctl.current, b);
+});
+
+test('a bubble opened by its owner also cancels waits pending elsewhere', () => {
+  const { clock, ctl, a, b } = setup();
+  ctl.hover(a);
+  clock.advance(OPEN_DELAY - 100);
+  b.show();
+  ctl.adopt(b);
+  clock.advance(1_000);
+  assert.equal(b.open, true);
+  assert.equal(a.open, false);
+});
+
 test('a bubble its owner opened stays through a pointer leaving, until focus goes or something is pressed', () => {
   // A tap on a touch screen opens a rich card through its bound `open`, and a
   // finger lifting is a pointer leaving. The card must not go with it.
