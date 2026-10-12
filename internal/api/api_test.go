@@ -689,6 +689,9 @@ type route struct {
 	// accountOnly refuses bearer tokens even when their scopes match. Source
 	// membership must belong to the signed-in account.
 	accountOnly bool
+	// visitorDenied is a read that needs an authenticated caller even though
+	// its action also permits retained public fleet data. Scoped tokens work.
+	visitorDenied bool
 	// action is the permission the route's own gate checks, and the scope a
 	// narrowed token therefore has to carry. Empty means no gate: the public
 	// routes, and the three self-service ones every signed-in identity may
@@ -862,7 +865,7 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "GET", path: "/api/v1/jobs/" + ids.job, role: store.RoleViewer, action: auth.ActionJobsRead},
 		{method: "GET", path: "/api/v1/jobs/" + ids.job + "/events", role: store.RoleViewer, action: auth.ActionJobsRead},
 		{method: "GET", path: "/api/v1/jobs/" + ids.job + "/explanation", role: store.RoleViewer, action: auth.ActionJobsRead},
-		{method: "GET", path: "/api/v1/jobs/" + ids.job + "/pr-delay", role: store.RoleViewer, action: auth.ActionJobsRead},
+		{method: "GET", path: "/api/v1/jobs/" + ids.job + "/pr-delay", role: store.RoleViewer, action: auth.ActionJobsRead, visitorDenied: true},
 		{method: "POST", path: "/api/v1/jobs/" + ids.job + "/cancel", role: store.RoleOperator, action: auth.ActionJobsCancel},
 		{method: "POST", path: "/api/v1/jobs/" + ids.job + "/rerun", role: store.RoleOperator, action: auth.ActionJobsRerun},
 
