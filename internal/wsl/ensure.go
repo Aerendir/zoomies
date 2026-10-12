@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -178,7 +179,7 @@ func ensureLinger(ctx context.Context, sys System, opts Options) Step {
 		step.Status, step.Detail = StatusSkipped, "the agent's user is unknown (no installed zoomies-agent unit)"
 		return step
 	}
-	if sys.Exists(filepath.Join(lingerDir, user)) {
+	if sys.Exists(path.Join(lingerDir, user)) {
 		step.Status, step.Detail = StatusOK, "enabled for "+user
 		return step
 	}
