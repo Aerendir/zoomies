@@ -238,7 +238,7 @@ func writeScript(ctx context.Context, sys System, distro string, dry bool) (scri
 	}
 	local := strings.TrimSpace(decodeConsole(out))
 	if local == "" || strings.Contains(local, "%") {
-		return res, errors.New("Windows did not say where %LOCALAPPDATA% is")
+		return res, errors.New("the Windows side did not say where %LOCALAPPDATA% is")
 	}
 	unixOut, err := sys.Run(ctx, "wslpath", "-u", local)
 	if err != nil {
