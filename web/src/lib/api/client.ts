@@ -1320,7 +1320,12 @@ export const replaceAssistantConversation = (
   );
 export const deleteAssistantConversation = (id: string) =>
   api.del<void>(`/assistant/personal/conversations/${encodeURIComponent(id)}`);
-export const listEliRepairs = () => api.get<Result<'listEliRepairs'>>('/assistant/repairs');
+export const listEliRepairs = (query?: Query<'listEliRepairs'>, signal?: AbortSignal) =>
+  api.get<Result<'listEliRepairs'>>('/assistant/repairs', { query, signal });
+export const selectEliRepairs = (query?: Query<'selectEliRepairs'>, signal?: AbortSignal) =>
+  api.get<Result<'selectEliRepairs'>>('/assistant/repairs/selection', { query, signal });
+export const bulkEliRepairAction = (body: Body<'bulkEliRepairAction'>) =>
+  api.post<Result<'bulkEliRepairAction'>>('/assistant/repairs/bulk', { body });
 export const getEliRepairSettings = () =>
   api.get<Result<'getEliRepairSettings'>>('/assistant/repairs/settings');
 export const requestEliRepair = (body: Body<'requestEliRepair'>) =>
