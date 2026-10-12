@@ -345,22 +345,17 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 		// pressured events than the fewest judged at all: one failure in
 		// the one busy minute of a day is not a cluster.
 		clustered := pe >= minPressureEvents && e.PressuredMinutes > 0 && pe*calm >= 2*ce*e.PressuredMinutes
+		// Every count here is of measured events, so it names their kinds
+		// alone; a kind that fell only where there were no samples is named
+		// by the gap's clause and the confidence reason, never here.
 		what := badWords(measured)
-		if e.Unmeasured > 0 {
-			// The subject takes in the events the gap clause counts too.
-			what = badWords(events)
-		}
 		switch {
 		case clustered:
 			f.Dominant = HostPressured
 			th, above, with := threshold(measured, samples)
 			if th != nil {
-				subject := badWords(with)
-				if e.Unmeasured > 0 {
-					subject = what
-				}
 				f.Summary = fmt.Sprintf("%s's %s cluster in its busy minutes: %d of %d came while %s was at or above %s, which was true for %s %s%s.",
-					host, subject, above, len(with), th.words, th.shown, share(th.minutesAbove, th.minutes), ofPeriod(th.minutes), gap)
+					host, badWords(with), above, len(with), th.words, th.shown, share(th.minutesAbove, th.minutes), ofPeriod(th.minutes), gap)
 				f.Evidence.Threshold = &th.PressureThreshold
 			} else {
 				f.Summary = fmt.Sprintf("%s's %s cluster in its busy minutes: %d of %d came while it was under pressure, which was true for %s %s%s.",
@@ -370,7 +365,12 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 				f.NextSteps = append(f.NextSteps, NextStep{Code: "jobs.oom_killed", Setting: "pool.resources.memory_mb", Text: fmt.Sprintf(
 					"Jobs on %s were killed for their memory in its busy minutes; the memory a pool gives each runner is also what the scheduler reserves for it, so raising it places fewer runners on %s at once.", host, host)})
 			}
-			f.NextSteps = append(f.NextSteps, capacityStep(fmt.Sprintf("its %s came in the minutes it was under pressure", what)))
+			// Said of all of them only when all of them came under pressure.
+			came := fmt.Sprintf("its %s came", what)
+			if ce > 0 {
+				came = fmt.Sprintf("%d of its %d %s came", pe, len(measured), what)
+			}
+			f.NextSteps = append(f.NextSteps, capacityStep(came+" in the minutes it was under pressure"))
 			if ce > pe {
 				// Most came while it was calm, and lowering its capacity
 				// would not have saved those.

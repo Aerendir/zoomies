@@ -229,6 +229,12 @@ func TestACalmMajorityCapsAClusterAtMedium(t *testing.T) {
 	if want := []string{"host.throttled", "jobs.workflow_failing"}; !slices.Equal(codes, want) {
 		t.Errorf("steps' codes %v, want %v", codes, want)
 	}
+	// The capacity step is about the pressured ones and says how many
+	// they were; "its failures came in the minutes it was under pressure"
+	// would be false of the other 4.
+	if !strings.Contains(f.NextSteps[0].Text, ": 3 of its 7 failures came in the minutes it was under pressure,") {
+		t.Errorf("capacity step %q does not say how many came under pressure", f.NextSteps[0].Text)
+	}
 	if !strings.Contains(f.NextSteps[1].Text, "while it was calm") {
 		t.Errorf("calm step %q does not say which failures it is about", f.NextSteps[1].Text)
 	}
@@ -236,6 +242,14 @@ func TestACalmMajorityCapsAClusterAtMedium(t *testing.T) {
 	even := mustPressure(t, pressSnapshot(loadMinutes(120, 3, 2.5, 0.5), failedIn(0, 1, 2, 30, 50, 70)))
 	if even.Confidence != High || len(even.NextSteps) != 1 {
 		t.Errorf("3 pressured and 3 calm: %s (%s), steps %+v, want high with the capacity step alone", even.Confidence, even.ConfidenceReason, even.NextSteps)
+	}
+	if !strings.Contains(even.NextSteps[0].Text, ": 3 of its 6 failures came in the minutes it was under pressure,") {
+		t.Errorf("capacity step %q does not say how many came under pressure", even.NextSteps[0].Text)
+	}
+	// Where every one came under pressure, the step can say so plainly.
+	all := mustPressure(t, pressSnapshot(loadMinutes(120, 20, 2.5, 0.5), failedIn(1, 4, 7, 10, 13)))
+	if !strings.Contains(all.NextSteps[0].Text, ": its failures came in the minutes it was under pressure,") {
+		t.Errorf("capacity step %q, want every failure said to have come under pressure", all.NextSteps[0].Text)
 	}
 }
 
@@ -396,6 +410,44 @@ func TestFailuresWhereTheHostSentNoSamplesAreCountedAndSaid(t *testing.T) {
 		if !strings.Contains(f.Summary, "fell where the host sent no samples") {
 			t.Errorf("summary %q does not count the unmeasured", f.Summary)
 		}
+	}
+}
+
+// gapMinutes is the busy-then-calm load with no samples for minutes 60 to
+// 71, so events from minute 62 to 71 have none near them.
+func gapMinutes(busy int) []HostMinute {
+	m := loadMinutes(120, busy, 2.5, 0.5)
+	return append(m[:60:60], m[72:]...)
+}
+
+func oomIn(minutes ...int) []HostJob {
+	jobs := failedIn(minutes...)
+	for i := range jobs {
+		jobs[i].ID, jobs[i].OOMKilled = fmt.Sprintf("oom-%03d", minutes[i]), true
+	}
+	return jobs
+}
+
+// A count of measured events names only the kinds among them: OOM kills
+// that all fell in a gap are named in the gap's clause and nowhere else, or
+// "5 of 6" would read as OOM kills pointing at the host's load.
+func TestAKindOnlyInTheGapIsNotNamedInACountOfMeasuredEvents(t *testing.T) {
+	clustered := mustPressure(t, pressSnapshot(gapMinutes(20), append(failedIn(1, 4, 7, 10, 13, 90), oomIn(62, 63, 64, 65, 66, 67, 68)...)))
+	if want := "demo-builder-2's failures cluster in its busy minutes: 5 of 6 came while its load per core was at or above 2.5, which was true for 19% of the minutes it was measured; 7 of 13 fell where the host sent no samples."; clustered.Summary != want {
+		t.Errorf("summary\n got %q\nwant %q", clustered.Summary, want)
+	}
+	for _, step := range clustered.NextSteps {
+		if strings.Contains(step.Text, "OOM") || step.Code == "jobs.oom_killed" {
+			t.Errorf("step %+v names OOM kills, none of which came in a measured minute", step)
+		}
+	}
+	if want := "7 of its 13 failures and OOM kills came in minutes with no sample"; !strings.Contains(clustered.ConfidenceReason, want) {
+		t.Errorf("reason %q does not count every kind in the gap: %q", clustered.ConfidenceReason, want)
+	}
+
+	calm := mustPressure(t, pressSnapshot(gapMinutes(0), append(failedIn(10, 20, 30, 40), oomIn(62, 63, 64, 65, 66, 67, 68)...)))
+	if want := "demo-builder-2 was not under pressure in any minute it was measured, so none of the 4 failures in measured minutes came under pressure; 7 of 11 fell where the host sent no samples."; calm.Summary != want {
+		t.Errorf("summary\n got %q\nwant %q", calm.Summary, want)
 	}
 }
 
