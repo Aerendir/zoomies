@@ -38,10 +38,12 @@ Flags:
   --controller               the controller to talk to; overrides agent.controller_url
   --join-token               a join token, used only when this host has no credentials yet
   --log-file                 append the log to this file instead of stderr (the Windows service is installed with one, because a service has no stderr anyone can read)
+  --wsl-ensure               inside a WSL2 distro, make sure it starts at boot and stays up (wsl.conf, linger, Windows scheduled tasks), then exit; safe to run repeatedly, restarts nothing, and does nothing elsewhere
 
 Examples:
   zoomies agent --config /etc/zoomies/zoomies.yaml
   zoomies agent --controller https://zoomies.example.com --join-token zoojoin_...
+  sudo zoomies agent --wsl-ensure
 ```
 
 ### zoomies gateway
