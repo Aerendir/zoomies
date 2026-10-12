@@ -253,6 +253,19 @@ cannot repeat or hide a row, which `--offset` cannot promise. `--output json`
 returns every job with its steps; `--include-steps=false` returns one short
 summary per job, small enough to read a hundred of.
 
+`jobs pr-delay <job-id> --pull-number N` reads the selected job's PR diagnostic
+through the same bounded API used by agents. It prints required-check coverage,
+known timings and opaque check identities. `--output json` preserves the
+controller's report; a successful command means the report was read, not that
+its checks passed or the PR may merge. Unknown phases are shown as unknown and
+zero measured time as zero. Use a signed-in account or `jobs:read` token; public
+visitors cannot make these installation reads. The shared installation allowance
+and quota reserve apply, so do not poll or automatically retry a 429.
+
+```sh
+zoomies jobs pr-delay job_01abc --pull-number 42 --output json
+```
+
 ### `zoomies why`
 
 `why <job>` is the one question "why did this job fail, stall or run slow",

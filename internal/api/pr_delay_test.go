@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/store"
@@ -46,9 +47,9 @@ func (f *prDelayAPIReader) RateLimit(context.Context) (*github.RateLimit, error)
 	return &github.RateLimit{Limit: 5000, Remaining: f.quota, ResetAt: time.Now().Add(time.Hour)}, nil
 }
 
-func prDelayAPIHarness(t *testing.T) (*harness, *store.Job, *prDelayAPIReader) {
+func prDelayAPIHarness(t *testing.T, opts ...func(*config.Config)) (*harness, *store.Job, *prDelayAPIReader) {
 	t.Helper()
-	h := newHarness(t)
+	h := newHarness(t, opts...)
 	inst := h.installation()
 	now := time.Now().UTC().Truncate(time.Second)
 	started, done := now.Add(-2*time.Minute), now.Add(-time.Minute)
@@ -128,6 +129,15 @@ func TestPRDelayAPIRejectsInvalidAndDuplicatePRNumbersBeforeReads(t *testing.T) 
 	}
 	if f.calls.Load() != 0 {
 		t.Fatal("invalid request spent GitHub reads")
+	}
+}
+
+func TestPRDelayAPIPublicVisitorsSpendNoInstallationReads(t *testing.T) {
+	h, job, f := prDelayAPIHarness(t, func(c *config.Config) { c.Security.PublicView = true })
+	resp := h.do(request{method: http.MethodGet, path: "/api/v1/jobs/" + job.ID + "/pr-delay?pull_number=1"})
+	resp.mustStatus(t, http.StatusForbidden, "public visitor installation diagnostic")
+	if f.calls.Load() != 0 || f.quotaCalls.Load() != 0 {
+		t.Fatal("visitor spent installation reads")
 	}
 }
 

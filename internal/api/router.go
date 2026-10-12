@@ -317,7 +317,7 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionJobsRead)).Get("/{id}", s.handleGetJob)
 			r.With(s.require(auth.ActionJobsRead)).Get("/{id}/events", s.handleJobEvents)
 			r.With(s.require(auth.ActionJobsRead)).Get("/{id}/explanation", s.handleJobExplanation)
-			r.With(s.require(auth.ActionJobsRead)).Get("/{id}/pr-delay", s.handlePRDelay)
+			r.With(s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/{id}/pr-delay", s.handlePRDelay)
 			r.With(s.require(auth.ActionJobsCancel)).Post("/{id}/cancel", s.handleCancelJobWorkflow)
 			r.With(s.require(auth.ActionJobsRerun)).Post("/{id}/rerun", s.handleRerunJobWorkflow)
 		})

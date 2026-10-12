@@ -680,6 +680,7 @@ Subcommands:
   stats                              Counts and percentiles over a period, grouped by release, day, host, pool or job
   get <job-id>                       One job in full
   why <job>                          Why this job failed, stalled or is waiting
+  pr-delay <job-id>                  Observed required-check delay for this job's PR head
   advice                             What a workflow's runs-on could say better, from what its jobs used
   rerun <job-id>                     Ask GitHub to run this run's failed jobs again
 
@@ -820,6 +821,30 @@ Examples:
   zoomies why https://github.com/acme/widgets/actions/runs/1234/job/5678
   zoomies why --latest-failed --repo acme/widgets
   zoomies why job_01abc --output json
+```
+
+#### zoomies jobs pr-delay
+
+Observed required-check delay for this job's PR head
+
+```text
+Read observed required-check delay for this job's PR head.
+
+Usage:
+  zoomies jobs pr-delay <job-id> --pull-number N
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --pull-number=0            PR number in the selected job's repository (required)
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies jobs pr-delay job_01abc --pull-number 42
+  zoomies jobs pr-delay job_01abc --pull-number 42 --output json
 ```
 
 #### zoomies jobs advice
