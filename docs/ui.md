@@ -573,6 +573,23 @@ so rather than looking healthy. Under the cards is every machine across every
 provider, narrowed by a state filter that lives in the URL, so a link to one
 part of the lifecycle is a link somebody else can open.
 
+An administrator can tick machines in that list, or in a provider's own
+Machines tab, and delete them together. It exists for the pile a wrong template
+or a wrong address leaves behind: filter to *Failed*, tick the box at the top to
+select every machine shown that can be deleted, and delete. A machine that
+cannot be deleted from here has no box and says why: one that has not been
+created yet, one already being deleted or deleted, and a quarantined one, whose
+resource may belong to somebody else and which is only ever released from its
+own page. The confirmation counts what it is about to do. Machines that never
+got as far as a VM, which is the usual shape of a failed create, are cleared
+with a click and touch nothing at the provider. If any ticked machine has a VM
+behind it, those VMs are destroyed, and you type how many machines you selected
+to confirm. A machine that still has runners on it is skipped and stays ticked,
+with the controller's reason on its row, unless you tick *Also delete machines
+that still have runners on them*, which loses whatever those runners were
+running. The same rules apply as when deleting one machine; the box is off
+again the next time the dialog opens.
+
 ![The Providers page: machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-dark.webp#only-dark){ .zoomies-shot }
 ![The Providers page: machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-light.webp#only-light){ .zoomies-shot }
 

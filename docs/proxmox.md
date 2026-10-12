@@ -438,6 +438,14 @@ own standard error for a bootstrap. Three machines failing in a row stand the pr
 down for a widening interval (a machine that keeps retrying counts once), so a bad template costs a few machines rather
 than fifty.
 
+**Clearing out failed machines.** A failed machine stays in the list until it is
+deleted, and a bad template or address leaves several. On **Providers**, filter
+to *Failed*, tick the box at the top and delete them together; the
+[Providers page](ui.md#providers) says what the confirmation asks. A failed
+machine that never got a VM costs nothing to delete. One that did has its VM
+destroyed, so the dialog asks you to type how many machines you selected. The
+same is `POST /api/v1/machines/bulk` in the [API](api-surface.md).
+
 **Orphan review.** **Providers → your provider → Orphans** has three lists:
 
 * *Untracked resources*: VMs wearing Zoomies' name or marks with no row behind

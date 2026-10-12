@@ -107,12 +107,22 @@ export interface MachineSignals {
   safeToDeleteWhy: string;
 }
 
+/**
+ * Whether a resource stands behind this machine: one the provider has been
+ * asked for and has not confirmed gone. It mirrors `store.Machine.Owns()`, and
+ * it is about the resource rather than the lifecycle, so a failed machine whose
+ * VM exists still counts.
+ */
+export function ownsResource(machine: Machine): boolean {
+  return Boolean(machine.resource_id) && !machine.deleted_at;
+}
+
 export function machineSignals(machine: Machine, now: number = Date.now()): MachineSignals {
   const since = machine.updated_at ? Date.parse(machine.updated_at) : Number.NaN;
   const state = machine.state;
   return {
     pending: state !== undefined && PENDING.has(state),
-    owns: Boolean(machine.resource_id) && !machine.deleted_at,
+    owns: ownsResource(machine),
     elapsedMs: Number.isFinite(since) ? Math.max(0, now - since) : null,
     operation: machine.operation ?? '',
     ...review(machine),
