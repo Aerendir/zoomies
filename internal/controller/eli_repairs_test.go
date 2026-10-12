@@ -429,7 +429,9 @@ func TestARepairThatCannotReadTheSourceSaysWhy(t *testing.T) {
 // named neither the tool nor the cause. A model told that it has no tools, and
 // shown the JSON it was asked for, usually complies on the next turn; one that
 // does not is named in the comment, so an operator can tell a model that
-// ignores its instructions from a prompt that was wrong.
+// ignores its instructions from a prompt that was wrong. The call here is one
+// the repair has no reply for; a call named after a reply is read as that reply
+// (see TestARepairReadsAToolCallNamedAfterAReplyAsThatReply).
 func TestARepairAnswersAnUnofferedToolCallOnceAndNamesItWhenItRepeats(t *testing.T) {
 	for _, relents := range []bool{true, false} {
 		name := "the model insists"
@@ -448,7 +450,7 @@ func TestARepairAnswersAnUnofferedToolCallOnceAndNamesItWhenItRepeats(t *testing
 					if relents && req.Messages[len(req.Messages)-1].Role == assistant.RoleTool {
 						return []assistant.Event{{Delta: `{"summary":"Fix cause","files":[{"path":"main.go","content":"fixed"}]}`}}
 					}
-					return []assistant.Event{{ToolCall: &assistant.ToolCall{ID: "call_1", Name: "read_file", Arguments: json.RawMessage(`{"path":"main.go"}`)}}}
+					return []assistant.Event{{ToolCall: &assistant.ToolCall{ID: "call_1", Name: "run_tests", Arguments: json.RawMessage(`{"command":"go test ./..."}`)}}}
 				}}), nil
 			}
 			user := &store.User{Username: "octo", Role: store.RoleViewer}
@@ -476,7 +478,7 @@ func TestARepairAnswersAnUnofferedToolCallOnceAndNamesItWhenItRepeats(t *testing
 			turns := requests[1].Messages
 			told := turns[len(turns)-1]
 			asked := turns[len(turns)-2]
-			if told.Role != assistant.RoleTool || told.ToolCallID != "call_1" || !strings.Contains(told.Content, "read_file") || !strings.Contains(told.Content, "No tools") || !strings.Contains(told.Content, "cannot_fix") {
+			if told.Role != assistant.RoleTool || told.ToolCallID != "call_1" || !strings.Contains(told.Content, "run_tests") || !strings.Contains(told.Content, "No tools") || !strings.Contains(told.Content, "cannot_fix") {
 				t.Fatalf("the model was told %+v", told)
 			}
 			if asked.Role != assistant.RoleAssistant || len(asked.ToolCalls) != 1 || asked.ToolCalls[0].ID != "call_1" {
@@ -495,11 +497,68 @@ func TestARepairAnswersAnUnofferedToolCallOnceAndNamesItWhenItRepeats(t *testing
 				t.Fatalf("a model that insists on a tool was not stopped: %+v", row)
 			}
 			last := fake.comments[len(fake.comments)-1]
-			for _, want := range []string{"### 🐶 Eli got stuck", "`read_file`", "no tools", "provider"} {
+			for _, want := range []string{"### 🐶 Eli got stuck", "`run_tests` (with `command`)", "no tools", "provider"} {
 				if !strings.Contains(last, want) {
 					t.Fatalf("the comment does not say %q:\n%s", want, last)
 				}
 			}
 		})
+	}
+}
+
+// The repair prompt describes its replies as {"read":["path"]} and
+// {"windows":[...]}, and Ollama cloud's models took those for functions: the
+// repairs on this repository ended in "Eli got stuck" with a tool call named
+// `read` or `windows`, twice, one step from reading the file. The call says what
+// the reply would have, so the repair goes on as if the model had typed it, with
+// no tool turn in the transcript for the model to be confused by.
+func TestARepairReadsAToolCallNamedAfterAReplyAsThatReply(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	fake := &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: "waiting"}
+	h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+	var requests []assistant.Request
+	h.c.openProvider = func(*store.AssistantProvider, string) (assistant.Provider, error) {
+		return assistant.NewFake(assistant.FakeOptions{Model: "scripted", Script: func(req assistant.Request) []assistant.Event {
+			requests = append(requests, req)
+			if len(requests) == 1 {
+				return []assistant.Event{{ToolCall: &assistant.ToolCall{ID: "call_1", Name: "read", Arguments: json.RawMessage(`{"path":"main.go"}`)}}}
+			}
+			return []assistant.Event{{Delta: `{"summary":"Fix cause","files":[{"path":"main.go","content":"fixed"}]}`}}
+		}}), nil
+	}
+	user := &store.User{Username: "octo", Role: store.RoleViewer}
+	h.st.CreateUser(h.ctx, user)
+	h.st.SetEliIdentity(h.ctx, store.EliIdentity{UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"})
+	h.st.ConfirmEliIdentity(h.ctx, user.ID, 42, true)
+	personal := &store.AssistantProvider{Name: "Personal", OwnerID: user.ID, Kind: "fake", Model: "scripted", Enabled: true}
+	if e := h.st.CreateAssistantProvider(h.ctx, personal); e != nil {
+		t.Fatal(e)
+	}
+	h.st.SetDefaultAssistantProvider(h.ctx, personal.ID)
+	h.st.SetEliRepairPolicy(h.ctx, store.EliRepairPolicy{Repo: "acme/repo", InstallationID: inst.ID, ProviderID: personal.ID, Enabled: true, DailyLimit: 5})
+	row := &store.EliRepair{DedupKey: "comment:acme/repo:77", Repo: "acme/repo", InstallationID: inst.ID, PullNumber: 1, Trigger: "mention", UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"}
+	h.st.EnqueueEliRepair(h.ctx, row, 5)
+	h.c.runEliRepair(h.ctx, row)
+
+	if len(requests) != 2 {
+		t.Fatalf("the model was asked %d times; a call named after a reply is the reply, so one step reads the file and the next fixes it", len(requests))
+	}
+	for _, m := range requests[1].Messages {
+		if m.Role == assistant.RoleTool || len(m.ToolCalls) > 0 {
+			t.Fatalf("the second request carries a tool turn: %+v", m)
+		}
+	}
+	var asked bool
+	for _, m := range requests[1].Messages {
+		if m.Role == assistant.RoleAssistant && m.Content == `{"read":["main.go"]}` {
+			asked = true
+		}
+	}
+	if !asked {
+		t.Errorf("the transcript does not hold the read as the model's reply: %+v", requests[1].Messages)
+	}
+	if row.State != "checking" || fake.commits != 1 {
+		t.Fatalf("the repair did not go on to publish the fix: %+v", row)
 	}
 }
