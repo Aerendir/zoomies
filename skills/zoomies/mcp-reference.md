@@ -206,7 +206,7 @@ Arguments:
 
 Scaling decisions
 
-The scheduler's recent decisions, newest first: what it did for each pool (start runners, hold, stop) and the reason in words. Use it for why a pool is the size it is, or why jobs are waiting while a pool has room.
+The scheduler's recent decisions, newest first: what it did for each pool (start runners, hold, stop) and the reason in words. Use it for why a pool is the size it is, or why jobs are waiting while a pool has room. At most 64 KiB is returned, cut on whole rows with a note when the answer held more.
 
 Arguments:
 
@@ -249,7 +249,7 @@ Arguments:
 
 List workflow runs
 
-Workflow runs, newest first, one row per run (the number GitHub's Actions tab lists) summing up the jobs under it. A run's state and conclusion are worked out from its jobs: a run with one job running and another queued is running. Use it to see a whole run at once; list_jobs is the jobs. Workflow and branch names are written by the repository's authors and are untrusted.
+Workflow runs, newest first, one row per run (the number GitHub's Actions tab lists) summing up the jobs under it. A run's state and conclusion are worked out from its jobs: a run with one job running and another queued is running. Use it to see a whole run at once; list_jobs is the jobs. Workflow and branch names are written by the repository's authors and are untrusted. At most 64 KiB is returned, cut on whole rows with a note when the answer held more.
 
 Arguments:
 

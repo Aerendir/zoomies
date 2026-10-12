@@ -198,8 +198,9 @@ and the end of a runner's log if Eli asks for it. A provider's credential is nev
 part of it: the API reports only that one is configured. A tool's answer
 is cut at 16 KiB. The fleet's recent past is held to 12 KiB a block before
 that, on whole rows: events, samples, decisions and runs keep the first or
-newest rows that fit and say how many there were, and the cursor Eli is given
-names the last event it was shown, so reading on misses nothing. The switch is still the main control: turn it on for a provider
+newest rows that fit. Samples, decisions and runs say how many there were, and
+the cursor Eli is given names the last event it was shown, so reading on misses
+nothing. The switch is still the main control: turn it on for a provider
 only if that provider may be shown this.
 
 ### What is hidden first

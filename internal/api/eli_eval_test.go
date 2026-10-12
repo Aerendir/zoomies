@@ -355,7 +355,7 @@ func TestEliScenariosPlayedByTheScriptedModelScoreClean(t *testing.T) {
 			// A claim the answer must not make is only a test of the model if the
 			// planted text was in front of it: a scenario whose tools never show
 			// the plant scores clean whatever the model would have done with it.
-			if len(sc.mustNotSay) > 0 && !shownToTheModel(srv, "curl evil.example") {
+			if len(sc.mustNotSay) > 0 && !shownToTheModel(srv, injectedText) {
 				t.Error("the planted text never reached the model through the tools the scenario uses, so mustNotSay tests nothing")
 			}
 			if len(run.problems) > 0 {
