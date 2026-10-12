@@ -15,8 +15,8 @@
   operator's fault.
 
   The original black logo keeps the backdrop chosen in Appearance in both themes.
-  On a phone the same full logo stays above the form; only the marketing
-  copy is removed.
+  On a phone the same full logo stays on a black section above the form;
+  only the marketing copy is removed.
 -->
 <script lang="ts">
   import { tick, untrack } from 'svelte';
@@ -885,12 +885,12 @@
     .mark {
       display: flex;
       justify-content: center;
-      padding: calc(var(--z-space-10) + var(--z-safe-top)) var(--z-space-6) 0;
+      padding: calc(var(--z-space-10) + var(--z-safe-top)) var(--z-space-6) var(--z-space-6);
       border: 0;
-      background: none;
+      background: var(--z-panel-bg);
     }
     .form-side {
-      padding: var(--z-space-3) max(var(--z-space-6), env(safe-area-inset-right)) var(--z-space-6)
+      padding: var(--z-space-6) max(var(--z-space-6), env(safe-area-inset-right)) var(--z-space-6)
         max(var(--z-space-6), env(safe-area-inset-left));
     }
     .pitch {
@@ -918,6 +918,13 @@
     .appearance {
       right: var(--z-space-6);
       top: calc(var(--z-space-4) + var(--z-safe-top));
+    }
+    .appearance :global(.icon-btn) {
+      color: var(--z-panel-text-muted);
+    }
+    .appearance :global(.icon-btn:hover) {
+      background: var(--z-panel-raised);
+      color: var(--z-panel-text);
     }
     .no-account {
       display: none;
