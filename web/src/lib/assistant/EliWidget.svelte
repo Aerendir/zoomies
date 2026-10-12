@@ -178,7 +178,7 @@
       }
     }}
   >
-    <header>
+    <header data-drag-area class:draggable={!modal}>
       <button
         type="button"
         class="identity"
@@ -400,6 +400,14 @@
     justify-content: space-between;
     gap: var(--z-space-3);
     padding: var(--z-space-3) var(--z-space-4);
+  }
+  header.draggable {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  header.draggable:active {
+    cursor: grabbing;
   }
   .identity,
   .tools,

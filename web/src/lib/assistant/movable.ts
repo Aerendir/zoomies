@@ -19,11 +19,13 @@ export function movable(node: HTMLElement, enabled: boolean) {
     if (enabled && position) place(position.x, position.y);
   }
   function down(event: PointerEvent) {
+    if (!enabled || event.button !== 0 || !(event.target instanceof Element)) return;
+    // The whole drag area grabs, not only the handle, so the panel moves from
+    // any empty stretch of its header. A control inside that area keeps its
+    // click: grabbing there would capture the pointer and swallow it.
+    const control = event.target.closest('button, a, input, select, textarea, [role="button"]');
     if (
-      !enabled ||
-      event.button !== 0 ||
-      !(event.target instanceof Element) ||
-      !event.target.closest('[data-drag-handle]')
+      control ? !control.matches('[data-drag-handle]') : !event.target.closest('[data-drag-area]')
     )
       return;
     const rect = node.getBoundingClientRect();

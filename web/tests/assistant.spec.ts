@@ -794,6 +794,43 @@ test('Eli has a circular launcher and can roam without leaving the viewport', as
   await expect.poll(async () => (await panel.boundingBox())!.x).toBeGreaterThan(100);
 });
 
+// The handle alone was a small target: an operator reaching for the bar the
+// panel hangs from got nothing unless they found the avatar. Any empty stretch
+// of the header now grabs, and the buttons on its right still only click.
+test('Eli drags from anywhere in its header without stealing the header buttons', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'Phones use the full-screen conversation.');
+  await goto(page, '/settings/assistant', 'Eli AI Assistant');
+  await openEli(page);
+  const panel = page.getByRole('dialog', { name: 'Eli assistant' });
+  const header = panel.locator('header');
+  const before = (await panel.boundingBox())!;
+  const bar = (await header.boundingBox())!;
+  // The header's top padding, halfway across: neither the handle nor a button.
+  await page.mouse.move(bar.x + bar.width / 2, bar.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(bar.x + bar.width / 2 - 120, bar.y + 63, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(before.x - 120);
+  const moved = (await panel.boundingBox())!;
+  const full = panel.getByRole('button', { name: 'Full screen' });
+  const button = (await full.boundingBox())!;
+  await page.mouse.move(button.x + button.width / 2, button.y + button.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(button.x + button.width / 2 - 40, button.y + button.height / 2, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(moved.x);
+  await panel.getByRole('button', { name: 'Past conversations' }).click();
+  await expect(
+    panel.getByRole('button', { name: 'Past conversations', pressed: true }),
+  ).toBeVisible();
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(moved.x);
+});
+
 // A phone used to get the panel edge to edge, with its border drawn at the
 // screen's edge, so it read as a page rather than the sheet it is. It now sits
 // inside the same small margin the Toaster and the Dialog keep on a phone, with
