@@ -34,9 +34,9 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and model scenarios remain |
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
-| E7 storage fixture correction | Draft PR, not merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Full-suite rerun result still pending |
-| E7 fallback-copy mode correction | Draft PR, not merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
-| E7 installer fixture correction | Draft PR, not merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; affected install/upgrade race checks pass |
+| E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Full-suite rerun result still pending |
+| E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
+| E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; affected install/upgrade race checks pass |
 | E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
 
 The first validation attempt was blocked by a missing Go compiler and shell
@@ -76,6 +76,7 @@ Current implementation plans:
 - [Validation fixture correction](roadmap/plans/2026-10-12-eli-validation-fixtures.md).
 - [Fallback-copy mode preservation](roadmap/plans/2026-10-12-eli-copy-mode-validation.md).
 - [Installer fixture permissions](roadmap/plans/2026-10-12-eli-installer-fixture-validation.md).
+- [Ledger fixture isolation](roadmap/plans/2026-10-12-eli-ledger-fixture-validation.md).
 
 The full-suite rerun found a storage fixture that relied on a permissive umask.
 This workspace uses `0077`, so requesting `0755` through Mkdir created a private
@@ -89,7 +90,14 @@ The installer previous-binary fixture had the same umask assumption: its source
 was 0700 rather than the asserted 0755. Explicit fixture chmod corrects that
 setup; the affected install/upgrade race checks pass. The controller package
 also reached the ten-minute package deadline and is rerunning with thirty
-minutes. The rest of the original full suite is still running. Record its final result, including failures,
+minutes. The original broad run completed with 44 passing packages. It failed in seven
+packages: storage fixture, fallback-copy mode, installer fixture, Proxmox ledger
+fixture, and the API/controller/store ten-minute deadlines. The ledger test had
+omitted its temporary-directory override and ignored the opening error; it now
+uses the existing fixture helper and checks that error. The complete normal
+Proxmox package race tests pass (no live e2e tag or cluster run). The three
+large packages are rerunning with thirty-minute budgets. The corrected fixture
+and backend checks pass separately; the original full command did not pass. Record its final result, including failures,
 before claiming full-suite verification.
 
 The next agent should start from the stack tip, check which parent PRs have
