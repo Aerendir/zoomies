@@ -242,12 +242,17 @@ curl --proto '=https' --proto-redir '=https' -fsSL "$base/SHA256SUMS" -o "$tmp/S
 export LIBGUESTFS_BACKEND=direct
 qemu-img create -f qcow2 "$tmp/prepared.img" 8G
 virt-resize --expand /dev/sda1 "$tmp/$asset" "$tmp/prepared.img"
+# virt-resize renumbers the partitions in disk order (the image's 1, 14, 15, 16
+# become 1 to 4), and the boot loader it copies still names the old numbers, so
+# a machine cloned from this image stops in grub rescue with "no such
+# partition". The boot loader is written again against the layout it now has.
 virt-customize -a "$tmp/prepared.img" --install docker.io,qemu-guest-agent \
   --upload "$binary:/usr/local/bin/zoomies" --chmod 0755:/usr/local/bin/zoomies \
   --upload "$unit:/etc/systemd/system/zoomies-agent.service" --chmod 0644:/etc/systemd/system/zoomies-agent.service \
   --run-command 'set -e; useradd --system --user-group --home-dir /var/lib/zoomies --shell /usr/sbin/nologin zoomies; usermod -aG docker zoomies' \
   --run-command 'set -e; mkdir -p /etc/zoomies /var/lib/zoomies/work; printf "agent:\n  embedded: false\n  work_dir: /var/lib/zoomies/work\n" > /etc/zoomies/zoomies.yaml; chown -R zoomies:zoomies /etc/zoomies /var/lib/zoomies' \
   --run-command 'set -e; systemctl enable docker.service qemu-guest-agent.service; systemctl disable zoomies-agent.service' \
+  --run-command 'set -e; grub-install --target=i386-pc /dev/sda; update-grub' \
   --run-command 'set -e; cloud-init clean --logs --machine-id; rm -f /etc/ssh/ssh_host_*; rm -f /var/lib/dbus/machine-id'
 mv "$tmp/prepared.img" "$dir/template.img"
 `
