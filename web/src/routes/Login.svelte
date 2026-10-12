@@ -20,6 +20,7 @@
   the form; only the marketing copy is removed.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { tick, untrack } from 'svelte';
   import { Moon, Sun, Eye, EyeOff, Globe, Server, TriangleAlert } from '@lucide/svelte';
   import {
@@ -183,6 +184,19 @@
 
   const meta = $derived(session.meta);
 
+  let returning = $state(false);
+
+  /** Back to the public view, as a visitor. */
+  async function keepLooking(): Promise<void> {
+    returning = true;
+    try {
+      if (!session.visitor) await session.refresh();
+      router.navigate('/');
+    } finally {
+      returning = false;
+    }
+  }
+
   /**
    * Whether this is the shell's /login route rather than the sign-in screen.
    *
@@ -248,6 +262,11 @@
   $effect(() => {
     if (placed || !usernameInput || meta?.auth_disabled) return;
     placed = true;
+    // Inside the shell the route change moves focus to the page heading a
+    // moment later, which blurred the field and marked it as left empty, so a
+    // public view's visitor opening this page was greeted with "Enter your
+    // username." before typing anything. The shell owns focus there.
+    if (embedded) return;
     // Do not open a phone keyboard or scroll the form before the user chooses a field.
     if (matchMedia('(max-width: 960px), (pointer: coarse)').matches) return;
     untrack(() => (username.trim() === '' ? usernameInput : passwordInput))?.focus();
@@ -319,11 +338,13 @@
   <div class="form-side">
     <div class="form-column">
       {#if !embedded}
-        <p class="instance" title="The Zoomies instance at this address">
-          <Server size={12} aria-hidden="true" />
-          <span class="sr-only">This instance:</span>
-          <span class="host">{host}</span>
-        </p>
+        <Tooltip bare text="The Zoomies instance at this address">
+          <p class="instance">
+            <Server size={12} aria-hidden="true" />
+            <span class="sr-only">This instance:</span>
+            <span class="host">{host}</span>
+          </p>
+        </Tooltip>
       {/if}
 
       {#if meta?.auth_disabled}
@@ -511,6 +532,24 @@
               Sign in
             </Button>
           </form>
+        {/if}
+
+        {#if meta?.public_view}
+          <!--
+            A visitor who opened this page and changed their mind, or somebody
+            who just signed out of a public fleet, can go back to looking. The
+            session is asked again rather than assumed: it is what turns this
+            browser back into a visitor.
+          -->
+          <Button
+            variant="ghost"
+            size="lg"
+            full
+            loading={returning}
+            onclick={() => void keepLooking()}
+          >
+            Continue without signing in
+          </Button>
         {/if}
 
         <details class="account-help">

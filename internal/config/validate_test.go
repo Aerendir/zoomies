@@ -1105,3 +1105,29 @@ func TestJobHistoryKeptForLessThanTheSizingWindowIsSaidSoAndAWeekIsNot(t *testin
 		t.Error("retention off keeps everything and was reported as short")
 	}
 }
+
+// A public view is the point of a demo and a surprise anywhere else, so it is
+// said out loud, but it never stops startup: it is a decision an operator is
+// entitled to take. With authentication off it would only repeat what
+// auth.disabled already says more loudly.
+func TestAPublicViewIsAWarningUnlessAuthenticationIsOffAnyway(t *testing.T) {
+	c := Default()
+	c.Database.Path = filepath.Join(t.TempDir(), "zoomies.db")
+	if f := find(c.Validate(), "auth.public_view"); f.Code != "" {
+		t.Fatalf("the defaults raise auth.public_view: %s", f.Title)
+	}
+
+	c.Security.PublicView = true
+	f := find(c.Validate(), "auth.public_view")
+	if f.Severity != SeverityWarning || f.Setting != "security.public_view" {
+		t.Fatalf("public view finding = %+v; want a warning naming security.public_view", f)
+	}
+	if err := c.Validate().Err(); err != nil {
+		t.Fatalf("a public view stopped startup: %v", err)
+	}
+
+	c.Security.DisableAuth = true
+	if f := find(c.Validate(), "auth.public_view"); f.Code != "" {
+		t.Errorf("auth.public_view raised beside auth.disabled: %s", f.Title)
+	}
+}

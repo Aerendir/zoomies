@@ -40,7 +40,8 @@
   import GithubMark from '../icons/GithubMark.svelte';
   import IconButton from '../components/IconButton.svelte';
   import Logo from '../components/Logo.svelte';
-  import { NAV_GROUPS, SECTIONS, isCurrentSection } from './sections';
+  import Tooltip from '../components/Tooltip.svelte';
+  import { isCurrentSection, navGroupsFor, sectionsFor } from './sections';
   import { buildLabel } from './build';
   import { session } from '../state/session.svelte';
   import BuildTag from './BuildTag.svelte';
@@ -56,7 +57,8 @@
 
   const phone = $derived(viewport.phone);
   const collapsed = $derived(prefs.navCollapsed && !phone);
-  const primary = SECTIONS.filter((item) => item.primary);
+  const primary = $derived(sectionsFor(session.visitor).filter((item) => item.primary));
+  const groups = $derived(navGroupsFor(session.visitor));
   const build = $derived(buildLabel(session.meta));
 
   function isCurrent(path: string): boolean {
@@ -74,20 +76,30 @@
 {#snippet entry(item: NavItem)}
   {@const current = isCurrent(item.path)}
   <li>
-    <a
-      href={item.path}
-      aria-current={current ? 'page' : undefined}
-      class:current
+    <!--
+      The bubble clears the rail rather than the entry, which is inset in it, and
+      says the page's one-sentence purpose with the keys that go there. Collapsed
+      the rail shows an icon and nothing else, so the page's name is the heading;
+      expanded the name is already on show.
+    -->
+    <Tooltip
+      bare
       title={collapsed ? item.label : undefined}
+      text={item.hint}
+      keys={phone ? undefined : ['g', item.key]}
+      placement={phone ? 'top' : 'right'}
+      edge=".nav"
     >
-      <item.icon size={phone ? 18 : 16} aria-hidden="true" />
-      {#if collapsed}
-        <span class="sr-only">{item.label}</span>
-      {:else}
-        <span class="label">{item.label}</span>
-        {#if !phone}<kbd aria-hidden="true">g {item.key}</kbd>{/if}
-      {/if}
-    </a>
+      <a href={item.path} aria-current={current ? 'page' : undefined} class:current>
+        <item.icon size={phone ? 18 : 16} aria-hidden="true" />
+        {#if collapsed}
+          <span class="sr-only">{item.label}</span>
+        {:else}
+          <span class="label">{item.label}</span>
+          {#if !phone}<kbd aria-hidden="true">g {item.key}</kbd>{/if}
+        {/if}
+      </a>
+    </Tooltip>
   </li>
 {/snippet}
 
@@ -127,7 +139,7 @@
     </div>
 
     <div class="groups">
-      {#each NAV_GROUPS as group, i (group.label ?? 'top')}
+      {#each groups as group, i (group.label ?? 'top')}
         <div class="group" class:pinned={group.label === 'Administration'}>
           {#if group.label}
             <!--
@@ -153,16 +165,39 @@
     <div class="foot">
       {#if !collapsed}
         <div class="foot-links">
-          <IconButton icon={BookOpen} label="Documentation" size="sm" href={DOCS_URL} newTab />
-          <IconButton icon={GithubMark} label="Source on GitHub" size="sm" href={REPO_URL} newTab />
+          <IconButton
+            icon={BookOpen}
+            label="Documentation"
+            help="Open the Zoomies documentation in a new tab."
+            size="sm"
+            href={DOCS_URL}
+            newTab
+            placement="top"
+          />
+          <IconButton
+            icon={GithubMark}
+            label="Source on GitHub"
+            help="Browse the Zoomies source code on GitHub, in a new tab."
+            size="sm"
+            href={REPO_URL}
+            newTab
+            placement="top"
+          />
         </div>
       {/if}
+      <!--
+        The build is said here, not in the name, when collapsed: the rail has no
+        room to show it, and a bug report needs it.
+      -->
       <IconButton
         icon={collapsed ? PanelLeftOpen : PanelLeftClose}
-        label={collapsed
-          ? `Expand the navigation${build ? ` (${build.kind} ${build.name})` : ''}`
-          : 'Collapse the navigation'}
+        label={collapsed ? 'Expand the navigation' : 'Collapse the navigation'}
+        help={collapsed
+          ? `Show the page names again.${build ? ` Controller build: ${build.kind} ${build.name}.` : ''}`
+          : 'Keep only the icons, to give the page more room.'}
         size="sm"
+        placement={collapsed ? 'right' : 'top'}
+        edge={collapsed ? '.nav' : undefined}
         onclick={() => prefs.toggleNav()}
       />
     </div>

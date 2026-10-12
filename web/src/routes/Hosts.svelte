@@ -14,6 +14,7 @@
   fleet does.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import HostCapacityMap from '$lib/insights/HostCapacityMap.svelte';
   import { hostSignals } from '$lib/insights/signals';
   import MetricGrid from '$lib/components/MetricGrid.svelte';
@@ -625,15 +626,16 @@
     <h2 class="controls-heading">Host controls and configuration</h2>
     <div class="filters" role="group" aria-label="Show hosts by OS health">
       {#each HEALTH_FILTERS as option (option.value)}
-        <button
-          type="button"
-          class="filter"
-          id="hosts-health-{option.value}"
-          aria-pressed={filter === option.value}
-          title={option.title}
-          onclick={() => chooseFilter(option.value)}
-          >{option.label} <span class="count">{counts[option.value]}</span></button
-        >
+        <Tooltip bare text={option.title}>
+          <button
+            type="button"
+            class="filter"
+            id="hosts-health-{option.value}"
+            aria-pressed={filter === option.value}
+            onclick={() => chooseFilter(option.value)}
+            >{option.label} <span class="count">{counts[option.value]}</span></button
+          >
+        </Tooltip>
       {/each}
     </div>
     <!--

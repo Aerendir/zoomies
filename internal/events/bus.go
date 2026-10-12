@@ -140,6 +140,7 @@ type subscriber struct {
 	id     int
 	ch     chan Event
 	filter func(Event) bool
+	class  string
 }
 
 // New returns a bus with sensible queue depths.
@@ -327,6 +328,14 @@ type SubscribeOptions struct {
 	// its Last-Event-ID was from another run of the process -- so the
 	// subscription is marked incomplete whatever the ring holds.
 	Incomplete bool
+	// Class sets a subscription apart under a ceiling of its own, ClassLimit,
+	// instead of the one SubscribeWithin is given. A public view's visitors
+	// are a class: a crowd of them must never fill the streams the people who
+	// run the fleet need, so they neither count against that ceiling nor are
+	// counted by it. Empty is the ordinary, unclassed subscription.
+	Class string
+	// ClassLimit caps the open subscriptions of Class. Zero is no ceiling.
+	ClassLimit int
 }
 
 // Matches is the predicate a subscription, a replay and a read of the ring all
@@ -395,21 +404,26 @@ func (b *Bus) Subscribe(ctx context.Context, opts SubscribeOptions) *Subscriptio
 
 // SubscribeWithin is Subscribe with a ceiling on how many feeds may be open,
 // reporting false and subscribing nothing when limit are already open. Zero
-// is no ceiling.
+// is no ceiling. A subscription with a Class is held to its ClassLimit
+// instead, and the two ceilings count only their own: see Class.
 //
 // The count and the subscription are taken under the one lock, so a burst of
 // streams opened together cannot all see room for one and all take it.
 func (b *Bus) SubscribeWithin(ctx context.Context, opts SubscribeOptions, limit int) (*Subscription, bool) {
 	filter := opts.Matches
 
+	ceiling := limit
+	if opts.Class != "" {
+		ceiling = opts.ClassLimit
+	}
 	b.mu.Lock()
-	if limit > 0 && len(b.subs) >= limit {
+	if ceiling > 0 && b.countLocked(opts.Class) >= ceiling {
 		b.mu.Unlock()
 		return nil, false
 	}
 	ch := make(chan Event, b.buffer)
 	b.nextID++
-	sub := &subscriber{id: b.nextID, ch: ch, filter: filter}
+	sub := &subscriber{id: b.nextID, ch: ch, filter: filter, class: opts.Class}
 	b.subs[sub.id] = sub
 	// Replay under the same lock so an event cannot slip between the replay
 	// and the subscription taking effect.
@@ -453,6 +467,27 @@ func (b *Bus) Subscribers() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return len(b.subs)
+}
+
+// ClassSubscribers returns how many subscriptions of class are open; the
+// empty class is the ordinary ones.
+func (b *Bus) ClassSubscribers(class string) int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.countLocked(class)
+}
+
+// countLocked counts the open subscriptions of one class. A walk rather than
+// a running count: the set is a few hundred at most, and a count kept beside
+// it is one more thing every close has to remember to keep right.
+func (b *Bus) countLocked(class string) int {
+	n := 0
+	for _, s := range b.subs {
+		if s.class == class {
+			n++
+		}
+	}
+	return n
 }
 
 // LastID returns the most recently issued event ID.

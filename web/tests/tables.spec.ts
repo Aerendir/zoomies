@@ -264,10 +264,16 @@ test('column width and order survive reload', async ({ page }) => {
   await name.getByRole('button', { name: 'Reposition Name column' }).press('ArrowLeft');
   await name.getByRole('button', { name: 'Resize Name column' }).press('ArrowRight');
 
+  // The heading's own words. The resize edge has just been focused, so its help is
+  // open inside the heading, and that is not part of what the heading says.
   const headings = async () =>
-    runners
-      .getByRole('columnheader')
-      .evaluateAll((items) => items.map((item) => item.textContent?.replace(/⋮/g, '').trim()));
+    runners.getByRole('columnheader').evaluateAll((items) =>
+      items.map((item) => {
+        const copy = item.cloneNode(true) as HTMLElement;
+        copy.querySelectorAll('.bubble').forEach((bubble) => bubble.remove());
+        return copy.textContent?.replace(/⋮/g, '').trim();
+      }),
+    );
   await expect.poll(headings).toEqual(expect.arrayContaining(['Name', 'Status']));
   expect((await headings()).indexOf('Name')).toBeLessThan((await headings()).indexOf('Status'));
   await expect

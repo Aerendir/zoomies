@@ -17,12 +17,14 @@
   now, where the three options are visible and the one in force is marked.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import {
     Activity,
     BookOpen,
     CircleUser,
     Keyboard,
     KeyRound,
+    LogIn,
     LogOut,
     Monitor,
     Moon,
@@ -43,7 +45,7 @@
   import Logo from '../components/Logo.svelte';
   import type { MenuItem } from '../components/DropdownMenu.svelte';
   import { SECTIONS, isCurrentSection } from './sections';
-  import { signOut } from './signout';
+  import { signIn, signOut } from './signout';
 
   interface Props {
     onpalette: () => void;
@@ -91,10 +93,12 @@
   const roleLine = $derived(
     session.authDisabled
       ? 'Authentication is off, so every request is an administrator'
-      : roleLabel(session.role),
+      : session.visitor
+        ? 'Public, read-only view'
+        : roleLabel(session.role),
   );
 
-  const menuItems = $derived<MenuItem[]>([
+  const themeItems = $derived<MenuItem[]>([
     {
       id: 'theme-system',
       label: 'System',
@@ -119,6 +123,41 @@
       icon: Moon,
       onSelect: () => theme.set('dark'),
     },
+  ]);
+
+  /**
+   * A visitor has no account, tokens, events page or settings to open, so the
+   * menu keeps what is theirs whoever they are (the theme, the shortcuts, the
+   * documentation) and offers signing in where everybody else signs out.
+   */
+  const visitorItems = $derived<MenuItem[]>([
+    ...themeItems,
+    {
+      id: 'shortcuts',
+      label: 'Keyboard shortcuts',
+      icon: Keyboard,
+      hint: '?',
+      separated: true,
+      onSelect: onshortcuts,
+    },
+    {
+      id: 'docs',
+      label: 'Documentation',
+      icon: BookOpen,
+      href: DOCS_URL,
+      newTab: true,
+    },
+    {
+      id: 'signin',
+      label: 'Sign in',
+      icon: LogIn,
+      separated: true,
+      onSelect: signIn,
+    },
+  ]);
+
+  const accountItems = $derived<MenuItem[]>([
+    ...themeItems,
     {
       id: 'account',
       label: 'Your account',
@@ -170,9 +209,12 @@
       icon: LogOut,
       separated: true,
       disabled: session.authDisabled,
+      reason: 'Authentication is off on this controller, so there is no session to end.',
       onSelect: () => void signOut(),
     },
   ]);
+
+  const menuItems = $derived(session.visitor ? visitorItems : accountItems);
 </script>
 
 <header class="topbar">
@@ -196,10 +238,18 @@
   </div>
 
   <div class="right">
-    <p class="connection" data-state={connection} title={connectionHint}>
-      <span class="dot" aria-hidden="true"></span>
-      <span class="connection-text" class:sr-only={connection === 'live'}>{connectionText}</span>
-    </p>
+    <!-- Live is a dot and nothing else, so the state is the heading. -->
+    <Tooltip
+      bare
+      title={connection === 'live' ? connectionText : undefined}
+      text={connectionHint}
+      placement="bottom"
+    >
+      <p class="connection" data-state={connection}>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="connection-text" class:sr-only={connection === 'live'}>{connectionText}</span>
+      </p>
+    </Tooltip>
     <output class="sr-only" aria-live="polite">Connection: {connectionText}</output>
 
     <ProblemsBell />

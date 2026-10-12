@@ -11,6 +11,7 @@
   looking away from the figures.
 -->
 <script lang="ts" generics="S extends Series">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { formatNumber, NO_VALUE } from '$lib/format';
   import Stroke from './Stroke.svelte';
   import type { Series } from './plot';
@@ -55,16 +56,17 @@
       onfocusin={() => onchip(r.series.key)}
       onfocusout={() => onchip(null)}
     >
-      <button
-        type="button"
-        class="toggle"
-        aria-pressed="true"
-        title={`Hide ${r.series.label.toLowerCase()}`}
-        onclick={() => ontoggle(r.series.key)}
-      >
-        <Stroke series={r.series} />
-        <span class="name">{r.series.label}</span>
-      </button>
+      <Tooltip bare text={`Hide ${r.series.label.toLowerCase()}`}>
+        <button
+          type="button"
+          class="toggle"
+          aria-pressed="true"
+          onclick={() => ontoggle(r.series.key)}
+        >
+          <Stroke series={r.series} />
+          <span class="name">{r.series.label}</span>
+        </button>
+      </Tooltip>
       <span class="track" aria-hidden="true">
         {#if r.value !== null}
           <span
@@ -74,11 +76,13 @@
           ></span>
         {/if}
       </span>
-      <span class="value" title={`${r.series.label} ${moment}: ${r.series.hint}`}>
-        {#if r.value === null}<span class="gap">{NO_VALUE}</span>{:else}<strong
-            >{format(r.value)}</strong
-          >{/if}
-      </span>
+      <Tooltip bare text={`${r.series.label} ${moment}: ${r.series.hint}`}>
+        <span class="value">
+          {#if r.value === null}<span class="gap">{NO_VALUE}</span>{:else}<strong
+              >{format(r.value)}</strong
+            >{/if}
+        </span>
+      </Tooltip>
     </div>
   {/each}
   {#if readings.length === 0}

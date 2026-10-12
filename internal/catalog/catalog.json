@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "0da5c7e",
+  "generated_from": "257e5c4",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -489,6 +489,20 @@
       "fix": "Password guessing is not rate limited.",
       "verify": null,
       "setting": "security.rate_limit_logins",
+      "docs_html": "https://zoomies.sh/problem-codes/#configuration-authentication",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#configuration-authentication"
+    },
+    {
+      "id": "auth.public_view",
+      "kind": "problem",
+      "title": "auth.public_view",
+      "category": "configuration",
+      "severity": "warning",
+      "detection": "static",
+      "detects": "Anyone who can reach this controller reads its fleet without signing in: pools, hosts, runners, jobs, usage and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind sign-in, and every change still needs somebody signed in. Right for a public demo or a project that shows its CI fleet on purpose; turn `security.public_view` off anywhere else. See [Public view](public-view.md).",
+      "fix": "Anyone who can reach this controller reads its fleet without signing in: pools, hosts, runners, jobs, usage and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind sign-in, and every change still needs somebody signed in. Right for a public demo or a project that shows its CI fleet on purpose; turn `security.public_view` off anywhere else. See [Public view](public-view.md).",
+      "verify": null,
+      "setting": "security.public_view",
       "docs_html": "https://zoomies.sh/problem-codes/#configuration-authentication",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#configuration-authentication"
     },
@@ -2522,7 +2536,7 @@
       "severity": "error",
       "detection": "runtime",
       "detects": "The machine came up and its agent never did. The guest's own standard error is on the machine's page.",
-      "fix": "Usually the template: a missing guest agent, a missing Zoomies binary, or an `agent.json` left in the image. See [Proxmox VE](proxmox.md#preparing-the-template).",
+      "fix": "Usually the template: a missing guest agent, a missing Zoomies binary, or an `agent.json` left in the image. See [Proxmox VE](proxmox.md#preparing-the-template). Then delete the failed machine, which destroys its VM so it stops being billed.",
       "verify": null,
       "status_sentence": "A newly rented machine failed to join the fleet.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
@@ -2634,7 +2648,7 @@
       "severity": "warning",
       "detection": "runtime",
       "detects": "A machine never reached ready, and carries the provider's own words for why.",
-      "fix": "Read the machine's page. Three machines failing in a row stand the provider down, so a bad template costs a few machines rather than fifty.",
+      "fix": "Read the machine's page, then delete the machine. One that never got a VM costs nothing to delete. For one that did, its VM may still be running and billed: check the provider's console first if you would rather look, and press Delete to destroy it; the delete asks the provider again before it destroys anything. Several can be ticked and deleted together on the Providers page. Three machines failing in a row stand the provider down, so a bad template costs a few machines rather than fifty.",
       "verify": null,
       "status_sentence": "A machine the fleet asked for did not arrive, so jobs may wait for room.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",

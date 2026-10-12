@@ -253,6 +253,27 @@ func assistantProblemsWords(problems []Problem) string {
 // what kind of trouble there is, not the drawer itself, which the tools show.
 const assistantProblemCodes = 5
 
+// assistantStartAgain is the cure for a conversation that has grown past what
+// one request may carry. The page offers it as a button when it sees these
+// words, so keep them as they are or change the page with them.
+const assistantStartAgain = "so start a new conversation and paste again only what Eli needs"
+
+// kib is a size as a person reads it, to one decimal: a paste 300 bytes over the
+// limit would round to the limit itself in whole KiB, and a refusal that says
+// "8 KiB is too much, you sent 8 KiB" reads as a bug.
+func kib(n int) string { return fmt.Sprintf("%.1f KiB", float64(n)/1024) }
+
+// oversizeMessage is the refusal for one message past its limit. The newest is
+// the one the person has just written and can cut; an older one is not on their
+// screen to cut, so the refusal says which it is and the cure is a new thread.
+func oversizeMessage(size int, newest bool) string {
+	limit := assistantChatMaxMessageBytes >> 10
+	if newest {
+		return fmt.Sprintf("your message is %s; Eli reads at most %d KiB in one message, so paste only the lines around the error, or send the rest in a second message", kib(size), limit)
+	}
+	return fmt.Sprintf("an earlier message in this conversation is %s; Eli reads at most %d KiB in one message, %s", kib(size), limit, assistantStartAgain)
+}
+
 // ValidateAssistantChat says what is wrong with a conversation, or returns the
 // turns to send. It is separate from StartAssistantChat so the limits can be
 // held by a test that needs no model.
@@ -261,7 +282,7 @@ func ValidateAssistantChat(in []AssistantChatMessage) ([]assistant.Message, erro
 		return nil, &AssistantChatInvalid{"messages", "send at least one message"}
 	}
 	if len(in) > assistantChatMaxMessages {
-		return nil, &AssistantChatInvalid{"messages", fmt.Sprintf("a conversation of more than %d messages is too long to send; start a new one", assistantChatMaxMessages)}
+		return nil, &AssistantChatInvalid{"messages", fmt.Sprintf("this conversation has %d messages; Eli reads at most %d at once, %s", len(in), assistantChatMaxMessages, assistantStartAgain)}
 	}
 	out := make([]assistant.Message, 0, len(in))
 	total := 0
@@ -278,13 +299,13 @@ func ValidateAssistantChat(in []AssistantChatMessage) ([]assistant.Message, erro
 		case !utf8.ValidString(text):
 			return nil, &AssistantChatInvalid{field, "a message must be text"}
 		case len(text) > assistantChatMaxMessageBytes:
-			return nil, &AssistantChatInvalid{field, fmt.Sprintf("a message is at most %d KiB", assistantChatMaxMessageBytes>>10)}
+			return nil, &AssistantChatInvalid{field, oversizeMessage(len(text), i == len(in)-1)}
 		}
 		total += len(text)
 		out = append(out, assistant.Message{Role: role, Content: text})
 	}
 	if total > assistantChatMaxTotalBytes {
-		return nil, &AssistantChatInvalid{"messages", fmt.Sprintf("a conversation of more than %d KiB is too long to send; start a new one", assistantChatMaxTotalBytes>>10)}
+		return nil, &AssistantChatInvalid{"messages", fmt.Sprintf("this conversation is %s; Eli reads at most %d KiB of it at once, %s", kib(total), assistantChatMaxTotalBytes>>10, assistantStartAgain)}
 	}
 	if out[len(out)-1].Role != assistant.RoleUser {
 		return nil, &AssistantChatInvalid{fmt.Sprintf("messages[%d]", len(out)-1), "a conversation ends with the person's question"}

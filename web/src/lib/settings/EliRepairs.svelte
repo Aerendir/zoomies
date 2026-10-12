@@ -4,7 +4,6 @@
   import {
     ApiError,
     getEliRepairSettings,
-    listEliRepairs,
     listInstallations,
     listUsers,
     listAssistantProviders,
@@ -17,6 +16,7 @@
   import type { Schemas, Installation, User, AssistantProvider } from '$lib/api/types';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
+  import RepairHistory from '$lib/repairs/RepairHistory.svelte';
   import RepairRequest from '$lib/repairs/RepairRequest.svelte';
   import RepositoryPicker from '$lib/repairs/RepositoryPicker.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -37,7 +37,6 @@
   } = $props();
   let identities = $state<Schemas['EliIdentity'][]>([]);
   let policies = $state<Schemas['EliRepairPolicy'][]>([]);
-  let repairs = $state<Schemas['EliRepair'][]>([]);
   let installations = $state<Installation[]>([]);
   let users = $state<User[]>([]);
   let providers = $state<AssistantProvider[]>([]);
@@ -46,7 +45,7 @@
   let opportunities = $state<Schemas['EliOpportunity'][]>([]);
   let selectedOffer = $state<Schemas['EliOpportunity'] | null>(null);
   let retryTarget = $state<{ repo: string; pull: number } | null>(null);
-  let filter = $state('all');
+  let history = $state<RepairHistory | null>(null);
   let showSetup = $state(false);
   let mode = $state('ask');
   let bulkResults = $state<string[]>([]);
@@ -68,9 +67,8 @@
   let offersReadAt = 0;
   async function refresh(): Promise<void> {
     try {
-      const [settings, history, offers] = await Promise.all([
+      const [settings, offers] = await Promise.all([
         getEliRepairSettings(),
-        listEliRepairs(),
         session.authDisabled || Date.now() - offersReadAt < 60000
           ? Promise.resolve({ items: opportunities })
           : listEliOpportunities(),
@@ -79,7 +77,6 @@
       if (Date.now() - offersReadAt >= 60000) offersReadAt = Date.now();
       identities = settings.identities;
       policies = settings.policies;
-      repairs = history.items;
       error = '';
     } catch (cause) {
       error = cause instanceof ApiError ? cause.message : 'Could not read PR repairs.';
@@ -93,8 +90,7 @@
    */
   export async function reload(): Promise<void> {
     offersReadAt = 0;
-    await refresh();
-    await adminChoices();
+    await Promise.all([refresh().then(adminChoices), history?.reload()]);
   }
   async function adminChoices(): Promise<void> {
     if (!admin) return;
@@ -132,6 +128,7 @@
       toasts.success(success);
       await refresh();
       await adminChoices();
+      await history?.reload();
     } catch (cause) {
       toasts.error(
         'Could not complete that request',
@@ -174,36 +171,6 @@
       }
     }
   }
-  function copyRepair(r: Schemas['EliRepair']): void {
-    void navigator.clipboard.writeText(JSON.stringify(r, null, 2)).then(
-      () => toasts.success('Repair details copied'),
-      () => toasts.error('Could not copy repair details'),
-    );
-  }
-  const visibleRepairs = $derived(
-    repairs.filter(
-      (r) =>
-        filter === 'all' ||
-        (filter === 'active'
-          ? ['queued', 'working', 'checking'].includes(r.state)
-          : filter === 'passed'
-            ? r.state === 'succeeded'
-            : !['queued', 'working', 'checking', 'succeeded'].includes(r.state)),
-    ),
-  );
-  const stateLabel = (state: string) =>
-    ({
-      queued: 'Queued',
-      working: 'Investigating',
-      checking: 'Waiting for CI',
-      succeeded: 'Checks passed',
-      checks_failed: 'Checks failed',
-      interrupted: 'Interrupted',
-      unverified: 'Unverified',
-      superseded: 'Newer commit',
-      blocked: 'Needs attention',
-      failed: 'Could not repair',
-    })[state] ?? state;
 </script>
 
 <section class="repairs" aria-labelledby="eli-repairs-heading">
@@ -257,6 +224,7 @@
           onqueued={() => {
             offersReadAt = 0;
             void refresh();
+            void history?.reload();
           }}
         />
       {/key}
@@ -467,91 +435,14 @@
       </details>
     {/if}
   </details>
-  <div class="card">
-    <h4>Recent repairs</h4>
-    <Field id="repair-filter" label="Show"
-      ><Select
-        id="repair-filter"
-        bind:value={filter}
-        options={[
-          { value: 'all', label: 'All repairs' },
-          { value: 'attention', label: 'Needs attention' },
-          { value: 'active', label: 'In progress' },
-          { value: 'passed', label: 'Checks passed' },
-        ]}
-      /></Field
-    >
-    {#if repairs.length === 0}<p>
-        No repairs yet. Repairs appear when a linked user asks or an automatic policy encounters a
-        failed PR job.
-      </p>{:else}
-      <div class="history">
-        {#each visibleRepairs as r (r.id)}<article>
-            <div class="repair-title">
-              <a
-                href="https://github.com/{r.repo}/pull/{r.pull_number}"
-                target="_blank"
-                rel="noreferrer">{r.repo} #{r.pull_number || '?'}</a
-              ><span
-                class:success={r.state === 'succeeded'}
-                class:danger={['failed', 'checks_failed', 'blocked'].includes(r.state)}
-                >{stateLabel(r.state)}</span
-              >
-            </div>
-            <p>{r.message || 'Waiting to start.'}</p>
-            <p>
-              {new Date(r.created_at).toLocaleString()} · {r.details?.stage?.replaceAll('_', ' ') ||
-                stateLabel(r.state)}
-            </p>
-            <details>
-              <summary>Usage and investigation details</summary>
-              <p>
-                Model: {r.details?.model || 'Not recorded'}. Source supplied: {Math.round(
-                  (r.details?.source_bytes ?? 0) / 1024,
-                )} KiB.
-              </p>
-              {#if r.details?.steps?.length}
-                {#each r.details.steps as step, index (index)}<p>
-                    Step {index + 1}: {step.usage_reported
-                      ? `${step.input_tokens.toLocaleString()} input / ${step.output_tokens.toLocaleString()} output tokens`
-                      : 'Token usage unknown (provider did not report it)'}. {Math.round(
-                      step.request_bytes / 1024,
-                    )} KiB request; {(step.elapsed_ms / 1000).toFixed(1)}s.
-                  </p>{/each}
-              {:else}<p>Token usage was not recorded for this attempt.</p>{/if}
-              <Button size="sm" onclick={() => copyRepair(r)}>Copy investigation details</Button>
-            </details>
-            {#if !['queued', 'working', 'checking', 'succeeded'].includes(r.state)}
-              <p>
-                {['context_limit', 'source_unavailable', 'unsupported_fix'].includes(
-                  r.details?.failure_code ?? '',
-                )
-                  ? 'A retry needs narrower instructions or a supported edit. Review the failure before spending another attempt.'
-                  : 'Check the PR and current readiness before trying again.'}
-              </p>
-              <Button
-                size="sm"
-                onclick={() => {
-                  selectedOffer = null;
-                  retryTarget = { repo: r.repo, pull: r.pull_number };
-                  document.getElementById('eli-repairs-heading')?.scrollIntoView();
-                }}>Review another attempt</Button
-              >
-            {/if}
-            <small
-              >{r.trigger === 'automatic'
-                ? 'Automatic · installation provider'
-                : `Requested by @${r.github_login} · personal provider`}
-              {#if r.commit_sha}· <a
-                  href="https://github.com/{r.repo}/commit/{r.commit_sha}"
-                  target="_blank"
-                  rel="noreferrer">{r.commit_sha.slice(0, 7)}</a
-                >{/if}</small
-            >
-          </article>{/each}
-      </div>
-    {/if}
-  </div>
+  <RepairHistory
+    bind:this={history}
+    onretry={(target) => {
+      selectedOffer = null;
+      retryTarget = target;
+      document.getElementById('eli-repairs-heading')?.scrollIntoView();
+    }}
+  />
 </section>
 
 <style>
@@ -617,15 +508,11 @@
     gap: var(--z-space-2);
     margin-bottom: var(--z-space-4);
   }
-  .history {
-    margin-top: var(--z-space-3);
-  }
   article + article {
     border-top: var(--z-border-width) solid var(--z-border);
     padding-top: var(--z-space-3);
     margin-top: var(--z-space-3);
   }
-  .repair-title,
   .identity {
     display: flex;
     justify-content: space-between;
@@ -634,20 +521,8 @@
     font-size: var(--z-text-sm);
     flex-wrap: wrap;
   }
-  a {
-    color: var(--z-accent);
-    overflow-wrap: anywhere;
-  }
-  small {
-    color: var(--z-text-muted);
-    font-size: var(--z-text-xs);
-  }
-  .error,
-  .danger {
+  .error {
     color: var(--z-danger);
-  }
-  .success {
-    color: var(--z-idle);
   }
   @media (max-width: 640px) {
     .fields {

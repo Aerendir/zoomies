@@ -78,7 +78,7 @@
             label="No credential"
             size="sm"
             dot={false}
-            title="Nothing can be created until a credential is stored."
+            help="Nothing can be created until a credential is stored."
           />
         {/if}
         {#if provider.paused}
@@ -87,7 +87,7 @@
             label="Paused"
             size="sm"
             dot={false}
-            title={provider.paused_reason || 'New machines are held.'}
+            help={provider.paused_reason || 'New machines are held.'}
           />
         {/if}
         {#if provider.enabled === false}
@@ -99,7 +99,7 @@
             label="Tailcat"
             size="sm"
             dot={false}
-            title="Reached through a zoomies gateway over a private encrypted connection. The gateway's address is sealed and never shown."
+            help="Reached through a zoomies gateway over a private encrypted connection. The gateway's address is sealed and never shown."
           />
         {/if}
         {#if provider.insecure_skip_verify}
@@ -108,7 +108,7 @@
             label="Certificate unchecked"
             size="sm"
             dot={false}
-            title="Zoomies does not verify the provider's certificate, so the credential travels to whatever answers at that address."
+            help="Zoomies does not verify the provider's certificate, so the credential travels to whatever answers at that address."
           />
         {/if}
       </div>

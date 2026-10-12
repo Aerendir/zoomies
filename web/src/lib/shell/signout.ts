@@ -22,3 +22,12 @@ export async function signOut(): Promise<void> {
     toasts.fromError(cause, 'Could not sign out');
   }
 }
+
+/**
+ * Signing in from a public view. The visitor is already in the product, and
+ * the sign-in page sits inside it for somebody who is, so this is only a way
+ * there; signing in replaces the visitor with the account.
+ */
+export function signIn(): void {
+  router.navigate('/login');
+}

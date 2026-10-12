@@ -42,8 +42,14 @@ export const layers = {
     layer.close();
     return true;
   },
+  /**
+   * How many open overlays own the keyboard. A tooltip is on the stack so that
+   * Escape closes it first, but it is help, not a place: counting it would
+   * switch every global shortcut off whenever the pointer rested on the
+   * sidebar, including the `r` its own bubble advertises.
+   */
   get size(): number {
-    return stack.length;
+    return stack.filter((l) => l.kind !== 'tooltip').length;
   },
 };
 
@@ -61,6 +67,25 @@ const FOCUSABLE = [
 
 /** The panels currently trapping focus, outermost first. */
 const traps: HTMLElement[] = [];
+
+/**
+ * Focus an overlay puts somewhere itself, on opening and on closing, is not
+ * somebody reaching for a control. A tooltip that opened on it would be there
+ * the moment a dialog appeared, over its Close button, and take the first
+ * Escape that was meant for the dialog.
+ */
+let placedUntil = 0;
+
+/** Move focus as an overlay's own bookkeeping, which a tooltip does not answer. */
+export function placeFocus(el: HTMLElement): void {
+  placedUntil = performance.now() + 100;
+  el.focus();
+}
+
+/** Whether focus has only just been placed by an overlay rather than moved by a person. */
+export function focusWasPlaced(): boolean {
+  return performance.now() < placedUntil;
+}
 
 /** Every focusable descendant, in document order, skipping hidden ones. */
 export function focusableWithin(root: HTMLElement): HTMLElement[] {
@@ -84,7 +109,7 @@ export function trapFocus(node: HTMLElement, initial?: HTMLElement | null) {
       node.querySelector<HTMLElement>('[data-autofocus]') ??
       focusableWithin(node)[0] ??
       node;
-    target.focus();
+    placeFocus(target);
   }
 
   function onKeydown(e: KeyboardEvent): void {
@@ -149,7 +174,7 @@ export function trapFocus(node: HTMLElement, initial?: HTMLElement | null) {
           restoreTo && restoreTo !== document.body && document.contains(restoreTo)
             ? restoreTo
             : (document.getElementById('page-heading') ?? document.getElementById('main'));
-        target?.focus();
+        if (target) placeFocus(target);
       });
     },
   };

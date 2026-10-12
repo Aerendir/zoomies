@@ -215,7 +215,7 @@
                     size="sm"
                     dot={false}
                     label={sparse ? 'Not enough data yet' : adviceWords(item.kind).label}
-                    title={sparse
+                    help={sparse
                       ? 'The class is worked out from too few runs to advise on.'
                       : adviceWords(item.kind).hint}
                   />

@@ -154,6 +154,33 @@ func (s *Server) endIfRevoked(stream *sseWriter, r *http.Request, action auth.Ac
 	return true
 }
 
+// subscribeStream takes one of the live-update slots the caller is held to,
+// for the stream and for a wait on GET /events/recent alike, or says why there
+// is none. A crowd of a public view's visitors is held to a ceiling of its own
+// and never counted against the one the people who run the fleet need.
+func (s *Server) subscribeStream(ctx context.Context, id *auth.Identity, opts events.SubscribeOptions) (*events.Subscription, *controller.LimitError) {
+	limit := s.cfg().Limits.EventSubscribers
+	visitor := auth.IsVisitor(id)
+	if visitor {
+		opts.Class = visitorStreams
+		opts.ClassLimit = s.cfg().Limits.VisitorEventSubscribers
+	}
+	if sub, ok := s.ctrl.Events().SubscribeWithin(ctx, opts, limit); ok {
+		return sub, nil
+	}
+	if visitor {
+		return nil, &controller.LimitError{
+			Setting: "limits.visitor_event_subscribers", Limit: opts.ClassLimit,
+			What: "live-update streams for visitors",
+			Free: "reload in a minute, since every page still works without live updates",
+		}
+	}
+	return nil, &controller.LimitError{
+		Setting: "limits.event_subscribers", Limit: limit, What: "live-update streams",
+		Free: "close a browser tab that is no longer needed",
+	}
+}
+
 // handleEvents streams every change the operator would want to see.
 //
 // There is no polling anywhere in the UI, so this endpoint is the whole of the
@@ -181,13 +208,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// Refused before the stream starts, while a status code can still be
 	// sent. The browser's EventSource gives up on a non-200 rather than
 	// retrying, which is what an instance with no room wants from it.
-	limit := s.cfg().Limits.EventSubscribers
-	sub, ok := bus.SubscribeWithin(subCtx, opts, limit)
-	if !ok {
-		limitReached(w, &controller.LimitError{
-			Setting: "limits.event_subscribers", Limit: limit, What: "live-update streams",
-			Free: "close a browser tab that is no longer needed",
-		})
+	sub, refused := s.subscribeStream(subCtx, Identity(ctx), opts)
+	if refused != nil {
+		limitReached(w, refused)
 		return
 	}
 
@@ -211,6 +234,12 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(s.streamHeartbeat)
 	defer ticker.Stop()
 
+	// Who the frames are chosen for. Resolved when the stream opens and again
+	// on every heartbeat, which is when the stream re-checks its credential
+	// anyway, rather than once per frame: a busy fleet sends many frames a
+	// second, and each resolution of a session is a database read.
+	reader := Identity(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -223,6 +252,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 				// ID and catch up, which is better than silently going stale.
 				return
 			}
+			if !frameReadable(reader, ev.Kind) {
+				continue
+			}
 			data, ok := s.frameFor(r, ev)
 			if !ok {
 				continue
@@ -233,6 +265,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		case <-ticker.C:
 			if s.endIfRevoked(stream, r, auth.ActionEventsRead) {
 				return
+			}
+			if fresh, err := s.resolveIdentity(r); err == nil {
+				reader = fresh
 			}
 			if err := stream.comment("heartbeat"); err != nil {
 				return

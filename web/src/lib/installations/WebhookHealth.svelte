@@ -185,7 +185,7 @@
         {#each deliveries as delivery (delivery.id)}
           {@const meta = deliveryStatus(delivery.status as DeliveryStatus | undefined)}
           <li>
-            <span class="badge"><Badge status={meta} size="sm" title={meta.hint} /></span>
+            <span class="badge"><Badge status={meta} size="sm" help={meta.hint} /></span>
             <span class="what">
               <span class="event mono">
                 {delivery.event}{delivery.action ? `.${delivery.action}` : ''}

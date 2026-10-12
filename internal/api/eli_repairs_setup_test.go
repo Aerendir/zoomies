@@ -37,7 +37,7 @@ func TestEliReadinessExplainsMissingSetupWithoutChargingAnAttempt(t *testing.T) 
 	if result.Ready || len(result.Blockers) < 2 {
 		t.Fatalf("readiness %+v", result)
 	}
-	rows, err := h.st.ListEliRepairs(h.ctx)
+	rows, _, err := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if err != nil || len(rows) != 0 {
 		t.Fatal("readiness spent an attempt")
 	}

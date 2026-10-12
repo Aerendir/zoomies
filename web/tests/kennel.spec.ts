@@ -452,8 +452,12 @@ test.describe('with Kennel Club on', () => {
     await goto(page, `/kennel/repositories/${quiet.id}/ci`, quiet.name);
     // Nothing is open and everything was read: the one place "best in show" is
     // earned, and the page says what earned it.
+    // The status badge says the same thing in its tooltip, so the sentence is in the
+    // page twice; the one to read is the description under the heading.
     await expect(
-      page.getByText('Every check that is turned on ran against everything it needs'),
+      page.locator('p.description', {
+        hasText: 'Every check that is turned on ran against everything it needs',
+      }),
     ).toBeVisible();
     await expect(page.getByRole('article')).toHaveCount(0);
 
@@ -477,10 +481,13 @@ test.describe('with Kennel Club on', () => {
       return route.fulfill({ response: real, json: body });
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('This is not an all clear.')).toBeVisible();
-    await expect(page.getByText('Nothing open, and not an all clear')).toBeVisible();
-    await expect(page.getByText('Held for a rate limit')).toBeVisible();
-    await expect(page.getByText('Every check that is turned on ran')).toHaveCount(0);
+    // The standing's tooltip sentence is also in the page's hidden descriptions, so
+    // these read the page's own content and not that copy.
+    const content = page.locator('main');
+    await expect(content.getByText('This is not an all clear.')).toBeVisible();
+    await expect(content.getByText('Nothing open, and not an all clear')).toBeVisible();
+    await expect(content.getByText('Held for a rate limit')).toBeVisible();
+    await expect(content.getByText('Every check that is turned on ran')).toHaveCount(0);
   });
 
   // Best in show is the kennel word, so it follows the vocabulary switch like the
@@ -3388,7 +3395,9 @@ test.describe('the AI Context row in the side menu', () => {
       await expect(badge(page)).toHaveAttribute('data-tone', tone);
       // The link is still named for the page, and what is wrong is its description.
       await expect(row(page)).toHaveAccessibleDescription(text);
-      await expect(badge(page).locator('..')).toHaveAttribute('aria-hidden', 'true');
+      // The badge is for the eye only. Its tooltip wrapper sits between it and the
+      // hidden span, so the check is for an ancestor and not the direct parent.
+      await expect(badge(page).locator('xpath=ancestor::span[@aria-hidden="true"]')).toHaveCount(1);
     });
   }
 

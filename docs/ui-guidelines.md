@@ -744,13 +744,13 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 
 | Component | Notes |
 | --- | --- |
-| `Button` | variants: `primary`, `secondary`, `ghost`, `danger`; sizes `sm`, `md`, and `lg` for the sign-in form alone; `loading` swaps the label for a spinner without changing width |
-| `IconButton` | square, always has an `aria-label` |
+| `Button` | variants: `primary`, `secondary`, `ghost`, `danger`; sizes `sm`, `md`, and `lg` for the sign-in form alone; `loading` swaps the label for a spinner without changing width. `help` is a sentence in the shared tooltip; `reason`, with `disabled`, says why it cannot be used and keeps it reachable (see *Help*) |
+| `IconButton` | square, always has an `aria-label`, which is also the heading of its tooltip. `help`, `keys` and `reason` add a sentence, the keys that do the same and why it is unavailable |
 | `Input`, `Textarea`, `Select`, `Switch`, `Checkbox`, `RadioGroup` | all support `error` and `hint`; the error is announced with `aria-describedby`. `Input` has the same three sizes as `Button` |
 | `Field` | label + control + hint + error; the only way form controls are laid out |
 | `Badge` | status pill: colour **and** shape from the state map |
 | `StatusDot` | the shape half of the state encoding, reusable inline |
-| `Tooltip` | on hover *and* focus; never the only place information lives. `text` is the whole tooltip as one sentence and what assistive technology gets; an optional `content` snippet draws a richer card for sighted readers. What it wraps has to be something a keyboard reaches -- a button, with `aria-describedby` pointing at the sentence -- or focus opens nothing, and a card that carries figures also opens on a tap, which has no hover |
+| `Tooltip` | the one hover and focus help, on one bubble (`TooltipBubble`) and one set of timing rules (`lib/tooltip.ts`); never the only place information lives. Plain help is a `title` heading, a `text` sentence, a `reason` and the `keys` that do the same thing; `text` is also what assistive technology gets, linked to the control with `aria-describedby`. An optional `content` snippet draws a richer card for sighted readers, with `text` as its one-sentence copy. What it wraps has to be something a keyboard reaches, or focus opens nothing; a card that carries figures also opens on a tap, which has no hover. See *Help* |
 | `Segmented` | one choice among a few as one control, `aria-pressed` on the one in force: the activity matrix's ranges, the fleet trend's windows, the usage chart's two measures |
 | `Dialog` | focus trap, restores focus on close, `Esc` closes, backdrop click closes only non-destructive dialogs, and never one that is showing a secret exactly once. A dialog with text fields is a `<form>` whose footer button is `type="submit" form="…"`, so `Enter` submits it |
 | `Drawer` | right-hand detail panel; same focus rules. On a phone it runs the full height but not the full width: a strip of the page stays visible down its left, under the scrim, so it reads as a panel over the page rather than a new page, and a tap on the strip closes it |
@@ -761,7 +761,7 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 | `Skeleton` | **the only loading affordance for content.** Spinners are for in-flight *actions* only |
 | `EmptyState` | icon + one sentence of what this is + the action that fills it; a `visual` snippet replaces the icon disc where artwork is wanted, as the not-found page does with the mark |
 | `CopyButton` | wraps any ID; announces "copied" to screen readers |
-| `RelativeTime` | "4m ago", absolute ISO timestamp in the tooltip, updates itself |
+| `RelativeTime` | "4m ago", the exact local time and the ISO timestamp in the tooltip, updates itself |
 | `Duration` | humanised, tabular numerals |
 | `Sparkline` | inline SVG, no chart library, `role="img"` with a text summary |
 | `Slider` | the browser's own range control between notches, with the recommended notch ringed and words at the ones worth naming; a second row when two would collide. `aria-valuetext` says the value in the same words the readout shows |
@@ -773,7 +773,7 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 
 | Component | Notes |
 | --- | --- |
-| `DataGrid` | TanStack Table core + our own markup. Server-side pagination, sorting and filtering; column show/hide, width and order persisted per grid; sticky header; row selection with a bulk action bar; full keyboard navigation (`↑ ↓` rows, `Enter` opens, `Space` selects, `Shift+↑/↓` range). Defaults fit the frame; an explicitly widened layout scrolls inside its own frame, see *Tables use the space they need* |
+| `DataGrid` | TanStack Table core + our own markup. Server-side pagination, sorting and filtering; column show/hide, width and order persisted per grid; a column's `help` makes its heading a dotted-underline button that opens a sentence; sticky header; row selection with a bulk action bar; full keyboard navigation (`↑ ↓` rows, `Enter` opens, `Space` selects, `Shift+↑/↓` range). Defaults fit the frame; an explicitly widened layout scrolls inside its own frame, see *Tables use the space they need* |
 | `RowActions` | a row's actions as buttons rather than a menu, as an ARIA toolbar: one tab stop per row, `← →` along it, and every button's name carries what it acts on |
 | `FilterBar` | chips for active filters, each individually removable, plus a clear-all |
 | `PageHeader` | title, subtitle, breadcrumb, primary action, and the refresh button where the page passes `onrefresh` |
@@ -979,11 +979,75 @@ Everything reachable, in a sensible order, with a visible focus ring
 (`2px` `--z-accent`, `2px` offset, never removed). `Cmd/Ctrl+K` palette,
 `g` then `o/p/r/q/w/j/u/h/v/i/m/k/a/s` to jump between sections (`j` is the Jobs
 list, one step down from Workflows), `/` focuses the current page's search, `R` refreshes it, `?` opens the shortcut sheet, `Esc` closes the
-topmost layer. While a dialog, drawer, menu or the palette is open, `Esc` is
+topmost layer, and a tooltip is the first thing it closes. While a dialog, drawer, menu or the palette is open, `Esc` is
 the only one of these the shell answers; the rest belong to the overlay, so a
 `g r` typed into a confirmation cannot navigate away from the thing being
 confirmed. Tab stays inside the innermost open overlay, and everything outside
 it is `inert`.
+
+### Help
+
+Every help that appears on hover or focus is a `Tooltip`. The browser's own
+`title` is not used for it: it waits a second, cannot be styled, never shows for
+the keyboard, and is read out inconsistently. `title` stays where it carries
+meaning in its own right, on an `<abbr>` (the expansion of an abbreviation), an
+`<iframe>` and an SVG `<title>`, and nowhere else.
+
+There are three kinds of content, and one bubble under all of them:
+
+| Kind | What it is | Used by |
+| --- | --- | --- |
+| Plain help | an optional heading, one sentence, an optional reason and the keys that do the same thing | the sidebar, icon buttons, row actions and menu items, `Badge`, `RelativeTime`, truncated values, grid headings |
+| Rich card | a `content` snippet with a layout of its own; `text` stays its one-sentence copy | the runner state card, the memory badges, the host memory ledger, the lifecycle flow, pool risks, field help, setting sources, backup badges |
+| Data card | a rich card that is not interactive and opens with no wait | the activity matrix |
+
+The heading is shown only for a control that does not show its own name: an icon
+button's label, a collapsed sidebar entry's page. When there is a heading the
+sentence is muted. A **reason** says why a control cannot be used now and what to
+do about it, under a rule and an "i" icon, or a padlock when it is a permission
+(`lock`). The keys are `<kbd>` caps.
+
+The surface is `--z-surface-raised` with `--z-border`, `--z-radius-md` and
+`--z-shadow-md`, in `--z-text-xs`. It is in the browser's top layer, so a table's
+scrolling frame cannot clip it, and it is let go of when its trigger scrolls out
+of the frame it lives in. It is at most 280px wide (360px for a `wide` card, 300px
+for the matrix's). The caret is an 8px rotated square that points at the
+trigger's centre even when the bubble has been held inside the window, and is
+kept 14px from the bubble's ends. An invisible halo around the bubble bridges the
+gap to the trigger, so the pointer can travel onto it. It prefers the side it is
+given (`top` unless told otherwise), flips to the other when there is not room
+for it plus an 8px gap and an 8px margin and the other side has more, and is held
+8px inside the window. On a phone-width window a `right` preference becomes
+`bottom`. A sidebar entry anchors to the rail's edge (`edge`), not its own, so
+the bubble clears the rail. It fades in and slides 4px from the trigger's side
+over `--z-motion-fast`, which collapses to `1ms` under reduced motion.
+
+The timing is one controller, `lib/tooltip.ts`, shared by every bubble, so only
+one is ever open:
+
+| Rule | Value |
+| --- | --- |
+| The first bubble waits | 250ms (`OPEN_DELAY`) |
+| After one has shown, and while one is open, a neighbour opens at once | for 300ms (`WARM`), which is what makes a sweep down the sidebar feel instant |
+| Leaving closes after a grace, and entering the bubble cancels it | 100ms (`GRACE`) |
+| Keyboard focus (`:focus-visible`) | opens at once; blur closes |
+| `Esc` | closes the bubble first, in the capture phase, without moving focus and without closing the menu underneath; it is stopped only when a bubble was open |
+| A press on the trigger or the bubble | hides it |
+| A touch | does not open on hover; the sentence is still the description |
+| `wait="none"` | opens at once, for things people scrub across |
+
+Rich cards take the shared 250ms wait. They used to open the instant the pointer
+touched them; `RICH_CARD_WAIT` in `lib/tooltip.ts` is the one place to give that
+back.
+
+What a screen reader gets does not depend on the bubble. The sentence (and the
+reason) is the control's `aria-describedby`, unless it would only repeat the
+control's accessible name, and a value that is already on the page in full
+(a truncated name) is not described a second time. A control that is unavailable
+for a reason is marked `aria-disabled`, not `disabled`: a disabled button cannot
+be hovered or focused, and the reason is the point. `Button`, `IconButton`,
+`Checkbox`, `RowActions` and `DropdownMenu` items all do this when given a
+`reason`.
 
 ### Responsive
 
@@ -1067,7 +1131,8 @@ Five things make it fit, in this order:
   `DataGrid` works out each column's width from the frame it measures rather
   than from its content. A declared `width` is the useful measure when all the
   useful measures fit, and a share of the frame when they do not. A cell too
-  small for its content truncates and keeps the whole value in its `title`.
+  small for its content truncates and keeps the whole value in a tooltip, which
+  opens only on a cell that is actually cut off.
 * **A deliberate layout stays deliberate.** Every heading has a drag handle and
   a resize edge. The handle also moves with left/right arrow keys and the edge
   resizes in eight-pixel keyboard steps; double-clicking an edge restores that
@@ -1186,6 +1251,7 @@ Every PR that touches the UI should be able to answer yes to all of these:
 - [ ] Text meets WCAG AA in **both** themes (4.5:1 body, 3:1 large and UI)
 - [ ] Live regions announce async outcomes once, not on every keystroke
 - [ ] Reduced-motion honoured
+- [ ] Hover help is a `Tooltip`, never a native `title`, and a control that is unavailable says why
 - [ ] Zoom to 200% without loss of function
 
 ---

@@ -41,6 +41,7 @@
   already on.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { readableJobText } from '$lib/jobs/name';
   import JobsInsights from '$lib/insights/JobsInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
@@ -302,6 +303,7 @@
       // read.
       id: 'class',
       header: 'Size class',
+      help: 'Which class of host the job was put in, and where it ran when that was another.',
       priority: 'wide',
       hiddenByDefault: true,
       value: (job) => classCell(job) || '--',
@@ -359,26 +361,28 @@
          looking like work the fleet was about to pick up. -->
     {#if queueStatus(job)}
       {@const queue = queueStatus(job)}
-      <Badge status={queue!} size="sm" title={queue!.hint} />
+      <Badge status={queue!} size="sm" help={queue!.hint} />
     {/if}
     {#if fleetFailed(job)}
-      <Badge status={RUNNER_LOST} size="sm" title={job.fault_fix || RUNNER_LOST.hint} />
+      <Badge status={RUNNER_LOST} size="sm" help={job.fault_fix || RUNNER_LOST.hint} />
     {/if}
     {#if stuckUnmatched(job)}
-      <Badge status={UNMATCHED} size="sm" title={UNMATCHED.hint} />
+      <Badge status={UNMATCHED} size="sm" help={UNMATCHED.hint} />
     {:else if job.hosted && job.matched === false}
-      <Badge status={HOSTED} size="sm" title={HOSTED.hint} />
+      <Badge status={HOSTED} size="sm" help={HOSTED.hint} />
     {/if}
   </span>
 {/snippet}
 
 {#snippet failedAtCell(job: Job)}
   {#if fleetFailed(job)}
-    <span class="failed-at danger" title={job.runner_fault || job.fault_fix}>{failedAt(job)}</span>
+    <Tooltip bare text={job.runner_fault || job.fault_fix || ''}>
+      <span class="failed-at danger">{failedAt(job)}</span>
+    </Tooltip>
   {:else if job.failed_step}
-    <span class="failed-at" title="Step {job.failed_step.number}: {job.failed_step.name}">
-      {job.failed_step.name}
-    </span>
+    <Tooltip bare text="Step {job.failed_step.number}: {job.failed_step.name}">
+      <span class="failed-at">{job.failed_step.name}</span>
+    </Tooltip>
   {:else}
     <span class="none">--</span>
   {/if}

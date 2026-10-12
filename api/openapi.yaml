@@ -1738,7 +1738,9 @@ paths:
         and nothing to return yet, the request is held for the next matching event and answers
         with it and anything queued behind it, or with `timed_out` true and no items when the
         wait ends (at most 25 seconds, whatever was asked). A held request counts against
-        `limits.event_subscribers` as a stream does.
+        `limits.event_subscribers` as a stream does, or a public view's visitor's against
+        `limits.visitor_event_subscribers`. Each event is returned only to a caller who could
+        read it from its own route, as the stream sends it.
       x-zoomies-role: viewer
       parameters:
         - name: since
@@ -5724,7 +5726,20 @@ paths:
       operationId: listEliRepairs
       tags: [assistant]
       summary: List repair history visible to the caller
+      description: >-
+        One page of the caller's repairs, newest first, with `total` for how many match in
+        all so a client can page without asking for everything. Administrators see every
+        repair; everyone else sees only the ones they asked for. A repair that has been
+        cleared from the history is neither listed nor counted. A `group` or `trigger` this
+        API does not know, or a `repo` of more than 200 characters, is a 422 that names the
+        parameter: a filter that was quietly ignored would show the wrong history.
       x-zoomies-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/EliRepairGroup"
+        - $ref: "#/components/parameters/EliRepairRepo"
+        - $ref: "#/components/parameters/EliRepairTrigger"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: OK
@@ -5750,6 +5765,78 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EliRepair" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/selection:
+    get:
+      operationId: selectEliRepairs
+      tags: [assistant]
+      summary: Take every repair a filter matches that can be cleared from the history
+      description: >-
+        The ids a "select all" should take: the repairs the same filters would list, without
+        paging, leaving out any that are still queued, running or waiting on checks, since
+        those cannot be cleared. At most 500 ids come back, newest first, taken at the moment
+        of the call, so a repair that arrives afterwards is not swept in. `total` is how many
+        could be cleared in all, and `truncated` is true when that is more than the ids sent.
+        The same scope and the same 422s as the list.
+      x-zoomies-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/EliRepairGroup"
+        - $ref: "#/components/parameters/EliRepairRepo"
+        - $ref: "#/components/parameters/EliRepairTrigger"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliRepairSelection" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/bulk:
+    post:
+      operationId: bulkEliRepairAction
+      tags: [assistant]
+      summary: Clear several repairs from the history
+      description: >-
+        Hides repairs from the history and does nothing else to them. The repair stays on
+        record, so it still counts towards the repository's and the person's daily limit,
+        still stops Eli answering the same webhook delivery twice, and still stops Eli
+        repairing its own commit. Answers 200 with a result for each distinct id, in the
+        order asked, so a partial failure is visible rather than hidden behind one status
+        code. A repair that is still queued, running or waiting on checks comes back as
+        `still running`. An id that does not exist and an id the caller may not see both come
+        back as `not found`, so the answer cannot be used to discover which ids are real. An
+        id that is already cleared is `ok`. One audit row, `assistant.repair_clear`, lists the
+        ids that were cleared.
+      x-zoomies-role: viewer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { type: string, enum: [clear] }
+                ids: { type: array, items: { type: string }, minItems: 1, maxItems: 500 }
+      responses:
+        "200":
+          description: Per-ID outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, ok]
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { type: string }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
   /assistant/repairs/settings:
@@ -7670,6 +7757,28 @@ components:
       name: offset
       in: query
       schema: { type: integer, default: 0, minimum: 0 }
+    EliRepairGroup:
+      name: group
+      in: query
+      description: >-
+        Only repairs in this group of states. `attention` is every state that is neither
+        running nor passed, `active` is queued, working and checking, and `passed` is
+        succeeded. Anything else is a 422.
+      schema: { type: string, enum: [attention, active, passed] }
+    EliRepairRepo:
+      name: repo
+      in: query
+      description: >-
+        Only repairs whose repository contains this text, ignoring case. Spaces at either end
+        are dropped.
+      schema: { type: string, maxLength: 200 }
+    EliRepairTrigger:
+      name: trigger
+      in: query
+      description: >-
+        How the repair began. `automatic` is one Eli started on its own; `requested` is one a
+        person asked for, however they asked. Anything else is a 422.
+      schema: { type: string, enum: [automatic, requested] }
     Sort:
       name: sort
       in: query
@@ -8672,6 +8781,12 @@ components:
         bootstrap_required: { type: boolean, description: True when no user exists yet. `/readyz` carries the same field, so a provisioner can wait on one endpoint. }
         tailcat_available: { type: boolean, description: Whether private enrolment is enabled and the controller has its encryption key. Relay connectivity is checked at enrolment. }
         auth_disabled: { type: boolean, description: True when authentication has been switched off in the configuration. }
+        public_view:
+          type: boolean
+          description: >-
+            True when `security.public_view` is on: a caller with no credential
+            reads the fleet as a visitor, whose session has the kind `public`.
+            False whenever authentication is switched off.
         oidc_enabled: { type: boolean }
         oidc_label: { type: string, examples: ["Sign in with Okta"], description: "`oidc.label`, or \"Sign in with\" and the issuer's host." }
         password_login_hidden:
@@ -12497,6 +12612,15 @@ components:
             a form can only keep what it is shown, and a box that opens empty would clear it
             on the next save. Absent when none is set, and when what is stored is not
             entirely certificates.
+        machine_ca_pem:
+          type: string
+          description: >-
+            The certificate a machine built by this provider trusts for this controller, and
+            nothing else when it is set. A different certificate from `ca_pem` in general: a
+            cluster's own authority has no reason to have signed the controller. Empty leaves
+            a machine on its own trust store, which is right for a controller on a public
+            certificate. Returned for the same reason `ca_pem` is, and absent when none is
+            set and when what is stored is not entirely certificates.
         connection:
           type: string
           enum: [direct, tailcat]
@@ -12602,7 +12726,14 @@ components:
         kind: { $ref: "#/components/schemas/ProviderKindName" }
         name: { type: string }
         endpoint: { type: string }
-        ca_pem: { type: string, description: The certificate to trust for this endpoint, instead of turning verification off. }
+        ca_pem: { type: string, description: The certificate to trust for this endpoint, instead of turning verification off. Certificates only; a private key is refused with a 422 naming this field. }
+        machine_ca_pem:
+          type: string
+          description: >-
+            The certificate a machine built by this provider trusts for this controller, and nothing
+            else. Leave it out, or empty, for a machine to use its own trust store, which is right for a
+            controller on a public certificate. Certificates only; a private key is refused with a 422
+            naming this field. An edit that does not name it leaves it alone.
         insecure_skip_verify: { type: boolean }
         connection:
           type: string
@@ -13027,11 +13158,29 @@ components:
 
     EliRepairList:
       type: object
-      required: [items]
+      required: [items, total]
       properties:
         items:
           type: array
           items: { $ref: "#/components/schemas/EliRepair" }
+        total:
+          type: integer
+          description: How many repairs match the filters in all, not only on this page.
+
+    EliRepairSelection:
+      type: object
+      required: [ids, total, truncated]
+      properties:
+        ids:
+          type: array
+          maxItems: 500
+          items: { type: string }
+        total:
+          type: integer
+          description: How many repairs match and can be cleared, which is more than `ids` holds when `truncated`.
+        truncated:
+          type: boolean
+          description: True when `total` is more than the ids sent, so a select-all took only the newest 500.
 
     EliRepairSettings:
       type: object
@@ -13413,7 +13562,12 @@ components:
     Identity:
       type: object
       properties:
-        kind: { type: string, enum: [user, token, agent, system] }
+        kind:
+          type: string
+          enum: [user, token, agent, system, public]
+          description: >-
+            `public` is a public view's visitor: no account, the viewer role
+            narrowed to reading the fleet, refused every change.
         id: { type: string }
         name: { type: string }
         role: { $ref: "#/components/schemas/Role" }

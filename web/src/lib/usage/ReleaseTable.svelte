@@ -15,6 +15,7 @@
   note says so, because the API says so and the numbers get quoted without it.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { getJobStats } from '$lib/api/client';
   import type { JobStats, JobStatsGroup } from '$lib/api/types';
   import { formatDuration, formatNumber, formatPercent } from '$lib/format';
@@ -112,14 +113,17 @@
             {@const name = release(group)}
             <!-- svelte-ignore a11y_no_redundant_roles -->
             <tr role="row" data-release={name}>
-              <th role="rowheader" scope="row" class="key" title={name}>
-                <span class="name" class:muted={name === 'unknown'}>{name}</span>
+              <th role="rowheader" scope="row" class="key">
+                <Tooltip bare whenTruncated text={name}>
+                  <span class="name" class:muted={name === 'unknown'}>{name}</span>
+                </Tooltip>
                 {#if name === 'unknown'}
-                  <span
-                    class="tag"
-                    title="Recorded before releases were stamped, or claimed by no pool here"
-                    >not recorded</span
+                  <Tooltip
+                    bare
+                    text="Recorded before releases were stamped, or claimed by no pool here"
                   >
+                    <span class="tag">not recorded</span>
+                  </Tooltip>
                 {/if}
               </th>
               <td role="cell" class="end tabular" data-label="Jobs">{formatNumber(group.count)}</td>

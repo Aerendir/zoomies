@@ -160,31 +160,37 @@ func (s *Server) apiRoutes() chi.Router {
 	r.Group(func(r chi.Router) {
 		r.Use(s.authenticate)
 
-		// Every authenticated identity may end its own session, see itself and
-		// change its own password; there is no separate role for that.
-		r.Post("/auth/logout", s.handleLogout)
-		r.Post("/auth/logout-others", s.handleLogoutOthers)
+		// Every authenticated identity may see itself, a public view's visitor
+		// included: that is how the UI learns it is one.
 		r.Get("/auth/session", s.handleSession)
-		r.Get("/auth/preferences", s.handleGetPreferences)
-		r.Put("/auth/preferences", s.handlePutPreferences)
-		r.Get("/auth/problem-dismissals", s.handleGetProblemDismissals)
-		r.Patch("/auth/problem-dismissals", s.handlePatchProblemDismissals)
-		r.Post("/auth/password", s.handleChangePassword)
-		r.Get("/auth/two-step", s.handleTwoStepStatus)
-		r.Post("/auth/two-step/setup", s.handleTwoStepSetup)
-		r.Post("/auth/two-step/confirm", s.handleTwoStepConfirm)
-		r.Post("/auth/two-step/disable", s.handleTwoStepDisable)
-		r.Post("/auth/two-step/recovery-codes", s.handleTwoStepRecoveryCodes)
 
-		// The consent screen, and a person's own MCP connections. Like the
-		// rest of /auth these are the caller's own and need no role.
-		r.Get("/auth/mcp-requests/{id}", s.mcpOAuth(s.handleGetMCPRequest))
-		r.Post("/auth/mcp-requests/{id}/approve", s.mcpOAuth(s.handleApproveMCPRequest))
-		r.Post("/auth/mcp-requests/{id}/deny", s.mcpOAuth(s.handleDenyMCPRequest))
-		r.Get("/auth/mcp-connections", s.handleListOwnMCPConnections)
-		r.Delete("/auth/mcp-connections/{id}", s.handleRevokeOwnMCPConnection)
-		r.Get("/auth/mcp-connections/{id}/repositories", s.handleGetOwnContextSelection)
-		r.Put("/auth/mcp-connections/{id}/repositories", s.handlePutOwnContextSelection)
+		r.Group(func(r chi.Router) {
+			r.Use(s.refuseVisitors)
+			// Every signed-in identity may end its own session and change its own
+			// password; there is no separate role for that. A visitor has neither.
+			r.Post("/auth/logout", s.handleLogout)
+			r.Post("/auth/logout-others", s.handleLogoutOthers)
+			r.Get("/auth/preferences", s.handleGetPreferences)
+			r.Put("/auth/preferences", s.handlePutPreferences)
+			r.Get("/auth/problem-dismissals", s.handleGetProblemDismissals)
+			r.Patch("/auth/problem-dismissals", s.handlePatchProblemDismissals)
+			r.Post("/auth/password", s.handleChangePassword)
+			r.Get("/auth/two-step", s.handleTwoStepStatus)
+			r.Post("/auth/two-step/setup", s.handleTwoStepSetup)
+			r.Post("/auth/two-step/confirm", s.handleTwoStepConfirm)
+			r.Post("/auth/two-step/disable", s.handleTwoStepDisable)
+			r.Post("/auth/two-step/recovery-codes", s.handleTwoStepRecoveryCodes)
+
+			// The consent screen, and a person's own MCP connections. Like the
+			// rest of /auth these are the caller's own and need no role.
+			r.Get("/auth/mcp-requests/{id}", s.mcpOAuth(s.handleGetMCPRequest))
+			r.Post("/auth/mcp-requests/{id}/approve", s.mcpOAuth(s.handleApproveMCPRequest))
+			r.Post("/auth/mcp-requests/{id}/deny", s.mcpOAuth(s.handleDenyMCPRequest))
+			r.Get("/auth/mcp-connections", s.handleListOwnMCPConnections)
+			r.Delete("/auth/mcp-connections/{id}", s.handleRevokeOwnMCPConnection)
+			r.Get("/auth/mcp-connections/{id}/repositories", s.handleGetOwnContextSelection)
+			r.Put("/auth/mcp-connections/{id}/repositories", s.handlePutOwnContextSelection)
+		})
 
 		// Overview.
 		r.With(s.require(auth.ActionStatsRead)).Get("/stats", s.handleStats)
@@ -394,6 +400,8 @@ func (s *Server) apiRoutes() chi.Router {
 		// The assistant's providers: the administrator's, kinds included,
 		// because only the page that adds one asks for them.
 		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs", s.handleEliRepairs)
+		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs/selection", s.handleEliRepairSelection)
+		r.With(s.require(auth.ActionAssistantOwn)).Post("/assistant/repairs/bulk", s.handleBulkEliRepairs)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/readiness", s.handleEliReadiness)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/opportunities", s.handleEliOpportunities)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Post("/assistant/repairs/opportunities/{id}", s.handleEliOpportunityAction)

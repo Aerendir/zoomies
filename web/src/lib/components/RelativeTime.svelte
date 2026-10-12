@@ -1,9 +1,10 @@
 <!--
   "4m ago", updating itself from one shared clock rather than one timer per row,
-  with the exact timestamp in the title for anyone who needs it.
+  with the exact timestamp in the shared tooltip for anyone who needs it.
 -->
 <script lang="ts">
   import { onClockTick, formatTimestampTitle, relativeTime, type TimeInput } from '../format';
+  import Tooltip from './Tooltip.svelte';
 
   interface Props {
     value: TimeInput;
@@ -25,11 +26,13 @@
   // is trimmed away, and a `{' '}` to put it back is what the lint rightly calls
   // noise. A prefix that already ends in a space is not given two.
   const lead = $derived(prefix ? `${prefix.trimEnd()} ` : '');
-  const title = $derived(formatTimestampTitle(value));
+  const exact = $derived(formatTimestampTitle(value));
   const iso = $derived(typeof value === 'string' ? value : undefined);
 </script>
 
-<time class="relative {className}" class:plain datetime={iso} {title}>{lead}{text}</time>
+<Tooltip bare quiet text={exact}>
+  <time class="relative {className}" class:plain datetime={iso}>{lead}{text}</time>
+</Tooltip>
 
 <style>
   .relative {

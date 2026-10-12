@@ -8,62 +8,84 @@
 -->
 <script lang="ts">
   import type { StatusMeta } from '../status';
+  import Tooltip from './Tooltip.svelte';
 
   interface Props {
     status: StatusMeta;
     size?: 'sm' | 'md';
     /** Print the label after the shape. */
     showLabel?: boolean;
+    /**
+     * Explain the status in the shared tooltip. A dot inside a badge turns it
+     * off: the badge says it once for both.
+     */
+    tip?: boolean;
     class?: string;
   }
 
-  let { status, size = 'md', showLabel = false, class: className = '' }: Props = $props();
+  let {
+    status,
+    size = 'md',
+    showLabel = false,
+    tip = true,
+    class: className = '',
+  }: Props = $props();
 
   const px = $derived(size === 'sm' ? 8 : 10);
 </script>
 
-<span class="dot-wrap {className}" title={status.hint}>
-  <svg
-    width={px}
-    height={px}
-    viewBox="0 0 10 10"
-    role="img"
-    aria-label={showLabel ? undefined : status.label}
-    aria-hidden={showLabel ? 'true' : undefined}
-    style="color: {status.colour}"
-  >
-    {#if status.shape === 'filled'}
-      <circle cx="5" cy="5" r="4" fill="currentColor" />
-    {:else if status.shape === 'hollow'}
-      <circle cx="5" cy="5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-    {:else if status.shape === 'dashed'}
-      <circle
-        cx="5"
-        cy="5"
-        r="3.4"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-dasharray="2.2 1.8"
-        stroke-linecap="round"
-      />
-    {:else if status.shape === 'slash'}
-      <circle cx="5" cy="5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-      <line x1="2.2" y1="7.8" x2="7.8" y2="2.2" stroke="currentColor" stroke-width="1.6" />
-    {:else if status.shape === 'triangle'}
-      <path
-        d="M5 0.8 L9.4 8.6 H0.6 Z"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linejoin="round"
-      />
-    {:else}
-      <rect x="1.4" y="1.4" width="7.2" height="7.2" rx="1.2" fill="currentColor" opacity="0.85" />
-    {/if}
-  </svg>
-  {#if showLabel}<span class="label">{status.label}</span>{/if}
-</span>
+<Tooltip bare text={tip ? status.hint : ''}>
+  <span class="dot-wrap {className}">
+    <svg
+      width={px}
+      height={px}
+      viewBox="0 0 10 10"
+      role="img"
+      aria-label={showLabel ? undefined : status.label}
+      aria-hidden={showLabel ? 'true' : undefined}
+      style="color: {status.colour}"
+    >
+      {#if status.shape === 'filled'}
+        <circle cx="5" cy="5" r="4" fill="currentColor" />
+      {:else if status.shape === 'hollow'}
+        <circle cx="5" cy="5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+      {:else if status.shape === 'dashed'}
+        <circle
+          cx="5"
+          cy="5"
+          r="3.4"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-dasharray="2.2 1.8"
+          stroke-linecap="round"
+        />
+      {:else if status.shape === 'slash'}
+        <circle cx="5" cy="5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <line x1="2.2" y1="7.8" x2="7.8" y2="2.2" stroke="currentColor" stroke-width="1.6" />
+      {:else if status.shape === 'triangle'}
+        <path
+          d="M5 0.8 L9.4 8.6 H0.6 Z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+      {:else}
+        <rect
+          x="1.4"
+          y="1.4"
+          width="7.2"
+          height="7.2"
+          rx="1.2"
+          fill="currentColor"
+          opacity="0.85"
+        />
+      {/if}
+    </svg>
+    {#if showLabel}<span class="label">{status.label}</span>{/if}
+  </span>
+</Tooltip>
 
 <style>
   .dot-wrap {

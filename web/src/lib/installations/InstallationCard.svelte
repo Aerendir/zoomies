@@ -81,7 +81,7 @@
     <div class="identity">
       <h3 id="installation-{installation.id}">{installation.target || 'Unnamed target'}</h3>
       <div class="badges">
-        <Badge {status} size="sm" title={status.hint} />
+        <Badge {status} size="sm" help={status.hint} />
         <Badge
           tone="neutral"
           label={installation.target_type === 'repo' ? 'Repository' : 'Organisation'}
@@ -94,7 +94,7 @@
             label="GitHub Enterprise"
             size="sm"
             dot={false}
-            title={installation.api_base_url}
+            help={installation.api_base_url}
           />
         {:else}
           <Badge tone="neutral" label="github.com" size="sm" dot={false} />

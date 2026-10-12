@@ -533,7 +533,7 @@ test('a read that was in flight when a frame landed does not put its older answe
     // The read answers now, with the document from before the change, and the
     // refresh ends: that is when it would have been put over the frame.
     answer();
-    await expect(refresh).toHaveAttribute('title', /^Refreshed /);
+    await expect(refresh).toHaveAccessibleDescription(/^Refreshed /);
     await expect(mode(page)).toContainText('12 hours');
   } finally {
     answer();

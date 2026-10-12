@@ -9,6 +9,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import type { LucideIcon } from '@lucide/svelte';
+  import type { Side } from '../tooltip-place';
+  import Tooltip from './Tooltip.svelte';
 
   interface Props {
     variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -44,7 +46,23 @@
      * which `loading` deliberately does not do.
      */
     iconSpin?: boolean;
-    title?: string;
+    /**
+     * What it does, when the label is not enough: a sentence in the shared
+     * tooltip, on hover and on keyboard focus, and linked as the button's
+     * description. Never the only place something lives.
+     */
+    help?: string;
+    /**
+     * Why it cannot be used now, and what to do about it. With `disabled`, the
+     * button is marked `aria-disabled` rather than `disabled`, so it can still be
+     * hovered and focused and the reason can be reached.
+     */
+    reason?: string;
+    /** The reason is a permission, so it is drawn with a padlock. */
+    lock?: boolean;
+    /** The keys that do the same thing, one cap each. */
+    keys?: readonly string[];
+    placement?: Side;
     ariaLabel?: string;
     ariaExpanded?: boolean;
     ariaControls?: string;
@@ -67,7 +85,11 @@
     icon: Icon,
     iconAfter: IconAfter,
     iconSpin = false,
-    title,
+    help,
+    reason,
+    lock = false,
+    keys,
+    placement,
     ariaLabel,
     ariaExpanded,
     ariaControls,
@@ -84,6 +106,12 @@
    * for the second; a link has neither, so both come down to the same thing.
    */
   const inert = $derived(disabled || loading);
+  /**
+   * Off, with a reason to give. It is refused rather than disabled so that the
+   * operator can still point at it: a natively disabled button takes no hover
+   * and no focus, and the reason is the whole point.
+   */
+  const refused = $derived(disabled && Boolean(reason));
 </script>
 
 {#snippet body()}
@@ -101,8 +129,9 @@
   {/if}
 {/snippet}
 
-{#if href}
-  <!--
+{#snippet control()}
+  {#if href}
+    <!--
     A link that is off has no `href`.
 
     `pointer-events: none` stops the mouse and nothing else: the anchor kept
@@ -112,22 +141,24 @@
     same refusal for everyone; `aria-disabled` and `aria-busy` are what say
     why, and the styling is unchanged because `.btn` does not depend on href.
   -->
-  <a
-    href={inert ? undefined : href}
-    {title}
-    class="btn {variant} {size} {className}"
-    class:full
-    target={newTab && !inert ? '_blank' : undefined}
-    rel={newTab && !inert ? 'noopener noreferrer' : undefined}
-    aria-label={ariaLabel}
-    aria-disabled={inert ? 'true' : undefined}
-    aria-busy={loading || iconSpin ? 'true' : undefined}
-  >
-    {@render body()}
-    {#if newTab}<span class="sr-only"> (opens in a new tab)</span>{/if}
-  </a>
-{:else}
-  <!--
+    <a
+      href={inert ? undefined : href}
+      class="btn {variant} {size} {className}"
+      class:full
+      class:refused
+      target={newTab && !inert ? '_blank' : undefined}
+      rel={newTab && !inert ? 'noopener noreferrer' : undefined}
+      role={refused ? 'link' : undefined}
+      tabindex={refused ? 0 : undefined}
+      aria-label={ariaLabel}
+      aria-disabled={inert ? 'true' : undefined}
+      aria-busy={loading || iconSpin ? 'true' : undefined}
+    >
+      {@render body()}
+      {#if newTab}<span class="sr-only"> (opens in a new tab)</span>{/if}
+    </a>
+  {:else}
+    <!--
     Loading is `aria-disabled`, not `disabled`.
 
     Disabling the element the operator has just activated makes the browser
@@ -137,30 +168,40 @@
     behind it. aria-disabled keeps the button focused and announced, the
     pointer is stopped in CSS, and the click handler refuses while busy.
   -->
-  <button
-    {type}
-    {form}
-    {title}
-    class="btn {variant} {size} {className}"
-    class:full
-    {disabled}
-    aria-disabled={loading ? 'true' : undefined}
-    aria-label={ariaLabel}
-    aria-busy={loading || iconSpin ? 'true' : undefined}
-    aria-expanded={ariaExpanded}
-    aria-controls={ariaControls}
-    aria-haspopup={ariaHaspopup}
-    onclick={(event) => {
-      if (loading) {
-        event.preventDefault();
-        return;
-      }
-      onclick?.(event);
-    }}
-  >
-    {@render body()}
-  </button>
-{/if}
+    <button
+      {type}
+      {form}
+      class="btn {variant} {size} {className}"
+      class:full
+      class:refused
+      disabled={disabled && !refused}
+      aria-disabled={loading || refused ? 'true' : undefined}
+      aria-label={ariaLabel}
+      aria-busy={loading || iconSpin ? 'true' : undefined}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
+      aria-haspopup={ariaHaspopup}
+      onclick={(event) => {
+        if (loading || refused) {
+          event.preventDefault();
+          return;
+        }
+        onclick?.(event);
+      }}
+    >
+      {@render body()}
+    </button>
+  {/if}
+{/snippet}
+
+<!--
+  Always wrapped, with nothing to say unless `help`, `reason` or `keys` is given:
+  wrapping only when there is help would rebuild the button, and drop its focus,
+  the moment help appeared. The wrapper takes no box of its own.
+-->
+<Tooltip bare text={help ?? ''} {reason} {lock} {keys} {placement}>
+  {@render control()}
+</Tooltip>
 
 <style>
   .btn {
@@ -184,7 +225,7 @@
   }
   /* A button that is busy still holds focus, so it must not also be clickable
      -- otherwise a second press fires the same request again. */
-  .btn[aria-disabled='true'] {
+  .btn[aria-disabled='true']:not(.refused) {
     pointer-events: none;
   }
   .btn.full {

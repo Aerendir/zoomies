@@ -249,11 +249,18 @@ func bootstrapPayload(m *store.Machine, row *store.Provider, token string, cfg *
 	set("ZOOMIES_WORK_DIR", machineWorkDir)
 
 	files := []provider.File{{Path: machineEnvPath, Mode: machineEnvMode, Content: []byte(b.String())}}
-	if row.CAPEM != "" {
-		// Only when the provider supplies one: a guest told to trust a file
-		// that is not there refuses to start, which is worse than a guest that
-		// uses its own trust store.
-		files = append(files, provider.File{Path: machineCAPath, Mode: 0o644, Content: []byte(row.CAPEM)})
+	// The provider's machine certificate, which is not the one this controller
+	// uses to reach the hypervisor: that authority has no reason to have signed
+	// the controller, and a machine verifies the controller against this file
+	// and nothing else.
+	//
+	// Only when it is set, because a guest told to trust a file that is not
+	// there refuses to start, which is worse than a guest that uses its own
+	// trust store. Only when it is a certificate, because the text is copied
+	// into every machine built, where a private key pasted by mistake would be
+	// readable by the jobs that run there.
+	if ca := certificateAuthority(row.MachineCAPEM); ca != "" {
+		files = append(files, provider.File{Path: machineCAPath, Mode: 0o644, Content: []byte(ca)})
 		files[0].Content = append(files[0].Content, []byte("ZOOMIES_AGENT_CA_FILE="+machineCAPath+"\n")...)
 	}
 

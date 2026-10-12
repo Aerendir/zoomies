@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/events"
 )
 
@@ -137,13 +136,9 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 	// the streams the instance allows, refused before anything is sent.
 	subCtx, unsubscribe := context.WithCancel(r.Context())
 	defer unsubscribe()
-	ceiling := s.cfg().Limits.EventSubscribers
-	sub, ok := bus.SubscribeWithin(subCtx, opts, ceiling)
-	if !ok {
-		limitReached(w, &controller.LimitError{
-			Setting: "limits.event_subscribers", Limit: ceiling, What: "live-update streams",
-			Free: "close a browser tab that is no longer needed",
-		})
+	sub, refused := s.subscribeStream(subCtx, Identity(r.Context()), opts)
+	if refused != nil {
+		limitReached(w, refused)
 		return
 	}
 	// Closed here as well as by the context: the context's release happens on
@@ -305,6 +300,12 @@ func fromRing(bus *events.Bus, opts events.SubscribeOptions, limit int, keep fun
 // recentFrame renders one event for this caller, or reports that it is not
 // theirs to see.
 func (s *Server) recentFrame(r *http.Request, ev events.Event) (recentFrame, bool) {
+	// The stream's rule: a frame goes only to a caller who could have fetched
+	// it from its GET route. Resolved once per request, which lasts at most a
+	// wait, as the stream resolves it once per heartbeat.
+	if !frameReadable(Identity(r.Context()), ev.Kind) {
+		return recentFrame{}, false
+	}
 	data, ok := s.frameFor(r, ev)
 	if !ok {
 		return recentFrame{}, false

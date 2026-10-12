@@ -328,7 +328,7 @@
       <Badge status={poolStatus(pool)} size="sm" />
       <Badge tone="neutral" size="sm" dot={false} label={backendLabel(pool.backend)} />
       {#if pool.auto}
-        <Badge tone="accent" size="sm" dot={false} label="Automatic" title={pool.auto.summary} />
+        <Badge tone="accent" size="sm" dot={false} label="Automatic" help={pool.auto.summary} />
       {/if}
       {#if pool.installation_target}
         <span class="target">{pool.installation_target}</span>
@@ -363,7 +363,7 @@
       variant="danger"
       icon={Trash2}
       disabled={deleteBlocked}
-      title={deleteBlocked
+      reason={deleteBlocked
         ? 'The controller would make this pool again. Pause it to take it out of use, or set scheduler.auto_pools to shadow or off first.'
         : undefined}
       onclick={askDelete}>Delete</Button
