@@ -149,6 +149,13 @@ func (s *Store) EnqueueEliRepair(ctx context.Context, r *EliRepair, limit int) (
 			// keys remain permanent, and an in-flight UI request is still idempotent.
 			retry := strings.HasPrefix(r.DedupKey, "ui:") && (saved.State == "failed" || saved.State == "blocked" || saved.State == "interrupted" || saved.State == "unverified" || saved.State == "checks_failed" || saved.State == "superseded")
 			if !retry {
+				// Asking again for something already done brings it back into view.
+				// Without this a person who cleared the repair would be answered with
+				// a history that does not contain what they just asked for. This and
+				// the history queries are the only readers of cleared_at.
+				if _, err := tx.ExecContext(ctx, `UPDATE eli_repairs SET cleared_at=NULL WHERE id=? AND cleared_at IS NOT NULL`, saved.ID); err != nil {
+					return err
+				}
 				*r = *saved
 				return nil
 			}
@@ -184,34 +191,6 @@ func (s *Store) EnqueueEliRepair(ctx context.Context, r *EliRepair, limit int) (
 		return err
 	})
 	return added, wrapWrite(err)
-}
-func (s *Store) ListEliRepairs(ctx context.Context) ([]*EliRepair, error) {
-	return s.listEliRepairs(ctx, "", false)
-}
-func (s *Store) ListEliRepairsForOwner(ctx context.Context, owner string) ([]*EliRepair, error) {
-	return s.listEliRepairs(ctx, owner, true)
-}
-func (s *Store) listEliRepairs(ctx context.Context, owner string, scoped bool) ([]*EliRepair, error) {
-	query := `SELECT ` + eliRepairCols + ` FROM eli_repairs`
-	args := []any{}
-	if scoped {
-		query += ` WHERE user_id=? AND user_id<>''`
-		args = append(args, owner)
-	}
-	rows, err := s.read.QueryContext(ctx, query+` ORDER BY created_at DESC LIMIT 100`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []*EliRepair{}
-	for rows.Next() {
-		r, err := scanEliRepair(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
 }
 func (s *Store) NextEliRepair(ctx context.Context) (*EliRepair, error) {
 	r, err := scanEliRepair(s.read.QueryRowContext(ctx, `SELECT `+eliRepairCols+` FROM eli_repairs WHERE state='queued' ORDER BY created_at LIMIT 1`))

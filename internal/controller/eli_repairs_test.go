@@ -57,7 +57,7 @@ func TestRepairAdmissionRequiresLinkedHumanCommentAndDeduplicates(t *testing.T) 
 			t.Fatal("forged repair delivery accepted")
 		}
 	}
-	rows, e := h.st.ListEliRepairs(h.ctx)
+	rows, _, e := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if e != nil || len(rows) != 1 || rows[0].UserID != user.ID || rows[0].State != "queued" {
 		t.Fatalf("rows %+v %v", rows, e)
 	}
@@ -194,7 +194,7 @@ func TestRepairWorkerSelectsTheHybridProviderAndRecordsRealCheckOutcome(t *testi
 			}
 			h.c.runEliRepair(runCtx, row)
 			if trigger == "cancelled" {
-				rows, _ := h.st.ListEliRepairs(h.ctx)
+				rows, _, _ := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 				if len(rows) != 1 || rows[0].State != "failed" || fake.commits != 0 {
 					t.Fatalf("cancelled repair stuck: %+v", rows)
 				}
@@ -233,7 +233,7 @@ func TestRepairWorkerSelectsTheHybridProviderAndRecordsRealCheckOutcome(t *testi
 				}
 				h.advance(time.Hour)
 				h.c.checkEliRepairs(h.ctx)
-				all, _ := h.st.ListEliRepairs(h.ctx)
+				all, _, _ := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 				if all[0].State != "unverified" {
 					t.Fatalf("verification never expired: %+v", all[0])
 				}
@@ -243,7 +243,7 @@ func TestRepairWorkerSelectsTheHybridProviderAndRecordsRealCheckOutcome(t *testi
 			if len(rows) != 0 {
 				t.Fatal("failed checks remained pending")
 			}
-			all, _ := h.st.ListEliRepairs(h.ctx)
+			all, _, _ := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 			if all[0].State != "checks_failed" {
 				t.Fatalf("false success %+v", all[0])
 			}
@@ -284,7 +284,7 @@ func TestAutomaticRepairIgnoresNonPRFailuresBeforeChargingTheBudget(t *testing.T
 	if err := h.c.enqueueRepairWebhook(h.ctx, inst, "workflow_job", body); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ := h.st.ListEliRepairs(h.ctx)
+	rows, _, _ := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if len(rows) != 0 {
 		t.Fatal("non-PR job charged the budget")
 	}
@@ -292,7 +292,7 @@ func TestAutomaticRepairIgnoresNonPRFailuresBeforeChargingTheBudget(t *testing.T
 	if err := h.c.enqueueRepairWebhook(h.ctx, inst, "workflow_job", body); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ = h.st.ListEliRepairs(h.ctx)
+	rows, _, _ = h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if len(rows) != 1 || rows[0].PullNumber != 1 {
 		t.Fatalf("PR was not admitted: %+v", rows)
 	}
@@ -315,7 +315,7 @@ func TestLinkedCommentCannotSpendTheBudgetAfterRepositoryAccessIsRemoved(t *test
 	if err := h.c.enqueueRepairWebhook(h.ctx, inst, "issue_comment", body); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ := h.st.ListEliRepairs(h.ctx)
+	rows, _, _ := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if len(rows) != 0 {
 		t.Fatal("removed collaborator charged the budget")
 	}
@@ -325,7 +325,7 @@ func TestLinkedCommentCannotSpendTheBudgetAfterRepositoryAccessIsRemoved(t *test
 	if err := h.c.enqueueRepairWebhook(h.ctx, inst, "issue_comment", body); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ = h.st.ListEliRepairs(h.ctx)
+	rows, _, _ = h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if len(rows) != 0 {
 		t.Fatal("disabled user charged the budget")
 	}
@@ -334,7 +334,7 @@ func TestLinkedCommentCannotSpendTheBudgetAfterRepositoryAccessIsRemoved(t *test
 	if err := h.c.enqueueRepairWebhook(h.ctx, inst, "issue_comment", body); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ = h.st.ListEliRepairs(h.ctx)
+	rows, _, _ = h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if len(rows) != 1 {
 		t.Fatal("current collaborator was not admitted")
 	}

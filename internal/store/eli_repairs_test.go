@@ -154,7 +154,7 @@ func TestPersonalRepairHistoryIsFilteredBeforeThePageLimit(t *testing.T) {
 	for i := 0; i < 110; i++ {
 		s.EnqueueEliRepair(ctx, &EliRepair{Repo: fmt.Sprint("repo/", i), UserID: fmt.Sprint("user", i), DedupKey: fmt.Sprint("other", i)}, 1)
 	}
-	rows, err := s.ListEliRepairsForOwner(ctx, "owner")
+	rows, _, err := s.ListEliRepairsPage(ctx, EliRepairFilter{Scoped: true, OwnerID: "owner", Limit: MaxEliRepairPage})
 	if err != nil || len(rows) != 1 || rows[0].ID != own.ID {
 		t.Fatalf("lost personal history: %v %v", rows, err)
 	}
@@ -211,7 +211,7 @@ func TestManualRepairPoliciesNeedNoInstallationPayerAndOffersSpendNoAttempts(t *
 	if err != nil || len(offers) != 1 {
 		t.Fatalf("offers %+v %v", offers, err)
 	}
-	rows, _ := s.ListEliRepairs(ctx)
+	rows, _, _ := s.ListEliRepairsPage(ctx, EliRepairFilter{Limit: MaxEliRepairPage})
 	if len(rows) != 0 {
 		t.Fatal("offers created charged attempts")
 	}
@@ -256,7 +256,7 @@ func TestRepairDetailsPreserveReportedAndUnknownUsage(t *testing.T) {
 	if err := s.SaveEliRepair(ctx, row); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := s.ListEliRepairs(ctx)
+	rows, _, err := s.ListEliRepairsPage(ctx, EliRepairFilter{Limit: MaxEliRepairPage})
 	if err != nil || len(rows) != 1 || len(rows[0].Details.Steps) != 2 || !rows[0].Details.Steps[0].UsageReported || rows[0].Details.Steps[1].UsageReported || rows[0].Details.Steps[0].InputTokens != 10 {
 		t.Fatalf("usage %+v %v", rows, err)
 	}
@@ -273,7 +273,7 @@ func TestConcurrentOfferAcceptancesCannotChargeDifferentPeople(t *testing.T) {
 	if _, err := s.EnqueueEliRepair(ctx, second, 5); !errors.Is(err, ErrConflict) {
 		t.Fatalf("another owner accepted: %v", err)
 	}
-	rows, _ := s.ListEliRepairs(ctx)
+	rows, _, _ := s.ListEliRepairsPage(ctx, EliRepairFilter{Limit: MaxEliRepairPage})
 	if len(rows) != 1 {
 		t.Fatal("duplicate attempt charged")
 	}
