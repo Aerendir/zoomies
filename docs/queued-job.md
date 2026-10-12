@@ -17,6 +17,12 @@ Start in **Jobs** and open the job, then read the Overview's problems drawer.
 For a runner managed by another tool, start with GitHub's runner status and
 routing checks below; the pool and host steps are specific to Zoomies.
 
+**Want help following the evidence?** Use **Ask Eli** on the job, or connect
+your own assistant through [MCP](mcp.md). [Assistant-led
+troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp) explains
+the required access and how to distinguish a routing or capacity problem from
+a workflow failure.
+
 ## 1. Check what GitHub is waiting for
 
 Open the workflow run and read the job's status and requested runner labels.

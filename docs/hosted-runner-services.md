@@ -29,7 +29,7 @@ before relying on a number.
 | [WarpBuild BYOC](https://www.warpbuild.com/docs/ci/byoc) | Your AWS, Google Cloud or Azure account | $0.002 a minute to WarpBuild, plus your cloud bill | Linux; Windows on AWS and Azure |
 | [Depot](https://depot.dev/pricing) | Depot's infrastructure (single-tenant EC2 instances), or your own AWS account | A monthly plan (Developer $20 with 2,000 minutes, Startup $200 with 20,000), then $0.006 a minute | Linux x86 and Arm, Windows; macOS on Startup and Business plans |
 | [RunsOn](https://runs-on.com/pricing/) | Your AWS account, on EC2 | A yearly licence from €300 (free for non-commercial use), plus your AWS bill | Linux x64 and arm64, Windows |
-| Zoomies | Machines you own or rent, anywhere | Nothing, [AGPL-3.0](https://github.com/eyupio/zoomies/blob/main/LICENSE), plus the machines | Linux x64 and arm64; Windows [not yet qualified](index.md#what-is-qualified) |
+| Zoomies | Machines you own or rent, anywhere | Nothing, [AGPL-3.0](https://github.com/eyupio/zoomies/blob/main/LICENSE), plus the machines | Linux x64 and arm64; Windows x64 with the [process backend](hosts-and-pools.md#worked-shapes) |
 
 For the per-minute services, the smallest runner of each kind:
 

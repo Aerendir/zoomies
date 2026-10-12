@@ -141,8 +141,9 @@ when building unattended deployment or recovery tooling.
 
 ## Keep going
 
+- [Eli and MCP troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp): investigate jobs, prepare fixes and compare optimisation evidence.
 - [Migrating repositories](migration.md): preview workflow changes before expanding adoption.
 - [Private hosts and providers](private-hosts.md): connect capacity behind NAT.
 - [Architecture](architecture.md): scheduling, outbound agents and lifecycle behaviour.
 - [Security](security.md) and [two-step verification](two-step.md): identity and isolation boundaries.
-- [Eli](eli.md), [MCP connections](connect-claude.md) and [AI Context](ai-context.md): assistant access to fleet operations and repository source.
+- [Eli](eli.md), [MCP](mcp.md) and [AI Context](ai-context.md): assistant access to fleet operations and repository source.
