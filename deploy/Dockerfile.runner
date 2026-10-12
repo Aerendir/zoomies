@@ -60,12 +60,12 @@
 # deploy/Dockerfile.runner .` still produces the plain runner; the variant is
 # built with --target runner-docker.
 
-ARG RUNNER_VERSION=2.337.0
+ARG RUNNER_VERSION=2.338.0
 # The SHA-256 GitHub publishes for each release archive, from the release
 # notes; internal/backend/runner_digests.go carries the same values for the
 # process backend, and the runner-version workflow moves all of them together.
-ARG RUNNER_SHA256_X64=70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613
-ARG RUNNER_SHA256_ARM64=9b1dc70626422526e3c94767cf024896beb15da5342a3f4819bf2feac13e0393
+ARG RUNNER_SHA256_X64=af4b794c1bc41d73d40535e3fe092a39f9679cd8d965954c2aca25a05ca41d32
+ARG RUNNER_SHA256_ARM64=628b4a7258487b80c1d3c221095a7ded349f5ae0175fd3dfab708d07428f041b
 ARG BASE=ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
 
 FROM ${BASE} AS runner-base
