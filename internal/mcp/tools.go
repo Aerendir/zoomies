@@ -33,10 +33,21 @@ type tool struct {
 	live bool
 	call func(ctx context.Context, c API, args json.RawMessage) ([]Content, error)
 	// structured is call with a second answer: the same facts as a value a
-	// program can read without parsing the text. New gives a tool that sets it
-	// and leaves call nil a call that drops the value, so a caller that wants
-	// text only (Eli, the in-product assistant) needs no second code path.
+	// program can read without parsing the text. A tool sets exactly one of
+	// call and structured; run is how either is invoked, and CallTool, which
+	// wants text only (Eli, the in-product assistant), drops the value.
 	structured func(ctx context.Context, c API, args json.RawMessage) ([]Content, any, error)
+}
+
+// run invokes the tool whichever way it was written, so no caller has to know
+// which of call and structured a tool sets. A tool with only call answers a nil
+// value.
+func (t *tool) run(ctx context.Context, c API, args json.RawMessage) ([]Content, any, error) {
+	if t.structured != nil {
+		return t.structured(ctx, c, args)
+	}
+	content, err := t.call(ctx, c, args)
+	return content, nil, err
 }
 
 type annotations struct {

@@ -99,6 +99,8 @@ func TestAStructuredToolsTextIsAllEliSees(t *testing.T) {
 	}
 }
 
+// Only the probe is live here. When a real tool is made live (wait_for_change)
+// the loop below stops being true of it and is changed to allow that tool.
 func TestALiveToolIsMarkedOnItsDefinition(t *testing.T) {
 	live := map[string]bool{}
 	for _, d := range probeServer().Definitions() {
@@ -114,6 +116,20 @@ func TestALiveToolIsMarkedOnItsDefinition(t *testing.T) {
 	}
 	if _, ok := live["fleet_status"]; !ok {
 		t.Error("the real tools are missing from the definitions")
+	}
+}
+
+// A tool is written one way or the other, never both and never neither, and an
+// output schema promises structured content: a schema on a text-only tool would
+// be a promise a client validates against nothing.
+func TestEveryToolHasExactlyOneWayToAnswerAndASchemaOnlyWhenStructured(t *testing.T) {
+	for _, tl := range append(tools(), windowTestTool()) {
+		if (tl.call == nil) == (tl.structured == nil) {
+			t.Errorf("%s must set exactly one of call and structured", tl.Name)
+		}
+		if (tl.OutputSchema != nil) != (tl.structured != nil) {
+			t.Errorf("%s: OutputSchema must be set if and only if structured is", tl.Name)
+		}
 	}
 }
 

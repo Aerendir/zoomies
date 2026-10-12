@@ -162,7 +162,7 @@ func New(api API, opts Options) *Server {
 }
 
 // newServer is New over a given set of tools, which is how a test offers one
-// the real surface does not have, and still gets the wrapping New applies.
+// the real surface does not have, through the same registration as the rest.
 func newServer(api API, opts Options, all []*tool) *Server {
 	s := &Server{
 		api:      api,
@@ -172,13 +172,6 @@ func newServer(api API, opts Options, all []*tool) *Server {
 		inFlight: map[string]context.CancelFunc{},
 	}
 	for _, t := range all {
-		if t.call == nil && t.structured != nil {
-			structured := t.structured
-			t.call = func(ctx context.Context, c API, args json.RawMessage) ([]Content, error) {
-				content, _, err := structured(ctx, c, args)
-				return content, err
-			}
-		}
 		if t.action {
 			s.actions[t.Name] = true
 			if opts.Offer == nil || !opts.Offer(t.Name) {
@@ -394,18 +387,11 @@ func (s *Server) callTool(ctx context.Context, name string, arguments json.RawMe
 	if len(bytes.TrimSpace(args)) == 0 || string(bytes.TrimSpace(args)) == "null" {
 		args = json.RawMessage("{}")
 	}
-	if t.structured != nil {
-		content, value, err := t.structured(ctx, s.api, args)
-		if err != nil {
-			return toolError(err), nil
-		}
-		return CallResult{Content: content, StructuredContent: value}, nil
-	}
-	content, err := t.call(ctx, s.api, args)
+	content, value, err := t.run(ctx, s.api, args)
 	if err != nil {
 		return toolError(err), nil
 	}
-	return CallResult{Content: content}, nil
+	return CallResult{Content: content, StructuredContent: value}, nil
 }
 
 // Definition is a tool as a model is told about it when the model is not an MCP
@@ -422,7 +408,9 @@ type Definition struct {
 
 // Definitions lists the tools this server offers, in the order it lists them to
 // an MCP client. A tool that changes the fleet is in the list only if the
-// server was given leave to offer it.
+// server was given leave to offer it. Definition and tool stay separate types
+// because Live must never reach tools/list, and tool is what that list
+// serialises.
 func (s *Server) Definitions() []Definition {
 	out := make([]Definition, 0, len(s.tools))
 	for _, t := range s.tools {
