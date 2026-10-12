@@ -475,6 +475,33 @@ func TestACursorFromAnEmptyRingStaysHonestWhenTheRingMovesOn(t *testing.T) {
 	}
 }
 
+// A frame that is sent and never kept, such as the resync after many runner
+// rows are pruned at once, still takes an id. On a ring that has kept nothing,
+// a cursor from before it must read back as incomplete, or the caller steps
+// past the one frame that told it to fetch everything again.
+func TestAnEmptyRingIsIncompleteOnceATransientFrameHasTakenAnId(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("watcher", store.RoleViewer)
+	bus := h.ctrl.Events()
+
+	first := h.recent(t, cookie, "")
+	if first.Next != bus.WireID(0) || !first.Complete {
+		t.Fatalf("a ring that has numbered nothing answered next %q complete %v, want %s and complete", first.Next, first.Complete, bus.WireID(0))
+	}
+
+	bus.PublishTransient(events.KindResync, "", map[string]any{"reason": "fetch the resources again"})
+
+	for _, query := range []string{"?since=" + url.QueryEscape(first.Next), "?since=1h"} {
+		got := h.recent(t, cookie, query)
+		if got.Complete {
+			t.Errorf("%s after an unkept resync was called complete, so the caller would never learn to fetch afresh", query)
+		}
+		if got.Next != bus.WireID(1) {
+			t.Errorf("%s answered next %q, want %s past the unkept frame", query, got.Next, bus.WireID(1))
+		}
+	}
+}
+
 // The brief's other half of "a wait counts as a stream": a wait asked for while
 // every slot is taken is refused the way a stream is, before anything is held.
 func TestAWaitIsRefusedWhenTheStreamSlotsAreFull(t *testing.T) {

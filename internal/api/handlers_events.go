@@ -240,8 +240,10 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 		// window and is not the first this run ever numbered: something older,
 		// perhaps inside the window too, has been pushed out. An id taken by a
 		// transient frame, which is never ringed, looks the same, so this errs
-		// towards telling the caller to fetch afresh.
-		complete = len(ring) == 0 || ring[0].ID <= 1 || !ring[0].At.After(cutoff)
+		// towards telling the caller to fetch afresh. An empty ring is whole
+		// only while nothing has been numbered: an unkept frame, such as the
+		// resync after many runner rows are pruned, is otherwise passed unseen.
+		complete = ringIsWhole(ring, mark) || (len(ring) > 0 && !ring[0].At.After(cutoff))
 	case since.foreign:
 		items, _, truncated = bus.Recent(0, opts, limit)
 	case since.fromStart:
@@ -249,8 +251,8 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 		items, ring, truncated = fromRing(bus, opts, limit, nil)
 		// A cursor of zero claims the ring still holds everything this run ever
 		// numbered. Like the window read it errs towards false when a transient
-		// frame took the first id.
-		complete = len(ring) == 0 || ring[0].ID <= 1
+		// frame took the first id, or any id while the ring is empty.
+		complete = ringIsWhole(ring, mark)
 	default:
 		items, complete, truncated = bus.Recent(since.id, opts, limit)
 	}
@@ -269,6 +271,17 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 		out.Next = bus.WireID(mark)
 	}
 	return out
+}
+
+// ringIsWhole says whether the ring still holds every frame this run has
+// numbered, given mark, the newest id taken before the ring was read. A ring
+// that is empty holds everything only if no id has been taken, because a
+// transient frame takes one and is never kept.
+func ringIsWhole(ring []events.Event, mark uint64) bool {
+	if len(ring) == 0 {
+		return mark == 0
+	}
+	return ring[0].ID <= 1
 }
 
 // fromRing reads the whole ring once and selects from that one read, so what it
