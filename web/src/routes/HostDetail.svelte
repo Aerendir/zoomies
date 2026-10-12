@@ -28,7 +28,9 @@
   } from '$lib/hosts/report-only';
   import { noReport, noReportSubtitle } from '$lib/hosts/no-report';
   import { allClear, announcement, logLine, reportChanges } from '$lib/hosts/report-changes';
-  import { KIND_WORDS, previewCommand, rowKind } from '$lib/hosts/row-kind';
+  import { KIND_WORDS, fixCommand, rowKind } from '$lib/hosts/row-kind';
+  import { hostCheckContext } from '$lib/assistant/contexts';
+  import { eli } from '$lib/assistant/eli.svelte';
   import { pluralise } from '$lib/format';
   import { niceValue } from '$lib/hosts/check-value';
   import { acceptedIds, acceptedLast, acceptNote, canAccept, endedNote } from '$lib/hosts/accept';
@@ -37,7 +39,7 @@
   import { toasts } from '$lib/state/toasts.svelte';
   import type { StatusTone } from '$lib/status';
   import { tick, untrack } from 'svelte';
-  import { ServerCog, Stethoscope } from '@lucide/svelte';
+  import { RefreshCw, ServerCog, Stethoscope } from '@lucide/svelte';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import CopyButton from '$lib/components/CopyButton.svelte';
@@ -725,12 +727,55 @@
 {#snippet statusCell(check: DoctorResult)}
   {@const badge = statusBadge(check)}
   {@const kind = rowKind(check, readOnly !== null)}
-  {@const command = kind === 'fixable' && canOperate ? previewCommand(check) : null}
   <span class="status">
     <Badge label={badge.label} tone={badge.tone} />
     {#if kind}<span class="kind">{KIND_WORDS[kind]}</span>{/if}
-    {#if command}
-      <CopyButton value={command} size="md" label={`Copy preview command for ${check.id}`} />
+  </span>
+{/snippet}
+
+<!-- Every warning gets the same three ways forward: put it right, ask about it,
+     and look again once it is. Zoomies runs none of them on the host. Fix copies
+     a command where there is one; where there is not (advice about a mount, say)
+     it hands Eli the row and asks for the steps, so the button is never absent
+     and never a command that was made up. -->
+{#snippet rowActions(row: DoctorResult)}
+  {@const fix = canOperate && !readOnly ? fixCommand(row) : null}
+  {@const hostName = host?.name || id}
+  <span class="row-actions">
+    {#if canOperate && !readOnly}
+      {#if fix}
+        <CopyButton
+          value={fix}
+          showLabel
+          label={row.actionable === true && !row.command
+            ? `Copy preview command for ${row.id}`
+            : `Copy fix for ${row.id}`}
+        />
+      {:else}
+        <Button
+          variant="ghost"
+          size="sm"
+          ariaLabel="Ask Eli how to fix: {row.title}"
+          help="This row has no command Zoomies can offer. Ask Eli for the steps."
+          onclick={() => eli.ask(hostCheckContext(hostName, row, 'fix'))}>Fix</Button
+        >
+      {/if}
+    {/if}
+    <AskEli context={hostCheckContext(hostName, row)} />
+    {#if check?.show}
+      <!-- The same ask as Check now: the agent re-runs every read-only check, so
+           this row clears, or does not, with the rest. -->
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={RefreshCw}
+        iconSpin={check.loading}
+        disabled={check.disabled}
+        ariaLabel="Re-check after fixing: {row.title}"
+        help="Ask the agent to run its read-only checks again, once you have fixed this."
+        reason={check.disabled ? check.reason : undefined}
+        onclick={() => void ask()}>Re-check</Button
+      >
     {/if}
   </span>
 {/snippet}
@@ -777,6 +822,7 @@
               {:else if endedNote(check)}
                 <small class="accepted-note">{endedNote(check)}</small>
               {/if}
+              {#if check.status === 'warn' && !check.accepted}{@render rowActions(check)}{/if}
               {#if canOperate && (canAccept(check) || check.accepted)}
                 <span class="decide">
                   {#if check.accepted}
@@ -1004,6 +1050,13 @@
   }
   .decide {
     display: block;
+    margin-top: var(--z-space-2);
+  }
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--z-space-2);
     margin-top: var(--z-space-2);
   }
   .kind {
