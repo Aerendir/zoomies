@@ -24,7 +24,7 @@
 * Paging uses the house `Limit` and `Offset` parameters: default 50, maximum 500. Selection returns at most 500 ids. A bulk request carries 1 to 500 ids and the single action `clear`.
 * A bad `group`, `trigger`, `action` or `ids`, or a `repo` over 200 characters, is a 422 with a field error.
 * Per-id clear errors are exactly `not found` and `still running`.
-* Scope: administrators (`ActionAssistantRead`) reach every row; everyone else only rows whose `user_id` is theirs and not empty.
+* Scope: administrators (`ActionAssistantRead`) reach every row; everyone else only rows whose `user_id` is theirs and not empty. *Amended by the final review:* that is the rule for the list and the selection, which are reads. The bulk clear is a write, so its wide reach uses `ActionAssistantWrite`: an administrator's token narrowed to `assistant:own` passes `ActionAssistantRead` and must not be able to clear everyone's repairs. `eliRepairScope` in `internal/api/handlers_eli_repairs.go` is the one place the rule is written.
 * Audit: `assistant.repair_clear`, target kind `eli_repair`, detail holds the count and the ids, never repair text.
 * Voice: British spelling, no em dashes, no `--`, comments say why. Test names are sentences.
 * Commit messages are imperative sentences in sentence case with no prefix, ending with the two trailer lines the session was given (`Co-Authored-By` and `Claude-Session`).
