@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
+	"github.com/eyupio/zoomies/internal/events"
 	"github.com/eyupio/zoomies/internal/mcp"
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -458,5 +459,56 @@ func TestAnAgentRefusedAChangeIsNotToldToSendConfirm(t *testing.T) {
 	}
 	if stored, _ := h.st.GetHost(h.ctx, host.ID); stored.RunnerProfile.Set() {
 		t.Fatalf("a refused change was written: %+v", stored.RunnerProfile)
+	}
+}
+
+// The two-call wait on a fleet that has been busy. With more frames in the
+// ring than one answer carries, a first call that started from the ring would
+// hand back a page of the past and a cursor in the middle of it, and the second
+// call would answer at once with the next page instead of waiting. Started from
+// the present, the second call is held until something new happens and is
+// answered with that alone.
+func TestMCPWaitForChangeOnABusyFleetHoldsTheSecondCallForWhatIsNew(t *testing.T) {
+	h := newHarness(t)
+	token := h.token("watcher", store.RoleViewer)
+	bus := h.ctrl.Events()
+	publishJobs(h, 120)
+
+	// The first call is a cursor, at once: one that waited here would hold for
+	// the whole of its seconds on an idle bus and still look like a cursor.
+	asked := time.Now()
+	first := h.mcpTool(token, "wait_for_change", map[string]any{})
+	if elapsed := time.Since(asked); elapsed > 2*time.Second {
+		t.Errorf("the first call took %v, want a cursor at once", elapsed)
+	}
+	if first.IsError {
+		t.Fatalf("the first call failed: %s", resultText(first))
+	}
+	text := resultText(first)
+	if strings.Contains(text, "job.updated") {
+		t.Fatalf("the first call answered the past:\n%.400s", text)
+	}
+	cursor := ""
+	for line := range strings.SplitSeq(text, "\n") {
+		if c, ok := strings.CutPrefix(line, "next: "); ok {
+			cursor = c
+		}
+	}
+	if cursor != bus.WireID(bus.LastID()) {
+		t.Fatalf("the first call's cursor is %q, want the present %q:\n%s", cursor, bus.WireID(bus.LastID()), text)
+	}
+
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		bus.Publish(events.KindJobUpdated, "job:job_new", map[string]any{"id": "job_new", "state": "queued"})
+	}()
+	started := time.Now()
+	second := h.mcpTool(token, "wait_for_change", map[string]any{"since": cursor, "seconds": 10})
+	if elapsed := time.Since(started); elapsed < 250*time.Millisecond {
+		t.Errorf("the second call answered after %v, want it held until the new frame", elapsed)
+	}
+	got := resultText(second)
+	if n := strings.Count(got, "job.updated"); n != 1 || !strings.Contains(got, "job:job_new") {
+		t.Errorf("the second call answered %d frames, want only the new one:\n%.600s", n, got)
 	}
 }

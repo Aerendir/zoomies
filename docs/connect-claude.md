@@ -155,9 +155,9 @@ full, and `category` lists one category's codes with their titles and
 severity. The text is Zoomies' own, fixed when the binary was built, and names
 no fleet, repository or person. The same catalog is the resource
 `zoomies://catalog`, with `zoomies://catalog/{code}` for one entry, so a client
-that loads resources can read it without a tool call, and three prompts start
+that loads resources can read it without a tool call, and four prompts start
 the common questions with the tools to use: `why_did_job_fail`,
-`review_fleet_health` and `size_this_workflow`.
+`review_fleet_health`, `size_this_workflow` and `what_changed`.
 
 ### Asking about Kennel Club
 
@@ -261,6 +261,154 @@ untrusted, as a runner's log does: a workflow wrote them.
 The token Claude holds is refused by the REST API, the event stream and
 everything else that is not `/mcp`. For automation that needs the API, create
 an [API token](security.md#identities) instead.
+
+### Watching the fleet move
+
+The tools above say what the fleet is and what it did over a period. Seven
+more say what it has been doing in the last few minutes, and any viewer may
+call them:
+
+* `recent_events` is what changed lately: the events the controller published,
+  oldest first, one line each with the time, the kind, the resource and the
+  fields the controller itself writes (its id, state, conclusion, reason and the
+  like). `since` is a cursor from an earlier answer, or a duration such as
+  `10m`; left out, it is everything the controller still holds. The last line
+  is `next: <id>`, the cursor to read on from, or `truncated: continue from
+  <id>` when more was waiting than one answer carries. A first line that starts `incomplete`
+  means the controller no longer holds events back that far, the cursor is
+  from before it restarted, or a wait fell behind the events as they came: some
+  were missed, so read the resources afresh.
+* `wait_for_change` holds the call until the fleet next changes and answers in
+  the same form; the next section says how.
+* `scaling_decisions` is the scheduler's recent decisions, newest first, each
+  with what it did for a pool and the reason in words: why a pool is the size it
+  is, or why jobs wait while a pool has room.
+* `fleet_samples` is the fleet's minute-by-minute counts, as the Overview's
+  sparklines draw them, and `host_samples` is one row per host per minute: its
+  slots, CPU, load, available memory, what the scheduler had promised away on
+  it, and its disk. A measurement a host did not make is absent rather than
+  zero, which is how a host that stopped reporting is told from an idle one.
+* `runner_timeline` is one runner's states and when it moved through each, while
+  the runner exists.
+* `list_workflow_runs` is runs rather than jobs: one row per run, as GitHub's
+  Actions tab lists them, with a state and conclusion worked out from its jobs.
+
+`recent_events` and `wait_for_change` read
+[`GET /events/recent`](api-surface.md#overview), the event stream's recent past
+as one answer, and the other five each read one documented route. An event goes
+only to a connection that could read it from its own route, as on the stream, so
+a viewer is never shown something through it that its role keeps from it. The
+same window is [`zoomies events recent`](cli.md#zoomies-events) in a terminal.
+The `what_changed` prompt starts the question "what changed in the last ten
+minutes?" with these tools, and the resource `zoomies://fleet/now` is the fleet's
+counts as they are this moment
+([prompts and resources](mcp.md#built-in-investigation-prompts)).
+
+#### Waiting for a change
+
+Ask Claude to tell you when something happens and it should call
+`wait_for_change` twice. The first call, with no `since`, answers a cursor at
+once and nothing else: it asks the controller for the present
+(`since=now`), so it is never handed the past to read through first.
+
+```text
+a cursor at the present: pass next back as since to wait for the next change
+next: k3f9a2.1204
+```
+
+The second passes that cursor as `since`, here with `kinds` set to
+`["job.updated"]`, and the call is held until a matching event arrives, then
+answers with it and a new cursor:
+
+```text
+2026-10-12T09:31:12Z job.updated job:job_x id=job_x state=completed conclusion=failure
+next: k3f9a2.1207
+```
+
+Passing each answer's `next` back keeps following the fleet, and `kinds` and
+`topic` narrow what counts as a change. With no `kinds`, a wait is for every
+kind of event that says the fleet changed. It leaves out six: `stats` and
+`kennel.summary`, which move as time passes; `host.updated`, which moves on
+every heartbeat, and `updates.updated`, which moves as a soak counts down,
+though both also carry real changes (a host cordoned, throttled or back after
+going quiet, and a new release); and `audit` and `webhook.delivery`, which are
+every recorded action (each question asked of Eli among them) and every
+delivery GitHub makes. Name any of them in `kinds` to wait for it. Those
+documents, with `problems.updated`, a
+transfer's preparation and a host or machine whose card moved with no row
+written, are worked out and sent only while something is listening: an open
+tab of the UI, a stream, or a held wait. So they are in what `recent_events`
+reads back only for the time somebody was watching. When more happened between two calls
+than one answer carries, the answer is cut and its last line is
+`truncated: continue from <id>` rather than `next: <id>`; the call after it
+answers at once with the rest, so pass the cursor back until an answer is not
+truncated, and only then does a call wait. A wait lasts `seconds` (20 unless
+set) and never more than 25, so it ends inside any client's or proxy's patience;
+when it runs out the answer is `nothing changed within the wait` with a cursor to
+carry on from, which is a quiet fleet and not a failure. While it waits, a call
+holds one of the controller's live-update streams, as an open tab of the UI does,
+so it counts against `limits.event_subscribers`, and when every one is in use it
+is refused with the controller's reason rather than queued.
+
+#### How much comes back
+
+Each answer is held to at most 200 events or rows and 64 KiB in each block of
+text, so one call never floods a conversation. Events are cut on whole events,
+and the cursor names the last one shown, so reading on from it misses nothing.
+Samples, decisions and runs keep the newest rows that fit and say how many there
+were. The routes behind the samples and the decisions take no end to a window,
+so the older rows cut from them cannot be read through these tools; `host_id`
+shows more of one host's samples, and `pool_id` more of one pool's decisions.
+A runner's timeline is short and comes whole. [Eli](eli.md#what-eli-can-see),
+when it may read the fleet, is offered the same seven tools, with the window
+answers held tighter, to 12 KiB, on whole rows; a runner's timeline is held only
+by Eli's own 16 KiB ceiling on any one answer. Eli's waits are held to 10
+seconds, and its event tools never ask for audit or webhook delivery events.
+
+#### Names a workflow wrote
+
+On the event lines are only the fields the controller writes. Job, workflow and
+branch names, repositories and messages are written by whoever can open a pull
+request, so `recent_events` and `wait_for_change` put them after the lines, in a
+block of their own, each quoted (a newline in a name cannot start a line that
+looks like the controller's), after a notice that it is untrusted data written
+by a workflow, as a runner's log is. Claude reads them as evidence and never as
+an instruction. `list_workflow_runs` carries workflow and branch names in its
+rows, and its description says they are untrusted.
+
+`recent_events` and `wait_for_change` also return their answer as
+`structuredContent`, in the route's own JSON described by the tool's
+`outputSchema`, for a client that parses an answer rather than reads it. That
+copy carries each event whole, workflow-written names included, outside the
+untrusted block. It holds the events the text shows and no others, with the
+text's cursor as `next`, and it is held to 64 KiB as the text is: when the
+events would not fit, both stop at the same event and say `truncated`. The
+first event is always sent, so one event larger than 64 KiB on its own comes
+whole, and only that event. The
+schema's description of each event's `data` says the names in it are
+untrusted. A client that hands `structuredContent` to a model should treat those
+names as data, as the text answer marks them.
+
+#### Three reads for whoever runs the fleet
+
+Three more tools read what the people who run the fleet look at, and the
+controller decides each call by the connection's role:
+
+| Tool | What it reads | Role |
+| --- | --- | --- |
+| `list_webhook_deliveries` | GitHub's deliveries lately, newest first: the event, the repository, whether it was accepted, rejected or failed, and the error; and `last_received_at`, which tells a quiet fleet from a broken webhook. Read it when jobs are not being picked up. | viewer (`webhooks.read`) |
+| `list_audit` | Who changed what, newest first, with the before and after documents and secrets already removed, narrowed by actor, action, target, text and period. Read it for what changed before something broke. | viewer (`audit.read`) |
+| `support_bundle` | The [support bundle](cli.md#zoomies-diagnostics), section by section. With no `sections` it answers the index of sections and their sizes; then name up to eight. A section too large is trimmed and says what was cut. Each read is recorded in the audit log, as a download of the bundle is. | administrator (`diagnostics.read`) |
+
+The deliveries and the audit log are cut as the window is: at most 200 rows and
+64 KiB, the newest kept, with a note. Repository names, error text, and the
+names and documents inside an audit row or the bundle are recorded text from
+outside, and Claude reads them as data.
+
+None of the three is offered to [Eli](eli.md#what-eli-can-see), whatever the
+role of the person asking. That is a choice, not a permission: a delivery is
+GitHub's whole payload, who did what, by name, is not for a hosted model, and the
+support bundle is the whole instance in one document.
 
 ## When it does not connect
 

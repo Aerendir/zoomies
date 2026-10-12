@@ -2,10 +2,11 @@
  * The questions the empty conversation offers. Without the fleet to look at
  * they are about Zoomies in general. With it, the first is always the open
  * one, so the entry point is the same every time, and the rest are about what
- * the fleet is doing now: the worst open problem by name, the jobs waiting,
- * the jobs that failed, the host that is unwell. A fixed list of four read the
- * same on a quiet fleet and a burning one; these read differently, which is
- * what makes one worth pressing.
+ * the fleet is doing now: with a problem open, what changed lately, and then
+ * the worst open problem by name, the jobs waiting, the jobs that failed, the
+ * host that is unwell. A fixed list of four read the same on a quiet fleet and
+ * a burning one; these read differently, which is what makes one worth
+ * pressing.
  */
 
 export const GENERAL_STARTERS = [
@@ -21,6 +22,13 @@ export const FLEET_STARTERS = [
   'Which jobs are queued, and why?',
   'How busy are the pools?',
 ] as const;
+
+/**
+ * Asked second whenever a problem is open. A problem is usually the end of
+ * something that happened, and Eli can read what the fleet did lately, so
+ * the question that finds the start of it comes before the one about the end.
+ */
+export const CHANGED_STARTER = 'What changed in the last ten minutes?';
 
 /** How many the panel shows: a glance, not a menu. */
 const COUNT = 4;
@@ -45,6 +53,7 @@ export function starterQuestions(input: StarterInput): string[] {
   const add = (q: string | undefined) => {
     if (q && !out.includes(q) && out.length < COUNT) out.push(q);
   };
+  if (input.problems.length > 0) add(CHANGED_STARTER);
   // The problems, worst first; the drawer's own order is by time, which is
   // not what decides where to look first.
   const problems = [...input.problems].sort(

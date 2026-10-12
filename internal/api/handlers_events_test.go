@@ -647,3 +647,74 @@ func TestAVisitorsWaitIsHeldToTheVisitorsCeiling(t *testing.T) {
 	staff := h.do(request{method: http.MethodGet, path: "/api/v1/events/recent?wait=1s", cookie: h.session(admin)})
 	staff.mustStatus(t, http.StatusOK, "an administrator's wait while visitors are at their ceiling")
 }
+
+// A caller who wants to hear about what happens next asks from now. Without it
+// the only cursor-free start is the oldest of the ring, and on a busy fleet that
+// is five pages of the past to read before anything new could be waited for.
+func TestRecentEventsSinceNowIsACursorAtThePresentAndNothingElse(t *testing.T) {
+	h := newHarness(t)
+	viewer, _ := h.user("watcher", store.RoleViewer)
+	cookie := h.session(viewer)
+	bus := h.ctrl.Events()
+	publishJobs(h, 60)
+
+	now := h.recent(t, cookie, "?since=now")
+	if len(now.Items) != 0 || now.Truncated || now.TimedOut || !now.Complete {
+		t.Fatalf("since=now answered %d items (truncated %v, timed_out %v, complete %v), want none and complete",
+			len(now.Items), now.Truncated, now.TimedOut, now.Complete)
+	}
+	if now.Next != bus.WireID(bus.LastID()) {
+		t.Errorf("next = %q, want the bus's last id %q", now.Next, bus.WireID(bus.LastID()))
+	}
+	res := h.do(request{method: http.MethodGet, path: "/api/v1/events/recent?since=now", cookie: cookie})
+	if !strings.Contains(string(res.body), `"items":[]`) {
+		t.Errorf("body = %s, want items to be an empty array", res.body)
+	}
+	if bus.Subscribers() != 0 {
+		t.Errorf("subscribers = %d, a read from now with no wait must not hold one", bus.Subscribers())
+	}
+
+	// The cursor reads on from the present: the next call is given what came
+	// after it and nothing from before.
+	ids := publishJobs(h, 1)
+	after := h.recent(t, cookie, "?since="+url.QueryEscape(now.Next))
+	if len(after.Items) != 1 || after.Items[0].ID != bus.WireID(ids[0]) {
+		t.Errorf("reading on from now returned %v, want only %s", after.ids(), bus.WireID(ids[0]))
+	}
+}
+
+func TestAWaitSinceNowHoldsForTheNextMatchingFrameOnly(t *testing.T) {
+	h := newHarness(t)
+	viewer, _ := h.user("watcher", store.RoleViewer)
+	cookie := h.session(viewer)
+	bus := h.ctrl.Events()
+	publishJobs(h, 60)
+
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		// A frame the caller did not ask for must not end its wait.
+		bus.Publish(events.KindRunnerUpdated, "runner:r", map[string]any{"id": "r"})
+		time.Sleep(50 * time.Millisecond)
+		bus.Publish(events.KindJobUpdated, "job:job_late", map[string]any{"id": "job_late"})
+	}()
+	started := time.Now()
+	got := h.recent(t, cookie, "?since=now&kinds=job.updated&wait=10s")
+	if elapsed := time.Since(started); elapsed < 100*time.Millisecond {
+		t.Errorf("answered after %v, want the request held until the new frame", elapsed)
+	}
+	if got.TimedOut || len(got.Items) != 1 || got.Items[0].Topic != "job:job_late" {
+		t.Fatalf("answered %v (timed_out %v), want only the late job frame", got.ids(), got.TimedOut)
+	}
+	if !got.Complete || got.Next != got.Items[0].ID {
+		t.Errorf("complete %v next %q, want complete and the frame's id", got.Complete, got.Next)
+	}
+
+	// Nothing arrives: the wait ends with no items and the cursor it was given.
+	idle := h.recent(t, cookie, "?since=now&kinds=job.updated&wait=300ms")
+	if !idle.TimedOut || len(idle.Items) != 0 || idle.Next != bus.WireID(bus.LastID()) || !idle.Complete {
+		t.Errorf("a quiet wait from now answered %+v, want timed_out, no items and the present as next", idle)
+	}
+	if bus.Subscribers() != 0 {
+		t.Errorf("%d subscribers left after the wait ended", bus.Subscribers())
+	}
+}

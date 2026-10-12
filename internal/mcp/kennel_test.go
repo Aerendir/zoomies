@@ -53,9 +53,10 @@ func repoDoc() string {
 	}`
 }
 
-func kennelCall(t *testing.T, tl func(context.Context, API, json.RawMessage) ([]Content, error), api API, args string) ([]Content, error) {
+func kennelCall(t *testing.T, tl *tool, api API, args string) ([]Content, error) {
 	t.Helper()
-	return tl(t.Context(), api, json.RawMessage(args))
+	content, _, err := tl.run(t.Context(), api, json.RawMessage(args))
+	return content, err
 }
 
 func kennelTool(t *testing.T, name string) *tool {
@@ -97,12 +98,12 @@ func TestKennelClubsToolsOnlyReadAndAreOfferedToEveryone(t *testing.T) {
 
 func TestTheOverviewIsAskedForWithoutArgumentsAndRefusesAny(t *testing.T) {
 	api := &kennelAPI{body: `{"enabled": true}`}
-	out, err := kennelCall(t, kennelTool(t, "kennel_overview").call, api, `{}`)
+	out, err := kennelCall(t, kennelTool(t, "kennel_overview"), api, `{}`)
 	if err != nil || api.got != "GET /kennel" || len(api.query) != 0 || len(out) != 1 || out[0].Text != `{"enabled":true}` {
 		t.Fatalf("got %q %v, content %+v, err %v", api.got, api.query, out, err)
 	}
 	api = &kennelAPI{}
-	if _, err := kennelCall(t, kennelTool(t, "kennel_overview").call, api, `{"id":"kcr_1"}`); err == nil || api.calls != 0 {
+	if _, err := kennelCall(t, kennelTool(t, "kennel_overview"), api, `{"id":"kcr_1"}`); err == nil || api.calls != 0 {
 		t.Errorf("an argument it does not take was sent to REST: calls=%d err=%v", api.calls, err)
 	}
 }
@@ -112,7 +113,7 @@ func TestTheOverviewIsAskedForWithoutArgumentsAndRefusesAny(t *testing.T) {
 // controller says, are in the block before it, with none of the names.
 func TestARepositorysEvidenceArrivesInABlockOfItsOwnThatSaysItIsUntrusted(t *testing.T) {
 	api := &kennelAPI{body: repoDoc()}
-	out, err := kennelCall(t, kennelRepository, api, `{"id":"kcr_1"}`)
+	out, err := kennelCall(t, &tool{call: kennelRepository}, api, `{"id":"kcr_1"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +155,7 @@ func TestARepositorysEvidenceArrivesInABlockOfItsOwnThatSaysItIsUntrusted(t *tes
 
 func TestARepositoryWithNoEvidenceIsOneBlockAndNotAnEmptyUntrustedOne(t *testing.T) {
 	api := &kennelAPI{body: `{"id":"kcr_2","findings":[{"code":"c","evidence":[]},{"code":"d","evidence":null}],"waived":[]}`}
-	out, err := kennelCall(t, kennelRepository, api, `{"id":"kcr_2"}`)
+	out, err := kennelCall(t, &tool{call: kennelRepository}, api, `{"id":"kcr_2"}`)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("content %+v, err %v", out, err)
 	}
@@ -174,7 +175,7 @@ func TestAnAnswerTheToolCannotTakeApartIsRefusedAndNotPassedOn(t *testing.T) {
 		"evidence with no code":          `{"findings": [{"evidence": [{"label": "` + hostile + `"}]}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			out, err := kennelCall(t, kennelRepository, &kennelAPI{body: body}, `{"id":"kcr_1"}`)
+			out, err := kennelCall(t, &tool{call: kennelRepository}, &kennelAPI{body: body}, `{"id":"kcr_1"}`)
 			if err == nil || len(out) != 0 {
 				t.Fatalf("content %+v, err %v: want it refused with nothing handed on", out, err)
 			}
@@ -187,7 +188,7 @@ func TestAnAnswerTheToolCannotTakeApartIsRefusedAndNotPassedOn(t *testing.T) {
 
 func TestARepositoryIsAskedForByAnIDThatCannotReachAnotherRoute(t *testing.T) {
 	api := &kennelAPI{body: `{"findings":[],"waived":[]}`}
-	if _, err := kennelCall(t, kennelRepository, api, `{"id":"../recheck?x=1"}`); err != nil {
+	if _, err := kennelCall(t, &tool{call: kennelRepository}, api, `{"id":"../recheck?x=1"}`); err != nil {
 		t.Fatal(err)
 	}
 	if api.got != "GET /kennel/repositories/..%2Frecheck%3Fx=1" {
@@ -195,19 +196,19 @@ func TestARepositoryIsAskedForByAnIDThatCannotReachAnotherRoute(t *testing.T) {
 	}
 	api = &kennelAPI{}
 	for _, args := range []string{`{}`, `{"id":""}`, `{"id":"  "}`, `{"id":"kcr_1","limit":3}`} {
-		if _, err := kennelCall(t, kennelRepository, api, args); err == nil || api.calls != 0 {
+		if _, err := kennelCall(t, &tool{call: kennelRepository}, api, args); err == nil || api.calls != 0 {
 			t.Errorf("%s reached REST (calls=%d, err=%v)", args, api.calls, err)
 		}
 	}
 }
 
 func TestARepositoryThatIsNotThereIsAnsweredWithTheIDAndWhereToLook(t *testing.T) {
-	_, err := kennelCall(t, kennelRepository, &kennelAPI{err: refusal{http.StatusNotFound}}, `{"id":"kcr_gone"}`)
+	_, err := kennelCall(t, &tool{call: kennelRepository}, &kennelAPI{err: refusal{http.StatusNotFound}}, `{"id":"kcr_gone"}`)
 	if err == nil || !strings.Contains(err.Error(), "kcr_gone") || !strings.Contains(err.Error(), "kennel_findings") {
 		t.Errorf("err = %v", err)
 	}
 	// Any other refusal is the controller's own sentence, passed on as it came.
-	_, err = kennelCall(t, kennelRepository, &kennelAPI{err: refusal{http.StatusConflict}}, `{"id":"kcr_1"}`)
+	_, err = kennelCall(t, &tool{call: kennelRepository}, &kennelAPI{err: refusal{http.StatusConflict}}, `{"id":"kcr_1"}`)
 	if err == nil || err.Error() != http.StatusText(http.StatusConflict) {
 		t.Errorf("err = %v, want the controller's refusal", err)
 	}
@@ -242,7 +243,7 @@ func TestFindingsAreAskedForWithTheFiltersGivenAndAPageSmallEnoughToRead(t *test
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			api := &kennelAPI{body: `{"items":[],"total":0,"limit":25,"offset":0}`}
-			if _, err := kennelCall(t, kennelFindings, api, tc.args); err != nil {
+			if _, err := kennelCall(t, &tool{call: kennelFindings}, api, tc.args); err != nil {
 				t.Fatal(err)
 			}
 			if api.got != "GET /kennel/repositories" || api.query.Encode() != tc.want.Encode() {
@@ -285,7 +286,7 @@ func TestFindingsRefuseWhatTheAPIWouldBeAskedNonsenseAboutBeforeAskingIt(t *test
 	for _, args := range []string{`{"limit":101}`, `{"limit":-1}`, `{"offset":-1}`, `{"severity":7}`, `{"tracked":"no"}`,
 		`{"active":"yes"}`, `{"active":1}`, `{"incomplete":"true"}`, `{"waived":null,"incomplete":2}`, `{"id":"kcr_1"}`, `[]`} {
 		api := &kennelAPI{}
-		if _, err := kennelCall(t, kennelFindings, api, args); err == nil || api.calls != 0 {
+		if _, err := kennelCall(t, &tool{call: kennelFindings}, api, args); err == nil || api.calls != 0 {
 			t.Errorf("%s reached REST (calls=%d, err=%v)", args, api.calls, err)
 		}
 	}
@@ -296,7 +297,7 @@ func TestFindingsRefuseWhatTheAPIWouldBeAskedNonsenseAboutBeforeAskingIt(t *test
 // kept so a reader can tell there are more.
 func TestFindingsCarryNoEvidenceAndKeepThePagesEnvelope(t *testing.T) {
 	api := &kennelAPI{body: `{"items":[` + repoDoc() + `,` + repoDoc() + `],"total":57,"limit":2,"offset":10}`}
-	out, err := kennelCall(t, kennelFindings, api, `{"limit":2,"offset":10}`)
+	out, err := kennelCall(t, &tool{call: kennelFindings}, api, `{"limit":2,"offset":10}`)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("content %+v, err %v", out, err)
 	}
@@ -328,7 +329,7 @@ func TestAListTheToolCannotTakeApartIsRefusedAndNotPassedOn(t *testing.T) {
 		"an item that is not a repository": `{"items": [{"findings": [{"evidence": [{"label": "` + hostile + `"}]}]}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			out, err := kennelCall(t, kennelFindings, &kennelAPI{body: body}, `{}`)
+			out, err := kennelCall(t, &tool{call: kennelFindings}, &kennelAPI{body: body}, `{}`)
 			if err == nil || len(out) != 0 {
 				t.Fatalf("content %+v, err %v: want it refused with nothing handed on", out, err)
 			}
@@ -342,7 +343,7 @@ func TestEvidenceNamesTheFindingItBelongsToIncludingItsSubject(t *testing.T) {
 	api := &kennelAPI{body: `{"findings":[
 	  {"code":"capacity.unserved_label","subject":"gpu","evidence":[{"kind":"pool","ref":"pool_1","label":"a"}]},
 	  {"code":"capacity.unserved_label","subject":"arm","evidence":[{"kind":"pool","ref":"pool_2","label":"b"}]}],"waived":[]}`}
-	out, err := kennelCall(t, kennelRepository, api, `{"id":"kcr_1"}`)
+	out, err := kennelCall(t, &tool{call: kennelRepository}, api, `{"id":"kcr_1"}`)
 	if err != nil || len(out) != 3 {
 		t.Fatalf("content %+v, err %v", out, err)
 	}
@@ -376,7 +377,7 @@ func TestTheWorkflowInventoryTravelsInTheUntrustedBlock(t *testing.T) {
 	  "coverage": [{"source": "workflows", "state": "ok"}]
 	}`
 	api := &kennelAPI{body: doc}
-	out, err := kennelCall(t, kennelRepository, api, `{"id":"kcr_1"}`)
+	out, err := kennelCall(t, &tool{call: kennelRepository}, api, `{"id":"kcr_1"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +396,7 @@ func TestTheWorkflowInventoryTravelsInTheUntrustedBlock(t *testing.T) {
 	}
 
 	list := &kennelAPI{body: `{"items": [` + doc + `], "total": 1, "limit": 20, "offset": 0}`}
-	out, err = kennelCall(t, kennelFindings, list, `{}`)
+	out, err = kennelCall(t, &tool{call: kennelFindings}, list, `{}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +410,7 @@ func TestTheWorkflowInventoryTravelsInTheUntrustedBlock(t *testing.T) {
 // block already, and the notice says where a prompt is had.
 func TestAFindingsPromptLeavesWithTheEvidence(t *testing.T) {
 	api := &kennelAPI{body: repoDoc()}
-	out, err := kennelCall(t, kennelRepository, api, `{"id":"kcr_1"}`)
+	out, err := kennelCall(t, &tool{call: kennelRepository}, api, `{"id":"kcr_1"}`)
 	if err != nil {
 		t.Fatal(err)
 	}

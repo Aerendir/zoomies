@@ -2153,20 +2153,21 @@ func TestAFullFleetIsStillDistinguishedFromAFleetThatCanNeverRunThePool(t *testi
 			atCapacity:    true,
 		},
 		{
-			// The counterpart of the two rows above, and the reason the question
-			// is asked of the configuration and not of the weather. A cordoned
-			// host could run the pool the moment somebody uncordons it, so the
-			// fleet is not full: it has a host that is being held back. Calling
-			// it full would put a machine on the bill for a pool that needed an
-			// operator to uncordon a host they already have.
+			// A cordoned host is out of service by an operator's choice, so it
+			// offers no slots and is not part of the question: the fleet is full
+			// when the hosts left to take work are. Counting it kept a busy fleet
+			// from being called full, and so kept a rented machine from being
+			// asked for, while 30 jobs waited beside hosts nobody could use.
+			// Uncordoning it is still the operator's to do, and the problems
+			// list says so; what it no longer does is stand in the way.
 			name: "one host busy and one cordoned that could run it",
 			hosts: func() []*store.Host {
 				other := testHost("host_b", 8, 0)
 				other.Cordoned = true
 				return []*store.Host{testHost("host_a", 1, 1), other}
 			}(),
-			couldRun: []string{"host_a", "host_b"},
-			// Neither: a finished job would not clear this, an uncordon would.
+			couldRun:   []string{"host_a", "host_b"},
+			atCapacity: true,
 		},
 		{
 			// A silent agent may be back within the minute, and until it is
@@ -2453,5 +2454,20 @@ func TestAMixedFleetAdvisesWaitingOrAddingAHost(t *testing.T) {
 	}
 	if !strings.Contains(pp.BlockedFix, "wait for a job to finish") {
 		t.Errorf("BlockedFix = %q, want the advice for a full fleet", pp.BlockedFix)
+	}
+}
+
+// Every host cordoned is a fleet with nowhere to put a runner, whatever the
+// hosts would do uncordoned, and that is the shortfall a provider answers.
+func TestAFleetOfOnlyCordonedHostsHasNowhereToRun(t *testing.T) {
+	a, b := testHost("host_a", 8, 0), testHost("host_b", 8, 0)
+	a.Cordoned, b.Cordoned = true, true
+	pool := testPool("linux-x64", "linux")
+	pp := only(t, Decide(snap([]*store.Pool{pool}, nil, []*store.Job{queued("j1", time.Minute, "linux")}, []*store.Host{a, b})))
+	if !pp.BlockedNoEligibleHost {
+		t.Fatalf("BlockedNoEligibleHost = false (%s); with every host cordoned there is nowhere to run it", pp.Blocked)
+	}
+	if pp.BlockedAtCapacity {
+		t.Errorf("BlockedAtCapacity = true; no host is merely full")
 	}
 }

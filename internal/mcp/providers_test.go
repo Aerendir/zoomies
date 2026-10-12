@@ -78,7 +78,7 @@ func TestProviderToolsPassTheControllersRefusalOnIntact(t *testing.T) {
 			"/providers": statusRefusal{http.StatusForbidden, sentence}, "/providers/pairings": statusRefusal{http.StatusForbidden, sentence},
 			"/machines": statusRefusal{http.StatusForbidden, sentence},
 		}}
-		_, err := kennelCall(t, kennelTool(t, name).call, api, args)
+		_, err := kennelCall(t, kennelTool(t, name), api, args)
 		if err == nil || err.Error() != sentence {
 			t.Errorf("%s: err = %v, want the controller's own sentence", name, err)
 		}
@@ -100,7 +100,7 @@ func TestListProvidersSaysWhetherThisControllerCanRentAtAll(t *testing.T) {
 			"/providers": `{"items":[{"id":"prov_1","name":"proxmox-lab","held":"proxmox-lab is paused: an operator paused it"}]}`,
 			"/meta":      tc.meta,
 		}}
-		got, err := kennelCall(t, kennelTool(t, "list_providers").call, api, `{}`)
+		got, err := kennelCall(t, kennelTool(t, "list_providers"), api, `{}`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,7 @@ func TestListProvidersStillAnswersWhenMetaCannotBeRead(t *testing.T) {
 		{bodies: map[string]string{"/providers": `{"items":[]}`, "/meta": `not json`}},
 		{bodies: map[string]string{"/providers": `{"items":[]}`, "/meta": `{"version":"1"}`}},
 	} {
-		got, err := kennelCall(t, kennelTool(t, "list_providers").call, api, `{}`)
+		got, err := kennelCall(t, kennelTool(t, "list_providers"), api, `{}`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +140,7 @@ func TestListProvidersCarriesTheRentingAnswerAsTheRouteGaveIt(t *testing.T) {
 		"/meta":              `{"providers_available":false}`,
 		"/providers/renting": renting,
 	}}
-	got, err := kennelCall(t, kennelTool(t, "list_providers").call, api, `{}`)
+	got, err := kennelCall(t, kennelTool(t, "list_providers"), api, `{}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestListProvidersStillAnswersWhenTheRentingRouteCannotBeRead(t *testing.T) 
 		{bodies: map[string]string{"/providers": `{"items":[]}`, "/providers/renting": `3`}},
 		{bodies: map[string]string{"/providers": `{"items":[]}`, "/providers/renting": `[]`}},
 	} {
-		got, err := kennelCall(t, kennelTool(t, "list_providers").call, api, `{}`)
+		got, err := kennelCall(t, kennelTool(t, "list_providers"), api, `{}`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -181,7 +181,7 @@ func TestListProvidersStillAnswersWhenTheRentingRouteCannotBeRead(t *testing.T) 
 // A refusal of the providers route is the answer, whatever meta would have said.
 func TestListProvidersDoesNotReadMetaForACallerTheRouteRefused(t *testing.T) {
 	api := &routeAPI{errs: map[string]error{"/providers": statusRefusal{http.StatusForbidden, "no"}}, bodies: map[string]string{"/meta": `{}`}}
-	if _, err := kennelCall(t, kennelTool(t, "list_providers").call, api, `{}`); err == nil {
+	if _, err := kennelCall(t, kennelTool(t, "list_providers"), api, `{}`); err == nil {
 		t.Fatal("a refused providers route must be an error")
 	}
 	if len(api.calls) != 1 {
@@ -196,7 +196,7 @@ func TestProviderPairingsNarrowToAPoolOrAProvider(t *testing.T) {
 	tl := kennelTool(t, "provider_pairings")
 	api := &routeAPI{bodies: map[string]string{"/providers/pairings": pairingsDoc}}
 
-	whole, err := kennelCall(t, tl.call, api, `{}`)
+	whole, err := kennelCall(t, tl, api, `{}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestProviderPairingsNarrowToAPoolOrAProvider(t *testing.T) {
 		t.Errorf("unfiltered answer has %d pairings, want 3: %s", n, whole[0].Text)
 	}
 
-	byPool, err := kennelCall(t, tl.call, api, `{"pool_id":"pool_b"}`)
+	byPool, err := kennelCall(t, tl, api, `{"pool_id":"pool_b"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestProviderPairingsNarrowToAPoolOrAProvider(t *testing.T) {
 		t.Errorf("by pool = %+v, want the one pairing with why and fix intact", out.Items)
 	}
 
-	both, err := kennelCall(t, tl.call, api, `{"pool_id":"pool_a","provider_id":"prov_2"}`)
+	both, err := kennelCall(t, tl, api, `{"pool_id":"pool_a","provider_id":"prov_2"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,10 +230,10 @@ func TestProviderPairingsNarrowToAPoolOrAProvider(t *testing.T) {
 		t.Errorf("by pool and provider = %s", both[0].Text)
 	}
 
-	if _, err := kennelCall(t, tl.call, api, `{"pool_id":"pool_zzz"}`); err == nil || !strings.Contains(err.Error(), "list_providers") {
+	if _, err := kennelCall(t, tl, api, `{"pool_id":"pool_zzz"}`); err == nil || !strings.Contains(err.Error(), "list_providers") {
 		t.Errorf("an unknown pool must say where the ids are, got %v", err)
 	}
-	if _, err := kennelCall(t, tl.call, api, `{"pool":"pool_a"}`); err == nil {
+	if _, err := kennelCall(t, tl, api, `{"pool":"pool_a"}`); err == nil {
 		t.Error("an argument the schema does not name must be refused, not ignored")
 	}
 }
@@ -241,7 +241,7 @@ func TestProviderPairingsNarrowToAPoolOrAProvider(t *testing.T) {
 func TestListMachinesAsksTheRouteForWhatWasNamedAndBoundsThePage(t *testing.T) {
 	tl := kennelTool(t, "list_machines")
 	api := &routeAPI{bodies: map[string]string{"/machines": `{"items":[],"total":0}`}}
-	if _, err := kennelCall(t, tl.call, api, `{"provider_id":"prov_1","pool_id":"pool_a","state":"failed","limit":9999}`); err != nil {
+	if _, err := kennelCall(t, tl, api, `{"provider_id":"prov_1","pool_id":"pool_a","state":"failed","limit":9999}`); err != nil {
 		t.Fatal(err)
 	}
 	q := api.query["/machines"]
@@ -250,7 +250,7 @@ func TestListMachinesAsksTheRouteForWhatWasNamedAndBoundsThePage(t *testing.T) {
 			t.Errorf("%s = %q, want %q (query %v)", key, q.Get(key), want, q)
 		}
 	}
-	if _, err := kennelCall(t, tl.call, api, `{}`); err != nil {
+	if _, err := kennelCall(t, tl, api, `{}`); err != nil {
 		t.Fatal(err)
 	}
 	if got := api.query["/machines"]; got.Get("limit") != "50" || got.Get("state") != "" {

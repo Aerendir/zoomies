@@ -36,6 +36,10 @@ type Tool struct {
 	Name        string
 	Description string
 	Parameters  json.RawMessage
+	// Live is true for a tool whose answer changes while a conversation goes
+	// on, so the same call made twice is two questions. It is for the caller
+	// running the calls; no adapter sends it to a model.
+	Live bool
 }
 
 // ToolCall is the model asking for a tool, with its arguments as the JSON

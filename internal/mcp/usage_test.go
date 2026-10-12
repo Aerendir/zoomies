@@ -23,7 +23,7 @@ func usageDoc() string {
 // would be cut on.
 func TestUsageReadsThirtyDaysByPoolWithoutTheHistory(t *testing.T) {
 	api := &kennelAPI{body: usageDoc()}
-	out, err := kennelCall(t, kennelTool(t, "get_usage").call, api, `{}`)
+	out, err := kennelCall(t, kennelTool(t, "get_usage"), api, `{}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestUsageReadsThirtyDaysByPoolWithoutTheHistory(t *testing.T) {
 // history comes when it is asked for, with its bucket width.
 func TestUsageTakesTheRoutesFiltersAndCanKeepTheHistory(t *testing.T) {
 	api := &kennelAPI{body: usageDoc()}
-	out, err := kennelCall(t, kennelTool(t, "get_usage").call, api, `{"group_by":"repository","key":"acme/app","since":"7d","interval":"day","include_history":true}`)
+	out, err := kennelCall(t, kennelTool(t, "get_usage"), api, `{"group_by":"repository","key":"acme/app","since":"7d","interval":"day","include_history":true}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestUsageTakesTheRoutesFiltersAndCanKeepTheHistory(t *testing.T) {
 // A grouping the route would refuse is refused here, before anything is asked.
 func TestUsageRefusesAGroupingTheRouteDoesNotHave(t *testing.T) {
 	api := &kennelAPI{body: usageDoc()}
-	if _, err := kennelCall(t, kennelTool(t, "get_usage").call, api, `{"group_by":"user"}`); err == nil || api.calls != 0 {
+	if _, err := kennelCall(t, kennelTool(t, "get_usage"), api, `{"group_by":"user"}`); err == nil || api.calls != 0 {
 		t.Errorf("err %v, calls %d", err, api.calls)
 	}
 }

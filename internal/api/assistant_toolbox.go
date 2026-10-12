@@ -7,6 +7,7 @@ import (
 
 	"github.com/eyupio/zoomies/internal/assistant"
 	"github.com/eyupio/zoomies/internal/auth"
+	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/mcp"
 )
 
@@ -20,7 +21,11 @@ type assistantToolbox struct {
 }
 
 func (s *Server) assistantToolbox(r *http.Request, as *auth.Identity) *assistantToolbox {
-	return &assistantToolbox{server: mcp.New(inProcessAPI{s: s, from: r, as: as, direct: true}, mcp.Options{})}
+	return &assistantToolbox{server: mcp.New(inProcessAPI{s: s, from: r, as: as, direct: true}, mcp.Options{
+		WindowBlock:   controller.AssistantWindowBlock,
+		MaxWait:       controller.AssistantMaxWait,
+		WithheldKinds: controller.AssistantWithheldKinds,
+	})}
 }
 
 func (b *assistantToolbox) Tools() []assistant.Tool {
@@ -31,7 +36,7 @@ func (b *assistantToolbox) Tools() []assistant.Tool {
 		if err != nil {
 			continue
 		}
-		out = append(out, assistant.Tool{Name: d.Name, Description: d.Description, Parameters: schema})
+		out = append(out, assistant.Tool{Name: d.Name, Description: d.Description, Parameters: schema, Live: d.Live})
 	}
 	return out
 }

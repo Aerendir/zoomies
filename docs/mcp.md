@@ -123,10 +123,14 @@ MCP clients that support prompts can use these starting points:
 - `review_fleet_health`: prioritise problems, host health and repository findings.
 - `size_this_workflow`: recommend labels from measured usage, or say when there
   is not enough data.
+- `what_changed`: read the events and the scheduler's decisions over a recent
+  period (the optional `period` argument, a duration such as `2h`, default
+  `10m`), then the open problems, and say what moved and what is still open.
 
 The resources `zoomies://catalog` and `zoomies://catalog/{code}` explain
-problem codes and repository checks. To inspect the interface without a
-controller or credentials, run:
+problem codes and repository checks. `zoomies://fleet/now` is the fleet's
+counts as they are this moment, read with your own token like `fleet_status`.
+To inspect the interface without a controller or credentials, run:
 
 ```sh
 zoomies mcp --describe

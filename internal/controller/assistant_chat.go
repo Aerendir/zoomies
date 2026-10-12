@@ -524,12 +524,13 @@ func (c *Controller) StartAssistantChat(ctx context.Context, in AssistantChatReq
 	}
 	// The administrator decides, per provider, whether the fleet may be read
 	// through it. Off, the model is not told there are tools and is not given any.
-	allowed := map[string]bool{}
+	allowed, live := map[string]bool{}, map[string]bool{}
 	if in.Tools != nil && row.FleetAccess && assistant.SupportsTools(assistant.Kind(row.Kind)) {
 		for _, t := range in.Tools.Tools() {
 			if slices.Contains(AssistantFleetTools, t.Name) {
 				req.Tools = append(req.Tools, t)
 				allowed[t.Name] = true
+				live[t.Name] = t.Live
 			}
 		}
 		if len(req.Tools) > 0 {
@@ -547,7 +548,7 @@ func (c *Controller) StartAssistantChat(ctx context.Context, in AssistantChatReq
 		Provider: row.Name, ProviderID: row.ID, Model: shown, OutputLimit: AssistantOutputLimit(row),
 		FleetAccess: len(req.Tools) > 0,
 		redacted:    hidden,
-		provider:    p, req: req, box: in.Tools, allowed: allowed, cancel: cancel,
+		provider:    p, req: req, box: in.Tools, allowed: allowed, live: live, cancel: cancel,
 	}
 	if err := chat.open(ctx); err != nil {
 		cancel()
