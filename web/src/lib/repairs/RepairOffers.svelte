@@ -9,7 +9,8 @@
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function refresh(): Promise<void> {
-      if (session.authDisabled) return;
+      // A visitor has no Eli to repair anything with, and asking is a 403.
+      if (session.authDisabled || session.visitor) return;
       try {
         const result = await listEliOpportunities();
         if (active) count = result.items.length;

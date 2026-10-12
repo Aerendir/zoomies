@@ -23,10 +23,12 @@
   import CommandPalette from '$lib/shell/CommandPalette.svelte';
   import Nav from '$lib/shell/Nav.svelte';
   import NavMenu from '$lib/shell/NavMenu.svelte';
+  import { hiddenFromVisitors } from '$lib/shell/sections';
   import { eli } from '$lib/assistant/eli.svelte';
   import ProblemsDrawer from '$lib/problems/ProblemsDrawer.svelte';
   import ShortcutSheet from '$lib/shell/ShortcutSheet.svelte';
   import TopBar from '$lib/shell/TopBar.svelte';
+  import VisitorNotice from '$lib/shell/VisitorNotice.svelte';
   import Bootstrap from './routes/Bootstrap.svelte';
   import Login from './routes/Login.svelte';
   import EliWidget from '$lib/assistant/EliWidget.svelte';
@@ -66,7 +68,11 @@
       },
       refresh: () => void refresh.run(),
       eli: () => eli.toggle(),
-      go: (path) => router.navigate(path),
+      // The `g` keys skip what the sidebar hides from a visitor, rather than
+      // opening a page whose only content is "sign in to see this".
+      go: (path) => {
+        if (!(session.visitor && hiddenFromVisitors(path))) router.navigate(path);
+      },
     });
     return () => {
       stopWatchingForUpgrades();
@@ -189,6 +195,7 @@
     <Nav menuOpen={navMenuOpen} onmore={() => (navMenuOpen = !navMenuOpen)} />
     <div class="column">
       <TopBar onpalette={() => (paletteOpen = true)} onshortcuts={() => (shortcutsOpen = true)} />
+      {#if session.visitor && router.pathname !== '/login'}<VisitorNotice />{/if}
       <main id="main" tabindex="-1">
         {#if router.error}
           <div class="page">
