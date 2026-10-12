@@ -26,6 +26,7 @@
   import { eli } from './eli.svelte';
   import EliAvatar from './EliAvatar.svelte';
   import EliThinking from './EliThinking.svelte';
+  import { MESSAGE_LIMIT_BYTES, formatKiB, keepEnd, keepStart, messageBytes } from './limits';
   import Markdown from './Markdown.svelte';
   import { starterQuestions } from './starters';
   import { toolLabel } from './tools';
@@ -142,10 +143,74 @@
     box.style.height = `${Math.min(box.scrollHeight, 176)}px`;
   }
 
+  // The box is resized whenever its words change, whoever changed them: a refusal
+  // gives a question back, and a trim rewrites it, with no keystroke to follow.
+  $effect(() => {
+    void conversation.draft;
+    void tick().then(fit);
+  });
+
+  // The controller refuses a message over its limit, and the person would learn
+  // it after a round trip, so the page says it first. The counter shows from
+  // three quarters of the way, so it is there before it is needed and not on
+  // every short question.
+  const draftBytes = $derived(messageBytes(conversation.draft));
+  const tooBig = $derived(draftBytes > MESSAGE_LIMIT_BYTES);
+  const nearing = $derived(!tooBig && draftBytes > MESSAGE_LIMIT_BYTES * 0.75);
+
+  // What the last trim took off, and what the box held before it, so a trim that
+  // was the wrong one is one press from undone. Nothing is ever cut unasked.
+  let trimmed = $state<{ before: string; note: string } | undefined>();
+
+  function trim(side: 'end' | 'start'): void {
+    const before = conversation.draft;
+    const kept = (side === 'end' ? keepEnd : keepStart)(before);
+    conversation.draft = kept.text;
+    // The refusal that sent the words back is about the words as they were.
+    if (conversation.refusal?.kind === 'newest') conversation.refusal = undefined;
+    trimmed = {
+      before,
+      note: `Kept the ${side} of your message (${formatKiB(messageBytes(kept.text))}) and cut ${formatKiB(kept.cut)} from the ${side === 'end' ? 'start' : 'end'}.`,
+    };
+    void tick().then(() => box?.focus());
+  }
+
+  function undoTrim(): void {
+    if (!trimmed) return;
+    conversation.draft = trimmed.before;
+    trimmed = undefined;
+    void tick().then(() => box?.focus());
+  }
+
+  /** The words were edited by hand: whatever was said about them before is out of date. */
+  function edited(): void {
+    trimmed = undefined;
+    if (conversation.refusal?.kind === 'newest') conversation.refusal = undefined;
+    fit();
+  }
+
+  // A refusal the person cannot cut their way out of (an older message, or a
+  // thread that is too long) is cured by a new conversation, and what they were
+  // about to say comes with them.
+  function startAgain(): void {
+    const draft = conversation.draft;
+    trimmed = undefined;
+    eli.newConversation();
+    conversation.draft = draft;
+    void tick().then(() => box?.focus());
+  }
+
+  const refusal = $derived(conversation.refusal);
+  // The size notice already says what a refused newest message was told, and
+  // better, with the way out beside it.
+  const showRefusal = $derived(!!refusal && !(refusal.kind === 'newest' && tooBig));
+
   async function ask(text: string): Promise<void> {
     const question = text.trim();
     if (!question || conversation.busy || !answering) return;
+    if (messageBytes(question) > MESSAGE_LIMIT_BYTES) return;
     conversation.draft = '';
+    trimmed = undefined;
     atBottom = true;
     void tick().then(fit);
     await conversation.send(question, undefined, answering.id);
@@ -287,7 +352,7 @@
                   {#if turn.content}
                     <CopyButton value={turn.content} label="Copy answer" />
                   {/if}
-                  {#if turn.error && turn === last}
+                  {#if turn.error && turn === last && !turn.refused}
                     <button type="button" class="retry" onclick={() => void conversation.retry()}>
                       <RotateCcw size={14} aria-hidden="true" /> Try again
                     </button>
@@ -331,16 +396,57 @@
       void ask(conversation.draft);
     }}
   >
+    {#if tooBig}
+      <div class="notice" data-tone="danger" role="status" id="eli-size-notice">
+        <p>
+          <TriangleAlert size={14} aria-hidden="true" />
+          <span>
+            This message is <strong>{formatKiB(draftBytes)}</strong>. Eli reads at most
+            {formatKiB(MESSAGE_LIMIT_BYTES)} in one message.
+          </span>
+        </p>
+        <div class="notice-actions">
+          <button type="button" class="retry" onclick={() => trim('end')}>Keep the end</button>
+          <button type="button" class="retry" onclick={() => trim('start')}>Keep the start</button>
+        </div>
+        <p class="aside">
+          The failure in a log is usually at the end. Nothing is cut until you choose, and a trim
+          can be undone.
+        </p>
+      </div>
+    {:else if trimmed && conversation.draft}
+      <div class="notice" role="status">
+        <p>{trimmed.note}</p>
+        <div class="notice-actions">
+          <button type="button" class="retry" onclick={undoTrim}>Undo</button>
+        </div>
+      </div>
+    {:else if refusal && showRefusal}
+      <div class="notice" data-tone="danger" role="alert">
+        <p>
+          <TriangleAlert size={14} aria-hidden="true" />
+          <span>{refusal.message}</span>
+        </p>
+        {#if refusal.kind === 'earlier' || refusal.kind === 'conversation'}
+          <div class="notice-actions">
+            <button type="button" class="retry" onclick={startAgain}>
+              Start a new conversation
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
     <div class="field" data-closed={answering ? undefined : ''}>
       <textarea
         bind:this={box}
         bind:value={conversation.draft}
         rows="1"
         aria-label="Message"
+        aria-describedby={tooBig ? 'eli-size-notice' : undefined}
         data-autofocus
         placeholder={answering ? 'Ask Eli anything about Zoomies or GitHub Actions' : closedHint}
         disabled={!answering}
-        oninput={fit}
+        oninput={edited}
         {onkeydown}></textarea>
       {#if conversation.busy}
         <button
@@ -356,12 +462,15 @@
           type="submit"
           class="send"
           aria-label="Send"
-          disabled={!answering || !conversation.draft.trim()}
+          disabled={!answering || !conversation.draft.trim() || tooBig}
         >
           <ArrowUp size={16} aria-hidden="true" />
         </button>
       {/if}
     </div>
+    {#if nearing}
+      <p class="count">{formatKiB(draftBytes)} of {formatKiB(MESSAGE_LIMIT_BYTES)}</p>
+    {/if}
     {#if answering}
       <p class="hint">
         Enter to send, Shift and Enter for a new line. Eli can be wrong: check anything you act on.
@@ -678,6 +787,50 @@
     padding: 0 var(--z-space-2);
     font-size: var(--z-text-xs);
     color: var(--z-text-subtle);
+  }
+  /* Beside the box and not in the hint, which a touch screen hides: a phone is
+     where a log is pasted from the clipboard without being read. */
+  .count {
+    padding: 0 var(--z-space-2);
+    font-size: var(--z-text-xs);
+    color: var(--z-text-subtle);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+  .notice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--z-space-2);
+    padding: var(--z-space-2) var(--z-space-3);
+    font-size: var(--z-text-sm);
+    background: var(--z-surface-sunken);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+  }
+  .notice[data-tone='danger'] {
+    background: var(--z-danger-subtle);
+    border-color: var(--z-danger-border);
+  }
+  .notice[data-tone='danger'] > p:first-child {
+    color: var(--z-danger);
+  }
+  .notice > p {
+    display: flex;
+    gap: var(--z-space-2);
+    overflow-wrap: anywhere;
+  }
+  .notice > p :global(svg) {
+    flex: none;
+    margin-top: var(--z-space-1);
+  }
+  .notice .aside {
+    font-size: var(--z-text-xs);
+    color: var(--z-text-muted);
+  }
+  .notice-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--z-space-2);
   }
   @media (hover: none) {
     .hint {

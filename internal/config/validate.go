@@ -618,6 +618,20 @@ func (c *Config) Validate() Findings {
 			Fix: fix,
 		})
 	}
+	// A public view is the point of a demo and a surprise anywhere else, so it
+	// is said out loud like every other setting that widens who may look. With
+	// authentication off it would add nothing: every request is already an
+	// administrator, and auth.disabled says so.
+	if c.Security.PublicView && !c.Security.DisableAuth {
+		add(Finding{
+			Code: "auth.public_view", Severity: SeverityWarning, Setting: "security.public_view",
+			Title: "anyone can read this fleet without signing in",
+			Detail: "a request with no credential is a visitor, who reads pools, hosts, runners, jobs, usage " +
+				"and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind " +
+				"sign-in, and every change still needs somebody signed in.",
+			Fix: "turn security.public_view off unless this controller is meant to be public.",
+		})
+	}
 	// A session cookie without Secure is one a single plaintext request to the
 	// same host hands to anyone watching. Zoomies cannot see that a proxy in
 	// front terminates TLS, so it says so rather than guessing.
@@ -1166,6 +1180,9 @@ func (c *Config) Validate() Findings {
 		{"limits.runners", c.Limits.Runners},
 		{"limits.join_tokens", c.Limits.JoinTokens},
 		{"limits.event_subscribers", c.Limits.EventSubscribers},
+		// limits.visitor_event_subscribers is checked below, not here: it
+		// has a default, and it only ever refuses strangers, so a loopback
+		// controller has nothing to be warned about.
 	} {
 		switch {
 		case l.value < 0:
@@ -1182,6 +1199,13 @@ func (c *Config) Validate() Findings {
 				Fix:    fmt.Sprintf("set %s back to 0, or leave it if this controller will be reachable once it is behind a proxy or given an external URL.", l.key),
 			})
 		}
+	}
+	if c.Limits.VisitorEventSubscribers < 0 {
+		add(Finding{
+			Code: "limits.negative", Severity: SeverityError, Setting: "limits.visitor_event_subscribers",
+			Title: fmt.Sprintf("limits.visitor_event_subscribers is %d, and a ceiling cannot be negative", c.Limits.VisitorEventSubscribers),
+			Fix:   "set limits.visitor_event_subscribers to 0 for no ceiling, or to the most visitors' streams this instance should hold.",
+		})
 	}
 
 	if c.Limits.JobStatsWindow < 0 {

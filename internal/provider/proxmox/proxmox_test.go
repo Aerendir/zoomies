@@ -934,10 +934,15 @@ func TestTheShapeAndTheOwnershipRecordDoNotReadEachOther(t *testing.T) {
 	if _, ok := decodeShape(`{"zoomies":{"machine":"mach_c"}}`); ok {
 		t.Error("the ownership record was read as a shape")
 	}
+	// The shape is the last line inside the hidden comment, on a line of its
+	// own, so that an operator's note beside it does not displace it.
 	var block shapeBlock
 	line := strings.Split(description, "\n")
-	if err := json.Unmarshal([]byte(line[len(line)-1]), &block); err != nil {
-		t.Errorf("the shape is not the last line of the description, so an operator's note would displace it: %v", err)
+	if line[len(line)-1] != "-->" {
+		t.Fatalf("the machine-readable blocks are not closed off, so the console would show them: %q", line[len(line)-1])
+	}
+	if err := json.Unmarshal([]byte(line[len(line)-2]), &block); err != nil {
+		t.Errorf("the shape is not on a line of its own: %v", err)
 	}
 }
 

@@ -45,6 +45,7 @@ questions to fixes and optimisation.
 | **HTTP with browser sign-in** | Your MCP client supports Zoomies' OAuth flow and can reach the controller over HTTPS | [Connect Claude](connect-claude.md) provides worked steps for Claude apps and Claude Code. |
 | **HTTP with a bearer token** | Your client supports Streamable HTTP and you want to configure its access explicitly | Use `https://<your controller>/mcp` with `Authorization: Bearer <your API token>`. Start with a viewer token. |
 | **Local stdio** | Your client starts a local MCP process | Install the Zoomies binary on that client's machine and configure it to run `zoomies mcp`. |
+| **HTTP with no credential** | The controller has a [public view](public-view.md), such as a demo | Use `https://<the controller>/mcp` and nothing else. The client is a visitor: it reads the fleet, is offered no tool that changes it, and AI context answers that the public view does not show it. |
 
 The HTTP route requires no Zoomies binary on the assistant's machine. A cloud
 client must be able to reach the controller from its servers; a client running

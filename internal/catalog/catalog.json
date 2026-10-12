@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "1e745d2",
+  "generated_from": "6511c40",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -489,6 +489,20 @@
       "fix": "Password guessing is not rate limited.",
       "verify": null,
       "setting": "security.rate_limit_logins",
+      "docs_html": "https://zoomies.sh/problem-codes/#configuration-authentication",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#configuration-authentication"
+    },
+    {
+      "id": "auth.public_view",
+      "kind": "problem",
+      "title": "auth.public_view",
+      "category": "configuration",
+      "severity": "warning",
+      "detection": "static",
+      "detects": "Anyone who can reach this controller reads its fleet without signing in: pools, hosts, runners, jobs, usage and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind sign-in, and every change still needs somebody signed in. Right for a public demo or a project that shows its CI fleet on purpose; turn `security.public_view` off anywhere else. See [Public view](public-view.md).",
+      "fix": "Anyone who can reach this controller reads its fleet without signing in: pools, hosts, runners, jobs, usage and runner logs. The audit log, accounts, tokens, settings, AI context and Eli stay behind sign-in, and every change still needs somebody signed in. Right for a public demo or a project that shows its CI fleet on purpose; turn `security.public_view` off anywhere else. See [Public view](public-view.md).",
+      "verify": null,
+      "setting": "security.public_view",
       "docs_html": "https://zoomies.sh/problem-codes/#configuration-authentication",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#configuration-authentication"
     },

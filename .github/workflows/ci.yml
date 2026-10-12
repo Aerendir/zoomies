@@ -135,6 +135,14 @@ jobs:
               # tests in internal/backend, internal/installer and internal/docs,
               # which are in the rest shard.
               deploy/runner-*.sh) deploy=true; installer=true; rest=true ;;
+              # The InstaPods scripts go into no image: a pod downloads a
+              # release and runs them from its checkout. The installer job
+              # lints them, and the rest shard holds the tests that read
+              # deploy/.
+              deploy/instapods/*) installer=true; rest=true ;;
+              # Workflows for the demo organisation to copy. Nothing here runs
+              # them; internal/docs reads them like any other prose.
+              deploy/demo-org/*) docs=true ;;
               deploy/*|docker-compose.yml|.dockerignore) deploy=true; rest=true ;;
               # The check each built runner image is run through.
               test/runner-image/*) deploy=true; installer=true ;;
@@ -1033,6 +1041,12 @@ jobs:
             case "$f" in deploy/runner-entrypoint.sh) continue ;; esac
             dash -n "$f"
             shellcheck -s sh "$f"
+          done
+          # A pod's Build and Start commands run under its /bin/sh, which on
+          # Ubuntu is dash. -x follows the helpers both of them source.
+          for f in deploy/instapods/*.sh; do
+            dash -n "$f"
+            shellcheck -s sh -x "$f"
           done
 
       - name: RPM package install recovery

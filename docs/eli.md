@@ -242,7 +242,14 @@ a hostile name can do is mislead an answer: check what you act on.
   your own provider and asks again: a thinking model at high effort can spend
   the ceiling on reasoning and send no words at all. Lowering the provider's
   reasoning effort is the cheaper cure.
-* A conversation is at most 40 messages, 8 KiB each and 32 KiB in all.
+* A conversation is at most 40 messages, 8 KiB each and 32 KiB in all. The box
+  shows the size of what you are typing from 6 KiB, and a message over 8 KiB
+  cannot be sent until you cut it. **Keep the end** (the usual choice for a log,
+  whose failure is at the end) or **Keep the start** trims it at a line break and
+  says how much it took off, and **Undo** puts it back. Nothing is cut until you
+  choose. If the controller refuses a message anyway, or a conversation has
+  outgrown what one request carries, your words come back in the box with the
+  reason, and **Start a new conversation** takes them into a fresh thread.
 * Signed-in conversations are saved to your account, with the retention and
   limits described under [Past conversations](#past-conversations). A demo
   with authentication off has no account and keeps no conversation history.

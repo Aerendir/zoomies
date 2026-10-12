@@ -142,6 +142,18 @@ func TestImagePreparationScriptIsValidAndLeavesAnUnenrolledAgent(t *testing.T) {
 	}
 }
 
+// virt-resize renumbers a cloud image's partitions, and the boot loader it
+// copies still names the old ones: a machine cloned from the result sits in
+// "grub rescue" with "no such partition", never boots and never answers its
+// guest agent. The boot loader has to be written again after the resize.
+func TestImagePreparationWritesTheBootLoaderAgainAfterTheResize(t *testing.T) {
+	resize := strings.Index(prepareTemplateImage, "virt-resize")
+	grub := strings.Index(prepareTemplateImage, "grub-install --target=i386-pc /dev/sda")
+	if resize < 0 || grub < 0 || grub < resize {
+		t.Fatalf("the boot loader is not written again after the resize (resize at %d, grub-install at %d)", resize, grub)
+	}
+}
+
 func bridgeHost(inventory string) Host {
 	return Host{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name != "pvesh" || !strings.Contains(strings.Join(args, " "), "/nodes/pve/network") {
@@ -230,5 +242,16 @@ func TestGrantTokenGrantsTheUserAndTheTokenOnEveryPath(t *testing.T) {
 				t.Errorf("no grant of %s on %s:\n%s", who, path, joined)
 			}
 		}
+	}
+}
+
+// A template whose /etc/machine-id is missing boots clones that never get an
+// address: systemd-networkd's DHCP client cannot start without one. The file
+// has to be left empty, which is also how systemd knows to make a fresh id.
+func TestImagePreparationLeavesAnEmptyMachineIDForEachCloneToFill(t *testing.T) {
+	clean := strings.Index(prepareTemplateImage, "cloud-init clean --logs --machine-id")
+	empty := strings.Index(prepareTemplateImage, ": > /etc/machine-id")
+	if clean < 0 || empty < 0 || empty < clean {
+		t.Fatalf("the machine id is not left empty after the cleanup (cleanup at %d, truncate at %d)", clean, empty)
 	}
 }

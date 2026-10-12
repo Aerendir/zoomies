@@ -23,6 +23,7 @@
     CircleUser,
     Keyboard,
     KeyRound,
+    LogIn,
     LogOut,
     Monitor,
     Moon,
@@ -43,7 +44,7 @@
   import Logo from '../components/Logo.svelte';
   import type { MenuItem } from '../components/DropdownMenu.svelte';
   import { SECTIONS, isCurrentSection } from './sections';
-  import { signOut } from './signout';
+  import { signIn, signOut } from './signout';
 
   interface Props {
     onpalette: () => void;
@@ -91,10 +92,12 @@
   const roleLine = $derived(
     session.authDisabled
       ? 'Authentication is off, so every request is an administrator'
-      : roleLabel(session.role),
+      : session.visitor
+        ? 'Public, read-only view'
+        : roleLabel(session.role),
   );
 
-  const menuItems = $derived<MenuItem[]>([
+  const themeItems = $derived<MenuItem[]>([
     {
       id: 'theme-system',
       label: 'System',
@@ -119,6 +122,41 @@
       icon: Moon,
       onSelect: () => theme.set('dark'),
     },
+  ]);
+
+  /**
+   * A visitor has no account, tokens, events page or settings to open, so the
+   * menu keeps what is theirs whoever they are (the theme, the shortcuts, the
+   * documentation) and offers signing in where everybody else signs out.
+   */
+  const visitorItems = $derived<MenuItem[]>([
+    ...themeItems,
+    {
+      id: 'shortcuts',
+      label: 'Keyboard shortcuts',
+      icon: Keyboard,
+      hint: '?',
+      separated: true,
+      onSelect: onshortcuts,
+    },
+    {
+      id: 'docs',
+      label: 'Documentation',
+      icon: BookOpen,
+      href: DOCS_URL,
+      newTab: true,
+    },
+    {
+      id: 'signin',
+      label: 'Sign in',
+      icon: LogIn,
+      separated: true,
+      onSelect: signIn,
+    },
+  ]);
+
+  const accountItems = $derived<MenuItem[]>([
+    ...themeItems,
     {
       id: 'account',
       label: 'Your account',
@@ -173,6 +211,8 @@
       onSelect: () => void signOut(),
     },
   ]);
+
+  const menuItems = $derived(session.visitor ? visitorItems : accountItems);
 </script>
 
 <header class="topbar">

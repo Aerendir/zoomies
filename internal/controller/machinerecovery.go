@@ -354,6 +354,45 @@ func (c *Controller) sweepProvider(ctx context.Context, env *machineEnv, pr *mac
 	}
 }
 
+// settleGoneMachine records that a machine already on its way out has nothing
+// left at its provider: the row is stamped deleted, which is also what frees the
+// resource id for the next machine, and a host it enrolled is removed.
+func (c *Controller) settleGoneMachine(ctx context.Context, env *machineEnv, m *store.Machine, detail string) {
+	if _, err := c.st.ConfirmMachineDeleted(ctx, m.ID, env.now); err != nil {
+		c.log.Warn("could not confirm a machine's resource is gone", "machine", m.ID, "error", err)
+		return
+	}
+	c.transitionMachine(ctx, env, m, store.MachineDeleted, detail)
+	if m.HostID != "" {
+		if err := c.DeleteHost(ctx, m.HostID); err != nil && !errors.Is(err, store.ErrNotFound) {
+			c.log.Warn("a machine's resource is gone but its host row could not be removed",
+				"machine", m.ID, "host", m.HostID, "error", err)
+		}
+	}
+}
+
+// releaseStaleHolder frees a resource id the provider has just offered again.
+//
+// A provider that hands out the lowest free id offers one a person destroyed by
+// hand, and the row of the machine that held it still names it until a sweep
+// notices. The allocation has just seen the id free at the provider, which is
+// the same evidence the sweep acts on, so a row that was already failed or
+// being deleted is settled here rather than failing the new machine on the
+// unique index and spending one of its attempts. Any other holder is left
+// alone, and the caller reports the conflict.
+func (c *Controller) releaseStaleHolder(ctx context.Context, env *machineEnv, pr *machineProvider, m *store.Machine, zone, resourceID string) bool {
+	holder, err := c.st.GetMachineByResource(ctx, pr.row.ID, zone, resourceID)
+	if err != nil || holder.ID == m.ID {
+		return false
+	}
+	if holder.State != store.MachineFailed && holder.State != store.MachineDeleting {
+		return false
+	}
+	c.settleGoneMachine(ctx, env, holder, fmt.Sprintf(
+		"%s offered id %s again, so the resource this machine named is gone", pr.row.Name, resourceID))
+	return true
+}
+
 // sweepAbsent decides what a resource's absence means for the row that names
 // it.
 //
@@ -364,18 +403,7 @@ func (c *Controller) sweepProvider(ctx context.Context, env *machineEnv, pr *mac
 func (c *Controller) sweepAbsent(ctx context.Context, env *machineEnv, pr *machineProvider, m *store.Machine) {
 	switch m.State {
 	case store.MachineDeleting, store.MachineFailed:
-		if _, err := c.st.ConfirmMachineDeleted(ctx, m.ID, env.now); err != nil {
-			c.log.Warn("could not confirm a machine's resource is gone", "machine", m.ID, "error", err)
-			return
-		}
-		c.transitionMachine(ctx, env, m, store.MachineDeleted,
-			fmt.Sprintf("%s no longer has this machine's resource", pr.row.Name))
-		if m.HostID != "" {
-			if err := c.DeleteHost(ctx, m.HostID); err != nil && !errors.Is(err, store.ErrNotFound) {
-				c.log.Warn("a machine's resource is gone but its host row could not be removed",
-					"machine", m.ID, "host", m.HostID, "error", err)
-			}
-		}
+		c.settleGoneMachine(ctx, env, m, fmt.Sprintf("%s no longer has this machine's resource", pr.row.Name))
 	case store.MachineCreating, store.MachinePlanned:
 		// The create's own ambiguity path owns this: a machine that is being
 		// built and cannot be seen yet is not a machine that has gone.
