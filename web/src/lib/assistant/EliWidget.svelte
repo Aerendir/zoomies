@@ -16,6 +16,7 @@
   import ConversationView from './ConversationView.svelte';
   import EliAvatar from './EliAvatar.svelte';
   import { movable } from './movable';
+  import { followViewport } from './sheet';
   import { eli } from './eli.svelte';
   import { contextPrompt } from './prompts';
   import { layers, lockScroll, pageInert, trapFocus } from '$lib/keys';
@@ -57,9 +58,14 @@
     const layer = layers.push('dialog', () => eli.close());
     const unlock = modal ? lockScroll() : () => {};
     const uninert = modal ? pageInert(panel) : () => {};
-    const trap = modal ? trapFocus(panel) : undefined;
+    // A phone's sheet opens with focus on itself, not on the message box: a
+    // focused box raises the keyboard, which takes half the screen before
+    // the operator has read a word. The box is one tap away.
+    const trap = modal ? trapFocus(panel, phone ? panel : undefined) : undefined;
+    const unfollow = phone ? followViewport(panel, window.visualViewport) : () => {};
     return () => {
       layers.remove(layer);
+      unfollow();
       uninert();
       unlock();
       trap?.destroy();
@@ -95,7 +101,7 @@
     void tick().then(() => panel?.focus());
   });
   $effect(() => {
-    if (!eli.open || loading || !answering || !panel) return;
+    if (!eli.open || loading || !answering || !panel || phone) return;
     void tick().then(() => {
       if (eli.open && panel?.contains(document.activeElement))
         panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')?.focus();
@@ -544,19 +550,32 @@
     }
     /* A sheet inside a small margin, as the Toaster and a Dialog sit on a
        phone, rather than a page: the safe areas are in the sheet's offsets, so
-       the header and footer keep their ordinary padding inside it. */
+       the header and footer keep their ordinary padding inside it.
+
+       It hangs from the top edge rather than standing on the bottom one, and
+       its top and height are the visual viewport's (see sheet.ts), so the
+       keyboard shortens it from below instead of pushing its header off the
+       screen. With the keyboard down the two properties equal 0 and 100dvh,
+       which is the same sheet as before. */
     .panel,
     .panel[data-size],
     .panel[data-side],
     .panel.full {
+      --z-eli-sheet-top: 0px;
+      --z-eli-sheet-height: 100dvh;
+      top: calc(var(--z-eli-sheet-top) + var(--z-space-3) + var(--z-safe-top));
       left: var(--z-space-3);
       right: auto;
-      bottom: calc(var(--z-space-3) + var(--z-safe-bottom));
+      bottom: auto;
       width: calc(var(--z-window-width) - var(--z-space-3) * 2);
       min-width: 0;
       max-width: calc(var(--z-window-width) - var(--z-space-3) * 2);
-      height: calc(100dvh - var(--z-space-3) * 2 - var(--z-safe-top) - var(--z-safe-bottom));
-      max-height: calc(100dvh - var(--z-space-3) * 2 - var(--z-safe-top) - var(--z-safe-bottom));
+      height: calc(
+        var(--z-eli-sheet-height) - var(--z-space-3) * 2 - var(--z-safe-top) - var(--z-safe-bottom)
+      );
+      max-height: calc(
+        var(--z-eli-sheet-height) - var(--z-space-3) * 2 - var(--z-safe-top) - var(--z-safe-bottom)
+      );
       border-radius: var(--z-radius-lg);
       resize: none;
     }

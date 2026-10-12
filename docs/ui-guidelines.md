@@ -753,7 +753,7 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 | `Tooltip` | on hover *and* focus; never the only place information lives. `text` is the whole tooltip as one sentence and what assistive technology gets; an optional `content` snippet draws a richer card for sighted readers. What it wraps has to be something a keyboard reaches -- a button, with `aria-describedby` pointing at the sentence -- or focus opens nothing, and a card that carries figures also opens on a tap, which has no hover |
 | `Segmented` | one choice among a few as one control, `aria-pressed` on the one in force: the activity matrix's ranges, the fleet trend's windows, the usage chart's two measures |
 | `Dialog` | focus trap, restores focus on close, `Esc` closes, backdrop click closes only non-destructive dialogs, and never one that is showing a secret exactly once. A dialog with text fields is a `<form>` whose footer button is `type="submit" form="…"`, so `Enter` submits it |
-| `Drawer` | right-hand detail panel; same focus rules |
+| `Drawer` | right-hand detail panel; same focus rules. On a phone it runs the full height but not the full width: a strip of the page stays visible down its left, under the scrim, so it reads as a panel over the page rather than a new page, and a tap on the strip closes it |
 | `NavMenu` | the phone's menu: a sheet that rises from the bottom edge, where the thumb that pressed More is, carrying every section named and in order, plus the account, the theme and sign out; same focus rules, closes when a section is chosen |
 | `DropdownMenu` | roving tabindex, type-ahead; the list opens in the browser's top layer, placed against its trigger and flipped above where there is no room below, so a menu on a grid's last row is not cut off by the frame that scrolls. It closes when its trigger scrolls out of that frame. A `header` snippet names who the menu is about, and items sharing a `choice` are one segmented row of radio items with the one in force checked |
 | `Tabs` | `aria-controls`/`aria-selected`, arrow-key navigation |
@@ -1290,6 +1290,11 @@ and Expanded sizes, left or right placement, manual corner resizing and a
 full-screen view. Size and side are browser preferences. A phone shows the panel
 as a sheet inset by `--z-space-3` on every side, above the scrim every modal
 shares, with the rest of the page inert; the sizes and sides do not apply there.
+The sheet opens with focus on itself rather than on the message box, so the
+keyboard waits for a tap, and it is sized from the visual viewport
+(`web/src/lib/assistant/sheet.ts`), so when the keyboard does come up it
+shortens the sheet from below instead of scrolling Eli's header off the top of
+the screen.
 Minimising or navigating preserves the conversation and draft; a reload,
 sign-out or New conversation clears them. Chat uses the owner-scoped personal API and that user’s enabled default
 provider. Installation provider management retains its administrator gate.
