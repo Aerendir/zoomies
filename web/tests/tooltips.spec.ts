@@ -3,7 +3,9 @@ import {
   SECTIONS,
   browserOverride,
   goto,
+  nav,
   navEntry,
+  navMenu,
   openAccountMenu,
   openSection,
 } from './support/fixtures';
@@ -256,6 +258,45 @@ test.describe('the shared tooltip', () => {
     await page.mouse.up();
     await page.waitForTimeout(600);
     await expect(page.locator('.bubble')).toHaveCount(0);
+  });
+
+  test('a sheet that rises under a resting pointer opens no bubble until the pointer moves', async ({
+    page,
+  }) => {
+    // The phone's menu covers the place the pointer pressed "More" from, so the
+    // browser reports the pointer entering whatever the sheet puts there, with no
+    // move behind it. Help that opened on that would take the first Escape that
+    // belongs to the sheet.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goto(page, '/', 'Overview');
+    const more = nav(page).getByRole('button', { name: 'More' });
+    await more.click();
+    const tag = navMenu(page).locator('p.build');
+    const box = await tag.boundingBox();
+    expect(box, 'the build tag is in the sheet').not.toBeNull();
+    const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+    const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+    await page.keyboard.press('Escape');
+    await expect(navMenu(page)).toHaveCount(0);
+
+    // Park the pointer where the tag will be, then open the sheet from the keyboard.
+    await page.mouse.move(x, y);
+    await more.focus();
+    await page.keyboard.press('Enter');
+    await expect(navMenu(page)).toBeVisible();
+    await page.waitForTimeout(600);
+    await expect(page.locator('.bubble', { hasText: 'development build' })).toHaveCount(0);
+    await expect(page.locator('.bubble')).toHaveCount(0);
+
+    // A real move over it is a reach, and the wait starts then.
+    await page.mouse.move(x + 2, y + 1);
+    await expect(page.locator('.bubble', { hasText: 'build' })).toBeVisible();
+    // The first Escape is still the sheet's own once the bubble has gone.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.bubble')).toHaveCount(0);
+    await expect(navMenu(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(navMenu(page)).toHaveCount(0);
   });
 
   test('escape closes the bubble first, and the menu under it only on the next press', async ({
