@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -133,12 +134,13 @@ func TestAWaitingVerdictAddsOnlyTheTailToTheSchedulersSentence(t *testing.T) {
 	inst := h.installation()
 	pool := h.pool(inst, "linux-x64")
 	h.providerRow(t, "lab")
-	// One host that could run the pool is cordoned and another has no slot
-	// left, so the pool is blocked, but not for want of a machine: mending the
-	// first is cheaper than renting one.
-	cordoned := h.host("vm-1")
-	if err := h.st.SetHostCordoned(h.ctx, cordoned.ID, true); err != nil {
-		t.Fatalf("SetHostCordoned: %v", err)
+	// One host that could run the pool has gone quiet and another has no slot
+	// left, so the pool is blocked, but not for want of a machine: bringing
+	// the first back is cheaper than renting one. (A cordoned host would not do
+	// here: an operator took it out of service, so it is not waited on.)
+	silent := h.host("vm-1")
+	if err := h.st.Heartbeat(h.ctx, silent.ID, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("Heartbeat: %v", err)
 	}
 	full := h.host("vm-2")
 	full.Capacity = 0
@@ -243,5 +245,39 @@ func TestAFleetWithoutProvidersReadsAsItDidBeforeRenting(t *testing.T) {
 		if e.Label == "renting" {
 			t.Errorf("evidence %+v mentions renting in a fleet without providers", e)
 		}
+	}
+}
+
+// A cordoned host is out of service by an operator's choice and offers no slots,
+// so it does not stop the fleet being called full: beside a host with no slot
+// left, a pool with work waiting is rented a machine. It used to wait on the
+// cordoned host instead, with 31 jobs queued and a provider ready to build.
+func TestACordonedHostDoesNotStopAFullFleetRentingAMachine(t *testing.T) {
+	h := newHarness(t)
+	h.enableProviders(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux-x64")
+	h.providerRow(t, "lab")
+	cordoned := h.host("vm-1")
+	if err := h.st.SetHostCordoned(h.ctx, cordoned.ID, true); err != nil {
+		t.Fatalf("SetHostCordoned: %v", err)
+	}
+	full := h.host("vm-2")
+	full.Capacity = 0
+	if err := h.st.UpdateHost(h.ctx, full); err != nil {
+		t.Fatalf("UpdateHost: %v", err)
+	}
+	h.queueWork(t)
+	if err := h.c.Reconcile(h.ctx); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	h.machinePass(t)
+
+	v := h.c.rentingFor(pool.ID)
+	if v == nil || v.State != RentingBuying {
+		t.Fatalf("rentingFor = %+v, want a verdict that a machine is being rented", v)
+	}
+	if got := len(h.machines()); got == 0 {
+		t.Fatal("no machine was reserved although every host that can take work is full")
 	}
 }

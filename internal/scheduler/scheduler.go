@@ -1765,7 +1765,13 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 				waits, outOfSlots = true, true
 			}
 		}
-		if HostCouldRun(h, p) {
+		// A cordoned host is not a candidate: the operator has taken it out of
+		// service, so its free slots are not slots anybody can have, and
+		// waiting on it is waiting on a person rather than on a job. Counting it
+		// kept a fleet from being called full while every host that could
+		// take work was busy, and so kept a rented machine from being asked
+		// for.
+		if HostCouldRun(h, p) && !h.Cordoned {
 			candidates++
 			if waits {
 				waiting++
@@ -1815,11 +1821,13 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 		// full.
 		//
 		// A host that could run the pool but is not waiting on a job keeps
-		// the fleet from being called full. One that is cordoned, silent or
-		// running an agent this controller cannot talk to is waiting on
-		// somebody to uncordon, repair or upgrade it, which is a cheaper
-		// answer than a rented machine; one that is held or warming lifts on
-		// its own.
+		// the fleet from being called full. One that is silent or running an
+		// agent this controller cannot talk to is waiting on somebody to
+		// repair or upgrade it, which is a cheaper answer than a rented
+		// machine; one that is held or warming lifts on its own. A cordoned
+		// host is not in the question at all: an operator took it out of
+		// service on purpose, so it offers no slots, and the fleet is full
+		// when the hosts left to take work are.
 		//
 		// The first half is the test the scheduler has always used, kept
 		// unchanged so that the second half can only add fleets to the full
