@@ -452,8 +452,12 @@ test.describe('with Kennel Club on', () => {
     await goto(page, `/kennel/repositories/${quiet.id}/ci`, quiet.name);
     // Nothing is open and everything was read: the one place "best in show" is
     // earned, and the page says what earned it.
+    // The status badge says the same thing in its tooltip, so the sentence is in the
+    // page twice; the one to read is the description under the heading.
     await expect(
-      page.getByText('Every check that is turned on ran against everything it needs'),
+      page.locator('p.description', {
+        hasText: 'Every check that is turned on ran against everything it needs',
+      }),
     ).toBeVisible();
     await expect(page.getByRole('article')).toHaveCount(0);
 
