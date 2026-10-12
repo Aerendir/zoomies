@@ -11,7 +11,7 @@ in the same pull request as the work.
 
 | Package | Status | Evidence |
 | --- | --- | --- |
-| ZF-242 | `in_progress` | Pure pinned-head required-check delay calculation and behavioural/purity tests. [First-slice plan](plans/2026-10-12-eli-merge-delay-core.md) records scope and validation: Go 1.27.2 formatting, package race tests and vet pass after installing the official toolchain and refreshing upstream. Readers, REST, MCP/CLI and UI integration remain to be implemented. |
+| ZF-242 | `in_progress` | Pure calculation core in draft PR #931, with Go 1.27.2 formatting, package race tests and vet passing. [First-slice plan](plans/2026-10-12-eli-merge-delay-core.md). The stacked [bounded GitHub reader](plans/2026-10-12-eli-pr-delay-evidence.md) collects target-branch protection and pinned-head check evidence with explicit coverage and a final currentness read. Authorised job joins, REST, MCP/CLI and UI integration remain to be implemented. |
 
 ## How to read a row
 
