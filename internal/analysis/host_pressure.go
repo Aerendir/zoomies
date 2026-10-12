@@ -302,7 +302,18 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 			"Lower %s's capacity so fewer runners share it at once: %s, and the throttle only steps a host down once that pressure has begun.", host, why)}
 	}
 	calm := e.Minutes - e.PressuredMinutes
+	// An event no sample covers still happened. Every sentence that counts
+	// measured events says how many fell outside them, so a burst during a
+	// gap in the agent's samples is never dropped from the count unseen.
+	gap, theMeasured := "", func(what string) string { return fmt.Sprintf("its %d %s", len(measured), what) }
+	if e.Unmeasured > 0 {
+		gap = fmt.Sprintf("; %d of %d fell where the host sent no samples", e.Unmeasured, len(events))
+		theMeasured = func(what string) string { return fmt.Sprintf("the %d %s in measured minutes", len(measured), what) }
+	}
 	switch {
+	case len(events) == 0:
+		f.Confidence, f.ConfidenceReason = Low, "there were no failures, OOM kills or slow startups to compare with its load"
+		f.Summary = fmt.Sprintf("%s had no failures, OOM kills or slow startups in this period.", host)
 	case e.Minutes == 0:
 		f.Confidence = Low
 		f.ConfidenceReason = "no samples with its load, CPU or memory cover this period: an agent too old to report them sends none, " +
@@ -312,9 +323,6 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 			NextStep{Code: "host.version_behind", Text: fmt.Sprintf(
 				"If %s's agent is older than the controller, upgrade it: an agent too old to measure its host reports no load or memory to judge by.", host)},
 			NextStep{Setting: "retention.samples", Text: "If the period is older than retention.samples keeps, its samples are gone; ask about a more recent period, or keep samples longer for next time."})
-	case len(events) == 0:
-		f.Confidence, f.ConfidenceReason = Low, "there were no failures, OOM kills or slow startups to compare with its load"
-		f.Summary = fmt.Sprintf("%s had no failures, OOM kills or slow startups in this period.", host)
 	case len(events) < minPressureEvents:
 		few := fmt.Sprintf("only %s: too few to say whether they follow its load", anyBad(len(events)))
 		f.Confidence, f.ConfidenceReason = Low, few
@@ -327,52 +335,82 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 			len(measured), host, anyBad(len(events)))
 	case calm == 0:
 		f.Confidence, f.ConfidenceReason = Low, "it was under pressure in every measured minute, so there were no calm minutes to compare with"
-		f.Summary = fmt.Sprintf("%s was under pressure in every minute it was measured, so there are no calm minutes to set its %d %s against.",
-			host, len(measured), badWords(measured))
+		f.Summary = fmt.Sprintf("%s was under pressure in every minute it was measured, so there are no calm minutes to set %s against%s.",
+			host, theMeasured(badWords(measured)), gap)
 		f.NextSteps = append(f.NextSteps, capacityStep("it was under pressure in every minute it was measured"))
 	default:
 		pe, ce := e.PressuredEvents, len(measured)-e.PressuredEvents
 		// At least twice as many events a pressured minute as a calm one,
-		// kept in integers so exactly twice is twice.
-		clustered := e.PressuredMinutes > 0 && pe*calm >= 2*ce*e.PressuredMinutes
+		// kept in integers so exactly twice is twice, and never on fewer
+		// pressured events than the fewest judged at all: one failure in
+		// the one busy minute of a day is not a cluster.
+		clustered := pe >= minPressureEvents && e.PressuredMinutes > 0 && pe*calm >= 2*ce*e.PressuredMinutes
 		what := badWords(measured)
+		if e.Unmeasured > 0 {
+			// The subject takes in the events the gap clause counts too.
+			what = badWords(events)
+		}
 		switch {
 		case clustered:
 			f.Dominant = HostPressured
 			th, above, with := threshold(measured, samples)
 			if th != nil {
-				f.Summary = fmt.Sprintf("%s's %s cluster in its busy minutes: %d of %d came while %s was at or above %s, which was true for %s %s.",
-					host, badWords(with), above, len(with), th.words, th.shown, share(th.minutesAbove, th.minutes), ofPeriod(th.minutes))
+				subject := badWords(with)
+				if e.Unmeasured > 0 {
+					subject = what
+				}
+				f.Summary = fmt.Sprintf("%s's %s cluster in its busy minutes: %d of %d came while %s was at or above %s, which was true for %s %s%s.",
+					host, subject, above, len(with), th.words, th.shown, share(th.minutesAbove, th.minutes), ofPeriod(th.minutes), gap)
 				f.Evidence.Threshold = &th.PressureThreshold
 			} else {
-				f.Summary = fmt.Sprintf("%s's %s cluster in its busy minutes: %d of %d came while it was under pressure, which was true for %s %s.",
-					host, what, pe, len(measured), share(e.PressuredMinutes, e.Minutes), ofPeriod(e.Minutes))
+				f.Summary = fmt.Sprintf("%s's %s cluster in its busy minutes: %d of %d came while it was under pressure, which was true for %s %s%s.",
+					host, what, pe, len(measured), share(e.PressuredMinutes, e.Minutes), ofPeriod(e.Minutes), gap)
 			}
 			if hasKind(measured, EventOOM, true) {
 				f.NextSteps = append(f.NextSteps, NextStep{Code: "jobs.oom_killed", Setting: "pool.resources.memory_mb", Text: fmt.Sprintf(
 					"Jobs on %s were killed for their memory in its busy minutes; the memory a pool gives each runner is also what the scheduler reserves for it, so raising it places fewer runners on %s at once.", host, host)})
 			}
 			f.NextSteps = append(f.NextSteps, capacityStep(fmt.Sprintf("its %s came in the minutes it was under pressure", what)))
+			if ce > pe {
+				// Most came while it was calm, and lowering its capacity
+				// would not have saved those.
+				var calmOnes []placed
+				for _, p := range measured {
+					if !p.Pressured {
+						calmOnes = append(calmOnes, p)
+					}
+				}
+				f.NextSteps = append(f.NextSteps, calmSteps(host, calmOnes, "while it was calm, so its load does not explain them")...)
+			}
 		case e.PressuredMinutes == 0:
 			f.Dominant = HostNotPressured
-			f.Summary = fmt.Sprintf("%s was not under pressure in any minute it was measured, so its %d %s did not come from its load.",
-				host, len(measured), what)
+			// What is known is that pressure was absent, not that load
+			// played no part: CPU held by an unlimited runner, which the
+			// throttle also counts, is not in a sample.
+			f.Summary = fmt.Sprintf("%s was not under pressure in any minute it was measured, so none of %s came under pressure%s.",
+				host, theMeasured(what), gap)
 		case ce*2 >= len(measured):
 			f.Dominant = HostNotPressured
-			f.Summary = fmt.Sprintf("%s's %s do not cluster in its busy minutes: %d of %d came while it was calm.", host, what, ce, len(measured))
+			f.Summary = fmt.Sprintf("%s's %s do not cluster in its busy minutes: %d of %d came while it was calm%s.", host, what, ce, len(measured), gap)
 		default:
 			// Most came while it was busy, but it was busy most of the
 			// time: saying how many came while calm would hide that.
 			f.Dominant = HostNotPressured
-			f.Summary = fmt.Sprintf("%s's %s do not cluster in its busy minutes: %d of %d came while it was under pressure, but it was under pressure for %s %s.",
-				host, what, pe, len(measured), share(e.PressuredMinutes, e.Minutes), ofPeriod(e.Minutes))
+			f.Summary = fmt.Sprintf("%s's %s do not cluster in its busy minutes: %d of %d came while it was under pressure, but it was under pressure for %s %s%s.",
+				host, what, pe, len(measured), share(e.PressuredMinutes, e.Minutes), ofPeriod(e.Minutes), gap)
 		}
 		if f.Dominant == HostNotPressured {
-			f.NextSteps = append(f.NextSteps, calmSteps(host, measured)...)
+			f.NextSteps = append(f.NextSteps, calmSteps(host, measured, "whether or not it was busy, so its load is not why")...)
 		}
 		var reasons []string
 		if len(measured) < confidentPressureEvents {
-			reasons = append(reasons, fmt.Sprintf("only %d %s came in a measured minute, too few to be sure of the pattern", len(measured), what))
+			reasons = append(reasons, fmt.Sprintf("only %d %s came in a measured minute, too few to be sure of the pattern", len(measured), badWords(measured)))
+		}
+		if e.Unmeasured*10 > len(events) {
+			reasons = append(reasons, fmt.Sprintf("%d of its %d %s came in minutes with no sample", e.Unmeasured, len(events), badWords(events)))
+		}
+		if clustered && ce > pe {
+			reasons = append(reasons, fmt.Sprintf("only %d of %d came while it was under pressure, and the other %d came while it was calm", pe, len(measured), ce))
 		}
 		if e.Minutes*10 < e.ExpectedMinutes*9 {
 			reasons = append(reasons, "samples cover "+coverage(e.Minutes, e.ExpectedMinutes)+" of the period")
@@ -442,12 +480,20 @@ type drawn struct {
 }
 
 // threshold draws a line on each measure at the 20th percentile of the
-// events' values, so four in five of them are at or above it, and keeps the
-// line that leaves the fewest minutes above it. A line separates only when
-// the events above it are at least twice as dense, a minute, as those below,
-// the same rule that says the events cluster; a line under every minute
-// separates nothing. It returns the line, how many events came at or above
-// it, and the events that measure covers.
+// events' values, so four in five of them are at or above it. A line
+// separates only when the share of events at or above it is at least twice
+// the share of minutes: a line most minutes are above says nothing about
+// when things went wrong, however many events are above it too, and with
+// every event above the line (as three events always are) a rule about the
+// events below it would pass anything. The rule also means the events above
+// are at least twice as dense, a minute, as those below, the rule that says
+// the events cluster.
+//
+// Of the lines that separate, the one leaving the fewest minutes above it is
+// kept, but CPU only when neither load nor memory separates: the throttle
+// never acts on CPU alone, so a CPU line beside a step about the throttle
+// would point at a measure it does not use. It returns the line, how many
+// events came at or above it, and the events that measure covers.
 func threshold(events []placed, samples map[time.Time]HostMinute) (*drawn, int, []placed) {
 	var best *drawn
 	var bestAbove int
@@ -481,8 +527,10 @@ func threshold(events []placed, samples map[time.Time]HostMinute) (*drawn, int, 
 				}
 			}
 		}
-		below, minutesBelow := len(values)-above, minutes-minutesAbove
-		if minutesBelow == 0 || above*minutesBelow < 2*below*minutesAbove {
+		if above*minutes < 2*minutesAbove*len(values) {
+			continue
+		}
+		if m.name == MeasureCPUPercent && best != nil {
 			continue
 		}
 		d := &drawn{PressureThreshold: PressureThreshold{Measure: m.name, Value: line,
@@ -496,21 +544,22 @@ func threshold(events []placed, samples map[time.Time]HostMinute) (*drawn, int, 
 	return best, bestAbove, bestWith
 }
 
-// calmSteps say where to look when the host's load is not why: one step for
-// each kind of thing that went wrong, in a fixed order.
-func calmSteps(host string, events []placed) []NextStep {
+// calmSteps say where to look for what the host's load does not explain:
+// one step for each kind of thing that went wrong, in a fixed order. when
+// says which events those are, "while it was calm, so ...".
+func calmSteps(host string, events []placed, when string) []NextStep {
 	var out []NextStep
 	if hasKind(events, EventFailure, false) {
 		out = append(out, NextStep{Code: "jobs.workflow_failing", Text: fmt.Sprintf(
-			"%s's failures came whether or not it was busy, so its load is not why; what each job failed on, a step of its own or a fault the fleet recorded, says what to fix.", host)})
+			"%s's failures came %s; what each job failed on, a step of its own or a fault the fleet recorded, says what to fix.", host, when)})
 	}
 	if hasKind(events, EventOOM, false) {
 		out = append(out, NextStep{Code: "jobs.oom_killed", Setting: "pool.resources.memory_mb", Text: fmt.Sprintf(
-			"Jobs on %s were killed for their memory limit whether or not it was busy, so the limit is too small for them; the memory their pool gives each runner is what to raise.", host)})
+			"Jobs on %s were killed for their memory limit %s: the limit is too small for them, and the memory their pool gives each runner is what to raise.", host, when)})
 	}
 	if hasKind(events, EventSlowStartup, false) {
 		out = append(out, NextStep{Code: "pool.queue_wait_high", Setting: "pool.min_runners", Text: fmt.Sprintf(
-			"Runners on %s were slow to start whether or not it was busy; warm runners kept by a pool's minimum runners hide startup from its jobs.", host)})
+			"Runners on %s were slow to start %s; warm runners kept by a pool's minimum runners hide startup from its jobs.", host, when)})
 	}
 	return out
 }
