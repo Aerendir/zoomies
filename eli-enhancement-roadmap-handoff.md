@@ -31,14 +31,14 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 snapshot assembly | Merged | [#935](https://github.com/eyupio/zoomies/pull/935), following its merged parents | Focused controller/analysis race tests pass; verifies repository/installation/run/job joins, preserves incomplete evidence, and separates check reporting from job execution |
 | E1 on-demand collector | Merged | [#938](https://github.com/eyupio/zoomies/pull/938), following the merged foundations | Collector/assembly/core/reader race tests and changed-package vet pass; selects the existing job's installation, bounds collection, respects installation holds and labels the window basis |
 | E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
-| E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and model scenarios remain |
+| E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and scripted scenarios merged in #959 |
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
-| E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Full-suite rerun result still pending |
+| E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
-| E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; affected install/upgrade race checks pass |
-| E7 ledger fixture isolation | Draft PR, not merged | [#965](https://github.com/eyupio/zoomies/pull/965), following merged validation parents | Proxmox ledger package race tests pass with a temporary directory and checked opening error; no live e2e cluster run |
-| E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
+| E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; complete installer package race tests pass |
+| E7 ledger fixture isolation | Merged | [#965](https://github.com/eyupio/zoomies/pull/965), following merged validation parents | Proxmox ledger package race tests pass with a temporary directory and checked opening error; no live e2e cluster run |
+| E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; Broad run and complete corrective package checks finished; all failed packages now have passing reruns, with controller coverage split over its complete test list. The original full command did not pass. No live model evaluation or performance experiment has run |
 
 The first validation attempt was blocked by a missing Go compiler and shell
 network access. Explicit per-command network access resolved connectivity;
@@ -51,14 +51,13 @@ toolchain remains in `/tmp/eli-toolchain/go`. Use
 `GOCACHE=/workspace/eli-tooling/go-cache`, `GOPATH=/tmp/eli-go-path`,
 `GOTMPDIR=/workspace/eli-tooling/tmp` and `TMPDIR=/workspace/eli-tooling/tmp`
 for subsequent checks in this workspace. Interrupted full checks did not pass.
-The full rerun was also interrupted during process cleanup; current verification
-uses focused race tests for the collector, assembler, core and reader, plus
-changed-package vet. Keep full-suite and full lint verification outstanding
-rather than carrying a "running" status forward. A fresh `make lint` subsequently
+An early rerun was also interrupted during process cleanup. Those attempts were
+not passes. The later broad run and corrective package checks are now complete;
+the evidence below supersedes the old pending verification status. `make lint`
 passed for the API slice (normal/e2e/drill/load vet, Go formatting and web lint);
-staticcheck was not installed and skipped. `mkdocs build --strict` passed in
-`/workspace/eli-tooling/docs-venv`, using the repository-only header fallback
-when optional GitHub release/repository header lookups were denied.
+staticcheck was unavailable and skipped. UI lint, Svelte checks and asset budgets
+passed for #959. Strict MkDocs builds passed using the repository-only header
+fallback when optional GitHub header lookups were denied.
 
 PR #943 conflict resolution: merged `main` at `de28a68c` into the API
 branch. The OpenAPI source merged cleanly; regenerated the embedded contract
@@ -79,30 +78,38 @@ Current implementation plans:
 - [Installer fixture permissions](roadmap/plans/2026-10-12-eli-installer-fixture-validation.md).
 - [Ledger fixture isolation](roadmap/plans/2026-10-12-eli-ledger-fixture-validation.md).
 
-The full-suite rerun found a storage fixture that relied on a permissive umask.
-This workspace uses `0077`, so requesting `0755` through Mkdir created a private
-`0700` directory and defeated the refusal test's setup. The fixture now explicitly
-sets `0755`; all aicontext package race tests pass after that correction. The original full run also reached the API package's ten-minute deadline while
-creating a test database. A complete API race rerun has a thirty-minute budget.
-The backend's mode-copy fixture exposed masked destination permissions; explicitly
-setting source 0755 still failed before the fix. The fallback copy now restores
-source permissions after copying, and the backend package race tests pass.
-The installer previous-binary fixture had the same umask assumption: its source
-was 0700 rather than the asserted 0755. Explicit fixture chmod corrects that
-setup; the affected install/upgrade race checks pass. The controller package
-also reached the ten-minute package deadline and is rerunning with thirty
-minutes. The original broad run completed with 44 passing packages. It failed in seven
-packages: storage fixture, fallback-copy mode, installer fixture, Proxmox ledger
-fixture, and the API/controller/store ten-minute deadlines. The ledger test had
-omitted its temporary-directory override and ignored the opening error; it now
-uses the existing fixture helper and checks that error. The complete normal
-Proxmox package race tests pass (no live e2e tag or cluster run). The complete API race rerun passes with its thirty-minute budget (1380.705 seconds).
-The complete store race rerun also passes (1122.901 seconds). Controller reached
-its thirty-minute package deadline, with no assertion failure reported, at a
-newly started webhook test. Its 1329 listed tests are now split into disjoint
-665/664 groups, covering the full list with separate race-test budgets. The corrected fixture
-and backend checks pass separately; the original full command did not pass. Record its final result, including failures,
-before claiming full-suite verification.
+## Completed broad validation
+
+The original `go test -race -count=1 -p 2 ./...` finished with 44 passing
+packages and seven failing packages. Four issues were corrected in merged PRs
+#960, #961, #962 and #965: a public-directory fixture masked by umask 0077,
+fallback copies losing source permissions, a previous-binary fixture with the
+same umask assumption, and a ledger fixture writing outside its temporary
+workspace and ignoring its opening error. API/controller/store hit package
+wall-clock deadlines while continuing through tests.
+
+Every originally failing package has successful corrective race checks:
+
+| Package | Completed verification | Result |
+| --- | --- | --- |
+| aicontext | Complete package, after explicit fixture permissions | Pass, 18.349 s |
+| backend | Complete package, after mode restoration; focused test failed before correction | Pass, 32.369 s |
+| installer | Complete package, after explicit previous-binary fixture mode | Pass, 140.344 s |
+| test/e2e/proxmox | Complete normal package, after ledger fixture isolation | Pass, 9.440 s; no live e2e tag or cluster operations |
+| API | Complete package with `-timeout 30m` | Pass, 1380.705 s |
+| store | Complete package with `-timeout 30m` | Pass, 1122.901 s |
+| controller | All 1329 listed tests, disjoint 665/664 groups, each with its own race-test budget | Both pass, 801.357 s and 844.029 s |
+
+Controller's single thirty-minute package run also reached its deadline without
+an assertion failure. The complete partition is reproducible from the
+[ledger validation plan](roadmap/plans/2026-10-12-eli-ledger-fixture-validation.md).
+This is verification across the broad run and complete corrective runs; do not
+claim the original full command passed. No validation command remains running.
+
+See the [validation record](roadmap/validation/2026-10-12-eli-pr-delay-validation.md)
+for commands, tested changes, environment and limits. A live model evaluation
+and a real performance experiment remain unrun. E2 to E6 remain unstarted;
+reconcile the E2 comparison contract with ZF-241 before activating new work.
 
 The next agent should start from the stack tip, check which parent PRs have
 merged and preserve each PR's focused diff. Never merge or retarget a parent
