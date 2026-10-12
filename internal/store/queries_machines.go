@@ -128,9 +128,13 @@ func (s *Store) GetMachineByHost(ctx context.Context, hostID string) (*Machine, 
 // GetMachineByResource answers the question a sweep asks about every resource
 // it finds: is this one of ours, and which row is it? A resource with no row is
 // an orphan, and an orphan is never deleted without a person saying so.
+//
+// A machine whose resource the provider has confirmed gone no longer answers for
+// it. The id is free to be given to the next machine, and a resource that turns
+// up under it afterwards was made by somebody else.
 func (s *Store) GetMachineByResource(ctx context.Context, providerID, zone, resourceID string) (*Machine, error) {
 	row := s.read.QueryRowContext(ctx, `SELECT `+machineCols+` FROM machines
-		WHERE provider_id = ? AND resource_zone = ? AND resource_id = ?`, providerID, zone, resourceID)
+		WHERE provider_id = ? AND resource_zone = ? AND resource_id = ? AND deleted_at IS NULL`, providerID, zone, resourceID)
 	m, err := scanMachine(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("machine for %s %s on %s: %w", providerID, resourceID, zone, ErrNotFound)

@@ -12338,6 +12338,14 @@ components:
           description: Where Zoomies reaches the provider. Not a secret - it is the address an operator typed - and showing it is how somebody tells two clusters apart on a page listing both.
           examples: ["https://pve.example.com:8006"]
         insecure_skip_verify: { type: boolean, description: Certificate verification is off for this provider, which the validator warns about rather than refusing. }
+        ca_pem:
+          type: string
+          description: >-
+            The certificate Zoomies trusts for this endpoint instead of the system's. It is
+            the public half of a cluster's own authority and not a secret, so it is returned:
+            a form can only keep what it is shown, and a box that opens empty would clear it
+            on the next save. Absent when none is set, and when what is stored is not
+            entirely certificates.
         connection:
           type: string
           enum: [direct, tailcat]

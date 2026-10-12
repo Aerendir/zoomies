@@ -9315,6 +9315,8 @@ export interface components {
             endpoint?: string;
             /** @description Certificate verification is off for this provider */
             insecure_skip_verify?: boolean;
+            /** @description The certificate Zoomies trusts for this endpoint instead of the system's. It is the public half of a cluster's own authority and not a secret, so it is returned: a form can only keep what it is shown, and a box that opens empty would clear it on the next save. Absent when none is set, and when what is stored is not entirely certificates. */
+            ca_pem?: string;
             /**
              * @description How the controller reaches the endpoint: over the network, or through a `zoomies gateway` running beside the provider, for a hypervisor on a home network with no address the controller can route to. The gateway's address is sealed on the row and never returned, for the credential's reason.
              * @enum {string}

@@ -221,6 +221,11 @@ export function draftFromProvider(provider: Provider): ProviderDraft {
     kind: provider.kind ?? '',
     name: provider.name ?? '',
     endpoint: provider.endpoint ?? '',
+    // The box opens with what is trusted. The credential and the gateway address
+    // come back empty because they are sealed and an empty box keeps them; the
+    // certificate is neither, so an empty box means "none" and saving one would
+    // clear what the connection depends on.
+    ca_pem: provider.ca_pem ?? '',
     insecure_skip_verify: provider.insecure_skip_verify === true,
     connection: provider.connection === 'tailcat' ? 'tailcat' : 'direct',
     tailcat_configured: provider.connection === 'tailcat',

@@ -1771,6 +1771,9 @@ type ProviderView struct {
 	// somebody tells two clusters apart on a page listing both.
 	Endpoint           string `json:"endpoint,omitempty"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty"`
+	// CAPEM is the certificate this controller trusts for the endpoint instead of
+	// the system's.
+	CAPEM string `json:"ca_pem,omitempty"`
 	// Connection is how the endpoint is reached: "direct" over the network,
 	// or "tailcat" through a gateway beside the provider. The gateway's
 	// address is sealed on the row and, like the credential, has no field
@@ -1843,6 +1846,7 @@ func (c *Controller) ProviderView(p *store.Provider, machines []*store.Machine) 
 		Name:                  p.Name,
 		Endpoint:              p.Endpoint,
 		InsecureSkipVerify:    p.InsecureSkipVerify,
+		CAPEM:                 certificateAuthority(p.CAPEM),
 		Connection:            providerConnection(p),
 		Settings:              emptyMap(p.Settings),
 		CredentialsConfigured: len(p.CredentialsEnc) > 0,

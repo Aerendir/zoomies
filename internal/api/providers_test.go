@@ -83,6 +83,114 @@ func TestAnEmptyCredentialLeavesTheStoredOneAlone(t *testing.T) {
 	}
 }
 
+// The certificate a provider trusts is the public half of a cluster's own
+// authority, not a secret, and a form can only keep what it is shown. It comes
+// back in the provider's response so that the edit form opens with the box
+// filled in: a box that opens empty reads as "nothing is trusted", and saving it
+// then clears the one thing the connection depends on.
+func TestAProviderReturnsTheCertificateItTrusts(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.user("admin", store.RoleAdmin)
+	cookie := h.session(admin)
+	cert := strings.TrimSpace(setupCertificate(t))
+
+	created := h.do(request{method: http.MethodPost, path: "/api/v1/providers", cookie: cookie,
+		body: map[string]any{"kind": "fake", "name": "proxmox-lab", "endpoint": "https://pve.example.com:8006",
+			"credential": "zoomies@pve!ci=secret", "ca_pem": cert, "settings": map[string]string{"zone": "zone-a"}}})
+	created.mustStatus(t, http.StatusCreated, "create provider")
+	var made providerResponse
+	created.into(t, &made)
+	if made.CAPEM != cert {
+		t.Errorf("the created provider answers ca_pem = %q, want the certificate it was given", made.CAPEM)
+	}
+
+	got := h.do(request{method: http.MethodGet, path: "/api/v1/providers/" + made.ID, cookie: cookie})
+	got.mustStatus(t, http.StatusOK, "get provider")
+	var read providerResponse
+	got.into(t, &read)
+	if read.CAPEM != cert {
+		t.Errorf("reading the provider back answers ca_pem = %q, want the certificate it trusts", read.CAPEM)
+	}
+}
+
+// A PATCH leaves what it does not name alone. This is the half of the contract
+// the edit form relies on once it is shown the certificate, so it is pinned
+// beside the half that clears one.
+func TestAnEditThatDoesNotMentionTheCertificateKeepsIt(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.user("admin", store.RoleAdmin)
+	cookie := h.session(admin)
+	prov := h.provider("proxmox-lab")
+	cert := strings.TrimSpace(setupCertificate(t))
+	h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie,
+		body: map[string]any{"ca_pem": cert}}).mustStatus(t, http.StatusOK, "set the certificate")
+
+	h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie,
+		body: map[string]any{"name": "proxmox-lab-2"}}).mustStatus(t, http.StatusOK, "rename the provider")
+
+	row, err := h.st.GetProvider(h.ctx, prov.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	if row.CAPEM != cert {
+		t.Errorf("a rename changed the stored certificate to %q", row.CAPEM)
+	}
+}
+
+// Emptying the box is how an operator goes back to the system's trust store,
+// which a cluster that moves to a publicly trusted certificate has to do: a CA
+// that is set replaces the system's pool, so the old one would refuse the new
+// certificate.
+func TestAnEmptyCertificateOnAnEditClearsIt(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.user("admin", store.RoleAdmin)
+	cookie := h.session(admin)
+	prov := h.provider("proxmox-lab")
+	cert := strings.TrimSpace(setupCertificate(t))
+	h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie,
+		body: map[string]any{"ca_pem": cert}}).mustStatus(t, http.StatusOK, "set the certificate")
+
+	h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie,
+		body: map[string]any{"ca_pem": ""}}).mustStatus(t, http.StatusOK, "clear the certificate")
+
+	row, err := h.st.GetProvider(h.ctx, prov.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	if row.CAPEM != "" {
+		t.Errorf("an empty certificate left %q stored", row.CAPEM)
+	}
+}
+
+// A key pasted into the certificate box by mistake was never checked on the way
+// in (a cluster keeps its authority's private half beside the public one), so it
+// can already be stored. It must not be sent on to every page, event and audit
+// row that renders a provider.
+func TestAProviderResponseNeverCarriesAKeyPastedAsACertificate(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.user("admin", store.RoleAdmin)
+	cookie := h.session(admin)
+	prov := h.provider("proxmox-lab")
+	row, err := h.st.GetProvider(h.ctx, prov.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	row.CAPEM = "-----BEGIN PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END PRIVATE KEY-----"
+	if err := h.st.UpdateProvider(h.ctx, row); err != nil {
+		t.Fatalf("UpdateProvider: %v", err)
+	}
+
+	for _, resp := range []*response{
+		h.do(request{method: http.MethodGet, path: "/api/v1/providers", cookie: cookie}),
+		h.do(request{method: http.MethodGet, path: "/api/v1/providers/" + prov.ID, cookie: cookie}),
+	} {
+		resp.mustStatus(t, http.StatusOK, "read providers")
+		if strings.Contains(string(resp.body), "PRIVATE KEY") || strings.Contains(string(resp.body), "bm90IGEgcmVhbCBrZXk") {
+			t.Fatalf("a provider response carries the key: %s", truncate(resp.body))
+		}
+	}
+}
+
 // The machines a provider already owns are its kind's machines, managed by its
 // kind's driver. A kind that could be edited would leave them being reasoned
 // about by a driver that has never heard of them.

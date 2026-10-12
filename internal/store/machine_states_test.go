@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -133,6 +134,81 @@ func TestAMachineIsFoundByTheResourceItNames(t *testing.T) {
 	}
 	if _, err := s.GetMachineByResource(ctx, p.ID, "pve-1", "144"); err == nil {
 		t.Error("a machine answered for an id it does not have")
+	}
+}
+
+// A VM id is only unique among the VMs that exist. A hypervisor is asked for the
+// lowest free id in the range an operator allowed, so once a machine's VM has
+// been destroyed and the provider has confirmed it gone, the next machine is
+// given the same id. The old row stays, for the record of what was rented, and
+// it must not stand in the way: if it does, every allocation after the first
+// deletion picks the id the history still holds, and the provider can never
+// build another machine.
+func TestAMachineCanTakeTheResourceOfOneConfirmedGone(t *testing.T) {
+	now := time.Date(2026, 10, 12, 6, 0, 0, 0, time.UTC)
+	s := newTestStoreAt(t, func() time.Time { return now })
+	ctx := context.Background()
+	p := seedProvider(t, s)
+
+	old := seedMachine(t, s, p.ID, MachineDeleting)
+	if err := s.SetMachineResource(ctx, old.ID, "pve-1", "9000", "fingerprint", "ctl_one"); err != nil {
+		t.Fatalf("SetMachineResource: %v", err)
+	}
+	if _, err := s.ConfirmMachineDeleted(ctx, old.ID, now); err != nil {
+		t.Fatalf("ConfirmMachineDeleted: %v", err)
+	}
+
+	next := seedMachine(t, s, p.ID, MachinePlanned)
+	if err := s.SetMachineResource(ctx, next.ID, "pve-1", "9000", "fingerprint", "ctl_one"); err != nil {
+		t.Fatalf("a machine could not take the id of one confirmed gone: %v", err)
+	}
+
+	found, err := s.GetMachineByResource(ctx, p.ID, "pve-1", "9000")
+	if err != nil {
+		t.Fatalf("GetMachineByResource: %v", err)
+	}
+	if found.ID != next.ID {
+		t.Errorf("the id answers for %s, want the machine that holds it now, %s", found.ID, next.ID)
+	}
+}
+
+// The other half of that rule. Until the provider has confirmed a resource gone
+// it is still somebody's, and a second row naming it would be two machines each
+// believing they own one VM.
+func TestTwoMachinesCannotOwnTheSameResourceAtOnce(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	p := seedProvider(t, s)
+
+	first := seedMachine(t, s, p.ID, MachineDeleting)
+	if err := s.SetMachineResource(ctx, first.ID, "pve-1", "9000", "fingerprint", "ctl_one"); err != nil {
+		t.Fatalf("SetMachineResource: %v", err)
+	}
+	second := seedMachine(t, s, p.ID, MachinePlanned)
+	if err := s.SetMachineResource(ctx, second.ID, "pve-1", "9000", "fingerprint", "ctl_one"); err == nil {
+		t.Error("a second machine was given a resource the first still owns")
+	}
+}
+
+// An id that only a machine confirmed gone ever named is nobody's. A VM that
+// turns up under it was made by someone else, which makes it an orphan to report
+// and never a machine to manage.
+func TestAResourceOnlyAMachineConfirmedGoneNamedIsNotOurs(t *testing.T) {
+	now := time.Date(2026, 10, 12, 6, 0, 0, 0, time.UTC)
+	s := newTestStoreAt(t, func() time.Time { return now })
+	ctx := context.Background()
+	p := seedProvider(t, s)
+
+	old := seedMachine(t, s, p.ID, MachineDeleting)
+	if err := s.SetMachineResource(ctx, old.ID, "pve-1", "9000", "fingerprint", "ctl_one"); err != nil {
+		t.Fatalf("SetMachineResource: %v", err)
+	}
+	if _, err := s.ConfirmMachineDeleted(ctx, old.ID, now); err != nil {
+		t.Fatalf("ConfirmMachineDeleted: %v", err)
+	}
+
+	if _, err := s.GetMachineByResource(ctx, p.ID, "pve-1", "9000"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetMachineByResource for an id only a gone machine named = %v, want ErrNotFound", err)
 	}
 }
 
