@@ -131,8 +131,8 @@ func (e *AssistantChatInvalid) Error() string { return e.Message }
 // words and the model's earlier answers are accepted: a system or tool message
 // from a client would be a way to speak with the operator's voice.
 type AssistantChatMessage struct {
-	Role    string
-	Content string
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // AssistantChatRequest is a conversation so far, ending in a question. The
