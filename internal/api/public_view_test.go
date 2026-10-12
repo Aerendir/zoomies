@@ -36,7 +36,7 @@ func TestAVisitorReadsTheFleetAndIsRefusedEverythingElse(t *testing.T) {
 		t.Run(rt.method+" "+rt.path, func(t *testing.T) {
 			resp := h.do(request{method: rt.method, path: rt.path, body: rt.body})
 			allowed := rt.path == "/api/v1/auth/session" ||
-				(rt.action != "" && !rt.accountOnly && rt.role == store.RoleViewer && slices.Contains(reach, rt.action.Scope()))
+				(rt.action != "" && !rt.accountOnly && !rt.visitorDenied && rt.role == store.RoleViewer && slices.Contains(reach, rt.action.Scope()))
 			if allowed {
 				if resp.status == http.StatusUnauthorized || resp.status == http.StatusForbidden {
 					t.Fatalf("a visitor was refused %d: %s", resp.status, truncate(resp.body))

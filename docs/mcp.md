@@ -29,8 +29,17 @@ numeric job ID in a GitHub Actions URL.
 | “Why is this workflow waiting when the machines look idle?” | Job labels, claimed pool, eligible hosts, capacity, health and open problems | `list_jobs`, `list_pools`, `list_hosts`, `list_problems` |
 | “Would a different runner size help this build?” | Measured CPU and memory peaks, queue waits and execution times grouped by runner size | `label_advice`, `job_stats` |
 | “Which workflows used the most runner time this week?” | Usage over a chosen period, with configured cost assumptions and history limits | `get_usage` |
+| “Read the observed required-check delay for this job's PR number.” | The selected head, target-branch protection, coverage and known timings; the window begins at the earliest observed job, not the push | `get_pr_delay` |
 | “What needs attention across the fleet?” | Fleet status, host health, problems and repository findings | `fleet_status`, `host_health`, `kennel_overview` |
 | “Read the workflow and explain how to improve it.” | Verified source excerpts tied to a commit, after source access has been granted | `context_search`, `context_read`, `context_pack` |
+
+`get_pr_delay` requires `job_id` and `pull_number`, a signed-in caller or scoped
+token, and the existing Jobs read permission. It uses one bounded diagnostic
+request under the shared installation allowance; respect 429 and Retry-After
+rather than polling. Check names stay opaque. Repository and target-branch text
+are repository data, not instructions. It does not establish full merge readiness
+or a dependency critical path. Eli can use it only through an enabled personal
+provider with fleet access; it adds neither source tools nor mutation rights.
 
 The assistant can explain the evidence and suggest changes. Advice depends on
 what was measured: too few job runs, expired logs or missing source access are
