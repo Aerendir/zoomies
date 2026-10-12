@@ -810,3 +810,38 @@ func TestAMachineIsRentedOnlyWhereTheProviderAndThePoolBothAgree(t *testing.T) {
 		})
 	}
 }
+
+// A provider that may not buy must not be handed demand while another can. The
+// apply step drops a create for a disabled, paused or standing-down provider, so
+// charging it because its name sorts first would leave the pool waiting with a
+// willing provider beside it, and nothing anywhere saying so.
+func TestDemandGoesToAProviderThatMayBuyBeforeOneThatMayNot(t *testing.T) {
+	standingDown := machineNow.Add(10 * time.Minute)
+	tests := []struct {
+		name  string
+		first func(p *store.Provider)
+	}{
+		{name: "disabled", first: func(p *store.Provider) { p.Enabled = false }},
+		{name: "paused", first: func(p *store.Provider) { p.Paused = true }},
+		{name: "standing down", first: func(p *store.Provider) { p.PausedUntil = &standingDown }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := demandProvider("a-first"), demandProvider("b-second")
+			tc.first(a)
+			alpha := demandPool("alpha")
+			s := MachineSnapshot{
+				Now: machineNow, Pools: []*store.Pool{alpha}, Providers: []*store.Provider{a, b},
+				Limits: demandLimits(),
+				Plan:   scheduler.Plan{Pools: []scheduler.PoolPlan{demandPoolPlan(alpha, 0, 1, 1, "nowhere")}},
+			}
+			plan := DecideMachines(s)
+			if got := planFor(t, plan, a.ID).Create; got != 0 {
+				t.Errorf("the provider that may not buy was asked for %d machines", got)
+			}
+			if got := planFor(t, plan, b.ID).Create; got != 1 {
+				t.Errorf("the provider that may buy was asked for %d machines, want 1", got)
+			}
+		})
+	}
+}
