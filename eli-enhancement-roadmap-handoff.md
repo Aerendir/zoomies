@@ -36,6 +36,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Draft PR, not merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Full-suite rerun result still pending |
 | E7 fallback-copy mode correction | Draft PR, not merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
+| E7 installer fixture correction | Draft PR, not merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; affected install/upgrade race checks pass |
 | E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
 
 The first validation attempt was blocked by a missing Go compiler and shell
