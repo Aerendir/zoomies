@@ -31,7 +31,7 @@ func (b *assistantToolbox) Tools() []assistant.Tool {
 		if err != nil {
 			continue
 		}
-		out = append(out, assistant.Tool{Name: d.Name, Description: d.Description, Parameters: schema})
+		out = append(out, assistant.Tool{Name: d.Name, Description: d.Description, Parameters: schema, Live: d.Live})
 	}
 	return out
 }

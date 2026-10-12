@@ -23,12 +23,16 @@ import (
 //
 // Left out on purpose: the context_* tools, which read a repository's source and
 // are the most that could leave the building; the configuration and note tools;
+// the webhook deliveries, the audit log and the support bundle, which are
+// GitHub's whole payloads, who did what by name, and the whole instance at once;
 // and every tool that changes the fleet.
 var AssistantFleetTools = []string{
 	"fleet_status", "list_problems", "list_jobs", "get_job", "job_stats",
 	"list_runners", "list_pools", "list_hosts", "host_health", "label_advice",
 	"get_runner_log", "kennel_overview", "kennel_repository", "kennel_findings",
 	"list_providers", "provider_pairings", "list_machines", "get_catalog", "get_usage",
+	"recent_events", "wait_for_change", "scaling_decisions", "fleet_samples",
+	"host_samples", "runner_timeline", "list_workflow_runs",
 }
 
 // What one question may cost in tools. Eli answers from what it looked at, and a
@@ -105,8 +109,12 @@ type AssistantChat struct {
 	req      assistant.Request
 	box      AssistantToolbox
 	allowed  map[string]bool
-	ctx      context.Context
-	cancel   context.CancelFunc
+	// live is the offered tools whose answer is never taken from made: a wait
+	// that timed out is asked again with the cursor it gave back, which is the
+	// same call word for word and a new question.
+	live   map[string]bool
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	stream    assistant.Stream
 	rounds    int
@@ -197,8 +205,10 @@ func (a *AssistantChat) Next(ctx context.Context) (AssistantChatEvent, bool) {
 			// A call the model already made, word for word, is answered without
 			// being run or shown: the result is above it, unchanged, and a model
 			// that is told so moves on where one shown the same failure four times
-			// did not. It costs none of the calls an answer may make.
-			if _, again := a.made[callKey(call)]; again {
+			// did not. It costs none of the calls an answer may make. A live
+			// tool is the exception: its answer is what has happened since, so
+			// the same call is run again and counts like any other.
+			if _, again := a.made[callKey(call)]; again && !a.live[call.Name] {
 				told := fenceToolResult(call.Name, "You already called "+call.Name+" with these arguments in this answer; its result is above and has not changed. Do not call it again.")
 				a.req.Messages = append(a.req.Messages, assistant.Message{Role: assistant.RoleTool, ToolCallID: call.ID, Content: told})
 				continue

@@ -148,15 +148,24 @@ what lets Eli answer "why is this pool full and not renting?" from the fleet and
 from a guess. A setting only an administrator can read, such as `provider.enabled`,
 is not something Eli can see, but `list_providers` carries `renting`, which says
 whether renting is switched on and what to change, so Eli can still name it.
+It can read the fleet's recent past as well: what changed lately, the scheduler's
+decisions and the reason for each, the minute-by-minute samples of the fleet and
+of each host, a runner's timeline and the workflow runs, and it can wait for the
+next change. The audit log, the webhook deliveries and the support bundle are not
+offered to it, whoever is asking: they are who did what by name, GitHub's whole
+payloads and the whole instance at once, which is more than a question about the
+fleet should send to a model.
 When it looks, the panel says what it looked at, under the answer, and a look
 that failed says why beside its name (a code that is not in the catalog, a route
 that refused), which is the part worth reading. A call Eli makes twice with the
-same arguments is answered from the first without being run or shown again.
+same arguments is answered from the first without being run or shown again,
+except a wait for the next change, which is a new question each time it is asked.
 
 The questions an empty conversation offers come from the fleet when Eli can
-read it: the open one first, then the worst open problem by name, the jobs
-waiting, the jobs that failed and the host that is unwell, filled out from a
-fixed few on a quiet fleet. Without fleet access they are about Zoomies in
+read it: the open one first, then, while a problem is open, what changed in the
+last ten minutes, then the worst open problem by name, the jobs waiting, the jobs
+that failed and the host that is unwell, filled out from a fixed few on a quiet
+fleet. Without fleet access they are about Zoomies in
 general, so the first press is never a refusal.
 
 Every question also carries the situation: the time, your role (so "ask an

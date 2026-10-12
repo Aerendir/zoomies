@@ -25,9 +25,10 @@ test('the general list stands without fleet access, and the open question leads 
   assert.equal(fleet[0], 'How is the fleet doing right now?');
 });
 
-// A fleet with trouble asks about the trouble: the worst problem by name, the
-// jobs waiting, the jobs that failed, the host that is unwell. Nothing is
-// invented when the figure is zero, and the list is still four long.
+// A fleet with trouble asks what changed, and then about the trouble: the worst
+// problem by name, the jobs waiting, the jobs that failed, the host that is
+// unwell. Nothing is invented when the figure is zero, and the list is still
+// four long.
 test('a fleet with problems, a queue, failures and a sick host asks about those first', () => {
   const got = starterQuestions({
     fleetAccess: true,
@@ -43,10 +44,38 @@ test('a fleet with problems, a queue, failures and a sick host asks about those 
   });
   assert.equal(got.length, 4);
   assert.equal(got[0], 'How is the fleet doing right now?');
+  assert.equal(got[1], 'What changed in the last ten minutes?');
   // The error outranks the warning, whatever order the drawer listed them in.
-  assert.equal(got[1], 'Explain "Pool arm has nowhere to run" and what to do about it.');
-  assert.equal(got[2], 'Why are 6 jobs queued right now?');
-  assert.equal(got[3], 'Why did 3 jobs fail in the last hour, and was the fleet at fault for any?');
+  assert.equal(got[2], 'Explain "Pool arm has nowhere to run" and what to do about it.');
+  assert.equal(got[3], 'Why are 6 jobs queued right now?');
+});
+
+// An open problem is usually the end of something that happened, and Eli can
+// read what the fleet did lately, so the question that finds the start of it is
+// second whenever a problem is open, and never offered on a fleet with none.
+test('an open problem makes what changed lately the second question', () => {
+  const open = starterQuestions({
+    fleetAccess: true,
+    stats: stats(),
+    problems: [{ code: 'pool.no_host', severity: 'error', title: 'Pool arm has nowhere to run' }],
+    hosts: [],
+  });
+  assert.equal(open[1], 'What changed in the last ten minutes?');
+  assert.equal(open.length, 4);
+  const busy = starterQuestions({
+    fleetAccess: true,
+    stats: stats({ queued_jobs: 2, failed: 1 }),
+    problems: [],
+    hosts: [{ name: 'ubuntu-skull', healthy: false }],
+  });
+  assert.ok(!busy.includes('What changed in the last ten minutes?'), busy.join(' | '));
+  const general = starterQuestions({
+    fleetAccess: false,
+    stats: stats(),
+    problems: [{ code: 'pool.no_host', severity: 'error', title: 'Pool arm has nowhere to run' }],
+    hosts: [],
+  });
+  assert.ok(!general.includes('What changed in the last ten minutes?'), general.join(' | '));
 });
 
 // With less going on, the host and the second problem get their turn, and the
@@ -62,9 +91,9 @@ test('quieter fleets fill the list from the host, the next problem and the defau
   });
   assert.deepEqual(sick, [
     'How is the fleet doing right now?',
+    'What changed in the last ten minutes?',
     'Explain "A host has stopped answering" and what to do about it.',
     'What is wrong with host ubuntu-skull?',
-    'Which jobs are queued, and why?',
   ]);
   const quiet = starterQuestions({ fleetAccess: true, stats: null, problems: [], hosts: [] });
   assert.deepEqual(quiet, [

@@ -18,3 +18,13 @@ test('the catalog is named as what it is, not by its route', () => {
   assert.equal(toolLabel('get_catalog'), 'the catalog of codes and checks');
   assert.equal(toolLabel('get_usage'), 'usage and cost');
 });
+
+// The window's tools read as what a person would ask about, so a look at
+// list_workflow_runs is not shown as "Looked at list workflow runs".
+test('the fleet window is named for what it shows', () => {
+  assert.equal(toolLabel('recent_events'), 'what changed lately');
+  assert.equal(toolLabel('wait_for_change'), 'the next change');
+  assert.equal(toolLabel('scaling_decisions'), 'the scheduler’s decisions');
+  assert.equal(toolLabel('host_samples'), 'hosts minute by minute');
+  assert.equal(toolLabel('list_workflow_runs'), 'workflow runs');
+});

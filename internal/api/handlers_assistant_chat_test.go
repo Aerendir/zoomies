@@ -10,6 +10,7 @@ import (
 	"github.com/eyupio/zoomies/internal/assistant/assistanttest"
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/controller"
+	"github.com/eyupio/zoomies/internal/events"
 	"github.com/eyupio/zoomies/internal/mcp"
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -492,6 +493,11 @@ func TestEveryReadToolIsOnElisListOrLeftOffOnPurpose(t *testing.T) {
 		"context_search":   "reads a repository's source",
 		"context_pack":     "reads a repository's source",
 		"context_notes":    "repository notes, written by people for agents",
+		// These three are left off by the owner's choice, not by role: a viewer
+		// may read the audit, and still Eli is not offered it.
+		"list_webhook_deliveries": "a delivery is GitHub's whole payload",
+		"list_audit":              "who did what, by name, is not for a hosted model",
+		"support_bundle":          "the whole instance in one document",
 	}
 	defs := mcp.New(nil, mcp.Options{}).Definitions()
 	have := map[string]bool{}
@@ -513,6 +519,81 @@ func TestEveryReadToolIsOnElisListOrLeftOffOnPurpose(t *testing.T) {
 		if !have[name] {
 			t.Errorf("%s is named as left off and the MCP server no longer has it: take it off the list", name)
 		}
+	}
+}
+
+// toolRuns counts, per tool, the looks the page was told had started. A call
+// answered from what an earlier one said is never started, so this is also how
+// often the toolbox was asked.
+func toolRuns(got []frame) map[string]int {
+	runs := map[string]int{}
+	for _, f := range got {
+		if f.kind == "tool" && f.data["status"] == "running" {
+			runs[f.data["name"].(string)]++
+		}
+	}
+	return runs
+}
+
+// A wait that ran out of time hands back the cursor it was given, so the next
+// wait is word for word the last one. Answered from the first, the model would
+// be told nothing changed for as long as it kept asking, and told not to ask
+// again, which is the opposite of what wait_for_change is for. Every other tool
+// asked the same thing twice is still answered from the first time.
+func TestALiveToolIsNotAnsweredFromTheCache(t *testing.T) {
+	h, cookie, srv := chatHarness(t)
+	allowFleetAccess(t, h, cookie, true)
+	job := h.job(h.pool(h.installation(), "linux"), store.JobQueued)
+	bus := h.ctrl.Events()
+	bus.Publish(events.KindJobUpdated, "job:"+job.ID, map[string]any{"id": job.ID, "state": "queued"})
+	wait := `{"since":"` + bus.WireID(bus.LastID()) + `","seconds":1}`
+	get := `{"job_id":"` + job.ID + `"}`
+	srv.Script = []assistanttest.Round{
+		{Calls: []assistanttest.Call{{Name: "wait_for_change", Arguments: wait}, {Name: "get_job", Arguments: get}}},
+		{Calls: []assistanttest.Call{{Name: "wait_for_change", Arguments: wait}, {Name: "get_job", Arguments: get}}},
+		{Text: "Nothing has moved yet; the job is still queued."},
+	}
+	resp := h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, readStream: true, body: chatBody("user", "Tell me when the job starts.")})
+	resp.mustStatus(t, http.StatusOK, "asking")
+	got := frames(t, resp.body)
+	if runs := toolRuns(got); runs["wait_for_change"] != 2 || runs["get_job"] != 1 {
+		t.Errorf("tool runs = %v, want wait_for_change twice and get_job once", runs)
+	}
+	done := got[len(got)-1]
+	if done.kind != "done" || !slices.Equal(anyStrings(done.data["tools"]), []string{"wait_for_change", "get_job", "wait_for_change"}) {
+		t.Errorf("done = %+v", done)
+	}
+}
+
+// The reads left off Eli's list are left off whoever asks: this administrator
+// could read the audit for themselves, and their Eli still may not. A model that
+// knows a tool's name from elsewhere and asks for it by name is told it was not
+// offered, and the toolbox is never asked.
+func TestEliRefusesAReadLeftOffItsListByName(t *testing.T) {
+	h, cookie, srv := chatHarness(t)
+	allowFleetAccess(t, h, cookie, true)
+	srv.Script = []assistanttest.Round{
+		{Calls: []assistanttest.Call{{Name: "list_audit", Arguments: `{}`}}},
+		{Text: "I cannot read the audit log."},
+	}
+	resp := h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, readStream: true, body: chatBody("user", "Who changed the pool?")})
+	resp.mustStatus(t, http.StatusOK, "asking")
+	reqs := chatRequests(srv)
+	if len(reqs) != 2 {
+		t.Fatalf("the model was asked %d times, want 2", len(reqs))
+	}
+	if slices.Contains(toolsOffered(reqs[0].Body), "list_audit") {
+		t.Error("list_audit was offered")
+	}
+	msgs, _ := reqs[1].Body["messages"].([]any)
+	last, _ := msgs[len(msgs)-1].(map[string]any)
+	if content, _ := last["content"].(string); last["role"] != "tool" || !strings.Contains(content, "not one you were offered") {
+		t.Errorf("the call by name was answered with %v", last)
+	}
+	got := frames(t, resp.body)
+	done := got[len(got)-1]
+	if done.kind != "done" || len(anyStrings(done.data["tools"])) != 0 {
+		t.Errorf("the toolbox was asked: done = %+v", done)
 	}
 }
 
