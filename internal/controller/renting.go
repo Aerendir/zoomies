@@ -246,6 +246,7 @@ const (
 	fleetNoCeiling    = "Renting is on, but the fleet may rent no machines: a maximum of none is none."
 	fleetNoCeilingFix = "Set Machines the fleet may rent to the most machines you are willing to pay for at once."
 	fleetOn           = "Renting is on."
+	fencedOnItsWay    = "A machine for this pool was being built, but this fleet is fenced for recovery, so nothing is finishing it."
 	offOnItsWay       = "A machine for this pool was being built, but renting is switched off, so nothing is finishing it."
 )
 
@@ -321,6 +322,9 @@ type rentingInput struct {
 	Enabled     bool
 	Paused      bool
 	MaxMachines int
+	// Fenced is whether the fleet is fenced for recovery, which stops every
+	// machine step at every provider and so strands one on its way.
+	Fenced bool
 	// Held is what provisioningHeld says of each provider the pass read, by
 	// id, a row-disabled one included, without the countdown of a provider
 	// standing down. It is gathered only while renting is on: while it is off
@@ -364,7 +368,7 @@ func buildRentingView(in rentingInput) RentingView {
 		return out
 	}
 	for _, v := range in.Report.Pools {
-		out.Pools = append(out.Pools, overlayRenting(v, in.Enabled, in.Held))
+		out.Pools = append(out.Pools, overlayRenting(v, in.Enabled, in.Fenced, in.Held))
 	}
 	return out
 }
@@ -383,8 +387,16 @@ func buildRentingView(in rentingInput) RentingView {
 // Switched on, a purchase the provider may not make is held rather than
 // renting, and the fix a partial purchase named goes with it: raising a ceiling
 // does nothing for a provider that is paused.
-func overlayRenting(v PoolRenting, enabled bool, held map[string]string) PoolRenting {
+func overlayRenting(v PoolRenting, enabled, fenced bool, held map[string]string) PoolRenting {
 	if enabled {
+		if fenced && v.State == RentingOnItsWay {
+			// Nothing is created or deleted while the fleet is fenced, so the
+			// machines counted as coming are not being finished. Held, as a
+			// provider that may not buy is, because it ends the same way: when
+			// whatever holds it is lifted.
+			v.State, v.Summary, v.Machines = RentingHeld, fencedOnItsWay, 0
+			return v
+		}
 		if why := held[v.ProviderID]; why != "" && v.State == RentingBuying {
 			v.State, v.Summary, v.Fix, v.Setting = RentingHeld, "Not renting: "+why+".", "", ""
 		}
@@ -453,6 +465,7 @@ func (c *Controller) rentingNow() rentingInput {
 		Enabled:     cfg.Provider.Enabled,
 		Paused:      cfg.Provider.Paused,
 		MaxMachines: cfg.Provider.MaxMachines,
+		Fenced:      c.Fenced().Fenced,
 	}
 	if report == nil {
 		return in

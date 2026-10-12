@@ -23,6 +23,7 @@
     clearHostThrottle,
     listJoinTokens,
     listMachines,
+    getProviderRenting,
     listProviders,
     pauseProvider,
     resumeProvider,
@@ -219,9 +220,15 @@
       }
     }
     if (paused) {
+      // With renting switched off the machine loop does nothing, so drains and
+      // deletes wait too. Asked now rather than kept, because the switch can
+      // move while this page is open.
+      const rentingOff = (await getProviderRenting().catch(() => null))?.state === 'off';
       toasts.info(
         'New machines paused',
-        'Nothing new is bought. Drains, deletes and machines already on their way carry on.',
+        rentingOff
+          ? 'Nothing new is bought. Drains and deletes resume once renting is switched on.'
+          : 'Nothing new is bought. Drains, deletes and machines already on their way carry on.',
       );
     } else {
       toasts.success('New machines resumed', 'Machines may be bought again.');
