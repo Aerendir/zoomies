@@ -24,6 +24,7 @@ import (
 	"github.com/eyupio/zoomies/internal/naming"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/version"
+	"github.com/eyupio/zoomies/internal/wsl"
 )
 
 // JoinOptions configures `zoomies agent join`.
@@ -368,6 +369,19 @@ func Join(ctx context.Context, opts JoinOptions) error {
 	}
 	status, _ := mgr.Status(ctx)
 	u.ok("started (" + status + ")")
+
+	// A WSL2 distro stops when its last Windows session closes, taking the agent
+	// with it. This runs as root, which is what writing wsl.conf needs.
+	if kind == ServiceSystemd && runningUnderWSL() {
+		rep := wsl.Ensure(ctx, wsl.OS{}, wsl.Options{Binary: det.BinaryPath, User: serviceUser})
+		for _, st := range rep.Steps {
+			if st.Status == wsl.StatusWarn {
+				u.warn(st.Name + ": " + st.Detail)
+			} else if st.Status == wsl.StatusChanged {
+				u.ok(st.Name + ": " + st.Detail)
+			}
+		}
+	}
 
 	// The service is installed and the account it runs as can be read back from
 	// its unit. A refusal is a warning: the token is spent and the host is

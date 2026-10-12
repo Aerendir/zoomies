@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,6 +17,7 @@ import (
 	"github.com/eyupio/zoomies/internal/installer"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates/channel"
+	"github.com/eyupio/zoomies/internal/wsl"
 )
 
 // runAgent is `zoomies agent`: either the daemon, or its `join` subcommand.
@@ -40,16 +42,23 @@ func runAgentDaemon(ctx context.Context, e *env, args []string) error {
 	cfgPath := fs.String("config", "", "path to zoomies.yaml (default: "+config.DefaultConfigFile()+")")
 	controllerURL := fs.String("controller", "", "the controller to talk to; overrides agent.controller_url")
 	joinToken := fs.String("join-token", "", "a join token, used only when this host has no credentials yet")
+	wslEnsure := fs.Bool("wsl-ensure", false, "inside a WSL2 distro, make sure it starts at boot and stays up (wsl.conf, linger, Windows scheduled tasks), then exit; safe to run repeatedly, restarts nothing, and does nothing elsewhere")
 	logFile := fs.String("log-file", "", "append the log to this file instead of stderr (the Windows service is installed with one, because a service has no stderr anyone can read)")
 	fs.example(
 		"zoomies agent --config /etc/zoomies/zoomies.yaml",
 		"zoomies agent --controller https://zoomies.example.com --join-token zoojoin_...",
+		"sudo zoomies agent --wsl-ensure",
 	)
 	if err := fs.parse(args); err != nil {
 		return err
 	}
 	if err := fs.noMoreArgs(); err != nil {
 		return err
+	}
+	if *wslEnsure {
+		// Before the configuration is read: a scheduled task or a boot command
+		// runs this, and it must work on a host whose agent is not joined yet.
+		return runWSLEnsure(ctx, e)
 	}
 
 	if *logFile != "" {
@@ -82,6 +91,7 @@ func runAgentDaemon(ctx context.Context, e *env, args []string) error {
 	}
 
 	log, _ := setupLogging(cfg)
+	startWSLSelfManagement(ctx, log, cfg.Agent.WorkDir)
 
 	backends, err := buildBackends(ctx, cfg, log)
 	if err != nil {
@@ -326,4 +336,61 @@ func redirectOutput(e *env, path string) error {
 	os.Stdout, os.Stderr = f, f
 	e.out, e.err = f, f
 	return nil
+}
+
+// wslOptions names this binary for the boot command, resolving symlinks so that
+// wsl.conf does not point at a path an upgrade swaps out.
+func wslOptions() wsl.Options {
+	bin, err := os.Executable()
+	if err != nil {
+		return wsl.Options{}
+	}
+	if real, err := filepath.EvalSymlinks(bin); err == nil {
+		bin = real
+	}
+	return wsl.Options{Binary: bin}
+}
+
+// runWSLEnsure is `zoomies agent --wsl-ensure`. Problems are printed as
+// warnings and the exit status stays 0: a scheduled task that fails every five
+// minutes is noise, and the steps that could be taken were.
+func runWSLEnsure(ctx context.Context, e *env) error {
+	rep := wsl.Ensure(ctx, wsl.OS{}, wslOptions())
+	for _, s := range rep.Steps {
+		fmt.Fprintf(e.out, "%-8s %s: %s\n", s.Status, s.Name, s.Detail)
+	}
+	return nil
+}
+
+// startWSLSelfManagement is what the agent daemon does for itself inside a WSL2
+// distro: say so, hold a session open on the distro for as long as it lives,
+// and make sure the distro comes back after a shutdown or a reboot. None of it
+// blocks start-up, and none of it touches a runner.
+func startWSLSelfManagement(ctx context.Context, log *slog.Logger, workDir string) {
+	sys := wsl.OS{}
+	if !wsl.Detect(sys) {
+		return
+	}
+	distro := wsl.Distro(ctx, sys)
+	log.Info("running inside WSL2; the agent will keep the distro up and start it at boot", "distro", distro)
+	ka := &wsl.Keepalive{
+		Distro:  distro,
+		PidFile: filepath.Join(workDir, "wsl-keepalive.pid"),
+		Log:     log,
+	}
+	if distro != "" && sys.Exists(wsl.WSLExePath) {
+		ka.WSLExe = wsl.WSLExePath
+	}
+	go ka.Run(ctx)
+	go func() {
+		rep := wsl.Ensure(ctx, sys, wslOptions())
+		for _, s := range rep.Steps {
+			switch s.Status {
+			case wsl.StatusWarn:
+				log.Warn("WSL2 self-management: "+s.Detail, "step", s.Name)
+			case wsl.StatusChanged:
+				log.Info("WSL2 self-management: "+s.Detail, "step", s.Name)
+			}
+		}
+	}()
 }
