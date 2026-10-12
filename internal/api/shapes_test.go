@@ -381,6 +381,53 @@ func TestResponsesMatchTheSpecShapes(t *testing.T) {
 		assertShape(t, doc, "Orphan", raw)
 	})
 
+	t.Run("Renting", func(t *testing.T) {
+		// A fleet of its own, so that the work it queues is not part of what the
+		// subtests after it read. Renting is off, as it ships, and one pool has
+		// work waiting with a machine already on its way: the fleet that fills in
+		// every field omitted when empty. The setting and the suggested ceiling
+		// are on the fleet, the provider and the time the machine was asked for
+		// are on the pool, and a check that never saw them would pass whether or
+		// not the document described them.
+		rh := newHarness(t)
+		ru, _ := rh.user("admin", store.RoleAdmin)
+		rcookie := rh.session(ru)
+		rpool := rh.pool(rh.installation(), "linux-x64")
+		rh.machine(rh.provider("proxmox-lab"), "zoomies-mach-coming")
+		rh.job(rpool, store.JobQueued)
+		if err := rh.ctrl.ReconcileMachines(rh.ctx); err != nil {
+			t.Fatalf("ReconcileMachines: %v", err)
+		}
+
+		resp := rh.do(request{method: http.MethodGet, path: "/api/v1/providers/renting", cookie: rcookie})
+		resp.mustStatus(t, http.StatusOK, "renting")
+		assertShape(t, doc, "Renting", resp.body)
+
+		var fleet map[string]json.RawMessage
+		resp.into(t, &fleet)
+		for _, key := range []string{"fix", "setting", "suggested_max_machines", "decided_at"} {
+			if _, ok := fleet[key]; !ok {
+				t.Errorf("the fleet's view has no %q, so the document's description of it is unchecked: %s", key, truncate(resp.body))
+			}
+		}
+		var pools []json.RawMessage
+		if err := json.Unmarshal(fleet["pools"], &pools); err != nil || len(pools) == 0 {
+			t.Fatalf("the pass left no verdict on the one pool with work waiting, so PoolRenting is unchecked (%v): %s", err, truncate(resp.body))
+		}
+		for _, verdict := range pools {
+			assertShape(t, doc, "PoolRenting", verdict)
+		}
+		var verdict map[string]json.RawMessage
+		if err := json.Unmarshal(pools[0], &verdict); err != nil {
+			t.Fatalf("reading the pool's verdict: %v", err)
+		}
+		for _, key := range []string{"fix", "setting", "provider_id", "provider_name", "since"} {
+			if _, ok := verdict[key]; !ok {
+				t.Errorf("the pool's verdict has no %q, so the document's description of it is unchecked: %s", key, truncate(pools[0]))
+			}
+		}
+	})
+
 	t.Run("Machine", func(t *testing.T) {
 		resp := h.do(request{method: http.MethodGet, path: "/api/v1/machines", cookie: cookie})
 		resp.mustStatus(t, http.StatusOK, "list machines")

@@ -734,6 +734,13 @@ export const listProviderKinds = (signal?: AbortSignal) =>
 export const listProviderPairings = (signal?: AbortSignal) =>
   api.get<Result<'listProviderPairings'>>('/providers/pairings', { signal });
 
+/**
+ * Whether the fleet may rent a machine, and for each pool why it is or is not
+ * doing so. One verdict, rendered by every page that wonders.
+ */
+export const getProviderRenting = (signal?: AbortSignal) =>
+  api.get<Result<'getProviderRenting'>>('/providers/renting', { signal });
+
 export const getProvider = (id: string, signal?: AbortSignal) =>
   api.get<Result<'getProvider'>>(`/providers/${enc(id)}`, { signal });
 

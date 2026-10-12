@@ -481,7 +481,7 @@ func (f *fakePVE) routes() map[string]http.HandlerFunc {
 			defer f.mu.Unlock()
 			vm, ok := f.vms[pathInt(r, "vmid")]
 			if !ok {
-				writeFailure(w, http.StatusNotFound, "Configuration file does not exist")
+				missingGuest(w, r)
 				return
 			}
 			if vm.lock != "" {
@@ -501,7 +501,7 @@ func (f *fakePVE) routes() map[string]http.HandlerFunc {
 			defer f.mu.Unlock()
 			vm, ok := f.vms[pathInt(r, "vmid")]
 			if !ok {
-				writeFailure(w, http.StatusNotFound, "Configuration file does not exist")
+				missingGuest(w, r)
 				return
 			}
 			out := map[string]any{
@@ -523,7 +523,7 @@ func (f *fakePVE) routes() map[string]http.HandlerFunc {
 			defer f.mu.Unlock()
 			vm, ok := f.vms[pathInt(r, "vmid")]
 			if !ok {
-				writeFailure(w, http.StatusNotFound, "Configuration file does not exist")
+				missingGuest(w, r)
 				return
 			}
 			out := map[string]any{
@@ -545,7 +545,7 @@ func (f *fakePVE) routes() map[string]http.HandlerFunc {
 			defer f.mu.Unlock()
 			vm, ok := f.vms[pathInt(r, "vmid")]
 			if !ok {
-				writeFailure(w, http.StatusNotFound, "Configuration file does not exist")
+				missingGuest(w, r)
 				return
 			}
 			if vm.lock != "" {
@@ -570,7 +570,7 @@ func (f *fakePVE) routes() map[string]http.HandlerFunc {
 			defer f.mu.Unlock()
 			vmid := pathInt(r, "vmid")
 			if _, ok := f.vms[vmid]; !ok {
-				writeFailure(w, http.StatusNotFound, "Configuration file does not exist")
+				missingGuest(w, r)
 				return
 			}
 			delete(f.vms, vmid)
@@ -619,7 +619,7 @@ func (f *fakePVE) routes() map[string]http.HandlerFunc {
 			defer f.mu.Unlock()
 			vm, ok := f.vms[pathInt(r, "vmid")]
 			if !ok {
-				writeFailure(w, http.StatusNotFound, "Configuration file does not exist")
+				missingGuest(w, r)
 				return
 			}
 			if vm.files == nil {
@@ -646,6 +646,16 @@ func writeData(w http.ResponseWriter, v any) {
 
 // writeFailure answers the way Proxmox does when a call is refused: a status
 // and a sentence, with the data member explicitly null.
+// missingGuest answers as a real node does for a guest that is not there:
+// HTTP 500, not 404, with the path of the configuration file it looked for.
+// Answering 404 here, as this fake once did, hid the fault that a missing guest
+// was classed as a refused read, so no machine could ever be created.
+func missingGuest(w http.ResponseWriter, r *http.Request) {
+	node := r.PathValue("node")
+	writeFailure(w, http.StatusInternalServerError,
+		fmt.Sprintf("Configuration file 'nodes/%s/qemu-server/%s.conf' does not exist", node, r.PathValue("vmid")))
+}
+
 func writeFailure(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

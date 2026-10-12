@@ -15,6 +15,7 @@
     deleteProvider,
     getProvider,
     getProviderOrphans,
+    getProviderRenting,
     listMachines,
     listProviderPairings,
     pauseProvider,
@@ -28,6 +29,7 @@
     ProviderCheck,
     ProviderOrphans,
     ProviderPairing,
+    ProviderRenting,
   } from '$lib/api/types';
   import { pluralise } from '$lib/format';
   import { router } from '$lib/router';
@@ -48,6 +50,7 @@
   import MachineBand from '$lib/providers/MachineBand.svelte';
   import OrphanReview from '$lib/providers/OrphanReview.svelte';
   import PoolsTab from '$lib/providers/PoolsTab.svelte';
+  import RentingNotice from '$lib/providers/RentingNotice.svelte';
   import CheckFindings from '$lib/providers/CheckFindings.svelte';
   import ProviderForm from '$lib/providers/ProviderForm.svelte';
 
@@ -137,6 +140,42 @@
     return () => controller.abort();
   });
 
+  // Why nothing is rented, fleet-wide, and each pool's verdict for the Pools
+  // tab. Read beside the pairings and again when a pass may have decided
+  // something new; half a second gathers one pass's burst of frames into one
+  // request, and only the newest answer is kept.
+  let renting = $state<ProviderRenting | null>(null);
+  const rentingOff = $derived(renting?.state === 'off');
+  let rentingAsked = 0;
+  function refreshRenting(): void {
+    const ask = ++rentingAsked;
+    void getProviderRenting()
+      .then((view) => {
+        if (ask === rentingAsked) renting = view;
+      })
+      .catch(() => {});
+  }
+  $effect(() => {
+    void reload;
+    refreshRenting();
+  });
+  $effect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const soon = () => {
+      clearTimeout(timer);
+      timer = setTimeout(refreshRenting, 500);
+    };
+    const stop = [
+      events.subscribe('provider.updated', soon),
+      events.subscribe('machine.updated', soon),
+      events.subscribe('problems.updated', soon),
+    ];
+    return () => {
+      clearTimeout(timer);
+      for (const off of stop) off();
+    };
+  });
+
   // The orphan review is fetched when it is opened, and again only when asked.
   $effect(() => {
     const providerId = id;
@@ -210,7 +249,9 @@
       if (paused) {
         toasts.info(
           'New machines paused',
-          'Drains, deletes and machines already on their way carry on.',
+          rentingOff
+            ? 'Drains and deletes resume once renting is switched on.'
+            : 'Drains, deletes and machines already on their way carry on.',
         );
       } else {
         toasts.success('Resumed', 'Machines may be bought again.');
@@ -336,6 +377,8 @@
       </Panel>
     {/if}
 
+    <RentingNotice {renting} {canAdmin} onchanged={refreshRenting} />
+
     <Tabs tabs={TABS} value={tab} label="Provider sections" onchange={selectTab}>
       {#snippet children(active)}
         {#if active === 'machines'}
@@ -344,6 +387,7 @@
               {machines}
               providers={[p]}
               {canOperate}
+              {rentingOff}
               onpause={(paused) => void pause(paused)}
             />
             {#if machines.length === 0}
@@ -372,7 +416,7 @@
             {/if}
           </div>
         {:else if active === 'pools'}
-          <PoolsTab provider={p} {pairings} />
+          <PoolsTab provider={p} {pairings} renting={renting?.pools ?? null} />
         {:else if active === 'settings'}
           <div class="tab">
             {#if editing && canAdmin}

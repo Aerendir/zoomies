@@ -12,7 +12,9 @@
   row, and it blocks nothing else -- a drain finishes, a delete completes, and a
   machine already being built is still followed to wherever it ends up. An
   operator who presses it during an incident has stopped the spending without
-  stranding a VM.
+  stranding a VM. The one exception is a fleet with renting switched off: then
+  the machine loop holds every provider, drains and deletes included, and the
+  description must not promise otherwise.
 -->
 <script lang="ts">
   import { TriangleAlert } from '@lucide/svelte';
@@ -28,12 +30,27 @@
     machines: readonly Machine[];
     providers: readonly Provider[];
     canOperate?: boolean;
+    /** Renting is switched off for the fleet, so nothing carries on while paused either. */
+    rentingOff?: boolean;
     /** Press the kill switch, or let it up again, across every provider. */
     onpause: (paused: boolean) => void;
     class?: string;
   }
 
-  let { machines, providers, canOperate = false, onpause, class: className = '' }: Props = $props();
+  let {
+    machines,
+    providers,
+    canOperate = false,
+    rentingOff = false,
+    onpause,
+    class: className = '',
+  }: Props = $props();
+
+  const carryOn = $derived(
+    rentingOff
+      ? 'Drains and deletes resume once renting is switched on.'
+      : 'Drains, deletes and machines already on their way carry on.',
+  );
 
   const steps = $derived(lifecycleCounts(machines));
   const live = $derived(steps.reduce((n, step) => n + step.count, 0));
@@ -59,10 +76,10 @@
       disabled={!canOperate}
       label="Pause new machines"
       description={paused
-        ? 'Nothing new is being bought. Drains, deletes and machines already on their way carry on.'
+        ? `Nothing new is being bought. ${carryOn}`
         : partly
           ? 'One provider is already paused. Switching this on pauses the rest.'
-          : 'Stops anything new being bought. Drains, deletes and machines already on their way carry on.'}
+          : `Stops anything new being bought. ${carryOn}`}
       onchange={(next) => onpause(next)}
     />
   </header>

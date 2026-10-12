@@ -114,11 +114,12 @@ fleet [rents from a provider](proxmox.md): which providers exist, which pools ea
 will buy for and why one will not, and where each machine got to. That last part is
 what lets Eli answer "why is this pool full and not renting?" from the fleet and not
 from a guess. A setting only an administrator can read, such as `provider.enabled`,
-is not something Eli can see, and it is told to say so. When it looks, the panel
-says what it looked at, under the answer, and a look that failed says why beside
-its name (a code that is not in the catalog, a route that refused), which is the
-part worth reading. A call Eli makes twice with the same arguments is answered
-from the first without being run or shown again.
+is not something Eli can see, but `list_providers` carries `renting`, which says
+whether renting is switched on and what to change, so Eli can still name it.
+When it looks, the panel says what it looked at, under the answer, and a look
+that failed says why beside its name (a code that is not in the catalog, a route
+that refused), which is the part worth reading. A call Eli makes twice with the
+same arguments is answered from the first without being run or shown again.
 
 The questions an empty conversation offers come from the fleet when Eli can
 read it: the open one first, then the worst open problem by name, the jobs

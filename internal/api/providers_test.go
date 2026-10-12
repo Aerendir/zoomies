@@ -389,6 +389,89 @@ func TestPairingsSayWhichSideRefusedAndWhy(t *testing.T) {
 	}
 }
 
+// A pool with work queued and nothing rented for it looks the same whether this
+// controller may not rent at all, the fleet may rent none, or no provider builds
+// a machine that suits the pool, and the three call for different things. The
+// route is where an operator finds out which. It is a viewer's: reading the
+// answer changes nothing, and acting on it is what takes a role.
+func TestTheRentingRouteSaysWhyNothingIsRentedWhileRentingIsOff(t *testing.T) {
+	// A fleet ceiling, so that the switch is the only thing standing in the way
+	// and the answer under test is "renting is off", not "the fleet may rent none".
+	h := newHarness(t, func(c *config.Config) { c.Provider.MaxMachines = 10 })
+	viewer, _ := h.user("viewer", store.RoleViewer)
+	cookie := h.session(viewer)
+
+	// read returns the view and the pools as they were written. A nil slice and
+	// an empty one decode alike, and a page that is sent null has to be written
+	// to cope with it, so the text is kept to compare.
+	read := func() (controller.RentingView, string) {
+		t.Helper()
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/providers/renting", cookie: cookie})
+		resp.mustStatus(t, http.StatusOK, "read the renting view")
+		var view controller.RentingView
+		resp.into(t, &view)
+		var written struct {
+			Pools json.RawMessage `json:"pools"`
+		}
+		resp.into(t, &written)
+		return view, string(written.Pools)
+	}
+
+	// With no provider there is nothing to switch on, and a fleet told to turn on
+	// renting would be sent to a switch that changes nothing.
+	view, pools := read()
+	if view.State != "none" || view.Setting != "" || view.Fix != "" {
+		t.Errorf("a fleet with no provider is %q with setting %q and fix %q, want none and neither", view.State, view.Setting, view.Fix)
+	}
+	if pools != "[]" {
+		t.Errorf("pools = %s for a fleet with no provider, want []", pools)
+	}
+
+	// A provider and no machine pass yet. The switches are read with the request,
+	// so the state is already known; there is no verdict to give, and "no
+	// verdicts" is an empty list and never null.
+	h.provider("lab")
+	view, pools = read()
+	if view.State != "off" || view.Setting != "provider.enabled" || view.Enabled {
+		t.Errorf("before any pass the state is %q (setting %q, enabled %v), want off, provider.enabled and not enabled",
+			view.State, view.Setting, view.Enabled)
+	}
+	if pools != "[]" || view.DecidedAt != nil {
+		t.Errorf("before any pass pools = %s decided at %v, want [] and no time", pools, view.DecidedAt)
+	}
+
+	// Work waiting and no host to take it: the pass decides what it would rent,
+	// and the verdict says that it is the switch, not the work, that stops it.
+	// The report is the pass's, so one has to have run.
+	pool := h.pool(h.installation(), "linux-x64")
+	h.job(pool, store.JobQueued)
+	if err := h.ctrl.ReconcileMachines(h.ctx); err != nil {
+		t.Fatalf("ReconcileMachines: %v", err)
+	}
+	view, _ = read()
+	if view.State != "off" || view.Setting != "provider.enabled" || view.Summary == "" || view.Fix == "" {
+		t.Errorf("the fleet is %q (setting %q) with summary %q and fix %q, want off, provider.enabled and words for both",
+			view.State, view.Setting, view.Summary, view.Fix)
+	}
+	if view.DecidedAt == nil {
+		t.Error("the view carries no decision time, so a reader cannot tell how old the verdicts are")
+	}
+	if len(view.Pools) != 1 {
+		t.Fatalf("%d verdicts for one pool with work waiting, want 1: %+v", len(view.Pools), view.Pools)
+	}
+	got := view.Pools[0]
+	if got.PoolID != pool.ID || got.PoolName != pool.Name || got.ProviderName != "lab" {
+		t.Errorf("the verdict is about pool %s (%s) and provider %q, want %s (%s) and lab", got.PoolID, got.PoolName, got.ProviderName, pool.ID, pool.Name)
+	}
+	if got.Machines != 1 || !strings.HasPrefix(got.Summary, "Would rent 1 machine") {
+		t.Errorf("the verdict says %q for %d machines, want it to say 1 machine would be rented (the ceiling of 10 leaves the switch as the only thing in the way)", got.Summary, got.Machines)
+	}
+	if got.State != controller.RentingOff || got.Setting != "provider.enabled" || got.Summary == "" || got.Fix == "" {
+		t.Errorf("the pool is %q (setting %q) with summary %q and fix %q, want off, provider.enabled and words for both",
+			got.State, got.Setting, got.Summary, got.Fix)
+	}
+}
+
 // The pool's half of the agreement has to survive being written and read: a
 // selector that silently came back empty would leave every provider free to rent
 // for a pool somebody had restricted.

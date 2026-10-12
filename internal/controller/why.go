@@ -96,6 +96,10 @@ type whySnapshot struct {
 	PoolPlan  *scheduler.PoolPlan
 	Unmatched *scheduler.UnmatchedJob
 	PlanAt    time.Time
+	// Renting is the machine planner's verdict on the pool, when there is one.
+	// It is optional: no provider, or nothing the planner had to say, leaves
+	// the explanation as the scheduler alone wrote it.
+	Renting *PoolRenting
 	// Counts is the pool's live runners, when they were loaded.
 	Counts *store.PoolCounts
 	// Host is the host of a running job's runner, when there is one.
@@ -263,6 +267,15 @@ func classifyQueued(s whySnapshot, v *whyVerdict) {
 			fix = "add a host, raise a host's capacity, uncordon one, or relax the pool's host selector."
 		}
 		v.NextSteps = []NextStep{{Text: capitalise(fix), Kind: "change", Link: poolLink}}
+		if r := s.Renting; r != nil {
+			// A waiting verdict's summary quotes the scheduler's sentence the
+			// line above already shows, so only its tail is new; and its fix is
+			// about hosts, which the pool's own next step covers.
+			v.Evidence = append(v.Evidence, Evidence{Kind: "plan_reason", Label: "renting", Value: evidenceText(r.Aside())})
+			if r.Fix != "" && r.State != RentingWaiting {
+				v.NextSteps = append(v.NextSteps, NextStep{Text: r.Fix, Kind: "change", Link: "/providers"})
+			}
+		}
 
 	case s.PoolPlan != nil && s.PoolPlan.Failing != "":
 		v.Class = WhyRunnerStartupFailure

@@ -265,6 +265,7 @@ var problemAudience = map[string]Audience{
 	"provider.preflight_failed":                     AudienceFleet,
 	"provider.provisioning_paused":                  AudienceFleet,
 	"provider.quota_exhausted":                      AudienceFleet,
+	"provider.renting_off":                          AudienceFleet,
 	"provider.template_unverified":                  AudienceFleet,
 	"provider.unreachable":                          AudienceFleet,
 	"provider.unservable":                           AudienceFleet,
@@ -476,6 +477,7 @@ func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
 	gather("stuck runners", c.notProgressingProblems)
 	gather("capacity-demand deliveries", c.capacityDeliveryProblems)
 	gather("infrastructure providers", c.machineProblems)
+	gather("machine renting", c.rentingProblems)
 	gather("the private connection", c.privateConnectionProblems)
 
 	// An incomplete list says so, at the top, in the same shape as everything
@@ -613,6 +615,86 @@ func (c *Controller) machineProblems(ctx context.Context, out *[]Problem) error 
 			})
 		}
 	}
+	return nil
+}
+
+// rentingProblems says that renting is switched off when a provider is
+// configured that would otherwise rent. It is separate from machineProblems
+// because that returns early while renting is off, which is exactly when this
+// has something to say.
+//
+// It is raised from the renting view's state rather than from the switch
+// alone: a fleet whose only provider is a demo fixture, or is disabled on its
+// own row, would rent nothing with renting on, and an operator sent to
+// provider.enabled for it would flip a switch that changes nothing.
+//
+// The detail carries counts of pools, machines and providers and never a
+// duration, because whatever reaches the problems list is sent again each
+// time it differs, and two identical passes must give identical bytes.
+func (c *Controller) rentingProblems(ctx context.Context, out *[]Problem) error {
+	view, err := c.Renting(ctx)
+	if err != nil {
+		return fmt.Errorf("reading the renting view: %w", err)
+	}
+	if view.State != "off" {
+		return nil
+	}
+	usable, err := c.usableProviders(ctx)
+	if err != nil {
+		return err
+	}
+	if len(usable) == 0 {
+		return nil
+	}
+
+	detail := usable[0].Name + " is"
+	if len(usable) > 1 {
+		detail = fmt.Sprintf("%d providers are", len(usable))
+	}
+	detail += " configured, but this controller is not allowed to rent machines, " +
+		"so a pool that runs out of room waits for the hosts it has."
+
+	// A pool that would rent nothing now has nothing to add, and more than
+	// three would bury the sentence they sit in.
+	//
+	// An off verdict with no machines is a pool whose machine was already on
+	// its way, or one a ceiling would have stopped anyway: it still makes the
+	// problem a warning, because work is waiting on a switch, but there is no
+	// "would rent" sentence to add for it.
+	waiting := false
+	listed := 0
+	for _, v := range view.Pools {
+		if v.State != RentingOff {
+			continue
+		}
+		waiting = true
+		if v.Machines > 0 && listed < 3 {
+			detail += fmt.Sprintf(" Pool %s would rent %s now.", v.PoolName, plural(v.Machines, "machine"))
+			listed++
+		}
+	}
+	if view.Owned > 0 {
+		verb, pronoun := "are", "them"
+		if view.Owned == 1 {
+			verb, pronoun = "is", "it"
+		}
+		detail += fmt.Sprintf(" %s %s still rented, and nothing is draining, deleting or checking %s while renting is off.",
+			plural(view.Owned, "machine"), verb, pronoun)
+	}
+
+	severity := config.SeverityInfo
+	if waiting || view.Owned > 0 {
+		severity = config.SeverityWarning
+	}
+	*out = append(*out, Problem{
+		Code:       "provider.renting_off",
+		Severity:   severity,
+		Setting:    "provider.enabled",
+		Title:      "renting is switched off, so no provider can add a machine",
+		Detail:     detail,
+		Fix:        fleetOffFix,
+		TargetKind: "provider", TargetID: usable[0].ID,
+	})
 	return nil
 }
 
@@ -1533,17 +1615,45 @@ func (c *Controller) PoolCapacityProblems() []Problem {
 			title = fmt.Sprintf("pool %s has %s waiting and nowhere to run them",
 				pp.PoolName, plural(pp.QueuedMatched, "job"))
 		}
+		detail, fix := c.withRenting(pp.PoolID, pp.Blocked, pp.BlockedFix)
 		out = append(out, Problem{
 			Code:         "pool.no_capacity",
 			Severity:     severity,
 			Title:        title,
-			Detail:       pp.Blocked,
-			Fix:          pp.BlockedFix,
+			Detail:       detail,
+			Fix:          fix,
 			Alternatives: pp.BlockedAlternatives,
 			TargetKind:   "pool", TargetID: pp.PoolID,
 		})
 	}
 	return out
+}
+
+// withRenting lays the machine planner's verdict for a pool over the
+// scheduler's sentence and fix, so that the one entry which says no runner can
+// be placed also says whether a machine is coming and, if not, what to change.
+// A pool the planner said nothing about (no provider, or nothing it could
+// act on) is returned as it was, which is how a fleet without providers reads
+// exactly as before.
+//
+// The verdict's fix goes first because it is the cheaper change when there is
+// one (switch renting on); a waiting pool's fix is the scheduler's own, so it
+// is left alone rather than stated twice.
+func (c *Controller) withRenting(poolID, detail, fix string) (string, string) {
+	v := c.rentingFor(poolID)
+	if v == nil {
+		return detail, fix
+	}
+	// The scheduler's sentence does not end in a full stop, so the aside would
+	// otherwise run on from its last bracket.
+	if !strings.HasSuffix(detail, ".") {
+		detail += "."
+	}
+	detail += " " + v.Aside()
+	if v.Fix != "" && v.State != RentingWaiting {
+		fix = v.Fix + " " + capitalise(fix)
+	}
+	return detail, fix
 }
 
 // plural writes "1 job" and "3 jobs". Titles are read as headings in the

@@ -2997,6 +2997,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/providers/renting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether machines are being rented, and why not
+         * @description The answer behind `providers_available` on `GET /meta`, which is the coarse flag and says only whether this controller can rent at all. This says why nothing is being rented, for the fleet and for each pool: one sentence an operator can act on, what to change, and the one setting that changes it. The switches (`enabled`, `paused` and `max_machines`) are read when the request is made, so switching renting on shows at once. Which providers may rent, and the verdicts in `pools`, are as the last machine pass found them, as old as `decided_at`, with the switches laid over them. A pass decides and keeps its verdicts while renting is off and changes nothing, so a pool's entry then says what switching renting on would do. A pool the pass had nothing to say about is not listed, and `pools` is an empty list until a pass has run.
+         */
+        get: operations["getProviderRenting"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/providers/{id}": {
         parameters: {
             query?: never;
@@ -9796,6 +9816,73 @@ export interface components {
             /** @description What to change */
             fix?: string;
         };
+        /** @description Whether this fleet is renting machines and what it decided about each pool it had something to say about. The switches are read when the request is made; the verdicts are the last machine pass's. */
+        Renting: {
+            /**
+             * @description Which switch, if any, is holding renting back. `none`: no provider may rent (none is configured, or every one is disabled on its own row), so there is nothing to switch on. `off`: `provider.enabled` is off, so no machine is created from any provider. `no_ceiling`: renting is on but `provider.max_machines` is zero, and a maximum of none is none. `on`: renting is on and the fleet may rent.
+             * @enum {string}
+             */
+            state: "none" | "off" | "no_ceiling" | "on";
+            /** @description The state in one sentence, written to be shown as it is. */
+            summary: string;
+            /** @description What to change, when `state` is `off` or `no_ceiling`. */
+            fix?: string;
+            /**
+             * @description The one setting `fix` changes. Absent when there is no fix.
+             * @example provider.enabled
+             */
+            setting?: string;
+            /** @description `provider.enabled` as it stands: this controller may rent machines. */
+            enabled: boolean;
+            /** @description `provider.paused` as it stands: the fleet-wide pause on new machines. */
+            paused: boolean;
+            /** @description `provider.max_machines` as it stands: the most machines the fleet may rent at once. Zero rents nothing. */
+            max_machines: number;
+            /** @description The fleet ceiling a page offers to set when it switches renting on: the ceilings of the providers that may rent, added up, and never less than one, so that the click that switches renting on cannot leave a fleet that may rent nothing. */
+            suggested_max_machines?: number;
+            /** @description How many machines still own a resource, and so are still being paid for, as the last pass counted them. Zero before the first pass. */
+            owned: number;
+            /**
+             * Format: date-time
+             * @description When the pass the verdicts come from ran. Absent before the first pass.
+             */
+            decided_at?: string;
+            /** @description The verdict on each pool the last pass had something to say about, with the switches laid over it. An empty list, never null, before the first pass, and also whenever no provider may rent, since then nothing is rented whatever a pool needs and `summary` is the whole answer. */
+            pools: components["schemas"]["PoolRenting"][];
+        };
+        /** @description What the machine planner decided about renting for one pool, and why, with the fleet's switches laid over it. */
+        PoolRenting: {
+            pool_id: string;
+            pool_name: string;
+            /**
+             * @description `renting`: machines are being rented for the pool, all it is short of or as many as the ceilings allow. `on_its_way`: machines already being built cover it. `waiting`: the scheduler could not place it for a reason a machine does not answer (a host that could run it is cordoned, silent, incompatible, held or still starting runners), so nothing is rented until every host that could run it is full. `ceiling`: a limit stopped the purchase. `unserved`: no provider will rent for it, because a selector says no or no provider builds a machine that suits it. `held`: a provider would rent for it but may not at the moment. `off`: renting is switched off, so what the pass would have done is not being done.
+             * @enum {string}
+             */
+            state: "renting" | "on_its_way" | "waiting" | "ceiling" | "unserved" | "held" | "off";
+            /** @description The verdict in one sentence, written to be shown as it is. It carries no time or age, so it differs only when the fleet does. */
+            summary: string;
+            /** @description What to change. */
+            fix?: string;
+            /**
+             * @description The one setting `fix` changes. Absent when there is none: a provider's own limits are on its own form, not in Settings.
+             * @example provider.max_machines
+             */
+            setting?: string;
+            /** @description The provider the pool's shortfall was charged to or, for `on_its_way`, the one building the oldest machine that covers it. Absent for a pool that is waiting, or that no provider will rent for. */
+            provider_id?: string;
+            provider_name?: string;
+            /** @description The queued jobs the pool claims, counted so that a job two pools could run is counted for one. */
+            queued: number;
+            /** @description The runner slots the pool is missing once the free slots on the hosts that could run it are counted. Except for `on_its_way`, the machines already on their way are counted too. For `waiting`, and for `unserved` when the scheduler is waiting on hosts, it is the scheduler's own shortfall. */
+            short: number;
+            /** @description For `renting`, the machines this pool alone needs, at most what the provider rents this pass; pools that share a machine each count it, so the figures are never to be added up. For `on_its_way`, how many of the named provider's machines are coming. For `held` and `off`, what the pass would have rented had nothing stood in the way, which is none for a pool a ceiling stopped or one the machines on their way cover. */
+            machines: number;
+            /**
+             * Format: date-time
+             * @description When the oldest machine on its way for this pool was asked for. A field and not part of the summary, because a sentence with a clock in it would differ on every pass.
+             */
+            since?: string;
+        };
         ProviderChoice: {
             value: string;
             label?: string;
@@ -15674,6 +15761,26 @@ export interface operations {
                     "application/json": {
                         items?: components["schemas"]["ProviderPairing"][];
                     };
+                };
+            };
+        };
+    };
+    getProviderRenting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Renting"];
                 };
             };
         };

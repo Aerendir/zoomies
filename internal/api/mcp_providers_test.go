@@ -42,6 +42,10 @@ func TestAViewerTokenReadsProvidersAndMachinesOverMCPWithoutAnyCredential(t *tes
 			Owned                 int    `json:"owned"`
 		} `json:"items"`
 		ProvidersAvailable *bool `json:"providers_available"`
+		Renting            *struct {
+			State string          `json:"state"`
+			Pools json.RawMessage `json:"pools"`
+		} `json:"renting"`
 	}
 	if err := json.Unmarshal([]byte(text), &list); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, text)
@@ -51,6 +55,12 @@ func TestAViewerTokenReadsProvidersAndMachinesOverMCPWithoutAnyCredential(t *tes
 	}
 	if list.ProvidersAvailable == nil {
 		t.Errorf("list_providers must say whether this controller can rent at all: %s", text)
+	}
+	// A viewer cannot read provider.enabled, so renting is how an assistant
+	// learns whether it is the cause. A fresh harness has a provider and renting
+	// off, so the answer is one of the states and never a missing key.
+	if list.Renting == nil || list.Renting.State == "" || string(list.Renting.Pools) == "null" {
+		t.Errorf("list_providers must carry the renting answer, with pools never null: %s", text)
 	}
 	// The credential was sealed from this string; nothing a tool returns may carry
 	// it, in the clear or by any other name.

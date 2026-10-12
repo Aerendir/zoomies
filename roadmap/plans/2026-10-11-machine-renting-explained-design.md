@@ -1,6 +1,6 @@
 # Explain, and enable, machine renting: design
 
-**Status:** design approved in conversation (approach A); this written spec awaits the owner's review before any plan or code.
+**Status:** implemented (approach A), on draft pull request eyupio/zoomies#880.
 **Date:** 11 October 2026.
 
 ## Goal
@@ -218,7 +218,8 @@ question. The words the description tests pin stay.
   ceiling field defaulting to `suggested_max_machines`; one `PATCH /settings` sets
   `provider.enabled` and `provider.max_machines` together. Everyone else sees the
   sentence and who can change it. An environment-pinned setting shows the server's
-  own refusal. For `on` with something being built it shows a single calm line.
+  own refusal. For `on` it shows nothing: a machine being built is told on the Pools tab
+and the pool page, and a notice that is always there stops being read.
 - The Pools tab shows each pool's live verdict under "Would rent" and keeps the
   static reason for "Would not rent".
 - Tokens only: the notice is a pure explanation (`--z-accent-subtle` and

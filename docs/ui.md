@@ -567,6 +567,15 @@ part of the lifecycle is a link somebody else can open.
 ![The Providers page: machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-dark.webp#only-dark){ .zoomies-shot }
 ![The Providers page: machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-light.webp#only-light){ .zoomies-shot }
 
+When a switch is the reason nothing is rented, a notice above the totals says so
+in the controller's own sentence, lists the pools it is holding back, and offers
+an administrator one click that turns renting on with a ceiling already filled
+in; anyone else is told who can. A setting pinned in the environment refuses the
+click, and the notice stays with the controller's reason beside the button,
+which names the variable to unset. A provider's **Pools** tab gives each pool it
+would rent for the last machine pass's verdict on it, so what renting is doing
+for a pool now sits beside the reason it would not rent for the rest.
+
 Adding one is five steps (where it is and how we sign in, where a machine is
 built, what shape it is, what it may spend, and what the controller makes of it)
 and none of them creates anything: the draft is sent to the controller for a

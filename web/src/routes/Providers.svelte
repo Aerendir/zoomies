@@ -5,13 +5,14 @@
   decision rather than an oversight. Providers and machines are read by the two
   pages that show them; putting them in the cache would cost every signed-in
   tab another request on every reconcile, and the shell another slice of a
-  budget that has none to spare. The live half is a subscription to the two
+  budget that has none to spare. The live half is a subscription to the
   kinds this page cares about, which costs nothing when nobody is looking.
 -->
 <script lang="ts">
   import { Cloud, Plus } from '@lucide/svelte';
   import {
     checkProvider,
+    getProviderRenting,
     listMachines,
     listProviderPairings,
     listProviders,
@@ -19,7 +20,7 @@
     resumeProvider,
   } from '$lib/api/client';
   import { events } from '$lib/api/sse';
-  import type { Machine, Provider, ProviderPairing } from '$lib/api/types';
+  import type { Machine, Provider, ProviderPairing, ProviderRenting } from '$lib/api/types';
   import { pluralise } from '$lib/format';
   import { router } from '$lib/router';
   import { machineStatus } from '$lib/status';
@@ -36,6 +37,7 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import MachineBand from '$lib/providers/MachineBand.svelte';
   import ProviderCard from '$lib/providers/ProviderCard.svelte';
+  import RentingNotice from '$lib/providers/RentingNotice.svelte';
   import { machinesNeedingReview } from '$lib/providers/machines';
   import { MACHINE_STATES } from '$lib/api/types';
 
@@ -45,6 +47,7 @@
   let providers = $state<Provider[]>([]);
   let machines = $state<Machine[]>([]);
   let pairings = $state<ProviderPairing[]>([]);
+  let renting = $state<ProviderRenting | null>(null);
   let loading = $state(true);
   let loaded = $state(false);
   let error = $state<unknown>(null);
@@ -56,6 +59,7 @@
   const stateFilter = $derived(router.param('state'));
   const shown = $derived(stateFilter ? machines.filter((m) => m.state === stateFilter) : machines);
   const review = $derived(machinesNeedingReview(machines));
+  const rentingOff = $derived(renting?.state === 'off');
 
   $effect(() => {
     void reload;
@@ -71,11 +75,15 @@
       // that nothing will ever be rented from it, which is the question a new
       // provider's owner opens this page to ask.
       listProviderPairings(controller.signal).catch(() => ({ items: [] as ProviderPairing[] })),
+      // Why nothing is rented, when a switch is the reason. A page that could
+      // not read it still has everything else to show, so a failure is no notice.
+      getProviderRenting(controller.signal).catch(() => null),
     ])
-      .then(([providerPage, machinePage, pairingPage]) => {
+      .then(([providerPage, machinePage, pairingPage, rentingView]) => {
         providers = providerPage.items ?? [];
         machines = machinePage.items ?? [];
         pairings = pairingPage.items ?? [];
+        renting = rentingView;
         error = null;
         loaded = true;
       })
@@ -85,6 +93,36 @@
       })
       .finally(() => (loading = false));
     return () => controller.abort();
+  });
+
+  // The verdicts are the machine pass's, and no event carries them. These three
+  // kinds are what moves when a pass decides something new, so they prompt a
+  // fresh read; half a second gathers the burst one pass sends into one request.
+  // Only the newest answer is kept, so a slow one cannot overwrite a later one.
+  let rentingAsked = 0;
+  function refreshRenting(): void {
+    const ask = ++rentingAsked;
+    void getProviderRenting()
+      .then((view) => {
+        if (ask === rentingAsked) renting = view;
+      })
+      .catch(() => {});
+  }
+  $effect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const soon = () => {
+      clearTimeout(timer);
+      timer = setTimeout(refreshRenting, 500);
+    };
+    const stop = [
+      events.subscribe('provider.updated', soon),
+      events.subscribe('machine.updated', soon),
+      events.subscribe('problems.updated', soon),
+    ];
+    return () => {
+      clearTimeout(timer);
+      for (const off of stop) off();
+    };
   });
 
   // Live, without a collection in the fleet cache: one frame in, one row
@@ -150,7 +188,9 @@
       if (paused) {
         toasts.info(
           `${provider.name} paused`,
-          'Nothing new is bought. Drains, deletes and machines already on their way carry on.',
+          rentingOff
+            ? 'Nothing new is bought. Drains and deletes resume once renting is switched on.'
+            : 'Nothing new is bought. Drains, deletes and machines already on their way carry on.',
         );
       } else {
         toasts.success(`${provider.name} resumed`, 'Machines may be bought again.');
@@ -225,6 +265,8 @@
       </EmptyState>
     {/snippet}
 
+    <RentingNotice {renting} {canAdmin} onchanged={refreshRenting} />
+
     <MetricGrid
       items={[
         {
@@ -246,12 +288,20 @@
         {
           label: 'Paused providers',
           value: String(providers.filter((p) => p.paused).length),
-          detail: 'New machines held; drains and deletes continue',
+          detail: rentingOff
+            ? 'New machines held; drains and deletes wait for renting'
+            : 'New machines held; drains and deletes continue',
         },
       ]}
     />
 
-    <MachineBand {machines} {providers} {canOperate} onpause={(paused) => void pauseAll(paused)} />
+    <MachineBand
+      {machines}
+      {providers}
+      {canOperate}
+      {rentingOff}
+      onpause={(paused) => void pauseAll(paused)}
+    />
 
     <div class="grid">
       {#each providers as provider (provider.id)}

@@ -143,7 +143,7 @@ func (c *Controller) ProviderKinds() []ProviderKindView {
 }
 
 // ProvidersAvailable reports whether this deployment can rent machines at all:
-// a driver to rent from, and an operator who has turned the machine loop on.
+// a driver to rent from, and an operator who has switched provider.enabled on.
 // The page that would otherwise offer to buy machines nothing would ever create
 // asks this first.
 func (c *Controller) ProvidersAvailable() bool {

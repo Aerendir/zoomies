@@ -87,7 +87,7 @@
             label="Paused"
             size="sm"
             dot={false}
-            title={provider.paused_reason || 'New machines are held. Drains and deletes continue.'}
+            title={provider.paused_reason || 'New machines are held.'}
           />
         {/if}
         {#if provider.enabled === false}
