@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { DoctorResult } from '../src/lib/hosts/health.ts';
-import { KIND_WORDS, previewCommand, rowKind } from '../src/lib/hosts/row-kind.ts';
+import { KIND_WORDS, fixCommand, previewCommand, rowKind } from '../src/lib/hosts/row-kind.ts';
 
 function row(over: Partial<DoctorResult> = {}): DoctorResult {
   return {
@@ -100,4 +100,30 @@ test('the preview never carries a flag that changes the host', () => {
   for (const flag of ['--yes', '--revert', '--background', '--force']) {
     assert.ok(!cmd.includes(flag), flag);
   }
+});
+
+test('a row the agent gives a command for copies that command, not the preview', () => {
+  const cmd = 'sudo apt-get install linux-generic-hwe-24.04';
+  assert.equal(fixCommand(row({ command: cmd, actionable: true })), cmd);
+});
+
+test('an actionable row with no command of its own copies the dry-run preview', () => {
+  assert.equal(
+    fixCommand(row({ actionable: true })),
+    'sudo zoomies tune --only inotify.watches --dry-run',
+  );
+});
+
+test('advice with no command has nothing to copy, rather than an invented one', () => {
+  assert.equal(fixCommand(row()), null);
+});
+
+test('a row that is not a live warning has no fix to copy', () => {
+  assert.equal(fixCommand(row({ status: 'ok', actionable: true })), null);
+  assert.equal(
+    fixCommand(
+      row({ actionable: true, accepted: { by: 'a', at: '2026-01-01T00:00:00Z' } as never }),
+    ),
+    null,
+  );
 });
