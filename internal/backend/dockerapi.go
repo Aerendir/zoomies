@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -78,6 +79,10 @@ type APIClient struct {
 	// open for the whole grace period. Their context carries the deadline.
 	held    *http.Client
 	version string
+	// raised is the version the daemon asked for when it refused ours, "" until
+	// it has. It is a pointer swapped atomically because one client serves many
+	// requests at once.
+	raised atomic.Pointer[string]
 
 	// base is the URL prefix requests are built on. For a unix socket the
 	// authority is a placeholder, since the transport ignores it.
@@ -231,7 +236,11 @@ func (c *APIClient) unavailable(err error) error {
 // ---------------------------------------------------------------------------
 
 func (c *APIClient) urlFor(path string, q url.Values) string {
-	u := c.base + "/" + c.version + path
+	version := c.version
+	if v := c.raised.Load(); v != nil {
+		version = *v
+	}
+	u := c.base + "/" + version + path
 	if len(q) > 0 {
 		u += "?" + q.Encode()
 	}
@@ -289,13 +298,60 @@ func (c *APIClient) doRaw(ctx context.Context, method, path string, q url.Values
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		return nil, &APIError{Status: resp.StatusCode, Method: method, Path: path, Message: decodeMessage(resp.Body)}
+		msg := decodeMessage(resp.Body)
+		if resp.StatusCode == http.StatusBadRequest && c.raiseVersion(msg) {
+			// The daemon refused our API version and named the one it wants.
+			// Asked again at that version, so the call that found out is not
+			// the one that fails. A second refusal names the same version,
+			// which raiseVersion declines, so this cannot loop.
+			return c.doRaw(ctx, method, path, q, body, headers, stream)
+		}
+		return nil, &APIError{Status: resp.StatusCode, Method: method, Path: path, Message: msg}
 	}
 	if cancel != nil {
 		resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel}
 		handedOff = true
 	}
 	return resp, nil
+}
+
+// minAPIVersion matches the sentence a Docker daemon answers an old client
+// with: "client version 1.41 is too old. Minimum supported API version is 1.44".
+var minAPIVersion = regexp.MustCompile(`Minimum supported API version is (\d+)\.(\d+)`)
+
+// raiseVersion moves the client up to the version a daemon's refusal names, and
+// reports whether it did. It only ever raises: a message asking for a version
+// at or below the one in use is not one this can fix.
+func (c *APIClient) raiseVersion(message string) bool {
+	m := minAPIVersion.FindStringSubmatch(message)
+	if m == nil {
+		return false
+	}
+	major, _ := strconv.Atoi(m[1])
+	minor, _ := strconv.Atoi(m[2])
+	current := c.version
+	if v := c.raised.Load(); v != nil {
+		current = *v
+	}
+	curMajor, curMinor, ok := parseAPIVersion(current)
+	if !ok || major < curMajor || (major == curMajor && minor <= curMinor) {
+		return false
+	}
+	want := fmt.Sprintf("v%d.%d", major, minor)
+	c.raised.Store(&want)
+	return true
+}
+
+// parseAPIVersion reads "v1.41" as 1 and 41.
+func parseAPIVersion(v string) (major, minor int, ok bool) {
+	maj, min, found := strings.Cut(strings.TrimPrefix(v, "v"), ".")
+	if !found {
+		return 0, 0, false
+	}
+	var err1, err2 error
+	major, err1 = strconv.Atoi(maj)
+	minor, err2 = strconv.Atoi(min)
+	return major, minor, err1 == nil && err2 == nil
 }
 
 // The response owns its deadline until its caller finishes reading it.
