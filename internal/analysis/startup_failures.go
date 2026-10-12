@@ -115,6 +115,12 @@ type StartupSnapshot struct {
 	Incidents []HostIncident
 	// Truncated says the read stopped at MaxReadJobs runners.
 	Truncated bool
+	// HeartbeatInterval is the agents' agent.heartbeat_interval. A runtime
+	// incident is first heard of on the beat after the start that found the
+	// runtime down, so a failure up to one interval before its since may be
+	// what raised it, and one further back may not. Zero reaches back not
+	// at all.
+	HeartbeatInterval time.Duration
 }
 
 // StartupGroup is one host or one pool and how its starts went. Every time
@@ -214,6 +220,7 @@ type startupRead struct {
 	incidents      []HostIncident
 	throttles      []HostInterval
 	since, until   time.Time
+	heartbeat      time.Duration
 }
 
 // StartupFailures names the host or pool that keeps failing to start runners,
@@ -226,7 +233,7 @@ func StartupFailures(s StartupSnapshot) (StartupFailuresFinding, error) {
 		return f, errors.New("startup failures snapshot needs a period with a start before its end")
 	}
 	r := startupRead{poolNames: map[string]string{}, hostNames: map[string]string{}, incidents: s.Incidents,
-		throttles: s.Throttles, since: s.Since, until: s.Until}
+		throttles: s.Throttles, since: s.Since, until: s.Until, heartbeat: s.HeartbeatInterval}
 	e := StartupEvidence{Groups: []StartupGroup{}, Truncated: s.Truncated}
 	for _, a := range s.Attempts {
 		if a.RequestedAt.Before(s.Since) || !a.RequestedAt.Before(s.Until) {
@@ -351,7 +358,7 @@ func StartupFailures(s StartupSnapshot) (StartupFailuresFinding, error) {
 		reasons = append(reasons, fmt.Sprintf("only %s in this period: too few to say that nothing keeps failing", count(e.Starts, "start")))
 	}
 	if e.Unknown*10 > e.Starts+e.Unknown {
-		reasons = append(reasons, fmt.Sprintf("%d of the %d runners asked to start have no recorded outcome (still starting when the period ended, removed before registering with nothing recorded, or known only from a session that never registered), so some may have failed",
+		reasons = append(reasons, fmt.Sprintf("%d of the %d runners asked to start have no recorded outcome (still starting when the period ended, removed before registering with nothing recorded, or known only from a session that never registered, or with an outcome this analysis does not know), so some may have failed",
 			e.Unknown, e.Starts+e.Unknown))
 	}
 	if s.Truncated {
@@ -512,33 +519,45 @@ func (r startupRead) imagePullCovers(a StartAttempt) (bool, time.Time) {
 	return false, time.Time{}
 }
 
-// runtimeCovers takes a failure at or after the incident's since, and one
-// before it in the group's current run with no start registered on its host
-// in between: the controller hears of the incident on the heartbeat after
-// the start that found the runtime down, so that failure is its trigger.
+// runtimeCovers takes a failure at or after the incident's since. It also
+// takes one before it by no more than a heartbeat interval, in the group's
+// current run, with no start registered on its host in between: the
+// controller hears of the incident on the beat after the start that found
+// the runtime down, so that failure is its trigger. A failure further back
+// came while the runtime was, for all anything says, working. Of several
+// incidents that cover it, the earliest is the one it came under, so the
+// order they are listed in cannot change the answer.
 func (r startupRead) runtimeCovers(a StartAttempt, failingSince time.Time) (bool, time.Time) {
 	if !hostMachinery(a.FaultKind) {
 		return false, time.Time{}
 	}
 	at := a.at()
+	var since time.Time
 	for _, inc := range r.incidents {
-		if inc.Kind != IncidentRuntime || inc.HostID != a.HostID {
+		if inc.Kind != IncidentRuntime || inc.HostID != a.HostID || (!since.IsZero() && !inc.Since.Before(since)) {
 			continue
 		}
-		if !inc.Since.After(at) {
-			return true, inc.Since
+		if inc.Since.After(at) && !r.triggered(a, inc.Since, failingSince) {
+			continue
 		}
-		if at.Before(failingSince) {
-			return false, time.Time{}
-		}
-		for _, b := range r.known {
-			if b.Outcome == StartStarted && b.HostID == a.HostID && b.at().After(at) && !b.at().After(inc.Since) {
-				return false, time.Time{}
-			}
-		}
-		return true, inc.Since
+		since = inc.Since
 	}
-	return false, time.Time{}
+	return !since.IsZero(), since
+}
+
+// triggered says whether a failure before an incident's since could be the
+// one that raised it.
+func (r startupRead) triggered(a StartAttempt, since, failingSince time.Time) bool {
+	at := a.at()
+	if since.Sub(at) > r.heartbeat || at.Before(failingSince) {
+		return false
+	}
+	for _, b := range r.known {
+		if b.Outcome == StartStarted && b.HostID == a.HostID && b.at().After(at) && !b.at().After(since) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r startupRead) throttleCovers(a StartAttempt) (bool, time.Time) {

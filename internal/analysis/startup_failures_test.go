@@ -70,7 +70,8 @@ func minutesFrom(first, n int) []int {
 }
 
 func startSnapshot(groups ...[]StartAttempt) StartupSnapshot {
-	return StartupSnapshot{Since: startBase.Add(-3 * time.Hour), Until: startBase.Add(21 * time.Hour), Attempts: slices.Concat(groups...)}
+	return StartupSnapshot{Since: startBase.Add(-3 * time.Hour), Until: startBase.Add(21 * time.Hour), Attempts: slices.Concat(groups...),
+		HeartbeatInterval: 30 * time.Second}
 }
 
 func mustStartup(t *testing.T, s StartupSnapshot) StartupFailuresFinding {
@@ -248,12 +249,56 @@ func TestAPoolsExplanationNamesTheHostsBehindIt(t *testing.T) {
 // runtime down, so that failure comes before it; it is the incident's own
 // trigger, not a failure with another cause.
 func TestTheFailureThatRaisedARuntimeIncidentIsPutDownToIt(t *testing.T) {
+	// The first failure ends at 09:00:30; the beat after it, one interval
+	// later at most, is when the controller hears of the incident.
 	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0, 10, 20))
-	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}}
+	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(1)}}
 	f := mustStartup(t, s)
 	wantConfidence(t, f, High, "")
-	if !strings.HasSuffix(f.Summary, ": they came while the container runtime on demo-builder-2 was failing, as it has been since 2026-10-11 09:05 UTC.") {
+	if !strings.HasSuffix(f.Summary, ": they came while the container runtime on demo-builder-2 was failing, as it has been since 2026-10-11 09:01 UTC.") {
 		t.Errorf("summary %q, want all three put down to the incident", f.Summary)
+	}
+
+	// A millisecond past one heartbeat interval is past any beat that could
+	// have carried it, so that failure was not its trigger.
+	s.Incidents[0].Since = startMinute(1).Add(time.Millisecond)
+	f = mustStartup(t, s)
+	if g := dominantGroup(t, f); g.Explanation != "runtime_incident" || g.Explained != 2 {
+		t.Errorf("explanation %q covering %d, want runtime_incident covering 2", g.Explanation, g.Explained)
+	}
+}
+
+// Failures hours before an incident was first heard of came while the
+// runtime was, as far as anything says, working.
+func TestARuntimeIncidentDoesNotReachBackPastOneHeartbeat(t *testing.T) {
+	s := startSnapshot(failed("host_b", "pool_linux", "", 0, 10, 20))
+	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(600)}}
+	if g := dominantGroup(t, mustStartup(t, s)); g.Explanation != "" {
+		t.Errorf("failures ten hours before the incident explained as %q, want none", g.Explanation)
+	}
+	// Without an interval nothing before since is covered, not even a
+	// failure a second before it: only the two after it are.
+	s.Incidents[0].Since = startMinute(0).Add(31 * time.Second)
+	s.HeartbeatInterval = 0
+	if g := dominantGroup(t, mustStartup(t, s)); g.Explained != 2 {
+		t.Errorf("explanation %q covering %d with no heartbeat interval, want the 2 after since", g.Explanation, g.Explained)
+	}
+}
+
+// The store keeps one runtime incident a host, but the answer must not hang
+// on the order a snapshot lists them in: the earliest that covers a failure
+// is the one it came under.
+func TestTheEarliestRuntimeIncidentCoveringAFailureIsTheOneNamed(t *testing.T) {
+	// Both cover every failure, each after both began.
+	late := HostIncident{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}
+	early := HostIncident{HostID: "host_b", Kind: "runtime", Since: startMinute(-5)}
+	for _, order := range [][]HostIncident{{late, early}, {early, late}} {
+		s := startSnapshot(failed("host_b", "pool_linux", "backend", 10, 20, 30))
+		s.Incidents = order
+		f := mustStartup(t, s)
+		if !strings.HasSuffix(f.Summary, ": they came while the container runtime on demo-builder-2 was failing, as it has been since 2026-10-11 08:55 UTC.") {
+			t.Errorf("incidents %v: summary %q", order, f.Summary)
+		}
 	}
 }
 
@@ -262,6 +307,8 @@ func TestTheFailureThatRaisedARuntimeIncidentIsPutDownToIt(t *testing.T) {
 func TestARuntimeIncidentDoesNotReachBackPastAStartThatRegistered(t *testing.T) {
 	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0), started("host_b", "pool_arm", 2), failed("host_b", "pool_linux", "backend", 10, 20, 30))
 	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}}
+	// Long enough to reach the first failure, so only the start can stop it.
+	s.HeartbeatInterval = 10 * time.Minute
 	f := mustStartup(t, s)
 	// The pool started nothing, so its run of failures began at 09:00; the
 	// host's start of another pool at 09:02 still ends the host's episode.
@@ -281,6 +328,7 @@ func TestARuntimeIncidentDoesNotReachBackPastAStartThatRegistered(t *testing.T) 
 func TestARuntimeIncidentReachesBackOnlyWithinTheCurrentRun(t *testing.T) {
 	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0), started("host_a", "pool_linux", 2), failed("host_b", "pool_linux", "backend", 10, 20, 30))
 	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}}
+	s.HeartbeatInterval = 10 * time.Minute
 	f := mustStartup(t, s)
 	for _, g := range f.Evidence.Groups {
 		if g.Scope == "pool" && (g.Explanation != "runtime_incident" || g.Explained != 3) {
@@ -581,7 +629,7 @@ func TestAStartWithNoRecordedOutcomeIsNotCountedAsAFailure(t *testing.T) {
 
 func TestMoreThanATenthWithNoOutcomeIsMedium(t *testing.T) {
 	f := mustStartup(t, startSnapshot(started("host_a", "pool_linux", minutesFrom(0, 17)...), unknownStarts("host_a", "pool_linux", 30, 31)))
-	wantConfidence(t, f, Medium, "2 of the 19 runners asked to start have no recorded outcome (still starting when the period ended, removed before registering with nothing recorded, or known only from a session that never registered), so some may have failed")
+	wantConfidence(t, f, Medium, "2 of the 19 runners asked to start have no recorded outcome (still starting when the period ended, removed before registering with nothing recorded, or known only from a session that never registered, or with an outcome this analysis does not know), so some may have failed")
 }
 
 func TestAGroupsStartsWithNoOutcomeAreNamedInItsSentence(t *testing.T) {
