@@ -993,6 +993,8 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "DELETE", path: "/api/v1/machines/missing", role: store.RoleAdmin, action: auth.ActionMachinesDelete},
 		{method: "POST", path: "/api/v1/machines/missing/release", role: store.RoleAdmin, action: auth.ActionMachinesDelete,
 			body: map[string]any{"name": "never-the-right-name"}},
+		{method: "POST", path: "/api/v1/machines/bulk", role: store.RoleAdmin, action: auth.ActionMachinesDelete,
+			body: map[string]any{"action": "delete", "ids": []string{"missing"}}},
 
 		// Kennel Club answers 409 while it is off, which is what this walk sees: it
 		// is a route's gate being walked, and the behaviour behind it is
