@@ -393,3 +393,116 @@ func TestATransientEventReachesSubscribersWithoutEnteringTheRing(t *testing.T) {
 		t.Fatal("a replay across the transient event reported itself incomplete")
 	}
 }
+
+// A reconnecting client and a tool asking "since id 3" must get the same
+// answer, or the stream and the route disagree about what was lost.
+func TestRecentAgreesWithTheStreamsReplay(t *testing.T) {
+	b := New()
+	for i := range 5 {
+		b.Publish(KindScaling, "", map[string]int{"n": i})
+	}
+
+	items, complete, truncated := b.Recent(3, SubscribeOptions{}, 0)
+	if !complete || truncated {
+		t.Fatalf("complete = %v, truncated = %v, want true and false", complete, truncated)
+	}
+	if len(items) != 2 || items[0].ID != 4 || items[1].ID != 5 {
+		t.Fatalf("Recent(3) = %v, want ids 4 and 5", ids(items))
+	}
+
+	sub := b.Subscribe(context.Background(), SubscribeOptions{Replay: 3})
+	defer sub.Close()
+	if sub.Complete != complete {
+		t.Fatalf("the stream says complete = %v and Recent says %v", sub.Complete, complete)
+	}
+	for _, want := range items {
+		select {
+		case got := <-sub.C:
+			if got.ID != want.ID {
+				t.Fatalf("the stream replayed id %d where Recent returned %d", got.ID, want.ID)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("the stream never replayed id %d", want.ID)
+		}
+	}
+	select {
+	case got := <-sub.C:
+		t.Fatalf("the stream replayed id %d, which Recent did not return", got.ID)
+	default:
+	}
+}
+
+func TestRecentSaysIncompleteWhenTheRingMovedOn(t *testing.T) {
+	b := New()
+	b.ringCap = 4
+	for i := range 10 {
+		b.Publish(KindScaling, "", map[string]int{"n": i})
+	}
+
+	items, complete, _ := b.Recent(2, SubscribeOptions{}, 0)
+	if complete {
+		t.Fatal("Recent claimed to be complete though the ring no longer reaches id 3")
+	}
+	if got := ids(items); len(got) != 4 || got[0] != 7 || got[3] != 10 {
+		t.Fatalf("Recent(2) = %v, want what the ring holds, ids 7 to 10", got)
+	}
+
+	t.Run("an id from another run of the process is incomplete and empty", func(t *testing.T) {
+		items, complete, truncated := b.Recent(b.LastID()+40, SubscribeOptions{}, 0)
+		if complete || truncated || len(items) != 0 {
+			t.Fatalf("got %v, complete %v, truncated %v", ids(items), complete, truncated)
+		}
+	})
+	t.Run("the latest id has nothing since and misses nothing", func(t *testing.T) {
+		items, complete, truncated := b.Recent(b.LastID(), SubscribeOptions{}, 0)
+		if !complete || truncated || len(items) != 0 {
+			t.Fatalf("got %v, complete %v, truncated %v", ids(items), complete, truncated)
+		}
+	})
+	t.Run("an empty ring is complete from the start and incomplete from anywhere later", func(t *testing.T) {
+		empty := New()
+		if items, complete, _ := empty.Recent(0, SubscribeOptions{}, 0); !complete || len(items) != 0 {
+			t.Fatalf("since 0: got %v, complete %v", ids(items), complete)
+		}
+		if _, complete, _ := empty.Recent(5, SubscribeOptions{}, 0); complete {
+			t.Fatal("an id beyond an empty sequence was reported complete")
+		}
+	})
+}
+
+func TestRecentFiltersByKindAndTopicAndTruncatesOldestFirst(t *testing.T) {
+	b := New()
+	b.Publish(KindRunnerUpdated, "runner:a", nil)
+	b.Publish(KindPoolUpdated, "pool:a", nil)
+	b.Publish(KindRunnerUpdated, "runner:b", nil)
+	b.Publish(KindRunnerUpdated, "pool:b", nil)
+	b.Publish(KindRunnerUpdated, "runner:c", nil)
+
+	items, complete, truncated := b.Recent(0, SubscribeOptions{Kinds: []Kind{KindRunnerUpdated}}, 0)
+	if !complete || truncated || len(items) != 4 {
+		t.Fatalf("kind filter: got %v, complete %v, truncated %v", ids(items), complete, truncated)
+	}
+
+	items, _, _ = b.Recent(0, SubscribeOptions{TopicPrefix: "runner:"}, 0)
+	if got := ids(items); len(got) != 3 || got[0] != 1 || got[1] != 3 || got[2] != 5 {
+		t.Fatalf("topic filter: got %v, want ids 1, 3 and 5", got)
+	}
+
+	items, _, truncated = b.Recent(0, SubscribeOptions{}, 2)
+	if got := ids(items); len(got) != 2 || got[0] != 1 || got[1] != 2 || !truncated {
+		t.Fatalf("limit 2 of 5: got %v, truncated %v, want the oldest two and true", got, truncated)
+	}
+
+	items, _, truncated = b.Recent(0, SubscribeOptions{}, 5)
+	if len(items) != 5 || truncated {
+		t.Fatalf("a limit equal to the matches: got %d, truncated %v, want 5 and false", len(items), truncated)
+	}
+}
+
+func ids(events []Event) []uint64 {
+	out := make([]uint64, 0, len(events))
+	for _, e := range events {
+		out = append(out, e.ID)
+	}
+	return out
+}
