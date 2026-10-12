@@ -2845,13 +2845,12 @@ func (c *Controller) controllerUpdateProblems() []Problem {
 //
 // A host's failure is also history when it runs the build the controller would
 // take it to now (see attemptIsHistory), and that rule is deliberately not
-// borrowed here. A controller's attempt only ever asks for a release, so the
-// rule's trigger, an attempt at a build from main, cannot arise; and the build
-// to measure a controller against is the one it runs, which it always matches.
-// What is left is an upgrade by hand to a build from main. That build cannot be
-// ordered against the release the attempt asked for, so the failure stays until
-// a new attempt opens: guessing an order would hide a real helper fault in an
-// error.
+// borrowed here. The build to measure a controller against is the one it runs,
+// which it always matches, so on a controller built from main the rule would
+// forgive every failure the moment it was recorded. What is left is an upgrade by
+// hand to a build from main. That build cannot be ordered against the release the
+// attempt asked for, so the failure stays until a new attempt opens: guessing an
+// order would hide a real helper fault in an error.
 func failedUpdateProblem(a *store.UpdateAttempt) (Problem, bool) {
 	if a == nil || (a.State != store.UpdateFailed && a.State != store.UpdateTimedOut) {
 		return Problem{}, false

@@ -1015,6 +1015,98 @@ func TestAnOKResultWhileTheHostIsStillBehindIsAFailure(t *testing.T) {
 	}
 }
 
+// A controller built from main asks for its own exact build, but the helper can
+// only name the dev channel, and the channel moves with every push. When it has
+// moved since the controller was built, or has not published the controller's
+// build yet, the update works and the host lands on a different build from main.
+// That stays a failure, since the host does not match the controller, but the
+// sentence must say what happened: "the new release is not the one running" sent
+// an operator to restart an agent that was running the build the helper had just
+// installed.
+func TestAnOKResultWhereTheDevChannelServedAnotherBuildIsAFailureThatSaysSo(t *testing.T) {
+	h := newHarness(t)
+	h.inMode("manual")
+	withVersion(t, "main-sha-abc1234")
+	host := h.agentHost("vm-1", "main-sha-1c5b8378", agent.FeatureSelfUpdate)
+	a := h.requestHost(host)
+
+	h.agentBeat(host, "main-sha-5ca1ab1e", &agent.UpdateReport{
+		ID: a.ID, OK: true, Tag: "dev", From: "main-sha-1c5b8378", To: "main-sha-5ca1ab1e", FinishedAt: h.c.Now().UTC(),
+	})
+	got := h.attempt(a.ID)
+	if got.State != store.UpdateFailed {
+		t.Fatalf("attempt = %s, want failed: the host does not match the controller", got.State)
+	}
+	for _, want := range []string{"main-sha-5ca1ab1e", "main-sha-abc1234", "dev channel", "zoomies upgrade"} {
+		if !strings.Contains(got.Error, want) {
+			t.Errorf("the sentence %q does not mention %q", got.Error, want)
+		}
+	}
+	for _, not := range []string{"not the one running", "Restart the zoomies agent"} {
+		if strings.Contains(got.Error, not) {
+			t.Errorf("the sentence %q still says %q, which is untrue of an agent running what was installed", got.Error, not)
+		}
+	}
+}
+
+// The moved-channel sentence is for a host that is running what the helper
+// installed. Every other success the agent does not bear out keeps the
+// restart advice, and so does anything that is not a build from main.
+func TestAnOKResultTheAgentDoesNotBearOutKeepsTheRestartAdvice(t *testing.T) {
+	const controller, started = "main-sha-abc1234", "main-sha-1c5b8378"
+	for _, tc := range []struct {
+		name    string
+		attempt store.UpdateAttempt
+		running string
+		report  agent.UpdateReport
+		moved   bool
+	}{
+		{
+			"the helper installed a build from main that is not the controller's, and the agent runs it",
+			store.UpdateAttempt{ID: "upd_a", FromVersion: started, ToVersion: controller}, "main-sha-5ca1ab1e",
+			agent.UpdateReport{ID: "upd_a", OK: true, To: "main-sha-5ca1ab1e"}, true,
+		},
+		{
+			"the agent still runs the build it started on",
+			store.UpdateAttempt{ID: "upd_a", FromVersion: started, ToVersion: controller}, started,
+			agent.UpdateReport{ID: "upd_a", OK: true, To: controller}, false,
+		},
+		{
+			"the helper says it installed one build and the agent runs another",
+			store.UpdateAttempt{ID: "upd_a", FromVersion: started, ToVersion: controller}, "main-sha-5ca1ab1e",
+			agent.UpdateReport{ID: "upd_a", OK: true, To: "main-sha-0ddba115"}, false,
+		},
+		{
+			"the helper says nothing changed",
+			store.UpdateAttempt{ID: "upd_a", FromVersion: started, ToVersion: controller}, "main-sha-5ca1ab1e",
+			agent.UpdateReport{ID: "upd_a", OK: true}, false,
+		},
+		{
+			"the agent runs a release",
+			store.UpdateAttempt{ID: "upd_a", FromVersion: started, ToVersion: controller}, "1.3.5",
+			agent.UpdateReport{ID: "upd_a", OK: true, To: "1.3.5"}, false,
+		},
+		{
+			"the update was for a release",
+			store.UpdateAttempt{ID: "upd_a", FromVersion: "1.3.3", ToVersion: "v1.3.5"}, "1.3.4",
+			agent.UpdateReport{ID: "upd_a", OK: true, To: "1.3.4"}, false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state, text, ended := hostReportOutcome(tc.attempt, tc.running, &tc.report)
+			if !ended || state != store.UpdateFailed {
+				t.Fatalf("outcome = %q, ended %v; want a failure", state, ended)
+			}
+			if said := strings.Contains(text, "dev channel"); said != tc.moved {
+				t.Errorf("the sentence %q mentions the dev channel: %v, want %v", text, said, tc.moved)
+			}
+			if kept := strings.Contains(text, "Restart the zoomies agent"); kept == tc.moved {
+				t.Errorf("the sentence %q keeps the restart advice: %v, want %v", text, kept, !tc.moved)
+			}
+		})
+	}
+}
+
 // A failure is history once the host is on that release some other way, by hand
 // for instance, and the card says what is true now.
 func TestTheCardForgetsAFailureOnceTheHostRunsTheRelease(t *testing.T) {
@@ -1106,6 +1198,13 @@ func TestAFailedHostUpdateIsHistoryOnceTheHostRunsWhatTheControllerWouldTakeItTo
 		{"a host on the release it was asked for is history as before", "1.3.5", "1.3.4", "1.3.5", "1.3.5", true},
 		{"a host on a later release is history as before", "1.3.5", "1.3.4", "1.3.5", "1.3.6", true},
 		{"a host on an older release keeps it", "1.3.5", "1.3.4", "1.3.5", "1.3.4", false},
+
+		// A release cannot be ordered against a build from main either, so once the
+		// controller has moved to one, a failed update to a release is judged by what
+		// the controller would take the host to now, as the main ones above are.
+		{"a host on the controller's build from main is history of a failed update to a release", "1.3.5", "1.3.4", runsNow, runsNow, true},
+		{"a host on some other build from main keeps a failed update to a release", "1.3.5", "1.3.4", runsNow, "main-sha-5ca1ab1e", false},
+		{"a host still on its old release keeps a failed update to a release", "1.3.5", "1.3.4", runsNow, "1.3.4", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, state := range []string{store.UpdateFailed, store.UpdateTimedOut} {
