@@ -211,6 +211,12 @@ it is in WSL2 (`WSL_DISTRO_NAME`, or `microsoft-standard-WSL2` in
   `Zoomies\WslEvery5Minutes`. Both run a small script under
   `%LOCALAPPDATA%\Zoomies` that checks `wsl -l --running` first.
 
+`zoomies init`, `zoomies upgrade` and `zoomies agent join` notice a WSL2 distro
+and offer all of this, listing what is missing and asking before anything is
+written (`--yes` answers for you, `zoomies upgrade --check` only describes it,
+and with no terminal and no `--yes` it is left undone and says so). They say
+nothing once everything is in place.
+
 Run `sudo zoomies agent --wsl-ensure` yourself to see what is in place and what
 is not. It is safe to repeat, changes nothing that is already right, restarts no
 service and ends no process, so it cannot interrupt a job. Whatever it cannot do

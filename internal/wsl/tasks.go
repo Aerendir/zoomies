@@ -69,7 +69,7 @@ func taskSpecs() []taskSpec {
 // No credentials are ever passed: without /RU and /RP a task runs as the
 // current user and only while they are signed in, and an ONSTART task needs
 // elevation, which is reported rather than asked for.
-func ensureTask(ctx context.Context, sys System, spec taskSpec, winScript string) Step {
+func ensureTask(ctx context.Context, sys System, spec taskSpec, winScript string, dry bool) Step {
 	step := Step{Name: "task " + spec.name}
 	action := `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "` + winScript + `"`
 	if out, err := sys.Run(ctx, SchtasksPath, "/Query", "/TN", spec.name, "/XML"); err == nil {
@@ -78,6 +78,10 @@ func ensureTask(ctx context.Context, sys System, spec taskSpec, winScript string
 			step.Status, step.Detail = StatusOK, "already in place"
 			return step
 		}
+	}
+	if dry {
+		step.Status, step.Detail = StatusPending, "create the Windows scheduled task "+spec.name
+		return step
 	}
 	args := append([]string{"/Create", "/TN", spec.name, "/TR", action}, spec.args...)
 	args = append(args, "/F")
