@@ -1197,7 +1197,20 @@ func (a *Agent) dispatch(ctx context.Context, task Task) {
 	// stop and stream logs from, and an agent that stopped polling would
 	// strand every one of them.
 	if task.Kind == TaskCreateRunner {
-		if why := a.refuseNewWork(); why != "" {
+		why := a.refuseNewWork()
+		if why != "" {
+			// The flag is a copy taken at the last beat, and the controller is
+			// the side that places runners: an operator who uncordons a host
+			// with a backlog waiting has runners arriving here at once, up to
+			// a whole heartbeat before this copy says so, and each one would
+			// fail for a cordon that is already gone. Ask again before
+			// believing it. A failed beat leaves the old answer standing, so a
+			// controller that cannot be reached still gets the refusal.
+			if err := a.heartbeat(ctx); err == nil {
+				why = a.refuseNewWork()
+			}
+		}
+		if why != "" {
 			a.log.Warn("refusing to create a runner", "task", task.ID, "runner", task.RunnerID, "reason", why)
 			a.report(ctx, TaskResult{TaskID: task.ID, Kind: task.Kind, RunnerID: task.RunnerID, OK: false, Error: why, CompletedAt: a.now()})
 			return
