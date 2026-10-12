@@ -25,7 +25,9 @@ const (
 	StartFailed  = "failed"
 	// StartUnknown is a start whose end is not on record: a runner still
 	// starting when the period ended, one removed before it registered with
-	// no fault recorded, or a session whose runner record is gone.
+	// no fault recorded, or one known only from a session that never
+	// registered (a session that did is started). An outcome this package
+	// does not know is counted the same way.
 	StartUnknown = "unknown"
 )
 
@@ -154,6 +156,8 @@ type StartupGroup struct {
 type StartupEvidence struct {
 	// Groups are the hosts and pools that keep failing, most failures
 	// first, cut to MaxStartupGroups; GroupsCut says how many were left out.
+	// When none does but one failed three times or more, it holds that one,
+	// the group the summary quotes.
 	Groups    []StartupGroup `json:"groups"`
 	GroupsCut int            `json:"groups_cut"`
 	// Starts counts the starts in the period with an outcome, Failures those
@@ -209,6 +213,7 @@ type startupRead struct {
 	hostNames      map[string]string
 	incidents      []HostIncident
 	throttles      []HostInterval
+	since, until   time.Time
 }
 
 // StartupFailures names the host or pool that keeps failing to start runners,
@@ -221,7 +226,7 @@ func StartupFailures(s StartupSnapshot) (StartupFailuresFinding, error) {
 		return f, errors.New("startup failures snapshot needs a period with a start before its end")
 	}
 	r := startupRead{poolNames: map[string]string{}, hostNames: map[string]string{}, incidents: s.Incidents,
-		throttles: s.Throttles}
+		throttles: s.Throttles, since: s.Since, until: s.Until}
 	e := StartupEvidence{Groups: []StartupGroup{}, Truncated: s.Truncated}
 	for _, a := range s.Attempts {
 		if a.RequestedAt.Before(s.Since) || !a.RequestedAt.Before(s.Until) {
@@ -320,7 +325,7 @@ func StartupFailures(s StartupSnapshot) (StartupFailuresFinding, error) {
 		case ExplainThrottle:
 			reasons = append(reasons, "only the timing ties the failures to the throttle")
 		case "":
-			reasons = append(reasons, "no image fault, open incident or throttle explains the failures, and an incident that has already cleared is not kept")
+			reasons = append(reasons, "no image fault, open incident or throttle explains most of the failures, and an incident that has already cleared is not kept")
 		}
 		if top.Explanation != "" && top.Explained*4 < top.Failures*3 {
 			reasons = append(reasons, fmt.Sprintf("only %d of its %d failures %s, so the rest may have another cause",
@@ -333,16 +338,20 @@ func StartupFailures(s StartupSnapshot) (StartupFailuresFinding, error) {
 			e.Failures, e.Starts, unknownTail)
 	default:
 		// Some host or pool failed three times or more, but under half its
-		// starts: "more than twice" would be untrue of it.
+		// starts: "more than twice" would be untrue of it. The sentence says
+		// both halves of the rule, because a host that failed its only two
+		// starts did fail half of them. The group it quotes goes in the
+		// evidence, so whatever shows the sentence can show the row.
 		worst := rows[0]
-		f.Summary = fmt.Sprintf("No host or pool failed to start as many as half its runners in this period: %d of %d starts failed, the most on one being %d of %d on %s %s%s.",
+		f.Summary = fmt.Sprintf("No host or pool failed three or more times and at least half its starts in this period: %d of %d starts failed, the most on one being %d of %d on %s %s%s.",
 			e.Failures, e.Starts, worst.Failures, worst.Starts, worst.Scope, worst.Name, unknownTail)
+		f.Evidence.Groups = append(f.Evidence.Groups, worst.StartupGroup)
 	}
 	if f.Dominant == "" && e.Starts < confidentStarts {
 		reasons = append(reasons, fmt.Sprintf("only %s in this period: too few to say that nothing keeps failing", count(e.Starts, "start")))
 	}
 	if e.Unknown*10 > e.Starts+e.Unknown {
-		reasons = append(reasons, fmt.Sprintf("%d of the %d runners asked to start have no recorded outcome, still starting when the period ended or removed before they registered with nothing recorded",
+		reasons = append(reasons, fmt.Sprintf("%d of the %d runners asked to start have no recorded outcome (still starting when the period ended, removed before registering with nothing recorded, or known only from a session that never registered), so some may have failed",
 			e.Unknown, e.Starts+e.Unknown))
 	}
 	if s.Truncated {
@@ -439,6 +448,7 @@ func (r startupRead) row(scope, id, poolID string) startRow {
 	row.FaultKind, row.faultN = mostCommon(failures, func(a StartAttempt) string { return a.FaultKind },
 		func(x, y string) int { return cmp.Or(emptyLast(x)-emptyLast(y), strings.Compare(x, y)) })
 
+	runtimeCovers := func(a StartAttempt) (bool, time.Time) { return r.runtimeCovers(a, row.FailingSince) }
 	for _, ex := range []struct {
 		name   string
 		covers func(StartAttempt) (bool, time.Time)
@@ -446,7 +456,7 @@ func (r startupRead) row(scope, id, poolID string) startRow {
 	}{
 		{ExplainImage, func(a StartAttempt) (bool, time.Time) { return a.FaultKind == faultImage, time.Time{} }, false},
 		{ExplainImagePullIncident, r.imagePullCovers, false},
-		{ExplainRuntimeIncident, r.runtimeCovers, false},
+		{ExplainRuntimeIncident, runtimeCovers, false},
 		// The throttle holds at half because nothing firmer is claimed of
 		// it: the finding says only the timing ties it, at medium.
 		{ExplainThrottle, r.throttleCovers, true},
@@ -461,7 +471,20 @@ func (r startupRead) row(scope, id, poolID string) startRow {
 				}
 			}
 		}
-		if len(covered)*2 > row.Failures || (ex.atHalf && len(covered)*2 == row.Failures) {
+		holds := len(covered)*2 > row.Failures || (ex.atHalf && len(covered)*2 == row.Failures)
+		if ex.name == ExplainThrottle && holds {
+			// A host throttled all period has every failure inside a
+			// throttle by chance, so the failures must fall inside one
+			// more often than time does on their hosts: more covered than
+			// the sum of each failure's host's throttled share. In
+			// milliseconds, so the comparison is exact.
+			var expected int64
+			for _, a := range failures {
+				expected += r.throttledMS(a.HostID)
+			}
+			holds = int64(len(covered))*r.until.Sub(r.since).Milliseconds() > expected
+		}
+		if holds {
 			row.Explanation, row.Explained, row.covered, row.since = ex.name, len(covered), covered, since
 			break
 		}
@@ -489,14 +512,31 @@ func (r startupRead) imagePullCovers(a StartAttempt) (bool, time.Time) {
 	return false, time.Time{}
 }
 
-func (r startupRead) runtimeCovers(a StartAttempt) (bool, time.Time) {
+// runtimeCovers takes a failure at or after the incident's since, and one
+// before it in the group's current run with no start registered on its host
+// in between: the controller hears of the incident on the heartbeat after
+// the start that found the runtime down, so that failure is its trigger.
+func (r startupRead) runtimeCovers(a StartAttempt, failingSince time.Time) (bool, time.Time) {
 	if !hostMachinery(a.FaultKind) {
 		return false, time.Time{}
 	}
+	at := a.at()
 	for _, inc := range r.incidents {
-		if inc.Kind == IncidentRuntime && inc.HostID == a.HostID && !inc.Since.After(a.at()) {
+		if inc.Kind != IncidentRuntime || inc.HostID != a.HostID {
+			continue
+		}
+		if !inc.Since.After(at) {
 			return true, inc.Since
 		}
+		if at.Before(failingSince) {
+			return false, time.Time{}
+		}
+		for _, b := range r.known {
+			if b.Outcome == StartStarted && b.HostID == a.HostID && b.at().After(at) && !b.at().After(inc.Since) {
+				return false, time.Time{}
+			}
+		}
+		return true, inc.Since
 	}
 	return false, time.Time{}
 }
@@ -512,6 +552,26 @@ func (r startupRead) throttleCovers(a StartAttempt) (bool, time.Time) {
 		}
 	}
 	return false, time.Time{}
+}
+
+// throttledMS is how long a host was throttled within the period.
+func (r startupRead) throttledMS(host string) int64 {
+	var list []Interval
+	for _, th := range r.throttles {
+		if th.HostID == host {
+			iv := th.Interval
+			if iv.To.IsZero() || iv.To.After(r.until) {
+				iv.To = r.until
+			}
+			iv.From = later(iv.From, r.since)
+			list = append(list, iv)
+		}
+	}
+	var ms int64
+	for _, iv := range merge(list) {
+		ms += iv.To.Sub(iv.From).Milliseconds()
+	}
+	return ms
 }
 
 // oneHostOfMany is the host a pool's failures all fell on, when the pool's
@@ -584,9 +644,11 @@ func (r startupRead) repeatSentence(g startRow) string {
 	switch g.Explanation {
 	case ExplainImage:
 		if g.Explained < g.Failures {
-			fmt.Fprintf(&b, ": %d of them because the runner image could not be pulled", g.Explained)
+			fmt.Fprintf(&b, ": %d of them because the runner image could not be pulled or would not start", g.Explained)
 		} else {
-			b.WriteString(": the runner image could not be pulled")
+			// The image fault is a pull that failed or an image that would
+			// not start, and the sentence claims no more than that.
+			b.WriteString(": the runner image could not be pulled or would not start")
 		}
 	case ExplainImagePullIncident:
 		fmt.Fprintf(&b, ": %s came on %s, which %s been unable to pull pool %s's image since %s",
@@ -596,7 +658,9 @@ func (r startupRead) repeatSentence(g startRow) string {
 	case ExplainThrottle:
 		fmt.Fprintf(&b, ": %s came while %s %s throttled", they, hosts, verb("was", "were"))
 	default:
-		b.WriteString(", and no image fault, open incident or throttle explains them")
+		// Most, because that is what each explanation was held to: half of
+		// them can be image faults and none explain the group.
+		b.WriteString(", and no image fault, open incident or throttle explains most of them")
 		if g.FaultKind != "" {
 			fmt.Fprintf(&b, ": %s recorded the fault %s", ofThem(g.faultN, g.Failures, "all of them"), g.FaultKind)
 		}
@@ -615,7 +679,7 @@ var coveredWords = map[string]string{
 
 func (r startupRead) steps(g startRow) []NextStep {
 	var out []NextStep
-	hosts, _ := r.coveredHosts(g)
+	hosts, verb := r.coveredHosts(g)
 	switch g.Explanation {
 	case ExplainImage, ExplainImagePullIncident:
 		text := fmt.Sprintf("Check that pool %s's image names a tag that exists, and that its hosts can reach the registry and are logged in to it if the image is private.", g.Name)
@@ -627,13 +691,16 @@ func (r startupRead) steps(g startRow) []NextStep {
 		out = append(out, NextStep{Setting: "pool.image", Code: "host.image_pull_failed", Text: text})
 	case ExplainRuntimeIncident:
 		out = append(out, NextStep{Setting: "host.capacity", Code: "host.runtime_recovering", Text: fmt.Sprintf(
-			"Get the container runtime on %s answering again: the host holds new starts until it recovers, and if the runtime is running but slow, lower the host's capacity so it carries less.", hosts)})
+			"Get the container runtime on %s answering again: %s, and if %s running but slow, lower %s capacity so it carries less.", hosts,
+			verb("the host holds new starts until it recovers", "the hosts hold new starts until they recover"),
+			verb("the runtime is", "a runtime is"), verb("the host's", "that host's"))})
 	case ExplainThrottle:
 		out = append(out, NextStep{Setting: "host.capacity", Code: "host.throttled", Text: fmt.Sprintf(
-			"Lower the capacity of %s so its runners fit the machine: the failures came while it was throttled after sustained pressure, though only the timing ties them to it.", hosts)})
+			"Lower the capacity of %s so %s: the failures came while %s throttled after sustained pressure, though only the timing ties them to it.", hosts,
+			verb("its runners fit the machine", "their runners fit the machines"), verb("it was", "they were"))})
 	default:
 		out = append(out, NextStep{Code: "pool.runners_failing", Text: fmt.Sprintf(
-			"Read what runner %s, the latest to fail on %s %s, reported when it failed: no image fault, open incident or throttle explains these failures, so its own message is the best lead.",
+			"Read what runner %s, the latest to fail on %s %s, reported when it failed: no image fault, open incident or throttle explains most of these failures, so its own message is the best lead.",
 			g.LastRunnerID, g.Scope, g.Name)})
 	}
 	switch {

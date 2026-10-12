@@ -89,7 +89,7 @@ func mustStartup(t *testing.T, s StartupSnapshot) StartupFailuresFinding {
 		t.Errorf("confidence %s with reason %q: a reason is given exactly when it is not high", f.Confidence, f.ConfidenceReason)
 	}
 	for _, text := range []string{f.Summary, f.ConfidenceReason} {
-		if strings.Contains(text, "—") || strings.Contains(text, "--") {
+		if strings.Contains(text, "\u2014") || strings.Contains(text, "--") {
 			t.Errorf("a dash standing in for punctuation in %q", text)
 		}
 	}
@@ -145,7 +145,7 @@ func TestStartupFailuresNamesTheHostThatKeepsFailing(t *testing.T) {
 		t.Errorf("dominant %q, want host:host_b", f.Dominant)
 	}
 	wantConfidence(t, f, High, "")
-	wantSummary(t, f, "Host demo-builder-2 failed to start 6 of 7 runners in this period, failing since 2026-10-11 09:00 UTC, before the container started: the runner image could not be pulled.")
+	wantSummary(t, f, "Host demo-builder-2 failed to start 6 of 7 runners in this period, failing since 2026-10-11 09:00 UTC, before the container started: the runner image could not be pulled or would not start.")
 	if !slices.Contains(f.Codes, "host.image_pull_failed") {
 		t.Errorf("codes %v, want host.image_pull_failed", f.Codes)
 	}
@@ -179,7 +179,7 @@ func TestFailuresSpreadAcrossHostsNameThePool(t *testing.T) {
 	if f.Dominant != "pool:pool_linux" {
 		t.Errorf("dominant %q, want pool:pool_linux", f.Dominant)
 	}
-	wantSummary(t, f, "Pool linux failed to start 8 of 10 runners in this period, failing since 2026-10-11 09:00 UTC, before the container started, and no image fault, open incident or throttle explains them.")
+	wantSummary(t, f, "Pool linux failed to start 8 of 10 runners in this period, failing since 2026-10-11 09:00 UTC, before the container started, and no image fault, open incident or throttle explains most of them.")
 	var order []string
 	for _, g := range f.Evidence.Groups {
 		order = append(order, g.Scope+":"+g.ID)
@@ -223,6 +223,21 @@ func TestAPoolsExplanationNamesTheHostsBehindIt(t *testing.T) {
 		t.Errorf("summary %q", f.Summary)
 	}
 
+	if len(f.NextSteps) == 0 || !strings.HasPrefix(f.NextSteps[0].Text, "Get the container runtime on demo-builder-1 and 1 more host answering again: the hosts hold new starts until they recover") {
+		t.Errorf("first step %+v, want the hosts named as hosts", f.NextSteps)
+	}
+
+	s.Incidents = nil
+	s.Throttles = []HostInterval{{HostID: "host_a", Interval: Interval{From: startMinute(-1), To: startMinute(30)}},
+		{HostID: "host_b", Interval: Interval{From: startMinute(-1), To: startMinute(30)}}}
+	f = mustStartup(t, s)
+	if !strings.HasSuffix(f.Summary, ": they came while demo-builder-1 and 1 more host were throttled.") {
+		t.Errorf("summary %q", f.Summary)
+	}
+	if len(f.NextSteps) == 0 || !strings.HasPrefix(f.NextSteps[0].Text, "Lower the capacity of demo-builder-1 and 1 more host so their runners fit the machines: the failures came while they were throttled") {
+		t.Errorf("first step %+v, want the hosts named as hosts", f.NextSteps)
+	}
+
 	f = mustStartup(t, startSnapshot(failed("host_a", "pool_linux", "image", 0, 10, 20), failed("host_b", "pool_linux", "image", 5, 15)))
 	if len(f.NextSteps) != 1 || !strings.HasPrefix(f.NextSteps[0].Text, "Check that pool linux's image names a tag that exists") {
 		t.Errorf("steps %+v, want the pool's image checked", f.NextSteps)
@@ -230,22 +245,65 @@ func TestAPoolsExplanationNamesTheHostsBehindIt(t *testing.T) {
 }
 
 // The incident is heard of on the heartbeat after the start that found the
-// runtime down, so the first failure can come before it; the rest still did.
-func TestARuntimeIncidentHeardOfAfterTheFirstFailureStillExplainsMost(t *testing.T) {
-	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0, 10, 20, 30))
+// runtime down, so that failure comes before it; it is the incident's own
+// trigger, not a failure with another cause.
+func TestTheFailureThatRaisedARuntimeIncidentIsPutDownToIt(t *testing.T) {
+	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0, 10, 20))
 	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}}
 	f := mustStartup(t, s)
 	wantConfidence(t, f, High, "")
-	if !strings.HasSuffix(f.Summary, ": 3 of them came while the container runtime on demo-builder-2 was failing, as it has been since 2026-10-11 09:05 UTC.") {
-		t.Errorf("summary %q, want the three it covers counted", f.Summary)
+	if !strings.HasSuffix(f.Summary, ": they came while the container runtime on demo-builder-2 was failing, as it has been since 2026-10-11 09:05 UTC.") {
+		t.Errorf("summary %q, want all three put down to the incident", f.Summary)
+	}
+}
+
+// A start that registered on the host between a failure and the incident
+// says the runtime was working then, so that failure was another episode.
+func TestARuntimeIncidentDoesNotReachBackPastAStartThatRegistered(t *testing.T) {
+	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0), started("host_b", "pool_arm", 2), failed("host_b", "pool_linux", "backend", 10, 20, 30))
+	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}}
+	f := mustStartup(t, s)
+	// The pool started nothing, so its run of failures began at 09:00; the
+	// host's start of another pool at 09:02 still ends the host's episode.
+	var pool *StartupGroup
+	for i, g := range f.Evidence.Groups {
+		if g.Scope == "pool" {
+			pool = &f.Evidence.Groups[i]
+		}
+	}
+	if pool == nil || pool.Explanation != "runtime_incident" || pool.Explained != 3 {
+		t.Errorf("pool group %+v, want runtime_incident covering 3 of its 4", pool)
+	}
+}
+
+// A pool's run of failures begins after its last start anywhere; an earlier
+// failure is not put down to an incident heard of after that start.
+func TestARuntimeIncidentReachesBackOnlyWithinTheCurrentRun(t *testing.T) {
+	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0), started("host_a", "pool_linux", 2), failed("host_b", "pool_linux", "backend", 10, 20, 30))
+	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}}
+	f := mustStartup(t, s)
+	for _, g := range f.Evidence.Groups {
+		if g.Scope == "pool" && (g.Explanation != "runtime_incident" || g.Explained != 3) {
+			t.Errorf("pool group %+v, want runtime_incident covering 3 of its 4", g)
+		}
+		if g.Scope == "host" && g.Explained != 4 {
+			t.Errorf("host group %+v, want all 4 covered: nothing started on it in between", g)
+		}
 	}
 }
 
 // Three in four covered is high; two in three is mixed evidence.
 func TestAnExplanationCoveringFewerThanThreeInFourIsMedium(t *testing.T) {
-	s := startSnapshot(failed("host_b", "pool_linux", "backend", 0, 10, 20))
-	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(5)}}
+	s := startSnapshot(failed("host_b", "pool_linux", "config", 0), failed("host_b", "pool_linux", "backend", 10, 20, 30))
+	s.Incidents = []HostIncident{{HostID: "host_b", Kind: "runtime", Since: startMinute(-5)}}
 	f := mustStartup(t, s)
+	wantConfidence(t, f, High, "")
+	if !strings.HasSuffix(f.Summary, ": 3 of them came while the container runtime on demo-builder-2 was failing, as it has been since 2026-10-11 08:55 UTC.") {
+		t.Errorf("summary %q, want the three it covers counted", f.Summary)
+	}
+
+	s.Attempts = slices.Concat(failed("host_b", "pool_linux", "config", 0), failed("host_b", "pool_linux", "backend", 10, 20))
+	f = mustStartup(t, s)
 	if g := dominantGroup(t, f); g.Explanation != "runtime_incident" || g.Explained != 2 {
 		t.Errorf("explanation %q covering %d, want runtime_incident covering 2", g.Explanation, g.Explained)
 	}
@@ -260,6 +318,41 @@ func TestARuntimeIncidentDoesNotExplainAFaultThatNamesAnotherCause(t *testing.T)
 	f := mustStartup(t, s)
 	if g := dominantGroup(t, f); g.Explanation != "" {
 		t.Errorf("explanation %q for registration faults, want none", g.Explanation)
+	}
+}
+
+// A host throttled all period has every failure inside a throttle by
+// chance; the failures must fall inside one more often than the time does.
+func TestAThrottleCoveringThePeriodExplainsNothing(t *testing.T) {
+	s := startSnapshot(failed("host_b", "pool_linux", "backend_busy", 0, 10, 20))
+	s.Throttles = []HostInterval{{HostID: "host_b", Interval: Interval{From: s.Since}}}
+	if g := dominantGroup(t, mustStartup(t, s)); g.Explanation != "" {
+		t.Errorf("explanation %q from a throttle on all period, want none", g.Explanation)
+	}
+}
+
+// Throttled for half the period: two failures of four inside it is what
+// chance gives, and three is more.
+func TestAThrottleExplainsOnlyMoreFailuresThanItsShareOfTime(t *testing.T) {
+	s := startSnapshot(failed("host_b", "pool_linux", "", 0, 10, 700, 710))
+	s.Throttles = []HostInterval{{HostID: "host_b", Interval: Interval{From: s.Since, To: s.Since.Add(12 * time.Hour)}}}
+	if g := dominantGroup(t, mustStartup(t, s)); g.Explanation != "" {
+		t.Errorf("2 of 4 failures in a throttle over half the period explained as %q, want none", g.Explanation)
+	}
+	// The same half, begun before the period and recorded twice: only what
+	// falls inside the period counts, and once.
+	s.Attempts = failed("host_b", "pool_linux", "", 0, 10, 20, 710)
+	s.Throttles = []HostInterval{{HostID: "host_b", Interval: Interval{From: s.Since.Add(-12 * time.Hour), To: s.Since.Add(12 * time.Hour)}},
+		{HostID: "host_b", Interval: Interval{From: s.Since.Add(-12 * time.Hour), To: s.Since.Add(12 * time.Hour)}}}
+	if g := dominantGroup(t, mustStartup(t, s)); g.Explanation != "throttle" || g.Explained != 3 {
+		t.Errorf("3 of 4 failures in a throttle over half the period explained as %q covering %d, want throttle covering 3", g.Explanation, g.Explained)
+	}
+
+	// And the later half, running past the period's end.
+	s.Attempts = failed("host_b", "pool_linux", "", 0, 600, 610, 620)
+	s.Throttles = []HostInterval{{HostID: "host_b", Interval: Interval{From: s.Until.Add(-12 * time.Hour), To: s.Until.Add(12 * time.Hour)}}}
+	if g := dominantGroup(t, mustStartup(t, s)); g.Explanation != "throttle" || g.Explained != 3 {
+		t.Errorf("3 of 4 failures in the period's last half throttled explained as %q covering %d, want throttle covering 3", g.Explanation, g.Explained)
 	}
 }
 
@@ -323,12 +416,20 @@ func TestImageFaultsExplainOnlyWhenMoreThanHalf(t *testing.T) {
 	if g := dominantGroup(t, half); g.Explanation != "" {
 		t.Errorf("3 image faults of 6 explained as %q, want none", g.Explanation)
 	}
+	// Half of them are image faults, so "no image fault explains them" would
+	// be untrue; what was checked is whether one explains most.
+	if !strings.HasSuffix(half.Summary, "explains most of them: 3 of them recorded the fault image.") {
+		t.Errorf("summary %q", half.Summary)
+	}
+	if len(half.NextSteps) == 0 || !strings.Contains(half.NextSteps[0].Text, "explains most of these failures") {
+		t.Errorf("first step %+v", half.NextSteps)
+	}
 	most := mustStartup(t, startSnapshot(failed("host_b", "pool_linux", "image", 0, 10, 20, 30), failed("host_b", "pool_linux", "", 40, 50, 60)))
 	if g := dominantGroup(t, most); g.Explanation != "image" || g.Explained != 4 {
 		t.Errorf("4 image faults of 7 explained as %q covering %d, want image covering 4", g.Explanation, g.Explained)
 	}
 	wantConfidence(t, most, Medium, "only 4 of its 7 failures recorded the image fault")
-	if !strings.HasSuffix(most.Summary, ": 4 of them because the runner image could not be pulled.") {
+	if !strings.HasSuffix(most.Summary, ": 4 of them because the runner image could not be pulled or would not start.") {
 		t.Errorf("summary %q, want the image faults counted", most.Summary)
 	}
 }
@@ -378,7 +479,7 @@ func TestAnUnexplainedRepeatIsMedium(t *testing.T) {
 		t.Errorf("explanation %q, fault kind %q; want none and registration", g.Explanation, g.FaultKind)
 	}
 	wantConfidence(t, f, Medium, "an incident that has already cleared is not kept")
-	wantSummary(t, f, "Host demo-builder-2 failed to start 3 of 3 runners in this period, failing since 2026-10-11 09:00 UTC, before the container started, and no image fault, open incident or throttle explains them: all of them recorded the fault registration.")
+	wantSummary(t, f, "Host demo-builder-2 failed to start 3 of 3 runners in this period, failing since 2026-10-11 09:00 UTC, before the container started, and no image fault, open incident or throttle explains most of them: all of them recorded the fault registration.")
 	if len(f.NextSteps) == 0 || f.NextSteps[0].Code != "pool.runners_failing" || !strings.Contains(f.NextSteps[0].Text, "run_host_b_pool_linux_f20") {
 		t.Errorf("first step %+v, want pool.runners_failing naming the latest runner", f.NextSteps)
 	}
@@ -415,7 +516,22 @@ func TestFailuresUnderHalfAreNotARepeatAndSaySo(t *testing.T) {
 	if f.Dominant != "" {
 		t.Errorf("dominant %q for 3 failures in 10, want none", f.Dominant)
 	}
-	wantSummary(t, f, "No host or pool failed to start as many as half its runners in this period: 3 of 10 starts failed, the most on one being 3 of 10 on host demo-builder-1.")
+	wantSummary(t, f, "No host or pool failed three or more times and at least half its starts in this period: 3 of 10 starts failed, the most on one being 3 of 10 on host demo-builder-1.")
+}
+
+// A host that failed both its starts failed half of them; the sentence must
+// say what was checked, three failures and half, not only half. The group it
+// quotes is in the evidence, so a card can show the row it names.
+func TestTheNoRepeatSentenceIsTrueOfAHostUnderThreeFailures(t *testing.T) {
+	f := mustStartup(t, startSnapshot(failed("host_a", "pool_linux", "", 0, 10, 20, 30, 40), started("host_a", "pool_linux", minutesFrom(50, 95)...),
+		failed("host_b", "pool_linux", "", 5, 15)))
+	if f.Dominant != "" {
+		t.Errorf("dominant %q, want none", f.Dominant)
+	}
+	wantSummary(t, f, "No host or pool failed three or more times and at least half its starts in this period: 7 of 102 starts failed, the most on one being 7 of 102 on pool linux.")
+	if len(f.Evidence.Groups) != 1 || f.Evidence.Groups[0].Scope+":"+f.Evidence.Groups[0].ID != "pool:pool_linux" || f.Evidence.Groups[0].Failures != 7 {
+		t.Errorf("groups %+v, want the pool the sentence names", f.Evidence.Groups)
+	}
 }
 
 func TestExactlyHalfFailedIsARepeat(t *testing.T) {
@@ -465,7 +581,7 @@ func TestAStartWithNoRecordedOutcomeIsNotCountedAsAFailure(t *testing.T) {
 
 func TestMoreThanATenthWithNoOutcomeIsMedium(t *testing.T) {
 	f := mustStartup(t, startSnapshot(started("host_a", "pool_linux", minutesFrom(0, 17)...), unknownStarts("host_a", "pool_linux", 30, 31)))
-	wantConfidence(t, f, Medium, "2 of the 19 runners asked to start have no recorded outcome")
+	wantConfidence(t, f, Medium, "2 of the 19 runners asked to start have no recorded outcome (still starting when the period ended, removed before registering with nothing recorded, or known only from a session that never registered), so some may have failed")
 }
 
 func TestAGroupsStartsWithNoOutcomeAreNamedInItsSentence(t *testing.T) {
@@ -530,7 +646,7 @@ func TestARecoveredGroupSaysWhenAStartRegistered(t *testing.T) {
 	if !g.FailingSince.Equal(startMinute(0).Add(30*time.Second)) || g.RecoveredAt == nil || !g.RecoveredAt.Equal(startMinute(30).Add(40*time.Second)) {
 		t.Errorf("failing since %v, recovered %v; want 09:00:30 and 09:30:40", g.FailingSince, g.RecoveredAt)
 	}
-	wantSummary(t, f, "Host demo-builder-2 failed to start 3 of 4 runners in this period, failing from 2026-10-11 09:00 UTC until a start registered at 2026-10-11 09:30 UTC, before the container started, and no image fault, open incident or throttle explains them.")
+	wantSummary(t, f, "Host demo-builder-2 failed to start 3 of 4 runners in this period, failing from 2026-10-11 09:00 UTC until a start registered at 2026-10-11 09:30 UTC, before the container started, and no image fault, open incident or throttle explains most of them.")
 
 	f = mustStartup(t, startSnapshot(failed("host_b", "pool_linux", "", 0), started("host_b", "pool_linux", 5),
 		failed("host_b", "pool_linux", "", 10, 20, 30), started("host_b", "pool_linux", 40)))
@@ -592,7 +708,7 @@ func TestAPoolFailingOnOneHostWhileStartingElsewhereNamesTheHost(t *testing.T) {
 	if g.PoolID != "pool_linux" || g.Starts != 4 || g.Failures != 4 {
 		t.Errorf("group %+v, want host_b counted on pool_linux alone, 4 of 4", g)
 	}
-	wantSummary(t, f, "Host demo-builder-2 failed to start 4 of 4 runners of pool linux in this period, a pool whose runners started on other hosts, failing since 2026-10-11 09:00 UTC, before the container started, and no image fault, open incident or throttle explains them.")
+	wantSummary(t, f, "Host demo-builder-2 failed to start 4 of 4 runners of pool linux in this period, a pool whose runners started on other hosts, failing since 2026-10-11 09:00 UTC, before the container started, and no image fault, open incident or throttle explains most of them.")
 	settings := stepSettings(f.NextSteps)
 	if !slices.Contains(settings, "pool.host_selector") || slices.Contains(settings, "host.cordoned") {
 		t.Errorf("steps name %v, want the pool's host selector and no cordon", settings)
