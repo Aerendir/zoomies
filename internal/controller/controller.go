@@ -167,8 +167,11 @@ type Controller struct {
 	// backupHTTP is Options.BackupRemoteHTTPClient, nil in production.
 	backupHTTP *http.Client
 
-	metrics *metrics
-	clients *clientCache
+	metrics         *metrics
+	clients         *clientCache
+	prDelayMu       sync.Mutex
+	prDelayReads    *auth.RateLimiter
+	prDelayInFlight map[string]bool
 	// openProvider, when set, stands in for kinds.Open: a test puts a scripted
 	// model behind a provider row and runs the same path the worker runs.
 	openProvider func(row *store.AssistantProvider, apiKey string) (assistant.Provider, error)

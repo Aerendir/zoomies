@@ -11,7 +11,7 @@ in the same pull request as the work.
 
 | Package | Status | Evidence |
 | --- | --- | --- |
-| ZF-242 | `in_progress` | Core, GitHub reader and snapshot assembly merged in #931, #933 and #935. The [on-demand collector](plans/2026-10-12-eli-pr-delay-collector.md), draft PR #938, uses the selected job's installation, verifies retained records and exposes its observation-window basis. Focused collector/assembly/core/reader race tests and changed-package vet pass. [Live handoff status](../eli-enhancement-roadmap-handoff.md#execution-status-updated-12-october-2026) records validation limits. Caller authorisation, request-admission budget, REST, MCP/CLI and UI integration remain. |
+| ZF-242 | `in_progress` | Foundations and collector merged in #931, #933, #935 and #938. The [read-only API and admission slice](plans/2026-10-12-eli-pr-delay-api.md) adds the Jobs read gate, rolling installation allowance, one in-flight request and quota preflight, with generated contracts. Focused race, shape and route/spec tests pass. [Live handoff status](../eli-enhancement-roadmap-handoff.md#execution-status-updated-12-october-2026) records checks and remaining work. MCP/CLI, contextual UI/Eli and model scenarios remain. |
 
 ## How to read a row
 

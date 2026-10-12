@@ -2292,6 +2292,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{id}/pr-delay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Observed required-check delay for a job's PR head
+         * @description On-demand GitHub metadata reads using the selected job's installation. Requires the jobs:read token scope. Protection applies to the PR's actual target branch. Missing or partial evidence remains explicit; this is not full merge readiness or a dependency critical path. At most 20 admissions per installation per rolling hour, one in flight, with a quota preflight retaining half the reported core allowance. Admission counters are in-memory and reset on controller restart. No source or model is read.
+         */
+        get: operations["getJobPRDelay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/facets": {
         parameters: {
             query?: never;
@@ -7585,6 +7608,51 @@ export interface components {
             timeline?: components["schemas"]["TimelineEntry"][];
             /** @description False when the runner's host is unreachable */
             logs_available?: boolean;
+        };
+        PRDelayReport: {
+            job_id: string;
+            repository: string;
+            installation_id: string;
+            pull_number: number;
+            /** @enum {string} */
+            window_basis: "earliest_observed_job";
+            result: components["schemas"]["PRDelayResult"];
+        };
+        /** @enum {string} */
+        PRDelayCoverage: "complete" | "partial" | "not_permitted" | "not_available" | "held_back" | "failed";
+        PRDelayResult: {
+            version: string;
+            head_sha: string;
+            target_branch: string;
+            /** Format: date-time */
+            observed_at: string;
+            /** Format: date-time */
+            window_start: string;
+            protection_coverage: components["schemas"]["PRDelayCoverage"];
+            observation_coverage: components["schemas"]["PRDelayCoverage"];
+            /** @enum {string} */
+            state: "superseded" | "currentness_unknown" | "incomplete" | "no_required_checks" | "checks_failed" | "checks_pending" | "checks_passed";
+            checks: components["schemas"]["PRDelayCheck"][];
+            /** @description The latest observed completed required check among retained evidence, or empty; not a proven critical path. */
+            last_finishing_check_id: string;
+            ignored_other_heads: number;
+        };
+        PRDelayCheck: {
+            /** @description Opaque identity within this snapshot; required-check names are not exposed. */
+            check_id: string;
+            /** @enum {string} */
+            state: "missing" | "unmapped" | "ambiguous" | "invalid_timing" | "pending" | "failed" | "passed" | "unknown_outcome";
+            /** @description A check-run reference */
+            observation_id: string;
+            completion_delay_ms: number | null;
+            timing: components["schemas"]["PRDelayTiming"];
+        };
+        /** @description Unknown intervals are null. Pre-start wait includes queue and startup; do not sum all three. Check reporting completion is separate from execution. */
+        PRDelayTiming: {
+            pre_start_ms: number | null;
+            queue_ms: number | null;
+            startup_ms: number | null;
+            execution_ms: number | null;
         };
         JobExplanation: {
             job_id: string;
@@ -14678,6 +14746,63 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    getJobPRDelay: {
+        parameters: {
+            query: {
+                /** @description A PR number in the selected job's repository; its initial head must match the job. */
+                pull_number: number;
+            };
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A no-store snapshot with explicit coverage and observation-window basis. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PRDelayReport"];
+                };
+            };
+            /** @description Invalid PR number or incomplete selected-job identity. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Unsupported reader, stale/closed/retargeted PR, or collection deadline exceeded. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Diagnostic admission, in-flight or GitHub quota limit; Retry-After gives a bounded retry delay. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     getJobFacets: {
