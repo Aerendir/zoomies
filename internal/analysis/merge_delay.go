@@ -45,6 +45,9 @@ type CheckObservation struct {
 	ProvisionedAt *time.Time
 	StartedAt     *time.Time
 	CompletedAt   *time.Time
+	// CheckCompletedAt can follow the job's execution completion. Keep it
+	// separate so check-reporting delay does not become execution time.
+	CheckCompletedAt *time.Time
 }
 
 type MergeDelaySnapshot struct {
@@ -176,7 +179,11 @@ func MergeDelay(s MergeDelaySnapshot) (MergeDelayResult, error) {
 						d.State = "pending"
 						break
 					}
-					d.CompletionDelayMS = milliseconds(o.CompletedAt.Sub(s.WindowStart))
+					completed := o.CompletedAt
+					if o.CheckCompletedAt != nil {
+						completed = o.CheckCompletedAt
+					}
+					d.CompletionDelayMS = milliseconds(completed.Sub(s.WindowStart))
 					d.State = "failed"
 					if o.Conclusion == "success" || o.Conclusion == "neutral" || o.Conclusion == "skipped" {
 						d.State = "passed"
@@ -184,8 +191,8 @@ func MergeDelay(s MergeDelaySnapshot) (MergeDelayResult, error) {
 					if o.Conclusion == "" {
 						d.State = "unknown_outcome"
 					}
-					if o.CompletedAt.After(latest) || (o.CompletedAt.Equal(latest) && (r.LastFinishingCheckID == "" || c.ID < r.LastFinishingCheckID)) {
-						latest = *o.CompletedAt
+					if completed.After(latest) || (completed.Equal(latest) && (r.LastFinishingCheckID == "" || c.ID < r.LastFinishingCheckID)) {
+						latest = *completed
 						r.LastFinishingCheckID = c.ID
 					}
 				}
@@ -239,6 +246,9 @@ func validTimeline(o CheckObservation, s MergeDelaySnapshot) bool {
 			return false
 		}
 		prev = *at
+	}
+	if o.CheckCompletedAt != nil && (o.CompletedAt == nil || o.CheckCompletedAt.Before(*o.CompletedAt) || o.CheckCompletedAt.After(s.ObservedAt)) {
+		return false
 	}
 	// GitHub can complete a skipped check without ever starting its job.
 	return o.CompletedAt == nil || o.StartedAt != nil || o.Conclusion == "skipped" || o.Conclusion == "neutral"

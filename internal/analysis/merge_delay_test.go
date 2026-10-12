@@ -33,6 +33,21 @@ func TestMergeDelayKeepsQueueAndStartupApart(t *testing.T) {
 	}
 }
 
+func TestMergeDelayUsesCheckReportingCompletionWithoutAddingItToExecution(t *testing.T) {
+	s := delayFixture()
+	completed := s.WindowStart.Add(12 * time.Minute)
+	s.Observations[0].CheckCompletedAt = &completed
+	r, err := MergeDelay(s)
+	if err != nil || *r.Checks[0].CompletionDelayMS != 720000 || *r.Checks[0].Timing.ExecutionMS != 60000 {
+		t.Fatalf("got %+v, %v", r, err)
+	}
+	completed = s.WindowStart.Add(9 * time.Minute)
+	r, err = MergeDelay(s)
+	if err != nil || r.Checks[0].State != "invalid_timing" {
+		t.Fatalf("got %+v, %v", r, err)
+	}
+}
+
 func TestMergeDelayKeepsIncompleteEvidenceAndBlockedChecksVisible(t *testing.T) {
 	cases := []struct {
 		name   string
