@@ -46,8 +46,8 @@ authorised AI Context source reads to a connected client.
 **Try it without credentials:** [start the local demo](quickstart.md#just-looking),
 open **Settings → Eli AI Assistant**, edit the demo provider and enable
 **Let Eli read this fleet through this provider**. Then open Eli and ask about
-“the fleet”: the built-in fixture provider reads the demo data and repeats what
-it found. With the switch off it echoes your question without reading the
+“the fleet”: the built-in fixture provider reads the demo data and presents a
+formatted fleet summary with a next step. With the switch off it echoes your question without reading the
 fleet. Use a model you configure for normal conversations and repairs on your
 own instance.
 
@@ -281,7 +281,7 @@ verdict to break the build on.
 
 The demo model that ships with the demo fleet can be asked about "the fleet"
 after you enable its fleet-read switch in Settings, Eli AI Assistant. It then
-reads the demo data and repeats what it found, so the lookup loop can be seen
+reads the demo data and presents a readable summary, so the lookup loop can be seen
 with no account and no key. With the switch off it only echoes the question.
 
 ## Personal conversations and PR repairs
@@ -320,6 +320,13 @@ answer, follow-on prompts use the conversation's topic and skip questions
 already asked. Extend `web/src/lib/assistant/prompts.ts` with a narrative topic;
 new page integrations pass an `EliContext` to `AskEli.svelte`.
 
+The [UI tour](ui.md#ask-eli) shows the current panel beside the fleet. This
+capture uses the built-in demo model and a real fleet lookup. It presents the
+result with clear headings, labelled metrics and a next step, without credentials.
+
+![Eli in an expanded panel beside Overview: a question about the fleet, the demo model's reply and the fleet lookup listed under What Eli looked at](screenshots/eli-chat-dark.webp#only-dark){ .zoomies-shot }
+![Eli in an expanded panel beside Overview: a question about the fleet, the demo model's reply and the fleet lookup listed under What Eli looked at](screenshots/eli-chat-light.webp#only-light){ .zoomies-shot }
+
 ## Hybrid provider ownership
 
 | Request | Provider |
@@ -336,6 +343,14 @@ scopes. Removing a user removes their personal providers. Deleting an
 installation provider leaves repository policies in place; automatic repairs stop until an administrator chooses another installation provider.
 
 ## Set up PR repairs
+
+The [repair UI tour](ui.md#eli-repairs) shows readiness checks and repository
+setup. The history below uses labelled sample outcomes; no real PR was changed
+to produce these images. A stopped attempt explains what needs attention before
+you spend another attempt, while a passed repair still needs normal PR review.
+
+![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs with sample history: a passed repair and an attempt needing attention, their explanations and investigation details below the PR request form](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
 1. Open **Eli repairs** from the navigation, or **Review a repair with Eli**
    beside a failed job. Paste a PR link to check readiness without invoking a model.
@@ -448,3 +463,11 @@ Model-generated fixes still need review. The limits constrain cost and the
 editing surface; they do not prove a patch correct. Provider errors, quota
 exhaustion or unsupported model output stop a repair without trying another
 user's credentials.
+
+A repair offers the model no tools; every step is a JSON object. A model that
+answers with a tool call anyway is told, as the result of that call, that it has
+no tools and which JSON replies it may send, and is asked once more. Most models
+comply. One that calls a tool again stops the repair, and Eli's comment names the
+tool it asked for, so you can tell a model that ignores its instructions, which
+a different model or provider fixes, from a prompt that was wrong. Both turns
+appear in the repair history.

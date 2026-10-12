@@ -176,13 +176,22 @@
     }
   }
   /*
-    On a phone the panel is the whole screen, so its bottom edge is the one the
-    home indicator sits on. index.html asks for viewport-fit=cover, so the gap
-    is honoured here rather than declared and ignored -- the footer holds the
-    drawer's actions, and a button half under the indicator is a button that
-    takes two goes to press.
+    On a phone the panel runs the full height of the screen, so its bottom
+    edge is the one the home indicator sits on. index.html asks for
+    viewport-fit=cover, so the gap is honoured here rather than declared and
+    ignored -- the footer holds the drawer's actions, and a button half under
+    the indicator is a button that takes two goes to press.
+
+    It is not the full width. Every drawer size is wider than a phone, so the
+    panel used to cover the whole screen and read as a new page, with nothing
+    to say where the operator had come from or that a tap outside would take
+    them back. A strip of the page stays visible down the left, under the
+    scrim, as wide as a finger needs to hit it.
   */
   @media (max-width: 768px) {
+    .panel {
+      max-width: calc(var(--z-window-width) - var(--z-space-12));
+    }
     .body,
     .body.flush,
     footer {

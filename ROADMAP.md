@@ -1,6 +1,6 @@
 # Zoomies follow-on roadmap
 
-Version 3.10 · 11 October 2026 · derived from the owner's
+Version 3.11 · 12 October 2026 · derived from the owner's
 [follow-on roadmap v1.0](roadmap/source/2026-09-06-follow-on-roadmap-v1.0.md),
 reconciled against `main` at `6d12a72` on 6 September, at `9a80b31`
 on 19 September and at `88c41f6` on 8 October, when the owner set a new primary target, withdrew the
@@ -1626,6 +1626,53 @@ and 2 touch neither.
 
 Depends on ZF-235 for Eli's repair worker. Size L.
 
+### ZF-240: the fleet as it moves, over MCP
+
+**Classification: extension; M; proposed and designed 12 October.** An
+agent connected over MCP, and Eli, can read what the fleet is and what it
+did over a period, but not what is happening as it happens: the event
+stream, the scheduler's decisions, the minute samples, a runner's timeline
+and the workflow runs are REST only, and the interesting questions cost
+more calls than Eli may spend.
+[fleet-analysis.md](roadmap/fleet-analysis.md) section 4 is the design.
+
+**Do:** `GET /events/recent` over the bus's ring, with a bounded `wait`;
+`recent_events`, `wait_for_change`, `scaling_decisions`, `fleet_samples`,
+`host_samples`, `runner_timeline`, `list_workflow_runs` and
+`list_webhook_deliveries` for any viewer, and `list_audit` and
+`support_bundle` for an administrator's agent; the first seven on Eli's list
+and the other three named as left off; a live flag so Eli runs a wait again; the `what_changed` prompt and the
+`zoomies://fleet/now` resource; `zoomies events recent`; three recorded Eli
+scenarios. Push (resource subscriptions, a server-initiated stream) is
+deferred, and the design says why.
+
+**Accepted because:** the transport stays stateless; every tool is one
+documented route with the caller's own credential; workflow-written text
+is quoted only in the untrusted block.
+
+Depends on ZF-228, ZF-235. Size M.
+
+### ZF-241: analyses the controller computes
+
+**Classification: new; M; proposed and designed 12 October.** Why a period
+was slow, whether a release made things worse, whether a host fails when it
+is busy and which host keeps failing to start runners are each answerable
+from what the fleet keeps, and each takes a model a dozen calls to assemble
+badly. [fleet-analysis.md](roadmap/fleet-analysis.md) section 5 is the design.
+
+**Do:** `internal/analysis`, pure, with a purity test; four findings, each
+a REST route, an MCP tool on Eli's list, a card in the UI where the
+question is already asked, and `zoomies analyse`: the queue-wait breakdown
+by cause, a comparison of two periods or releases that says when the
+sample is too small, host pressure against failures, and repeated
+runner-startup failures by host and pool; an Eli scenario per finding.
+
+**Accepted because:** one computed answer is rendered everywhere, as the
+job explanation is, so the UI, the CLI and Eli cannot disagree; the package
+is pure and its decisions are table tests.
+
+Depends on ZF-240, ZF-231, ZF-226. Size M.
+
 ## 9. Kept for the day somebody asks
 
 Nothing here is authorised by planning alone. Each starts when a fleet
@@ -1759,6 +1806,8 @@ every package in section 8 was re-read on 19 September against the code.
 | 16 | ZF-234 the documentation | `mkdocs build --strict` passes; every new route and command is on its page |
 | 17 | ZF-235 the assistant, slice by slice, after an owner decision to start | Each slice's acceptance in the design's section 9 |
 | 18 | ZF-239 slice 2, the controller's side of a shared App, with no network | An `own` installation is unchanged; a `shared` one completes a repair against the fake relay and holds no private key |
+| 19 | ZF-240 the fleet as it moves, over MCP | One call answers what changed; a second with the cursor blocks until a seeded event; Eli's three scenarios hold and the admin reads are left off its list |
+| 20 | ZF-241 the analyses | Each seeded cause is named as dominant at high confidence; a small sample is said to be small; the card and the tool show one answer |
 | - | ZF-239 slices 3 to 5, the relay itself | After the owner's answers and a ruling on delivery rule 15 |
 | - | ZF-215, ZF-212, ZF-403's rotation, and section 9 | When a fleet asks |
 
@@ -1800,6 +1849,12 @@ remaining dependency. Do not invent live runs, elapsed observation, benchmark
 results or user feedback; do not wait for them either.
 
 ## 13. Change record
+
+* **12 October 2026: Version 3.11:** ZF-240 and ZF-241 added and designed
+  in [fleet-analysis.md](roadmap/fleet-analysis.md): the recent past over
+  MCP with a bounded wait, and four analyses the controller computes, each
+  offered to an agent and to Eli alike. Push over MCP is deferred, with the
+  reason recorded. Rows 19 and 20 in section 10. No code yet.
 
 * **11 October 2026: Version 3.10:** ZF-206, Windows: the owner tried the
   Windows agent on a real Windows host and it works. The text that said no

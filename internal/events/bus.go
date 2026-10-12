@@ -328,6 +328,69 @@ type SubscribeOptions struct {
 	Incomplete bool
 }
 
+// filter is the predicate a subscription and a read of the ring share, so the
+// two cannot disagree about which events match.
+func (o SubscribeOptions) filter() func(Event) bool {
+	kinds := map[Kind]bool{}
+	for _, k := range o.Kinds {
+		kinds[k] = true
+	}
+	return func(e Event) bool {
+		if len(kinds) > 0 && !kinds[e.Kind] {
+			return false
+		}
+		if o.TopicPrefix != "" && !strings.HasPrefix(e.Topic, o.TopicPrefix) {
+			return false
+		}
+		return true
+	}
+}
+
+// replayLocked returns the ringed events after since that pass filter, and
+// whether the ring still covers the whole gap. The caller holds b.mu, so the
+// answer is one instant's: a subscription takes it under the lock that also
+// registers the feed, and Recent under the lock that publish numbers events
+// with. Zero means "from the start of the ring" and is always complete; it is
+// SubscribeWithin's job to ask for no replay at all.
+func (b *Bus) replayLocked(since uint64, filter func(Event) bool) ([]Event, bool) {
+	complete := true
+	if since > 0 {
+		// The ring covers the gap when the event after since is still in it,
+		// or when nothing has been published since. A since beyond the
+		// sequence is from another run of the process and covers nothing.
+		last := b.seq.Load()
+		switch {
+		case since > last:
+			complete = false
+		case since == last:
+		case len(b.ring) == 0 || b.ring[0].ID > since+1:
+			complete = false
+		}
+	}
+	var out []Event
+	for _, e := range b.ring {
+		if e.ID > since && filter(e) {
+			out = append(out, e)
+		}
+	}
+	return out, complete
+}
+
+// Recent answers "what happened since event id since" from the ring, with the
+// events and the completeness a reconnecting stream would be given for the
+// same id. Zero returns everything the ring holds. limit, when positive, keeps
+// the oldest limit matches and reports truncated if more remained, so a caller
+// paging forward resumes from the last id it was handed.
+func (b *Bus) Recent(since uint64, opts SubscribeOptions, limit int) (items []Event, complete, truncated bool) {
+	b.mu.RLock()
+	items, complete = b.replayLocked(since, opts.filter())
+	b.mu.RUnlock()
+	if limit > 0 && len(items) > limit {
+		items, truncated = items[:limit], true
+	}
+	return items, complete, truncated
+}
+
 // Subscribe returns a feed. The caller must Close it.
 func (b *Bus) Subscribe(ctx context.Context, opts SubscribeOptions) *Subscription {
 	s, _ := b.SubscribeWithin(ctx, opts, 0)
@@ -341,19 +404,7 @@ func (b *Bus) Subscribe(ctx context.Context, opts SubscribeOptions) *Subscriptio
 // The count and the subscription are taken under the one lock, so a burst of
 // streams opened together cannot all see room for one and all take it.
 func (b *Bus) SubscribeWithin(ctx context.Context, opts SubscribeOptions, limit int) (*Subscription, bool) {
-	kinds := map[Kind]bool{}
-	for _, k := range opts.Kinds {
-		kinds[k] = true
-	}
-	filter := func(e Event) bool {
-		if len(kinds) > 0 && !kinds[e.Kind] {
-			return false
-		}
-		if opts.TopicPrefix != "" && !strings.HasPrefix(e.Topic, opts.TopicPrefix) {
-			return false
-		}
-		return true
-	}
+	filter := opts.filter()
 
 	b.mu.Lock()
 	if limit > 0 && len(b.subs) >= limit {
@@ -368,28 +419,17 @@ func (b *Bus) SubscribeWithin(ctx context.Context, opts SubscribeOptions, limit 
 	// and the subscription taking effect.
 	complete := true
 	if opts.Replay > 0 {
-		// The ring covers the gap when the event after Replay is still in
-		// it, or when nothing has been published since. A Replay beyond the
-		// sequence is from another run of the process and covers nothing.
-		last := b.seq.Load()
-		switch {
-		case opts.Replay > last:
-			complete = false
-		case opts.Replay == last:
-		case len(b.ring) == 0 || b.ring[0].ID > opts.Replay+1:
-			complete = false
-		}
-		for _, e := range b.ring {
-			if e.ID > opts.Replay && filter(e) {
-				select {
-				case ch <- e:
-				default:
-					// The queue is deeper than the ring, so this is not
-					// reachable -- but a replay that silently dropped a frame
-					// while still calling itself complete is the one outcome
-					// this whole path exists to prevent, so say so instead.
-					complete = false
-				}
+		var replay []Event
+		replay, complete = b.replayLocked(opts.Replay, filter)
+		for _, e := range replay {
+			select {
+			case ch <- e:
+			default:
+				// The queue is deeper than the ring, so this is not
+				// reachable -- but a replay that silently dropped a frame
+				// while still calling itself complete is the one outcome
+				// this whole path exists to prevent, so say so instead.
+				complete = false
 			}
 		}
 	}

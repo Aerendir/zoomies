@@ -5802,6 +5802,57 @@ paths:
                         type: array
                         items: { $ref: "#/components/schemas/Machine" }
 
+  /machines/bulk:
+    post:
+      operationId: bulkMachineAction
+      tags: [providers]
+      summary: Delete several machines
+      description: >-
+        Applies the rules of a single delete to each machine and returns a per-ID result,
+        in the order asked, so a partial failure is visible rather than hidden behind one
+        status code. A quarantined machine, one that is already deleted, one that is only
+        planned and one that still has runners on it come back as failed rows that say why;
+        the rest are put in `deleting`, and are finished when the provider can no longer
+        find the resource. A machine with nothing behind it, such as one whose create failed
+        before a resource was made, goes straight to deleted.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { type: string, enum: [delete] }
+                ids: { type: array, items: { type: string }, minItems: 1, maxItems: 500 }
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Delete a machine that still has runners on it, and lose whatever they
+                    were running. Without it that machine comes back as its own failed row
+                    rather than failing the batch. A quarantined machine is never deleted,
+                    forced or not: its resource may belong to somebody else, and the escape
+                    hatch there is release.
+      responses:
+        "200":
+          description: Per-ID outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { type: string }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /machines/{id}:
     parameters: [{ $ref: "#/components/parameters/PathID" }]
     get:

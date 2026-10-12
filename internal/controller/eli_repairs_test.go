@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/eyupio/zoomies/internal/assistant"
 	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/prrepair"
 	"github.com/eyupio/zoomies/internal/store"
@@ -72,6 +73,8 @@ type repairFake struct {
 	unsupportedRun bool
 	noWrite        bool
 	reacted        []int64
+	// comments is every text Eli posted or edited on the PR, in order.
+	comments []string
 	// sourceErr, when set, is what reading the PR's source fails with.
 	sourceErr error
 }
@@ -111,7 +114,8 @@ func (f *repairFake) CommitRepair(_ context.Context, _ string, p github.RepairPu
 	f.commits++
 	return "fixed", nil
 }
-func (f *repairFake) RepairComment(context.Context, string, int, int64, string) (int64, error) {
+func (f *repairFake) RepairComment(_ context.Context, _ string, _ int, _ int64, text string) (int64, error) {
+	f.comments = append(f.comments, text)
 	return 1, nil
 }
 func (f *repairFake) RepairReact(_ context.Context, _ string, id int64, content string) error {
@@ -410,5 +414,85 @@ func TestARepairThatCannotReadTheSourceSaysWhy(t *testing.T) {
 	h.c.runEliRepair(h.ctx, row)
 	if row.State != "failed" || row.Message != "The PR source could not be read: repository inventory exceeds Eli's repair limit." {
 		t.Fatalf("repair = %+v", row)
+	}
+}
+
+// Ollama cloud answered the repair prompt with a tool call although it was
+// offered no tools, and the repair gave up on the spot with a comment that
+// named neither the tool nor the cause. A model told that it has no tools, and
+// shown the JSON it was asked for, usually complies on the next turn; one that
+// does not is named in the comment, so an operator can tell a model that
+// ignores its instructions from a prompt that was wrong.
+func TestARepairAnswersAnUnofferedToolCallOnceAndNamesItWhenItRepeats(t *testing.T) {
+	for _, relents := range []bool{true, false} {
+		name := "the model insists"
+		if relents {
+			name = "the model relents"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			inst := h.installation()
+			fake := &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: "waiting"}
+			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+			var requests []assistant.Request
+			h.c.openProvider = func(*store.AssistantProvider, string) (assistant.Provider, error) {
+				return assistant.NewFake(assistant.FakeOptions{Model: "scripted", Script: func(req assistant.Request) []assistant.Event {
+					requests = append(requests, req)
+					if relents && req.Messages[len(req.Messages)-1].Role == assistant.RoleTool {
+						return []assistant.Event{{Delta: `{"summary":"Fix cause","files":[{"path":"main.go","content":"fixed"}]}`}}
+					}
+					return []assistant.Event{{ToolCall: &assistant.ToolCall{ID: "call_1", Name: "read_file", Arguments: json.RawMessage(`{"path":"main.go"}`)}}}
+				}}), nil
+			}
+			user := &store.User{Username: "octo", Role: store.RoleViewer}
+			h.st.CreateUser(h.ctx, user)
+			h.st.SetEliIdentity(h.ctx, store.EliIdentity{UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"})
+			h.st.ConfirmEliIdentity(h.ctx, user.ID, 42, true)
+			shared := &store.AssistantProvider{Name: "Shared", Kind: "fake", Model: "scripted", Enabled: true}
+			personal := &store.AssistantProvider{Name: "Personal", OwnerID: user.ID, Kind: "fake", Model: "scripted", Enabled: true}
+			for _, p := range []*store.AssistantProvider{shared, personal} {
+				if e := h.st.CreateAssistantProvider(h.ctx, p); e != nil {
+					t.Fatal(e)
+				}
+				h.st.SetDefaultAssistantProvider(h.ctx, p.ID)
+			}
+			h.st.SetEliRepairPolicy(h.ctx, store.EliRepairPolicy{Repo: "acme/repo", InstallationID: inst.ID, ProviderID: shared.ID, Enabled: true, DailyLimit: 5})
+			row := &store.EliRepair{DedupKey: "comment:acme/repo:77", Repo: "acme/repo", InstallationID: inst.ID, PullNumber: 1, Trigger: "mention", UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"}
+			h.st.EnqueueEliRepair(h.ctx, row, 5)
+			h.c.runEliRepair(h.ctx, row)
+			if len(requests) != 2 {
+				t.Fatalf("the model was asked %d times; a tool call it was not offered is answered once, then the repair gives up", len(requests))
+			}
+			// The model is answered the way the chat loop answers an unknown
+			// tool: as a result of the call it made, saying the tool is not one
+			// it was offered, with the turn that made the call kept above it.
+			turns := requests[1].Messages
+			told := turns[len(turns)-1]
+			asked := turns[len(turns)-2]
+			if told.Role != assistant.RoleTool || told.ToolCallID != "call_1" || !strings.Contains(told.Content, "read_file") || !strings.Contains(told.Content, "No tools") || !strings.Contains(told.Content, "cannot_fix") {
+				t.Fatalf("the model was told %+v", told)
+			}
+			if asked.Role != assistant.RoleAssistant || len(asked.ToolCalls) != 1 || asked.ToolCalls[0].ID != "call_1" {
+				t.Fatalf("the turn before the result is %+v, not the call", asked)
+			}
+			if len(row.Details.Steps) != 2 {
+				t.Fatalf("%d steps recorded for two model calls", len(row.Details.Steps))
+			}
+			if relents {
+				if row.State != "checking" || fake.commits != 1 {
+					t.Fatalf("the corrected model's plan was not published: %+v", row)
+				}
+				return
+			}
+			if row.State != "failed" || fake.commits != 0 {
+				t.Fatalf("a model that insists on a tool was not stopped: %+v", row)
+			}
+			last := fake.comments[len(fake.comments)-1]
+			for _, want := range []string{"### 🐶 Eli got stuck", "`read_file`", "no tools", "provider"} {
+				if !strings.Contains(last, want) {
+					t.Fatalf("the comment does not say %q:\n%s", want, last)
+				}
+			}
+		})
 	}
 }

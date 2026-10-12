@@ -2,17 +2,135 @@
 icon: material/arrow-up-bold-circle-outline
 title: Upgrading a Zoomies fleet
 description: >-
-  What an upgrade actually does, what happens to running jobs, how far a
-  controller and its agents may drift apart, and why there is no downgrade.
+  Update the controller and agent hosts from the Zoomies web UI, use manual
+  or automatic rollouts, or upgrade locally with the supported CLI and installer.
 ---
 
 # Upgrading
 
-Use one command on the installed host:
+Update your controller and agent hosts from the controller's web UI, or use
+the supported local CLI method. Start with **Manual** if you want to review
+each update before it runs; **Auto** can update the controller and roll out
+its release to hosts after a waiting period.
+
+| You want to update | Where to start | Permission |
+| --- | --- | --- |
+| The controller | **Settings → Updates** | `platform` role |
+| One agent host | **Hosts → Update** on its card | Administrator |
+| All eligible hosts behind the controller | **Hosts → Update N hosts** | Administrator |
+| A machine locally, including older installations | [CLI or installer](#upgrading-from-the-cli) on that machine | Its service owner, with elevation where needed |
+
+Managed updates need the [update helper](#adding-the-update-helper) on each
+machine being updated. A card or page that cannot offer an update explains
+why and provides the supported local instructions. Windows hosts use the
+[agent installer or a binary replacement](#upgrading-an-agent-host).
+
+Before updating a controller, keep a current [backup](backup-and-restore.md).
+Controller first, then its hosts: managed host updates target the release the
+controller is running. Running jobs continue in their existing runners; the
+services restart, so the UI briefly reconnects and reporting can be delayed.
+[Work in flight](#what-happens-to-work-in-flight) covers the backend details.
+
+## Updating from the web UI
+
+### Set up managed updates
+
+1. Open **Settings → Updates** as a user with the `platform` role.
+2. Under **Update mode**, choose **Manual**. This enables requested updates
+   without enabling automatic restarts. The soak and check interval are on the
+   same page; Configuration also exposes these settings. If the environment
+   pins a value, the page names the override that must be removed to edit it.
+3. If the page says the helper is missing, copy its install command and run it
+   on the controller's host. On each supported Linux/systemd agent host you
+   want to update from the UI, its owner also installs the helper once:
+
+   ```sh
+   sudo zoomies updates helper install
+   ```
+
+   Copy the command supplied by the page or host card for a custom
+   configuration directory. [Helper setup](#adding-the-update-helper) explains
+   supported deployments, its permissions and older installations.
+
+### Update the controller from Settings
+
+1. In **Settings → Updates**, review the offered release and its release notes.
+2. Choose **Update to vX.Y.Z**, where the button names the available release,
+   and confirm that version.
+3. Leave the page open while the controller restarts. It follows the attempt
+   and confirms success once the controller returns on the target release.
+   A controller's embedded agent updates with it.
+
+![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
+![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
+
+### Update hosts from the controller
+
+1. Open **Hosts** as an administrator. A host behind the controller shows its
+   current version, the target release and whether its helper can update it.
+2. Choose **Update** on one host's card, or **Update N hosts** in the page
+   header to start a rollout of eligible hosts behind the controller.
+3. Confirm the update. A rollout handles one host at a time and confirms each
+   host's target version from its heartbeat before moving on.
+4. Follow the rollout on **Hosts**. If a host fails or times out, inspect its
+   reason, then use **Resume the rollout** or **Cancel the rollout**. Cancelling
+   prevents new requests; an update already handed to a helper finishes.
+
+No routine drain is needed for an update. A host without a usable helper shows
+**Update by command** with its local instructions. Where no supported command
+can be offered, **Update by hand** links to the manual steps. Windows agents use
+the PowerShell installer from their card. Use those instructions rather than
+a newer release chosen independently of the controller.
+[Host update details](#updating-hosts-and-rollouts)
+cover ordering, retries and version confirmation.
+
+![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-dark.webp#only-dark){ .zoomies-shot }
+![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-light.webp#only-light){ .zoomies-shot }
+
+### Choose manual or automatic updates
+
+| Mode | What it does |
+| --- | --- |
+| `off` (the default) | Web UI update requests are disabled. Host cards keep their local upgrade instructions; choosing this mode installs no helper. |
+| `manual` | Request a controller update on **Settings → Updates**, one host with **Update** on its card, or a fleet rollout with **Update N hosts**. Only hosts whose helper can update them are eligible. Updates start when you request them. |
+| `auto` | The controller takes the newest release once it has been public for `updates.soak`, then takes every host behind it to the release it runs, one at a time. The buttons stay, and mean "now, without the wait". |
+
+Only the `platform` role changes the mode, soak and check interval, on
+**Settings → Updates** or **Configuration**. Everyone can read the update status;
+an administrator updates hosts and manages rollouts. Choosing **Auto** asks for
+confirmation because it permits controller restarts without another click.
+The default soak is 24 hours. [Auto and the soak](#what-auto-does-and-the-soak)
+explain what happens when another release arrives during that wait.
+
+Prefer the terminal for managed updates? [`zoomies updates`](cli.md#zoomies-updates)
+requests the same controller and host updates. It is distinct from
+`zoomies upgrade`, which upgrades the machine where you run it:
+
+```sh
+zoomies updates status
+zoomies updates apply          # Request a controller update; platform role.
+zoomies updates apply --hosts  # Request a host rollout; administrator.
+```
+
+These commands use your [CLI connection](cli.md#talking-to-a-controller) to the
+controller and need the same enabled mode and helpers as the UI. `apply`
+returns when the request is accepted; follow it with `updates status` to check
+the result. At a terminal it asks for confirmation; unattended requests need
+`--yes`.
+
+## Upgrading from the CLI
+
+The existing local CLI method remains supported. Run this on the machine
+you want to upgrade; it does not update the rest of the fleet:
 
 ```sh
 sudo zoomies upgrade
 ```
+
+Use `sudo zoomies upgrade --check` to inspect the deployment without changing
+it. `--version vX.Y.Z` targets a specific release, and `--no-download` applies
+the executable already installed. A remote agent's card provides the command
+pinned to its controller's release.
 
 It checks the existing deployment, downloads and verifies the new binary,
 refreshes cached stock runner images, updates the controller or agent service,
@@ -27,21 +145,23 @@ container is kept running without a restart. An image pulled earlier still
 replaces a container using an older build. A stopped container is started even
 when its image has not changed.
 
-At a colour-capable terminal, a block-letter Zoomies banner lights up from
-blue to cyan, catches a bright sweep, then holds briefly before the stages
-begin. The intro lasts about three seconds and plays once, including when the command
-continues in a downloaded binary. Use `--no-animation` or set
-`ZOOMIES_NO_ANIMATION=1` to skip it. `NO_COLOR`, `TERM=dumb`, `--check`,
-`--non-interactive` and redirected output also skip the animation. Small terminals
-skip it too. True-colour terminals use the brand colours; other terminals use
-256- or 16-colour equivalents.
+??? info "Installer and upgrade animations"
 
-The same banner welcomes initial controller and remote-host installs through
-`zoomies init`, including `install.sh --mode agent`, and agent template setup
-with `zoomies agent install`. It runs once when the binary takes over setup,
-with the caption “Ready. Set. Install.”. `install.sh --no-animation` carries
-through to setup, including when setup runs via sudo. Answer-file installs stay
-unanimated.
+    At a colour-capable terminal, a block-letter Zoomies banner lights up from
+    blue to cyan, catches a bright sweep, then holds briefly before the stages
+    begin. The intro lasts about three seconds and plays once, including when the command
+    continues in a downloaded binary. Use `--no-animation` or set
+    `ZOOMIES_NO_ANIMATION=1` to skip it. `NO_COLOR`, `TERM=dumb`, `--check`,
+    `--non-interactive` and redirected output also skip the animation. Small terminals
+    skip it too. True-colour terminals use the brand colours; other terminals use
+    256- or 16-colour equivalents.
+
+    The same banner welcomes initial controller and remote-host installs through
+    `zoomies init`, including `install.sh --mode agent`, and agent template setup
+    with `zoomies agent install`. It runs once when the binary takes over setup,
+    with the caption “Ready. Set. Install.”. `install.sh --no-animation` carries
+    through to setup, including when setup runs via sudo. Answer-file installs stay
+    unanimated.
 
 The terminal shows four short stages: **Binary**, **Deployment**, **Verify**
 and **Host health**, followed by the upgrade result. Host health is read-only
@@ -62,18 +182,10 @@ curl -fsSL https://zoomies.sh/install.sh | sh -s -- --upgrade
 ```
 
 The first controller start applies schema migrations. Upgrade does not run
-setup again or require a new join token. A remote host is upgraded locally, with
-the command on its card, unless its agent offers to update itself: that is so only
-once the update helper is installed on the host (`sudo zoomies updates helper
-install`), and then an administrator can update it with the **Update** button on
-its card on **Hosts** (or `POST /api/v1/hosts/{id}/update`) when `updates.mode`
-is `manual` or `auto`. The
-controller only asks: the helper on that host does the work, and the controller does
-not replace the binary of any host itself. Without the helper, a controller upgrade does
-not remotely replace binaries across the fleet. On the controller's own host the
-same helper can replace the controller's binary, with `zoomies updates apply` or the
-Update button on Settings → Updates (the platform role). [Updating from the web
-UI](#updating-from-the-web-ui) is all of it.
+setup again or require a new join token. The web UI uses the same upgrade
+engine through the helper installed on each machine; a local CLI upgrade
+needs no helper. [Managed updates](#updating-from-the-web-ui) cover controller
+updates, individual hosts and fleet rollouts.
 
 For a **remote agent**, copy the upgrade command from its card on **Hosts**.
 That command targets the controller's published version instead of blindly
@@ -207,26 +319,12 @@ The parts of that worth knowing before you do it are what happens to work in
 flight, how far the pieces may drift apart, and the one direction you cannot
 go back in.
 
-## Updating from the web UI
+## How managed updates work
 
-`sudo zoomies upgrade` on each machine is still how a fleet is upgraded, and it
-stays the way for any host whose owner has not agreed to more. `updates.mode`
-lets the controller start the same upgrade instead, through an *update helper*
-that the owner of each host installs:
-
-| Mode | What it does |
-| --- | --- |
-| `off` (the default) | Nothing new. The Overview says that a newer release exists, each host's card keeps its command to copy, and the mode creates no folder or unit. The Update buttons on the Hosts page are drawn but cannot be pressed, with the reason beside them. |
-| `manual` | **Update** buttons: for the controller on Settings → Updates, on the card of each host whose helper is installed, and **Update N hosts** on the Hosts page for every host behind the controller whose helper is installed (N counts the hosts whose card offers Update). Nothing moves without a click. |
-| `auto` | The controller takes the newest release once it has been public for `updates.soak`, then takes every host behind it to the release it runs, one at a time. The buttons stay, and mean "now, without the wait". |
-
-Only the `platform` role changes the mode and the soak, on the Configuration
-page ([`updates.mode`](configuration.md#updatesmode-what-is-done-about-a-newer-release));
-everyone can read them on Settings → Updates. The `platform` role updates the
-controller, and an administrator updates hosts and starts, resumes and cancels a
-rollout. With the mode `off` each of those is refused with `update.mode_off`, and
-a controller that is fenced for recovery or has lost its lease does none of
-them. Every button is also a command, in [`zoomies updates`](cli.md#zoomies-updates).
+With the mode `off`, controller and host update requests are refused with
+`update.mode_off`. A controller fenced for recovery or without its lease
+starts no update. Local `zoomies upgrade` remains available independently of
+the controller's managed update mode.
 
 A release is offered only once it is complete: a tag of the form `vX.Y.Z`,
 neither a prerelease nor a draft, with `checksums.txt` and the binary for the
@@ -299,9 +397,10 @@ is no command to copy, and the reason says how to replace the binary by hand. A 
 behind the controller for one of the same reasons (its agent says which on its
 heartbeat; an agent too old to say is known only by an operating system other
 than Linux) shows **Update by command** on its card with the reason and no
-button, and the upgrade command beneath it is the way. A Windows host shows
-**Update by hand** instead: there is no command for it, and the foot of its card
-gives the steps and links to [upgrading an agent host](#upgrading-an-agent-host).
+button, and the upgrade command beneath it is the way. A Windows agent's card
+provides the PowerShell installer pinned to the controller's published release.
+Where a command cannot be offered, the card gives version guidance and links
+to [upgrading an agent host](#upgrading-an-agent-host).
 
 The same question is asked once more, in the same words, at the end of a fresh
 `zoomies init` and of `zoomies agent join`, once the service is installed (for a
@@ -1011,54 +1110,47 @@ about.
 
 ## Upgrading an agent host
 
-A controller upgrade is one machine. A fleet is not: each agent host runs jobs
-that belong to somebody, and the sequence below is the difference between an
-upgrade nobody notices and a wave of failed builds.
+After updating the controller, use **Hosts → Update** for one eligible host
+or **Update N hosts** for a rollout. Each host targets the controller's release.
+[The UI steps](#update-hosts-from-the-controller) explain how to follow it.
+
+For a local upgrade, copy the command from the host's card. On a supported
+native, Compose or Docker installation, the CLI equivalent is:
 
 ```sh
-# 1. Stop new work arriving, and let what is here finish.
-zoomies hosts drain hst_k3f9qz2m
-
-# 2. Wait for it to empty. Each runner gets five minutes to finish what it is
-#    on, so this takes about that, not as long as the longest job.
-zoomies hosts list
-
-# 3. Swap the binary and restart the unit.
-curl -fsSL https://zoomies.sh/install.sh | sh -s -- --no-init
-sudo systemctl restart zoomies-agent
-
-# 4. Let it take work again.
-zoomies hosts uncordon hst_k3f9qz2m
+# Replace vX.Y.Z with the release shown for the controller.
+sudo zoomies upgrade --mode agent --version vX.Y.Z
 ```
 
-`hosts drain` cordons before it drains, and the order is the whole point:
-draining a host that still accepts work means the scheduler puts a fresh runner
-on it while the old ones are finishing, and the count goes down and back up
-while an operator watches and concludes the drain failed.
+This keeps the existing credentials and host identity. An older installation
+can use the [installer upgrade command](#upgrading-from-the-cli); copy the
+version-pinned command on its card rather than installing a newer agent
+independently of its controller.
 
-Step 2 is optional, and skipping it is safe rather than merely tolerated: an
-agent that restarts over running work adopts it rather than reaping it, which is
-what makes a binary swap non-disruptive at all. Draining first is what makes it
-*predictable* (a host with nothing on it cannot surprise you) and on a host
-whose jobs are short it costs a few minutes.
+A routine update does not require draining the host. If you want a maintenance
+window with no new placements, **cordon** it, wait for its current jobs to finish,
+upgrade, then **uncordon** it. Use `zoomies hosts list` to watch its runners.
+`hosts drain` is a separate retirement action with a stop grace period; it is
+not required for the restart to adopt running runners.
 
-On a Windows host the same sequence is `zoomies hosts drain`, then, from an
-elevated PowerShell, the installer script with the release you want, then
-`zoomies hosts uncordon`:
+On a Windows host, use the installer command from its card in an elevated
+PowerShell. The version below is a placeholder for the controller's release:
 
 ```powershell
-& ([scriptblock]::Create((irm https://zoomies.sh/install.ps1))) -Mode agent -Version 'v1.4.0'
+& ([scriptblock]::Create((irm https://zoomies.sh/install.ps1))) -Mode agent -Version 'vX.Y.Z'
 ```
 
 On a machine that is already enrolled the script stops the service, replaces
 `zoomies.exe`, keeps the credentials and starts the service again, with no
 token. A Windows host's card gives this command in place of `sudo zoomies
 upgrade`, which knows no Windows service. Doing it by hand is the same:
-replace `zoomies.exe`, then `sc.exe stop zoomies-agent` and
-`sc.exe start zoomies-agent`. A Windows agent runs the `process` backend, so the runner release it
-downloads is pinned by the pool's `runner_version` and the digests in the
+stop the service with `sc.exe stop zoomies-agent`, replace `zoomies.exe`,
+then start it with `sc.exe start zoomies-agent`. A Windows agent runs the
+`process` backend, so the runner release it downloads is pinned by the pool's
+`runner_version` and the digests in the
 binary, and an agent behind the controller's release may not know a digest the
-controller's default asks for; upgrade the agent first on that platform.
+controller's default asks for. Keep the Windows agent on the controller's
+release so it has the matching runner digests.
 
 An agent that comes back on a release the controller does not recognise is
 excluded rather than refused: it keeps heartbeating, its running work finishes,
@@ -1066,6 +1158,12 @@ and no new runner is placed on it. The Hosts page says so on the card. See
 [What happens when the protocol stops matching](#what-happens-when-the-protocol-stops-matching).
 
 ## Upgrading a container deployment
+
+Use the web UI when this deployment has a supported helper, or
+`sudo zoomies upgrade` locally. Both use the recorded deployment, keep its
+runtime options and provide the [shutdown budget](#upgrading-from-the-cli).
+The earlier Compose method remains available when you manage the service image
+and Compose file yourself. Pin the intended service image first, then run:
 
 ```sh
 docker compose pull
@@ -1079,8 +1177,16 @@ cannot be undone.
 
 ## After an upgrade
 
-`zoomies version` says what is running, and `zoomies status` says whether the
-fleet is happy with it. If a setting was removed or renamed in the release, the
+Check **Settings → Updates** for the controller's running release and completed
+attempt. On **Hosts**, check that each updated host reports the controller's
+version and that the rollout has finished. A failed host halts a rollout;
+review its reason before resuming it.
+
+From the CLI, `zoomies updates status` follows managed update attempts and
+rollouts; `zoomies status` checks the fleet. `zoomies version` reports the local
+executable, so it does not prove that a remote controller or agent has updated.
+
+If a setting was removed or renamed in the release, the
 validator says so by name at startup rather than ignoring it: an unknown key in
 `zoomies.yaml` is refused, so a setting that silently does nothing is not a
 state this can get into.

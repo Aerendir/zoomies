@@ -59,6 +59,31 @@ func TestConversationsAreKeptPerPersonRedactedAndDeletable(t *testing.T) {
 	h.do(request{method: http.MethodGet, path: assistantConversations + "/" + id, cookie: alice}).mustStatus(t, http.StatusNotFound, "gone")
 }
 
+// The page reads a kept conversation's messages by the names the API contract
+// promises. Without them in the JSON a resumed thread drew as a column of empty
+// Eli turns, because every message had no role and no words.
+func TestAKeptConversationReadsBackWithTheContractsFieldNames(t *testing.T) {
+	h := newHarness(t)
+	_, alice := h.user("alice", store.RoleViewer)
+	body := map[string]any{"messages": []map[string]string{
+		{"role": "user", "content": "Why did job_1 fail?"},
+		{"role": "assistant", "content": "The runner ran out of memory."},
+	}}
+	created := h.do(request{method: http.MethodPost, path: assistantConversations, cookie: alice, body: body})
+	created.mustStatus(t, http.StatusCreated, "keeping a conversation")
+	id, _ := created.json(t)["id"].(string)
+	got := h.do(request{method: http.MethodGet, path: assistantConversations + "/" + id, cookie: alice})
+	got.mustStatus(t, http.StatusOK, "reading it back")
+	messages, _ := got.json(t)["messages"].([]any)
+	if len(messages) != 2 {
+		t.Fatalf("messages = %s", got.body)
+	}
+	first, _ := messages[0].(map[string]any)
+	if first["role"] != "user" || first["content"] != "Why did job_1 fail?" {
+		t.Errorf("first message = %v, want lower-case role and content keys", first)
+	}
+}
+
 // The transcript is bounded the way a chat request is, and a role the chat
 // does not have is refused, so the stored document is always one the page
 // could send back.
