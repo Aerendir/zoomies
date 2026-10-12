@@ -759,6 +759,29 @@ func (c *Controller) providerTroubleProblems(out *[]Problem, p *store.Provider, 
 	}
 }
 
+// failedMachineFix says what to do with a machine the fleet gave up on.
+//
+// The answer is to delete it in both cases, and it used to be to release it.
+// Release forgets a row and touches nothing: it is the escape hatch for a
+// quarantined machine nobody can safely delete, and the wrong tool for a failed
+// one. A failed machine with no resource id has nothing to check and nothing to
+// leave running: the identity is written before the create is issued, so a row
+// without one never reached the hypervisor. Releasing a pile of those one at a
+// time is the chore a bad template turns a few failures into. One that did get
+// a resource may still be running and billed, and forgetting it would leave a
+// VM that nothing tracks; deleting it asks the provider again before anything
+// is destroyed, and leaves alone a resource it cannot prove is ours.
+func failedMachineFix(m *store.Machine) string {
+	if m.ResourceID == "" {
+		return "nothing was ever created for this machine, so there is nothing to clean up at the provider. " +
+			"Delete it from its page, or tick every failed machine on the Providers page and delete them together."
+	}
+	return "a resource was created for this machine and may still be running, and billed. Check the provider's " +
+		"console, then delete the machine: Zoomies asks the provider again before it destroys anything, and " +
+		"leaves alone a resource it cannot prove is its own. Several can be ticked and deleted together on the " +
+		"Providers page."
+}
+
 // machineStateProblems says what is wrong with individual machines: the ones
 // that never arrived, the ones nothing can prove we own, and the deletes that
 // have not confirmed.
@@ -789,17 +812,17 @@ func (c *Controller) machineStateProblems(out *[]Problem, p *store.Provider, mac
 				Detail:   m.BootstrapError,
 				Fix: "the machine is running and is still being paid for. Check that the template carries the " +
 					"zoomies agent, installed and disabled, with no agent.json in it -- two machines sharing one " +
-					"agent identity is the failure that looks like a host flapping.",
+					"agent identity is the failure that looks like a host flapping. Once the template is fixed, " +
+					"delete this machine to stop paying for it; its VM is destroyed with it.",
 				TargetKind: "machine", TargetID: m.ID,
 			})
 		case m.State == store.MachineFailed:
 			*out = append(*out, Problem{
-				Code:     "provider.machine_failed",
-				Severity: config.SeverityWarning,
-				Title:    fmt.Sprintf("machine %s never reached ready", m.Name),
-				Detail:   firstNonEmpty(m.ProviderError, m.Message, "the machine was given up on without saying why"),
-				Fix: "the row is kept because the resource behind it may still exist. Release it once you have " +
-					"checked the provider's console.",
+				Code:       "provider.machine_failed",
+				Severity:   config.SeverityWarning,
+				Title:      fmt.Sprintf("machine %s never reached ready", m.Name),
+				Detail:     firstNonEmpty(m.ProviderError, m.Message, "the machine was given up on without saying why"),
+				Fix:        failedMachineFix(m),
 				TargetKind: "machine", TargetID: m.ID,
 			})
 		case m.State == store.MachineDeleting && deleteTimeout > 0 &&
