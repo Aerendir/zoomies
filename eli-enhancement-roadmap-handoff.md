@@ -72,12 +72,17 @@ Current implementation plans:
 - [CLI and agent tools](roadmap/plans/2026-10-12-eli-pr-delay-agent-tools.md).
 - [Contextual UI and scripted scenarios](roadmap/plans/2026-10-12-eli-pr-delay-ui.md).
 - [Validation fixture correction](roadmap/plans/2026-10-12-eli-validation-fixtures.md).
+- [Fallback-copy mode preservation](roadmap/plans/2026-10-12-eli-copy-mode-validation.md).
 
 The full-suite rerun found a storage fixture that relied on a permissive umask.
 This workspace uses `0077`, so requesting `0755` through Mkdir created a private
 `0700` directory and defeated the refusal test's setup. The fixture now explicitly
-sets `0755`; all aicontext package race tests pass after that correction. The rest
-of the full suite is still running. Record its final result, including failures,
+sets `0755`; all aicontext package race tests pass after that correction. The original full run also reached the API package's ten-minute deadline while
+creating a test database. A complete API race rerun has a thirty-minute budget.
+The backend's mode-copy fixture exposed masked destination permissions; explicitly
+setting source 0755 still failed before the fix. The fallback copy now restores
+source permissions after copying, and the backend package race tests pass.
+The rest of the original full suite is still running. Record its final result, including failures,
 before claiming full-suite verification.
 
 The next agent should start from the stack tip, check which parent PRs have
