@@ -412,7 +412,11 @@ test('Eli says it cannot see the fleet until an administrator allows it, and the
       'Looked at the fleet at a glance',
     );
     // What the tool read is the controller's own figures, not something invented.
-    await expect(answer).toContainText('queued_jobs');
+    await expect(answer).toContainText('Fleet summary');
+    await expect(answer).toContainText(/Jobs: \d+ waiting; \d+ running/);
+    await expect(answer).toContainText('Next step');
+    await expect(answer.locator('.markdown').getByRole('list')).toHaveCount(2);
+    await expect(answer).not.toContainText('queued_jobs');
   } finally {
     await fleetAccess(page, false);
   }

@@ -54,9 +54,9 @@ func (f *Fake) Chat(ctx context.Context, req Request) (Stream, error) {
 		}{last})
 		events = append(events, Event{ToolCall: &ToolCall{ID: "call_echo", Name: "echo", Arguments: args}})
 	case toolAnswer(req.Messages) != "":
-		// What a tool showed is what the demo model repeats, so the whole loop
-		// can be followed end to end with no account and no key.
-		events = words("The built-in model looked at the fleet and saw: " + toolAnswer(req.Messages))
+		// The demo explains the tool's figures without a model account. Keep
+		// the full result until it is decoded, so later fields are not lost.
+		events = words(demoFleetSummary(toolAnswer(req.Messages)))
 	case hasTool(req.Tools, "fleet_status") && strings.Contains(strings.ToLower(last), "fleet"):
 		events = append(events, Event{ToolCall: &ToolCall{ID: "call_fleet_status", Name: "fleet_status", Arguments: json.RawMessage(`{}`)}})
 	default:
@@ -142,7 +142,7 @@ func words(reply string) []Event {
 	return events
 }
 
-// toolAnswer is the first line of what the last tool said, when the
+// toolAnswer is what the last tool said, when the
 // conversation ends with one, and empty otherwise.
 func toolAnswer(messages []Message) string {
 	if len(messages) == 0 || messages[len(messages)-1].Role != RoleTool {
@@ -154,9 +154,5 @@ func toolAnswer(messages []Message) string {
 		text = after
 	}
 	text, _, _ = strings.Cut(text, "\n</fleet-data>")
-	text = strings.Join(strings.Fields(text), " ")
-	if len(text) > 160 {
-		text = text[:160] + "..."
-	}
-	return text
+	return strings.TrimSpace(text)
 }
