@@ -59,7 +59,8 @@ type CompareSide struct {
 	CountsOnly bool       `json:"counts_only"`
 	// JobsGoneBefore is set on a release side reaching past retention.jobs:
 	// no roll-up records which release ran a job, so the jobs before it are
-	// simply gone.
+	// simply gone. A period side never has it: past retention.jobs it is
+	// read from the roll-up instead (CountsOnly), so Compare refuses it.
 	JobsGoneBefore *time.Time `json:"jobs_gone_before"`
 	// MeanSlots is the fleet's slots on offer, averaged over the side's
 	// sampled minutes; nil when no sample covers the side.
@@ -204,6 +205,9 @@ func Compare(s CompareSnapshot) (CompareFinding, error) {
 		}
 		if !side.Since.IsZero() && !side.Until.IsZero() && side.Until.Before(side.Since) {
 			return f, fmt.Errorf("compare side %s ends before it starts", side.Label)
+		}
+		if s.By == "period" && side.JobsGoneBefore != nil {
+			return f, fmt.Errorf("compare side %s is a period cut short by retention.jobs; a period past it is read from the roll-up", side.Label)
 		}
 	}
 	f.Since, f.Until = span(s.A, s.B)
@@ -494,12 +498,8 @@ func (w wording) doubts(s CompareSnapshot) []string {
 	}
 	for _, side := range []CompareSide{s.A, s.B} {
 		if side.JobsGoneBefore != nil {
-			jobs, figures := side.Label+"'s jobs", side.Label+"'s figures"
-			if w.period() {
-				jobs, figures = "the jobs in "+side.Label, "that side's figures"
-			}
-			out = append(out, fmt.Sprintf("%s from before %s are gone (retention.jobs keeps them for a set time, and raising it keeps more next time), so %s cover only the jobs still kept",
-				jobs, side.JobsGoneBefore.UTC().Format("2006-01-02 15:04 UTC"), figures))
+			out = append(out, fmt.Sprintf("%s's jobs from before %s are gone (retention.jobs keeps them for a set time, and raising it keeps more next time), so %s's figures cover only the jobs still kept",
+				side.Label, side.JobsGoneBefore.UTC().Format("2006-01-02 15:04 UTC"), side.Label))
 		}
 	}
 	switch {

@@ -91,8 +91,12 @@ type HostPressureSnapshot struct {
 	HostID, HostName string
 	Minutes          []HostMinute
 	// Jobs are those that started or completed on the host in the period.
-	Jobs       []HostJob
-	Thresholds PressureThresholds
+	Jobs []HostJob
+	// JobsTruncated says the job read stopped at MaxReadJobs, keeping the
+	// newest: a busy host over a long period runs more than that, and the
+	// failures among the oldest are then not there to place.
+	JobsTruncated bool
+	Thresholds    PressureThresholds
 }
 
 // BadEvent is one thing that went wrong on the host and the minute it came
@@ -141,6 +145,7 @@ type HostPressureEvidence struct {
 	MeasuredEvents  int        `json:"measured_events"`
 	PressuredEvents int        `json:"pressured_events"`
 	Unmeasured      int        `json:"unmeasured"`
+	JobsTruncated   bool       `json:"jobs_truncated"`
 	// Threshold is set only when the events cluster and some measure's line
 	// separates them; a line drawn where nothing clusters would be read as
 	// the cause.
@@ -243,7 +248,7 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 		}
 	}
 	e := HostPressureEvidence{HostID: s.HostID, HostName: s.HostName, Pressure: s.Thresholds,
-		Minutes: len(samples), ExpectedMinutes: int(end.Sub(first) / time.Minute)}
+		Minutes: len(samples), ExpectedMinutes: int(end.Sub(first) / time.Minute), JobsTruncated: s.JobsTruncated}
 	for _, m := range samples {
 		if m.pressured(s.Thresholds) {
 			e.PressuredMinutes++
@@ -414,6 +419,9 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 		}
 		if e.Minutes*10 < e.ExpectedMinutes*9 {
 			reasons = append(reasons, "samples cover "+coverage(e.Minutes, e.ExpectedMinutes)+" of the period")
+		}
+		if s.JobsTruncated {
+			reasons = append(reasons, fmt.Sprintf("the period held more than %d jobs on this host; the newest %d were read, so narrow since", MaxReadJobs, MaxReadJobs))
 		}
 		f.Confidence = High
 		if len(reasons) > 0 {

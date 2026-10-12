@@ -99,9 +99,19 @@ func testConfig(t *testing.T) *config.Config {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessAt(t, nil)
+}
+
+// newHarnessAt is newHarness on a clock the test holds, read by the store and
+// the controller alike: a test about a period in the past needs the rows'
+// own stamps (a runner's creation, a failure's end) to fall inside it, and
+// the store stamps those from its clock, not from anything the test passes.
+// A nil clock is the wall clock.
+func newHarnessAt(t *testing.T, clock func() time.Time) *harness {
+	t.Helper()
 	ctx := context.Background()
 
-	st, err := store.Open(ctx, store.Options{Path: ":memory:"})
+	st, err := store.Open(ctx, store.Options{Path: ":memory:", Now: clock})
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -138,7 +148,13 @@ func newHarness(t *testing.T) *harness {
 		HTTPClient: &http.Client{Transport: harnessTransport{}},
 		Providers:  providers,
 		Logger:     slog.New(slog.DiscardHandler),
-		Clock:      func() time.Time { return time.Now().Add(time.Duration(offset.Load())) },
+		Clock: func() time.Time {
+			now := time.Now()
+			if clock != nil {
+				now = clock()
+			}
+			return now.Add(time.Duration(offset.Load()))
+		},
 		UpdateDir:  updateDir,
 		HelperHost: func() updates.HelperHost { return helperHostForTests },
 	})

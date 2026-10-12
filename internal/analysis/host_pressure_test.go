@@ -668,6 +668,21 @@ func TestASharePercentageNeverRoundsToAClaim(t *testing.T) {
 	}
 }
 
+// The jobs are read newest first up to MaxReadJobs, so on a busy host over a
+// long period the oldest are not there to place; a pattern drawn from the
+// rest says so rather than reading as the whole period's.
+func TestATruncatedJobReadKeepsHostPressureFromHigh(t *testing.T) {
+	s := pressSnapshot(loadMinutes(120, 20, 2.5, 0.5), failedIn(1, 4, 7, 10, 13, 16, 60))
+	s.JobsTruncated = true
+	f := mustPressure(t, s)
+	if f.Dominant != "pressure" || f.Confidence != Medium || !f.Evidence.JobsTruncated {
+		t.Errorf("dominant %q at %s, truncated %v; want pressure at medium, and said", f.Dominant, f.Confidence, f.Evidence.JobsTruncated)
+	}
+	if want := "the period held more than 5000 jobs on this host; the newest 5000 were read, so narrow since"; f.ConfidenceReason != want {
+		t.Errorf("reason\n got %q\nwant %q", f.ConfidenceReason, want)
+	}
+}
+
 func TestEveryMediumReasonIsGivenJoined(t *testing.T) {
 	f := mustPressure(t, pressSnapshot(loadMinutes(120, 20, 2.5, 0.5)[:96], failedIn(1, 4, 7)))
 	if want := "only 3 failures came in a measured minute, too few to be sure of the pattern; also, samples cover 80% of the period"; f.ConfidenceReason != want {

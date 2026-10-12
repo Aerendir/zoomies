@@ -515,6 +515,15 @@ func TestCompareRefusesASnapshotItCannotRead(t *testing.T) {
 		"a side that ends before it starts": func(s *CompareSnapshot) {
 			s.A.Until = s.A.Since.Add(-time.Hour)
 		},
+		// A period past retention.jobs is read from the roll-up, which keeps
+		// every day's counts, so no jobs of a period side are ever gone; a
+		// snapshot that says so was assembled wrong, and wording it would
+		// state something the fleet does not do.
+		"a period side cut short by retention": func(s *CompareSnapshot) {
+			s.By = "period"
+			gone := s.B.Since.Add(time.Hour)
+			s.B.JobsGoneBefore = &gone
+		},
 	} {
 		s := releases(120, 120)
 		edit(&s)
