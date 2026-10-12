@@ -8805,7 +8805,7 @@ components:
 
     EventFrame:
       type: object
-      required: [id, kind, topic, at, data]
+      required: [id, kind, topic, at]
       properties:
         id:
           type: string
@@ -8817,7 +8817,9 @@ components:
         data:
           type: object
           additionalProperties: true
-          description: The resource view the stream carries for this kind.
+          description: >-
+            The resource view the stream carries for this kind. Absent for an event that
+            carries none.
 
     ScalingEvent:
       type: object

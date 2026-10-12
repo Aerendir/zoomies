@@ -29,11 +29,13 @@ const (
 // recentFrame is one event as the polling route renders it. The id is the wire
 // id the stream sends, so a cursor taken from either is good for both.
 type recentFrame struct {
-	ID    string          `json:"id"`
-	Kind  events.Kind     `json:"kind"`
-	Topic string          `json:"topic"`
-	At    time.Time       `json:"at"`
-	Data  json.RawMessage `json:"data"`
+	ID    string      `json:"id"`
+	Kind  events.Kind `json:"kind"`
+	Topic string      `json:"topic"`
+	At    time.Time   `json:"at"`
+	// Data is absent for an event that carries none, rather than invented as an
+	// empty object.
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
 // recentView is the body of GET /events/recent.
@@ -146,6 +148,10 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Closed here as well as by the context: the context's release happens on
+	// the bus's own goroutine, after this response has gone, so a client that
+	// reopens a stream the moment it has its answer could still be refused.
+	defer sub.Close()
 	// An event published between the read above and the subscription taking
 	// effect is in the ring but was never offered to the subscriber. Reading
 	// again, now that it is registered, closes that gap: anything later arrives
@@ -170,7 +176,11 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				// The bus ended this feed for falling behind. What is in the ring
 				// is the answer now, whether or not it is what was waited for.
-				writeJSON(w, http.StatusOK, s.readRecent(r, since, opts, limit))
+				again := s.readRecent(r, since, opts, limit)
+				// Frames may have been dropped with the feed, and the ring is
+				// all there is to say what they were.
+				again.Complete = false
+				writeJSON(w, http.StatusOK, again)
 				return
 			}
 			first, ok := s.recentFrame(r, ev)
@@ -225,12 +235,24 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 	)
 	switch {
 	case since.window > 0:
-		items, complete, truncated = recentWithin(bus, since.window, time.Now(), opts, limit)
+		cutoff := time.Now().Add(-since.window)
+		var ring []events.Event
+		items, ring, truncated = fromRing(bus, opts, limit, func(ev events.Event) bool { return !ev.At.Before(cutoff) })
+		// Incomplete when the oldest event the ring holds is itself inside the
+		// window and is not the first this run ever numbered: something older,
+		// perhaps inside the window too, has been pushed out. An id taken by a
+		// transient frame, which is never ringed, looks the same, so this errs
+		// towards telling the caller to fetch afresh.
+		complete = len(ring) == 0 || ring[0].ID <= 1 || !ring[0].At.After(cutoff)
 	case since.foreign:
 		items, _, truncated = bus.Recent(0, opts, limit)
 	case since.fromStart:
-		items, _, truncated = bus.Recent(0, opts, limit)
-		complete = ringReachesStart(bus)
+		var ring []events.Event
+		items, ring, truncated = fromRing(bus, opts, limit, nil)
+		// A cursor of zero claims the ring still holds everything this run ever
+		// numbered. Like the window read it errs towards false when a transient
+		// frame took the first id.
+		complete = len(ring) == 0 || ring[0].ID <= 1
 	default:
 		items, complete, truncated = bus.Recent(since.id, opts, limit)
 	}
@@ -251,40 +273,36 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 	return out
 }
 
-// ringReachesStart reports whether the ring still holds everything this run ever
-// numbered, which is what a cursor of zero claims. Like the window read it errs
-// towards false when a transient frame took the first id.
-func ringReachesStart(bus *events.Bus) bool {
-	all, _, _ := bus.Recent(0, events.SubscribeOptions{}, 0)
-	return len(all) == 0 || all[0].ID <= 1
-}
-
-// recentWithin selects the ringed events no older than window. The ring says
-// nothing about time, so it is asked for everything and filtered on At.
+// fromRing reads the whole ring once and selects from that one read, so what it
+// reports about the ring and what it returns cannot disagree about an event
+// published between two reads. keep, when not nil, narrows by something the bus
+// cannot filter on, such as age; the kinds and topic are the bus's own rule.
 //
-// now is the wall clock, not the controller's, because the bus stamps events
-// with the wall clock.
-//
-// It reports incomplete when the oldest event the ring holds is itself inside the
-// window and is not the first this run ever numbered: something older than it,
-// perhaps inside the window too, has been pushed out. An id taken by a transient
-// frame, which is never ringed, looks the same, so this errs towards telling the
-// caller to fetch afresh.
-func recentWithin(bus *events.Bus, window time.Duration, now time.Time, opts events.SubscribeOptions, limit int) (items []events.Event, complete, truncated bool) {
-	cutoff := now.Add(-window)
-	all, _, _ := bus.Recent(0, events.SubscribeOptions{}, 0)
-	complete = len(all) == 0 || all[0].ID <= 1 || !all[0].At.After(cutoff)
-
-	matched, _, _ := bus.Recent(0, opts, 0)
-	for _, ev := range matched {
-		if !ev.At.Before(cutoff) {
-			items = append(items, ev)
+// The matching is written out here because the bus's filter is the bus's. It is
+// three comparisons, and the test that pairs this route with the stream's replay
+// is what keeps the two honest.
+func fromRing(bus *events.Bus, opts events.SubscribeOptions, limit int, keep func(events.Event) bool) (items, ring []events.Event, truncated bool) {
+	ring, _, _ = bus.Recent(0, events.SubscribeOptions{}, 0)
+	kinds := make(map[events.Kind]bool, len(opts.Kinds))
+	for _, k := range opts.Kinds {
+		kinds[k] = true
+	}
+	for _, ev := range ring {
+		if len(kinds) > 0 && !kinds[ev.Kind] {
+			continue
 		}
+		if opts.TopicPrefix != "" && !strings.HasPrefix(ev.Topic, opts.TopicPrefix) {
+			continue
+		}
+		if keep != nil && !keep(ev) {
+			continue
+		}
+		items = append(items, ev)
 	}
 	if len(items) > limit {
 		items, truncated = items[:limit], true
 	}
-	return items, complete, truncated
+	return items, ring, truncated
 }
 
 // recentFrame renders one event for this caller, or reports that it is not
@@ -293,9 +311,6 @@ func (s *Server) recentFrame(r *http.Request, ev events.Event) (recentFrame, boo
 	data, ok := s.frameFor(r, ev)
 	if !ok {
 		return recentFrame{}, false
-	}
-	if len(data) == 0 {
-		data = []byte("{}")
 	}
 	return recentFrame{
 		ID: s.ctrl.Events().WireID(ev.ID), Kind: ev.Kind, Topic: ev.Topic, At: ev.At, Data: data,

@@ -6123,8 +6123,8 @@ export interface components {
             topic: string;
             /** Format: date-time */
             at: string;
-            /** @description The resource view the stream carries for this kind. */
-            data: {
+            /** @description The resource view the stream carries for this kind. Absent for an event that carries none. */
+            data?: {
                 [key: string]: unknown;
             };
         };

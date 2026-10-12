@@ -123,16 +123,16 @@ func TestRecentEventsTakesADurationAsSince(t *testing.T) {
 	bus := h.ctrl.Events()
 
 	bus.Publish(events.KindJobUpdated, "job:old", map[string]any{"id": "old"})
-	time.Sleep(1200 * time.Millisecond)
+	time.Sleep(2 * time.Second)
 	bus.Publish(events.KindJobUpdated, "job:new", map[string]any{"id": "new"})
 	bus.Publish(events.KindRunnerUpdated, "runner:new", map[string]any{"id": "run"})
 
 	if got := h.recent(t, cookie, "?since=10m&kinds=job.updated"); len(got.Items) != 2 {
 		t.Errorf("since=10m returned %v, want both job frames", got.ids())
 	}
-	got := h.recent(t, cookie, "?since=600ms&kinds=job.updated")
+	got := h.recent(t, cookie, "?since=1s&kinds=job.updated")
 	if len(got.Items) != 1 || got.Items[0].Topic != "job:new" {
-		t.Fatalf("since=600ms returned %v, want only the recent job frame", got.ids())
+		t.Fatalf("since=1s returned %v, want only the recent job frame", got.ids())
 	}
 	if !got.Complete {
 		t.Error("a window the ring plainly covers was called incomplete")
@@ -384,8 +384,7 @@ func TestRecentEventsNeedTheEventsReadAction(t *testing.T) {
 // the route is the way round the stream's per-audience narrowing.
 func TestRecentEventsNarrowFramesTheWayTheStreamDoes(t *testing.T) {
 	h := newHarness(t)
-	viewer, viewerCookie := h.user("watcher", store.RoleViewer)
-	_ = viewer
+	_, viewerCookie := h.user("watcher", store.RoleViewer)
 	_, platformCookie := h.user("operator", store.RolePlatform)
 	h.ctrl.Events().Publish(events.KindTransfer, "transfer:t", map[string]any{"id": "t", "runners": []string{"run_secret"}})
 	publishJobs(h, 1)
@@ -499,5 +498,53 @@ func TestAWaitIsRefusedWhenTheStreamSlotsAreFull(t *testing.T) {
 	}
 	if time.Since(started) > time.Second {
 		t.Error("the refusal waited instead of coming at once")
+	}
+}
+
+// A frame the caller may not see arrives on the channel like any other. It must
+// not be the answer, and it must not end the wait.
+func TestAFrameHiddenFromTheCallerDoesNotEndItsWait(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("watcher", store.RoleViewer)
+	bus := h.ctrl.Events()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		bus.Publish(events.KindTransfer, "transfer:t", map[string]any{"id": "t"}) // hidden from a viewer
+		time.Sleep(150 * time.Millisecond)
+		bus.Publish(events.KindJobUpdated, "job:job_seen", map[string]any{"id": "job_seen"})
+	}()
+
+	got := h.recent(t, cookie, "?wait=10s&since="+url.QueryEscape(bus.WireID(0)))
+	if got.TimedOut || len(got.Items) != 1 || got.Items[0].Topic != "job:job_seen" {
+		t.Fatalf("answered %+v, want the job frame after the hidden one was passed over", got)
+	}
+}
+
+// A cursor past the newest id, on a ring with nothing in it, is not worth
+// echoing: it would stay incomplete for ever.
+func TestACursorPastTheNewestIdOnAnEmptyRingIsReplaced(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("watcher", store.RoleViewer)
+	bus := h.ctrl.Events()
+	bus.PublishTransient(events.KindScaling, "pool:p", map[string]any{})
+
+	got := h.recent(t, cookie, "?since="+url.QueryEscape(bus.WireID(50)))
+	if got.Complete || got.Next != bus.WireID(1) {
+		t.Errorf("answered next %q complete %v, want %s and incomplete", got.Next, got.Complete, bus.WireID(1))
+	}
+	if again := h.recent(t, cookie, "?since="+url.QueryEscape(got.Next)); !again.Complete {
+		t.Error("the replacement cursor was still incomplete")
+	}
+}
+
+// The stream sends a frame with no payload; the route must not make one up.
+func TestAFrameWithNoPayloadCarriesNoData(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("watcher", store.RoleViewer)
+	h.ctrl.Events().Publish(events.KindScaling, "pool:p", nil)
+
+	res := h.do(request{method: http.MethodGet, path: "/api/v1/events/recent?kinds=scaling", cookie: cookie})
+	if res.status != http.StatusOK || !strings.Contains(string(res.body), `"topic":"pool:p"`) || strings.Contains(string(res.body), `"data"`) {
+		t.Errorf("body = %s, want the frame with no data member", res.body)
 	}
 }
