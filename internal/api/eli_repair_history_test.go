@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -379,4 +380,114 @@ func TestEliRepairsAreClearedInBulkAndReportedOneByOne(t *testing.T) {
 		maxed[i] = fmt.Sprintf("erf_%d", i)
 	}
 	bulk(viewer, map[string]any{"action": "clear", "ids": maxed}).mustStatus(t, http.StatusOK, "exactly 500 ids")
+}
+
+// clearRepairs posts a bulk clear as whoever holds the cookie or the token and
+// returns the per-id answers.
+func (h *harness) clearRepairs(t *testing.T, cookie, token string, ids ...string) []store.EliRepairClear {
+	t.Helper()
+	resp := h.do(request{method: http.MethodPost, path: "/api/v1/assistant/repairs/bulk", cookie: cookie, token: token,
+		body: map[string]any{"action": "clear", "ids": ids}})
+	resp.mustStatus(t, http.StatusOK, "clearing repairs")
+	var out struct {
+		Results []store.EliRepairClear `json:"results"`
+	}
+	resp.into(t, &out)
+	return out.Results
+}
+
+// An administrator is the one caller who can tidy the whole history, and the
+// audit log is where anyone later asks who did it: the row has to name the
+// administrator, not the person whose repair it was.
+func TestAnAdministratorsBulkClearReachesAnotherPersonsRowAndTheAuditNamesTheAdministrator(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	admin, adminCookie := h.user("reach-admin", store.RoleAdmin)
+	owner, ownerCookie := h.user("reach-owner", store.RoleViewer)
+
+	ids := h.seedRepairs(t, inst, historyRow{owner.ID, "acme/site", "mention", "failed"})
+
+	got := h.clearRepairs(t, adminCookie, "", ids...)
+	if want := []store.EliRepairClear{{ID: ids[0], OK: true}}; !slices.Equal(got, want) {
+		t.Fatalf("an administrator clearing someone else's repair: got %+v, want %+v", got, want)
+	}
+	if list := h.repairHistory(t, ownerCookie, ""); len(list.Items) != 0 {
+		t.Errorf("the owner still sees %v after an administrator cleared it", list.ids())
+	}
+
+	audit, _, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"assistant.repair_clear"}}, store.Page{Limit: 5})
+	if err != nil || len(audit) != 1 {
+		t.Fatalf("audit rows = %v, %v; want exactly one", audit, err)
+	}
+	if a := audit[0]; a.ActorID != admin.ID || a.ActorID == owner.ID || !strings.Contains(a.After, ids[0]) {
+		t.Errorf("the audit row must name the administrator who cleared it, not the owner: %+v", a)
+	}
+}
+
+// Whether a repair is running is only worth saying to someone who may see it.
+// The answer for someone else's row has to be the same "not found" whatever
+// state the row is in, or the state would be a way to probe other people's work.
+func TestAnotherPersonsRunningRepairIsNotFoundToANonAdministratorAndStillRunningToAnAdministrator(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	_, adminCookie := h.user("probe-admin", store.RoleAdmin)
+	_, viewerCookie := h.user("probe-viewer", store.RoleViewer)
+	other, _ := h.user("probe-other", store.RoleViewer)
+
+	ids := h.seedRepairs(t, inst, historyRow{other.ID, "acme/site", "mention", "working"})
+
+	if got := h.clearRepairs(t, viewerCookie, "", ids...); !slices.Equal(got, []store.EliRepairClear{{ID: ids[0], Error: "not found"}}) {
+		t.Errorf("a viewer asking about someone else's running repair got %+v, want not found", got)
+	}
+	// The contrast is the point: the same row, asked of by someone who may see it.
+	if got := h.clearRepairs(t, adminCookie, "", ids...); !slices.Equal(got, []store.EliRepairClear{{ID: ids[0], Error: "still running"}}) {
+		t.Errorf("an administrator asking about the same row got %+v, want still running", got)
+	}
+}
+
+// A token narrowed to assistant:own is "only the owner-scoped personal
+// endpoints", whatever role it was minted at. Any scope on a resource implies
+// reading it, so such a token can read every person's repairs; clearing is a
+// write and must not ride on that.
+//
+// The token belongs to the administrator because a token never acts above its
+// owner's role: one minted at admin for a viewer is a viewer, and would pass
+// this test without the gate it is here to pin.
+func TestATokenNarrowedToAssistantOwnClearsOnlyItsOwnPersonsRepairs(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	admin, adminCookie := h.user("narrow-admin", store.RoleAdmin)
+	other, _ := h.user("narrow-other", store.RoleViewer)
+
+	ids := h.seedRepairs(t, inst,
+		historyRow{admin.ID, "acme/site", "mention", "failed"},
+		historyRow{other.ID, "acme/site", "mention", "failed"},
+	)
+	own, someoneElses := ids[0], ids[1]
+
+	mint := func(name string, scopes ...string) string {
+		t.Helper()
+		_, plaintext, err := h.ctrl.Auth().CreateAPIToken(h.ctx, auth.NewToken{Name: name, Role: store.RoleAdmin, UserID: admin.ID, Scopes: scopes})
+		if err != nil {
+			t.Fatalf("minting %s: %v", name, err)
+		}
+		return plaintext
+	}
+
+	narrow := mint("narrowed-to-own", "assistant:own")
+	got := h.clearRepairs(t, "", narrow, someoneElses, own)
+	want := []store.EliRepairClear{{ID: someoneElses, Error: "not found"}, {ID: own, OK: true}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("an administrator's token narrowed to assistant:own\n got  %+v\n want %+v", got, want)
+	}
+	if list := h.repairHistory(t, adminCookie, ""); !slices.Equal(list.ids(), []string{someoneElses}) {
+		t.Errorf("the history is %v; the other person's repair should be untouched and the token's own person's gone", list.ids())
+	}
+
+	// The control: the same role and owner with the scope that does reach
+	// everyone's rows, so the refusal above is the scope and not the route.
+	wide := mint("wide-assistant", "assistant:*")
+	if got := h.clearRepairs(t, "", wide, someoneElses); !slices.Equal(got, []store.EliRepairClear{{ID: someoneElses, OK: true}}) {
+		t.Errorf("a token scoped to assistant:* clearing someone else's repair got %+v, want ok", got)
+	}
 }

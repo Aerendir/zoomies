@@ -43,18 +43,13 @@ const maxBulkEliRepairs = store.MaxEliRepairSelection
 // When it returns false it has already answered 422. paged is for the list;
 // a selection is the matches, not a page of them.
 func eliRepairFilter(w http.ResponseWriter, r *http.Request, paged bool) (store.EliRepairFilter, bool) {
-	id := Identity(r.Context())
 	q := r.URL.Query()
 	f := store.EliRepairFilter{
-		// A caller with no identity is scoped to nobody, never to everybody.
-		Scoped:  !id.Can(auth.ActionAssistantRead),
 		Group:   strings.TrimSpace(q.Get("group")),
 		Repo:    strings.TrimSpace(q.Get("repo")),
 		Trigger: strings.TrimSpace(q.Get("trigger")),
 	}
-	if id != nil {
-		f.OwnerID = id.UserID
-	}
+	f.OwnerID, f.Scoped = eliRepairScope(r, auth.ActionAssistantRead)
 
 	var fields []fieldError
 	if f.Group != "" && !slices.Contains(store.EliRepairGroups, f.Group) {
@@ -76,6 +71,27 @@ func eliRepairFilter(w http.ResponseWriter, r *http.Request, paged bool) (store.
 		f.Limit, f.Offset = p.Limit, p.Offset
 	}
 	return f, true
+}
+
+// eliRepairScope says whose repairs the caller reaches: everyone's when they
+// hold wide, otherwise only the repairs that belong to their own account. It is
+// the one place the rule is written, so the list, the selection and the clear
+// cannot drift apart.
+//
+// wide is what differs. Reading the history asks for assistant.read and
+// clearing it asks for assistant.write, because a clear is a change and a scope
+// on a resource implies reading it: a token narrowed to assistant:own can read
+// everything its owner's role can, and must not be able to clear it too.
+// assistant:own is "only the owner-scoped personal endpoints".
+//
+// A caller with no identity is scoped to nobody, never to everybody; the empty
+// owner matches no repair.
+func eliRepairScope(r *http.Request, wide auth.Action) (ownerID string, scoped bool) {
+	id := Identity(r.Context())
+	if id == nil {
+		return "", true
+	}
+	return id.UserID, !id.Can(wide)
 }
 
 // orList renders "a, b or c" for a message that offers the values a parameter
@@ -125,9 +141,11 @@ type bulkEliRepairRequest struct {
 // It answers 200 with a result for each id, in the order asked, as the machines'
 // bulk delete does: a person clearing a page of repairs will have one that Eli
 // picked up a moment ago, and "something failed" is not an answer they can act
-// on. The store decides each id, and the scope it applies is the same one the
-// list uses, so a person cannot clear, or learn the existence of, a repair they
-// could not see.
+// on. The store decides each id. The scope it applies is the list's rule with a
+// stricter test for reaching everyone's repairs (assistant.write, not
+// assistant.read; see eliRepairScope), so a person cannot clear, or learn the
+// existence of, a repair that is not theirs unless they are an administrator
+// whose credential may write.
 func (s *Server) handleBulkEliRepairs(w http.ResponseWriter, r *http.Request) {
 	var req bulkEliRepairRequest
 	if !decode(w, r, &req) {
@@ -155,12 +173,8 @@ func (s *Server) handleBulkEliRepairs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	id := Identity(ctx)
-	owner := ""
-	if id != nil {
-		owner = id.UserID
-	}
-	results, err := s.ctrl.Store().ClearEliRepairs(ctx, req.IDs, owner, !id.Can(auth.ActionAssistantRead))
+	owner, scoped := eliRepairScope(r, auth.ActionAssistantWrite)
+	results, err := s.ctrl.Store().ClearEliRepairs(ctx, req.IDs, owner, scoped)
 	if err != nil {
 		s.internal(w, r, "clearing Eli repairs from the history", err)
 		return
@@ -176,7 +190,7 @@ func (s *Server) handleBulkEliRepairs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(cleared) > 0 {
-		s.auth.Auditor().Act(ctx, id, "assistant.repair_clear", "eli_repair", "", map[string]any{"count": len(cleared), "ids": cleared})
+		s.auth.Auditor().Act(ctx, Identity(ctx), "assistant.repair_clear", "eli_repair", "", map[string]any{"count": len(cleared), "ids": cleared})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
