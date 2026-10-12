@@ -739,10 +739,6 @@ func TestHostSamplesBetweenReadsOneHostsWindowUpToTheLimit(t *testing.T) {
 	}
 }
 
-// Throttle episodes are read from the audit log, which also names who cleared
-// one. The analyses expose when a host was throttled and nothing about who
-// (F14), so the read returns the host, the time and the rung, and no actor or
-// detail.
 // A throttle that went on before the window and came off after it leaves no
 // row inside the window, and by the time anyone asks about a past window the
 // host's own Throttle.Since has long been cleared. The last change before the
@@ -787,6 +783,10 @@ func TestHostThrottleChangesCarryEachHostsLastChangeBeforeTheWindow(t *testing.T
 	}
 }
 
+// Throttle episodes are read from the audit log, which also names who cleared
+// one. The analyses expose when a host was throttled and nothing about who
+// (F14), so the read returns the host, the time and the rung, and no actor or
+// detail.
 func TestHostThrottleChangesReadOnlyTheThrottleRowsAndTheRungEachLeft(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
