@@ -66,34 +66,34 @@ type MergeDelaySnapshot struct {
 // Timing partitions a job's observable lifetime. Unknown phases remain nil.
 // Startup is carved out of pre-start wait, never added on top of queue wait.
 type CheckTiming struct {
-	PreStartMS  *int64
-	QueueMS     *int64
-	StartupMS   *int64
-	ExecutionMS *int64
+	PreStartMS  *int64 `json:"pre_start_ms"`
+	QueueMS     *int64 `json:"queue_ms"`
+	StartupMS   *int64 `json:"startup_ms"`
+	ExecutionMS *int64 `json:"execution_ms"`
 }
 
 type CheckDelay struct {
-	CheckID           string
-	State             string
-	ObservationID     string
-	CompletionDelayMS *int64
-	Timing            CheckTiming
+	CheckID           string      `json:"check_id"`
+	State             string      `json:"state"`
+	ObservationID     string      `json:"observation_id"`
+	CompletionDelayMS *int64      `json:"completion_delay_ms"`
+	Timing            CheckTiming `json:"timing"`
 }
 
 type MergeDelayResult struct {
-	Version             string
-	HeadSHA             string
-	TargetBranch        string
-	ObservedAt          time.Time
-	WindowStart         time.Time
-	ProtectionCoverage  Coverage
-	ObservationCoverage Coverage
-	State               string
-	Checks              []CheckDelay
+	Version             string       `json:"version"`
+	HeadSHA             string       `json:"head_sha"`
+	TargetBranch        string       `json:"target_branch"`
+	ObservedAt          time.Time    `json:"observed_at"`
+	WindowStart         time.Time    `json:"window_start"`
+	ProtectionCoverage  Coverage     `json:"protection_coverage"`
+	ObservationCoverage Coverage     `json:"observation_coverage"`
+	State               string       `json:"state"`
+	Checks              []CheckDelay `json:"checks"`
 	// This is an observed completion order, not a dependency critical path or
 	// a verdict on reviews, conflicts, merge queues or full merge readiness.
-	LastFinishingCheckID string
-	IgnoredOtherHeads    int
+	LastFinishingCheckID string `json:"last_finishing_check_id"`
+	IgnoredOtherHeads    int    `json:"ignored_other_heads"`
 }
 
 // MergeDelay never guesses required checks when protection is unavailable.

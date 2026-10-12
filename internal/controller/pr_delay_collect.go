@@ -18,14 +18,14 @@ const prDelayReadTimeout = 20 * time.Second
 const maxPRDelayJobReads = 500
 
 type PRDelayReport struct {
-	JobID          string
-	Repository     string
-	InstallationID string
-	PullNumber     int
+	JobID          string `json:"job_id"`
+	Repository     string `json:"repository"`
+	InstallationID string `json:"installation_id"`
+	PullNumber     int    `json:"pull_number"`
 	// WindowBasis prevents the earliest retained job from being mistaken for
 	// the time the developer pushed this revision.
-	WindowBasis string
-	Result      analysis.MergeDelayResult
+	WindowBasis string                    `json:"window_basis"`
+	Result      analysis.MergeDelayResult `json:"result"`
 }
 
 // PRDelayForJob is on-demand collection for a job the caller may already read.
@@ -62,6 +62,25 @@ func (c *Controller) PRDelayForJob(ctx context.Context, jobID string, pull int) 
 	reader, ok := raw.(github.PRDelayReader)
 	if !ok {
 		return nil, ErrPRDelayUnsupported
+	}
+	release, err := c.admitPRDelay(inst.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	quota, err := raw.RateLimit(ctx)
+	if err != nil {
+		c.holdIfRateLimited(inst.ID, err, c.Now(), "reading the quota for PR diagnostics")
+		return nil, err
+	}
+	// GitHub's rate-limit endpoint is not charged to core quota. Reserve half
+	// the reported allowance before admitting this bounded diagnostic read.
+	if quota == nil || quota.Limit <= 0 || quota.Remaining < 0 || quota.Remaining > quota.Limit || quota.Remaining-prDelayMaximumRequests < quota.Limit/2 {
+		retry := time.Minute
+		if quota != nil && quota.ResetAt.After(c.Now()) {
+			retry = quota.ResetAt.Sub(c.Now())
+		}
+		return nil, &PRDelayAdmissionError{RetryAfter: retry}
 	}
 	e, err := reader.ReadPRDelay(ctx, focus.Repo, pull)
 	if err != nil {

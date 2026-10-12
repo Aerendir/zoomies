@@ -29,10 +29,11 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 calculation core | Merged | [#931](https://github.com/eyupio/zoomies/pull/931) | Go 1.27.2 formatting, analysis race tests and vet pass; no runtime surface yet |
 | E1 bounded GitHub evidence | Merged | [#933](https://github.com/eyupio/zoomies/pull/933), following #931 | Full GitHub/analysis package race tests and vet pass; target-branch protection, bounded check reads, currentness recheck and explicit coverage |
 | E1 snapshot assembly | Merged | [#935](https://github.com/eyupio/zoomies/pull/935), following its merged parents | Focused controller/analysis race tests pass; verifies repository/installation/run/job joins, preserves incomplete evidence, and separates check reporting from job execution |
-| E1 on-demand collector | Prepared for PR | Branch `codex/eli-pr-delay-collector`, based on `main` at `63235b37` | Collector/assembly/core/reader race tests and changed-package vet pass; selects the existing job's installation, bounds collection, respects installation holds and labels the window basis |
-| E1 route and product integration | Not started | Follows the collector | REST/OpenAPI, caller authorisation, request-budget admission, MCP/CLI and contextual UI/Eli remain; these slices do not expose a feature in the product |
+| E1 on-demand collector | Merged | [#938](https://github.com/eyupio/zoomies/pull/938), following the merged foundations | Collector/assembly/core/reader race tests and changed-package vet pass; selects the existing job's installation, bounds collection, respects installation holds and labels the window basis |
+| E1 admission and read-only API | Draft PR, not merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
+| E1 agent and UI integration | Not started | Follows the API contract | MCP/CLI, contextual UI/Eli and model scenarios remain; do not describe the UI experience as delivered from an API-only slice |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
-| E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks pass; full tests/lint were interrupted and are not passes; no live model evaluation or performance experiment has run |
+| E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
 
 The first validation attempt was blocked by a missing Go compiler and shell
 network access. Explicit per-command network access resolved connectivity;
@@ -48,7 +49,16 @@ for subsequent checks in this workspace. Interrupted full checks did not pass.
 The full rerun was also interrupted during process cleanup; current verification
 uses focused race tests for the collector, assembler, core and reader, plus
 changed-package vet. Keep full-suite and full lint verification outstanding
-rather than carrying a "running" status forward.
+rather than carrying a "running" status forward. A fresh `make lint` subsequently
+passed for the API slice (normal/e2e/drill/load vet, Go formatting and web lint);
+staticcheck was not installed and skipped. `mkdocs build --strict` passed in
+`/workspace/eli-tooling/docs-venv`, using the repository-only header fallback
+when optional GitHub release/repository header lookups were denied.
+
+PR #943 conflict resolution: merged `main` at `de28a68c` into the API
+branch. The OpenAPI source merged cleanly; regenerated the embedded contract
+and TypeScript schema from that combined source. Route/spec and diagnostic
+race checks pass after resolution, as does the strict documentation build.
 
 Current implementation plans:
 
@@ -56,6 +66,7 @@ Current implementation plans:
 - [Bounded GitHub evidence](roadmap/plans/2026-10-12-eli-pr-delay-evidence.md).
 - [Snapshot assembly](roadmap/plans/2026-10-12-eli-pr-delay-snapshot.md).
 - [On-demand collection](roadmap/plans/2026-10-12-eli-pr-delay-collector.md).
+- [Admission and read-only API](roadmap/plans/2026-10-12-eli-pr-delay-api.md).
 
 The next agent should start from the stack tip, check which parent PRs have
 merged and preserve each PR's focused diff. Never merge or retarget a parent
