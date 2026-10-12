@@ -21,19 +21,42 @@ import (
 // workflow's names make it, so the bytes are bounded as well.
 const maxWindowBlock = 64 << 10
 
-// windowBlockKey carries a server's Options.WindowBlock to the window tools. It
-// travels on the context because the tools are plain functions over the API,
-// shared by every server, and only the block size differs between them.
-type windowBlockKey struct{}
+// windowKey carries a server's window limits to the window tools. They travel
+// on the context because the tools are plain functions over the API, shared by
+// every server, and only these limits differ between them.
+type windowKey struct{}
+
+// windowLimits is what a server's Options say about the window tools.
+type windowLimits struct {
+	block    int
+	maxWait  time.Duration
+	withheld []string
+}
+
+func limitsOf(ctx context.Context) windowLimits {
+	l, _ := ctx.Value(windowKey{}).(windowLimits)
+	return l
+}
 
 // windowBlock is the bytes one block of a window tool's answer may hold for
 // this call: the server's WindowBlock when it set one, and maxWindowBlock
 // otherwise.
 func windowBlock(ctx context.Context) int {
-	if n, ok := ctx.Value(windowBlockKey{}).(int); ok && n > 0 {
+	if n := limitsOf(ctx).block; n > 0 {
 		return min(n, maxWindowBlock)
 	}
 	return maxWindowBlock
+}
+
+// everyKind is every kind of event the controller sends, which is what a
+// server that withholds some asks for in place of "all".
+func everyKind() []string {
+	return slices.Sorted(slices.Values(append(slices.Clone(waitKinds), slices.Collect(maps.Keys(quietKinds))...)))
+}
+
+// withoutWithheld is kinds less those this server withholds.
+func withoutWithheld(kinds, withheld []string) []string {
+	return slices.DeleteFunc(slices.Clone(kinds), func(k string) bool { return slices.Contains(withheld, k) })
 }
 
 // maxWindowValue bounds one quoted field. A frame is then a bounded number of
@@ -338,6 +361,12 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 	if len(a.Kinds) > 10 {
 		return nil, nil, errors.New("kinds takes at most 10 event kinds; leave it out to read them all")
 	}
+	limits := limitsOf(ctx)
+	for _, k := range a.Kinds {
+		if slices.Contains(limits.withheld, k) {
+			return nil, nil, fmt.Errorf("%s events are not offered here; the kinds that are withheld are %s, so leave them out of kinds", k, strings.Join(limits.withheld, " and "))
+		}
+	}
 	q := url.Values{}
 	// A wait with no cursor is a request for one: the present, at once. Read
 	// from the start of what the controller holds instead, a busy fleet's
@@ -354,7 +383,10 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 	case len(a.Kinds) > 0:
 		q.Set("kinds", strings.Join(a.Kinds, ","))
 	case wait:
-		q.Set("kinds", strings.Join(waitKinds, ","))
+		q.Set("kinds", strings.Join(withoutWithheld(waitKinds, limits.withheld), ","))
+	case len(limits.withheld) > 0:
+		// "All" would include what is withheld, so every other kind is named.
+		q.Set("kinds", strings.Join(withoutWithheld(everyKind(), limits.withheld), ","))
 	}
 	if a.Topic != "" {
 		q.Set("topic", a.Topic)
@@ -364,7 +396,11 @@ func ringWindow(ctx context.Context, c API, raw json.RawMessage, wait bool) ([]C
 			return nil, nil, errors.New("the arguments do not match this tool's input schema: wait_for_change takes no limit")
 		}
 		if !start {
-			q.Set("wait", strconv.Itoa(clamp(a.Seconds, 20, 25))+"s")
+			seconds := clamp(a.Seconds, 20, 25)
+			if limits.maxWait > 0 {
+				seconds = min(seconds, max(1, int(limits.maxWait/time.Second)))
+			}
+			q.Set("wait", strconv.Itoa(seconds)+"s")
 		}
 	} else {
 		if a.Seconds != 0 {

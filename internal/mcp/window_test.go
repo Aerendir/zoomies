@@ -1031,3 +1031,69 @@ func TestACutNoteSaysTheOlderRowsCannotBeReadAndWhatShowsMore(t *testing.T) {
 		}
 	}
 }
+
+// A server that withholds kinds never asks the route for them: not when the
+// call leaves kinds out, where "all" would include them, and not when the call
+// names one, which is refused before anything is asked.
+func TestAServersWithheldKindsAreNeverAskedFor(t *testing.T) {
+	withheld := []string{"audit", "webhook.delivery"}
+	empty := `{"items":[],"next":"k1.1","complete":true,"truncated":false,"timed_out":true}`
+	for _, tc := range []struct{ tool, args string }{
+		{"recent_events", `{}`},
+		{"recent_events", `{"since":"10m","topic":"audit:"}`},
+		{"wait_for_change", `{"since":"k1.1","seconds":1}`},
+	} {
+		api := &kennelAPI{body: empty}
+		s := New(api, Options{WithheldKinds: withheld})
+		if _, failed, err := s.CallTool(t.Context(), tc.tool, json.RawMessage(tc.args)); err != nil || failed {
+			t.Fatalf("%s %s: %v %v", tc.tool, tc.args, err, failed)
+		}
+		asked := strings.Split(api.query.Get("kinds"), ",")
+		if len(asked) < 2 || !slices.Contains(asked, "job.updated") {
+			t.Errorf("%s %s asked for kinds %v, want every kind but the withheld", tc.tool, tc.args, asked)
+		}
+		for _, k := range withheld {
+			if slices.Contains(asked, k) {
+				t.Errorf("%s %s asked for %s", tc.tool, tc.args, k)
+			}
+		}
+	}
+	for _, args := range []string{`{"kinds":["audit"]}`, `{"kinds":["job.updated","webhook.delivery"]}`} {
+		for _, tool := range []string{"recent_events", "wait_for_change"} {
+			api := &kennelAPI{body: empty}
+			blocks, failed, err := New(api, Options{WithheldKinds: withheld}).CallTool(t.Context(), tool, json.RawMessage(args))
+			if err != nil || !failed || !strings.Contains(strings.Join(blocks, ""), "not offered here") {
+				t.Errorf("%s %s answered %q (failed %v, %v), want a refusal", tool, args, blocks, failed, err)
+			}
+			if api.calls != 0 {
+				t.Errorf("%s %s asked the route %d times after naming a withheld kind", tool, args, api.calls)
+			}
+		}
+	}
+	// A server that withholds nothing reads every kind, as before.
+	api := &kennelAPI{body: empty}
+	if _, _, err := New(api, Options{}).CallTool(t.Context(), "recent_events", json.RawMessage(`{}`)); err != nil || api.query.Has("kinds") {
+		t.Errorf("recent_events with nothing withheld asked for kinds %q (%v)", api.query.Get("kinds"), err)
+	}
+}
+
+func TestAServersMaxWaitHoldsEveryWaitShorter(t *testing.T) {
+	for _, tc := range []struct {
+		maxWait time.Duration
+		args    string
+		want    string
+	}{
+		{10 * time.Second, `{"since":"k1.1"}`, "10s"},
+		{10 * time.Second, `{"since":"k1.1","seconds":25}`, "10s"},
+		{10 * time.Second, `{"since":"k1.1","seconds":5}`, "5s"},
+		{0, `{"since":"k1.1","seconds":25}`, "25s"},
+	} {
+		api := &kennelAPI{body: `{"items":[],"next":"k1.1","complete":true,"truncated":false,"timed_out":true}`}
+		if _, _, err := New(api, Options{MaxWait: tc.maxWait}).CallTool(t.Context(), "wait_for_change", json.RawMessage(tc.args)); err != nil {
+			t.Fatal(err)
+		}
+		if got := api.query.Get("wait"); got != tc.want {
+			t.Errorf("MaxWait %v with %s asked to wait %q, want %q", tc.maxWait, tc.args, got, tc.want)
+		}
+	}
+}

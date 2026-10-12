@@ -359,7 +359,8 @@ shows more of one host's samples, and `pool_id` more of one pool's decisions.
 A runner's timeline is short and comes whole. [Eli](eli.md#what-eli-can-see),
 when it may read the fleet, is offered the same seven tools, with the window
 answers held tighter, to 12 KiB, on whole rows; a runner's timeline is held only
-by Eli's own 16 KiB ceiling on any one answer.
+by Eli's own 16 KiB ceiling on any one answer. Eli's waits are held to 10
+seconds, and its event tools never ask for audit or webhook delivery events.
 
 #### Names a workflow wrote
 

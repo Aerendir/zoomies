@@ -21,7 +21,11 @@ type assistantToolbox struct {
 }
 
 func (s *Server) assistantToolbox(r *http.Request, as *auth.Identity) *assistantToolbox {
-	return &assistantToolbox{server: mcp.New(inProcessAPI{s: s, from: r, as: as, direct: true}, mcp.Options{WindowBlock: controller.AssistantWindowBlock})}
+	return &assistantToolbox{server: mcp.New(inProcessAPI{s: s, from: r, as: as, direct: true}, mcp.Options{
+		WindowBlock:   controller.AssistantWindowBlock,
+		MaxWait:       controller.AssistantMaxWait,
+		WithheldKinds: controller.AssistantWithheldKinds,
+	})}
 }
 
 func (b *assistantToolbox) Tools() []assistant.Tool {

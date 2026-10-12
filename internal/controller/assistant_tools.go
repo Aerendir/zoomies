@@ -60,6 +60,19 @@ const (
 // writes "[redacted email]" over an address shorter than it.
 const AssistantWindowBlock = assistantToolResultBytes * 3 / 4
 
+// AssistantMaxWait is the longest one of Eli's waits for a change may hold.
+// Calls in a round run one after another and the limit is on calls, not time,
+// so at the tools' own 25 seconds a model that queued its twelve calls as
+// waits would spend the whole of the answer's deadline on them and lose it.
+const AssistantMaxWait = 10 * time.Second
+
+// AssistantWithheldKinds are the event kinds Eli's toolbox never asks for. The
+// audit log and the webhook deliveries are left off Eli's list by the owner's
+// choice, and their frames are the same rows one at a time, so the event tools
+// leave them out too rather than hand a hosted model what the list keeps from
+// it.
+var AssistantWithheldKinds = []string{"audit", "webhook.delivery"}
+
 // AssistantToolbox is the fleet's read tools as the person asking may use them.
 // The api package builds it over the same in-process routes, with the same
 // identity, that an MCP client of theirs would reach, so Eli can see nothing the

@@ -154,12 +154,17 @@ of each host, a runner's timeline and the workflow runs, and it can wait for the
 next change. The audit log, the webhook deliveries and the support bundle are not
 offered to it, whoever is asking: they are who did what by name, GitHub's whole
 payloads and the whole instance at once, which is more than a question about the
-fleet should send to a model.
+fleet should send to a model. The same goes for their events: what changed lately,
+as Eli reads it, never includes an audit row or a webhook delivery, and asking for
+those kinds is refused. Eli's wait for the next change is held to 10 seconds, not
+an agent's 25, so that a question which keeps waiting still ends inside the
+answer's own time limit.
 When it looks, the panel says what it looked at, under the answer, and a look
 that failed says why beside its name (a code that is not in the catalog, a route
 that refused), which is the part worth reading. A call Eli makes twice with the
 same arguments is answered from the first without being run or shown again,
-except a wait for the next change, which is a new question each time it is asked.
+except a read of what changed lately or a wait for the next change, which is a
+new question each time it is asked.
 
 The questions an empty conversation offers come from the fleet when Eli can
 read it: the open one first, then, while a problem is open, what changed in the

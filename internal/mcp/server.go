@@ -25,9 +25,11 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/eyupio/zoomies/internal/version"
 )
@@ -112,6 +114,17 @@ type Options struct {
 	// cut can only keep the end of the text, which starts inside a row and
 	// leaves a cursor that has moved past the rows it dropped.
 	WindowBlock int
+	// MaxWait, when positive, is the longest wait_for_change may hold a call,
+	// below the tool's own 25 seconds. A caller whose answer has a deadline of
+	// its own, and a limit on calls rather than on time, sets it so that a
+	// model queuing waits cannot spend the deadline on them.
+	MaxWait time.Duration
+	// WithheldKinds are event kinds the event tools never ask the route for. A
+	// call that names one is refused, and a call that names none asks for every
+	// other kind, so the frames are not fetched to be thrown away: what a caller
+	// is never handed cannot leak through a later change to how answers are
+	// rendered.
+	WithheldKinds []string
 }
 
 // JSON-RPC error codes.
@@ -157,8 +170,9 @@ type Server struct {
 	// "no such tool".
 	actions map[string]bool
 	refusal func(string) string
-	// windowBlock is Options.WindowBlock, handed to each call on its context.
-	windowBlock int
+	// window is what Options says about the window tools, handed to each call
+	// on its context.
+	window windowLimits
 
 	writeMu sync.Mutex
 	out     io.Writer
@@ -176,12 +190,12 @@ func New(api API, opts Options) *Server {
 // the real surface does not have, through the same registration as the rest.
 func newServer(api API, opts Options, all []*tool) *Server {
 	s := &Server{
-		api:         api,
-		byName:      map[string]*tool{},
-		actions:     map[string]bool{},
-		refusal:     opts.Refusal,
-		windowBlock: opts.WindowBlock,
-		inFlight:    map[string]context.CancelFunc{},
+		api:      api,
+		byName:   map[string]*tool{},
+		actions:  map[string]bool{},
+		refusal:  opts.Refusal,
+		window:   windowLimits{block: opts.WindowBlock, maxWait: opts.MaxWait, withheld: slices.Clone(opts.WithheldKinds)},
+		inFlight: map[string]context.CancelFunc{},
 	}
 	for _, t := range all {
 		if t.action {
@@ -399,9 +413,7 @@ func (s *Server) callTool(ctx context.Context, name string, arguments json.RawMe
 	if len(bytes.TrimSpace(args)) == 0 || string(bytes.TrimSpace(args)) == "null" {
 		args = json.RawMessage("{}")
 	}
-	if s.windowBlock > 0 {
-		ctx = context.WithValue(ctx, windowBlockKey{}, s.windowBlock)
-	}
+	ctx = context.WithValue(ctx, windowKey{}, s.window)
 	content, value, err := t.run(ctx, s.api, args)
 	if err != nil {
 		return toolError(err), nil

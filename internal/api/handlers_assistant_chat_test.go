@@ -925,3 +925,70 @@ func TestThePersonsAnswerStyleShapesThePrompt(t *testing.T) {
 	body["style"] = map[string]any{"length": "essay"}
 	h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, body: body}).mustStatus(t, http.StatusUnprocessableEntity, "a length this build does not know")
 }
+
+// The audit log and the webhook deliveries are off Eli's list, and their frames
+// are the same rows one at a time. So Eli's event tools never ask for them:
+// not when the model leaves kinds out, and not when it names them, which is
+// refused. This administrator could read both for themselves; their Eli still
+// may not.
+func TestElisEventToolsNeverAskForAuditOrDeliveryFrames(t *testing.T) {
+	h, cookie, srv := chatHarness(t)
+	allowFleetAccess(t, h, cookie, true)
+	bus := h.ctrl.Events()
+	since := bus.WireID(bus.LastID())
+	bus.Publish(events.KindAudit, "audit:pool", store.AuditEvent{ID: "aud_1", ActorName: "alice", Action: "pool.update", TargetKind: "pool", TargetID: "pool_1"})
+	bus.Publish(events.KindWebhook, "webhook:del_1", map[string]any{"id": "del_1", "event": "workflow_job", "status": "accepted"})
+	bus.Publish(events.KindJobUpdated, "job:job_1", map[string]any{"id": "job_1", "state": "queued"})
+
+	srv.Script = []assistanttest.Round{
+		{Calls: []assistanttest.Call{
+			{Name: "recent_events", Arguments: `{"since":"` + since + `"}`},
+			{Name: "recent_events", Arguments: `{"since":"` + since + `","kinds":["audit"]}`},
+			{Name: "wait_for_change", Arguments: `{"since":"` + since + `","kinds":["webhook.delivery"]}`},
+		}},
+		{Text: "A job was queued."},
+	}
+	resp := h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, readStream: true, body: chatBody("user", "What changed?")})
+	resp.mustStatus(t, http.StatusOK, "asking")
+	reqs := chatRequests(srv)
+	if len(reqs) < 2 {
+		t.Fatalf("the model was asked %d times", len(reqs))
+	}
+	seen := toolMessage(t, reqs[1], "call_0_0")
+	if !strings.Contains(seen, "job.updated job:job_1") {
+		t.Errorf("the job frame was not shown: %q", seen)
+	}
+	for _, kind := range []string{" audit ", "webhook.delivery", "aud_1", "del_1"} {
+		if strings.Contains(seen, kind) {
+			t.Errorf("Eli was shown %q: %q", kind, seen)
+		}
+	}
+	for _, call := range []string{"call_0_1", "call_0_2"} {
+		if told := toolMessage(t, reqs[1], call); !strings.Contains(told, "not offered here") || strings.Contains(told, "aud_1") || strings.Contains(told, "del_1") {
+			t.Errorf("%s naming a withheld kind was answered %q, want a refusal", call, told)
+		}
+	}
+}
+
+// Calls in a round run one after another and the limit is on calls, so Eli's
+// waits are held shorter than an agent's: twelve waits at the tools' own 25
+// seconds would outlast the answer's deadline.
+func TestElisWaitIsHeldToTenSecondsWhateverTheModelAsks(t *testing.T) {
+	h, cookie, srv := chatHarness(t)
+	allowFleetAccess(t, h, cookie, true)
+	bus := h.ctrl.Events()
+	srv.Script = []assistanttest.Round{
+		{Calls: []assistanttest.Call{{Name: "wait_for_change", Arguments: `{"since":"` + bus.WireID(bus.LastID()) + `","kinds":["job.updated"],"seconds":25}`}}},
+		{Text: "Nothing changed."},
+	}
+	started := time.Now()
+	resp := h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, readStream: true, body: chatBody("user", "Tell me when a job moves.")})
+	resp.mustStatus(t, http.StatusOK, "asking")
+	elapsed := time.Since(started)
+	if elapsed < 9*time.Second || elapsed > 15*time.Second {
+		t.Errorf("the answer took %v, want a wait of about ten seconds", elapsed)
+	}
+	if told := toolMessage(t, chatRequests(srv)[1], "call_0_0"); !strings.Contains(told, "nothing changed within the wait") {
+		t.Errorf("the wait was answered %q", told)
+	}
+}
