@@ -6,6 +6,39 @@ import (
 	"time"
 )
 
+// An operator who uncordons a host with a backlog waiting sees the controller
+// place runners on it at once, but the agent only learns the flag has gone on
+// its next beat. A create that arrives in that gap used to be refused from the
+// agent's stale copy, failing every runner placed in the first half minute.
+// The agent has to ask the controller again before it turns a create away.
+func TestAnUncordonedHostTakesACreateBeforeItsNextBeat(t *testing.T) {
+	h := newHarness(t, 4)
+	h.tr.mu.Lock()
+	h.tr.beatResp = &HeartbeatResponse{OK: true, Cordoned: true}
+	h.tr.mu.Unlock()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for h.agent.refuseNewWork() == "" {
+		if time.Now().After(deadline) {
+			t.Fatal("the agent never took in the cordon")
+		}
+		h.clock.advance(time.Second)
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// The operator uncordons, and the controller places a runner before this
+	// agent's next beat.
+	h.tr.mu.Lock()
+	h.tr.beatResp = &HeartbeatResponse{OK: true}
+	h.tr.mu.Unlock()
+
+	h.tr.tasks <- []Task{createTask("task-1", "runner-1")}
+	res := h.nextResult()
+	if !res.OK {
+		t.Fatalf("a create for a host that is no longer cordoned was refused from a stale flag: %q", res.Error)
+	}
+}
+
 // The controller already excludes a cordoned or incompatible host from
 // placement, so a create arriving here is a controller that has not caught up:
 // a plan computed before the flag, or one that does not know about the flag at
