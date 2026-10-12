@@ -14,13 +14,16 @@ runners is idling on more than half of itself, while each of those runners
 compiles inside a quota of under two cores. **Elastic CPU zoomies** lends that
 spare CPU to the runners that are actually using theirs, takes it back the
 moment anything else needs it, and never touches memory; that is [elastic
-memory](elastic-memory.md), on terms of its own. A job that would have taken
-four minutes at its guarantee finishes in two, and the fleet's accounting does
-not change by a single slot.
+memory](elastic-memory.md), on terms of its own. CPU-bound jobs can finish
+sooner when there is spare capacity; the gain depends on the workload and host
+load. The fleet's slot accounting does not change.
 
-It is a pool setting, on by default in its measuring form for every new pool,
-and the runner page and the Overview feed say when it is happening in the
-product's own words: **Squirrel spotted, maximum zoomies**.
+It is a pool setting. Eligible host-sized container pools created in the pool
+editor start on **Observe only**; the native installer's first pool starts with
+it off. Observation publishes measurements without changing quotas. Choose
+**Automatic boost** in the pool editor to apply boosts after reviewing them.
+The runner page and Overview feed say when it is happening in the product's
+own words: **Squirrel spotted, maximum zoomies**.
 
 The runners table uses one **Status** column. A runner normally shows its
 lifecycle state, such as **Registering** or **Busy**. While a boost or throttle
@@ -38,9 +41,10 @@ Status labels wrap when a saved column width is narrow; they are not clipped.
 The design starts from what it must never do, because a scheduler that lends
 CPU carelessly is a scheduler that starves a job it never noticed.
 
-* **Every runner keeps its guarantee.** A runner's share of the host is what it
-  was created with, and elasticity only ever adds to it. A busy or starting
-  runner's guarantee is charged in full before a single hundredth of a core is
+* **Elastic boosting preserves a runner's guarantee.** A runner's share of the
+  host is what it was created with, and elasticity only ever adds to it. The
+  separate host-pressure throttle can reduce it, as described below. A busy or
+  starting runner's guarantee is charged in full before a single hundredth of a core is
   lent to anyone. Idle runners (warm capacity waiting for a job) are charged
   one guarantee between them, the largest, because only one of them can be
   handed a job before the next plan; the rest of what they are not using is

@@ -107,8 +107,8 @@ has no macOS runner image, so it does not help with those.
   [hosts and pools](hosts-and-pools.md) and
   [elastic CPU zoomies](elastic-cpu.md).
 - **What is qualified.** Linux runners are what Zoomies is built and tested
-  for. The Windows agent builds and is unit-tested but
-  [has not yet run a job on a real Windows host](index.md#what-is-qualified).
+  for. The Windows agent builds and is unit-tested, with a reported manual
+  host-and-job trial; [written qualification is still pending](index.md#what-is-qualified).
 
 ## Where to go next
 

@@ -14,13 +14,20 @@ drawer (the count in the UI's top bar opens it) `GET /api/v1/problems` and
 matters and what to change. Every one carries a code, and
 [Problem codes](problem-codes.md) is the full list.
 
-Start here:
+Start in the UI's problems drawer or with `zoomies status`. The CLI needs a
+[configured controller connection and token](cli.md#talking-to-a-controller):
 
 ```sh
 zoomies status          # the Overview, in a terminal
-zoomies config check    # validate the config without starting anything
-journalctl -u zoomies -n 50
+zoomies hosts list
+zoomies jobs list --state queued --since 24h
 ```
+
+If you operate the controller host, `zoomies config check` validates the
+configuration locally. For a native systemd deployment, read its service log
+with `journalctl -u zoomies -n 50`; for Compose, use `docker compose logs --tail
+50 zoomies`. A fleet user without host access can share the problem code and
+request ID with the instance operator.
 
 This page is the rest: the things that go wrong before there is anything to
 look at, and the one symptom that has more causes than any other.
