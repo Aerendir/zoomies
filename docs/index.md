@@ -4,7 +4,8 @@ title: Zoomies
 social_title: "Zoomies: open-source self-hosted GitHub Actions runners"
 description: >-
   Run GitHub Actions on your own machines with fresh ephemeral runners, a live
-  web UI and autoscaling. Try the local demo or follow the first-job tutorial.
+  web UI, Eli AI assistance and MCP tools for job diagnosis and optimisation.
+  Try the local demo or follow the first-job tutorial.
 hide:
   - navigation
   - toc
@@ -19,7 +20,8 @@ hide:
 <p class="lede">
 Put your cloud VMs, office servers or home lab to work. Zoomies starts a fresh
 runner for each job, scales across your hosts and shows you what is happening
-in one live web UI. One binary, SQLite, no Kubernetes.
+in one live web UI. Ask Eli about your builds, or connect your own AI assistant
+through MCP. One binary, SQLite, no Kubernetes.
 </p>
 
 <p class="actions" markdown>
@@ -37,7 +39,7 @@ curl -fsSL https://zoomies.sh/install.sh | sh
 
 <p class="prereq" markdown="span">Start on Linux with Docker or Podman and a GitHub organisation or repository you administer. The local demo needs no GitHub credentials. [Read the installer first](quickstart.md#1-install).</p>
 
-<p class="popular" markdown="span">[Documentation](start-here.md) [Should you self-host?](should-i-self-host.md) [What it costs](costs.md)</p>
+<p class="popular" markdown="span">[Meet Eli and MCP](#ask-your-fleet-understand-your-builds) [Documentation](start-here.md) [What it costs](costs.md)</p>
 
 </div>
 
@@ -71,11 +73,61 @@ Size capacity, measure queue waits, tune resources and automate operations.
 
 </div>
 
-![Zoomies Overview showing queue and runner metrics, pool utilisation, startup timings and recent fleet activity](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
-![Zoomies Overview showing queue and runner metrics, pool utilisation, startup timings and recent fleet activity](screenshots/overview-light.webp#only-light){ .zoomies-shot }
+![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
+![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
 
 Watch jobs, capacity and scheduler decisions update in place. [Explore the web UI](ui.md).
 { .zoomies-shot-caption }
+
+## Ask your fleet. Understand your builds.
+
+Investigate a failed test, find why a job is waiting, or work out whether a
+build needs more memory or a smaller runner. Zoomies gives assistants access
+to the job evidence and fleet measurements behind those questions.
+
+<div class="zoomies-paths zoomies-paths--assistants" markdown>
+
+<div markdown>
+### Eli, right where you work
+
+Press **Ask Eli** on a job, host, pool or problem. With fleet access enabled
+for your chosen model, Eli can read job history, failure explanations,
+available runner logs and measured sizing advice, then explain what to try
+next. Its answer shows what it looked at.
+
+> “Why did this job fail, and what should I try next?”
+
+Use a local or hosted model you choose. Explore the built-in fixture provider
+in the demo, without an account or API key.
+
+[Meet Eli :material-arrow-right:](eli.md)
+</div>
+
+<div markdown>
+### Your assistant, connected over MCP
+
+Bring the same live diagnostics into Claude or another Model Context Protocol
+client. Compare queue waits, runner sizes and usage; with separately granted
+AI Context access, read the verified workflow source behind a job.
+
+> “Compare this workflow's runner sizes and show the evidence for a better fit.”
+
+Start with read access. Operator connections can also re-run jobs, drain
+runners and adjust capacity, within the role you grant.
+
+[Connect your assistant :material-arrow-right:](mcp.md)
+</div>
+
+</div>
+
+**From a failed check to a fix:** opt-in [Eli PR repairs](eli.md#set-up-pr-repairs)
+can investigate failed jobs, publish changes to the existing PR branch and
+watch GitHub's checks. Choose when repairs run and which provider pays; Eli
+never merges the PR. Chat itself diagnoses and advises without changing the
+fleet or repository.
+
+[Try Eli in the demo](quickstart.md#just-looking){ .md-button }
+[Troubleshoot jobs and improve builds](troubleshooting.md#investigate-jobs-with-eli-and-mcp){ .md-button }
 
 ## What you get
 
@@ -208,7 +260,7 @@ Caches, resource elasticity and automatic pools can follow once that works.
 | Deploy from files or a platform | [Docker Compose](compose.md), [PaaS](paas.md), [marketplace deployment](marketplace.md) |
 | Scale, tune and recover | [Advanced operations](advanced.md), [metrics](metrics.md), [backup and restore](backup-and-restore.md) |
 | Script or integrate | [CLI](cli.md), [API](api-surface.md), [configuration](configuration.md) |
-| Use an assistant | [Eli](eli.md), [MCP connections](connect-claude.md), [AI Context](ai-context.md) |
+| Investigate jobs or use an assistant | [Eli](eli.md), [MCP guide](mcp.md), [AI Context](ai-context.md), [job troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp) |
 
 ## Moving what you have now
 

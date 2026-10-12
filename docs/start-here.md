@@ -3,7 +3,8 @@ icon: material/book-open-page-variant-outline
 title: "Zoomies documentation: choose your starting point"
 description: >-
   Learn the basics, run your first GitHub Actions job, operate a runner fleet
-  and find advanced configuration, CLI, API and monitoring references.
+  and use Eli or MCP to diagnose builds. Find advanced configuration, CLI,
+  API and monitoring references.
 ---
 
 # Start here
@@ -52,6 +53,17 @@ Work from measured demand, add capacity and automate repeatable operations.
 
 </div>
 
+## Get help with jobs and workflows
+
+[Eli](eli.md) brings job context into a conversation from **Ask Eli** in the
+web UI. [MCP](mcp.md) connects your own assistant to diagnostics, measured
+runner sizing and, with separate consent, verified repository source. Use
+either to investigate failed or slow builds as well as fleet problems.
+
+Start with [assistant-led job troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp).
+For a failed check on an existing PR, [Eli repairs](eli.md#set-up-pr-repairs)
+can publish a fix and watch CI after you configure and authorise repairs.
+
 ## Find a task
 
 | I want to… | Start with | Check that it worked |
@@ -69,7 +81,9 @@ Work from measured demand, add capacity and automate repeatable operations.
 | Monitor the fleet | [Metrics](metrics.md) and [problem codes](problem-codes.md) | An authenticated scrape works and alerts reach the person who operates it. |
 | Back up, restore or upgrade | [Backup and restore](backup-and-restore.md), then [upgrading](upgrading.md) | Verify the backup and rehearse recovery before relying on it. |
 | Script fleet operations | [CLI](cli.md), [API](api-surface.md) and [automation contract](automation.md) | Use a scoped token and inspect errors; the automation contract is still proposed. |
-| Use an assistant | [Eli](eli.md), [Connect Claude](connect-claude.md) or [AI Context](ai-context.md) | Choose fleet access and repository source access deliberately. |
+| Diagnose a failed or slow build | [Eli and MCP troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp) | Read the evidence, then compare a fix or optimisation against a baseline. |
+| Repair a failed PR check | [Eli PR repairs](eli.md#set-up-pr-repairs) | Review readiness, the published diff and GitHub's resulting checks. |
+| Connect my own assistant | [MCP](mcp.md), [Connect Claude](connect-claude.md) or [AI Context](ai-context.md) | Choose fleet access and repository source access deliberately. |
 
 ## How to use these docs
 

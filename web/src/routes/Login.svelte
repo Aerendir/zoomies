@@ -14,9 +14,10 @@
   at all. Those are three different problems and only one of them is the
   operator's fault.
 
-  The original black logo keeps the backdrop chosen in Appearance in both themes.
-  On a phone the same full logo stays on a black section above the form;
-  only the marketing copy is removed.
+  The original black logo keeps the backdrop chosen in Appearance in both themes,
+  on a rounded Zoomies Black stage of its own; the column around it follows the
+  theme like the form. On a phone the same full logo and its stage stay above
+  the form; only the marketing copy is removed.
 -->
 <script lang="ts">
   import { tick, untrack } from 'svelte';
@@ -311,7 +312,7 @@
 <div class="signin" class:embedded>
   {#if !embedded}
     <div class="mark">
-      <span class="lockup"><Logo variant="lockup" size={71} label="Zoomies" /></span>
+      <div class="stage"><Logo variant="lockup" size={71} label="Zoomies" /></div>
     </div>
   {/if}
 
@@ -598,19 +599,27 @@
   }
   .mark,
   .about {
-    background: var(--z-panel-bg);
-    color: var(--z-panel-text);
     border-right: var(--z-border-width) solid var(--z-border);
   }
   .mark {
     grid-area: mark;
+    display: flex;
+    justify-content: center;
     padding: var(--z-space-12) var(--panel-pad-x) 0;
   }
-  .lockup {
+  /* The backdrop is a glow drawn for a dark ground, so the lockup sits on a
+     rounded square of Zoomies Black in both themes: a stage, not a column.
+     The stage is as wide as the lockup wants to be and no wider, and gives
+     way before the lockup does on a narrow screen. */
+  .stage {
     display: flex;
-    width: 100%;
-    max-width: 100%;
     justify-content: center;
+    box-sizing: border-box;
+    width: fit-content;
+    max-width: 100%;
+    padding: var(--z-space-4);
+    border-radius: var(--z-radius-lg);
+    background: var(--z-panel-bg);
   }
   .about {
     grid-area: about;
@@ -619,6 +628,7 @@
     justify-content: space-between;
     gap: var(--z-space-12);
     padding: var(--z-space-16) var(--panel-pad-x) var(--z-space-8);
+    color: var(--z-text);
   }
   .pitch {
     margin-block: auto;
@@ -630,7 +640,7 @@
     font-weight: var(--z-weight-semibold);
     letter-spacing: var(--z-tracking-wider);
     text-transform: uppercase;
-    color: var(--z-panel-text-muted);
+    color: var(--z-text-muted);
   }
   .tagline {
     margin: 0;
@@ -649,14 +659,14 @@
     margin: 0;
     font-size: var(--z-text-base);
     line-height: var(--z-leading-lg);
-    color: var(--z-panel-text-muted);
+    color: var(--z-text-muted);
   }
   .links {
     display: flex;
     flex-wrap: wrap;
     gap: var(--z-space-3) var(--z-space-5);
     font-size: var(--z-text-xs);
-    color: var(--z-panel-text-muted);
+    color: var(--z-text-muted);
   }
   .links a {
     display: inline-flex;
@@ -882,12 +892,11 @@
       display: flex;
       flex-direction: column;
     }
+    /* The stage starts below the appearance toggle in the corner, which
+       would otherwise sit half on the black and half on the page. */
     .mark {
-      display: flex;
-      justify-content: center;
-      padding: calc(var(--z-space-10) + var(--z-safe-top)) var(--z-space-6) var(--z-space-6);
+      padding: calc(var(--z-space-16) + var(--z-safe-top)) var(--z-space-6) var(--z-space-6);
       border: 0;
-      background: var(--z-panel-bg);
     }
     .form-side {
       padding: var(--z-space-6) max(var(--z-space-6), env(safe-area-inset-right)) var(--z-space-6)
@@ -898,13 +907,11 @@
     }
     .about {
       border: 0;
-      background: none;
       padding: var(--z-space-6);
       color: var(--z-text-muted);
       margin-top: auto;
     }
     .links {
-      color: var(--z-text-muted);
       justify-content: center;
     }
     .credit {
@@ -918,13 +925,6 @@
     .appearance {
       right: var(--z-space-6);
       top: calc(var(--z-space-4) + var(--z-safe-top));
-    }
-    .appearance :global(.icon-btn) {
-      color: var(--z-panel-text-muted);
-    }
-    .appearance :global(.icon-btn:hover) {
-      background: var(--z-panel-raised);
-      color: var(--z-panel-text);
     }
     .no-account {
       display: none;

@@ -1030,6 +1030,9 @@ input,
   gap: 0.9rem;
   margin: 1.25rem 0 2rem;
 }
+.zoomies-paths--assistants {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .zoomies-paths > div {
   min-width: 0;
   padding: 1.15rem 1.2rem;
@@ -1239,13 +1242,17 @@ input,
   -webkit-mask-image: radial-gradient(50% 90% at 15% 50%, #000 20%, transparent 100%);
   mask-image: radial-gradient(50% 90% at 15% 50%, #000 20%, transparent 100%);
 }
-/* The sign-in page's treatment: the black logo, padded, on the Orbital haze
-   backdrop, whose edges are feathered into the panel so it reads as a galaxy
-   behind the dog rather than a picture. The same in both schemes; decoration
-   belongs to the backdrop, never to the artwork. */
+/* Keep the logo's own surround black in both schemes, as on the sign-in page.
+   The pale Orbital haze stays inside it rather than fading into a light CTA.
+   Decoration belongs to the backdrop, never to the artwork. */
 .zoomies-cta .zoomies-brand {
+  box-sizing: border-box;
   width: 16rem;
   max-width: 100%;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-brand-black);
 }
 .zoomies-cta .zoomies-brand__art {
   position: relative;

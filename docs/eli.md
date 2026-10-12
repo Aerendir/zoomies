@@ -2,8 +2,8 @@
 icon: material/dog-side
 title: Eli, the assistant
 description: >-
-  Eli is the assistant built into Zoomies: a chat in the corner of every page that
-  can read your fleet through a model you choose, with separately authorised PR repairs.
+  Ask Eli about failed jobs, queue waits and runner sizing from the Zoomies UI.
+  Choose your model, inspect its evidence and opt into PR repairs when needed.
 ---
 
 # Eli, the assistant
@@ -18,6 +18,38 @@ Eli talks to a model **you** choose and pay for: one on your own machine such as
 Ollama, or a hosted one such as Ollama Cloud, OpenCode Zen, OpenCode Go, Anthropic or OpenAI, or your own
 Claude, ChatGPT or GitHub Copilot plan.
 Chat sends nothing until somebody asks Eli something. Enabled automatic repair policies also send PR source and failed-job evidence when a job fails.
+
+## What you can do with Eli
+
+Eli helps with the fleet **and the workflows running on it**. With fleet
+access enabled for your provider, start from **Ask Eli** on the relevant page:
+
+| You want to… | Try asking |
+| --- | --- |
+| Explain a failed build | “Was this a workflow failure or a runner fault? Show the evidence and the next step.” |
+| Unblock a queued job | “Why is this job waiting, and which pool or host constraint matters?” |
+| Choose a runner size | “Does the measured CPU and memory use support a different size for this workflow?” |
+| Investigate a slow build | “Separate queue wait, startup and execution time before suggesting an optimisation.” |
+| Understand a fleet problem | “Explain this problem code, the affected resources and the proposed remedy.” |
+
+The answer shows which tools Eli used. It can advise from job history, failure
+explanations and available runner logs, but chat does not apply changes or read
+repository source. [Troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp)
+takes a diagnosis into a fix or measured optimisation.
+
+For an existing PR with failed checks, [PR repairs](#set-up-pr-repairs) are a
+separate opt-in: Eli can read bounded source, publish a change to the PR branch
+and watch GitHub's checks. It never merges the PR. Prefer your own assistant?
+[MCP](mcp.md) exposes fleet diagnostics, permitted actions and separately
+authorised AI Context source reads to a connected client.
+
+**Try it without credentials:** [start the local demo](quickstart.md#just-looking),
+open **Settings → Eli AI Assistant**, edit the demo provider and enable
+**Let Eli read this fleet through this provider**. Then open Eli and ask about
+“the fleet”: the built-in fixture provider reads the demo data and repeats what
+it found. With the switch off it echoes your question without reading the
+fleet. Use a model you configure for normal conversations and repairs on your
+own instance.
 
 ## Setting it up
 
@@ -211,8 +243,9 @@ a hostile name can do is mislead an answer: check what you act on.
   the ceiling on reasoning and send no words at all. Lowering the provider's
   reasoning effort is the cheaper cure.
 * A conversation is at most 40 messages, 8 KiB each and 32 KiB in all.
-* The conversation lives in your browser and is gone when you reload. The
-  controller keeps nothing between questions.
+* Signed-in conversations are saved to your account, with the retention and
+  limits described under [Past conversations](#past-conversations). A demo
+  with authentication off has no account and keeps no conversation history.
 * Every signed-in user can ask through their own API provider; controller subscription tools require an administrator. Every chat is written to the audit log as
   `assistant.chat` with the provider, the model, whether the fleet could be read
   and the tools used, and never with what was said.
@@ -246,9 +279,10 @@ verdict to break the build on.
   provider live on this machine or your network, and `assistant.local_only` refuses
   any that does not.
 
-The demo model that ships with the demo fleet can be asked about "the fleet": it
-reads the fleet and repeats what it found, so the whole loop can be seen with no
-account and no key.
+The demo model that ships with the demo fleet can be asked about "the fleet"
+after you enable its fleet-read switch in Settings, Eli AI Assistant. It then
+reads the demo data and repeats what it found, so the lookup loop can be seen
+with no account and no key. With the switch off it only echoes the question.
 
 ## Personal conversations and PR repairs
 
