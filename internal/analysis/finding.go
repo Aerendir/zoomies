@@ -92,7 +92,7 @@ func Words(d time.Duration) string {
 // each has a catalog page. Each analysis adds its own table here.
 func CatalogCodes() []string {
 	var out []string
-	for _, table := range [][]string{queueWaitCodes, compareCodes} {
+	for _, table := range [][]string{queueWaitCodes, compareCodes, hostPressureCodes} {
 		out = append(out, table...)
 	}
 	return out
