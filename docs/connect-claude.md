@@ -327,11 +327,14 @@ next: k3f9a2.1207
 
 Passing each answer's `next` back keeps following the fleet, and `kinds` and
 `topic` narrow what counts as a change. With no `kinds`, a wait is for every
-kind of event that says something changed: it leaves out `stats`,
-`host.updated`, `kennel.summary` and `updates.updated`, which the controller
-sends as time passes (a host's card moves on every heartbeat, the Overview's
-counts and an update's countdown on every pass) when nothing has changed. Name
-them in `kinds` to wait for them. Those documents, with `problems.updated`, a
+kind of event that says the fleet changed. It leaves out six: `stats` and
+`kennel.summary`, which move as time passes; `host.updated`, which moves on
+every heartbeat, and `updates.updated`, which moves as a soak counts down,
+though both also carry real changes (a host cordoned, throttled or back after
+going quiet, and a new release); and `audit` and `webhook.delivery`, which are
+every recorded action (each question asked of Eli among them) and every
+delivery GitHub makes. Name any of them in `kinds` to wait for it. Those
+documents, with `problems.updated`, a
 transfer's preparation and a host or machine whose card moved with no row
 written, are worked out and sent only while something is listening: an open
 tab of the UI, a stream, or a held wait. So they are in what `recent_events`
@@ -380,6 +383,8 @@ copy carries each event whole, workflow-written names included, outside the
 untrusted block. It holds the events the text shows and no others, with the
 text's cursor as `next`, and it is held to 64 KiB as the text is: when the
 events would not fit, both stop at the same event and say `truncated`. The
+first event is always sent, so one event larger than 64 KiB on its own comes
+whole, and only that event. The
 schema's description of each event's `data` says the names in it are
 untrusted. A client that hands `structuredContent` to a model should treat those
 names as data, as the text answer marks them.

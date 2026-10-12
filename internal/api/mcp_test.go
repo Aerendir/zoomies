@@ -474,7 +474,13 @@ func TestMCPWaitForChangeOnABusyFleetHoldsTheSecondCallForWhatIsNew(t *testing.T
 	bus := h.ctrl.Events()
 	publishJobs(h, 120)
 
+	// The first call is a cursor, at once: one that waited here would hold for
+	// the whole of its seconds on an idle bus and still look like a cursor.
+	asked := time.Now()
 	first := h.mcpTool(token, "wait_for_change", map[string]any{})
+	if elapsed := time.Since(asked); elapsed > 2*time.Second {
+		t.Errorf("the first call took %v, want a cursor at once", elapsed)
+	}
 	if first.IsError {
 		t.Fatalf("the first call failed: %s", resultText(first))
 	}

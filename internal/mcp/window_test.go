@@ -813,8 +813,8 @@ func busKinds(t *testing.T) []string {
 // move with time while the fleet stands still, and a wait subscribing sets
 // them off, so a wait for every kind would come back within a pass to say a
 // host is still alive.
-func TestAWaitWithNoKindsLeavesOutOnlyTheFramesThatMoveWithNoChange(t *testing.T) {
-	want := []string{"heartbeat", "host.updated", "kennel.summary", "stats", "updates.updated"}
+func TestAWaitWithNoKindsLeavesOutTheFramesThatAreNotAChangeToTheFleet(t *testing.T) {
+	want := []string{"audit", "heartbeat", "host.updated", "kennel.summary", "stats", "updates.updated", "webhook.delivery"}
 	if got := slices.Sorted(maps.Keys(quietKinds)); !slices.Equal(got, want) {
 		t.Errorf("the quiet kinds are %v, want %v", got, want)
 	}
@@ -844,10 +844,20 @@ func TestAWaitWithNoKindsLeavesOutOnlyTheFramesThatMoveWithNoChange(t *testing.T
 		t.Errorf("recent_events with no kinds asked for %q (%v), want every kind", api.query.Get("kinds"), err)
 	}
 	desc := kennelTool(t, "wait_for_change").Description
-	for _, k := range []string{"stats", "host.updated", "kennel.summary", "updates.updated"} {
+	for _, k := range []string{"stats", "host.updated", "kennel.summary", "updates.updated", "audit", "webhook.delivery"} {
 		if !strings.Contains(desc, k) {
 			t.Errorf("the description does not say %s is left out unless asked for: %q", k, desc)
 		}
+	}
+	// host.updated and updates.updated carry real changes too, so a model is
+	// told what it would miss rather than that they never matter.
+	for _, says := range []string{"cordon", "new release", "Name any of them in kinds"} {
+		if !strings.Contains(desc, says) {
+			t.Errorf("the description does not say %q: %q", says, desc)
+		}
+	}
+	if strings.Contains(desc, "when nothing has changed") {
+		t.Errorf("the description says the quiet kinds move only when nothing changed: %q", desc)
 	}
 }
 
@@ -1095,5 +1105,47 @@ func TestAServersMaxWaitHoldsEveryWaitShorter(t *testing.T) {
 		if got := api.query.Get("wait"); got != tc.want {
 			t.Errorf("MaxWait %v with %s asked to wait %q, want %q", tc.maxWait, tc.args, got, tc.want)
 		}
+	}
+}
+
+// The route splits kinds on commas, trims each, and reads an empty value as
+// every kind. Checked as the tool was given them, these four would each reach
+// a withheld kind; checked as the route will read them, each is refused before
+// the route is asked.
+func TestAWithheldKindIsRefusedHoweverTheModelSpellsIt(t *testing.T) {
+	withheld := []string{"audit", "webhook.delivery"}
+	empty := `{"items":[],"next":"k1.1","complete":true,"truncated":false,"timed_out":true}`
+	for _, args := range []string{
+		`{"kinds":[""]}`,
+		`{"kinds":[" audit"]}`,
+		`{"kinds":["job.updated,audit"]}`,
+		`{"kinds":["webhook.delivery "]}`,
+	} {
+		for _, tool := range []string{"recent_events", "wait_for_change"} {
+			api := &kennelAPI{body: empty}
+			call := strings.TrimSuffix(args, "}") + `,"since":"k1.1"}`
+			blocks, failed, err := New(api, Options{WithheldKinds: withheld}).CallTool(t.Context(), tool, json.RawMessage(call))
+			if err != nil || !failed {
+				t.Errorf("%s %s answered %q (failed %v, %v), want a refusal", tool, call, blocks, failed, err)
+			}
+			if api.calls != 0 {
+				t.Errorf("%s %s asked the route for kinds %q", tool, call, api.query.Get("kinds"))
+			}
+		}
+	}
+	// What is sent is what was checked: names split and trimmed as the route
+	// would read them.
+	api := &kennelAPI{body: empty}
+	if _, failed, err := New(api, Options{WithheldKinds: withheld}).CallTool(t.Context(), "recent_events", json.RawMessage(`{"kinds":[" job.updated , runner.updated"]}`)); err != nil || failed {
+		t.Fatalf("%v %v", failed, err)
+	}
+	if got := api.query.Get("kinds"); got != "job.updated,runner.updated" {
+		t.Errorf("sent kinds %q, want the names as the route reads them", got)
+	}
+	// An empty name is refused for every server, not only one that withholds:
+	// sent on, it would read as every kind and skip a wait's quiet-kind default.
+	api = &kennelAPI{body: empty}
+	if _, failed, _ := New(api, Options{}).CallTool(t.Context(), "wait_for_change", json.RawMessage(`{"since":"k1.1","kinds":[" "]}`)); !failed || api.calls != 0 {
+		t.Errorf("an empty kind was sent on: failed %v, kinds %q", failed, api.query.Get("kinds"))
 	}
 }

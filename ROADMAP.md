@@ -1665,7 +1665,7 @@ each answer held to 200 rows and 64 KiB, cut on whole frames or rows (a
 runner's timeline comes whole), the two event tools quoting names a workflow
 wrote only in the untrusted block; `wait_for_change` with no `since` answers
 a cursor at once, and with no `kinds` waits only for kinds that say
-something changed; and three reads for whoever
+the fleet changed; and three reads for whoever
 runs the fleet, `list_webhook_deliveries` and `list_audit` (viewer) and
 `support_bundle` (administrator, section by section). Eli is offered the
 seven, the window answers held to 12 KiB a block on whole rows and its waits
@@ -1678,7 +1678,8 @@ its event tools never ask for audit or delivery events. The
 `zoomies events recent`, and *Watching the fleet move* in
 `docs/connect-claude.md`, in the pull request after it. The two event
 tools' `structuredContent` holds the events the text shows, with the text's
-cursor and the same 64 KiB bound, and carries names outside the untrusted
+cursor and the same 64 KiB bound (one event larger than that comes whole),
+and carries names outside the untrusted
 block, as the design asked; the page says so, so a client that hands it to
 a model treats them as data. `implemented` and not `done` until the second
 call of the two-call wait is seen to block against a real client.

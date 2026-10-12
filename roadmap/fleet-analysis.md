@@ -144,13 +144,17 @@ an administrator. Only `recent_events` and `wait_for_change` carry
 text, with names inline where the rows carry them, and their descriptions say
 those names are untrusted, so the untrusted block is the two event tools'
 alone. That structured copy holds the frames the text shows, with the text's
-cursor, and is held to 64 KiB as the text is; it carries workflow-written
+cursor, and is held to 64 KiB as the text is (one event larger than that on
+its own comes whole); it carries workflow-written
 names outside the untrusted block, and the schema's description of `data`
 says they are untrusted; `docs/connect-claude.md` tells a client that hands
 it to a model to treat them as data. Eli reads the window tools' text held to
 12 KiB a block, under its 16 KiB ceiling. `wait_for_change` with no `kinds`
-waits for every kind but `stats`, `host.updated`, `kennel.summary` and
-`updates.updated`, which move as time passes with nothing changed.
+waits for every kind but `stats`, `host.updated`, `kennel.summary`,
+`updates.updated`, `audit` and `webhook.delivery`: the first four move as
+time passes (`host.updated` and `updates.updated` carry real changes as
+well, and are named in `kinds` to wait on those), and the last two are
+activity rather than a change to the fleet.
 
 ### 4.3 Eli
 
