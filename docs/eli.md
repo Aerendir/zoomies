@@ -148,15 +148,29 @@ what lets Eli answer "why is this pool full and not renting?" from the fleet and
 from a guess. A setting only an administrator can read, such as `provider.enabled`,
 is not something Eli can see, but `list_providers` carries `renting`, which says
 whether renting is switched on and what to change, so Eli can still name it.
+It can read the fleet's recent past as well: what changed lately, the scheduler's
+decisions and the reason for each, the minute-by-minute samples of the fleet and
+of each host, a runner's timeline and the workflow runs, and it can wait for the
+next change. The audit log, the webhook deliveries and the support bundle are not
+offered to it, whoever is asking: they are who did what by name, GitHub's whole
+payloads and the whole instance at once, which is more than a question about the
+fleet should send to a model. The same goes for their events: what changed lately,
+as Eli reads it, never includes an audit row or a webhook delivery, and asking for
+those kinds is refused. Eli's wait for the next change is held to 10 seconds, not
+an agent's 25, so that a question which keeps waiting still ends inside the
+answer's own time limit.
 When it looks, the panel says what it looked at, under the answer, and a look
 that failed says why beside its name (a code that is not in the catalog, a route
 that refused), which is the part worth reading. A call Eli makes twice with the
-same arguments is answered from the first without being run or shown again.
+same arguments is answered from the first without being run or shown again,
+except a read of what changed lately or a wait for the next change, which is a
+new question each time it is asked.
 
 The questions an empty conversation offers come from the fleet when Eli can
-read it: the open one first, then the worst open problem by name, the jobs
-waiting, the jobs that failed and the host that is unwell, filled out from a
-fixed few on a quiet fleet. Without fleet access they are about Zoomies in
+read it: the open one first, then, while a problem is open, what changed in the
+last ten minutes, then the worst open problem by name, the jobs waiting, the jobs
+that failed and the host that is unwell, filled out from a fixed few on a quiet
+fleet. Without fleet access they are about Zoomies in
 general, so the first press is never a refusal.
 
 Every question also carries the situation: the time, your role (so "ask an
@@ -187,7 +201,11 @@ your question: runner, host, pool, job, workflow, repository and branch names,
 statuses, counts, a provider's address and the addresses of the machines it rented,
 and the end of a runner's log if Eli asks for it. A provider's credential is never
 part of it: the API reports only that one is configured. A tool's answer
-is cut at 16 KiB. The switch is still the main control: turn it on for a provider
+is cut at 16 KiB. The fleet's recent past is held to 12 KiB a block before
+that, on whole rows: events, samples, decisions and runs keep the first or
+newest rows that fit. Samples, decisions and runs say how many there were, and
+the cursor Eli is given names the last event it was shown, so reading on misses
+nothing. The switch is still the main control: turn it on for a provider
 only if that provider may be shown this.
 
 ### What is hidden first

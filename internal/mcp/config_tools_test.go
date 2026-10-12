@@ -39,7 +39,7 @@ func call(t *testing.T, name string, c API, args string) (string, error) {
 		if tl.Name != name {
 			continue
 		}
-		out, err := tl.call(context.Background(), c, json.RawMessage(args))
+		out, _, err := tl.run(context.Background(), c, json.RawMessage(args))
 		if err != nil {
 			return "", err
 		}

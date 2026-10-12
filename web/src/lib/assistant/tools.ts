@@ -23,6 +23,13 @@ const LABELS: Record<string, string> = {
   list_machines: 'rented machines',
   get_catalog: 'the catalog of codes and checks',
   get_usage: 'usage and cost',
+  recent_events: 'what changed lately',
+  wait_for_change: 'the next change',
+  scaling_decisions: 'the scheduler’s decisions',
+  fleet_samples: 'the fleet minute by minute',
+  host_samples: 'hosts minute by minute',
+  runner_timeline: 'a runner’s timeline',
+  list_workflow_runs: 'workflow runs',
 };
 
 export function toolLabel(name: string): string {

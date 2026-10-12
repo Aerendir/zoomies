@@ -84,7 +84,8 @@ These change nothing. Run them as the question needs.
 * `zoomies pools list`, `zoomies pools get`
 * `zoomies runners list`, `zoomies runners get`, `zoomies runners logs`
 * `zoomies problems list`
-* `zoomies jobs list`, `zoomies jobs stats`, `zoomies jobs get`, `zoomies jobs why`, `zoomies jobs advice`
+* `zoomies events recent` (with `--wait` it holds a request for the next change, for 25 seconds at most, and changes nothing)
+* `zoomies jobs list`, `zoomies jobs stats`, `zoomies jobs get`, `zoomies jobs why`, `zoomies jobs advice`, `zoomies jobs pr-delay`
 * `zoomies size-pins list`
 * `zoomies hosts list`
 * `zoomies updates status`

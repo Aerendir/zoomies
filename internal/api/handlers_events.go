@@ -58,16 +58,25 @@ type recentSince struct {
 	// window, when positive, selects by age instead: events at or after now minus
 	// window.
 	window time.Duration
+	// now asks for no events at all, only a cursor at the present, so that a
+	// caller who wants to hear about what happens next is not first handed the
+	// past to page through. On a busy fleet the ring holds five pages of it,
+	// and a wait asked with a cursor from the start answers at once with each.
+	now bool
 }
 
-// parseRecentSince reads `since`. A value with a dot in it, or made only of
-// digits, is an event id as the stream sends it; anything else is a duration.
+// parseRecentSince reads `since`. The word now is the present; a value with a
+// dot in it, or made only of digits, is an event id as the stream sends it;
+// anything else is a duration.
 // A dotted value whose sequence is not a number is tried as a duration before it
 // is refused, because "1.5s" has a dot in it and means what it says.
 func parseRecentSince(bus *events.Bus, raw string) (recentSince, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return recentSince{}, true
+	}
+	if raw == "now" {
+		return recentSince{now: true}, true
 	}
 	_, seq, dotted := strings.Cut(raw, ".")
 	if !dotted {
@@ -98,8 +107,15 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 
 	since, ok := parseRecentSince(bus, q.Get("since"))
 	if !ok {
-		badRequestField(w, "since", "since must be an event id as the stream sends it, or a duration such as 10m")
+		badRequestField(w, "since", "since must be an event id as the stream sends it, a duration such as 10m, or now")
 		return
+	}
+	// The present is the bus's last id, taken before anything else is read, so
+	// an event published while the rest of the request is parsed is after the
+	// cursor and is the caller's to be told about, not behind it and lost.
+	var nowMark uint64
+	if since.now {
+		nowMark = bus.LastID()
 	}
 	limit := queryInt(r, "limit", defaultRecentLimit)
 	if limit < 1 {
@@ -119,6 +135,17 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 	opts := events.SubscribeOptions{
 		Kinds:       parseKinds(q.Get("kinds")),
 		TopicPrefix: strings.TrimSpace(q.Get("topic")),
+	}
+	if since.now {
+		if wait <= 0 {
+			// Nothing has happened since now, and the cursor is the whole answer.
+			writeJSON(w, http.StatusOK, recentView{Items: []recentFrame{}, Next: bus.WireID(nowMark), Complete: true})
+			return
+		}
+		// A wait from now is a wait from that id: the ring re-read after
+		// subscribing then covers a frame published in between, as it does for
+		// any cursor.
+		since = recentSince{id: nowMark}
 	}
 
 	// The cursor, taken once. A timed-out wait hands this back unchanged, which

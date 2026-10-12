@@ -22,7 +22,7 @@ func catalogDoc() string {
 // arguments it is an index, and one entry comes by its code.
 func TestTheCatalogIsAnIndexWithoutArgumentsAndOneEntryByCode(t *testing.T) {
 	api := &kennelAPI{body: catalogDoc()}
-	out, err := kennelCall(t, kennelTool(t, "get_catalog").call, api, `{}`)
+	out, err := kennelCall(t, kennelTool(t, "get_catalog"), api, `{}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestTheCatalogIsAnIndexWithoutArgumentsAndOneEntryByCode(t *testing.T) {
 		t.Error("the index carries an entry's text, so it is not an index")
 	}
 
-	out, err = kennelCall(t, kennelTool(t, "get_catalog").call, api, `{"code":"ci.no_timeout"}`)
+	out, err = kennelCall(t, kennelTool(t, "get_catalog"), api, `{"code":"ci.no_timeout"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestTheCatalogIsAnIndexWithoutArgumentsAndOneEntryByCode(t *testing.T) {
 // is what an agent reads to choose which entry to open.
 func TestTheCatalogListsACategoryWithTitles(t *testing.T) {
 	api := &kennelAPI{body: catalogDoc()}
-	out, err := kennelCall(t, kennelTool(t, "get_catalog").call, api, `{"category":"capacity"}`)
+	out, err := kennelCall(t, kennelTool(t, "get_catalog"), api, `{"category":"capacity"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestTheCatalogListsACategoryWithTitles(t *testing.T) {
 // not with an empty document the model would read as "nothing is known".
 func TestAnUnknownCatalogCodeIsSaidToBeUnknown(t *testing.T) {
 	api := &kennelAPI{body: catalogDoc()}
-	out, err := kennelCall(t, kennelTool(t, "get_catalog").call, api, `{"code":"pool.made_up"}`)
+	out, err := kennelCall(t, kennelTool(t, "get_catalog"), api, `{"code":"pool.made_up"}`)
 	if err == nil || !strings.Contains(err.Error(), "pool.made_up") || out != nil {
 		t.Errorf("out %+v err %v", out, err)
 	}
@@ -79,7 +79,7 @@ func TestAnUnknownCatalogCodeIsSaidToBeUnknown(t *testing.T) {
 	if !strings.Contains(err.Error(), "pool.no_host") || !strings.Contains(err.Error(), "pool.minimum_overcharges") || strings.Contains(err.Error(), "ci.no_timeout") {
 		t.Errorf("the family's codes are not offered: %v", err)
 	}
-	_, err = kennelCall(t, kennelTool(t, "get_catalog").call, api, `{"code":"nothing.like_it"}`)
+	_, err = kennelCall(t, kennelTool(t, "get_catalog"), api, `{"code":"nothing.like_it"}`)
 	if err == nil || !strings.Contains(err.Error(), "without arguments") {
 		t.Errorf("a code of no known family is not sent to the index: %v", err)
 	}
