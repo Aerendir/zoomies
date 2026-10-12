@@ -73,8 +73,98 @@ func TestAnOversizeMessageIsRefusedWithHowFarOverItIsAndWhatToDo(t *testing.T) {
 	if !errors.As(err, &invalid) {
 		t.Fatalf("err = %v, want an AssistantChatInvalid", err)
 	}
-	if !strings.HasPrefix(invalid.Message, "an earlier message in this conversation") {
-		t.Errorf("message = %q, want it to name an earlier message", invalid.Message)
+	if !strings.HasPrefix(invalid.Message, "an earlier message of yours") {
+		t.Errorf("message = %q, want it to name an earlier message of the person's", invalid.Message)
+	}
+}
+
+// Eli's own answers are not the person's to cut. A long answer is the common
+// case (a log walked through step by step), and before this the next question
+// was refused for a message the person never typed, with advice to paste less.
+// The 8 KiB message limit is on what a person writes; an answer is bounded by
+// the conversation's total like everything else.
+func TestAnAnswerLongerThanAMessageMayBeSentBack(t *testing.T) {
+	long := strings.Repeat("a", assistantChatMaxMessageBytes+(4<<10))
+	turns := []AssistantChatMessage{
+		{Role: "user", Content: "why did it fail?"},
+		{Role: "assistant", Content: long},
+		{Role: "user", Content: "and what do I change?"},
+	}
+	got, err := ValidateAssistantChat(turns)
+	if err != nil {
+		t.Fatalf("a follow-up after a %d byte answer was refused: %v", len(long), err)
+	}
+	if len(got) != 3 || got[1].Content != long {
+		t.Errorf("the answer was not sent back whole: %d messages, answer of %d bytes", len(got), len(got[1].Content))
+	}
+
+	// The person's own words keep their limit wherever they sit in the thread,
+	// and the refusal still says which message it is.
+	big := strings.Repeat("x", assistantChatMaxMessageBytes+1)
+	_, err = ValidateAssistantChat([]AssistantChatMessage{
+		{Role: "user", Content: big}, {Role: "assistant", Content: "ok"}, {Role: "user", Content: "and now?"},
+	})
+	var invalid *AssistantChatInvalid
+	if !errors.As(err, &invalid) || invalid.Field != "messages[0]" {
+		t.Fatalf("an oversize question was not refused at messages[0]: %v", err)
+	}
+}
+
+// Exempting answers from the message limit must not lift the ceiling on a
+// request: there are no per-person limits yet, so 32 KiB in all is the only
+// bound on what one request sends to a model. An answer that alone fills it is
+// cured the way any too-long conversation is.
+func TestAnswersStillCountTowardTheConversationTotal(t *testing.T) {
+	turns := []AssistantChatMessage{
+		{Role: "user", Content: "why did it fail?"},
+		{Role: "assistant", Content: strings.Repeat("a", assistantChatMaxTotalBytes)},
+		{Role: "user", Content: "and what do I change?"},
+	}
+	_, err := ValidateAssistantChat(turns)
+	var invalid *AssistantChatInvalid
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want an AssistantChatInvalid", err)
+	}
+	if invalid.Field != "messages" {
+		t.Errorf("field = %q, want messages: the conversation is what is too long", invalid.Field)
+	}
+	for _, want := range []string{"at most 32 KiB", "start a new conversation"} {
+		if !strings.Contains(invalid.Message, want) {
+			t.Errorf("message %q does not say %q", invalid.Message, want)
+		}
+	}
+}
+
+// A conversation is kept as the page would send it back, and may end with the
+// answer. A long final answer is the usual ending, so keeping it must work.
+func TestAConversationEndingInALongAnswerCanBeKept(t *testing.T) {
+	long := strings.Repeat("a", assistantChatMaxMessageBytes+(4<<10))
+	got, err := ValidateAssistantTranscript([]AssistantChatMessage{
+		{Role: "user", Content: "why did it fail?"}, {Role: "assistant", Content: long},
+	})
+	if err != nil {
+		t.Fatalf("a conversation ending in a %d byte answer was refused: %v", len(long), err)
+	}
+	if len(got) != 2 || got[1].Content != long {
+		t.Errorf("the answer was not kept whole: %d messages", len(got))
+	}
+
+	_, err = ValidateAssistantTranscript([]AssistantChatMessage{
+		{Role: "user", Content: strings.Repeat("x", assistantChatMaxMessageBytes+1)}, {Role: "assistant", Content: "ok"},
+	})
+	var invalid *AssistantChatInvalid
+	if !errors.As(err, &invalid) || invalid.Field != "messages[0]" {
+		t.Fatalf("an oversize question was kept: %v", err)
+	}
+	if !strings.Contains(invalid.Message, "8 KiB") {
+		t.Errorf("message %q does not say the limit", invalid.Message)
+	}
+
+	_, err = ValidateAssistantTranscript([]AssistantChatMessage{
+		{Role: "user", Content: "q"}, {Role: "assistant", Content: strings.Repeat("a", assistantChatMaxTotalBytes+1)},
+	})
+	if !errors.As(err, &invalid) || invalid.Field != "messages" {
+		t.Fatalf("a conversation past the total was kept: %v", err)
 	}
 }
 
