@@ -13,6 +13,7 @@ import { focusWasPlaced } from './keys';
 import TooltipBubble from './components/TooltipBubble.svelte';
 import { tooltips, type Bubble, type Wait } from './tooltip';
 import { descriptionHost } from './tooltip-description';
+import { whenPointerMoves } from './tooltip-intent';
 import type { Side } from './tooltip-place';
 
 export interface AttachedTip {
@@ -55,13 +56,30 @@ export function attachTip(el: HTMLElement, tip: AttachedTip): () => void {
   const described = (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
   el.setAttribute('aria-describedby', [...described, description.id].join(' '));
 
+  let stopIntent: (() => void) | null = null;
+  const giveUpWaiting = () => {
+    stopIntent?.();
+    stopIntent = null;
+  };
   const onEnter = (event: PointerEvent) => {
     // A finger has no hover; the sentence is still the description.
-    if (event.pointerType !== 'touch') tooltips.hover(handle, tip.wait);
+    if (event.pointerType === 'touch') return;
+    giveUpWaiting();
+    // The wait starts on the first move, not the enter: see tooltip-intent.ts.
+    stopIntent = whenPointerMoves(el, () => {
+      stopIntent = null;
+      tooltips.hover(handle, tip.wait);
+    });
   };
-  const onLeave = () => tooltips.unhover(handle);
+  const onLeave = () => {
+    giveUpWaiting();
+    tooltips.unhover(handle);
+  };
   // A press inside the wait means the help is not wanted, and must not arrive late.
-  const onPress = () => tooltips.dismiss(handle);
+  const onPress = () => {
+    giveUpWaiting();
+    tooltips.dismiss(handle);
+  };
   const onFocus = () => {
     if (!focusWasPlaced() && el.matches(':focus-visible')) tooltips.focus(handle);
   };
@@ -73,6 +91,7 @@ export function attachTip(el: HTMLElement, tip: AttachedTip): () => void {
   el.addEventListener('blur', onBlur);
 
   return () => {
+    giveUpWaiting();
     el.removeEventListener('pointerenter', onEnter);
     el.removeEventListener('pointerleave', onLeave);
     el.removeEventListener('pointerdown', onPress);

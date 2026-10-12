@@ -205,6 +205,7 @@ func (s *Server) apiRoutes() chi.Router {
 		r.With(s.require(auth.ActionProblemsApply)).Post("/problems/auto-applied/{id}/undo", s.handleUndoAutoApplied)
 		r.With(s.require(auth.ActionStatsRead)).Get("/scaling-events", s.handleScalingEvents)
 		r.With(s.require(auth.ActionEventsRead)).Get("/events", s.handleEvents)
+		r.With(s.require(auth.ActionEventsRead)).Get("/events/recent", s.handleRecentEvents)
 
 		// Updates.
 		r.With(s.require(auth.ActionUpdatesRead)).Get("/updates", s.handleGetUpdates)

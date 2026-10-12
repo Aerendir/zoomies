@@ -369,6 +369,13 @@ func Join(ctx context.Context, opts JoinOptions) error {
 	status, _ := mgr.Status(ctx)
 	u.ok("started (" + status + ")")
 
+	// A WSL2 distro stops when its last Windows session closes, taking the agent
+	// with it, so a join there offers to keep it up.
+	if kind == ServiceSystemd {
+		offerWSLSelfManagement(ctx, wslOffer{Out: opts.Out, In: opts.In, Interactive: opts.Interactive,
+			AssumeYes: opts.AssumeYes, Binary: det.BinaryPath, User: serviceUser})
+	}
+
 	// The service is installed and the account it runs as can be read back from
 	// its unit. A refusal is a warning: the token is spent and the host is
 	// joined, and neither is worse for the helper being left for later. Another

@@ -266,6 +266,20 @@
     box-shadow: var(--z-shadow-md);
     font-size: var(--z-text-xs);
     line-height: var(--z-leading-xs);
+    /*
+      The bubble is a child of what it describes, so it inherits that thing's
+      text: a table heading's capitals and tracking, a numeric cell's right
+      alignment, an actions column's weight. It says its own piece in its own
+      voice wherever it was opened from.
+    */
+    font-weight: var(--z-weight-normal);
+    font-style: normal;
+    font-variant-numeric: normal;
+    letter-spacing: normal;
+    text-align: start;
+    text-decoration: none;
+    text-transform: none;
+    cursor: default;
     overflow-wrap: anywhere;
     white-space: normal;
     width: max-content;

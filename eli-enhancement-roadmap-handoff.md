@@ -55,6 +55,11 @@ staticcheck was not installed and skipped. `mkdocs build --strict` passed in
 `/workspace/eli-tooling/docs-venv`, using the repository-only header fallback
 when optional GitHub release/repository header lookups were denied.
 
+PR #943 conflict resolution: merged `main` at `de28a68c` into the API
+branch. The OpenAPI source merged cleanly; regenerated the embedded contract
+and TypeScript schema from that combined source. Route/spec and diagnostic
+race checks pass after resolution, as does the strict documentation build.
+
 Current implementation plans:
 
 - [Calculation core](roadmap/plans/2026-10-12-eli-merge-delay-core.md).

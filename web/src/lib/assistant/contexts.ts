@@ -132,6 +132,46 @@ export function poolContext(pool: PoolFacts, counts: PoolCounts): EliContext {
   };
 }
 
+export interface CheckFacts {
+  id: string;
+  title: string;
+  tier: string;
+  current?: string;
+  recommended?: string;
+  rationale?: string;
+  reason?: string;
+  command?: string;
+}
+
+/**
+ * One host health row. `fix` asks how to put it right instead of what it
+ * means, for the row that has no command of its own to copy.
+ */
+export function hostCheckContext(
+  host: string,
+  check: CheckFacts,
+  ask: 'explain' | 'fix' = 'explain',
+): EliContext {
+  return {
+    kind: 'host health check',
+    title: check.title,
+    facts: {
+      Host: host,
+      'Check ID': check.id,
+      Tier: check.tier,
+      Current: check.current,
+      Recommended: check.recommended,
+      Why: check.rationale,
+      Note: check.reason,
+      'Command shown': check.command,
+    },
+    question:
+      ask === 'fix'
+        ? 'What are the exact steps to fix this on the host, safely, and how do I confirm it worked?'
+        : 'Explain this warning, whether it matters for a CI host, and what I should do first.',
+  };
+}
+
 export interface FindingFacts {
   code: string;
   severity: string;

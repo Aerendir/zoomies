@@ -47,6 +47,7 @@
   import { RICH_CARD_WAIT, tooltips, type Bubble, type Wait } from '../tooltip';
   import { focusWasPlaced } from '../keys';
   import { hosted } from '../tooltip-description';
+  import { whenPointerMoves } from '../tooltip-intent';
   import type { Side } from '../tooltip-place';
   import TooltipBubble from './TooltipBubble.svelte';
 
@@ -142,6 +143,12 @@
   const ownId = $derived(descriptionId ?? `${componentId}-description`);
 
   let wrap = $state<HTMLSpanElement | null>(null);
+  /** Gives up the wait for the pointer's first move, while there is one. */
+  let stopIntent: (() => void) | null = null;
+  function giveUpWaiting(): void {
+    stopIntent?.();
+    stopIntent = null;
+  }
   /** Whether the description is linked to something inside, once it has been looked for. */
   let linked = $state(false);
   /** Whether the sentence would only repeat that control's name. */
@@ -345,12 +352,23 @@
   role="presentation"
   onpointerenter={(event) => {
     // A finger has no hover. The sentence is still there as the description.
-    if (event.pointerType === 'touch' || empty || covered()) return;
-    if (whenTruncated && wrap && !cutShort(wrap)) return;
-    tooltips.hover(handle, effectiveWait);
+    if (event.pointerType === 'touch' || empty || covered() || !wrap) return;
+    if (whenTruncated && !cutShort(wrap)) return;
+    giveUpWaiting();
+    // The wait starts on the first move, not the enter: see tooltip-intent.ts.
+    stopIntent = whenPointerMoves(wrap, () => {
+      stopIntent = null;
+      tooltips.hover(handle, effectiveWait);
+    });
   }}
-  onpointerleave={() => tooltips.unhover(handle)}
-  onpointerdown={() => tooltips.dismiss(handle)}
+  onpointerleave={() => {
+    giveUpWaiting();
+    tooltips.unhover(handle);
+  }}
+  onpointerdown={() => {
+    giveUpWaiting();
+    tooltips.dismiss(handle);
+  }}
   onfocusin={(event) => {
     // Only the keyboard's focus: a click focuses a button too, and help that
     // opens on every click would be in the way of the thing just clicked.

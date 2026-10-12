@@ -71,6 +71,13 @@ type UpgradeOptions struct {
 	serveTimeout, servePoll, progressEvery time.Duration
 }
 
+// wslOffer is the question an upgrade asks on a WSL2 distro. isWSL stands in for
+// the host in tests.
+func (o UpgradeOptions) wslOffer(check bool) wslOffer {
+	return wslOffer{Out: o.Out, In: o.In, Interactive: o.Interactive && !o.NonInteractive, AssumeYes: o.AssumeYes,
+		Check: check, Binary: o.BinaryPath, isWSL: o.isWSL}
+}
+
 type upgradePlan struct {
 	opts        UpgradeOptions
 	record      DeploymentRecord
@@ -147,6 +154,7 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 			return err
 		}
 		ui.Done(opts.Out, "Deployment checks passed; no changes made")
+		offerWSLSelfManagement(ctx, opts.wslOffer(true))
 		if opts.Doctor != nil {
 			opts.Doctor(ctx, p.settings(ctx).cfg)
 		}
@@ -210,6 +218,7 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	} else {
 		ui.Hint(opts.Out, "Review host health with: zoomies doctor")
 	}
+	offerWSLSelfManagement(ctx, opts.wslOffer(false))
 	fmt.Fprintln(opts.Out)
 	ui.Done(opts.Out, "%s", ui.Bold("Upgrade complete."))
 	return nil

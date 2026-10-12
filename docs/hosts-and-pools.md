@@ -192,9 +192,43 @@ into `/etc/wsl.conf` (it keeps the old file as `wsl.conf.zoomies-bak`, and
 `--yes` accepts the offer in advance; `--check` changes nothing). It cannot
 restart the distro for you, so it ends by telling you to run `wsl --shutdown`.
 
-WSL can still stop a distro that has no terminal open. To keep it up, add a
-Windows scheduled task that runs at logon (or at startup, to run before anyone
-signs in) and executes `wsl.exe -d <YourDistro> --exec sleep infinity`.
+WSL stops a distro when the last Windows session attached to it closes,
+whatever is running inside, so an agent that is a systemd service still goes
+away when the terminal that first started the distro is closed, and nothing
+starts it again after a reboot. The agent looks after this itself when it finds
+it is in WSL2 (`WSL_DISTRO_NAME`, or `microsoft-standard-WSL2` in
+`/proc/version`), and logs that it did:
+
+* **A session held open.** The agent starts `wsl.exe -d <distro> --exec sleep
+  infinity` through Windows interop and keeps it for as long as it lives. The
+  process is left running when the agent stops, so restarting or updating the
+  agent never lets the distro go down under a job, and the next agent adopts it.
+* **systemd linger** for the account the agent runs as.
+* **Start at boot.** `boot.command` in `/etc/wsl.conf` runs
+  `zoomies agent --wsl-ensure` when the distro starts (a command you already had
+  there is kept, and ours is chained after it), and two Windows scheduled tasks
+  start the distro if it is not running: `Zoomies\WslOnStart` at startup and
+  `Zoomies\WslEvery5Minutes`. Both run a small script under
+  `%LOCALAPPDATA%\Zoomies` that checks `wsl -l --running` first.
+
+`zoomies init`, `zoomies upgrade` and `zoomies agent join` notice a WSL2 distro
+and offer all of this, listing what is missing and asking before anything is
+written (`--yes` answers for you, `zoomies upgrade --check` only describes it,
+and with no terminal and no `--yes` it is left undone and says so). They say
+nothing once everything is in place.
+
+Run `sudo zoomies agent --wsl-ensure` yourself to see what is in place and what
+is not. It is safe to repeat, changes nothing that is already right, restarts no
+service and ends no process, so it cannot interrupt a job. Whatever it cannot do
+is printed as a warning and the exit status stays 0. It never asks for a
+password: writing `/etc/wsl.conf` needs root, and an `ONSTART` task needs an
+elevated Windows session, so without those it says so and carries on with the
+rest (the five-minute task runs as you, and only while you are signed in).
+`zoomies agent join` runs the same step as root.
+
+When a host goes away, the controller fails its runners after five minutes and
+removes their GitHub registrations. A registration GitHub still reports as busy
+is not forced: its removal is deferred until GitHub reports it idle or absent.
 
 ### What a host brings with it
 

@@ -1027,7 +1027,7 @@ one is ever open:
 
 | Rule | Value |
 | --- | --- |
-| The first bubble waits | 250ms (`OPEN_DELAY`) |
+| The first bubble waits | 250ms (`OPEN_DELAY`), counted from the pointer's first move over the trigger and not from the browser reporting that it entered (see below) |
 | After one has shown, and while one is open, a neighbour opens at once | for 300ms (`WARM`), which is what makes a sweep down the sidebar feel instant |
 | Leaving closes after a grace, and entering the bubble cancels it | 100ms (`GRACE`) |
 | Keyboard focus (`:focus-visible`) | opens at once; blur closes |
@@ -1039,6 +1039,14 @@ one is ever open:
 Rich cards take the shared 250ms wait. They used to open the instant the pointer
 touched them; `RICH_CARD_WAIT` in `lib/tooltip.ts` is the one place to give that
 back.
+
+The wait starts on a move because a page that changes under a resting pointer (the
+phone's sheet rising where "More" was pressed, a list re-rendering) makes the
+browser report the pointer entering whatever is now beneath it, with no move
+behind it. Help that opened on that would arrive over the thing the person had
+just opened, and take the first `Esc` that belonged to it. `whenPointerMoves` in
+`lib/tooltip-intent.ts` is the one place that rule lives; `Tooltip` and
+`attachTip` both use it.
 
 What a screen reader gets does not depend on the bubble. The sentence (and the
 reason) is the control's `aria-describedby`, unless it would only repeat the
