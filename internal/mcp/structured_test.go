@@ -78,8 +78,9 @@ func TestAStructuredToolAnswersBothBlocksAndStructuredContent(t *testing.T) {
 			continue
 		}
 		others++
-		if _, has := tl["outputSchema"]; has {
-			t.Errorf("%v advertises an outputSchema it has no structured answer for", tl["name"])
+		_, has := tl["outputSchema"]
+		if want := tl["name"] == "recent_events" || tl["name"] == "wait_for_change"; has != want {
+			t.Errorf("%v: outputSchema present = %v, want %v (only the tools that answer structured content have one)", tl["name"], has, want)
 		}
 	}
 	if found != 1 || others == 0 {
@@ -99,19 +100,23 @@ func TestAStructuredToolsTextIsAllEliSees(t *testing.T) {
 	}
 }
 
-// Only the probe is live here. When a real tool is made live (wait_for_change)
-// the loop below stops being true of it and is changed to allow that tool.
+// wait_for_change is the one real live tool: the window follows it as the fleet
+// changes, so a caller that remembers answers must ask it again. Any other tool
+// marked live is a claim that its answer goes stale, which should be made on
+// purpose and added here.
 func TestALiveToolIsMarkedOnItsDefinition(t *testing.T) {
 	live := map[string]bool{}
 	for _, d := range probeServer().Definitions() {
 		live[d.Name] = d.Live
 	}
-	if !live["window_probe"] {
-		t.Error("the live probe is not marked live")
+	for _, name := range []string{"window_probe", "wait_for_change"} {
+		if !live[name] {
+			t.Errorf("%s is not marked live", name)
+		}
 	}
 	for name, l := range live {
-		if l && name != "window_probe" {
-			t.Errorf("%s is marked live, and no real tool is yet", name)
+		if l && name != "window_probe" && name != "wait_for_change" {
+			t.Errorf("%s is marked live, and only wait_for_change is meant to be", name)
 		}
 	}
 	if _, ok := live["fleet_status"]; !ok {
