@@ -41,10 +41,19 @@
   let filters = $state<RepairFilters>({ ...NO_REPAIR_FILTERS });
   /** What the box holds, which runs ahead of `filters.repo` by the pause. */
   let repoText = $state('');
-  let limit = $state(prefs.pageSize(GRID));
+  /** Derived, as the other lists do, because the preferences arrive after sign-in. */
+  const limit = $derived(prefs.pageSize(GRID));
   let offset = $state(0);
   let items = $state<Schemas['EliRepair'][]>([]);
   let total = $state(0);
+  /**
+   * The filters the rows and the total above were read with. What the card
+   * draws goes by these and not by `filters`, which is a step ahead while a
+   * read is in flight: the controls are what an operator is using to widen a
+   * search that matched nothing, and neither they nor the empty-state wording
+   * may change under them until the wider answer is here.
+   */
+  let answered = $state<RepairFilters>({ ...NO_REPAIR_FILTERS });
   let loaded = $state(false);
   let error = $state('');
   let pause: ReturnType<typeof setTimeout> | undefined;
@@ -61,17 +70,25 @@
     const controller = new AbortController();
     reading = controller;
     const mine = ++latest;
+    const asked = { ...filters };
     try {
-      const page = await listEliRepairs(listQuery(filters, limit, offset), controller.signal);
+      const page = await listEliRepairs(listQuery(asked, limit, offset), controller.signal);
       if (mine !== latest) return;
       if (page.items.length === 0 && page.total > 0 && offset > 0) {
         // The page was emptied under the operator (a refresh after rows left
         // it, say). The history is not empty, so step back rather than say so.
-        offset = offsetAfterClear(offset, limit, page.total, 0);
-        return await load();
+        // Only a lower offset is a step: an answer that is empty at an offset
+        // inside the total (a count and a list that disagree) would otherwise
+        // be asked for again, for ever, with no pause between.
+        const back = offsetAfterClear(offset, limit, page.total, 0);
+        if (back < offset) {
+          offset = back;
+          return await load();
+        }
       }
       items = page.items;
       total = page.total;
+      answered = asked;
       loaded = true;
       error = '';
     } catch (cause) {
@@ -113,7 +130,7 @@
   }
 
   /** Nothing to filter in an empty history, so the controls wait for a repair. */
-  const showFilters = $derived(filtered(filters) || total > 0);
+  const showFilters = $derived(filtered(answered) || total > 0);
 
   onMount(() => {
     void load();
@@ -172,7 +189,7 @@
   {#if !loaded}
     {#if !error}<Skeleton lines={3} />{/if}
   {:else if total === 0}
-    {#if filtered(filters)}
+    {#if filtered(answered)}
       <EmptyState
         compact
         title="No repairs match these filters"
@@ -258,7 +275,6 @@
         void load();
       }}
       onlimit={(size) => {
-        limit = size;
         prefs.setPageSize(GRID, size);
         offset = 0;
         void load();
