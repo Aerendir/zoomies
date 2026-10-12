@@ -3,8 +3,12 @@
 -- The row is also the ledger behind the daily budget, the deduplication of
 -- webhook deliveries and the guard that stops Eli repairing its own repair
 -- commit. Deleting it would reset the spend cap and re-open a repair loop, so
--- clearing only records when the history stopped showing it. Only the history
--- queries and the clear read or write this column.
+-- clearing only records when the history stopped showing it.
+--
+-- Three places touch this column and nothing else may: the history's where
+-- clause reads it, ClearEliRepairs writes it, and EnqueueEliRepair writes it
+-- when a person asks again for a cleared repair. A budget, deduplication or
+-- loop-guard query that looked at it would start to forget cleared rows.
 --
 -- NULL means shown, which is what every existing row keeps on upgrade.
 ALTER TABLE eli_repairs ADD COLUMN cleared_at INTEGER;

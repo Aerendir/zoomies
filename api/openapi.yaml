@@ -5853,10 +5853,14 @@ paths:
         repairing its own commit. Answers 200 with a result for each distinct id, in the
         order asked, so a partial failure is visible rather than hidden behind one status
         code. A repair that is still queued, running or waiting on checks comes back as
-        `still running`. An id that does not exist and an id the caller may not see both come
-        back as `not found`, so the answer cannot be used to discover which ids are real. An
-        id that is already cleared is `ok`. One audit row, `assistant.repair_clear`, lists the
-        ids that were cleared.
+        `still running`. An id that does not exist and an id the caller may not clear both come
+        back as `not found`, so the answer cannot be used to discover which ids are real. The
+        caller may clear their own repairs, and an administrator may clear anyone's, but a
+        token narrowed to `assistant:own` can read an id it cannot clear and is answered
+        `not found` for it. An id that is already cleared is `ok`. One audit row,
+        `assistant.repair_clear`, is written when the request cleared any repair and lists the
+        ids it cleared; an `ok` for an id that was already cleared is not among them, and a
+        request that cleared nothing writes no row.
       x-zoomies-role: viewer
       requestBody:
         required: true
@@ -7818,8 +7822,8 @@ components:
       name: repo
       in: query
       description: >-
-        Only repairs whose repository contains this text, ignoring case. Spaces at either end
-        are dropped.
+        Only repairs whose repository contains this text, ignoring case. The 200 characters
+        are counted as sent, spaces included; spaces at either end are then dropped.
       schema: { type: string, maxLength: 200 }
     EliRepairTrigger:
       name: trigger

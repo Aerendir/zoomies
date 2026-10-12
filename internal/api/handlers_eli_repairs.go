@@ -44,9 +44,10 @@ const maxBulkEliRepairs = store.MaxEliRepairSelection
 // a selection is the matches, not a page of them.
 func eliRepairFilter(w http.ResponseWriter, r *http.Request, paged bool) (store.EliRepairFilter, bool) {
 	q := r.URL.Query()
+	rawRepo := q.Get("repo")
 	f := store.EliRepairFilter{
 		Group:   strings.TrimSpace(q.Get("group")),
-		Repo:    strings.TrimSpace(q.Get("repo")),
+		Repo:    strings.TrimSpace(rawRepo),
 		Trigger: strings.TrimSpace(q.Get("trigger")),
 	}
 	f.OwnerID, f.Scoped = eliRepairScope(r, auth.ActionAssistantRead)
@@ -58,7 +59,10 @@ func eliRepairFilter(w http.ResponseWriter, r *http.Request, paged bool) (store.
 	if f.Trigger != "" && !slices.Contains(store.EliRepairTriggers, f.Trigger) {
 		fields = append(fields, fieldError{"trigger", fmt.Sprintf("%q is not a way a repair begins; use %s", f.Trigger, orList(store.EliRepairTriggers))})
 	}
-	if n := utf8.RuneCountInString(f.Repo); n > maxEliRepairSearch {
+	// The contract's maxLength is about what was sent, so it is the raw value that
+	// is measured: counting the trimmed one would accept a value the OpenAPI text
+	// says is too long, as long as enough of it was spaces.
+	if n := utf8.RuneCountInString(rawRepo); n > maxEliRepairSearch {
 		fields = append(fields, fieldError{"repo", fmt.Sprintf("a repository search is at most %d characters and this one is %d; shorten it", maxEliRepairSearch, n)})
 	}
 	if len(fields) > 0 {
@@ -180,12 +184,15 @@ func (s *Server) handleBulkEliRepairs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// One row for the request, after the store has answered, naming what was
-	// cleared and nothing about what the repairs said. A request that cleared
-	// nothing changed nothing, so it leaves no row.
+	// One row for the request, after the store has answered, naming what this
+	// request cleared and nothing about what the repairs said. "OK" is not
+	// enough: a repeat, or an administrator clearing what its owner already
+	// cleared, is OK and changed nothing, and a row saying they cleared it would
+	// put their name on someone else's action. A request that changed nothing
+	// leaves no row.
 	cleared := []string{}
 	for _, res := range results {
-		if res.OK {
+		if res.Changed {
 			cleared = append(cleared, res.ID)
 		}
 	}

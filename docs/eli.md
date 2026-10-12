@@ -475,13 +475,15 @@ or with the box above the list for every repair shown. Once every repair on the
 page is chosen and more match, **Select all** takes everything the filters match,
 up to 500 at a time, and says so when there are more than that. **Clear from
 history** asks first, saying how many repairs it will clear, and then hides them
-from this list and does nothing else. A
-cleared repair is kept: it still counts towards each repository's and each
-person's daily limit, it still stops Eli repairing its own commit, and it still
-stops Eli answering the same webhook delivery twice. It cannot be restored from
-the page. A repair that is queued, running or waiting on checks cannot be
-cleared until it finishes. Ordinary users clear only their own requests, and
-each clear is written to the audit log as `assistant.repair_clear`.
+from this list and does nothing else. A cleared repair is kept: it still counts
+towards each repository's and each person's daily limit, it still stops Eli
+repairing its own commit, and it still stops Eli answering the same webhook
+delivery twice. It cannot be restored from the page, but asking again for it,
+from the page or by accepting an offer, brings it back into the history; a
+repair that a webhook delivers again does not come back, because nobody asked.
+A repair that is queued, running or waiting on checks cannot be cleared until it
+finishes. Ordinary users clear only their own requests, and each clear that
+hides a repair is written to the audit log as `assistant.repair_clear`.
 
 Model-generated fixes still need review. The limits constrain cost and the
 editing surface; they do not prove a patch correct. Provider errors, quota

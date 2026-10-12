@@ -3788,7 +3788,7 @@ export interface paths {
         put?: never;
         /**
          * Clear several repairs from the history
-         * @description Hides repairs from the history and does nothing else to them. The repair stays on record, so it still counts towards the repository's and the person's daily limit, still stops Eli answering the same webhook delivery twice, and still stops Eli repairing its own commit. Answers 200 with a result for each distinct id, in the order asked, so a partial failure is visible rather than hidden behind one status code. A repair that is still queued, running or waiting on checks comes back as `still running`. An id that does not exist and an id the caller may not see both come back as `not found`, so the answer cannot be used to discover which ids are real. An id that is already cleared is `ok`. One audit row, `assistant.repair_clear`, lists the ids that were cleared.
+         * @description Hides repairs from the history and does nothing else to them. The repair stays on record, so it still counts towards the repository's and the person's daily limit, still stops Eli answering the same webhook delivery twice, and still stops Eli repairing its own commit. Answers 200 with a result for each distinct id, in the order asked, so a partial failure is visible rather than hidden behind one status code. A repair that is still queued, running or waiting on checks comes back as `still running`. An id that does not exist and an id the caller may not clear both come back as `not found`, so the answer cannot be used to discover which ids are real. The caller may clear their own repairs, and an administrator may clear anyone's, but a token narrowed to `assistant:own` can read an id it cannot clear and is answered `not found` for it. An id that is already cleared is `ok`. One audit row, `assistant.repair_clear`, is written when the request cleared any repair and lists the ids it cleared; an `ok` for an id that was already cleared is not among them, and a request that cleared nothing writes no row.
          */
         post: operations["bulkEliRepairAction"];
         delete?: never;
@@ -11193,7 +11193,7 @@ export interface components {
         Offset: number;
         /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
         EliRepairGroup: "attention" | "active" | "passed";
-        /** @description Only repairs whose repository contains this text, ignoring case. Spaces at either end are dropped. */
+        /** @description Only repairs whose repository contains this text, ignoring case. The 200 characters are counted as sent, spaces included; spaces at either end are then dropped. */
         EliRepairRepo: string;
         /** @description How the repair began. `automatic` is one Eli started on its own; `requested` is one a person asked for, however they asked. Anything else is a 422. */
         EliRepairTrigger: "automatic" | "requested";
@@ -17133,7 +17133,7 @@ export interface operations {
             query?: {
                 /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
                 group?: components["parameters"]["EliRepairGroup"];
-                /** @description Only repairs whose repository contains this text, ignoring case. Spaces at either end are dropped. */
+                /** @description Only repairs whose repository contains this text, ignoring case. The 200 characters are counted as sent, spaces included; spaces at either end are then dropped. */
                 repo?: components["parameters"]["EliRepairRepo"];
                 /** @description How the repair began. `automatic` is one Eli started on its own; `requested` is one a person asked for, however they asked. Anything else is a 422. */
                 trigger?: components["parameters"]["EliRepairTrigger"];
@@ -17190,7 +17190,7 @@ export interface operations {
             query?: {
                 /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
                 group?: components["parameters"]["EliRepairGroup"];
-                /** @description Only repairs whose repository contains this text, ignoring case. Spaces at either end are dropped. */
+                /** @description Only repairs whose repository contains this text, ignoring case. The 200 characters are counted as sent, spaces included; spaces at either end are then dropped. */
                 repo?: components["parameters"]["EliRepairRepo"];
                 /** @description How the repair began. `automatic` is one Eli started on its own; `requested` is one a person asked for, however they asked. Anything else is a 422. */
                 trigger?: components["parameters"]["EliRepairTrigger"];

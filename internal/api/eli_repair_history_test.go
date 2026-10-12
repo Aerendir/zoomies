@@ -171,6 +171,10 @@ func TestEliRepairHistoryIsPagedFilteredAndCountedForTheCaller(t *testing.T) {
 			{"?group=nonsense", "group"},
 			{"?trigger=nonsense", "trigger"},
 			{"?repo=" + strings.Repeat("a", 201), "repo"},
+			// The contract's maxLength counts what was sent, not what is left once the
+			// spaces are trimmed, so padding cannot slip a long value past it.
+			{"?repo=" + strings.Repeat("%20", 201), "repo"},
+			{"?repo=" + strings.Repeat("a", 190) + strings.Repeat("%20", 11), "repo"},
 		} {
 			resp := h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs" + tc.query, cookie: admin})
 			resp.mustStatus(t, http.StatusUnprocessableEntity, tc.field+" that is not valid")
@@ -178,17 +182,58 @@ func TestEliRepairHistoryIsPagedFilteredAndCountedForTheCaller(t *testing.T) {
 				t.Errorf("%s named %v, want just %s", tc.query, got, tc.field)
 			}
 		}
-		// The longest repository the contract allows is still a filter.
-		h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs?repo=" + strings.Repeat("a", 200), cookie: admin}).
-			mustStatus(t, http.StatusOK, "a repository of exactly 200 characters")
+		// The longest repository the contract allows is still a filter, spaces or not.
+		for _, query := range []string{
+			"?repo=" + strings.Repeat("a", 200),
+			"?repo=" + strings.Repeat("a", 190) + strings.Repeat("%20", 10),
+			"?repo=" + strings.Repeat("%20", 200),
+		} {
+			h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs" + query, cookie: admin}).
+				mustStatus(t, http.StatusOK, "a repository of exactly 200 characters")
+		}
 	})
 
-	t.Run("a page size past the maximum is clamped, not refused", func(t *testing.T) {
+	// This only proves the request is not refused: six rows cannot show a clamp.
+	// TestEliRepairHistoryPageSizeIsClampedToTheMaximum seeds past the maximum.
+	t.Run("an oversized limit and a negative offset are not refused", func(t *testing.T) {
 		got := h.repairHistory(t, admin, "?limit=100000&offset=-4")
 		if got.Total != 6 || len(got.Items) != 6 {
 			t.Fatalf("got %d items and a total of %d, want 6 and 6", len(got.Items), got.Total)
 		}
 	})
+}
+
+// A clamp can only be seen with more rows than the maximum page holds. The
+// request parser and the store each clamp, so this pins what a client gets
+// rather than which of the two did it.
+func TestEliRepairHistoryPageSizeIsClampedToTheMaximum(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	_, admin := h.user("clamp-admin", store.RoleAdmin)
+
+	// Automatic repairs have no owner, so the per-person daily cap does not apply;
+	// the per-repository allowance does, hence several repositories.
+	var rows []historyRow
+	for i := range 11 {
+		for range 50 {
+			rows = append(rows, historyRow{"", fmt.Sprintf("acme/clamp-%d", i), "automatic", "succeeded"})
+		}
+	}
+	h.seedRepairs(t, inst, rows...)
+
+	for _, tc := range []struct {
+		name, query string
+		items       int
+	}{
+		{"no limit asked for", "", store.DefaultEliRepairPage},
+		{"a limit past the maximum", "?limit=100000", store.MaxEliRepairPage},
+		{"a limit within it", "?limit=7", 7},
+	} {
+		got := h.repairHistory(t, admin, tc.query)
+		if len(got.Items) != tc.items || got.Total != len(rows) {
+			t.Errorf("%s: got %d items and a total of %d, want %d and %d", tc.name, len(got.Items), got.Total, tc.items, len(rows))
+		}
+	}
 }
 
 func TestEliRepairSelectionIsTheCallersClearableMatches(t *testing.T) {
@@ -240,6 +285,7 @@ func TestEliRepairSelectionIsTheCallersClearableMatches(t *testing.T) {
 		{"?group=nonsense", "group"},
 		{"?trigger=nonsense", "trigger"},
 		{"?repo=" + strings.Repeat("a", 201), "repo"},
+		{"?repo=" + strings.Repeat("%20", 201), "repo"},
 	} {
 		resp := h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs/selection" + tc.query, cookie: viewer})
 		resp.mustStatus(t, http.StatusUnprocessableEntity, "a selection with a bad "+tc.field)
@@ -350,6 +396,11 @@ func TestEliRepairsAreClearedInBulkAndReportedOneByOne(t *testing.T) {
 	if !slices.Equal(repeat.Results, []store.EliRepairClear{{ID: own, OK: true}}) {
 		t.Errorf("clearing twice answered %+v", repeat.Results)
 	}
+	// It is harmless, and it must not look like work: the person changed nothing,
+	// so the audit log has no second row saying they cleared this repair.
+	if audit, _, _ := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"assistant.repair_clear"}}, store.Page{Limit: 5}); len(audit) != 1 {
+		t.Errorf("clearing a cleared repair wrote an audit row: %d rows, want the one from the first clear", len(audit))
+	}
 
 	tooMany := make([]string, 501)
 	for i := range tooMany {
@@ -422,6 +473,64 @@ func TestAnAdministratorsBulkClearReachesAnotherPersonsRowAndTheAuditNamesTheAdm
 	if a := audit[0]; a.ActorID != admin.ID || a.ActorID == owner.ID || !strings.Contains(a.After, ids[0]) {
 		t.Errorf("the audit row must name the administrator who cleared it, not the owner: %+v", a)
 	}
+}
+
+// The audit log is read later to answer who hid what. An administrator who
+// "clears" a repair the owner already cleared hid nothing, and a row that says
+// they did would put their name on someone else's action.
+func TestTheAuditNamesOnlyTheRepairsARequestActuallyCleared(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	admin, adminCookie := h.user("changed-admin", store.RoleAdmin)
+	owner, ownerCookie := h.user("changed-owner", store.RoleViewer)
+
+	ids := h.seedRepairs(t, inst,
+		historyRow{owner.ID, "acme/site", "mention", "failed"},
+		historyRow{owner.ID, "acme/site", "mention", "succeeded"},
+	)
+	clearedByOwner, stillShown := ids[0], ids[1]
+	h.clearRepairs(t, ownerCookie, "", clearedByOwner)
+
+	audits := func() []*store.AuditEvent {
+		t.Helper()
+		rows, _, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"assistant.repair_clear"}}, store.Page{Limit: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	if len(audits()) != 1 {
+		t.Fatalf("the owner's own clear should have left one audit row, got %d", len(audits()))
+	}
+
+	// Only the already-cleared row: ok for the administrator, and nothing to record.
+	got := h.clearRepairs(t, adminCookie, "", clearedByOwner)
+	if !slices.Equal(got, []store.EliRepairClear{{ID: clearedByOwner, OK: true}}) {
+		t.Fatalf("an administrator clearing an already cleared repair got %+v, want ok", got)
+	}
+	if len(audits()) != 1 {
+		t.Fatalf("an administrator clearing a repair that was already cleared wrote an audit row naming them: %d rows", len(audits()))
+	}
+
+	// Both, in one request: the answer is ok twice, the audit row names one repair.
+	got = h.clearRepairs(t, adminCookie, "", clearedByOwner, stillShown)
+	if !slices.Equal(got, []store.EliRepairClear{{ID: clearedByOwner, OK: true}, {ID: stillShown, OK: true}}) {
+		t.Fatalf("a request naming a cleared and an uncleared repair got %+v, want ok for both", got)
+	}
+	rows := audits()
+	if len(rows) != 2 {
+		t.Fatalf("audit rows = %d, want the owner's and the administrator's", len(rows))
+	}
+	for _, a := range rows {
+		if a.ActorID != admin.ID {
+			continue
+		}
+		if !strings.Contains(a.After, `"count":1`) || !strings.Contains(a.After, stillShown) || strings.Contains(a.After, clearedByOwner) {
+			t.Errorf("the administrator's audit row must count and name only the repair they cleared: %+v", a)
+		}
+		return
+	}
+	t.Errorf("no audit row names the administrator, who cleared %s: %+v", stillShown, rows)
 }
 
 // Whether a repair is running is only worth saying to someone who may see it.
