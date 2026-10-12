@@ -1754,7 +1754,8 @@ attempt refusal, failures preserved, faster latency with higher consumption show
 as a trade-off, and no causal or verified-improvement claim from historical data.
 Dispatch and publication are later, separately authorised work.
 
-**First slice:** [eligibility plan](roadmap/plans/2026-10-12-eli-comparison-eligibility.md).
+**Slices:** [eligibility plan](roadmap/plans/2026-10-12-eli-comparison-eligibility.md),
+[measurement plan](roadmap/plans/2026-10-12-eli-comparison-measurements.md).
 No new dependency, store query, route, model call, dispatch or publication.
 
 ## 9. Kept for the day somebody asks
