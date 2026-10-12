@@ -771,19 +771,18 @@ func (r recordedShape) zero() bool { return r.Cores == 0 && r.MemoryMB == 0 && r
 // describeMachine renders the description a clone carries: the ownership
 // record, and the shape the machine was asked for.
 func describeMachine(owner provider.Owner, name string, shape provider.Shape) string {
-	described := Describe(owner, name)
 	rec := recordedShape{Cores: coresFor(shape.CPUs), MemoryMB: shape.MemoryMB, DiskMB: shape.DiskMB}
 	if rec.zero() {
-		return described
+		return Describe(owner, name)
 	}
 	blob, err := json.Marshal(shapeBlock{Shape: rec})
 	if err != nil {
 		// A description without the shape still identifies the machine, and
 		// the guest keeps the template's size with a warning rather than not
 		// being created at all.
-		return described
+		return Describe(owner, name)
 	}
-	return described + "\n" + string(blob)
+	return describe(owner, name, string(blob))
 }
 
 // decodeShape reads the recorded shape back, reporting whether one was there.

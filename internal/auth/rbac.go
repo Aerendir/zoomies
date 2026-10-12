@@ -582,6 +582,9 @@ func Explain(id *Identity, a Action) string {
 	if id == nil {
 		return "this action needs you to be signed in"
 	}
+	if IsVisitor(id) && !Allowed(id, a) {
+		return visitorRefusal(a)
+	}
 	want, known := actionRoles[a]
 	if !known {
 		return fmt.Sprintf("%q is not an action this server knows about", string(a))

@@ -206,6 +206,8 @@ func (i *Identity) subject() string {
 		return "agent"
 	case KindSystem:
 		return "system identity"
+	case KindPublic:
+		return "public view"
 	default:
 		return "account"
 	}
@@ -861,11 +863,26 @@ func (s *Service) Authenticate(ctx context.Context, r AuthInput) (*Identity, err
 	if s.cfg.DisableAuth {
 		return DevIdentity(r.IP), nil
 	}
+	// A token is never softened into a visitor, even on a public view: the
+	// automation holding a revoked one has to hear that it was refused, or it
+	// carries on reading as a stranger and nobody learns the token is dead.
 	if tok := bearerToken(r.Authorization); tok != "" {
 		return s.authenticateToken(ctx, tok, r.IP)
 	}
 	if r.SessionCookie != "" {
-		return s.authenticateSession(ctx, r.SessionCookie, r.IP)
+		id, err := s.authenticateSession(ctx, r.SessionCookie, r.IP)
+		// A browser whose session lapsed on a public view is a visitor again.
+		// Refusing it would strand the person on a sign-in form holding a
+		// cookie they cannot get rid of, since signing out is itself behind
+		// authentication. A session the controller could not check is still
+		// a failure, never a visitor.
+		if err != nil && s.cfg.PublicView && !errors.Is(err, ErrAuthBackend) {
+			return PublicIdentity(r.IP), nil
+		}
+		return id, err
+	}
+	if s.cfg.PublicView {
+		return PublicIdentity(r.IP), nil
 	}
 	return nil, ErrNoCredentials
 }

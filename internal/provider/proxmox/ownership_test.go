@@ -204,3 +204,36 @@ func TestTheMarksAreReadBackFromTheGuestsOwnConfiguration(t *testing.T) {
 		t.Errorf("tags = %q, which a sweep would not find", cfg.Tags)
 	}
 }
+
+// The console renders a guest's notes as Markdown, and an operator opening one
+// should read a heading and a few facts, not a line of JSON. The blocks the
+// sweep reads are inside an HTML comment, which the renderer drops.
+func TestTheNotesAreReadableMarkdownWithTheRecordHidden(t *testing.T) {
+	owner := provider.Owner{
+		ControllerID: "ctl_k3f9", ProviderID: "prv_lab", MachineID: "mach_z7y6", Fingerprint: "9f8e",
+		CreatedAt: time.Date(2026, 10, 12, 10, 41, 22, 0, time.UTC),
+	}
+	description := describeMachine(owner, "zoomies-mach-z7y6", provider.Shape{CPUs: 2, MemoryMB: 4096})
+
+	if !strings.HasPrefix(description, "## 🐾 Managed by Zoomies 🐾\n\n") {
+		t.Errorf("the notes do not open with the paw heading:\n%s", description)
+	}
+	visible, hidden, found := strings.Cut(description, "<!--")
+	if !found {
+		t.Fatalf("the machine-readable blocks are not hidden in a comment:\n%s", description)
+	}
+	if strings.Contains(visible, "{") {
+		t.Errorf("JSON shows in the rendered notes:\n%s", visible)
+	}
+	for _, want := range []string{"**Machine:** `zoomies-mach-z7y6`", "**Provider:** `prv_lab`", "**Created:** 2026-10-12 10:41 UTC"} {
+		if !strings.Contains(visible, want) {
+			t.Errorf("the notes do not say %q:\n%s", want, visible)
+		}
+	}
+	if strings.Contains(visible, "9f8e") {
+		t.Error("the fingerprint is on show; it is for the sweep and not for the reader")
+	}
+	if !strings.Contains(hidden, `"zoomies_shape"`) {
+		t.Errorf("the shape is not in the hidden blocks:\n%s", hidden)
+	}
+}

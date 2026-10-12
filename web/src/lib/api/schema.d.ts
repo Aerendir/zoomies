@@ -5946,6 +5946,8 @@ export interface components {
             tailcat_available?: boolean;
             /** @description True when authentication has been switched off in the configuration. */
             auth_disabled?: boolean;
+            /** @description True when `security.public_view` is on: a caller with no credential reads the fleet as a visitor, whose session has the kind `public`. False whenever authentication is switched off. */
+            public_view?: boolean;
             oidc_enabled?: boolean;
             /**
              * @description `oidc.label`, or "Sign in with" and the issuer's host.
@@ -10106,8 +10108,11 @@ export interface components {
             recovery_codes: string[];
         };
         Identity: {
-            /** @enum {string} */
-            kind?: "user" | "token" | "agent" | "system";
+            /**
+             * @description `public` is a public view's visitor: no account, the viewer role narrowed to reading the fleet, refused every change.
+             * @enum {string}
+             */
+            kind?: "user" | "token" | "agent" | "system" | "public";
             id?: string;
             name?: string;
             role?: components["schemas"]["Role"];

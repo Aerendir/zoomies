@@ -15,7 +15,7 @@
   already used.
 -->
 <script lang="ts">
-  import { LogOut, X } from '@lucide/svelte';
+  import { LogIn, LogOut, X } from '@lucide/svelte';
   import { layers, lockScroll, pageInert, trapFocus } from '../keys';
   import { router } from '../router';
   import { roleLabel } from '../roles';
@@ -27,9 +27,9 @@
   import IconButton from '../components/IconButton.svelte';
   import Logo from '../components/Logo.svelte';
   import Segmented from '../components/Segmented.svelte';
-  import { SECTIONS, isCurrentSection } from './sections';
+  import { isCurrentSection, sectionsFor } from './sections';
   import BuildTag from './BuildTag.svelte';
-  import { signOut } from './signout';
+  import { signIn, signOut } from './signout';
 
   interface Props {
     open?: boolean;
@@ -41,8 +41,13 @@
 
   const initial = $derived(session.displayName.trim().charAt(0).toUpperCase() || '?');
   const roleLine = $derived(
-    session.authDisabled ? 'Authentication is off' : roleLabel(session.role),
+    session.authDisabled
+      ? 'Authentication is off'
+      : session.visitor
+        ? 'Public, read-only view'
+        : roleLabel(session.role),
   );
+  const sections = $derived(sectionsFor(session.visitor));
 
   function close(): void {
     open = false;
@@ -110,7 +115,7 @@
       -->
       <nav aria-label="All sections">
         <ul>
-          {#each SECTIONS as item (item.path)}
+          {#each sections as item (item.path)}
             {@const current = isCurrent(item.path)}
             <li>
               <a
@@ -128,14 +133,27 @@
       </nav>
 
       <div class="foot">
-        <Button
-          variant="ghost"
-          icon={LogOut}
-          disabled={session.authDisabled}
-          onclick={() => void signOut()}
-        >
-          Sign out
-        </Button>
+        {#if session.visitor}
+          <Button
+            variant="ghost"
+            icon={LogIn}
+            onclick={() => {
+              close();
+              signIn();
+            }}
+          >
+            Sign in
+          </Button>
+        {:else}
+          <Button
+            variant="ghost"
+            icon={LogOut}
+            disabled={session.authDisabled}
+            onclick={() => void signOut()}
+          >
+            Sign out
+          </Button>
+        {/if}
         <BuildTag />
       </div>
     </div>

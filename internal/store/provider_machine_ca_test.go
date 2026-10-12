@@ -64,7 +64,7 @@ func TestAProviderKeepsTheCertificateItsMachinesTrustApartFromItsOwn(t *testing.
 // machine of its own goes on using the system's trust.
 func TestAnUpgradeGivesAnExistingProviderItsCertificateAsTheOneItsMachinesTrust(t *testing.T) {
 	ctx := context.Background()
-	path := atSchemaBefore(t, "0100_provider_machine_ca.sql")
+	path := atSchemaBefore(t, "0101_provider_machine_ca.sql")
 
 	const authority = "-----BEGIN CERTIFICATE-----\nthe-clusters-authority\n-----END CERTIFICATE-----"
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")

@@ -14,8 +14,9 @@ import {
   streamAssistantChat,
 } from '$lib/api/client';
 import { session } from '$lib/state/session.svelte';
-import { transcript, turnsFrom, type StoredMessage } from './history';
-import { supportHint } from '$lib/errors';
+import { historyFor, transcript, turnsFrom, type StoredMessage } from './history';
+import { sentence, supportHint } from '$lib/errors';
+import { isRefusal, refusalKind, type RefusalKind } from './limits';
 import { router } from '$lib/router';
 import { prefs } from '$lib/state/prefs.svelte';
 import { hiddenNote } from './redaction';
@@ -44,6 +45,19 @@ export interface Turn {
   suggestions?: Suggestion[];
   error?: string;
   streaming?: boolean;
+  /**
+   * The controller refused this question, or the answer to it, for what it said:
+   * asking again cannot change that. Such a turn is never sent as history or
+   * kept, and offers no Try again.
+   */
+  refused?: boolean;
+}
+
+/** Why the last question was not sent, for the notice above the box. */
+export interface Refusal {
+  kind: RefusalKind;
+  /** The controller's own words, as a sentence. */
+  message: string;
 }
 
 export interface ToolLook {
@@ -77,30 +91,37 @@ export class Conversation {
   draft = $state('');
   /** The kept conversation this is, once an answer has been kept; nothing until then. */
   id = $state<string | undefined>();
+  /**
+   * Why the last question was not sent, until the next one is. The words went
+   * back to the box, so the notice is the only trace the refusal leaves.
+   */
+  refusal = $state<Refusal | undefined>();
   #controller: AbortController | undefined;
   #next = 0;
   #keeping: Promise<void> | undefined;
   /** Which provider the last question went to, so that asking again goes to the same one. */
   #provider: string | undefined;
 
-  /** Whether the last answer failed, so the page can offer to ask again. */
+  /** Whether the last answer failed in a way asking again could cure, so the page can offer to. */
   get failed(): boolean {
     const last = this.turns[this.turns.length - 1];
-    return last?.role === 'assistant' && !!last.error;
+    return last?.role === 'assistant' && !!last.error && !last.refused;
   }
 
   async send(text: string, context?: EliContext, providerId?: string): Promise<void> {
     const question = text.trim();
     if (!question || this.busy) return;
     this.#provider = providerId ?? this.#provider;
+    this.refusal = undefined;
     // What was said before is what the model is told it said: a turn that failed
-    // before it began has nothing to repeat, and is left out.
-    const history = this.turns
-      .filter((t) => t.content && !t.error)
-      .map((t) => ({ role: t.role, content: t.content }));
+    // before it began has nothing to repeat, and a question the controller
+    // refused was never heard.
+    const history = historyFor(this.turns);
     this.turns.push({ id: this.#next++, role: 'user', content: question, context });
+    const asked = this.turns[this.turns.length - 1]!;
     this.turns.push({ id: this.#next++, role: 'assistant', content: '', streaming: true });
     const answer = this.turns[this.turns.length - 1]!;
+    let refused = false;
     this.busy = true;
     const controller = new AbortController();
     this.#controller = controller;
@@ -137,8 +158,12 @@ export class Conversation {
       );
     } catch (cause) {
       // Stop is the person's, not a failure.
-      if (!(cause instanceof DOMException && cause.name === 'AbortError'))
-        answer.error = failure(cause);
+      if (cause instanceof DOMException && cause.name === 'AbortError') {
+        // Nothing to record.
+      } else if (cause instanceof ApiError && isRefusal(cause.status)) {
+        refused = true;
+        this.#refuse(cause, history.length + 1, asked, answer);
+      } else answer.error = failure(cause);
     } finally {
       answer.streaming = false;
       // A conversation cleared mid-answer may already be on its next question.
@@ -147,7 +172,30 @@ export class Conversation {
         this.#controller = undefined;
       }
     }
-    if (!answer.error && this.#controller === undefined) await this.keep();
+    if (!answer.error && !refused && this.#controller === undefined) await this.keep();
+  }
+
+  /**
+   * The controller would not take this question as it was asked, and asking
+   * again cannot change that. The person's own words go back in the box, with
+   * the reason beside it, rather than staying in the thread as a bubble that
+   * can only be retried into the same refusal. A question the page built from
+   * what it was showing (an Ask Eli snapshot) is not words the person typed
+   * and cannot be edited in the box, so it stays where it is, flagged so it is
+   * not sent again, and the thread says why.
+   */
+  #refuse(cause: ApiError, sent: number, asked: Turn, answer: Turn): void {
+    const message = sentence(cause.message);
+    asked.refused = true;
+    answer.refused = true;
+    if (asked.context) {
+      answer.error = message;
+      return;
+    }
+    this.turns = this.turns.filter((t) => t.id !== asked.id && t.id !== answer.id);
+    // A question typed while this one was being refused is not overwritten.
+    this.draft = this.draft.trim() ? `${asked.content}\n\n${this.draft}` : asked.content;
+    this.refusal = { kind: refusalKind(cause, sent), message };
   }
 
   /**
@@ -211,5 +259,6 @@ export class Conversation {
     this.turns = [];
     this.draft = '';
     this.id = undefined;
+    this.refusal = undefined;
   }
 }

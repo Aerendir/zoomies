@@ -51,41 +51,65 @@ type ownershipRecord struct {
 	CreatedAt   string `json:"created_at,omitempty"`
 }
 
-// descriptionPreamble is the sentence an operator reads in the Proxmox console
-// before they reach the machine-readable half. A guest that appears in somebody
-// else's cluster with no explanation is a guest somebody deletes by hand.
-const descriptionPreamble = "Managed by Zoomies. Deleting or renaming this guest by hand will leave the fleet with a machine it cannot account for."
+// descriptionHeading and descriptionPreamble are what an operator reads in the
+// Proxmox console before they reach anything machine-readable. A guest that
+// appears in somebody else's cluster with no explanation is a guest somebody
+// deletes by hand. The console renders a guest's notes as Markdown, so the
+// heading is one and the preamble is a paragraph rather than one long line.
+const (
+	descriptionHeading  = "## 🐾 Managed by Zoomies 🐾"
+	descriptionPreamble = "This guest is a rented runner machine in a Zoomies fleet. **Deleting or renaming it by hand will leave the fleet with a machine it cannot account for.**"
+)
 
 // Describe renders the description to write on a guest.
 //
-// The human sentence comes first because that is what the console shows in a
-// narrow column, and the machine-readable block is one line so that an operator
-// who adds a note of their own does not have to preserve its shape -- DecodeOwner
-// reads whichever line still parses.
+// The human half comes first and is Markdown: a heading, the sentence above and
+// a short list of which machine this is. The machine-readable blocks follow
+// inside an HTML comment, which the console's renderer drops, so an operator
+// reads prose and not JSON, while each block stays one line of its own so that
+// DecodeOwner finds it however an operator edits around it. Further blocks, such
+// as the shape a clone was asked for, ride in the same comment.
 func Describe(owner provider.Owner, name string) string {
+	return describe(owner, name)
+}
+
+func describe(owner provider.Owner, name string, blocks ...string) string {
 	rec := ownershipRecord{
 		Controller:  owner.ControllerID,
 		Provider:    owner.ProviderID,
 		Machine:     owner.MachineID,
 		Fingerprint: owner.Fingerprint,
 	}
+	facts := []string{}
+	if name != "" {
+		facts = append(facts, "- **Machine:** `"+name+"`")
+	}
+	if owner.ProviderID != "" {
+		facts = append(facts, "- **Provider:** `"+owner.ProviderID+"`")
+	}
+	if owner.ControllerID != "" {
+		facts = append(facts, "- **Controller:** `"+owner.ControllerID+"`")
+	}
 	if !owner.CreatedAt.IsZero() {
 		// UTC, always: a hypervisor's timezone is not ours, and a mark that
 		// read differently depending on where it was written would be useless
 		// as evidence.
 		rec.CreatedAt = owner.CreatedAt.UTC().Format(time.RFC3339Nano)
+		facts = append(facts, "- **Created:** "+owner.CreatedAt.UTC().Format("2006-01-02 15:04")+" UTC")
 	}
 	blob, err := json.Marshal(ownershipBlock{Zoomies: rec})
 	if err != nil {
 		// Nothing in the record can fail to encode; a description without the
 		// block is still better than no description at all.
-		return descriptionPreamble
+		return descriptionHeading + "\n\n" + descriptionPreamble
 	}
-	lines := []string{descriptionPreamble}
-	if name != "" {
-		lines = append(lines, "Machine "+name+".")
+	parts := []string{descriptionHeading, descriptionPreamble}
+	if len(facts) > 0 {
+		parts = append(parts, strings.Join(facts, "\n"))
 	}
-	return strings.Join(append(lines, string(blob)), "\n")
+	comment := append([]string{"<!--", string(blob)}, blocks...)
+	parts = append(parts, strings.Join(append(comment, "-->"), "\n"))
+	return strings.Join(parts, "\n\n")
 }
 
 // DecodeOwner reads the marks back out of a description, reporting whether it
