@@ -443,13 +443,15 @@ func unservedBy(providers []*store.Provider, synth map[string]*store.Host, pool 
 // Exactly one, deterministically. Charging every provider whose machines could
 // run the pool would buy the same shortfall from each of them, and the ledger
 // above exists precisely so that a slot is paid for once. Order is the
-// providers' own -- name, then id -- and a provider with no room left under its
-// own ceiling is passed over, so a half-configured row that may own nothing
-// cannot starve a configured one. When none has room the first eligible
-// provider still takes the demand, because a refusal an operator can read is
-// worth more than silence.
+// providers' own -- name, then id. A provider that may buy and has room under
+// its own ceiling comes first, so a half-configured row that may own nothing,
+// or one that is disabled, paused or standing down, cannot starve a configured
+// one: applying the plan drops a create for a provider that may not buy, and
+// the willing provider beside it would never have been asked. Failing that,
+// one with room that may not buy, then the first eligible provider, because a
+// refusal an operator can read is worth more than silence.
 func providerFor(providers []*store.Provider, synth map[string]*store.Host, pool *store.Pool, owned map[string]int, now time.Time) *store.Provider {
-	var first *store.Provider
+	var first, withRoom *store.Provider
 	for _, p := range providers {
 		if !providerServes(p, synth[p.ID], pool, now) {
 			continue
@@ -457,11 +459,27 @@ func providerFor(providers []*store.Provider, synth map[string]*store.Host, pool
 		if first == nil {
 			first = p
 		}
-		if p.MaxMachines-owned[p.ID] > 0 {
+		if p.MaxMachines-owned[p.ID] <= 0 {
+			continue
+		}
+		if acceptsDemand(p, now) {
 			return p
 		}
+		if withRoom == nil {
+			withRoom = p
+		}
+	}
+	if withRoom != nil {
+		return withRoom
 	}
 	return first
+}
+
+// acceptsDemand is whether a provider's own row lets it buy right now. The
+// controller-wide switches are not here: they hold every provider alike, so
+// they cannot make one a better choice than another.
+func acceptsDemand(p *store.Provider, now time.Time) bool {
+	return p.Enabled && !p.Paused && (p.PausedUntil == nil || !now.Before(*p.PausedUntil))
 }
 
 // drainable is the scale-down half: the machines that may be given up, keyed by
