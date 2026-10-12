@@ -465,12 +465,13 @@
         icon={Stethoscope}
         iconSpin={check.loading}
         disabled={check.disabled}
-        title={check.title}
+        help={check.title}
+        reason={check.disabled ? check.reason : undefined}
         onclick={() => void ask()}>Check now</Button
       >
     </span>
   {/if}
-  <Badge label={summary.label} tone={summary.tone} title={summary.hint} />
+  <Badge label={summary.label} tone={summary.tone} help={summary.hint} />
   {#snippet meta()}
     {#if fresh && report}
       <!-- Not a live region: a time that ticks would be announced again and again. -->

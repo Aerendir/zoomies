@@ -49,7 +49,7 @@ func TestAFailedMachineWithNothingBehindItIsToldToDeleteItNotToReleaseIt(t *test
 	m := h.failedMachine(t, false, store.Machine{ProviderError: "no space on pve-1"})
 
 	fix := h.fixFor(t, "provider.machine_failed", m.ID)
-	for _, want := range []string{"nothing was ever created", "Delete it", "together"} {
+	for _, want := range []string{"nothing was created", "Delete it", "together"} {
 		if !strings.Contains(fix, want) {
 			t.Errorf("the advice for a failed machine with no resource does not say %q: %s", want, fix)
 		}
@@ -70,7 +70,7 @@ func TestAFailedMachineWithAResourceIsToldToCheckTheConsoleAndThenDeleteIt(t *te
 	m := h.failedMachine(t, true, store.Machine{ProviderError: "the clone timed out"})
 
 	fix := h.fixFor(t, "provider.machine_failed", m.ID)
-	for _, want := range []string{"may still be running", "console", "delete the machine", "asks the provider again"} {
+	for _, want := range []string{"may still be running", "console", "Press Delete", "asks the provider again"} {
 		if !strings.Contains(fix, want) {
 			t.Errorf("the advice for a failed machine with a resource does not say %q: %s", want, fix)
 		}

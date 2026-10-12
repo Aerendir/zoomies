@@ -6,6 +6,7 @@
   labels themselves, not a truncated string.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { joinWords } from '$lib/format';
 
   interface Props {
@@ -31,15 +32,21 @@
 {#if labels.length === 0}
   <span class="none">No labels</span>
 {:else}
-  <span class="labels {className}" class:wrap title={all}>
-    {#each shown as label (label)}
-      <span class="label mono">{label}</span>
-    {/each}
-    {#if rest > 0}
-      <span class="more tabular">+{rest}</span>
-      <span class="sr-only">, and {joinWords(labels.slice(shown.length).map(String))}</span>
-    {/if}
-  </span>
+  <!--
+    The whole list, when some of it is not on show. All of it is in the page for
+    assistive technology already, so the tooltip does not say it a second time.
+  -->
+  <Tooltip bare describe={false} text={rest > 0 ? all : ''}>
+    <span class="labels {className}" class:wrap>
+      {#each shown as label (label)}
+        <span class="label mono">{label}</span>
+      {/each}
+      {#if rest > 0}
+        <span class="more tabular">+{rest}</span>
+        <span class="sr-only">, and {joinWords(labels.slice(shown.length).map(String))}</span>
+      {/if}
+    </span>
+  </Tooltip>
 {/if}
 
 <style>

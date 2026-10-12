@@ -335,7 +335,7 @@
               size="sm"
               label={host.name ?? ''}
               dot={false}
-              title={host.cordoned === true
+              help={host.cordoned === true
                 ? 'Cordoned: it matches, but takes no new runners'
                 : host.healthy === false
                   ? 'Not heartbeating, so it takes no new runners'

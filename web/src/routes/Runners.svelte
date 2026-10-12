@@ -13,6 +13,7 @@
   both the cache and the page of rows up to date.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { readableJobText } from '$lib/jobs/name';
   import RunnerInsights from '$lib/insights/RunnerInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
@@ -257,6 +258,9 @@
         label: 'Drain',
         icon: CircleSlash,
         disabled: terminal || runner.state === 'draining',
+        reason: terminal
+          ? 'This runner has already finished, so there is nothing to drain.'
+          : 'This runner is already draining. It leaves when its job ends.',
         onSelect: () => ask('drain', [runner]),
       },
       {
@@ -402,9 +406,11 @@
 
 {#snippet nameCell(runner: Runner)}
   <div class="name-cell">
-    <a class="name mono" href="/runners/{runner.id}" title={runner.name ?? undefined}>
-      {runner.name ?? 'unnamed'}
-    </a>
+    <Tooltip bare whenTruncated text={runner.name ?? ''}>
+      <a class="name mono" href="/runners/{runner.id}">
+        {runner.name ?? 'unnamed'}
+      </a>
+    </Tooltip>
     <span class="copy" role="presentation" onclick={stopRowClick}>
       <CopyButton value={runner.name ?? ''} label="Copy the runner name" size="sm" />
     </span>
@@ -413,14 +419,11 @@
 
 {#snippet poolCell(runner: Runner)}
   {#if runner.pool_id}
-    <a
-      class="link"
-      href="/pools/{runner.pool_id}"
-      title={runner.pool_name ?? runner.pool_id}
-      onclick={stopRowClick}
-    >
-      {runner.pool_name ?? runner.pool_id}
-    </a>
+    <Tooltip bare whenTruncated text={runner.pool_name ?? runner.pool_id}>
+      <a class="link" href="/pools/{runner.pool_id}" onclick={stopRowClick}>
+        {runner.pool_name ?? runner.pool_id}
+      </a>
+    </Tooltip>
   {:else}
     <span class="quiet">--</span>
   {/if}

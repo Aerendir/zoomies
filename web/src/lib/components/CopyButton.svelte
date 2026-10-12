@@ -5,6 +5,7 @@
   import { Check, Copy } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import { toasts } from '../state/toasts.svelte';
+  import Tooltip from './Tooltip.svelte';
 
   interface Props {
     value: string;
@@ -59,22 +60,25 @@
 </script>
 
 <span class="copy {className}">
-  {#if showValue}<code class="value" title={value}>{value}</code>{/if}
-  <button
-    type="button"
-    class="btn {size}"
-    class:labelled={showLabel}
-    aria-label={copied ? `${label}: copied` : label}
-    title={label}
-    onclick={copy}
-  >
-    {#if copied}
-      <Check size={size === 'sm' ? 12 : 14} aria-hidden="true" />
-    {:else}
-      <Copy size={size === 'sm' ? 12 : 14} aria-hidden="true" />
-    {/if}
-    {#if showLabel}<span class="text">{copied ? 'Copied' : label}</span>{/if}
-  </button>
+  <!-- The whole value, for when the ellipsis has cut it short. -->
+  {#if showValue}<Tooltip bare text={value}><code class="value">{value}</code></Tooltip>{/if}
+  <!-- Labelled, the button already says what it does; an icon alone is named by the heading. -->
+  <Tooltip bare title={showLabel ? undefined : label}>
+    <button
+      type="button"
+      class="btn {size}"
+      class:labelled={showLabel}
+      aria-label={copied ? `${label}: copied` : label}
+      onclick={copy}
+    >
+      {#if copied}
+        <Check size={size === 'sm' ? 12 : 14} aria-hidden="true" />
+      {:else}
+        <Copy size={size === 'sm' ? 12 : 14} aria-hidden="true" />
+      {/if}
+      {#if showLabel}<span class="text">{copied ? 'Copied' : label}</span>{/if}
+    </button>
+  </Tooltip>
   <span class="sr-only" aria-live="polite">
     {#if copied}Copied to the clipboard{/if}
   </span>
@@ -86,7 +90,7 @@
     is its content, and this one is a flex item of whatever row it sits in, so
     a long path made its own container as wide as the path -- and a phone,
     scroll sideways -- however carefully the row above it let itself shrink.
-    The full text is in the title for anybody the ellipsis cut short.
+    The full text is in the tooltip for anybody the ellipsis cut short.
   */
   .copy {
     display: inline-flex;

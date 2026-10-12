@@ -68,7 +68,7 @@
                     status={severityStatus(badge.worst)}
                     label={String(badge.count)}
                     size="sm"
-                    title={badge.text}
+                    help={badge.text}
                   />
                 </span>
               {/if}

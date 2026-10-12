@@ -759,29 +759,6 @@ func (c *Controller) providerTroubleProblems(out *[]Problem, p *store.Provider, 
 	}
 }
 
-// failedMachineFix says what to do with a machine the fleet gave up on.
-//
-// The answer is to delete it in both cases, and it used to be to release it.
-// Release forgets a row and touches nothing: it is the escape hatch for a
-// quarantined machine nobody can safely delete, and the wrong tool for a failed
-// one. A failed machine with no resource id has nothing to check and nothing to
-// leave running: the identity is written before the create is issued, so a row
-// without one never reached the hypervisor. Releasing a pile of those one at a
-// time is the chore a bad template turns a few failures into. One that did get
-// a resource may still be running and billed, and forgetting it would leave a
-// VM that nothing tracks; deleting it asks the provider again before anything
-// is destroyed, and leaves alone a resource it cannot prove is ours.
-func failedMachineFix(m *store.Machine) string {
-	if m.ResourceID == "" {
-		return "nothing was ever created for this machine, so there is nothing to clean up at the provider. " +
-			"Delete it from its page, or tick every failed machine on the Providers page and delete them together."
-	}
-	return "a resource was created for this machine and may still be running, and billed. Check the provider's " +
-		"console, then delete the machine: Zoomies asks the provider again before it destroys anything, and " +
-		"leaves alone a resource it cannot prove is its own. Several can be ticked and deleted together on the " +
-		"Providers page."
-}
-
 // machineStateProblems says what is wrong with individual machines: the ones
 // that never arrived, the ones nothing can prove we own, and the deletes that
 // have not confirmed.
@@ -822,7 +799,7 @@ func (c *Controller) machineStateProblems(out *[]Problem, p *store.Provider, mac
 				Severity:   config.SeverityWarning,
 				Title:      fmt.Sprintf("machine %s never reached ready", m.Name),
 				Detail:     firstNonEmpty(m.ProviderError, m.Message, "the machine was given up on without saying why"),
-				Fix:        failedMachineFix(m),
+				Fix:        failedMachineCleanup(m),
 				TargetKind: "machine", TargetID: m.ID,
 			})
 		case m.State == store.MachineDeleting && deleteTimeout > 0 &&
@@ -842,6 +819,35 @@ func (c *Controller) machineStateProblems(out *[]Problem, p *store.Provider, mac
 			})
 		}
 	}
+}
+
+// failedMachineCleanup says what to do with a failed machine's row, and what it
+// may still be costing.
+//
+// A failed machine is kept because the resource behind it may still exist, and a
+// running VM is billed whether or not Zoomies has given up on it. Delete is the
+// action that ends that: it asks the provider again before anything is
+// destroyed, leaves alone a resource it cannot prove is ours, and waits for the
+// provider to confirm it gone. Release only forgets the row and leaves the VM
+// running. That is the escape hatch for a quarantined machine nobody can safely
+// delete, or a resource somebody has dealt with by hand, so it is not what a
+// failed machine is told to do.
+//
+// One that never got a resource has nothing to check and nothing left running:
+// the identity is written before the create is issued, so a row without one
+// never reached the hypervisor. It is Delete that clears it as well, because
+// Delete can be done to many machines at once and Release cannot, and a bad
+// template turns a few failures into a pile of them.
+func failedMachineCleanup(m *store.Machine) string {
+	if m.Owns() {
+		return "its VM may still be running and being paid for. Press Delete on the machine's page to destroy it: " +
+			"Zoomies asks the provider again before it destroys anything, leaves alone a resource it cannot prove " +
+			"is its own, and waits for the provider to confirm it is gone. If you would rather look at it first, " +
+			"the provider's console has it. Several failed machines can be ticked and deleted together on the " +
+			"Providers page."
+	}
+	return "nothing was created for it, so there is nothing to clean up at the provider or pay for. Delete it from " +
+		"its page, or tick every failed machine on the Providers page and delete them together."
 }
 
 func (c *Controller) capacityDeliveryProblems(ctx context.Context, out *[]Problem) error {

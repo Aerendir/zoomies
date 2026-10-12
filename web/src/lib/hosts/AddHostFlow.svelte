@@ -488,7 +488,7 @@
                       <Button
                         size="sm"
                         icon={Plus}
-                        title="Used by {joinWords(s.pools)}"
+                        help="Used by {joinWords(s.pools)}"
                         onclick={() => suggest(s)}
                       >
                         <span class="mono">{s.id}</span>

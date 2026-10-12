@@ -19,6 +19,7 @@
   page on zoomies.sh, so the product and its site read as one thing.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { session } from '../state/session.svelte';
   import { DEVELOPER_NAME, DEVELOPER_URL, QUICKSTART_URL } from '../links';
   import Logo from '../components/Logo.svelte';
@@ -33,12 +34,14 @@
       <Logo variant="mark" size={16} label="" />
       <span class="name">Zoomies</span>
       {#if version}
-        <span class="version" title="The controller build this page is talking to">{version}</span>
+        <Tooltip bare text="The controller build this page is talking to">
+          <span class="version">{version}</span>
+        </Tooltip>
       {/if}
       {#if versionChannel}
-        <span class="channel" title="The published channel carrying Zoomies build"
-          >:{versionChannel}</span
-        >
+        <Tooltip bare text="The published channel carrying Zoomies build">
+          <span class="channel">:{versionChannel}</span>
+        </Tooltip>
       {/if}
     </span>
     <span class="right">

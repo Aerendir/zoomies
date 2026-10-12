@@ -340,6 +340,8 @@
         label: 'Reset two-step verification',
         icon: ShieldOff,
         disabled: !user.two_step_enabled,
+        reason:
+          'This account has not turned on two-step verification, so there is nothing to reset.',
         onSelect: () => {
           twoStepFor = user;
           twoStepOpen = true;
@@ -350,6 +352,7 @@
         label: user.disabled ? 'Enable this account' : 'Disable this account',
         icon: UserX,
         disabled: self && !user.disabled,
+        reason: 'You cannot disable the account you are signed in with. Ask another administrator.',
         onSelect: () => void setDisabled(user, !user.disabled),
       },
       {
@@ -359,6 +362,7 @@
         danger: true,
         separated: true,
         disabled: self,
+        reason: 'You cannot delete the account you are signed in with. Ask another administrator.',
         onSelect: () => {
           deleting = user;
           deleteOpen = true;

@@ -23,6 +23,7 @@
   under somebody who is reading.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { onMount } from 'svelte';
   import {
     ArrowDown,
@@ -629,14 +630,14 @@
         <span class="pip" aria-hidden="true"></span>
         {statusLabel}
       </span>
-      <span
-        class="lines tabular"
-        title="Lines received since this view opened. The scrollback keeps the most recent {formatNumber(
+      <Tooltip
+        bare
+        text="Lines received since this view opened. The scrollback keeps the most recent {formatNumber(
           SCROLLBACK,
         )}."
       >
-        {pluralise(lineCount, 'line')}
-      </span>
+        <span class="lines tabular">{pluralise(lineCount, 'line')}</span>
+      </Tooltip>
     </div>
 
     <div class="find">
@@ -681,7 +682,7 @@
         size="sm"
         variant="ghost"
         icon={Eraser}
-        title="Clear what is on screen. The log on the host is untouched."
+        help="Clear what is on screen. The log on the host is untouched."
         onclick={clearScreen}
       >
         Clear
@@ -691,7 +692,7 @@
         variant="secondary"
         icon={Download}
         href={runnerLogsDownloadUrl(runnerId)}
-        title="Download the whole log as a text file"
+        help="Download the whole log as a text file"
       >
         Download
       </Button>

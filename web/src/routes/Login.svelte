@@ -20,6 +20,7 @@
   the form; only the marketing copy is removed.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { tick, untrack } from 'svelte';
   import { Moon, Sun, Eye, EyeOff, Globe, Server, TriangleAlert } from '@lucide/svelte';
   import {
@@ -337,11 +338,13 @@
   <div class="form-side">
     <div class="form-column">
       {#if !embedded}
-        <p class="instance" title="The Zoomies instance at this address">
-          <Server size={12} aria-hidden="true" />
-          <span class="sr-only">This instance:</span>
-          <span class="host">{host}</span>
-        </p>
+        <Tooltip bare text="The Zoomies instance at this address">
+          <p class="instance">
+            <Server size={12} aria-hidden="true" />
+            <span class="sr-only">This instance:</span>
+            <span class="host">{host}</span>
+          </p>
+        </Tooltip>
       {/if}
 
       {#if meta?.auth_disabled}

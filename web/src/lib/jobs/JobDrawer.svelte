@@ -151,7 +151,7 @@
     <div class="stack">
       <div class="badges">
         {#if status}<Badge {status} />{/if}
-        {#if queue}<Badge status={queue} title={queue.hint} />{/if}
+        {#if queue}<Badge status={queue} help={queue.hint} />{/if}
         {#if job.runner_fault}<Badge status={RUNNER_LOST} />{/if}
         {#if unmatched}<Badge status={UNMATCHED} />{:else if job.hosted && !job.matched}<Badge
             status={HOSTED}
