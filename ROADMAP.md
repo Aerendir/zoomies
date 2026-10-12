@@ -1628,7 +1628,7 @@ Depends on ZF-235 for Eli's repair worker. Size L.
 
 ### ZF-240: the fleet as it moves, over MCP
 
-**Classification: extension; M; proposed, designed and delivered 12
+**Classification: extension; M; proposed, designed and implemented 12
 October.** An agent connected over MCP, and Eli, could read what the fleet
 is and what it did over a period, but not what is happening as it happens:
 the event stream, the scheduler's decisions, the minute samples, a runner's
@@ -1649,10 +1649,13 @@ deferred, and the design says why.
 
 **Accepted because:** the transport stays stateless; every tool is one
 documented route with the caller's own credential; workflow-written text
-is quoted only in the untrusted block.
+is quoted only in the untrusted block of the event tools' text, and where
+the row tools and the structured copy carry it inline, they say it is
+untrusted.
 
 **Done:** `GET /events/recent`, the bus's ring as one JSON answer with a
-cursor and `complete`, and a `wait` held for at most 25 seconds that counts
+cursor and `complete`, `since=now` for a cursor at the present and nothing
+before it, and a `wait` held for at most 25 seconds that counts
 against `limits.event_subscribers` (a public view's visitor against
 `limits.visitor_event_subscribers`); each event goes only to a caller who
 could read it from its own route (#911, #922). The seven window tools,
@@ -1660,19 +1663,25 @@ could read it from its own route (#911, #922). The seven window tools,
 `fleet_samples`, `host_samples`, `runner_timeline` and `list_workflow_runs`,
 each answer held to 200 rows and 64 KiB, cut on whole frames or rows (a
 runner's timeline comes whole), the two event tools quoting names a workflow
-wrote only in the untrusted block; and three reads for whoever
+wrote only in the untrusted block; `wait_for_change` with no `since` answers
+a cursor at once, and with no `kinds` waits only for kinds that say
+something changed; and three reads for whoever
 runs the fleet, `list_webhook_deliveries` and `list_audit` (viewer) and
 `support_bundle` (administrator, section by section). Eli is offered the
-seven, held to 12 KiB a block on whole rows, with three recorded scenarios;
+seven, the window answers held to 12 KiB a block on whole rows and its waits
+to 10 seconds, with three recorded scenarios;
 the three reads are left off its list by the owner's choice: a delivery is
 GitHub's whole payload, who did what, by name, is not for a hosted model,
-and the support bundle is the whole instance in one document (#949). The
+and the support bundle is the whole instance in one document (#949), and
+its event tools never ask for audit or delivery events. The
 `what_changed` prompt, the `zoomies://fleet/now` resource and
 `zoomies events recent`, and *Watching the fleet move* in
 `docs/connect-claude.md`, in the pull request after it. The two event
-tools' `structuredContent` carries names outside the untrusted block, as
-the design asked; the page says so, so a client that hands it to a model
-treats them as data.
+tools' `structuredContent` holds the events the text shows, with the text's
+cursor and the same 64 KiB bound, and carries names outside the untrusted
+block, as the design asked; the page says so, so a client that hands it to
+a model treats them as data. `implemented` and not `done` until the second
+call of the two-call wait is seen to block against a real client.
 
 Depends on ZF-228, ZF-235. Size M.
 
@@ -1854,7 +1863,7 @@ every package in section 8 was re-read on 19 September against the code.
 | 16 | ZF-234 the documentation | `mkdocs build --strict` passes; every new route and command is on its page |
 | 17 | ZF-235 the assistant, slice by slice, after an owner decision to start | Each slice's acceptance in the design's section 9 |
 | 18 | ZF-239 slice 2, the controller's side of a shared App, with no network | An `own` installation is unchanged; a `shared` one completes a repair against the fake relay and holds no private key |
-| 19 | ZF-240 the fleet as it moves, over MCP, done, 12 October | One call answers what changed; a second with the cursor blocks until a seeded event; Eli's three scenarios hold and the three reads for whoever runs the fleet are left off its list |
+| 19 | ZF-240 the fleet as it moves, over MCP, implemented, 12 October | One call answers what changed; a second with the cursor blocks until a seeded event; Eli's three scenarios hold and the three reads for whoever runs the fleet are left off its list |
 | 20 | ZF-241 the analyses | Each seeded cause is named as dominant at high confidence; a small sample is said to be small; the card and the tool show one answer |
 | 21 | ZF-242 PR required-check delay, starting with its independent pure core | Pinned heads and coverage survive every surface; missing/ambiguous checks stay visible; no merge-readiness claim |
 | - | ZF-239 slices 3 to 5, the relay itself | After the owner's answers and a ruling on delivery rule 15 |
@@ -1899,14 +1908,15 @@ results or user feedback; do not wait for them either.
 
 ## 13. Change record
 
-* **12 October 2026: Version 3.12:** ZF-240 delivered: `GET /events/recent`
-  with a bounded wait, the seven window tools on Eli's list, the three reads
+* **12 October 2026: Version 3.12:** ZF-240 implemented: `GET /events/recent`
+  with `since=now` and a bounded wait, the seven window tools on Eli's list, the three reads
   for whoever runs the fleet left off it by the owner's choice, the
   `what_changed` prompt, the `zoomies://fleet/now` resource and
   `zoomies events recent`, documented in `docs/connect-claude.md`. The entry,
   row 19 and [fleet-analysis.md](roadmap/fleet-analysis.md) sections 2, 3
   and 4.2 are corrected: the audit log is a viewer route, so the three are
-  off Eli's list by choice, not by role.
+  off Eli's list by choice, not by role. It stays `implemented` until the
+  two-call wait is seen to block against a real client.
 
 * **12 October 2026: Version 3.11:** ZF-240 and ZF-241 added and designed
   in [fleet-analysis.md](roadmap/fleet-analysis.md): the recent past over
