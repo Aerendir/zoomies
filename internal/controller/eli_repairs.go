@@ -198,7 +198,45 @@ func (m repairModel) SourceUsed(n int) {
 	}
 }
 
+// Answer asks the model for the next repair step. A repair offers the model no
+// tools: every step is a JSON object the system prompt describes. Some models
+// answer with a tool call anyway (Ollama cloud did, for a repair whose only
+// failing check was an audit script), and giving up on the first one threw
+// away a repair the model would have finished. So the model is told once, the
+// way the chat loop tells a model that asks for a tool it was not given: a
+// result for the call it made, saying there are no tools and what to send
+// instead. A model that calls again is stopped, and the failure names the
+// tool, so an operator can tell a model ignoring its instructions from a
+// prompt that was wrong.
 func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
+	turns := make([]assistant.Message, 0, len(messages)+2)
+	for _, v := range messages {
+		turns = append(turns, assistant.Message{Role: assistant.Role(v.Role), Content: v.Content})
+	}
+	for attempt := 0; ; attempt++ {
+		text, calls, err := m.complete(ctx, turns)
+		if err != nil {
+			return "", err
+		}
+		if len(calls) == 0 {
+			return text, nil
+		}
+		if attempt > 0 {
+			return "", fmt.Errorf("the provider answered with a tool call named %s, twice, instead of a repair plan; Eli offers no tools during a repair, so the model is ignoring its instructions: choose a model that keeps to a JSON reply, or test the provider in Eli settings", repairToolNames(calls))
+		}
+		// Every call gets a result of its own: the OpenAI protocol refuses a
+		// transcript in which a call went unanswered.
+		turns = append(turns, assistant.Message{Role: assistant.RoleAssistant, Content: text, ToolCalls: calls})
+		for _, call := range calls {
+			turns = append(turns, assistant.Message{Role: assistant.RoleTool, ToolCallID: call.ID, Content: repairToolRefusal(call.Name)})
+		}
+	}
+}
+
+// complete is one call to the provider, recorded as one step of the repair,
+// so the history shows the turn the model spent on a tool call as well as the
+// one that answered.
+func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (string, []assistant.ToolCall, error) {
 	step := store.EliRepairStep{RequestBytes: len(prrepair.SystemPrompt)}
 	started := time.Now()
 	defer func() {
@@ -207,12 +245,8 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 			m.record(step)
 		}
 	}()
-	for _, v := range messages {
+	for _, v := range turns {
 		step.RequestBytes += len(v.Content)
-	}
-	turns := make([]assistant.Message, 0, len(messages))
-	for _, v := range messages {
-		turns = append(turns, assistant.Message{Role: assistant.Role(v.Role), Content: v.Content})
 	}
 	limit := m.maxTokens
 	if limit <= 0 {
@@ -220,10 +254,11 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 	}
 	stream, err := m.provider.Chat(ctx, assistant.Request{Model: m.model, System: prrepair.SystemPrompt, Messages: turns, MaxTokens: limit})
 	if err != nil {
-		return "", repairProviderError(err)
+		return "", nil, repairProviderError(err)
 	}
 	defer stream.Close()
 	var out strings.Builder
+	var calls []assistant.ToolCall
 	done := false
 	for {
 		ev, ok := stream.Next(ctx)
@@ -236,17 +271,17 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 			step.UsageReported = true
 		}
 		if ev.Cut {
-			return "", fmt.Errorf("provider output limit reached: choose a model with more output room or request a smaller fix")
+			return "", nil, fmt.Errorf("provider output limit reached: choose a model with more output room or request a smaller fix")
 		}
 		if ev.Err != nil {
-			return "", repairProviderError(ev.Err)
+			return "", nil, repairProviderError(ev.Err)
 		}
 		if ev.ToolCall != nil {
-			return "", fmt.Errorf("the provider returned an unsupported tool call instead of a repair plan")
+			calls = append(calls, *ev.ToolCall)
 		}
 		out.WriteString(ev.Delta)
 		if out.Len() > prrepair.MaxReplyBytes {
-			return "", fmt.Errorf("the model response exceeded the repair limit")
+			return "", nil, fmt.Errorf("the model response exceeded the repair limit")
 		}
 		if ev.Done {
 			done = true
@@ -254,13 +289,48 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 		}
 	}
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", nil, ctx.Err()
 	}
 	if !done {
-		return "", fmt.Errorf("the model response ended before completion")
+		return "", nil, fmt.Errorf("the model response ended before completion")
 	}
-	return out.String(), nil
+	return out.String(), calls, nil
 }
+
+// repairToolRefusal is what a model is told for a tool it called during a
+// repair. It names the replies the system prompt allows, because a model that
+// reached for a tool was looking for a way to read or change a file and is
+// quickest set right by being shown the way it has.
+func repairToolRefusal(name string) string {
+	return repairToolName(name) + ` is not a tool you were offered. No tools are offered during a repair, so do not call one. Reply with one JSON object as instructed: {"read":["path"]} or {"windows":[...]} to see source, {"summary":"...","edits":[...]} or {"summary":"...","files":[...]} to fix it, or {"cannot_fix":"reason"}.`
+}
+
+// repairToolName is a tool name as a PR comment can carry it: the model wrote
+// it, so it is bounded and kept to one line, and a backtick in it cannot
+// close the code span it is shown in.
+func repairToolName(name string) string {
+	name = strings.Join(strings.Fields(strings.ReplaceAll(name, "`", "'")), " ")
+	if name == "" {
+		name = "(unnamed)"
+	}
+	if len(name) > 64 {
+		name = name[:64] + "..."
+	}
+	return "`" + name + "`"
+}
+
+func repairToolNames(calls []assistant.ToolCall) string {
+	var names []string
+	seen := map[string]bool{}
+	for _, call := range calls {
+		if !seen[call.Name] {
+			seen[call.Name] = true
+			names = append(names, repairToolName(call.Name))
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
 func (c *Controller) repairLoop(ctx context.Context) {
 	if err := c.st.InterruptEliRepairs(ctx); err != nil {
 		c.log.Error("could not recover Eli repairs", "error", err)
@@ -688,6 +758,10 @@ func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo st
 
 func repairFailureCode(message string) string {
 	switch {
+	// First, because the message carries a tool name the model chose, and a
+	// name such as read_file would otherwise read as a source failure.
+	case strings.Contains(message, "tool call"):
+		return "provider_unavailable"
 	case strings.Contains(message, "rate limit"):
 		return "rate_limited"
 	case strings.Contains(message, "provider credentials"):

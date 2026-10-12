@@ -443,6 +443,7 @@ func (s *Server) apiRoutes() chi.Router {
 		// for one, and handlers_machines.go says why that matters.
 		r.Route("/machines", func(r chi.Router) {
 			r.With(s.require(auth.ActionMachinesRead)).Get("/", s.handleListMachines)
+			r.With(s.require(auth.ActionMachinesDelete)).Post("/bulk", s.handleBulkMachines)
 			r.With(s.require(auth.ActionMachinesRead)).Get("/{id}", s.handleGetMachine)
 			r.With(s.require(auth.ActionMachinesDrain)).Post("/{id}/drain", s.handleDrainMachine)
 			r.With(s.require(auth.ActionMachinesDelete)).Delete("/{id}", s.handleDeleteMachine)

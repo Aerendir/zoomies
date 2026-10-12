@@ -3819,6 +3819,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/machines/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete several machines
+         * @description Applies the rules of a single delete to each machine and returns a per-ID result, in the order asked, so a partial failure is visible rather than hidden behind one status code. A quarantined machine, one that is already deleted, one that is only planned and one that still has runners on it come back as failed rows that say why; the rest are put in `deleting`, and are finished when the provider can no longer find the resource. A machine with nothing behind it, such as one whose create failed before a resource was made, goes straight to deleted.
+         */
+        post: operations["bulkMachineAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/machines/{id}": {
         parameters: {
             query?: never;
@@ -17106,6 +17126,46 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    bulkMachineAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action: "delete";
+                    ids: string[];
+                    /**
+                     * @description Delete a machine that still has runners on it, and lose whatever they were running. Without it that machine comes back as its own failed row rather than failing the batch. A quarantined machine is never deleted, forced or not: its resource may belong to somebody else, and the escape hatch there is release.
+                     * @default false
+                     */
+                    force?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Per-ID outcomes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results?: {
+                            id?: string;
+                            ok?: boolean;
+                            error?: string;
+                        }[];
+                    };
+                };
+            };
+            422: components["responses"]["Unprocessable"];
         };
     };
     getMachine: {

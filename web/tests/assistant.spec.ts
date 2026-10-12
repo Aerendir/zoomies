@@ -348,6 +348,7 @@ test('the model is chosen from the provider’s own list once it has been loaded
 
 test('Eli is in the corner of every page, opens and closes from the keyboard, and keeps the conversation', async ({
   page,
+  isMobile,
 }) => {
   await goto(page, '/pools', 'Pools');
   const launcher = page.getByRole('button', { name: 'Ask Eli' });
@@ -361,10 +362,14 @@ test('Eli is in the corner of every page, opens and closes from the keyboard, an
   await expect(launcher).toBeFocused();
 
   // E opens it from anywhere that is not a box to type in, with the box ready.
+  // Not on a phone, where a focused box raises the keyboard over half the
+  // sheet before the operator has read a word: there the sheet itself takes
+  // focus and the box is one tap away.
   await page.keyboard.press('e');
   await expect(page.getByRole('dialog', { name: 'Eli assistant' })).toBeVisible();
   const message = page.getByRole('textbox', { name: 'Message' });
-  await expect(message).toBeFocused();
+  if (isMobile) await expect(page.getByRole('dialog', { name: 'Eli assistant' })).toBeFocused();
+  else await expect(message).toBeFocused();
   await message.fill('Does this survive a page change?');
   await message.press('Enter');
   await expect(page.getByRole('article', { name: 'Eli' })).toContainText('Does this survive');
@@ -407,7 +412,11 @@ test('Eli says it cannot see the fleet until an administrator allows it, and the
       'Looked at the fleet at a glance',
     );
     // What the tool read is the controller's own figures, not something invented.
-    await expect(answer).toContainText('queued_jobs');
+    await expect(answer).toContainText('Fleet summary');
+    await expect(answer).toContainText(/Jobs: \d+ waiting; \d+ running/);
+    await expect(answer).toContainText('Next step');
+    await expect(answer.locator('.markdown').getByRole('list')).toHaveCount(2);
+    await expect(answer).not.toContainText('queued_jobs');
   } finally {
     await fleetAccess(page, false);
   }
@@ -785,6 +794,43 @@ test('Eli has a circular launcher and can roam without leaving the viewport', as
   await expect.poll(async () => (await panel.boundingBox())!.x).toBeGreaterThan(100);
 });
 
+// The handle alone was a small target: an operator reaching for the bar the
+// panel hangs from got nothing unless they found the avatar. Any empty stretch
+// of the header now grabs, and the buttons on its right still only click.
+test('Eli drags from anywhere in its header without stealing the header buttons', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'Phones use the full-screen conversation.');
+  await goto(page, '/settings/assistant', 'Eli AI Assistant');
+  await openEli(page);
+  const panel = page.getByRole('dialog', { name: 'Eli assistant' });
+  const header = panel.locator('header');
+  const before = (await panel.boundingBox())!;
+  const bar = (await header.boundingBox())!;
+  // The header's top padding, halfway across: neither the handle nor a button.
+  await page.mouse.move(bar.x + bar.width / 2, bar.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(bar.x + bar.width / 2 - 120, bar.y + 63, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(before.x - 120);
+  const moved = (await panel.boundingBox())!;
+  const full = panel.getByRole('button', { name: 'Full screen' });
+  const button = (await full.boundingBox())!;
+  await page.mouse.move(button.x + button.width / 2, button.y + button.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(button.x + button.width / 2 - 40, button.y + button.height / 2, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(moved.x);
+  await panel.getByRole('button', { name: 'Past conversations' }).click();
+  await expect(
+    panel.getByRole('button', { name: 'Past conversations', pressed: true }),
+  ).toBeVisible();
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(moved.x);
+});
+
 // A phone used to get the panel edge to edge, with its border drawn at the
 // screen's edge, so it read as a page rather than the sheet it is. It now sits
 // inside the same small margin the Toaster and the Dialog keep on a phone, with
@@ -804,6 +850,22 @@ test('on a phone the panel is a sheet with a margin, rounded corners and a scrim
   expect(rect.y).toBeGreaterThan(0);
   expect(rect.y + rect.height).toBeLessThan(viewport.height);
   expect(await panel.evaluate((el) => getComputedStyle(el).borderRadius)).not.toBe('0px');
+  // The sheet opens with focus on itself. Its message box used to take it, and
+  // a focused box raises the keyboard, which on a phone covered the lower
+  // half of the sheet and scrolled its header off the top of the screen.
+  await expect(panel).toBeFocused();
+  await expect(panel.getByRole('textbox', { name: 'Message' })).not.toBeFocused();
+  // The sheet is sized from the visual viewport, so the keyboard shortens it
+  // rather than hiding its head: with the keyboard down the two properties
+  // are the window itself, and the sheet is where the CSS alone would put it.
+  const sheet = await panel.evaluate((el) => ({
+    top: el.style.getPropertyValue('--z-eli-sheet-top'),
+    height: el.style.getPropertyValue('--z-eli-sheet-height'),
+  }));
+  expect(sheet.top).toBe('0px');
+  expect(sheet.height).toBe(
+    `${Math.round(await page.evaluate(() => window.visualViewport!.height))}px`,
+  );
   const scrim = page.locator('[data-eli-scrim]');
   await expect(scrim).toBeVisible();
   await scrim.click({ position: { x: 2, y: 2 } });
