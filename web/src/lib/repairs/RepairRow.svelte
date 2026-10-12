@@ -14,11 +14,14 @@
   let {
     repair: r,
     selected,
+    waiting,
     onselect,
     onretry,
   }: {
     repair: Schemas['EliRepair'];
     selected: boolean;
+    /** The list is being re-read for new filters, and this row is the old filters'. */
+    waiting: boolean;
     onselect: (on: boolean) => void;
     onretry: (target: { repo: string; pull: number }) => void;
   } = $props();
@@ -37,7 +40,7 @@
   <div class="pick">
     <Checkbox
       checked={selected && !running}
-      disabled={running}
+      disabled={running || waiting}
       reason={running ? 'Still running' : undefined}
       ariaLabel="Select repair {r.repo} #{r.pull_number || '?'}"
       onchange={onselect}

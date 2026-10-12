@@ -88,8 +88,12 @@ async function mockHistory(page: Page, count = 120) {
     selectionGate: null as Promise<void> | null,
     /** Replaces the model's own answer, for a server that says something odd. */
     answer: null as ((query: URLSearchParams) => Answer) | null,
-    /** While set, the bulk route fails with it and clears nothing. */
-    bulkFails: null as string | null,
+    /**
+     * While set, a bulk request fails with the message and clears nothing, once
+     * `after` requests have gone through: 0 fails the first, 1 lets the first
+     * succeed and fails the second.
+     */
+    bulkFails: null as { message: string; after: number } | null,
   };
   /** What the same filters would list, which is also what they would select from. */
   const matching = (query: URLSearchParams) => {
@@ -144,10 +148,10 @@ async function mockHistory(page: Page, count = 120) {
     async (route) => {
       const body = route.request().postDataJSON() as { action: string; ids: string[] };
       model.bulk.push(body);
-      if (model.bulkFails)
+      if (model.bulkFails && model.bulk.length > model.bulkFails.after)
         return route.fulfill({
           status: 500,
-          json: { error: { code: 'internal', message: model.bulkFails } },
+          json: { error: { code: 'internal', message: model.bulkFails.message } },
         });
       const cleared = new Set<string>();
       const results = body.ids.map((id) => {
@@ -524,6 +528,13 @@ test('clearing says what it does, then clears and reports', async ({ page }) => 
   await bar.getByRole('button', { name: 'Clear from history' }).click();
   const dialog = dialogOf(page);
   await expect(dialog.getByText('The repairs stop showing in this list.')).toBeVisible();
+  // How many, and that this page cannot bring them back: three here, but after a
+  // select-all it is up to 500, most of them on pages the operator never saw.
+  await expect(
+    dialog.getByText(
+      '3 repairs will stop showing in this list, and this cannot be undone from this page.',
+    ),
+  ).toBeVisible();
   await expect(
     dialog.getByText("They still count towards each repository's daily limit."),
   ).toBeVisible();
@@ -572,7 +583,7 @@ test('a clear that fails keeps the selection and the dialog', async ({ page }) =
 
   await tickOf(page, repair(3)).check();
   await bar.getByRole('button', { name: 'Clear from history' }).click();
-  model.bulkFails = 'the database is busy';
+  model.bulkFails = { message: 'the database is busy', after: 0 };
   await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
   await expect(page.getByText('the database is busy')).toBeVisible();
   await expect(dialogOf(page)).toBeVisible();
@@ -692,5 +703,127 @@ test('a selection past the bulk limit is cleared in requests the route accepts',
   expect(model.bulk.every((b) => b.action === 'clear')).toBe(true);
   // 499 are left, so the page it was on has gone and the list went to the last.
   await expect(pagination).toContainText('451–499 of 499 repairs');
+  await noSidewaysScroll(page);
+});
+
+// The count in the bar is what the operator agreed to clear. A select-all that
+// is still being read has not settled it, and the answer replaces the set when
+// it lands, so a clear started in that gap would clear more than they saw.
+test('a clear cannot start while a select-all is being read, and clears what the dialog counted', async ({
+  page,
+}) => {
+  const model = await mockHistory(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const bar = barOf(page);
+  const clearing = bar.getByRole('button', { name: 'Clear from history' });
+
+  await historyOf(page).getByRole('checkbox', { name: 'Select the 50 repairs shown' }).check();
+  await expect(bar.getByText('35 selected')).toBeVisible();
+
+  let release!: () => void;
+  model.selectionGate = new Promise<void>((resolve) => (release = resolve));
+  await bar.getByRole('button', { name: 'Select all 120 matching' }).click();
+  // Off while the read is out, and a press does not open the dialog.
+  await expect(clearing).toBeDisabled();
+  await clearing.click({ force: true });
+  await expect(dialogOf(page)).toHaveCount(0);
+
+  release();
+  model.selectionGate = null;
+  await expect(bar.getByText('84 selected')).toBeVisible();
+  await expect(clearing).toBeEnabled();
+  await clearing.click();
+  await expect(
+    dialogOf(page).getByText(
+      '84 repairs will stop showing in this list, and this cannot be undone from this page.',
+    ),
+  ).toBeVisible();
+  // Exactly the repairs the dialog counted, newest first as the route sent them.
+  // Worked out before the confirm, which removes them from the model.
+  const clearable = model.rows.filter((r) => !ACTIVE.includes(r.state)).map((r) => r.id);
+  expect(clearable).toHaveLength(84);
+  await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
+  await expect.poll(() => model.bulk).toEqual([{ action: 'clear', ids: clearable }]);
+});
+
+// The rows on show after a filter change are still the old filter's until the
+// answer lands, and a box ticked among them would sit in the set under filters
+// it does not belong to, with the bar counting one and nothing visibly ticked.
+test('the boxes are off while the list is re-read for new filters', async ({ page }) => {
+  const model = await mockHistory(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const history = historyOf(page);
+  const bar = barOf(page);
+  const header = history.getByRole('checkbox', { name: 'Select the 50 repairs shown' });
+
+  let release!: () => void;
+  model.gate = new Promise<void>((resolve) => (release = resolve));
+  await history.getByLabel('Show', { exact: true }).selectOption('attention');
+  // Row 4 passed, so it is not in "Needs attention", but it is still on show.
+  const stale = tickOf(page, repair(3));
+  await expect(stale).toBeVisible();
+  await expect(stale).toBeDisabled();
+  await expect(header).toBeDisabled();
+  await stale.click({ force: true });
+  await expect(bar).toContainText('Select repairs to clear them from the history');
+
+  release();
+  model.gate = null;
+  await expect(paginationOf(page)).toContainText('1–50 of 72 repairs');
+  await expect(history.getByRole('article').first()).toContainText('Repair number 5');
+  await expect(header).toBeEnabled();
+  await expect(tickOf(page, repair(4))).toBeEnabled();
+  await tickOf(page, repair(4)).check();
+  await expect(bar.getByText('1 selected')).toBeVisible();
+  await noSidewaysScroll(page);
+});
+
+// A clear that stops part-way has cleared some and not tried the rest. It says
+// so in the same words in the toast and the report, and the rest stay chosen so
+// that trying again is one press.
+test('a clear that fails on a later request reports what went and keeps the rest chosen', async ({
+  page,
+}) => {
+  const model = await mockHistory(page, 1000);
+  await goto(page, '/repairs', 'Eli repairs');
+  const history = historyOf(page);
+  const bar = barOf(page);
+  const late = repair(953);
+
+  await history.getByRole('checkbox', { name: 'Select the 50 repairs shown' }).check();
+  await bar.getByRole('button', { name: 'Select all 1,000 matching' }).click();
+  await expect(bar.getByText('500 of 700 selected')).toBeVisible();
+  await page.getByRole('button', { name: 'Last page' }).click();
+  await tickOf(page, late).check();
+  await expect(bar.getByText('501 selected')).toBeVisible();
+
+  // The first request of 500 goes through and the second, of one, does not.
+  model.bulkFails = { message: 'the database is busy', after: 1 };
+  await bar.getByRole('button', { name: 'Clear from history' }).click();
+  await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
+
+  const report = history.getByRole('status');
+  await expect(report).toContainText('500 repairs cleared from the history');
+  await expect(report).toContainText('1 skipped');
+  await report.getByText('Review skipped repairs').click();
+  await expect(report.getByText(`${late.repo} #${late.pull_number}: not attempted`)).toBeVisible();
+  await expect(page.getByText('Cleared 500 of 501 repairs before a request failed')).toBeVisible();
+  await expect(page.getByText('the database is busy')).toBeVisible();
+  // What was not tried is still chosen, and the dialog has gone.
+  await expect(dialogOf(page)).toHaveCount(0);
+  await expect(bar.getByText('1 selected')).toBeVisible();
+  expect(model.bulk.map((b) => b.ids.length)).toEqual([500, 1]);
+
+  // Another go sends only what was left.
+  model.bulkFails = null;
+  await bar.getByRole('button', { name: 'Clear from history' }).click();
+  await expect(
+    dialogOf(page).getByText(
+      '1 repair will stop showing in this list, and this cannot be undone from this page.',
+    ),
+  ).toBeVisible();
+  await dialogOf(page).getByRole('button', { name: 'Clear from history' }).click();
+  await expect(report).toContainText('1 repair cleared from the history');
+  expect(model.bulk.at(-1)).toEqual({ action: 'clear', ids: [late.id] });
   await noSidewaysScroll(page);
 });
