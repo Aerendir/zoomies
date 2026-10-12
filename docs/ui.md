@@ -871,9 +871,13 @@ helper, then every host behind it, one at a time), what its wait costs (a newer
 release restarts the wait, so if releases are published faster than the soak,
 auto never takes one) and what stops it: a host whose update fails halts the
 rollout until an administrator resumes or cancels it. Both are
-settings that only the platform role changes, on the Configuration page; this
-page shows them to everybody, because an administrator is not sent those rows
-and still has to be able to tell what the controller is set to do. The platform role also gets the controls under them: the mode as a choice of Off, Manual or Auto, and the soak and the check interval as the same rows the Configuration page shows, so a value the environment is holding reads as pinned and cannot be changed from here. Choosing Auto asks first, since it lets the controller restart itself with nobody pressing anything. Last is the
+settings that only the platform role changes, here or on the Configuration page.
+Everybody can read the effective values, including administrators who cannot
+change them. The platform role gets the controls under them: the mode as a
+choice of Off, Manual or Auto, and the soak and check interval as the same rows
+the Configuration page shows. A value the environment is holding reads as
+pinned and cannot be changed here. Choosing Auto asks first, since it lets the
+controller restart itself without another request. Last is the
 build the controller is running and whether it came from a release. One built
 from `main` is offered the newest release as a replacement, with a warning in
 the confirmation that it may take the controller back to older code, since a
