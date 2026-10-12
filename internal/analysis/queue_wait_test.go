@@ -698,3 +698,32 @@ func TestPoolRowsAddExactlyToTheFleetWait(t *testing.T) {
 		t.Errorf("pools add to %ds and the fleet waited %ds, want both 3s", sum, f.Evidence.WaitSeconds)
 	}
 }
+
+// A runner was asked for, so something claimed the job even with no
+// eligible_at on record: its wait is scheduling and startup, not unmatched,
+// and calling it unmatched would send the reader to labels that do match.
+func TestAJobWithARunnerRequestedButNoEligibleStampIsNotUnmatched(t *testing.T) {
+	s := waitSnapshot([]WaitJob{{ID: "requested", PoolID: "pool_linux", QueuedAt: waitBase,
+		RunnerRequestedAt: at(time.Minute)}}, linuxPool())
+	if got, want := causeSeconds(t, s), map[WaitCause]int64{CauseUnattributed: 60, CauseRunnerStartup: 7140}; !sameCauses(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// A job that started at or after the end of the period was still waiting
+// when it ended; its runner may simply not exist yet, so it has lost no
+// record and must not pull the finding's confidence down.
+func TestAJobStillWaitingAtTheEndHasNotLostItsRunnerRecord(t *testing.T) {
+	until := waitBase.Add(2 * time.Hour)
+	for _, started := range []time.Time{until, until.Add(time.Hour)} {
+		s := waitSnapshot([]WaitJob{{ID: "late", PoolID: "pool_linux", QueuedAt: waitBase, EligibleAt: at(0),
+			StartedAt: &started}}, linuxPool())
+		f, err := QueueWait(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Evidence.NoRunnerRecord != 0 || f.Evidence.WaitSeconds != 7200 {
+			t.Errorf("started at %v: %d without a record, %ds waited; want 0 and 7200s", started, f.Evidence.NoRunnerRecord, f.Evidence.WaitSeconds)
+		}
+	}
+}
