@@ -181,6 +181,7 @@ nav:
       - Private hosts with Tailcat: private-hosts.md
       - Proxmox VE: proxmox.md
   - Assistants and repository checks:
+      - MCP for your AI assistant: mcp.md
       - Eli conversations and PR repairs: eli.md
       - Kennel Club: kennel-club.md
       - Connect Claude: connect-claude.md
