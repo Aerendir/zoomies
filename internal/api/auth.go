@@ -172,7 +172,10 @@ func (s *Server) optionalAuth(next http.Handler) http.Handler {
 			if info := infoFrom(r.Context()); info != nil {
 				info.identity = id
 			}
-			s.forgetLapsedSession(w, r, id)
+			// The lapsed cookie is not cleared here: these are the sign-in
+			// routes, and a clearing header beside the one that sets the new
+			// session leaves the browser to settle which wins. GET
+			// /auth/session, which the UI asks on every boot, clears it.
 		}
 		next.ServeHTTP(w, r)
 	})

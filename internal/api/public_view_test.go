@@ -196,3 +196,26 @@ func TestEveryKindOfFrameSaysWhoMayReadIt(t *testing.T) {
 		t.Fatal("found no kinds in internal/events/bus.go, so this checked nothing")
 	}
 }
+
+// Signing in from a browser still holding a dead cookie must answer with the
+// new session alone. A clearing header beside the one that sets it would leave
+// the browser to settle which wins.
+func TestSigningInOverALapsedSessionSetsOneCookie(t *testing.T) {
+	h := newHarness(t, publicView)
+	h.user("alice", store.RoleAdmin)
+	resp := h.do(request{method: "POST", path: "/api/v1/auth/login", cookie: "a-session-that-ended-long-ago",
+		body: map[string]any{"username": "alice", "password": testPassword}})
+	resp.mustStatus(t, http.StatusOK, "signing in over a lapsed session")
+	set := 0
+	for _, c := range resp.header.Values("Set-Cookie") {
+		if strings.HasPrefix(c, SessionCookie+"=") {
+			set++
+		}
+	}
+	if set != 1 {
+		t.Errorf("the sign-in set the session cookie %d times; want once", set)
+	}
+	if resp.cookie == nil || resp.cookie.Value == "" || resp.cookie.MaxAge < 0 {
+		t.Errorf("the session cookie set was %+v; want the new session", resp.cookie)
+	}
+}
