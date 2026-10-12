@@ -3,11 +3,14 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/controller"
@@ -15,19 +18,169 @@ import (
 	"github.com/eyupio/zoomies/internal/store"
 )
 
-func (s *Server) handleEliRepairs(w http.ResponseWriter, r *http.Request) {
+// maxEliRepairSearch is the longest repository filter the contract allows. No
+// repository name is that long, so a longer search can only be a mistake, and
+// naming it is kinder than showing an empty history.
+const maxEliRepairSearch = 200
+
+// maxBulkEliRepairs is the most repairs one clear may name. It is the size of
+// the largest selection the selection endpoint hands out, so "select all" is
+// always exactly one request. There is a ceiling at all because ClearEliRepairs
+// runs its statements for every id under the store's single writer, and an
+// unbounded list would hold every other write for as long as it took.
+const maxBulkEliRepairs = store.MaxEliRepairSelection
+
+// eliRepairFilter reads the history's filters from the query string and builds
+// the scope from who is asking: an administrator reaches every repair, anyone
+// else only their own. The list and the selection share it so a select-all
+// takes exactly the rows the list shows.
+//
+// An unknown group or trigger is refused here, with the parameter's name,
+// rather than passed on. The store reads a value it does not know as "no
+// filter", which is right for a query builder and wrong for a person: a filter
+// that quietly widens shows them the wrong history without saying so.
+//
+// When it returns false it has already answered 422. paged is for the list;
+// a selection is the matches, not a page of them.
+func eliRepairFilter(w http.ResponseWriter, r *http.Request, paged bool) (store.EliRepairFilter, bool) {
 	id := Identity(r.Context())
-	rows, _, err := s.ctrl.Store().ListEliRepairsPage(r.Context(), store.EliRepairFilter{
+	q := r.URL.Query()
+	f := store.EliRepairFilter{
+		// A caller with no identity is scoped to nobody, never to everybody.
 		Scoped:  !id.Can(auth.ActionAssistantRead),
-		OwnerID: id.UserID,
-		Limit:   store.MaxEliRepairPage,
-	})
+		Group:   strings.TrimSpace(q.Get("group")),
+		Repo:    strings.TrimSpace(q.Get("repo")),
+		Trigger: strings.TrimSpace(q.Get("trigger")),
+	}
+	if id != nil {
+		f.OwnerID = id.UserID
+	}
+
+	var fields []fieldError
+	if f.Group != "" && !slices.Contains(store.EliRepairGroups, f.Group) {
+		fields = append(fields, fieldError{"group", fmt.Sprintf("%q is not a group of repairs; use %s", f.Group, orList(store.EliRepairGroups))})
+	}
+	if f.Trigger != "" && !slices.Contains(store.EliRepairTriggers, f.Trigger) {
+		fields = append(fields, fieldError{"trigger", fmt.Sprintf("%q is not a way a repair begins; use %s", f.Trigger, orList(store.EliRepairTriggers))})
+	}
+	if n := utf8.RuneCountInString(f.Repo); n > maxEliRepairSearch {
+		fields = append(fields, fieldError{"repo", fmt.Sprintf("a repository search is at most %d characters and this one is %d; shorten it", maxEliRepairSearch, n)})
+	}
+	if len(fields) > 0 {
+		unprocessable(w, "the repair history could not be filtered as asked", fields)
+		return f, false
+	}
+
+	if paged {
+		p := parsePage(r)
+		f.Limit, f.Offset = p.Limit, p.Offset
+	}
+	return f, true
+}
+
+// orList renders "a, b or c" for a message that offers the values a parameter
+// takes.
+func orList(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " or " + items[len(items)-1]
+}
+
+func (s *Server) handleEliRepairs(w http.ResponseWriter, r *http.Request) {
+	f, ok := eliRepairFilter(w, r, true)
+	if !ok {
+		return
+	}
+	rows, total, err := s.ctrl.Store().ListEliRepairsPage(r.Context(), f)
 	if err != nil {
 		s.internal(w, r, "listing Eli repairs", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": rows})
+	writeJSON(w, http.StatusOK, map[string]any{"items": rows, "total": total})
 }
+
+// handleEliRepairSelection answers GET /api/v1/assistant/repairs/selection: the
+// ids a select-all takes, for the same filters as the list.
+func (s *Server) handleEliRepairSelection(w http.ResponseWriter, r *http.Request) {
+	f, ok := eliRepairFilter(w, r, false)
+	if !ok {
+		return
+	}
+	ids, total, err := s.ctrl.Store().EliRepairSelection(r.Context(), f)
+	if err != nil {
+		s.internal(w, r, "selecting Eli repairs", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ids": ids, "total": total, "truncated": total > len(ids)})
+}
+
+type bulkEliRepairRequest struct {
+	Action string   `json:"action"`
+	IDs    []string `json:"ids"`
+}
+
+// handleBulkEliRepairs answers POST /api/v1/assistant/repairs/bulk.
+//
+// It answers 200 with a result for each id, in the order asked, as the machines'
+// bulk delete does: a person clearing a page of repairs will have one that Eli
+// picked up a moment ago, and "something failed" is not an answer they can act
+// on. The store decides each id, and the scope it applies is the same one the
+// list uses, so a person cannot clear, or learn the existence of, a repair they
+// could not see.
+func (s *Server) handleBulkEliRepairs(w http.ResponseWriter, r *http.Request) {
+	var req bulkEliRepairRequest
+	if !decode(w, r, &req) {
+		return
+	}
+
+	var fields []fieldError
+	switch req.Action {
+	case "clear":
+	case "":
+		fields = append(fields, fieldError{"action", "say what to do with these repairs: clear"})
+	default:
+		fields = append(fields, fieldError{"action", fmt.Sprintf("%q is not an action; use clear", req.Action)})
+	}
+	switch {
+	case len(req.IDs) == 0:
+		fields = append(fields, fieldError{"ids", "no repairs were selected"})
+	case len(req.IDs) > maxBulkEliRepairs:
+		fields = append(fields, fieldError{"ids", fmt.Sprintf("%d repairs is more than the %d this endpoint accepts at once; clear them in batches",
+			len(req.IDs), maxBulkEliRepairs)})
+	}
+	if len(fields) > 0 {
+		unprocessable(w, "this bulk action could not be carried out", fields)
+		return
+	}
+
+	ctx := r.Context()
+	id := Identity(ctx)
+	owner := ""
+	if id != nil {
+		owner = id.UserID
+	}
+	results, err := s.ctrl.Store().ClearEliRepairs(ctx, req.IDs, owner, !id.Can(auth.ActionAssistantRead))
+	if err != nil {
+		s.internal(w, r, "clearing Eli repairs from the history", err)
+		return
+	}
+
+	// One row for the request, after the store has answered, naming what was
+	// cleared and nothing about what the repairs said. A request that cleared
+	// nothing changed nothing, so it leaves no row.
+	cleared := []string{}
+	for _, res := range results {
+		if res.OK {
+			cleared = append(cleared, res.ID)
+		}
+	}
+	if len(cleared) > 0 {
+		s.auth.Auditor().Act(ctx, id, "assistant.repair_clear", "eli_repair", "", map[string]any{"count": len(cleared), "ids": cleared})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
 func (s *Server) handleEliRepairSettings(w http.ResponseWriter, r *http.Request) {
 	identities, err := s.ctrl.Store().EliIdentities(r.Context())
 	if err != nil {

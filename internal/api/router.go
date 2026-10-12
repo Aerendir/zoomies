@@ -399,6 +399,8 @@ func (s *Server) apiRoutes() chi.Router {
 		// The assistant's providers: the administrator's, kinds included,
 		// because only the page that adds one asks for them.
 		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs", s.handleEliRepairs)
+		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs/selection", s.handleEliRepairSelection)
+		r.With(s.require(auth.ActionAssistantOwn)).Post("/assistant/repairs/bulk", s.handleBulkEliRepairs)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/readiness", s.handleEliReadiness)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/opportunities", s.handleEliOpportunities)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Post("/assistant/repairs/opportunities/{id}", s.handleEliOpportunityAction)
