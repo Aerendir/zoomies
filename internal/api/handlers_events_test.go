@@ -537,14 +537,15 @@ func TestACursorPastTheNewestIdOnAnEmptyRingIsReplaced(t *testing.T) {
 	}
 }
 
-// The stream sends a frame with no payload; the route must not make one up.
-func TestAFrameWithNoPayloadCarriesNoData(t *testing.T) {
+// The stream's data line is {} for an event with no payload; the route says the
+// same rather than something of its own.
+func TestAFrameWithNoPayloadCarriesAnEmptyObjectAsTheStreamDoes(t *testing.T) {
 	h := newHarness(t)
 	_, cookie := h.user("watcher", store.RoleViewer)
 	h.ctrl.Events().Publish(events.KindScaling, "pool:p", nil)
 
 	res := h.do(request{method: http.MethodGet, path: "/api/v1/events/recent?kinds=scaling", cookie: cookie})
-	if res.status != http.StatusOK || !strings.Contains(string(res.body), `"topic":"pool:p"`) || strings.Contains(string(res.body), `"data"`) {
-		t.Errorf("body = %s, want the frame with no data member", res.body)
+	if res.status != http.StatusOK || !strings.Contains(string(res.body), `"topic":"pool:p"`) || !strings.Contains(string(res.body), `"data":{}`) {
+		t.Errorf("body = %s, want the frame with data {}", res.body)
 	}
 }

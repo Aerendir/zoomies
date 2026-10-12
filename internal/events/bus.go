@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -328,22 +329,17 @@ type SubscribeOptions struct {
 	Incomplete bool
 }
 
-// filter is the predicate a subscription and a read of the ring share, so the
-// two cannot disagree about which events match.
-func (o SubscribeOptions) filter() func(Event) bool {
-	kinds := map[Kind]bool{}
-	for _, k := range o.Kinds {
-		kinds[k] = true
+// Matches is the predicate a subscription, a replay and a read of the ring all
+// share, so none of them can disagree about which events match. It is exported
+// for the readers outside this package that select from a copy of the ring.
+func (o SubscribeOptions) Matches(e Event) bool {
+	if len(o.Kinds) > 0 && !slices.Contains(o.Kinds, e.Kind) {
+		return false
 	}
-	return func(e Event) bool {
-		if len(kinds) > 0 && !kinds[e.Kind] {
-			return false
-		}
-		if o.TopicPrefix != "" && !strings.HasPrefix(e.Topic, o.TopicPrefix) {
-			return false
-		}
-		return true
+	if o.TopicPrefix != "" && !strings.HasPrefix(e.Topic, o.TopicPrefix) {
+		return false
 	}
+	return true
 }
 
 // replayLocked returns the ringed events after since that pass filter, and
@@ -383,7 +379,7 @@ func (b *Bus) replayLocked(since uint64, filter func(Event) bool) ([]Event, bool
 // paging forward resumes from the last id it was handed.
 func (b *Bus) Recent(since uint64, opts SubscribeOptions, limit int) (items []Event, complete, truncated bool) {
 	b.mu.RLock()
-	items, complete = b.replayLocked(since, opts.filter())
+	items, complete = b.replayLocked(since, opts.Matches)
 	b.mu.RUnlock()
 	if limit > 0 && len(items) > limit {
 		items, truncated = items[:limit], true
@@ -404,7 +400,7 @@ func (b *Bus) Subscribe(ctx context.Context, opts SubscribeOptions) *Subscriptio
 // The count and the subscription are taken under the one lock, so a burst of
 // streams opened together cannot all see room for one and all take it.
 func (b *Bus) SubscribeWithin(ctx context.Context, opts SubscribeOptions, limit int) (*Subscription, bool) {
-	filter := opts.filter()
+	filter := opts.Matches
 
 	b.mu.Lock()
 	if limit > 0 && len(b.subs) >= limit {

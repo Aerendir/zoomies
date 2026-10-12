@@ -29,13 +29,11 @@ const (
 // recentFrame is one event as the polling route renders it. The id is the wire
 // id the stream sends, so a cursor taken from either is good for both.
 type recentFrame struct {
-	ID    string      `json:"id"`
-	Kind  events.Kind `json:"kind"`
-	Topic string      `json:"topic"`
-	At    time.Time   `json:"at"`
-	// Data is absent for an event that carries none, rather than invented as an
-	// empty object.
-	Data json.RawMessage `json:"data,omitempty"`
+	ID    string          `json:"id"`
+	Kind  events.Kind     `json:"kind"`
+	Topic string          `json:"topic"`
+	At    time.Time       `json:"at"`
+	Data  json.RawMessage `json:"data"`
 }
 
 // recentView is the body of GET /events/recent.
@@ -277,24 +275,10 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 // reports about the ring and what it returns cannot disagree about an event
 // published between two reads. keep, when not nil, narrows by something the bus
 // cannot filter on, such as age; the kinds and topic are the bus's own rule.
-//
-// The matching is written out here because the bus's filter is the bus's. It is
-// three comparisons, and the test that pairs this route with the stream's replay
-// is what keeps the two honest.
 func fromRing(bus *events.Bus, opts events.SubscribeOptions, limit int, keep func(events.Event) bool) (items, ring []events.Event, truncated bool) {
 	ring, _, _ = bus.Recent(0, events.SubscribeOptions{}, 0)
-	kinds := make(map[events.Kind]bool, len(opts.Kinds))
-	for _, k := range opts.Kinds {
-		kinds[k] = true
-	}
 	for _, ev := range ring {
-		if len(kinds) > 0 && !kinds[ev.Kind] {
-			continue
-		}
-		if opts.TopicPrefix != "" && !strings.HasPrefix(ev.Topic, opts.TopicPrefix) {
-			continue
-		}
-		if keep != nil && !keep(ev) {
+		if !opts.Matches(ev) || (keep != nil && !keep(ev)) {
 			continue
 		}
 		items = append(items, ev)
@@ -311,6 +295,10 @@ func (s *Server) recentFrame(r *http.Request, ev events.Event) (recentFrame, boo
 	data, ok := s.frameFor(r, ev)
 	if !ok {
 		return recentFrame{}, false
+	}
+	if len(data) == 0 {
+		// What the stream's data line carries for an event with no payload.
+		data = []byte("{}")
 	}
 	return recentFrame{
 		ID: s.ctrl.Events().WireID(ev.ID), Kind: ev.Kind, Topic: ev.Topic, At: ev.At, Data: data,
