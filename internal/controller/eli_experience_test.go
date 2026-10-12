@@ -35,7 +35,7 @@ func TestAskFirstOffersAreDeduplicatedAndCannotWriteAStaleHead(t *testing.T) {
 	if err != nil || len(offers) != 1 {
 		t.Fatalf("offers %+v %v", offers, err)
 	}
-	attempts, _ := h.st.ListEliRepairs(h.ctx)
+	attempts, _, _ := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if len(attempts) != 0 || fake.commits != 0 {
 		t.Fatal("offer spent an attempt or wrote")
 	}
@@ -49,7 +49,7 @@ func TestAskFirstOffersAreDeduplicatedAndCannotWriteAStaleHead(t *testing.T) {
 	if _, err := h.c.ActEliOpportunity(h.ctx, user.ID, offers[0].ID, "accept", false); err == nil {
 		t.Fatal("stale offer accepted")
 	}
-	attempts, _ = h.st.ListEliRepairs(h.ctx)
+	attempts, _, _ = h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
 	if len(attempts) != 0 {
 		t.Fatal("stale offer spent an attempt")
 	}

@@ -24,6 +24,7 @@
   omitted things would be worse than one that shows too much.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { History, SlidersHorizontal } from '@lucide/svelte';
   import { faultLabel } from '$lib/faults';
   import { formatNumber, pluralise } from '$lib/format';
@@ -113,21 +114,25 @@
         as "failure", so this is the only place the difference is visible
         without opening a job.
       -->
-      <a
-        class="failed-badge"
-        href={oursThisHour > 0 ? '/jobs?faulted=true' : '/jobs?failed=true'}
-        title={faultsThisHour
+      <Tooltip
+        bare
+        text={faultsThisHour
           ? `This fleet's own failures this hour: ${faultsThisHour}.`
           : "Every failure this hour is the workflows' own; nothing here broke."}
       >
-        <Badge
-          tone="danger"
-          label={oursThisHour > 0
-            ? `${formatNumber(failedThisHour)} failed, ${formatNumber(oursThisHour)} ours`
-            : `${formatNumber(failedThisHour)} failed, none ours`}
-          dot={false}
-        />
-      </a>
+        <a
+          class="failed-badge"
+          href={oursThisHour > 0 ? '/jobs?faulted=true' : '/jobs?failed=true'}
+        >
+          <Badge
+            tone="danger"
+            label={oursThisHour > 0
+              ? `${formatNumber(failedThisHour)} failed, ${formatNumber(oursThisHour)} ours`
+              : `${formatNumber(failedThisHour)} failed, none ours`}
+            dot={false}
+          />
+        </a>
+      </Tooltip>
     {/if}
     <a class="choose" href="/settings/events">
       <SlidersHorizontal size={13} aria-hidden="true" />

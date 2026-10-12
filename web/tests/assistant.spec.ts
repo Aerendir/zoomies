@@ -286,6 +286,153 @@ test('a refused question says why where the answer would have been', async ({ pa
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
 });
 
+/** A paste the size of a journal, one numbered line at a time, so a cut is easy to read. */
+const journal = (lines: number) =>
+  Array.from({ length: lines }, (_, i) => `Oct 05 11:05:26 host service[${i}]: line ${i}`).join(
+    '\n',
+  );
+
+// The limit is 8 KiB a message, and the first anyone hears of it is a pasted
+// log. So the page says it before Send, offers the cut that suits a log, and
+// never cuts anything the person did not choose.
+test('a message over Eli’s limit is caught before it is sent, and trimmed only when asked', async ({
+  page,
+}) => {
+  const asked: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  await page.route('**/api/v1/assistant/personal/chat', (route) => {
+    asked.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: answerStream('Read it.'),
+    });
+  });
+  await goto(page, '/settings/assistant', 'Eli AI Assistant');
+  await openEli(page);
+  const box = page.getByRole('textbox', { name: 'Message' });
+  const send = page.getByRole('button', { name: 'Send' });
+  const paste = journal(400);
+  await box.fill(paste);
+
+  const notice = page.getByRole('status').filter({ hasText: 'Eli reads at most 8.0 KiB' });
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('This message is');
+  await expect(send).toBeDisabled();
+  // Enter is the other way to send, and the page holds it back the same way.
+  await box.press('Enter');
+  expect(asked).toHaveLength(0);
+  await expect(box).toHaveValue(paste);
+
+  // Keep the end: the newest lines, from a whole line, and the cut is said.
+  await page.getByRole('button', { name: 'Keep the end' }).click();
+  await expect(notice).toHaveCount(0);
+  const kept = await box.inputValue();
+  expect(new TextEncoder().encode(kept).length).toBeLessThanOrEqual(8192);
+  expect(kept.endsWith('line 399')).toBe(true);
+  expect(kept.startsWith('Oct 05')).toBe(true);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Kept the end of your message' }),
+  ).toContainText('from the start');
+  await expect(send).toBeEnabled();
+
+  // A trim that was the wrong one is one press from undone.
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(box).toHaveValue(paste);
+  await expect(notice).toBeVisible();
+
+  await page.getByRole('button', { name: 'Keep the start' }).click();
+  const head = await box.inputValue();
+  expect(paste.startsWith(head)).toBe(true);
+  expect(head.endsWith('line 399')).toBe(false);
+
+  await send.click();
+  await expect(page.getByRole('article', { name: 'Eli' })).toContainText('Read it.');
+  expect(asked).toHaveLength(1);
+  expect(asked[0]!.messages).toEqual([{ role: 'user', content: head }]);
+});
+
+// What the controller still refuses (its limits may differ from the page's) is
+// not a failed answer to retry into the same refusal: the words come back in the
+// box with the reason, and the next question is not poisoned by the last.
+test('a message the controller refuses comes back to the box and is not sent again', async ({
+  page,
+}) => {
+  const asked: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  await page.route('**/api/v1/assistant/personal/chat', (route) => {
+    asked.push(route.request().postDataJSON());
+    if (asked.length === 1)
+      return route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: {
+            code: 'unprocessable',
+            message:
+              'your message is 9.0 KiB; Eli reads at most 8 KiB in one message, so paste only the lines around the error, or send the rest in a second message',
+            field: 'messages[0]',
+          },
+          errors: [{ field: 'messages[0]', message: 'too long' }],
+        }),
+      });
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: answerStream('Fine.'),
+    });
+  });
+  await goto(page, '/settings/assistant', 'Eli AI Assistant');
+  await openEli(page);
+  const box = page.getByRole('textbox', { name: 'Message' });
+  await box.fill('this is what I meant to say');
+  await page.getByRole('button', { name: 'Send' }).click();
+
+  const reason = page.getByRole('alert').filter({ hasText: 'Your message is 9.0 KiB' });
+  await expect(reason).toBeVisible();
+  await expect(reason).toContainText('lines around the error');
+  // Not a bubble in the thread and not something to retry: the words are back to edit.
+  await expect(box).toHaveValue('this is what I meant to say');
+  await expect(page.getByRole('article', { name: 'You' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+
+  await box.fill('a shorter one');
+  await expect(reason).toHaveCount(0);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.getByRole('article', { name: 'Eli' })).toContainText('Fine.');
+  expect(asked[1]!.messages).toEqual([{ role: 'user', content: 'a shorter one' }]);
+});
+
+test('a conversation that is too long offers a new one and brings what was being typed along', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/assistant/personal/chat', (route) =>
+    route.fulfill({
+      status: 422,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: {
+          code: 'unprocessable',
+          message:
+            'this conversation is 40.0 KiB; Eli reads at most 32 KiB of it at once, so start a new conversation and paste again only what Eli needs',
+          field: 'messages',
+        },
+        errors: [{ field: 'messages', message: 'too long' }],
+      }),
+    }),
+  );
+  await goto(page, '/settings/assistant', 'Eli AI Assistant');
+  await openEli(page);
+  const box = page.getByRole('textbox', { name: 'Message' });
+  await box.fill('one more thing');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Eli reads at most 32 KiB of it at once' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Start a new conversation' }).click();
+  await expect(box).toHaveValue('one more thing');
+  await expect(page.getByRole('alert').filter({ hasText: '32 KiB' })).toHaveCount(0);
+  await expect(page.getByRole('article', { name: 'You' })).toHaveCount(0);
+});
+
 test('Ollama Cloud, OpenCode Zen and OpenCode Go are in the provider list and fill in their addresses', async ({
   page,
 }) => {
@@ -714,7 +861,7 @@ test('a runner contextual action asks Eli with its displayed snapshot', async ({
   });
   await goto(page, '/runners', 'Runners');
   await page.locator('main a[href^="/runners/"]').first().click();
-  await page.getByTitle('Share these displayed details with Eli and ask for guidance').click();
+  await page.locator('main .btn.ask-eli').first().click();
   const panel = page.getByRole('dialog', { name: 'Eli assistant' });
   await expect(panel.getByRole('article', { name: 'Eli' })).toContainText(
     'The built-in model heard:',

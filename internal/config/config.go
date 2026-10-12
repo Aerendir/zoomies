@@ -578,6 +578,13 @@ type Security struct {
 	// LikelyReachable, which counts an external URL or a trusted proxy as
 	// reachable even on a loopback bind.
 	DisableAuth bool `yaml:"disable_auth"`
+	// PublicView lets a request that carries no credential at all read the
+	// fleet as a visitor: pools, hosts, runners, jobs, usage and runner logs,
+	// and nothing about the people who run it. It exists for a fleet that is
+	// meant to be looked at by anyone, such as a public demo or an open-source
+	// project's CI, and every change still needs somebody signed in. A
+	// credential that is presented and wrong is still refused.
+	PublicView bool `yaml:"public_view"`
 	// RateLimitLogins caps password attempts per source address per minute.
 	RateLimitLogins int `yaml:"rate_limit_logins"`
 	// DockerInDockerExpected stops a pool that gives its jobs a private daemon
@@ -1086,8 +1093,14 @@ type Limits struct {
 	// JoinTokens caps join tokens that are still outstanding: neither used
 	// nor expired.
 	JoinTokens int `yaml:"join_tokens"`
-	// EventSubscribers caps open live-update streams.
+	// EventSubscribers caps open live-update streams held by somebody signed
+	// in, or by an API token. A public view's visitors are not counted here.
 	EventSubscribers int `yaml:"event_subscribers"`
+	// VisitorEventSubscribers caps the live-update streams a public view's
+	// visitors hold, all of them together. It is a ceiling of its own rather
+	// than a share of EventSubscribers so that a crowd of visitors can never
+	// take the streams the people who run the fleet need. Zero is no ceiling.
+	VisitorEventSubscribers int `yaml:"visitor_event_subscribers"`
 	// JobStatsWindow is the longest span GET /api/v1/jobs/stats will
 	// aggregate in one request. The statistics are computed from the job
 	// rows on demand, so the bound is what keeps a single request from
@@ -1246,7 +1259,11 @@ func Default() *Config {
 			UsernameClaim: "preferred_username",
 			GroupsClaim:   "groups",
 		},
-		Limits: Limits{JobStatsWindow: DefaultJobStatsWindow},
+		// Two hundred visitors watching at once is a busy demo, and each
+		// holds a goroutine and a queue: bounded by default, because the
+		// people a public view invites are not people anyone can ask to
+		// close a tab.
+		Limits: Limits{JobStatsWindow: DefaultJobStatsWindow, VisitorEventSubscribers: 200},
 		Retention: Retention{
 			Jobs:           30 * 24 * time.Hour,
 			Runners:        7 * 24 * time.Hour,

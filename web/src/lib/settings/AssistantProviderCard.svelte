@@ -68,7 +68,7 @@
           label="Default"
           size="sm"
           dot={false}
-          title="The provider that answers."
+          help="The provider that answers."
         />
       {/if}
       {#if provider.local}
@@ -77,7 +77,7 @@
           label="Local"
           size="sm"
           dot={false}
-          title="Its address, as typed, is this machine or a private network. A hostname is not looked up, so one that resolves locally does not count."
+          help="Its address, as typed, is this machine or a private network. A hostname is not looked up, so one that resolves locally does not count."
         />
       {/if}
       {#if provider.subscription}
@@ -88,7 +88,7 @@
             : `${provider.owner || 'Someone'}’s subscription`}
           size="sm"
           dot={false}
-          title="Used through the vendor’s own tool, signed in on the controller’s machine. Only its owner may use it."
+          help="Used through the vendor’s own tool, signed in on the controller’s machine. Only its owner may use it."
         />
       {/if}
       {#if provider.fleet_access}
@@ -97,7 +97,7 @@
           label="Eli can read the fleet"
           size="sm"
           dot={false}
-          title="Runner, job, repository and branch names, and log excerpts when Eli asks for them, are sent to this provider."
+          help="Runner, job, repository and branch names, and log excerpts when Eli asks for them, are sent to this provider."
         />
       {/if}
       {#if provider.reasoning_effort}
@@ -106,7 +106,7 @@
           label={`Thinks: ${provider.reasoning_effort}`}
           size="sm"
           dot={false}
-          title="Sent as reasoning_effort on every request; the provider reads the word."
+          help="Sent as reasoning_effort on every request; the provider reads the word."
         />
       {/if}
       {#if provider.max_output_tokens}
@@ -115,7 +115,7 @@
           label={`Writes up to ${provider.max_output_tokens.toLocaleString()} tokens`}
           size="sm"
           dot={false}
-          title="How much the model may write in one round, thinking included."
+          help="How much the model may write in one round, thinking included."
         />
       {/if}
       {#if !provider.enabled}
@@ -124,7 +124,7 @@
           label="Disabled"
           size="sm"
           dot={false}
-          title="Switched off: it is kept but does not answer."
+          help="Switched off: it is kept but does not answer."
         />
       {/if}
       {#if needsKey}
@@ -133,7 +133,7 @@
           label="No key"
           size="sm"
           dot={false}
-          title="This kind needs an API key before it can answer."
+          help="This kind needs an API key before it can answer."
         />
       {/if}
     </div>

@@ -344,6 +344,27 @@ pre,
   border-width: 0;
 }
 
+/*
+  A label that carries help: a table header, a figure's name. The dotted rule is
+  how it says so, since the help is in a bubble and nothing else on the page
+  hints that there is one. It is a button, so the keyboard reaches it and the
+  bubble opens on focus, and the reset makes it read as the text it is.
+*/
+.help-term {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-transform: inherit;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--z-text-subtle);
+  text-underline-offset: 4px;
+  cursor: help;
+}
+
 /* The skip link is the first focusable thing on the page. */
 .skip-link {
   position: absolute;

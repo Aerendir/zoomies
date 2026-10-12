@@ -576,3 +576,74 @@ func TestAFrameWithNoPayloadCarriesAnEmptyObjectAsTheStreamDoes(t *testing.T) {
 		t.Errorf("body = %s, want the frame with data {}", res.body)
 	}
 }
+
+// The route answers from the ring the stream replays, so it has to ask the
+// stream's question of every frame: could this caller have fetched it from its
+// GET route? Otherwise a token scoped to events:read, or a public view's
+// visitor, could read the audit log a row at a time here instead.
+func TestRecentEventsSendAFrameOnlyToSomebodyWhoCouldReadIt(t *testing.T) {
+	h := newHarness(t, publicView)
+	scoped := h.token("events only", store.RoleAdmin, "events:read", "pools:read")
+	viewer, _ := h.user("viewer", store.RoleViewer)
+
+	bus := h.ctrl.Events()
+	bus.Publish(events.KindAudit, "audit:1", store.AuditEvent{ID: "aud_1", Action: "auth.login", ActorName: "alice", IP: "198.51.100.4"})
+	bus.Publish(events.KindPoolCreated, "pool:p", map[string]any{"id": "p"})
+
+	callers := []struct {
+		name      string
+		req       request
+		wantAudit bool
+	}{
+		{name: "visitor"},
+		{name: "token scoped to events and pools", req: request{token: scoped}},
+		{name: "viewer", req: request{cookie: h.session(viewer)}, wantAudit: true},
+	}
+	for _, c := range callers {
+		t.Run(c.name, func(t *testing.T) {
+			c.req.method, c.req.path = http.MethodGet, "/api/v1/events/recent"
+			res := h.do(c.req)
+			res.mustStatus(t, http.StatusOK, "reading the recent events")
+			var got recentBody
+			if err := json.Unmarshal(res.body, &got); err != nil {
+				t.Fatalf("decoding %s: %v", res.body, err)
+			}
+			sawAudit, sawPool := false, false
+			for _, it := range got.Items {
+				sawAudit = sawAudit || it.Kind == string(events.KindAudit)
+				sawPool = sawPool || it.Kind == string(events.KindPoolCreated)
+			}
+			if sawAudit != c.wantAudit || !sawPool {
+				t.Errorf("audit frame delivered = %v, pool frame = %v; want %v and true", sawAudit, sawPool, c.wantAudit)
+			}
+		})
+	}
+}
+
+// A wait holds a stream slot, so a visitor's wait is held to the visitors'
+// ceiling as their stream is, and a crowd of them cannot take the slots the
+// people who run the fleet need.
+func TestAVisitorsWaitIsHeldToTheVisitorsCeiling(t *testing.T) {
+	h := newHarness(t, publicView, func(c *config.Config) {
+		c.Limits.VisitorEventSubscribers = 1
+		c.Limits.EventSubscribers = 1
+	})
+	admin, _ := h.user("admin", store.RoleAdmin)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	frames, first := h.openStream(t, ctx, "/api/v1/events", "", nil)
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("the first visitor's stream answered %d", first.StatusCode)
+	}
+	await(t, frames, "the first visitor's opening comment", func(f sseFrame) bool { return f.comment != "" })
+
+	refused := h.do(request{method: http.MethodGet, path: "/api/v1/events/recent?wait=5s"})
+	refused.mustStatus(t, http.StatusConflict, "a visitor's wait past the visitors' ceiling")
+	if msg := refused.errorMessage(t); !strings.Contains(msg, "limits.visitor_event_subscribers") {
+		t.Errorf("the refusal does not name the visitors' ceiling: %q", msg)
+	}
+
+	staff := h.do(request{method: http.MethodGet, path: "/api/v1/events/recent?wait=1s", cookie: h.session(admin)})
+	staff.mustStatus(t, http.StatusOK, "an administrator's wait while visitors are at their ceiling")
+}

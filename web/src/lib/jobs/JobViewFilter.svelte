@@ -15,6 +15,7 @@
   chips above the grid immediately contradict.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import StatusDot from '$lib/components/StatusDot.svelte';
   import { JOB_VIEWS, type JobView } from './views';
 
@@ -29,23 +30,24 @@
 
 <div class="views" role="group" aria-label="Filter jobs by status">
   {#each JOB_VIEWS as view (view.id)}
-    <button
-      type="button"
-      data-view={view.id}
-      aria-pressed={value === view.id}
-      title={view.hint}
-      onclick={() => onchange(view.id)}
-    >
-      <!--
+    <Tooltip bare text={view.hint}>
+      <button
+        type="button"
+        data-view={view.id}
+        aria-pressed={value === view.id}
+        onclick={() => onchange(view.id)}
+      >
+        <!--
         The shape is hidden from assistive technology: it says the same word
         the button already says, and a button called "Running Running" is a
         button nobody can ask for by name.
       -->
-      {#if view.status}<span class="shape" aria-hidden="true"
-          ><StatusDot status={view.status} size="sm" /></span
-        >{/if}
-      {view.label}
-    </button>
+        {#if view.status}<span class="shape" aria-hidden="true"
+            ><StatusDot status={view.status} size="sm" /></span
+          >{/if}
+        {view.label}
+      </button>
+    </Tooltip>
   {/each}
 </div>
 

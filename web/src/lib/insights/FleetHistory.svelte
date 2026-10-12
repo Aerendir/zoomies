@@ -33,6 +33,7 @@
   reason everything else does: the replay buffer is finite.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { untrack } from 'svelte';
   import { listSamples } from '$lib/api/client';
   import { events } from '$lib/api/sse';
@@ -403,11 +404,18 @@
     />
 
     <div class="coverage" aria-label={`${observed} of ${count} ${unit} observed`}>
-      {#each points as point, i (point.at)}<span
-          class:observed={point.value !== null}
-          class:starved={starved.some((run) => i >= run.from && i <= run.to)}
-          title={`${stamp(point.at)}: ${point.value === null ? 'not sampled' : formatNumber(point.value)}`}
-        ></span>{/each}
+      <!-- Scrubbed across, so no wait; and the strip already has its summary label,
+           so a sentence per dot would be a hundred lines of noise for a reader. -->
+      {#each points as point, i (point.at)}<Tooltip
+          bare
+          wait="none"
+          describe={false}
+          text={`${stamp(point.at)}: ${point.value === null ? 'not sampled' : formatNumber(point.value)}`}
+          ><span
+            class:observed={point.value !== null}
+            class:starved={starved.some((run) => i >= run.from && i <= run.to)}
+          ></span></Tooltip
+        >{/each}
     </div>
     <p class="note">{observed} / {count} {unit} observed · gaps mean no sample</p>
 

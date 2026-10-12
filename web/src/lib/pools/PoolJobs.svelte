@@ -52,7 +52,7 @@
           <!-- A job this pool would have run, that an operator took out of the
                queue, is still `queued` to GitHub. Saying so here keeps the
                pool's list of work agreeing with its queue count above it. -->
-          {#if queue}<Badge status={queue} size="sm" title={queue.hint} />{/if}
+          {#if queue}<Badge status={queue} size="sm" help={queue.hint} />{/if}
           <span class="what">
             <span class="repo">{job.repo ?? 'unknown repository'}</span>
             <span class="job">{readableJobText(job.job_name) || job.workflow || 'a job'}</span>

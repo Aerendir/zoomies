@@ -12,6 +12,8 @@ with [Nixpacks](https://nixpacks.com) -- Coolify, Dokploy, Railway, Zeabur,
 Easypanel -- can deploy Zoomies straight from the source. Point it at
 `github.com/eyupio/zoomies`, set the handful of variables below, give it a
 volume, and it builds the UI, builds the binary and starts the controller.
+InstaPods deploys with commands you give it rather than Nixpacks, and offers
+no Docker, so it has a guide of its own: [Deploying on InstaPods](instapods.md).
 
 Nothing about the build is special to any one platform: it is the same two
 steps as `deploy/Dockerfile`, in the order that matters. `internal/api` embeds

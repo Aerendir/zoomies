@@ -256,9 +256,9 @@
             and would mean nothing on any of them. It is a clause instead, on the
             line that already explains the setting.
           -->
-          <span class="aside" title={setting.restart_reason ?? undefined}>
-            Applies on restart.
-          </span>
+          <Tooltip bare text={setting.restart_reason ?? ''}>
+            <span class="aside">Applies on restart.</span>
+          </Tooltip>
         {/if}
       </p>
     {/if}
@@ -335,7 +335,7 @@
           label="Waiting for a restart"
           size="sm"
           dot={false}
-          title="It is saved. Zoomies cannot apply it to itself, so it takes effect the next time it starts."
+          help="It is saved. Zoomies cannot apply it to itself, so it takes effect the next time it starts."
         />
       {/if}
       {#if source && !pinned}

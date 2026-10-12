@@ -114,7 +114,7 @@
       {#if 'config' in item && item.workflow_outdated && !item.config.disabled}<Badge
           tone="accent"
           label="Workflow out of date"
-          title="The workflow was written by an earlier Zoomies release. It still works; Reinstall / repair moves it to the current generator."
+          help="The workflow was written by an earlier Zoomies release. It still works; Reinstall / repair moves it to the current generator."
         />{/if}
     </div>
   </div>

@@ -7,6 +7,7 @@
   usage chart stay the same control rather than two that drifted.
 -->
 <script lang="ts" generics="S extends Series">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import Stroke from './Stroke.svelte';
   import type { Series } from './plot';
 
@@ -35,20 +36,21 @@
     {#if i > 0 && group && group(figures[i - 1]!) !== group(figure)}
       <span class="divider" aria-hidden="true"></span>
     {/if}
-    <button
-      type="button"
-      class="figure"
-      aria-pressed={enabled.includes(figure.key)}
-      title={`${figure.label}: ${figure.hint}`}
-      onclick={() => ontoggle(figure.key)}
-      onpointerenter={() => onchip(figure.key)}
-      onpointerleave={() => onchip(null)}
-      onfocus={() => onchip(figure.key)}
-      onblur={() => onchip(null)}
-    >
-      <Stroke series={figure} off={!enabled.includes(figure.key)} />
-      {figure.label}
-    </button>
+    <Tooltip bare text={`${figure.label}: ${figure.hint}`}>
+      <button
+        type="button"
+        class="figure"
+        aria-pressed={enabled.includes(figure.key)}
+        onclick={() => ontoggle(figure.key)}
+        onpointerenter={() => onchip(figure.key)}
+        onpointerleave={() => onchip(null)}
+        onfocus={() => onchip(figure.key)}
+        onblur={() => onchip(null)}
+      >
+        <Stroke series={figure} off={!enabled.includes(figure.key)} />
+        {figure.label}
+      </button>
+    </Tooltip>
   {/each}
 </div>
 

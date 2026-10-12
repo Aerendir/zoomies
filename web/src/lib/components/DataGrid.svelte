@@ -20,6 +20,12 @@
     /** Also the `sort` value sent to the API, and the key column visibility persists under. */
     id: string;
     header: string;
+    /**
+     * What the heading means, for a column whose name is not enough. The heading
+     * becomes a button with a dotted rule under it and the sentence opens in the
+     * shared tooltip, on hover and on keyboard focus.
+     */
+    help?: string;
     /** Plain text for the cell. Used when no `cell` snippet is given. */
     value?: (row: T) => string;
     /** Rich cell content -- a badge, a link, a duration. */
@@ -131,6 +137,7 @@
   import ErrorState from './ErrorState.svelte';
   import Pagination from './Pagination.svelte';
   import Segmented from './Segmented.svelte';
+  import Tooltip from './Tooltip.svelte';
   import Skeleton from './Skeleton.svelte';
 
   interface Props {
@@ -932,7 +939,9 @@
             variant={action.danger ? 'danger' : 'secondary'}
             icon={action.icon}
             disabled={tooMany}
-            title={tooMany ? `${action.label} works on one ${noun} at a time` : undefined}
+            reason={tooMany
+              ? `${action.label} works on one ${noun} at a time. Tick just one to use it.`
+              : undefined}
             onclick={() => void runBulk(action)}
           >
             {action.label}
@@ -990,18 +999,20 @@
                 onchange={(on) => toggleColumn(column.id, on)}
               />
               <span class="chooser-move">
-                <button
-                  type="button"
-                  title="Move {column.header} left"
-                  aria-label="Move {column.header} left"
-                  onclick={() => moveColumnBy(column, -1)}>←</button
-                >
-                <button
-                  type="button"
-                  title="Move {column.header} right"
-                  aria-label="Move {column.header} right"
-                  onclick={() => moveColumnBy(column, 1)}>→</button
-                >
+                <Tooltip bare title="Move {column.header} left">
+                  <button
+                    type="button"
+                    aria-label="Move {column.header} left"
+                    onclick={() => moveColumnBy(column, -1)}>←</button
+                  >
+                </Tooltip>
+                <Tooltip bare title="Move {column.header} right">
+                  <button
+                    type="button"
+                    aria-label="Move {column.header} right"
+                    onclick={() => moveColumnBy(column, 1)}>→</button
+                  >
+                </Tooltip>
               </span>
             </div>
           {/each}
@@ -1077,36 +1088,55 @@
                 : undefined}
             >
               <div class="heading">
+                <Tooltip
+                  bare
+                  text="Drag to reposition {column.header}; use left and right arrow keys for keyboard control"
+                >
+                  <button
+                    type="button"
+                    class="move"
+                    aria-label="Reposition {column.header} column"
+                    onkeydown={(event) => moveByKey(event, column)}
+                    onpointerdown={(event) => beginMove(event, column)}
+                  >
+                    <GripVertical size={12} aria-hidden="true" />
+                  </button>
+                </Tooltip>
+                <!--
+                  A heading with help is a button with a dotted rule under it: the
+                  bubble is the only place the help is, so something has to say
+                  there is one, and a button is what the keyboard reaches.
+                -->
+                <Tooltip bare text={column.help ?? ''} placement="bottom">
+                  {#if column.sortable}
+                    <button
+                      type="button"
+                      class="sort"
+                      class:help-term={Boolean(column.help)}
+                      onclick={() => toggleSort(column)}
+                    >
+                      <span>{column.header}</span>
+                      <span class="arrow" aria-hidden="true">
+                        {#if sort === column.id}{order === 'asc' ? '↑' : '↓'}{/if}
+                      </span>
+                    </button>
+                  {:else if column.help}
+                    <button type="button" class="heading-label help-term">{column.header}</button>
+                  {:else}
+                    <span class="heading-label">{column.header}</span>
+                  {/if}
+                </Tooltip>
+              </div>
+              <Tooltip bare text="Drag to resize; double-click to restore the default width">
                 <button
                   type="button"
-                  class="move"
-                  title="Drag to reposition {column.header}; use left and right arrow keys for keyboard control"
-                  aria-label="Reposition {column.header} column"
-                  onkeydown={(event) => moveByKey(event, column)}
-                  onpointerdown={(event) => beginMove(event, column)}
-                >
-                  <GripVertical size={12} aria-hidden="true" />
-                </button>
-                {#if column.sortable}
-                  <button type="button" class="sort" onclick={() => toggleSort(column)}>
-                    <span>{column.header}</span>
-                    <span class="arrow" aria-hidden="true">
-                      {#if sort === column.id}{order === 'asc' ? '↑' : '↓'}{/if}
-                    </span>
-                  </button>
-                {:else}
-                  <span class="heading-label">{column.header}</span>
-                {/if}
-              </div>
-              <button
-                type="button"
-                class="resizer"
-                aria-label="Resize {column.header} column"
-                title="Drag to resize; double-click to restore the default width"
-                onpointerdown={(event) => beginResize(event, column)}
-                onkeydown={(event) => resizeByKey(event, column)}
-                ondblclick={() => resetColumnWidth(column)}
-              ></button>
+                  class="resizer"
+                  aria-label="Resize {column.header} column"
+                  onpointerdown={(event) => beginResize(event, column)}
+                  onkeydown={(event) => resizeByKey(event, column)}
+                  ondblclick={() => resetColumnWidth(column)}
+                ></button>
+              </Tooltip>
             </th>
           {/each}
         </tr>
@@ -1204,27 +1234,36 @@
                 <td role="gridcell" data-label={column.header} class:end={column.align === 'end'}>
                   {#if column.cell}
                     <!--
-                      The title is the plain renderer's, for the same reason: a
+                      The tooltip is the plain renderer's, for the same reason: a
                       cell cut off at its column's edge has to keep the whole
                       value somewhere, and a column that draws itself still
-                      knows what it is worth in words.
+                      knows what it is worth in words. It opens only on a cell
+                      that is cut off.
                     -->
-                    <div
-                      class="cell-body"
-                      class:loose={column.overflows}
-                      class:wrap={column.wrap}
-                      title={column.wrap ? undefined : column.value?.(row.original) || undefined}
+                    <Tooltip
+                      bare
+                      whenTruncated
+                      text={column.wrap ? '' : column.value?.(row.original) || ''}
                     >
-                      {@render column.cell(row.original)}
-                    </div>
+                      <div
+                        class="cell-body"
+                        class:loose={column.overflows}
+                        class:wrap={column.wrap}
+                      >
+                        {@render column.cell(row.original)}
+                      </div>
+                    </Tooltip>
                   {:else}
                     <!--
-                      One line and an ellipsis, with the whole value in a title.
-                      A column has a width, and a hyphenated name with nothing
-                      stopping it wraps one segment per line -- which makes
-                      every row in the grid as tall as the longest name in it.
+                      One line and an ellipsis, with the whole value in a tooltip
+                      when it is cut off. A column has a width, and a hyphenated
+                      name with nothing stopping it wraps one segment per line --
+                      which makes every row in the grid as tall as the longest
+                      name in it.
                     -->
-                    <span class="plain" title={plain || undefined}>{plain}</span>
+                    <Tooltip bare whenTruncated text={plain}>
+                      <span class="plain">{plain}</span>
+                    </Tooltip>
                   {/if}
                 </td>
               {/each}
@@ -1556,6 +1595,11 @@
     letter-spacing: inherit;
     cursor: pointer;
     min-width: 0;
+  }
+  /* A heading that sorts and also carries help says the help is there; the dotted
+     rule is global, but this component's own cursor would beat it. */
+  .sort.help-term {
+    cursor: help;
   }
   .sort:hover {
     color: var(--z-text);

@@ -15,7 +15,8 @@
   * the label never moves, because a control that resizes under the pointer is
     a control that gets clicked twice;
   * the tooltip says when the last one landed, which is the question somebody
-    reaching for this button is usually actually asking;
+    reaching for this button is usually actually asking, and shows the `R` that
+    does the same;
   * `aria-busy` and one polite announcement carry all of that for anybody who is
     not watching the icon.
 
@@ -46,11 +47,12 @@
 
   const CLOCK = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' });
 
+  /** The shortcut is shown as a key cap in the bubble, not spelled out in the sentence. */
   const hint = $derived.by(() => {
     if (busy) return 'Refreshing this page.';
     const at = refresh.at;
-    if (at === null) return 'Fetch this page again. Shortcut: R';
-    return `Refreshed ${relativeTime(at, now)}. Fetch it again. Shortcut: R`;
+    if (at === null) return 'Fetch this page again.';
+    return `Refreshed ${relativeTime(at, now)}. Fetch this page again.`;
   });
 
   /*
@@ -75,7 +77,9 @@
   variant="secondary"
   icon={RotateCw}
   iconSpin={busy}
-  title={hint}
+  help={hint}
+  keys={['r']}
+  placement="bottom"
   class={className}
   onclick={() => void refresh.run()}
 >

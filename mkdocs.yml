@@ -161,6 +161,7 @@ nav:
       - Run your first job: quickstart.md
       - Docker Compose: compose.md
       - Deploying on a PaaS: paas.md
+      - Deploying on InstaPods: instapods.md
       - One-click deployment: marketplace.md
   - Run your fleet:
       - Web UI tour: ui.md
@@ -169,6 +170,7 @@ nav:
       - Backup and restore: backup-and-restore.md
       - Upgrading: upgrading.md
       - Two-step verification: two-step.md
+      - Public view: public-view.md
       - Host health and tuning: host-health.md
       - Troubleshooting: troubleshooting.md
       - A job stuck in the queue: queued-job.md
