@@ -80,9 +80,14 @@ func TestJobWaitsCarriesTheHeldApprovedAndStartFailedTimesFromTheTimeline(t *tes
 	held := analysisJob(t, s, 1, "pool_a", "host_x", q, func(j *Job) {
 		completed(q.Add(12*time.Minute), q.Add(20*time.Minute), "failure")(j)
 		j.EligibleAt, j.ControllerVersion, j.FaultKind = tp(q.Add(5*time.Minute)), "v1.3.3", FaultImage
+		j.RunnerFault = "the runner's container exited"
 		j.Repo, j.Workflow, j.JobName = "acme/web", "Deploy", "ship"
 	})
 	plain := analysisJob(t, s, 2, "pool_a", "host_x", q.Add(time.Minute), nil)
+	// The kill is only ever raised by a sample, never written with the job.
+	if _, err := s.exec(ctx, `UPDATE jobs SET oom_killed = 1 WHERE id = ?`, held.ID); err != nil {
+		t.Fatal(err)
+	}
 	for _, e := range []struct {
 		kind  JobEventKind
 		after time.Duration
@@ -114,11 +119,13 @@ func TestJobWaitsCarriesTheHeldApprovedAndStartFailedTimesFromTheTimeline(t *tes
 		t.Errorf("job stamps = %+v", h)
 	}
 	if h.Repo != "acme/web" || h.Workflow != "Deploy" || h.JobName != "ship" || h.PoolID != "pool_a" || h.HostID != "host_x" ||
-		h.Conclusion != "failure" || h.ControllerVersion != "v1.3.3" || h.FaultKind != FaultImage {
+		h.Conclusion != "failure" || h.ControllerVersion != "v1.3.3" || h.FaultKind != FaultImage ||
+		h.RunnerFault != "the runner's container exited" || !h.OOMKilled {
 		t.Errorf("job facts = %+v", h)
 	}
 	p := jobs[0]
-	if p.HeldAt != nil || p.ApprovedAt != nil || p.FirstStartFailureAt != nil || p.StartedAt != nil {
+	if p.HeldAt != nil || p.ApprovedAt != nil || p.FirstStartFailureAt != nil || p.StartedAt != nil ||
+		p.OOMKilled || p.RunnerFault != "" || p.FaultKind != "" {
 		t.Errorf("a job with nothing on its timeline carries %+v", p)
 	}
 }
@@ -431,6 +438,34 @@ func TestRunnerSpansKeepsARunnerThatFailedTheMomentItWasAskedFor(t *testing.T) {
 	}
 }
 
+// A runner that ended exactly as the window opened is read the same way from
+// its row and from its session. Were the two halves to draw the line on
+// different sides, the same history would give one answer this week and
+// another once retention.runners had pruned the row.
+func TestRunnerSpansReadsARunnerEndingAtTheWindowsStartTheSameFromItsRowAndItsSession(t *testing.T) {
+	now := analysisStart.Add(-time.Hour)
+	s := newTestStoreAt(t, func() time.Time { return now })
+	ctx := context.Background()
+	_, pool, host := seedPool(t, s)
+	r := &Runner{PoolID: pool.ID, HostID: host.ID, Name: "edge", State: RunnerRemoved, FinishedAt: tp(analysisStart)}
+	if err := s.CreateRunner(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	f := RunnerSpanFilter{Since: analysisStart, Until: analysisEnd}
+	spans, _ := readSpans(t, s, f, 10)
+	if got := spanIDs(spans); !slices.Equal(got, []string{r.ID}) || spans[0].State != RunnerRemoved {
+		t.Errorf("from the row: %v, want the runner that ended at the start", got)
+	}
+	now = analysisEnd
+	if ids, err := s.PruneRunners(ctx, analysisStart.Add(time.Minute)); err != nil || len(ids) != 1 {
+		t.Fatalf("PruneRunners = %v, %v", ids, err)
+	}
+	spans, _ = readSpans(t, s, f, 10)
+	if got := spanIDs(spans); !slices.Equal(got, []string{r.ID}) || spans[0].State != "" {
+		t.Errorf("from the session: %v, want the same runner", got)
+	}
+}
+
 func TestRunnerSpansReturnsUpToTheLimitAndSaysWhenMoreRemained(t *testing.T) {
 	now := analysisStart
 	s := newTestStoreAt(t, func() time.Time { return now })
@@ -708,12 +743,56 @@ func TestHostSamplesBetweenReadsOneHostsWindowUpToTheLimit(t *testing.T) {
 // one. The analyses expose when a host was throttled and nothing about who
 // (F14), so the read returns the host, the time and the rung, and no actor or
 // detail.
+// A throttle that went on before the window and came off after it leaves no
+// row inside the window, and by the time anyone asks about a past window the
+// host's own Throttle.Since has long been cleared. The last change before the
+// window is the only record that the host spent the whole window on a rung.
+func TestHostThrottleChangesCarryEachHostsLastChangeBeforeTheWindow(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	m := func(i int) time.Time { return analysisStart.Add(time.Duration(i) * time.Minute) }
+	for _, e := range []AuditEvent{
+		{Action: "host.throttle", TargetKind: "host", TargetID: "host_x", After: `{"level":1}`, CreatedAt: m(-90)},
+		{Action: "host.throttle", TargetKind: "host", TargetID: "host_x", After: `{"level":2}`, CreatedAt: m(-60)},
+		{Action: "host.throttle_clear", TargetKind: "host", TargetID: "host_x", After: `{"level":2}`, CreatedAt: m(400)},
+		{Action: "host.throttle", TargetKind: "host", TargetID: "host_y", After: `{"level":1}`, CreatedAt: m(-30)},
+		{Action: "host.throttle_lift", TargetKind: "host", TargetID: "host_y", After: `{"level":0}`, CreatedAt: m(-20)},
+		{Action: "host.update", TargetKind: "host", TargetID: "host_z", After: `{"level":3}`, CreatedAt: m(-10)},
+		{Action: "host.throttle", TargetKind: "host", TargetID: "host_y", After: `{"level":1}`, CreatedAt: m(30)},
+		{Action: "host.throttle", TargetKind: "host", TargetID: "host_y", After: `{"level":2}`, CreatedAt: m(40)},
+	} {
+		if err := s.AppendAudit(ctx, &e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	same := func(a, b ThrottleChange) bool {
+		return a.HostID == b.HostID && a.Action == b.Action && a.Level == b.Level && a.At.Equal(b.At)
+	}
+	got, more, err := s.HostThrottleChanges(ctx, analysisStart, analysisEnd, 10)
+	want := []ThrottleChange{
+		{HostID: "host_x", Action: "host.throttle", Level: 2, At: m(-60)},
+		{HostID: "host_y", Action: "host.throttle_lift", Level: 0, At: m(-20)},
+		{HostID: "host_y", Action: "host.throttle", Level: 1, At: m(30)},
+		{HostID: "host_y", Action: "host.throttle", Level: 2, At: m(40)},
+	}
+	if err != nil || more || !slices.EqualFunc(got, want, same) {
+		t.Errorf("changes = %+v, more %v, %v; want each host's last change before the window, then the window's", got, more, err)
+	}
+	// The limit cuts the window's oldest rows, never the starting rungs: they
+	// are at most one a host, and without them a cut read would lose the
+	// throttles that were on all along.
+	got, more, err = s.HostThrottleChanges(ctx, analysisStart, analysisEnd, 1)
+	if err != nil || !more || !slices.EqualFunc(got, []ThrottleChange{want[0], want[1], want[3]}, same) {
+		t.Errorf("limit 1: %+v, more %v, %v; want both starting rungs and the newest change", got, more, err)
+	}
+}
+
 func TestHostThrottleChangesReadOnlyTheThrottleRowsAndTheRungEachLeft(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	m := func(i int) time.Time { return analysisStart.Add(time.Duration(i) * time.Minute) }
 	for _, e := range []AuditEvent{
-		{Action: "host.throttle", TargetKind: "host", TargetID: "host_x", After: `{"level":1}`, CreatedAt: m(-1)},
+		{Action: "host.throttle", TargetKind: "host", TargetID: "host_x", After: `{"level":1}`, CreatedAt: m(-1)}, // its starting rung
 		{Action: "host.throttle", TargetKind: "host", TargetID: "host_x", After: `{"level":2,"reason":"load"}`, CreatedAt: m(0)},
 		{Action: "host.throttle_lift", TargetKind: "host", TargetID: "host_x", After: `{"level":1}`, CreatedAt: m(5)},
 		// A clear's detail names the rung that was cleared; the host is on none after it.
@@ -732,6 +811,7 @@ func TestHostThrottleChangesReadOnlyTheThrottleRowsAndTheRungEachLeft(t *testing
 		t.Fatalf("HostThrottleChanges: %v, more %v", err, more)
 	}
 	want := []ThrottleChange{
+		{HostID: "host_x", Action: "host.throttle", Level: 1, At: m(-1)},
 		{HostID: "host_x", Action: "host.throttle", Level: 2, At: m(0)},
 		{HostID: "host_x", Action: "host.throttle_lift", Level: 1, At: m(5)},
 		{HostID: "host_x", Action: "host.throttle_clear", Level: 0, At: m(9)},
@@ -745,8 +825,8 @@ func TestHostThrottleChangesReadOnlyTheThrottleRowsAndTheRungEachLeft(t *testing
 		t.Errorf("changes = %+v, want %+v oldest first", got, want)
 	}
 	got, more, err = s.HostThrottleChanges(ctx, analysisStart, analysisEnd, 2)
-	if err != nil || !more || !slices.EqualFunc(got, want[3:], same) {
-		t.Errorf("limit 2: %+v, more %v, %v; want the two newest and more", got, more, err)
+	if err != nil || !more || !slices.EqualFunc(got, append([]ThrottleChange{want[0]}, want[4:]...), same) {
+		t.Errorf("limit 2: %+v, more %v, %v; want the starting rung, the two newest and more", got, more, err)
 	}
 	if _, _, err := s.HostThrottleChanges(ctx, analysisStart, analysisEnd, 0); err == nil {
 		t.Error("a limit of zero was accepted")
@@ -822,7 +902,7 @@ func TestTheAnalysisReadsSeekTheirIndexes(t *testing.T) {
 		{JobWaitFilter{}, []string{"idx_jobs_queued_id"}},
 		{JobWaitFilter{PoolID: "pool_a"}, []string{"idx_jobs_pool"}},
 		{JobWaitFilter{HostID: "host_x"}, []string{"idx_jobs_queued_id"}},
-		{JobWaitFilter{HostID: "host_x", ByActivity: true}, []string{"MULTI-INDEX OR", "idx_jobs_completed (state=? AND completed_at>?)"}},
+		{JobWaitFilter{HostID: "host_x", ByActivity: true}, []string{"MULTI-INDEX OR", "idx_jobs_completed (state=? AND completed_at>? AND completed_at<?)"}},
 	} {
 		c.f.Since, c.f.Until = analysisStart, analysisEnd
 		q, args := jobWaitsQuery(c.f, 10)
@@ -849,7 +929,8 @@ func TestTheAnalysisReadsSeekTheirIndexes(t *testing.T) {
 	reads = append(reads,
 		read{"MeanFleetCapacity", meanFleetCapacitySQL, []any{ms(analysisStart), ms(analysisEnd)}, []string{"host_samples_at"}},
 		read{"HostSamplesBetween", hostSamplesBetweenSQL, []any{"host_x", ms(analysisStart), ms(analysisEnd), 10}, []string{"(host_id=? AND at>? AND at<?)"}},
-		read{"HostThrottleChanges", hostThrottleChangesSQL, []any{ms(analysisStart), ms(analysisEnd), 10}, []string{"idx_audit_action (action=? AND created_at>? AND created_at<?)"}},
+		read{"HostThrottleChanges", hostThrottleChangesSQL, []any{ms(analysisStart), ms(analysisEnd), 10, ms(analysisStart)},
+			[]string{"idx_audit_action (action=? AND created_at>? AND created_at<?)", "idx_audit_action (action=? AND created_at<?)"}},
 	)
 	for _, r := range reads {
 		plan := explain(t, s, r.query, r.args...)
