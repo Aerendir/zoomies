@@ -97,7 +97,10 @@ fixture, and the API/controller/store ten-minute deadlines. The ledger test had
 omitted its temporary-directory override and ignored the opening error; it now
 uses the existing fixture helper and checks that error. The complete normal
 Proxmox package race tests pass (no live e2e tag or cluster run). The complete API race rerun passes with its thirty-minute budget (1380.705 seconds).
-Controller and store are still running with the extended budget. The corrected fixture
+The complete store race rerun also passes (1122.901 seconds). Controller reached
+its thirty-minute package deadline, with no assertion failure reported, at a
+newly started webhook test. Its 1329 listed tests are now split into disjoint
+665/664 groups, covering the full list with separate race-test budgets. The corrected fixture
 and backend checks pass separately; the original full command did not pass. Record its final result, including failures,
 before claiming full-suite verification.
 
