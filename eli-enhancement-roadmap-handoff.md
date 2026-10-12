@@ -74,6 +74,7 @@ Current implementation plans:
 - [Contextual UI and scripted scenarios](roadmap/plans/2026-10-12-eli-pr-delay-ui.md).
 - [Validation fixture correction](roadmap/plans/2026-10-12-eli-validation-fixtures.md).
 - [Fallback-copy mode preservation](roadmap/plans/2026-10-12-eli-copy-mode-validation.md).
+- [Installer fixture permissions](roadmap/plans/2026-10-12-eli-installer-fixture-validation.md).
 
 The full-suite rerun found a storage fixture that relied on a permissive umask.
 This workspace uses `0077`, so requesting `0755` through Mkdir created a private
@@ -83,7 +84,11 @@ creating a test database. A complete API race rerun has a thirty-minute budget.
 The backend's mode-copy fixture exposed masked destination permissions; explicitly
 setting source 0755 still failed before the fix. The fallback copy now restores
 source permissions after copying, and the backend package race tests pass.
-The rest of the original full suite is still running. Record its final result, including failures,
+The installer previous-binary fixture had the same umask assumption: its source
+was 0700 rather than the asserted 0755. Explicit fixture chmod corrects that
+setup; the affected install/upgrade race checks pass. The controller package
+also reached the ten-minute package deadline and is rerunning with thirty
+minutes. The rest of the original full suite is still running. Record its final result, including failures,
 before claiming full-suite verification.
 
 The next agent should start from the stack tip, check which parent PRs have
