@@ -473,6 +473,13 @@ test.describe('the shared tooltip', () => {
       'From the first job starting to the last one finishing.',
     );
     await expect(heading).toHaveAccessibleDescription(/From the first job starting/);
+    // The bubble is a child of the heading, which is set in capitals and tracked
+    // out. It must not inherit that.
+    const voice = await page.locator('.bubble:popover-open').evaluate((n) => {
+      const s = getComputedStyle(n);
+      return { transform: s.textTransform, tracking: s.letterSpacing, align: s.textAlign };
+    });
+    expect(voice).toEqual({ transform: 'none', tracking: 'normal', align: 'start' });
   });
 
   test('a row action that cannot be used says why, and can still be pointed at', async ({
@@ -489,6 +496,8 @@ test.describe('the shared tooltip', () => {
     const bubble = page.locator('.bubble:popover-open');
     await expect(bubble.locator('.reason')).toBeVisible();
     await expect(bubble.locator('.title')).toBeVisible();
+    // The actions column is right-aligned, and the bubble sits inside its cell.
+    await expect(bubble).toHaveCSS('text-align', 'start');
     // Its name already carries the reason, so there is no second reading of it.
     await expect(refused).toHaveAccessibleName(/\./);
   });
