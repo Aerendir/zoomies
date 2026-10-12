@@ -225,7 +225,11 @@ test('analytics supports keyboard inspection, group focus and matching CSV expor
   // with anything in it. Focusing it opens the tooltip; Enter selects it and
   // opens the detail, which carries the same figures as text.
   const square = matrix.locator('[role="gridcell"][tabindex="0"]');
+  // Reached the way the keyboard reaches it: a script's focus after a click is not
+  // keyboard focus, and the card opens for the keyboard only.
   await square.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
   await expect(square).toBeFocused();
   await expect(page.locator('.bubble:popover-open')).toContainText('Queued');
   await square.press('Enter');
