@@ -511,6 +511,32 @@ test('a field an operator cleared is only cleared on the wire when the whole bod
   );
 });
 
+test('the certificate a provider trusts comes back into the edit form and goes out unchanged', () => {
+  // A form cannot keep what it was never shown. A box that opens empty on an
+  // edit reads as "nothing is trusted", and saving the whole body then sends the
+  // empty string, which clears the certificate the connection depends on.
+  const pem = '-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUQ\n-----END CERTIFICATE-----';
+  const draft = draftFromProvider({
+    id: 'prv_1',
+    kind: 'proxmox',
+    name: 'pve',
+    ca_pem: pem,
+  } as Provider);
+  assert.equal(draft.ca_pem, pem, 'the box opens with what is trusted');
+  assert.equal(
+    toProviderBody(draft, { complete: true }).ca_pem,
+    pem,
+    'saving the form leaves the certificate as it was',
+  );
+
+  const emptied = toProviderBody({ ...draft, ca_pem: '' }, { complete: true });
+  assert.equal(
+    emptied.ca_pem,
+    '',
+    'emptying the box is how an operator returns to the system store',
+  );
+});
+
 test('settings and labels are trimmed on the way out, and a nameless one is dropped', () => {
   const body = toProviderBody({
     ...emptyDraft(),
