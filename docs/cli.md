@@ -98,6 +98,47 @@ The Overview in a terminal: counts, pools, recent scaling and anything wrong.
 `--window` (`1h`) sets the period the rates cover, `--scaling` (`5`) how many
 recent decisions to print.
 
+### `zoomies events`
+
+What the controller published lately, and a wait for the next change. It is one
+read of `GET /events/recent`, for a terminal or a script that cannot hold the
+event stream open.
+
+```sh
+zoomies events recent --since 10m                       # the last ten minutes
+zoomies events recent --kinds job.updated --topic job:  # only jobs
+zoomies events recent --since k3f9a2.1204 --wait 20     # read on, or hold for the next change
+zoomies events recent --output json                     # the route's body, as it is
+```
+
+`events recent` prints one row for each event, oldest first: when, the kind, the
+topic (the resource it is about) and the fields the controller itself says
+(`id`, `state`, `conclusion`, `reason`, `code`, `severity`, `healthy`, `from`,
+`to`). A name a workflow wrote, such as a job, workflow or branch name, is not
+on a row; `--output json` carries the whole event for a program, and a job's
+name is on `zoomies jobs get`. The last line is a cursor: pass it back as
+`--since` to read on from there, so a first call without `--since` is also how
+to get one. `--since` takes an event id exactly as the stream sends it, or a
+duration such as `10m`; left out, it is everything the controller still holds.
+`--kinds` and `--topic` filter as the stream's do, and `--limit` (`50`, at most
+`200`) says how many; when more matched, the oldest are shown and the last line
+says how to read on.
+
+With `--wait SECONDS` and nothing yet to show, the request is held for the next
+matching event. It answers with that event, or, when the wait runs out, with
+`nothing changed in 20s` and the cursor again, and exits 0: a quiet wait is not
+a failure. The controller holds a request for 25 seconds at most whatever is
+asked, so a loop asks again with the cursor it was given. A held request counts
+against `limits.event_subscribers` as a stream does, and when the slots are full
+the controller refuses it with a sentence saying so.
+
+When the controller no longer holds events back to `--since` (or the id is from
+before it last restarted), the output begins by saying that events were missed.
+Those events are gone: fetch the resources afresh with `zoomies status`,
+`zoomies jobs list` or `zoomies runners list` instead of treating what follows as
+everything. Each event is shown only to a caller who could read it from its own
+route.
+
 ### `zoomies problems`
 
 What the controller thinks is wrong, and (for the problems it has worked out a change
