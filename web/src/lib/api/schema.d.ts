@@ -3700,11 +3700,54 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List repair history visible to the caller */
+        /**
+         * List repair history visible to the caller
+         * @description One page of the caller's repairs, newest first, with `total` for how many match in all so a client can page without asking for everything. Administrators see every repair; everyone else sees only the ones they asked for. A repair that has been cleared from the history is neither listed nor counted. A `group` or `trigger` this API does not know, or a `repo` of more than 200 characters, is a 422 that names the parameter: a filter that was quietly ignored would show the wrong history.
+         */
         get: operations["listEliRepairs"];
         put?: never;
         /** Request a repair using the caller’s personal provider */
         post: operations["requestEliRepair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Take every repair a filter matches that can be cleared from the history
+         * @description The ids a "select all" should take: the repairs the same filters would list, without paging, leaving out any that are still queued, running or waiting on checks, since those cannot be cleared. At most 500 ids come back, newest first, taken at the moment of the call, so a repair that arrives afterwards is not swept in. `total` is how many could be cleared in all, and `truncated` is true when that is more than the ids sent. The same scope and the same 422s as the list.
+         */
+        get: operations["selectEliRepairs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear several repairs from the history
+         * @description Hides repairs from the history and does nothing else to them. The repair stays on record, so it still counts towards the repository's and the person's daily limit, still stops Eli answering the same webhook delivery twice, and still stops Eli repairing its own commit. Answers 200 with a result for each distinct id, in the order asked, so a partial failure is visible rather than hidden behind one status code. A repair that is still queued, running or waiting on checks comes back as `still running`. An id that does not exist and an id the caller may not see both come back as `not found`, so the answer cannot be used to discover which ids are real. An id that is already cleared is `ok`. One audit row, `assistant.repair_clear`, lists the ids that were cleared.
+         */
+        post: operations["bulkEliRepairAction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9782,6 +9825,15 @@ export interface components {
         };
         EliRepairList: {
             items: components["schemas"]["EliRepair"][];
+            /** @description How many repairs match the filters in all, not only on this page. */
+            total: number;
+        };
+        EliRepairSelection: {
+            ids: string[];
+            /** @description How many repairs match and can be cleared, which is more than `ids` holds when `truncated`. */
+            total: number;
+            /** @description True when `total` is more than the ids sent, so a select-all took only the newest 500. */
+            truncated: boolean;
         };
         EliRepairSettings: {
             identities: components["schemas"]["EliIdentity"][];
@@ -11016,6 +11068,12 @@ export interface components {
         PathID: string;
         Limit: number;
         Offset: number;
+        /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
+        EliRepairGroup: "attention" | "active" | "passed";
+        /** @description Only repairs whose repository contains this text, ignoring case. Spaces at either end are dropped. */
+        EliRepairRepo: string;
+        /** @description How the repair began. `automatic` is one Eli started on its own; `requested` is one a person asked for, however they asked. Anything else is a 422. */
+        EliRepairTrigger: "automatic" | "requested";
         /** @description A column name. An unknown value falls back to the default rather than erroring, so a stale bookmark does not break the page. */
         Sort: string;
         Order: "asc" | "desc";
@@ -16851,7 +16909,16 @@ export interface operations {
     };
     listEliRepairs: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
+                group?: components["parameters"]["EliRepairGroup"];
+                /** @description Only repairs whose repository contains this text, ignoring case. Spaces at either end are dropped. */
+                repo?: components["parameters"]["EliRepairRepo"];
+                /** @description How the repair began. `automatic` is one Eli started on its own; `requested` is one a person asked for, however they asked. Anything else is a 422. */
+                trigger?: components["parameters"]["EliRepairTrigger"];
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16894,6 +16961,69 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    selectEliRepairs: {
+        parameters: {
+            query?: {
+                /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
+                group?: components["parameters"]["EliRepairGroup"];
+                /** @description Only repairs whose repository contains this text, ignoring case. Spaces at either end are dropped. */
+                repo?: components["parameters"]["EliRepairRepo"];
+                /** @description How the repair began. `automatic` is one Eli started on its own; `requested` is one a person asked for, however they asked. Anything else is a 422. */
+                trigger?: components["parameters"]["EliRepairTrigger"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliRepairSelection"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    bulkEliRepairAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action: "clear";
+                    ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Per-ID outcomes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: {
+                            id: string;
+                            ok: boolean;
+                            error?: string;
+                        }[];
+                    };
+                };
+            };
             422: components["responses"]["Unprocessable"];
         };
     };

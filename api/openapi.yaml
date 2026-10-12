@@ -5662,7 +5662,20 @@ paths:
       operationId: listEliRepairs
       tags: [assistant]
       summary: List repair history visible to the caller
+      description: >-
+        One page of the caller's repairs, newest first, with `total` for how many match in
+        all so a client can page without asking for everything. Administrators see every
+        repair; everyone else sees only the ones they asked for. A repair that has been
+        cleared from the history is neither listed nor counted. A `group` or `trigger` this
+        API does not know, or a `repo` of more than 200 characters, is a 422 that names the
+        parameter: a filter that was quietly ignored would show the wrong history.
       x-zoomies-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/EliRepairGroup"
+        - $ref: "#/components/parameters/EliRepairRepo"
+        - $ref: "#/components/parameters/EliRepairTrigger"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: OK
@@ -5688,6 +5701,78 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EliRepair" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/selection:
+    get:
+      operationId: selectEliRepairs
+      tags: [assistant]
+      summary: Take every repair a filter matches that can be cleared from the history
+      description: >-
+        The ids a "select all" should take: the repairs the same filters would list, without
+        paging, leaving out any that are still queued, running or waiting on checks, since
+        those cannot be cleared. At most 500 ids come back, newest first, taken at the moment
+        of the call, so a repair that arrives afterwards is not swept in. `total` is how many
+        could be cleared in all, and `truncated` is true when that is more than the ids sent.
+        The same scope and the same 422s as the list.
+      x-zoomies-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/EliRepairGroup"
+        - $ref: "#/components/parameters/EliRepairRepo"
+        - $ref: "#/components/parameters/EliRepairTrigger"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliRepairSelection" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/bulk:
+    post:
+      operationId: bulkEliRepairAction
+      tags: [assistant]
+      summary: Clear several repairs from the history
+      description: >-
+        Hides repairs from the history and does nothing else to them. The repair stays on
+        record, so it still counts towards the repository's and the person's daily limit,
+        still stops Eli answering the same webhook delivery twice, and still stops Eli
+        repairing its own commit. Answers 200 with a result for each distinct id, in the
+        order asked, so a partial failure is visible rather than hidden behind one status
+        code. A repair that is still queued, running or waiting on checks comes back as
+        `still running`. An id that does not exist and an id the caller may not see both come
+        back as `not found`, so the answer cannot be used to discover which ids are real. An
+        id that is already cleared is `ok`. One audit row, `assistant.repair_clear`, lists the
+        ids that were cleared.
+      x-zoomies-role: viewer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { type: string, enum: [clear] }
+                ids: { type: array, items: { type: string }, minItems: 1, maxItems: 500 }
+      responses:
+        "200":
+          description: Per-ID outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, ok]
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { type: string }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
   /assistant/repairs/settings:
@@ -7608,6 +7693,28 @@ components:
       name: offset
       in: query
       schema: { type: integer, default: 0, minimum: 0 }
+    EliRepairGroup:
+      name: group
+      in: query
+      description: >-
+        Only repairs in this group of states. `attention` is every state that is neither
+        running nor passed, `active` is queued, working and checking, and `passed` is
+        succeeded. Anything else is a 422.
+      schema: { type: string, enum: [attention, active, passed] }
+    EliRepairRepo:
+      name: repo
+      in: query
+      description: >-
+        Only repairs whose repository contains this text, ignoring case. Spaces at either end
+        are dropped.
+      schema: { type: string, maxLength: 200 }
+    EliRepairTrigger:
+      name: trigger
+      in: query
+      description: >-
+        How the repair began. `automatic` is one Eli started on its own; `requested` is one a
+        person asked for, however they asked. Anything else is a 422.
+      schema: { type: string, enum: [automatic, requested] }
     Sort:
       name: sort
       in: query
@@ -12949,11 +13056,29 @@ components:
 
     EliRepairList:
       type: object
-      required: [items]
+      required: [items, total]
       properties:
         items:
           type: array
           items: { $ref: "#/components/schemas/EliRepair" }
+        total:
+          type: integer
+          description: How many repairs match the filters in all, not only on this page.
+
+    EliRepairSelection:
+      type: object
+      required: [ids, total, truncated]
+      properties:
+        ids:
+          type: array
+          maxItems: 500
+          items: { type: string }
+        total:
+          type: integer
+          description: How many repairs match and can be cleared, which is more than `ids` holds when `truncated`.
+        truncated:
+          type: boolean
+          description: True when `total` is more than the ids sent, so a select-all took only the newest 500.
 
     EliRepairSettings:
       type: object

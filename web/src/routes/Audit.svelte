@@ -10,6 +10,7 @@
   pages of JSON that happen to differ somewhere in the middle.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { Search } from '@lucide/svelte';
   import { listAudit, listAuditActions } from '$lib/api/client';
   import { events } from '$lib/api/sse';
@@ -351,9 +352,9 @@
     {#if href}
       <a class="mono" {href} onclick={(event) => event.stopPropagation()}>{row.target_id}</a>
     {:else if row.target_id}
-      <span class="mono gone" title="This no longer exists, so there is nothing to open">
-        {row.target_id}
-      </span>
+      <Tooltip bare text="This no longer exists, so there is nothing to open">
+        <span class="mono gone">{row.target_id}</span>
+      </Tooltip>
     {:else}
       <span class="none">--</span>
     {/if}

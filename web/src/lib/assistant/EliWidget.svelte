@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { onMount, tick } from 'svelte';
   import {
     History,
@@ -134,14 +135,16 @@
   <!-- Exempt from the inert that a drawer or dialog puts on the rest of the
        page: Eli stays clickable above whatever is open. -->
   <div class="launcher" data-side={side} data-inert-exempt>
-    <button
-      class="launch"
-      onclick={launch}
-      aria-label="Ask Eli"
-      title="Ask Eli"
-      aria-expanded="false"
-      aria-controls="eli-widget"><EliAvatar size={56} /></button
-    >
+    <!-- The avatar is a picture, so the name is the heading; E does the same. -->
+    <Tooltip bare title="Ask Eli" keys={['e']} placement={side === 'right' ? 'left' : 'right'}>
+      <button
+        class="launch"
+        onclick={launch}
+        aria-label="Ask Eli"
+        aria-expanded="false"
+        aria-controls="eli-widget"><EliAvatar size={56} /></button
+      >
+    </Tooltip>
   </div>
 {:else}
   {#if phone}
@@ -179,23 +182,24 @@
     }}
   >
     <header data-drag-area class:draggable={!modal}>
-      <button
-        type="button"
-        class="identity"
-        data-drag-handle
-        disabled={modal}
-        aria-label="Move Eli panel using arrow keys or drag"
-        title="Drag me around, or use arrow keys"
-      >
-        <EliAvatar size={32} />
-        <div>
-          <span class="name">Eli</span>
-          <span class="subtitle">
-            {#if answering}Answers from <strong>{answering.name}</strong>, {answering.model}{:else}Your
-              fleet companion. All ears.{/if}
-          </span>
-        </div>
-      </button>
+      <Tooltip bare text="Drag me around, or use arrow keys" placement="bottom">
+        <button
+          type="button"
+          class="identity"
+          data-drag-handle
+          disabled={modal}
+          aria-label="Move Eli panel using arrow keys or drag"
+        >
+          <EliAvatar size={32} />
+          <div>
+            <span class="name">Eli</span>
+            <span class="subtitle">
+              {#if answering}Answers from <strong>{answering.name}</strong>, {answering.model}{:else}Your
+                fleet companion. All ears.{/if}
+            </span>
+          </div>
+        </button>
+      </Tooltip>
       <div class="tools">
         <IconButton
           icon={SquarePen}

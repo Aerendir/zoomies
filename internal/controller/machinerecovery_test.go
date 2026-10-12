@@ -648,3 +648,58 @@ func TestQuarantiningAMachineWithNoHostYetCordonsNothing(t *testing.T) {
 		}
 	}
 }
+
+// A failed machine that owns a resource is still being paid for, so the problem
+// has to say that and send the operator to Delete, which destroys the VM. The
+// old text told them to Release it, which forgets the row and leaves the VM
+// running.
+func TestAFailedMachineThatOwnsAVMIsToldToDeleteItNotReleaseIt(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+	m := &store.Machine{ProviderID: row.ID, State: store.MachinePlanned}
+	if err := h.st.CreateMachine(h.ctx, m); err != nil {
+		t.Fatalf("CreateMachine: %v", err)
+	}
+	if err := h.st.SetMachineResource(h.ctx, m.ID, "zone-a", "9001", "ours", h.c.controllerID()); err != nil {
+		t.Fatalf("SetMachineResource: %v", err)
+	}
+	for _, to := range []store.MachineState{store.MachineCreating, store.MachineFailed} {
+		if _, err := h.st.TransitionMachine(h.ctx, m.ID, to, "gave up"); err != nil {
+			t.Fatalf("TransitionMachine to %s: %v", to, err)
+		}
+	}
+
+	p, ok := h.problemsByCode()["provider.machine_failed"]
+	if !ok {
+		t.Fatalf("a failed machine raised %v, want provider.machine_failed", h.problemCodes())
+	}
+	for _, want := range []string{"still be running", "Press Delete"} {
+		if !strings.Contains(p.Fix, want) {
+			t.Errorf("the fix does not say %q: %s", want, p.Fix)
+		}
+	}
+	if strings.Contains(p.Fix, "Release it") {
+		t.Errorf("the fix tells the operator to release a machine whose VM may still be running: %s", p.Fix)
+	}
+}
+
+// One that never got a VM has nothing to pay for or delete.
+func TestAFailedMachineThatNeverGotAVMIsToldNothingWasCreated(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+	m := &store.Machine{ProviderID: row.ID, State: store.MachinePlanned}
+	if err := h.st.CreateMachine(h.ctx, m); err != nil {
+		t.Fatalf("CreateMachine: %v", err)
+	}
+	if _, err := h.st.TransitionMachine(h.ctx, m.ID, store.MachineFailed, "held"); err != nil {
+		t.Fatalf("TransitionMachine: %v", err)
+	}
+
+	p, ok := h.problemsByCode()["provider.machine_failed"]
+	if !ok {
+		t.Fatalf("a failed machine raised %v, want provider.machine_failed", h.problemCodes())
+	}
+	if !strings.Contains(p.Fix, "nothing was created") || strings.Contains(p.Fix, "being paid for") {
+		t.Errorf("the fix is wrong for a machine with no VM: %s", p.Fix)
+	}
+}

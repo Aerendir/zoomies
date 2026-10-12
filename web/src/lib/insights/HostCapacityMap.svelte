@@ -52,6 +52,7 @@
   so those windows fill in as the stream arrives.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { untrack } from 'svelte';
   import { listHostSamples } from '$lib/api/client';
   import type { Host, HostSample } from '$lib/api/types';
@@ -457,17 +458,13 @@
     onfocusin={() => (rowHost = id)}
     onfocusout={() => (rowHost = null)}
   >
-    <button
-      type="button"
-      class="toggle"
-      aria-pressed={shown}
-      onclick={() => toggleHost(id)}
-      title={shown ? `Hide ${host.name ?? id}` : `Show ${host.name ?? id}`}
-    >
-      <span class="swatch" style:background={tone}></span>
-      <span class="name">{host.name ?? id}</span>
-      <StatusDot status={hostStatus(host)} size="sm" />
-    </button>
+    <Tooltip bare text={shown ? `Hide ${host.name ?? id}` : `Show ${host.name ?? id}`}>
+      <button type="button" class="toggle" aria-pressed={shown} onclick={() => toggleHost(id)}>
+        <span class="swatch" style:background={tone}></span>
+        <span class="name">{host.name ?? id}</span>
+        <StatusDot status={hostStatus(host)} size="sm" />
+      </button>
+    </Tooltip>
     <span class="meters">
       {#each metrics as metric (metric.key)}
         {@const figure = read?.figures.find((f) => f.metric === metric)}
@@ -480,25 +477,28 @@
           v === null
             ? 'not measured'
             : (figure?.exact ?? (sample && !read ? metricText(sample, metric.key) : null))}
-        <span
-          class="meter"
-          title={`${metric.label} ${shown ? moment : 'now'}: ${words ?? `${v?.toFixed(0)}%`}`}
+        <Tooltip
+          bare
+          text={`${metric.label} ${shown ? moment : 'now'}: ${words ?? `${v?.toFixed(0)}%`}`}
         >
-          {@render strokeSample(metric, tone)}
-          <span class="key" aria-label={metric.label}>{metric.short}</span>
-          <span class="track">
-            {#if v !== null}
-              <span
-                class="fill"
-                class:promised={!metric.measured}
-                style:width="{Math.min(100, v)}%"
-                style:background={tone}
-              ></span>
-            {/if}
+          <span class="meter">
+            {@render strokeSample(metric, tone)}
+            <span class="key" aria-label={metric.label}>{metric.short}</span>
+            <span class="track">
+              {#if v !== null}
+                <span
+                  class="fill"
+                  class:promised={!metric.measured}
+                  style:width="{Math.min(100, v)}%"
+                  style:background={tone}
+                ></span>
+              {/if}
+            </span>
+            {#if v === null}<span class="gap">{NO_VALUE}</span>{:else}<strong
+                >{v.toFixed(0)}%</strong
+              >{/if}
           </span>
-          {#if v === null}<span class="gap">{NO_VALUE}</span>{:else}<strong>{v.toFixed(0)}%</strong
-            >{/if}
-        </span>
+        </Tooltip>
       {/each}
     </span>
     <span class="host-actions">
@@ -522,7 +522,9 @@
         <tr>
           <th scope="col"><span class="sr-only">Host</span></th>
           {#each metrics as metric (metric.key)}
-            <th scope="col" title={metric.label}>{metric.short}</th>
+            <!-- The expansion of an abbreviation, which is what `abbr` is for: this
+                 card follows the pointer and cannot be pointed at. -->
+            <th scope="col"><abbr title={metric.label}>{metric.short}</abbr></th>
           {/each}
         </tr>
       </thead>
@@ -577,20 +579,21 @@
           {#if i > 0 && METRICS[i - 1]!.measured && !metric.measured}
             <span class="divider" aria-hidden="true"></span>
           {/if}
-          <button
-            type="button"
-            class="metric"
-            aria-pressed={enabled.includes(metric.key)}
-            title={metric.hint}
-            onclick={() => toggleMetric(metric.key)}
-            onpointerenter={() => (chipMetric = metric.key)}
-            onpointerleave={() => (chipMetric = null)}
-            onfocus={() => (chipMetric = metric.key)}
-            onblur={() => (chipMetric = null)}
-          >
-            {@render strokeSample(metric)}
-            {metric.label}
-          </button>
+          <Tooltip bare text={`${metric.label}: ${metric.hint}`}>
+            <button
+              type="button"
+              class="metric"
+              aria-pressed={enabled.includes(metric.key)}
+              onclick={() => toggleMetric(metric.key)}
+              onpointerenter={() => (chipMetric = metric.key)}
+              onpointerleave={() => (chipMetric = null)}
+              onfocus={() => (chipMetric = metric.key)}
+              onblur={() => (chipMetric = null)}
+            >
+              {@render strokeSample(metric)}
+              {metric.label}
+            </button>
+          </Tooltip>
         {/each}
       </div>
       {#if lead && anyObserved}

@@ -11,6 +11,7 @@
   does not read the same sentence again.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { Bell } from '@lucide/svelte';
   import { joinWords, pluralise } from '$lib/format';
   import { notifications, SEVERITY_NOUN } from '$lib/state/notifications.svelte';
@@ -32,21 +33,23 @@
   );
 </script>
 
-<button
-  type="button"
-  class="bell"
-  data-severity={worst ?? 'none'}
-  aria-label="Problems. {sentence}"
-  aria-haspopup="dialog"
-  aria-expanded={notifications.open}
-  title={sentence}
-  onclick={() => (notifications.open = true)}
->
-  <Bell size={15} aria-hidden="true" />
-  {#if active.length > 0}
-    <span class="count" aria-hidden="true">{active.length}</span>
-  {/if}
-</button>
+<!-- The bell shows no name, so "Problems" is the heading; its name already carries the sentence. -->
+<Tooltip bare title="Problems" text={sentence} placement="bottom">
+  <button
+    type="button"
+    class="bell"
+    data-severity={worst ?? 'none'}
+    aria-label="Problems. {sentence}"
+    aria-haspopup="dialog"
+    aria-expanded={notifications.open}
+    onclick={() => (notifications.open = true)}
+  >
+    <Bell size={15} aria-hidden="true" />
+    {#if active.length > 0}
+      <span class="count" aria-hidden="true">{active.length}</span>
+    {/if}
+  </button>
+</Tooltip>
 
 <output class="sr-only" aria-live="polite">{sentence}</output>
 

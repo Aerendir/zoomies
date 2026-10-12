@@ -10,6 +10,8 @@
   and cannot be compared between two hosts of different sizes.
 -->
 <script lang="ts">
+  import Tooltip from '../components/Tooltip.svelte';
+
   interface Props {
     label: string;
     /** What the live runners have promised away. */
@@ -18,7 +20,7 @@
     total: number;
     /** The used and total figures, already in the units a person reads. */
     text: string;
-    /** What the operator holds back, spelled out for the title. */
+    /** What the operator holds back, spelled out for the tooltip. */
     hint?: string;
   }
 
@@ -32,13 +34,15 @@
   const summary = $derived(`${label}: ${text}${hint ? `. ${hint}` : ''}`);
 </script>
 
-<div class="row" title={summary}>
-  <span class="label">{label}</span>
-  <div class="track" role="img" aria-label={summary}>
-    <span class="fill" class:tight style="width: {pct}%"></span>
+<Tooltip bare text={summary}>
+  <div class="row">
+    <span class="label">{label}</span>
+    <div class="track" role="img" aria-label={summary}>
+      <span class="fill" class:tight style="width: {pct}%"></span>
+    </div>
+    <span class="value tabular" class:tight>{text}</span>
   </div>
-  <span class="value tabular" class:tight>{text}</span>
-</div>
+</Tooltip>
 
 <style>
   .row {

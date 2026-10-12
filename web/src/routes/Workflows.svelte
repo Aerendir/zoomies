@@ -20,6 +20,7 @@
   most of which ran somewhere else, and "Include other runners" widens it.
 -->
 <script lang="ts">
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { CircleX } from '@lucide/svelte';
   import {
     cancelWorkflowRun,
@@ -426,6 +427,7 @@
     {
       id: 'duration',
       header: 'Duration',
+      help: 'From the first job starting to the last one finishing.',
       sortable: true,
       align: 'end',
       width: '8rem',
@@ -465,7 +467,7 @@
       pack
     />
     {#if run.jobs?.faulted}
-      <Badge status={RUNNER_LOST} size="sm" title={RUNNER_LOST.hint} />
+      <Badge status={RUNNER_LOST} size="sm" help={RUNNER_LOST.hint} />
     {/if}
     <!-- What an operator has done to the run's queued jobs, said on the row
          the way a job's own row says it, so a Pause pressed here is seen to
@@ -479,7 +481,7 @@
           label={run.jobs.paused === run.jobs.queued
             ? QUEUE_PAUSED.label
             : `${run.jobs.paused} ${QUEUE_PAUSED.label.toLowerCase()}`}
-          title="{run.jobs.paused} of the run's {run.jobs.queued} queued jobs: {QUEUE_PAUSED.hint}"
+          help="{run.jobs.paused} of the run's {run.jobs.queued} queued jobs: {QUEUE_PAUSED.hint}"
         />
       {/if}
       {#if run.jobs?.expedited}
@@ -489,15 +491,15 @@
           label={run.jobs.expedited === run.jobs.queued
             ? QUEUE_EXPEDITED.label
             : `${run.jobs.expedited} ${QUEUE_EXPEDITED.label.toLowerCase()}`}
-          title="{run.jobs.expedited} of the run's {run.jobs
+          help="{run.jobs.expedited} of the run's {run.jobs
             .queued} queued jobs: {QUEUE_EXPEDITED.hint}"
         />
       {/if}
     {/if}
     {#if run.jobs?.unmatched}
-      <Badge status={UNMATCHED} size="sm" title={UNMATCHED.hint} />
+      <Badge status={UNMATCHED} size="sm" help={UNMATCHED.hint} />
     {:else if run.hosted && !run.managed}
-      <Badge status={HOSTED} size="sm" title={HOSTED.hint} />
+      <Badge status={HOSTED} size="sm" help={HOSTED.hint} />
     {/if}
   </span>
 {/snippet}
@@ -512,9 +514,9 @@
       onclick={(event) => event.stopPropagation()}
     />
     {#if (run.run_attempt ?? 1) > 1}
-      <span class="attempt" title="Re-run: this is attempt {run.run_attempt}">
-        attempt {run.run_attempt}
-      </span>
+      <Tooltip bare text="Re-run: this is attempt {run.run_attempt}">
+        <span class="attempt">attempt {run.run_attempt}</span>
+      </Tooltip>
     {/if}
   </span>
 {/snippet}

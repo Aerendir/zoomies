@@ -6,6 +6,7 @@
   import type { Snippet } from 'svelte';
   import type { StatusMeta, StatusTone } from '../status';
   import StatusDot from './StatusDot.svelte';
+  import Tooltip from './Tooltip.svelte';
 
   interface Props {
     /** Preferred: the entry from the state map, carrying colour, shape and label. */
@@ -18,7 +19,11 @@
     dot?: boolean;
     /** Draw the status's branded Lucide icon instead of its abstract shape. */
     icon?: boolean;
-    title?: string;
+    /**
+     * What the badge means, in the shared tooltip. A status carries its own hint,
+     * which is what this says unless told otherwise.
+     */
+    help?: string;
     class?: string;
     children?: Snippet;
   }
@@ -30,7 +35,7 @@
     size = 'md',
     dot = true,
     icon = false,
-    title,
+    help,
     class: className = '',
     children,
   }: Props = $props();
@@ -40,19 +45,20 @@
   const StatusIcon = $derived(status?.icon);
 </script>
 
-<span
-  class="badge {size} {className}"
-  data-tone={resolvedTone}
-  title={title ?? status?.hint}
-  style="--badge-colour: var(--z-{resolvedTone}); --badge-subtle: var(--z-{resolvedTone}-subtle); --badge-border: var(--z-{resolvedTone}-border)"
->
-  {#if status && icon && StatusIcon}<StatusIcon
-      size={size === 'sm' ? 12 : 14}
-      strokeWidth={2}
-      aria-hidden="true"
-    />{:else if status && dot}<StatusDot {status} size="sm" />{/if}
-  {#if children}{@render children()}{:else}{text}{/if}
-</span>
+<Tooltip bare quiet text={help ?? status?.hint ?? ''}>
+  <span
+    class="badge {size} {className}"
+    data-tone={resolvedTone}
+    style="--badge-colour: var(--z-{resolvedTone}); --badge-subtle: var(--z-{resolvedTone}-subtle); --badge-border: var(--z-{resolvedTone}-border)"
+  >
+    {#if status && icon && StatusIcon}<StatusIcon
+        size={size === 'sm' ? 12 : 14}
+        strokeWidth={2}
+        aria-hidden="true"
+      />{:else if status && dot}<StatusDot {status} size="sm" tip={false} />{/if}
+    {#if children}{@render children()}{:else}{text}{/if}
+  </span>
+</Tooltip>
 
 <style>
   .badge {

@@ -20,7 +20,7 @@
     size="sm"
     icon={Dog}
     class="ask-eli beat-{beat}"
-    title="Share these displayed details with Eli and ask for guidance"
+    help="Share these displayed details with Eli and ask for guidance"
     onclick={() => eli.ask(context)}>Ask Eli</Button
   >
 {/if}

@@ -107,9 +107,15 @@ test('a machine the controller would only refuse cannot be ticked, and says why'
   const quarantined = page.getByRole('checkbox', {
     name: new RegExp(`${DOUBTFUL.name} cannot be selected\\. Quarantined`),
   });
-  await expect(quarantined).toBeDisabled();
+  // Refused rather than disabled, so that it can be hovered and focused and the
+  // reason reached; ticking it does nothing.
+  await expect(quarantined).toHaveAttribute('aria-disabled', 'true');
   // The reason is where the checkbox would have been, not a surprise afterwards.
-  await expect(page.locator('.pick[title*="Open it to release the row"]')).toHaveCount(1);
+  await quarantined.hover();
+  await expect(page.locator('.bubble:popover-open')).toContainText('Open it to release the row');
+  // And ticking it does nothing. A press puts the bubble away, so this comes second.
+  await quarantined.click({ force: true });
+  await expect(quarantined).not.toBeChecked();
 
   // Nothing is ticked until somebody ticks it.
   await expect(bar(page)).toContainText('Tick machines to delete several at once');

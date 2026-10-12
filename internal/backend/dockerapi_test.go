@@ -820,3 +820,70 @@ func TestARemoveWhoseDeadlinePassesIsARemovalUnderWay(t *testing.T) {
 		t.Fatalf("a cancelled DELETE was read as a removal under way: %v", err)
 	}
 }
+
+// Docker 28 and later refuse any API version below 1.44, and Ubuntu's docker.io
+// is one of them. The client pins an old version on purpose, so the daemon's
+// refusal has to be an instruction and not the end of the backend: the agent in
+// a freshly built machine reported Docker as unavailable, and with it every
+// runner the pool wanted there.
+func TestAClientRaisesItsVersionToWhatTheDaemonAsksFor(t *testing.T) {
+	f := newFakeEngine(t, map[string]http.HandlerFunc{
+		"/": func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/v1.44/") {
+				_, _ = w.Write([]byte("OK"))
+				return
+			}
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"message": "client version 1.41 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version",
+			})
+		},
+	})
+	c := f.client(t)
+
+	if err := c.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping against a daemon that wants 1.44: %v", err)
+	}
+	if err := c.Ping(context.Background()); err != nil {
+		t.Fatalf("second Ping: %v", err)
+	}
+	// The first call found out and was asked again; the second went straight
+	// to the version the daemon wants.
+	var old, raised int
+	f.mu.Lock()
+	for _, r := range f.seen {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1.41/"):
+			old++
+		case strings.HasPrefix(r.URL.Path, "/v1.44/"):
+			raised++
+		}
+	}
+	f.mu.Unlock()
+	if old != 1 || raised != 2 {
+		t.Fatalf("requests at 1.41 = %d, at 1.44 = %d; want 1 and 2", old, raised)
+	}
+}
+
+// A daemon that keeps refusing must not send the client round in circles.
+func TestAClientDoesNotChaseAVersionItWasAlreadyAskingFor(t *testing.T) {
+	f := newFakeEngine(t, map[string]http.HandlerFunc{
+		"/": func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"message": "client version 1.41 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version",
+			})
+		},
+	})
+	c := f.client(t)
+
+	err := c.Ping(context.Background())
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+		t.Fatalf("Ping = %v, want the daemon's 400", err)
+	}
+	f.mu.Lock()
+	n := len(f.seen)
+	f.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("the client made %d requests, want 2 (one at 1.41, one at 1.44)", n)
+	}
+}
