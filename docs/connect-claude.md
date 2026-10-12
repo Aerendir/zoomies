@@ -273,7 +273,8 @@ call them:
   fields the controller itself writes (its id, state, conclusion, reason and the
   like). `since` is a cursor from an earlier answer, or a duration such as
   `10m`; left out, it is everything the controller still holds. The last line
-  is `next`, the cursor to read on from. A first line that starts `incomplete`
+  is `next: <id>`, the cursor to read on from, or `truncated: continue from
+  <id>` when more was waiting than one answer carries. A first line that starts `incomplete`
   means the controller no longer holds events back that far, or the cursor is
   from before it restarted: some were missed, so read the resources afresh.
 * `wait_for_change` holds the call until the fleet next changes and answers in
@@ -305,11 +306,12 @@ counts as they are this moment
 #### Waiting for a change
 
 Ask Claude to tell you when something happens and it should call
-`wait_for_change` twice. The first call, with no `since`, answers at once with
-what the controller still holds and a cursor:
+`wait_for_change` twice. The first call, with no `since`, answers a cursor at
+once and nothing else: it asks the controller for the present
+(`since=now`), so it is never handed the past to read through first.
 
 ```text
-2026-10-12T09:30:00Z job.updated job:job_x id=job_x state=in_progress
+a cursor at the present: pass next back as since to wait for the next change
 next: k3f9a2.1204
 ```
 
@@ -323,11 +325,14 @@ next: k3f9a2.1207
 ```
 
 Passing each answer's `next` back keeps following the fleet, and `kinds` and
-`topic` narrow what counts as a change. A wait lasts `seconds` (20 unless set)
-and never more than 25, so it ends inside any client's or proxy's patience; when
-it runs out the answer is `nothing changed within the wait` with the same cursor,
-which is a quiet fleet and not a failure. When the controller holds nothing yet
-that the connection may see, even the first call waits. While it waits, a call
+`topic` narrow what counts as a change. When more happened between two calls
+than one answer carries, the answer is cut and its last line is
+`truncated: continue from <id>` rather than `next: <id>`; the call after it
+answers at once with the rest, so pass the cursor back until an answer is not
+truncated, and only then does a call wait. A wait lasts `seconds` (20 unless
+set) and never more than 25, so it ends inside any client's or proxy's patience;
+when it runs out the answer is `nothing changed within the wait` with a cursor to
+carry on from, which is a quiet fleet and not a failure. While it waits, a call
 holds one of the controller's live-update streams, as an open tab of the UI does,
 so it counts against `limits.event_subscribers`, and when every one is in use it
 is refused with the controller's reason rather than queued.

@@ -106,7 +106,7 @@ Usage:
   zoomies events <subcommand> [flags]
 
 Subcommands:
-  recent [--since ID|DURATION] [--wait SECONDS]  The events since a point, optionally holding for the next one
+  recent [--since ID|DURATION|now] [--wait SECONDS]  The events since a point, optionally holding for the next one
 
 Run "zoomies events <subcommand> --help" for the flags each one takes.
 ```
@@ -116,10 +116,10 @@ Run "zoomies events <subcommand> --help" for the flags each one takes.
 The events since a point, optionally holding for the next one
 
 ```text
-What the controller published lately, oldest first, one row for each event. Pass the cursor a call prints as --since to read on from there; with --wait, a call with nothing new to show is held for the next matching event.
+What the controller published lately, oldest first, one row for each event. Pass the cursor a call prints as --since to read on from there, or --since now for a cursor at the present and nothing before it; with --wait, a call with nothing new to show is held for the next matching event.
 
 Usage:
-  zoomies events recent [--since ID|DURATION] [--kinds a,b] [--topic prefix] [--limit N] [--wait SECONDS]
+  zoomies events recent [--since ID|DURATION|now] [--kinds a,b] [--topic prefix] [--limit N] [--wait SECONDS]
 
 Flags:
   --ca-file                  PEM file holding the controller's certificate
@@ -127,7 +127,7 @@ Flags:
   --kinds                    only these kinds of event, comma-separated, such as job.updated,runner.updated
   --limit=50                 how many events at most (1 to 200)
   --output=table             table, json or yaml
-  --since                    an event id as a previous call printed it, or a duration such as 10m; leave out for everything the controller still holds
+  --since                    an event id as a previous call printed it, a duration such as 10m, or now for a cursor at the present and no events; leave out for everything the controller still holds
   --timeout=30s              how long to wait for one request
   --token                    an API token (or ZOOMIES_TOKEN)
   --topic                    only events about resources whose topic starts with this, such as job: or runner:
@@ -137,6 +137,7 @@ Flags:
 Examples:
   zoomies events recent --since 10m
   zoomies events recent --kinds job.updated --topic job:
+  zoomies events recent --since now
   zoomies events recent --since k3f9a2.1204 --wait 20
   zoomies events recent --output json
 ```

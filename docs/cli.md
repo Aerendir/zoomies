@@ -107,6 +107,7 @@ event stream open.
 ```sh
 zoomies events recent --since 10m                       # the last ten minutes
 zoomies events recent --kinds job.updated --topic job:  # only jobs
+zoomies events recent --since now                       # a cursor at the present, and nothing before it
 zoomies events recent --since k3f9a2.1204 --wait 20     # read on, or hold for the next change
 zoomies events recent --output json                     # the route's body, as it is
 ```
@@ -117,9 +118,12 @@ topic (the resource it is about) and the fields the controller itself says
 `to`). A name a workflow wrote, such as a job, workflow or branch name, is not
 on a row; `--output json` carries the whole event for a program, and a job's
 name is on `zoomies jobs get`. The last line is a cursor: pass it back as
-`--since` to read on from there, so a first call without `--since` is also how
-to get one. `--since` takes an event id exactly as the stream sends it, or a
-duration such as `10m`; left out, it is everything the controller still holds.
+`--since` to read on from there. `--since` takes an event id exactly as the
+stream sends it, a duration such as `10m`, or `now`, which prints no events and
+the present as the cursor, so a script that only wants what happens next starts
+there instead of reading the past first; left out, it is everything the
+controller still holds. `--since now --wait 20` holds for the next matching
+event from the moment it is asked.
 `--kinds` and `--topic` filter as the stream's do, and `--limit` (`50`, at most
 `200`; a number outside that is refused) says how many; when more matched, the
 oldest are shown and the last line says how to read on, even when none of the

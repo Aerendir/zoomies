@@ -291,3 +291,24 @@ func TestEventsRecentShowsEveryFieldTheMCPToolTrusts(t *testing.T) {
 		t.Errorf("the row shows a field the MCP tool does not trust:\n%s", out)
 	}
 }
+
+// --since now is how a script starts watching without first being handed the
+// past: the controller answers no events and the present as the cursor, and
+// the command says that is what the cursor is rather than that nothing exists.
+func TestEventsRecentSinceNowAsksForThePresentAndPrintsItsCursor(t *testing.T) {
+	var asked url.Values
+	srv := recentServer(t, http.StatusOK,
+		`{"items":[],"next":"k3f9a2.1300","complete":true,"truncated":false,"timed_out":false}`, &asked)
+
+	out, _ := runCLI(t, "events", "recent", "--since", "now", "--url", srv.URL)
+
+	if got := asked.Get("since"); got != "now" {
+		t.Errorf("the request carried since=%q, want now", got)
+	}
+	if strings.Contains(out, "no events") || !strings.Contains(out, "the present") {
+		t.Errorf("an answer from now does not say its cursor is the present:\n%s", out)
+	}
+	if !strings.Contains(out, "k3f9a2.1300") {
+		t.Errorf("the cursor was not printed:\n%s", out)
+	}
+}

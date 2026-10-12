@@ -105,7 +105,7 @@ func TestWaitForChangeAsksTheRouteToWaitAndIsLive(t *testing.T) {
 	if api.got != "GET /events/recent" || api.query.Get("wait") != "20s" || api.query.Get("since") != "k3.7" {
 		t.Errorf("got %q %v, want a 20s wait since k3.7", api.got, api.query)
 	}
-	if _, err := kennelCall(t, kennelTool(t, "wait_for_change"), api, `{"seconds":5}`); err != nil || api.query.Get("wait") != "5s" {
+	if _, err := kennelCall(t, kennelTool(t, "wait_for_change"), api, `{"since":"k3.7","seconds":5}`); err != nil || api.query.Get("wait") != "5s" {
 		t.Errorf("seconds was not passed on: %v %v", api.query, err)
 	}
 	if !kennelTool(t, "wait_for_change").live {
@@ -117,6 +117,33 @@ func TestWaitForChangeAsksTheRouteToWaitAndIsLive(t *testing.T) {
 	desc := kennelTool(t, "wait_for_change").Description
 	if !strings.Contains(desc, "no since") || !strings.Contains(desc, "repeatedly") {
 		t.Errorf("the description does not teach the two calls: %q", desc)
+	}
+}
+
+// The design's two calls: the first, with no cursor, is answered at once with
+// the present and nothing else, so the second waits for what happens next
+// rather than paging through what the controller already held.
+func TestWaitForChangeWithNoSinceAsksForACursorAtThePresentWithoutWaiting(t *testing.T) {
+	api := &kennelAPI{body: `{"items":[],"next":"k3.250","complete":true,"truncated":false,"timed_out":false}`}
+	out, err := kennelCall(t, kennelTool(t, "wait_for_change"), api, `{"kinds":["job.updated"],"seconds":5}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if api.query.Get("since") != "now" || api.query.Has("wait") {
+		t.Errorf("query = %v, want since=now and no wait", api.query)
+	}
+	if api.query.Get("kinds") != "job.updated" {
+		t.Errorf("kinds = %q, want the caller's", api.query.Get("kinds"))
+	}
+	text := out[0].Text
+	if strings.Contains(text, "no events") || !strings.Contains(text, "next: k3.250") || !strings.Contains(text, "wait for the next change") {
+		t.Errorf("the first call does not read as a cursor to wait from:\n%s", text)
+	}
+	if desc := kennelTool(t, "wait_for_change").Description; !strings.Contains(desc, "no since to get a cursor at once") {
+		t.Errorf("the description does not say a call with no since answers a cursor at once: %q", desc)
+	}
+	if !strings.Contains(Instructions, "no since to get a cursor at once") {
+		t.Error("the instructions do not say a call with no since answers a cursor at once")
 	}
 }
 
@@ -203,7 +230,8 @@ func TestEachWindowToolReadsTheRouteItsDescriptionPromises(t *testing.T) {
 		query            map[string]string
 	}{
 		{"recent_events", `{}`, "GET /events/recent", map[string]string{"limit": "50"}},
-		{"wait_for_change", `{}`, "GET /events/recent", map[string]string{"wait": "20s"}},
+		{"wait_for_change", `{}`, "GET /events/recent", map[string]string{"since": "now", "wait": ""}},
+		{"wait_for_change", `{"since":"k1.1"}`, "GET /events/recent", map[string]string{"since": "k1.1", "wait": "20s"}},
 		{"scaling_decisions", `{"pool_id":"pool_1"}`, "GET /scaling-events", map[string]string{"pool_id": "pool_1", "limit": "50"}},
 		{"fleet_samples", `{}`, "GET /samples", map[string]string{"window": "1h"}},
 		{"fleet_samples", `{"window":"6h"}`, "GET /samples", map[string]string{"window": "6h"}},

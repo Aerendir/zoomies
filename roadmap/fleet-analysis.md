@@ -80,7 +80,8 @@ credential. Nothing in `internal/mcp` learns about the store or the bus.
 
 `GET /events/recent` answers the ring as JSON rather than as a stream, so a
 stateless MCP tool, the CLI and a test can read it. Parameters: `since`
-(an event id as the stream sends it, or a duration such as `10m`), `kinds`,
+(an event id as the stream sends it, a duration such as `10m`, or `now`,
+which answers no events and the present as `next`), `kinds`,
 `topic` and `limit` (at most 200). The answer is `{items, next, complete}`:
 `next` is the id to continue from, and `complete` is false when the ring no
 longer reaches back to `since` or the id is from another run of the process,
@@ -155,7 +156,8 @@ tells a client that hands it to a model to treat them as data.
   runs again; `callKey` is unchanged for every other tool.
 - `wait_for_change` with no `since` answers the current `next` id at once
   and nothing else, so a model's first call establishes a cursor and its
-  second waits. The description says so.
+  second waits. The description says so. It asks the route for `since=now`
+  without `wait`, so a busy ring is not paged through first.
 - Three recorded scenarios in `eli_eval_test.go`: *what changed in the last
   ten minutes* (rests on `recent_events`, at most 2 calls), *why are jobs
   waiting right now* (rests on `scaling_decisions` and `list_problems`),

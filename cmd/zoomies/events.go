@@ -23,7 +23,7 @@ const maxEventsLimit = 200
 // runEvents is `zoomies events ...`: what the controller published lately.
 func runEvents(ctx context.Context, e *env, args []string) error {
 	return runGroup(ctx, e, "events", "What happened lately, and a wait for the next change.", []*subcommand{
-		{"recent", "[--since ID|DURATION] [--wait SECONDS]", "The events since a point, optionally holding for the next one", eventsRecent},
+		{"recent", "[--since ID|DURATION|now] [--wait SECONDS]", "The events since a point, optionally holding for the next one", eventsRecent},
 	}, args)
 }
 
@@ -47,11 +47,11 @@ type recentEventsResponse struct {
 }
 
 func eventsRecent(ctx context.Context, e *env, args []string) error {
-	fs := newFlagSet(e, "zoomies events recent [--since ID|DURATION] [--kinds a,b] [--topic prefix] [--limit N] [--wait SECONDS]",
+	fs := newFlagSet(e, "zoomies events recent [--since ID|DURATION|now] [--kinds a,b] [--topic prefix] [--limit N] [--wait SECONDS]",
 		"What the controller published lately, oldest first, one row for each event. "+
-			"Pass the cursor a call prints as --since to read on from there; with --wait, a call with nothing new to show is held for the next matching event.")
+			"Pass the cursor a call prints as --since to read on from there, or --since now for a cursor at the present and nothing before it; with --wait, a call with nothing new to show is held for the next matching event.")
 	cf := registerClientFlags(fs, true)
-	since := fs.String("since", "", "an event id as a previous call printed it, or a duration such as 10m; leave out for everything the controller still holds")
+	since := fs.String("since", "", "an event id as a previous call printed it, a duration such as 10m, or now for a cursor at the present and no events; leave out for everything the controller still holds")
 	kinds := fs.String("kinds", "", "only these kinds of event, comma-separated, such as job.updated,runner.updated")
 	topic := fs.String("topic", "", "only events about resources whose topic starts with this, such as job: or runner:")
 	limit := fs.Int("limit", 50, fmt.Sprintf("how many events at most (1 to %d)", maxEventsLimit))
@@ -59,6 +59,7 @@ func eventsRecent(ctx context.Context, e *env, args []string) error {
 	fs.example(
 		"zoomies events recent --since 10m",
 		"zoomies events recent --kinds job.updated --topic job:",
+		"zoomies events recent --since now",
 		"zoomies events recent --since k3f9a2.1204 --wait 20",
 		"zoomies events recent --output json",
 	)
@@ -110,11 +111,13 @@ func eventsRecent(ctx context.Context, e *env, args []string) error {
 	if p.structured() {
 		return p.emit(raw)
 	}
-	printRecentEvents(p, out, time.Duration(seconds)*time.Second)
+	printRecentEvents(p, out, time.Duration(seconds)*time.Second, strings.TrimSpace(*since) == "now")
 	return nil
 }
 
-func printRecentEvents(p *printer, out recentEventsResponse, waited time.Duration) {
+// printRecentEvents prints one answer. fromNow says the caller asked from the
+// present, so an empty answer is a starting cursor and not a quiet fleet.
+func printRecentEvents(p *printer, out recentEventsResponse, waited time.Duration, fromNow bool) {
 	next := plain(out.Next)
 	if !out.Complete {
 		// The route says this for three reasons, and the person can act on any of
@@ -136,6 +139,8 @@ func printRecentEvents(p *printer, out recentEventsResponse, waited time.Duratio
 	case out.Truncated:
 		// Everything in the batch was for another audience, so nothing is shown,
 		// but "no events" would be untrue: more is waiting past the cursor.
+	case fromNow:
+		p.note("nothing yet: the cursor below is the present, to wait from with --wait")
 	default:
 		p.note("no events")
 	}
