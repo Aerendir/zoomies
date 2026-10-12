@@ -41,10 +41,14 @@ are served by the same tools.
   model on one; the cost would be sessions and per-session buffers in a
   transport that is stateless on purpose.
 - **Eli is offered the window and the analyses, not the operator's
-  reads.** The audit log and the support bundle are administrator routes;
-  webhook deliveries any viewer may read, but a delivery's body is GitHub's
-  whole payload and nothing a question to Eli needs. All three stay off Eli's
-  list, named as left off in `TestEveryReadToolIsOnElisListOrLeftOffOnPurpose`.
+  reads.** This is the owner's choice, not a role: the webhook deliveries
+  and the audit log are viewer routes (`webhooks.read`, `audit.read`) and
+  only the support bundle is an administrator's (`diagnostics.read`). A
+  delivery is GitHub's whole payload, who did what, by name, is not for a
+  hosted model, and the support bundle is the whole instance in one
+  document. All three stay off Eli's list whoever is asking, named as left
+  off in `TestEveryReadToolIsOnElisListOrLeftOffOnPurpose`. (Corrected 12
+  October: this bullet first called the audit log an administrator route.)
 - **All four analyses:** queue-wait breakdown, release comparison, host
   pressure against failures, repeated runner-startup failures.
 - **Two packages**, so the window ships and is accepted before an analysis
@@ -61,7 +65,7 @@ are served by the same tools.
 | Runner timeline | `GET /runners/{id}/timeline` | `RunnerTimeline` | States and stages with durations |
 | Workflow runs | `GET /workflow-runs` | `ListWorkflowRuns` | Derived from jobs, never stored |
 | Webhook deliveries | `GET /webhook-deliveries` | | viewer; whole payloads |
-| Audit | `GET /audit` | `ListAudit` | admin |
+| Audit | `GET /audit` | `ListAudit` | viewer |
 | Support bundle | `GET /diagnostics/bundle` | | admin, sectioned, capped |
 | Job statistics | `GET /jobs/stats` | `JobStats` | Percentiles by six group keys, peaks |
 | Explanation | `GET /jobs/{id}/explanation` | | The failure classes ZF-231 made |
@@ -106,7 +110,7 @@ tool timeout and inside any proxy's patience.
 | `runner_timeline` | `/runners/{id}/timeline` | viewer | yes |
 | `list_workflow_runs` | `/workflow-runs` | viewer | yes |
 | `list_webhook_deliveries` | `/webhook-deliveries` | viewer | left off |
-| `list_audit` | `/audit` | admin | left off |
+| `list_audit` | `/audit` | viewer | left off |
 | `support_bundle` | `/diagnostics/bundle` | admin | left off |
 
 Each answers two content blocks: a short rendering for a model (one line
@@ -130,6 +134,16 @@ from, the way `get_runner_log` caps a log.
 `support_bundle` takes `sections` and returns only those, because the whole
 document is larger than any model should be handed; `sections` left out
 returns the index of sections and their sizes.
+
+As built (12 October): the three left off Eli's list are left off by the
+owner's choice, as section 2 says, not by their role; `list_audit` and
+`list_webhook_deliveries` answer any viewer, and only `support_bundle` needs
+an administrator. Only `recent_events` and `wait_for_change` carry
+`structuredContent` and an `outputSchema`; the other eight answer JSON as
+text. That structured copy is the route's body as it came, so it carries
+workflow-written names outside the untrusted block, and the schema's
+description of `data` says they are untrusted; `docs/connect-claude.md`
+tells a client that hands it to a model to treat them as data.
 
 ### 4.3 Eli
 
