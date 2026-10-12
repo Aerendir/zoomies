@@ -3395,7 +3395,9 @@ test.describe('the AI Context row in the side menu', () => {
       await expect(badge(page)).toHaveAttribute('data-tone', tone);
       // The link is still named for the page, and what is wrong is its description.
       await expect(row(page)).toHaveAccessibleDescription(text);
-      await expect(badge(page).locator('..')).toHaveAttribute('aria-hidden', 'true');
+      // The badge is for the eye only. Its tooltip wrapper sits between it and the
+      // hidden span, so the check is for an ancestor and not the direct parent.
+      await expect(badge(page).locator('xpath=ancestor::span[@aria-hidden="true"]')).toHaveCount(1);
     });
   }
 
