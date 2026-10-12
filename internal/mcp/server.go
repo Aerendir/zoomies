@@ -158,6 +158,12 @@ type Server struct {
 
 // New returns a server whose tools call api.
 func New(api API, opts Options) *Server {
+	return newServer(api, opts, tools())
+}
+
+// newServer is New over a given set of tools, which is how a test offers one
+// the real surface does not have, and still gets the wrapping New applies.
+func newServer(api API, opts Options, all []*tool) *Server {
 	s := &Server{
 		api:      api,
 		byName:   map[string]*tool{},
@@ -165,7 +171,14 @@ func New(api API, opts Options) *Server {
 		refusal:  opts.Refusal,
 		inFlight: map[string]context.CancelFunc{},
 	}
-	for _, t := range tools() {
+	for _, t := range all {
+		if t.call == nil && t.structured != nil {
+			structured := t.structured
+			t.call = func(ctx context.Context, c API, args json.RawMessage) ([]Content, error) {
+				content, _, err := structured(ctx, c, args)
+				return content, err
+			}
+		}
 		if t.action {
 			s.actions[t.Name] = true
 			if opts.Offer == nil || !opts.Offer(t.Name) {
@@ -381,6 +394,13 @@ func (s *Server) callTool(ctx context.Context, name string, arguments json.RawMe
 	if len(bytes.TrimSpace(args)) == 0 || string(bytes.TrimSpace(args)) == "null" {
 		args = json.RawMessage("{}")
 	}
+	if t.structured != nil {
+		content, value, err := t.structured(ctx, s.api, args)
+		if err != nil {
+			return toolError(err), nil
+		}
+		return CallResult{Content: content, StructuredContent: value}, nil
+	}
 	content, err := t.call(ctx, s.api, args)
 	if err != nil {
 		return toolError(err), nil
@@ -394,6 +414,10 @@ type Definition struct {
 	Name        string
 	Description string
 	InputSchema map[string]any
+	// Live is true for a tool whose answer the fleet window follows as the
+	// fleet changes. It is not part of the protocol and never reaches an MCP
+	// client.
+	Live bool
 }
 
 // Definitions lists the tools this server offers, in the order it lists them to
@@ -402,7 +426,7 @@ type Definition struct {
 func (s *Server) Definitions() []Definition {
 	out := make([]Definition, 0, len(s.tools))
 	for _, t := range s.tools {
-		out = append(out, Definition{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema})
+		out = append(out, Definition{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema, Live: t.live})
 	}
 	return out
 }
@@ -436,7 +460,11 @@ type Content struct {
 // CallResult is a tool's answer.
 type CallResult struct {
 	Content []Content `json:"content"`
-	IsError bool      `json:"isError,omitempty"`
+	// StructuredContent is the 2025-06-18 revision's second answer: the same
+	// facts as a value, for a client that would rather not parse the text. The
+	// text stays, because a client older than that revision reads only it.
+	StructuredContent any  `json:"structuredContent,omitempty"`
+	IsError           bool `json:"isError,omitempty"`
 }
 
 func toolError(err error) CallResult {

@@ -20,10 +20,23 @@ type tool struct {
 	Title       string         `json:"title"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
-	Annotations annotations    `json:"annotations"`
+	// OutputSchema describes the structuredContent of a tool that answers one.
+	// A client that reads it may validate the value against it, so it is only
+	// set where structured is.
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	Annotations  annotations    `json:"annotations"`
 
 	action bool
-	call   func(ctx context.Context, c API, args json.RawMessage) ([]Content, error)
+	// live marks a tool whose answer the fleet window can follow as it
+	// changes. The protocol has no hint for that, so it is never serialised;
+	// only Definitions reports it, to a caller that is not an MCP client.
+	live bool
+	call func(ctx context.Context, c API, args json.RawMessage) ([]Content, error)
+	// structured is call with a second answer: the same facts as a value a
+	// program can read without parsing the text. New gives a tool that sets it
+	// and leaves call nil a call that drops the value, so a caller that wants
+	// text only (Eli, the in-product assistant) needs no second code path.
+	structured func(ctx context.Context, c API, args json.RawMessage) ([]Content, any, error)
 }
 
 type annotations struct {
