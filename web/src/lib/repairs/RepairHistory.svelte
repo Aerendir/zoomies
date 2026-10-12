@@ -6,14 +6,24 @@
   with the filters and page the operator has chosen, because a refresh that
   forgot them would throw somebody back to the first page of everything while
   they were reading page three of one repository.
+
+  Repairs are chosen here and cleared from the history in one go. Clearing hides
+  a repair and nothing else, which the confirmation says in so many words; the
+  chosen ids are one set that outlives the refresh and a change of page, because
+  choosing is slow work, and is dropped by a change of filter, because what was
+  chosen may not be in the new list at all.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ApiError, listEliRepairs } from '$lib/api/client';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { ApiError, bulkEliRepairAction, listEliRepairs, selectEliRepairs } from '$lib/api/client';
   import type { Schemas } from '$lib/api/types';
+  import { formatNumber } from '$lib/format';
   import { prefs } from '$lib/state/prefs.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import Button from '$lib/components/Button.svelte';
+  import Checkbox from '$lib/components/Checkbox.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Field from '$lib/components/Field.svelte';
   import Input from '$lib/components/Input.svelte';
@@ -21,16 +31,22 @@
   import Select from '$lib/components/Select.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import {
+    BULK_LIMIT,
     NO_REPAIR_FILTERS,
+    batches,
+    clearConsequences,
+    clearReport,
     filtered,
     isActive,
     listQuery,
     offsetAfterClear,
-    stateLabel,
+    selectionQuery,
     type RepairFilters,
     type RepairGroup,
     type RepairTrigger,
   } from './history';
+  import ClearOutcome from './ClearOutcome.svelte';
+  import RepairRow from './RepairRow.svelte';
 
   let { onretry }: { onretry: (target: { repo: string; pull: number }) => void } = $props();
 
@@ -64,6 +80,27 @@
    * not promise that: the answer may already be in flight to the parser.
    */
   let latest = 0;
+
+  /**
+   * The repairs chosen, in the order they were chosen. One set serves the row
+   * boxes, the header box and a select-all, so the three cannot disagree about
+   * what is chosen.
+   */
+  const chosen = new SvelteSet<string>();
+  /**
+   * What the last select-all took, while the set is still that: how many
+   * repairs the filters could clear in all, and whether the server stopped
+   * short of them. Any other change to the set makes the count plain again,
+   * since it is no longer "everything".
+   */
+  let everything = $state<{ total: number; truncated: boolean } | null>(null);
+  let taking = $state(false);
+  let taken: AbortController | null = null;
+  let confirmOpen = $state(false);
+  /** What the last clear did, which stays until it is dismissed. */
+  let report = $state<{ cleared: number; skipped: { label: string; error: string }[] } | null>(
+    null,
+  );
 
   async function load(): Promise<void> {
     reading?.abort();
@@ -107,7 +144,84 @@
     clearTimeout(pause);
     filters = { ...filters, repo: repoText, ...change };
     offset = 0;
+    unchoose();
     void load();
+  }
+
+  /** Nothing chosen, and no select-all still on its way to choose something. */
+  function unchoose(): void {
+    taken?.abort();
+    taking = false;
+    chosen.clear();
+    everything = null;
+  }
+
+  function choose(id: string, on: boolean): void {
+    if (on) chosen.add(id);
+    else chosen.delete(id);
+    everything = null;
+  }
+
+  function chooseShown(on: boolean): void {
+    for (const id of clearableShown) choose(id, on);
+  }
+
+  /**
+   * Every repair the filters match that can be cleared, past the page shown.
+   * It asks by the filters the visible answer was read with: the total on the
+   * button belongs to them, and so must what the button chooses.
+   */
+  async function takeEverything(): Promise<void> {
+    taken?.abort();
+    const controller = new AbortController();
+    taken = controller;
+    taking = true;
+    try {
+      const picked = await selectEliRepairs(selectionQuery(answered), controller.signal);
+      if (controller.signal.aborted) return;
+      // Replaced, not added to: the ids are already everything that matches, and
+      // adding a row from further back could take the list past what one clear
+      // may carry for no reason the operator can see.
+      chosen.clear();
+      for (const id of picked.ids) chosen.add(id);
+      everything = { total: picked.total, truncated: picked.truncated };
+    } catch (cause) {
+      if (!controller.signal.aborted)
+        toasts.fromError(cause, 'Could not select the matching repairs');
+    } finally {
+      if (taken === controller) taking = false;
+    }
+  }
+
+  /**
+   * Hides the chosen repairs from the history. The route answers for each id,
+   * so a repair that started running since it was listed is skipped and
+   * reported rather than failing the lot.
+   */
+  async function clear(): Promise<boolean> {
+    const ids = [...chosen];
+    const names = new Map(items.map((r) => [r.id, `${r.repo} #${r.pull_number || '?'}`]));
+    const results: { id: string; ok: boolean; error?: string }[] = [];
+    try {
+      // One request holds 500 ids at most, and a select-all plus a row from a
+      // later page can pass that.
+      for (const part of batches(ids, BULK_LIMIT))
+        results.push(...(await bulkEliRepairAction({ action: 'clear', ids: part })).results);
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not clear those repairs');
+      // Nothing was cleared, so the dialog and the selection stay for another go.
+      if (results.length === 0) return false;
+    }
+    const outcome = clearReport(results);
+    report = {
+      cleared: outcome.cleared,
+      skipped: outcome.skipped.map((s) => ({ label: names.get(s.id) ?? s.id, error: s.error })),
+    };
+    unchoose();
+    // The page the operator was on may have gone with the rows.
+    offset = offsetAfterClear(offset, limit, total, outcome.cleared);
+    void load();
+    return true;
   }
 
   function typed(text: string): void {
@@ -122,15 +236,21 @@
     refilter({ ...NO_REPAIR_FILTERS });
   }
 
-  function copyRepair(r: Schemas['EliRepair']): void {
-    void navigator.clipboard.writeText(JSON.stringify(r, null, 2)).then(
-      () => toasts.success('Repair details copied'),
-      () => toasts.error('Could not copy repair details'),
-    );
-  }
-
   /** Nothing to filter in an empty history, so the controls wait for a repair. */
   const showFilters = $derived(filtered(answered) || total > 0);
+  /** The shown repairs that can be cleared: those Eli is not still on. */
+  const clearableShown = $derived(items.filter((r) => !isActive(r.state)).map((r) => r.id));
+  const shownChosen = $derived(clearableShown.filter((id) => chosen.has(id)).length);
+  const allShownChosen = $derived(
+    clearableShown.length > 0 && shownChosen === clearableShown.length,
+  );
+  /** Once the page is chosen and more match, the rest can be taken in one step. */
+  const canTakeEverything = $derived(allShownChosen && total > items.length && everything === null);
+  const howMany = $derived(
+    everything?.truncated
+      ? `${formatNumber(chosen.size)} of ${formatNumber(everything.total)} selected`
+      : `${formatNumber(chosen.size)} selected`,
+  );
 
   onMount(() => {
     void load();
@@ -140,6 +260,7 @@
       clearTimeout(pause);
       latest++;
       reading?.abort();
+      taken?.abort();
     };
   });
 </script>
@@ -186,6 +307,13 @@
     </div>
   {/if}
   {#if error}<p role="alert" class="error">{error}</p>{/if}
+  {#if report}
+    <ClearOutcome
+      cleared={report.cleared}
+      skipped={report.skipped}
+      ondismiss={() => (report = null)}
+    />
+  {/if}
   {#if !loaded}
     {#if !error}<Skeleton lines={3} />{/if}
   {:else if total === 0}
@@ -205,65 +333,47 @@
       />
     {/if}
   {:else}
-    <div class="history">
-      {#each items as r (r.id)}<article>
-          <div class="repair-title">
-            <a
-              href="https://github.com/{r.repo}/pull/{r.pull_number}"
-              target="_blank"
-              rel="noreferrer">{r.repo} #{r.pull_number || '?'}</a
-            ><span
-              class:success={r.state === 'succeeded'}
-              class:danger={['failed', 'checks_failed', 'blocked'].includes(r.state)}
-              >{stateLabel(r.state)}</span
-            >
-          </div>
-          <p>{r.message || 'Waiting to start.'}</p>
-          <p>
-            {new Date(r.created_at).toLocaleString()} · {r.details?.stage?.replaceAll('_', ' ') ||
-              stateLabel(r.state)}
-          </p>
-          <details>
-            <summary>Usage and investigation details</summary>
-            <p>
-              Model: {r.details?.model || 'Not recorded'}. Source supplied: {Math.round(
-                (r.details?.source_bytes ?? 0) / 1024,
-              )} KiB.
-            </p>
-            {#if r.details?.steps?.length}
-              {#each r.details.steps as step, index (index)}<p>
-                  Step {index + 1}: {step.usage_reported
-                    ? `${step.input_tokens.toLocaleString()} input / ${step.output_tokens.toLocaleString()} output tokens`
-                    : 'Token usage unknown (provider did not report it)'}. {Math.round(
-                    step.request_bytes / 1024,
-                  )} KiB request; {(step.elapsed_ms / 1000).toFixed(1)}s.
-                </p>{/each}
-            {:else}<p>Token usage was not recorded for this attempt.</p>{/if}
-            <Button size="sm" onclick={() => copyRepair(r)}>Copy investigation details</Button>
-          </details>
-          {#if !isActive(r.state) && r.state !== 'succeeded'}
-            <p>
-              {['context_limit', 'source_unavailable', 'unsupported_fix'].includes(
-                r.details?.failure_code ?? '',
-              )
-                ? 'A retry needs narrower instructions or a supported edit. Review the failure before spending another attempt.'
-                : 'Check the PR and current readiness before trying again.'}
-            </p>
-            <Button size="sm" onclick={() => onretry({ repo: r.repo, pull: r.pull_number })}
-              >Review another attempt</Button
+    <div class="bar" role="group" aria-label="Repair selection" aria-live="polite">
+      <Checkbox
+        checked={allShownChosen}
+        indeterminate={shownChosen > 0 && !allShownChosen}
+        disabled={clearableShown.length === 0}
+        reason={clearableShown.length === 0 ? 'Every repair shown is still running.' : undefined}
+        ariaLabel={items.length === 1
+          ? 'Select the repair shown'
+          : `Select the ${items.length} repairs shown`}
+        onchange={chooseShown}
+      />
+      {#if chosen.size > 0}
+        <strong class="count">{howMany}</strong>
+        <div class="actions">
+          {#if canTakeEverything}
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={taking}
+              onclick={() => void takeEverything()}
+              >Select all {formatNumber(total)} matching</Button
             >
           {/if}
-          <small
-            >{r.trigger === 'automatic'
-              ? 'Automatic · installation provider'
-              : `Requested by @${r.github_login} · personal provider`}
-            {#if r.commit_sha}· <a
-                href="https://github.com/{r.repo}/commit/{r.commit_sha}"
-                target="_blank"
-                rel="noreferrer">{r.commit_sha.slice(0, 7)}</a
-              >{/if}</small
+          <Button size="sm" variant="secondary" onclick={() => (confirmOpen = true)}
+            >Clear from history</Button
           >
-        </article>{/each}
+          <Button size="sm" variant="ghost" onclick={unchoose}>Clear selection</Button>
+        </div>
+      {:else}
+        <span class="hint">Select repairs to clear them from the history.</span>
+      {/if}
+    </div>
+    <div class="history">
+      {#each items as r (r.id)}
+        <RepairRow
+          repair={r}
+          selected={chosen.has(r.id)}
+          onselect={(on) => choose(r.id, on)}
+          {onretry}
+        />
+      {/each}
     </div>
     <Pagination
       {total}
@@ -283,6 +393,20 @@
   {/if}
 </section>
 
+<!--
+  It says what clearing leaves alone because that is the part that surprises: the
+  rows go from this list, and the limit and the guard still read them.
+-->
+<ConfirmDialog
+  bind:open={confirmOpen}
+  title="Clear from history"
+  description="The repairs stop showing in this list."
+  consequences={clearConsequences()}
+  confirmLabel="Clear from history"
+  tone="default"
+  onconfirm={clear}
+/>
+
 <style>
   .card {
     padding: var(--z-space-4);
@@ -301,54 +425,51 @@
     margin: var(--z-space-2) 0 var(--z-space-4);
     line-height: var(--z-leading-lg);
   }
-  summary {
-    display: flex;
-    gap: var(--z-space-3);
-    align-items: center;
-    cursor: pointer;
-    font-weight: var(--z-weight-semibold);
-    font-size: var(--z-text-sm);
-  }
   .filters {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--z-space-4);
     margin-top: var(--z-space-3);
   }
+  /* A phone has no room beside the box, so the actions wrap under the count. */
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--z-space-3);
+    margin-top: var(--z-space-3);
+    padding: var(--z-space-2) var(--z-space-3);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface-sunken);
+    font-size: var(--z-text-sm);
+  }
+  .hint {
+    color: var(--z-text-muted);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--z-space-2);
+    margin-left: auto;
+  }
   .history {
     margin-top: var(--z-space-3);
   }
-  article + article {
+  .history > :global(article + article) {
     border-top: var(--z-border-width) solid var(--z-border);
     padding-top: var(--z-space-3);
     margin-top: var(--z-space-3);
   }
-  .repair-title {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--z-space-2);
-    font-size: var(--z-text-sm);
-    flex-wrap: wrap;
-  }
-  a {
-    color: var(--z-accent);
-    overflow-wrap: anywhere;
-  }
-  small {
-    color: var(--z-text-muted);
-    font-size: var(--z-text-xs);
-  }
-  .error,
-  .danger {
+  .error {
     color: var(--z-danger);
-  }
-  .success {
-    color: var(--z-idle);
   }
   @media (max-width: 640px) {
     .filters {
       grid-template-columns: 1fr;
+    }
+    .actions {
+      margin-left: 0;
     }
   }
 </style>
