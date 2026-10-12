@@ -82,8 +82,14 @@ them. Somebody who needs more connects with an API token in the
 
 ## What it costs to be public
 
-A visitor holds an event stream open, so visitors share
-`limits.event_subscribers` with whoever runs the fleet, and watching a running
-job's log asks that job's agent for a stream. Put a reverse proxy in front that
-limits requests and open connections per address, and keep secrets out of the
-workflows the fleet runs: anyone can read their logs.
+Every open tab holds a live event stream. Visitors' streams have a ceiling of
+their own, `limits.visitor_event_subscribers` (200 unless you change it), and
+are not counted against `limits.event_subscribers`, so however many people are
+looking, whoever runs the fleet still gets theirs. A visitor past the ceiling
+still reads every page, without live updates, and is told to reload in a
+minute.
+
+Watching a running job's log asks that job's agent for a stream as well. Put a
+reverse proxy in front that limits requests and open connections per address,
+and keep secrets out of the workflows the fleet runs: anyone can read their
+logs.

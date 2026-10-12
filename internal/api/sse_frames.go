@@ -60,3 +60,8 @@ func frameReadable(id *auth.Identity, k events.Kind) bool {
 	a, ok := frameReads[k]
 	return ok && auth.Allowed(id, a)
 }
+
+// visitorStreams is the event bus class a public view's visitors' streams are
+// opened in, so limits.visitor_event_subscribers counts them and
+// limits.event_subscribers does not.
+const visitorStreams = "visitor"

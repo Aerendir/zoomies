@@ -879,7 +879,11 @@ var registry = buildRegistry([]Setting{
 	},
 	{
 		Key: "limits.event_subscribers", Label: "Most live-update streams", Env: "ZOOMIES_LIMITS_EVENT_SUBSCRIBERS", Kind: KindInt, Scope: ScopePlatform, Live: true,
-		Summary: "The most live-update streams open at once. Every open tab of the UI holds one, so leave room for every operator's browser. 0 is unlimited.",
+		Summary: "The most live-update streams open at once for people signed in and API tokens. Every open tab of the UI holds one, so leave room for every operator's browser. A public view's visitors are not counted here. 0 is unlimited.",
+	},
+	{
+		Key: "limits.visitor_event_subscribers", Label: "Most visitors' live-update streams", Env: "ZOOMIES_LIMITS_VISITOR_EVENT_SUBSCRIBERS", Kind: KindInt, Scope: ScopePlatform, Live: true,
+		Summary: "The most live-update streams a public view's visitors may hold at once, all of them together. It is a ceiling of its own, so a crowd of visitors never takes the streams the people who run the fleet need. A visitor past it still reads every page, without live updates. 0 is unlimited.",
 	},
 	{
 		Key: "limits.job_stats_window", Label: "Longest job statistics window", Env: "ZOOMIES_LIMITS_JOB_STATS_WINDOW", Kind: KindDuration, Scope: ScopePlatform, Live: true,

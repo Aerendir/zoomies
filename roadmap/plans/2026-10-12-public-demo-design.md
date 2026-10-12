@@ -189,9 +189,10 @@ flowchart LR
    no public address, using the guide's commands for the agent, with
    `ZOOMIES_CONTROLLER_URL` and a join token from **Hosts, Add a host**. Size it
    for the jobs: Grow (2 vCPU, 4 GB) runs two at a time comfortably.
-5. **Name and limits.** Attach `demo.zoomies.sh` to the web pod. A visitor holds
-   an event stream open and `limits.event_subscribers` is shared with whoever
-   runs the demo, so raise it to what the plan carries and watch it.
+5. **Name and limits.** Attach `demo.zoomies.sh` to the web pod. Each visitor
+   holds an event stream open, under `limits.visitor_event_subscribers` (200 by
+   default), a ceiling of their own that never takes the streams the people
+   running the demo need; raise it to what the plan carries and watch it.
 6. **Check it.** The problems list carries `auth.public_view` and nothing worse;
    a private window lands on the Overview with the read-only line; an assistant
    pointed at `/mcp` with no credential lists pools.
@@ -228,9 +229,11 @@ with `openapi_spec.go` and `schema.d.ts` regenerated, and `mkdocs.yml`.
   not listed: a new read action is hidden from visitors until somebody adds it.
 - **A route with no action that writes.** The account group is the only such
   group behind authentication; it is closed to visitors as a whole.
-- **Load from strangers.** Event streams are capped by
-  `limits.event_subscribers`; the runbook puts a rate limit in front. Watching a
-  running job's log asks the agent for a stream, so the demo pool stays small.
+- **Load from strangers.** Visitors' event streams have a ceiling of their own,
+  `limits.visitor_event_subscribers`, and are not counted against
+  `limits.event_subscribers`, so a crowd cannot lock out the people running
+  the demo; the runbook puts a rate limit in front as well. Watching a running
+  job's log asks the agent for a stream, so the demo pool stays small.
 - **A demo workflow that prints a secret.** The organisation holds none.
 - **Jobs that are processes, not containers.** Pods offer no Docker, so a job
   runs as the worker pod's user and a later job can see what an earlier one

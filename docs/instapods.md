@@ -305,7 +305,7 @@ runner's log.
 
 | Pod | Plan | Why |
 | --- | --- | --- |
-| Web | **Build** (2 vCPU, 2 GB) | The controller is light (tens of megabytes idle), so Launch (512 MB) is enough to try it with one worker. Build leaves room for a public view's visitors, each holding a live event stream, and for the backups the controller takes beside its database. |
+| Web | **Build** (2 vCPU, 2 GB) | The controller is light (tens of megabytes idle), so Launch (512 MB) is enough to try it with one worker. Build leaves room for a public view's visitors, each holding a live event stream (up to `limits.visitor_event_subscribers`, 200 by default), and for the backups the controller takes beside its database. |
 | Worker | **Grow** (2 vCPU, 4 GB), or **Scale** (4 vCPU, 8 GB) for heavier builds | The jobs are the load: each runner is the Actions runner plus whatever its job compiles, tests or installs, with no container limit around it. Grow is sized for two ordinary jobs side by side; for anything bigger, choose a larger plan before you raise the pool's maximum. |
 
 ## Upgrading

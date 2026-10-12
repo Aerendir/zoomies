@@ -219,3 +219,33 @@ func TestSigningInOverALapsedSessionSetsOneCookie(t *testing.T) {
 		t.Errorf("the session cookie set was %+v; want the new session", resp.cookie)
 	}
 }
+
+// A public demo invites people nobody can ask to close a tab. Their streams
+// have a ceiling of their own, and however full it is, somebody who runs the
+// fleet still gets the stream the ordinary ceiling keeps for them.
+func TestVisitorsCannotTakeTheStreamsStaffNeed(t *testing.T) {
+	h := newHarness(t, publicView, func(c *config.Config) {
+		c.Limits.VisitorEventSubscribers = 1
+		c.Limits.EventSubscribers = 1
+	})
+	admin, _ := h.user("admin", store.RoleAdmin)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	frames, first := h.openStream(t, ctx, "/api/v1/events", "", nil)
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("the first visitor's stream answered %d", first.StatusCode)
+	}
+	await(t, frames, "the first visitor's opening comment", func(f sseFrame) bool { return f.comment != "" })
+
+	second := h.do(request{method: "GET", path: "/api/v1/events"})
+	second.mustStatus(t, http.StatusConflict, "a second visitor past the visitors' ceiling")
+	if msg := second.errorMessage(t); !strings.Contains(msg, "limits.visitor_event_subscribers") {
+		t.Errorf("the refusal does not name the visitors' ceiling: %q", msg)
+	}
+
+	_, staff := h.openStream(t, ctx, "/api/v1/events", h.session(admin), nil)
+	if staff.StatusCode != http.StatusOK {
+		t.Fatalf("an administrator's stream answered %d while visitors were at their ceiling", staff.StatusCode)
+	}
+}
