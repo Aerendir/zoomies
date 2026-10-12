@@ -33,7 +33,6 @@
   } from '$lib/api/types';
   import { pluralise } from '$lib/format';
   import { router } from '$lib/router';
-  import { machineStatus } from '$lib/status';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import Badge from '$lib/components/Badge.svelte';
@@ -48,6 +47,7 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Tabs from '$lib/components/Tabs.svelte';
   import MachineBand from '$lib/providers/MachineBand.svelte';
+  import MachineList from '$lib/providers/MachineList.svelte';
   import OrphanReview from '$lib/providers/OrphanReview.svelte';
   import PoolsTab from '$lib/providers/PoolsTab.svelte';
   import RentingNotice from '$lib/providers/RentingNotice.svelte';
@@ -397,22 +397,9 @@
                 description="Nothing has been rented from this provider. A machine is built when a pool has queued work and no host that can run it."
               />
             {:else}
-              <ul class="machines">
-                {#each machines as machine (machine.id)}
-                  <li>
-                    <a href="/machines/{machine.id}">
-                      <span class="name">{machine.name}</span>
-                      <Badge status={machineStatus(machine.state)} size="sm" />
-                      <span class="where">
-                        {#if machine.resource_id}{machine.resource_zone} / {machine.resource_id}
-                        {:else}no resource yet{/if}
-                        {#if machine.host_name}· {machine.host_name}{/if}
-                      </span>
-                      <RelativeTime value={machine.updated_at} class="when" />
-                    </a>
-                  </li>
-                {/each}
-              </ul>
+              <div class="frame">
+                <MachineList {machines} canDelete={canAdmin} />
+              </div>
             {/if}
           </div>
         {:else if active === 'pools'}
@@ -576,51 +563,15 @@
     line-height: var(--z-leading-sm);
     color: var(--z-text-muted);
   }
-  .machines {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
   .stale {
     margin: 0 0 var(--z-space-3);
     font-size: var(--z-text-xs);
     color: var(--z-text-muted);
   }
-  .machines {
+  .frame {
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-md);
     background: var(--z-surface);
-  }
-  .machines li + li {
-    border-top: var(--z-border-width) solid var(--z-border);
-  }
-  .machines a {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--z-space-3);
-    padding: var(--z-space-3) var(--z-space-4);
-    color: var(--z-text);
-    text-decoration: none;
-  }
-  .machines a:hover {
-    background: var(--z-surface-hover);
-  }
-  .name {
-    font-family: var(--z-font-mono);
-    font-size: var(--z-text-xs);
-    overflow-wrap: anywhere;
-  }
-  .where {
-    font-size: var(--z-text-xs);
-    color: var(--z-text-subtle);
-  }
-  .machines :global(.when) {
-    margin-left: auto;
-    font-size: var(--z-text-xs);
-    color: var(--z-text-subtle);
   }
   .settings {
     display: flex;

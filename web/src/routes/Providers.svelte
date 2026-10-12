@@ -26,16 +26,15 @@
   import { machineStatus } from '$lib/status';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
-  import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import LoadingBoundary from '$lib/components/LoadingBoundary.svelte';
   import MetricGrid from '$lib/components/MetricGrid.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import RelativeTime from '$lib/components/RelativeTime.svelte';
   import Select from '$lib/components/Select.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import MachineBand from '$lib/providers/MachineBand.svelte';
+  import MachineList from '$lib/providers/MachineList.svelte';
   import ProviderCard from '$lib/providers/ProviderCard.svelte';
   import RentingNotice from '$lib/providers/RentingNotice.svelte';
   import { machinesNeedingReview } from '$lib/providers/machines';
@@ -350,21 +349,7 @@
           />
         </div>
       {:else}
-        <ul class="machines">
-          {#each shown as machine (machine.id)}
-            <li>
-              <a href="/machines/{machine.id}">
-                <span class="name">{machine.name}</span>
-                <Badge status={machineStatus(machine.state)} size="sm" />
-                <span class="where">
-                  {machine.provider_name || machine.provider_id}
-                  {#if machine.resource_id}· {machine.resource_zone} / {machine.resource_id}{/if}
-                </span>
-                <RelativeTime value={machine.updated_at} class="when" />
-              </a>
-            </li>
-          {/each}
-        </ul>
+        <MachineList machines={shown} showProvider canDelete={canAdmin} />
       {/if}
     </section>
   </LoadingBoundary>
@@ -403,6 +388,8 @@
     background: var(--z-surface);
   }
   .panel {
+    /* The machine list lines its rows up with this panel's own header. */
+    --machine-list-inset: var(--z-space-5);
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-md);
     background: var(--z-surface);
@@ -431,40 +418,6 @@
   }
   .panel-body {
     padding: var(--z-space-4);
-  }
-  .machines {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .machines li + li {
-    border-top: var(--z-border-width) solid var(--z-border);
-  }
-  .machines a {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--z-space-3);
-    padding: var(--z-space-3) var(--z-space-5);
-    color: var(--z-text);
-    text-decoration: none;
-  }
-  .machines a:hover {
-    background: var(--z-surface-hover);
-  }
-  .name {
-    font-family: var(--z-font-mono);
-    font-size: var(--z-text-xs);
-    overflow-wrap: anywhere;
-  }
-  .where {
-    font-size: var(--z-text-xs);
-    color: var(--z-text-subtle);
-  }
-  .machines :global(.when) {
-    margin-left: auto;
-    font-size: var(--z-text-xs);
-    color: var(--z-text-subtle);
   }
   .need-admin {
     margin: 0;

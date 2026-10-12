@@ -328,6 +328,98 @@ func TestUpdateAttemptsListNewestFirstForOneTargetOrAll(t *testing.T) {
 	}
 }
 
+// Two attempts of one target can be asked for within a millisecond: a person
+// cancelling and asking again, or the planner retrying the moment a failure is
+// recorded. requested_at is whole milliseconds and the id that broke the tie is
+// random, so the attempt asked for last was listed second about half the time.
+// Everything that reads "this host's latest attempt" (an agent's answer, a
+// heartbeat's report, the host's card) then judged the new attempt by the old
+// one.
+func TestTheLatestAttemptOfATargetIsTheLastAskedForEvenWithinOneMillisecond(t *testing.T) {
+	ctx := context.Background()
+	s, _ := updateAttemptStore(t)
+
+	// The clock never moves, so every ask ties with the one before it. Forty of
+	// them leave no room to pass on a coin flip per pair.
+	const asks = 40
+	latestIs := func(when string, n int, want string) {
+		t.Helper()
+		got, err := s.ListUpdateAttempts(ctx, UpdateScopeHost, "host_a", 1)
+		if err != nil || len(got) != 1 || got[0].ID != want {
+			t.Fatalf("ask %d, %s: host_a's latest attempt = %+v (%v), want %s", n, when, got, err, want)
+		}
+	}
+	var asked []string
+	for n := 1; n <= asks; n++ {
+		a := mustCreateAttempt(t, s, hostAttempt("host_a"))
+		asked = append(asked, a.ID)
+		latestIs("open", n, a.ID)
+		if ok, err := s.FinishUpdateAttempt(ctx, a.ID, UpdateCancelled, "closed elsewhere"); err != nil || !ok {
+			t.Fatalf("FinishUpdateAttempt = %v, %v", ok, err)
+		}
+		latestIs("ended", n, a.ID)
+	}
+
+	got, err := s.ListUpdateAttempts(ctx, UpdateScopeHost, "host_a", asks)
+	if err != nil || len(got) != asks {
+		t.Fatalf("host_a's attempts = %d rows (%v), want %d", len(got), err, asks)
+	}
+	for i, a := range got {
+		if want := asked[asks-1-i]; a.ID != want {
+			t.Fatalf("host_a's attempts newest first: position %d is %s, want %s, the order they were asked for reversed", i, a.ID, want)
+		}
+	}
+}
+
+// An attempt keeps the store's clock unless that would not make it the newest of
+// its target. Only then is it recorded a millisecond after its predecessor, the
+// smallest step the schema stores, so a timestamp is still the time it was asked
+// for wherever it can be, and the nudge neither reaches other targets nor
+// carries forward.
+func TestAnAttemptKeepsTheClockUnlessItWouldNotBeItsTargetsNewest(t *testing.T) {
+	ctx := context.Background()
+	s, clock := updateAttemptStore(t)
+	end := func(a *UpdateAttempt) {
+		t.Helper()
+		if ok, err := s.FinishUpdateAttempt(ctx, a.ID, UpdateFailed, "x"); err != nil || !ok {
+			t.Fatalf("FinishUpdateAttempt = %v, %v", ok, err)
+		}
+	}
+	wantAt := func(what string, a *UpdateAttempt, want time.Time) {
+		t.Helper()
+		if !a.RequestedAt.Equal(want) {
+			t.Errorf("%s was requested at %v, want %v", what, a.RequestedAt, want)
+		}
+	}
+
+	first := mustCreateAttempt(t, s, hostAttempt("host_a"))
+	wantAt("the first attempt of a target", first, updateAttemptsNow)
+	end(first)
+
+	// Asked for in the same millisecond as its predecessor, it is the one after.
+	second := mustCreateAttempt(t, s, hostAttempt("host_a"))
+	wantAt("a second attempt in the same instant", second, updateAttemptsNow.Add(time.Millisecond))
+
+	// Other targets are not behind host_a's attempts, so they keep the clock.
+	wantAt("another host's attempt", mustCreateAttempt(t, s, hostAttempt("host_b")), updateAttemptsNow)
+	wantAt("the controller's attempt", mustCreateAttempt(t, s, controllerAttempt()), updateAttemptsNow)
+
+	// A later instant is taken as it is: the step above does not carry forward.
+	end(second)
+	clock.at = updateAttemptsNow.Add(time.Hour)
+	third := mustCreateAttempt(t, s, hostAttempt("host_a"))
+	wantAt("an attempt asked for an hour later", third, clock.at)
+
+	// A clock that was put back must not bury the newest attempt behind older ones.
+	end(third)
+	clock.at = updateAttemptsNow
+	fourth := mustCreateAttempt(t, s, hostAttempt("host_a"))
+	wantAt("an attempt asked for under a clock put back", fourth, third.RequestedAt.Add(time.Millisecond))
+	if got, err := s.ListUpdateAttempts(ctx, UpdateScopeHost, "host_a", 1); err != nil || len(got) != 1 || got[0].ID != fourth.ID {
+		t.Errorf("host_a's latest attempt = %+v (%v), want %s", got, err, fourth.ID)
+	}
+}
+
 // The planner reads the attempts to the releases it would take machines to, and
 // a rollout's steps, and nothing else: however many other attempts are newer, a
 // machine's failures to its release are among what it reads.

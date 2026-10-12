@@ -805,6 +805,10 @@ export const drainMachine = (id: string) =>
 export const deleteMachine = (id: string, query?: Query<'deleteMachine'>) =>
   api.del<Result<'deleteMachine'>>(`/machines/${enc(id)}`, { query });
 
+/** Delete several machines at once, and be told which went and why the rest did not. */
+export const bulkMachines = (body: Body<'bulkMachineAction'>) =>
+  api.post<Result<'bulkMachineAction'>>('/machines/bulk', { body });
+
 /** Forget a quarantined row without touching the resource behind it. */
 export const releaseMachine = (id: string, body: Body<'releaseMachine'>) =>
   api.post<Result<'releaseMachine'>>(`/machines/${enc(id)}/release`, { body });

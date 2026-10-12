@@ -594,15 +594,23 @@ test('an overlay covers the window, not a page that has outgrown it', async ({ p
   await expect(drawer).toBeVisible();
   await widenThePage();
   await expectWithinTheWindow(drawer, 'the problems drawer');
-  // And it is the whole window rather than a column down one side of it: a
-  // phone has no room for a panel beside the page it came from.
-  expect((await drawer.boundingBox())!.width, 'the drawer fills the phone').toBeCloseTo(window, 0);
+  // And it is a panel against the right edge rather than the whole window: a
+  // strip of the page it came from stays in view down the left, wide enough
+  // to hit, so it reads as a drawer over the page rather than a new page, and
+  // a tap on the strip is the way back.
+  const panel = (await drawer.boundingBox())!;
+  expect(panel.x + panel.width, 'the drawer hangs off the right edge').toBeCloseTo(window, 0);
+  expect(panel.x, 'a strip of the page shows beside the drawer').toBeGreaterThanOrEqual(44);
   // The bar along the bottom is laid out in the same block and was the other
   // half of the reported capture: five entries spread across a page twice the
   // width of the screen, with three of them off the right of it.
   await expectWithinTheWindow(nav(page), 'the bottom navigation');
   await narrowThePage();
-  await page.keyboard.press('Escape');
+  // Measured again on the page as it normally is: while it was wide the
+  // browser showed it scaled down, and a press lands in the window's own
+  // pixels, not the page's.
+  const strip = (await drawer.boundingBox())!;
+  await page.mouse.click(strip.x / 2, strip.y + strip.height / 2);
   await expect(drawer).toHaveCount(0);
 
   const menu = await openNavMenu(page);
