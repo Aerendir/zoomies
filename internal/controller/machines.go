@@ -1608,6 +1608,13 @@ func (c *Controller) noteProviderFailure(ctx context.Context, providerID string,
 		// provider's ability to build one.
 		return
 	}
+	if m.Attempts > 0 {
+		// A retry of a step already counted. The breaker counts machines, as its
+		// threshold says; counting every retry let one machine stuck behind a
+		// single fault stand the provider down after three tries, and with it
+		// every other machine the pool was waiting for.
+		return
+	}
 	// Read afresh rather than counting on the pass's copy. Two machines of one
 	// provider are stepped at the same time, and the pass's row is shared
 	// between them: incrementing it in place would have the second failure

@@ -434,8 +434,8 @@ row, so it survives a restart, and it is audited.
 
 **A machine that will not come up.** Its page carries the failure in the words
 whatever refused it used: Proxmox's own task error for a clone, and the guest's
-own standard error for a bootstrap. Three failures in a row stand the provider
-down for a widening interval, so a bad template costs a few machines rather
+own standard error for a bootstrap. Three machines failing in a row stand the provider
+down for a widening interval (a machine that keeps retrying counts once), so a bad template costs a few machines rather
 than fifty.
 
 **Orphan review.** **Providers → your provider → Orphans** has three lists:

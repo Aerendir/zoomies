@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "acfdb49e",
+  "generated_from": "0da5c7e",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2634,7 +2634,7 @@
       "severity": "warning",
       "detection": "runtime",
       "detects": "A machine never reached ready, and carries the provider's own words for why.",
-      "fix": "Read the machine's page. Three failures in a row stand the provider down, so a bad template costs a few machines rather than fifty.",
+      "fix": "Read the machine's page. Three machines failing in a row stand the provider down, so a bad template costs a few machines rather than fifty.",
       "verify": null,
       "status_sentence": "A machine the fleet asked for did not arrive, so jobs may wait for room.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
