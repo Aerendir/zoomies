@@ -35,6 +35,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
 | E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Draft PR, not merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Full-suite rerun result still pending |
+| E7 fallback-copy mode correction | Draft PR, not merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
+| E7 installer fixture correction | Draft PR, not merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; affected install/upgrade race checks pass |
 | E7 | Supporting each E1 slice | Plans, behavioural fixtures and status records in the stack | Focused race checks, full lint and strict docs build pass for the API slice; full test suite remains unverified after interruption; no live model evaluation or performance experiment has run |
 
 The first validation attempt was blocked by a missing Go compiler and shell
@@ -72,12 +74,22 @@ Current implementation plans:
 - [CLI and agent tools](roadmap/plans/2026-10-12-eli-pr-delay-agent-tools.md).
 - [Contextual UI and scripted scenarios](roadmap/plans/2026-10-12-eli-pr-delay-ui.md).
 - [Validation fixture correction](roadmap/plans/2026-10-12-eli-validation-fixtures.md).
+- [Fallback-copy mode preservation](roadmap/plans/2026-10-12-eli-copy-mode-validation.md).
+- [Installer fixture permissions](roadmap/plans/2026-10-12-eli-installer-fixture-validation.md).
 
 The full-suite rerun found a storage fixture that relied on a permissive umask.
 This workspace uses `0077`, so requesting `0755` through Mkdir created a private
 `0700` directory and defeated the refusal test's setup. The fixture now explicitly
-sets `0755`; all aicontext package race tests pass after that correction. The rest
-of the full suite is still running. Record its final result, including failures,
+sets `0755`; all aicontext package race tests pass after that correction. The original full run also reached the API package's ten-minute deadline while
+creating a test database. A complete API race rerun has a thirty-minute budget.
+The backend's mode-copy fixture exposed masked destination permissions; explicitly
+setting source 0755 still failed before the fix. The fallback copy now restores
+source permissions after copying, and the backend package race tests pass.
+The installer previous-binary fixture had the same umask assumption: its source
+was 0700 rather than the asserted 0755. Explicit fixture chmod corrects that
+setup; the affected install/upgrade race checks pass. The controller package
+also reached the ten-minute package deadline and is rerunning with thirty
+minutes. The rest of the original full suite is still running. Record its final result, including failures,
 before claiming full-suite verification.
 
 The next agent should start from the stack tip, check which parent PRs have

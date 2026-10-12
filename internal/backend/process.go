@@ -1259,6 +1259,12 @@ func copyFile(src, dst string) error {
 		_ = out.Close()
 		return err
 	}
+	// OpenFile applies the process umask to a new destination. A fallback
+	// copy must keep the source mode just as a shared inode would.
+	if err := out.Chmod(info.Mode().Perm()); err != nil {
+		_ = out.Close()
+		return err
+	}
 	return out.Close()
 }
 
