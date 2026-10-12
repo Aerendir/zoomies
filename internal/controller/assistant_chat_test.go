@@ -46,6 +46,71 @@ func TestAConversationExactlyAtTheLimitsIsSent(t *testing.T) {
 	}
 }
 
+// The person reading a refusal has just pasted a log, so it says how far over
+// the limit they are and what to do about it, and not only what the limit is.
+// A bare "a message is at most 8 KiB" left them to guess how much to cut.
+func TestAnOversizeMessageIsRefusedWithHowFarOverItIsAndWhatToDo(t *testing.T) {
+	big := strings.Repeat("x", assistantChatMaxMessageBytes+(2<<10))
+	_, err := ValidateAssistantChat([]AssistantChatMessage{{Role: "user", Content: big}})
+	var invalid *AssistantChatInvalid
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want an AssistantChatInvalid", err)
+	}
+	if invalid.Field != "messages[0]" {
+		t.Errorf("field = %q, want messages[0]", invalid.Field)
+	}
+	for _, want := range []string{"your message", "10.0 KiB", "at most 8 KiB", "lines around the error"} {
+		if !strings.Contains(invalid.Message, want) {
+			t.Errorf("message %q does not say %q", invalid.Message, want)
+		}
+	}
+
+	// An older message in the thread is not "your message": the person is not
+	// looking at it, so the refusal says which one it is.
+	_, err = ValidateAssistantChat([]AssistantChatMessage{
+		{Role: "user", Content: big}, {Role: "assistant", Content: "ok"}, {Role: "user", Content: "and now?"},
+	})
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want an AssistantChatInvalid", err)
+	}
+	if !strings.HasPrefix(invalid.Message, "an earlier message in this conversation") {
+		t.Errorf("message = %q, want it to name an earlier message", invalid.Message)
+	}
+}
+
+// A conversation that is too long is cured by starting another, and the refusal
+// says so, with how long it is, so the page can offer exactly that.
+func TestAConversationThatIsTooLongSaysToStartANewOne(t *testing.T) {
+	var turns []AssistantChatMessage
+	for len(turns)*assistantChatMaxMessageBytes <= assistantChatMaxTotalBytes {
+		turns = append(turns, AssistantChatMessage{Role: "user", Content: strings.Repeat("y", assistantChatMaxMessageBytes)})
+	}
+	_, err := ValidateAssistantChat(turns)
+	var invalid *AssistantChatInvalid
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want an AssistantChatInvalid", err)
+	}
+	for _, want := range []string{"40.0 KiB", "at most 32 KiB", "start a new conversation"} {
+		if !strings.Contains(invalid.Message, want) {
+			t.Errorf("message %q does not say %q", invalid.Message, want)
+		}
+	}
+
+	many := make([]AssistantChatMessage, 0, assistantChatMaxMessages+1)
+	for len(many) <= assistantChatMaxMessages {
+		many = append(many, AssistantChatMessage{Role: "user", Content: "q"})
+	}
+	_, err = ValidateAssistantChat(many)
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want an AssistantChatInvalid", err)
+	}
+	for _, want := range []string{"41 messages", "at most 40", "start a new conversation"} {
+		if !strings.Contains(invalid.Message, want) {
+			t.Errorf("message %q does not say %q", invalid.Message, want)
+		}
+	}
+}
+
 // What is sent is what was typed, trimmed, in the roles the page may use.
 func TestAConversationIsSentTrimmedAndInTheRolesItWasGiven(t *testing.T) {
 	got, err := ValidateAssistantChat([]AssistantChatMessage{
