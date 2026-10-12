@@ -414,3 +414,11 @@ Model-generated fixes still need review. The limits constrain cost and the
 editing surface; they do not prove a patch correct. Provider errors, quota
 exhaustion or unsupported model output stop a repair without trying another
 user's credentials.
+
+A repair offers the model no tools; every step is a JSON object. A model that
+answers with a tool call anyway is told, as the result of that call, that it has
+no tools and which JSON replies it may send, and is asked once more. Most models
+comply. One that calls a tool again stops the repair, and Eli's comment names the
+tool it asked for, so you can tell a model that ignores its instructions, which
+a different model or provider fixes, from a prompt that was wrong. Both turns
+appear in the repair history.
