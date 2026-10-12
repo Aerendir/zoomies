@@ -9382,6 +9382,8 @@ export interface components {
             insecure_skip_verify?: boolean;
             /** @description The certificate Zoomies trusts for this endpoint instead of the system's. It is the public half of a cluster's own authority and not a secret, so it is returned: a form can only keep what it is shown, and a box that opens empty would clear it on the next save. Absent when none is set, and when what is stored is not entirely certificates. */
             ca_pem?: string;
+            /** @description The certificate a machine built by this provider trusts for this controller, and nothing else when it is set. A different certificate from `ca_pem` in general: a cluster's own authority has no reason to have signed the controller. Empty leaves a machine on its own trust store, which is right for a controller on a public certificate. Returned for the same reason `ca_pem` is, and absent when none is set and when what is stored is not entirely certificates. */
+            machine_ca_pem?: string;
             /**
              * @description How the controller reaches the endpoint: over the network, or through a `zoomies gateway` running beside the provider, for a hypervisor on a home network with no address the controller can route to. The gateway's address is sealed on the row and never returned, for the credential's reason.
              * @enum {string}
@@ -9481,6 +9483,8 @@ export interface components {
             endpoint?: string;
             /** @description The certificate to trust for this endpoint */
             ca_pem?: string;
+            /** @description The certificate a machine built by this provider trusts for this controller, and nothing else. Leave it out, or empty, for a machine to use its own trust store, which is right for a controller on a public certificate. Certificates only; a private key is refused with a 422 naming this field. An edit that does not name it leaves it alone. */
+            machine_ca_pem?: string;
             insecure_skip_verify?: boolean;
             /**
              * @description Direct, or through a `zoomies gateway` beside the provider. Choosing direct on a provider that had a private connection clears its stored address.
