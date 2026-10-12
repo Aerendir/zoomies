@@ -1293,7 +1293,13 @@ Minimising or navigating preserves the conversation and draft; a reload,
 sign-out or New conversation clears them. Chat uses the owner-scoped personal API and that user’s enabled default
 provider. Installation provider management retains its administrator gate.
 
-`web/src/lib/assistant/AskEli.svelte` is the shared contextual action. Supply an
+`web/src/lib/assistant/AskEli.svelte` is the shared contextual action. It wears
+the avatar's own tint (`--z-accent` on `--z-accent-subtle`, ringed by
+`--z-accent-border`), so the button on a page and the dog in the corner are
+plainly the same way to reach Eli, and it wiggles once when a page first shows
+it and again under the pointer so a person who has never noticed it does; a list
+of them arrives on three staggered beats rather than in unison, and reduced
+motion stops all of it. Supply an
 `EliContext` with a kind, title, optional question and an explicit map of displayed
 facts. Never pass a whole API object, credentials, environment variables or
 unrequested logs. Clicking the action opens Eli and asks with that snapshot.
