@@ -77,6 +77,15 @@ var ErrRolloutNotRunning = errors.New("the rollout is no longer running")
 // A target with an open attempt answers ErrConflict: the partial unique index
 // is the rule, so two callers racing cannot both succeed. An attempt that names
 // a rollout answers ErrRolloutNotRunning unless that rollout is running.
+//
+// RequestedAt is the store's clock, unless that is not after the target's
+// previous attempt, in which case it is a millisecond after it. The listings
+// order a target's attempts by it, it is kept in whole milliseconds, and the id
+// that would break a tie is random. Two attempts asked for within one
+// millisecond (a person cancelling and asking again, a clock that does not move
+// in a test) were therefore ordered by chance, and "the host's latest attempt"
+// was sometimes the one before. A clock that was put back is treated the same
+// way, for the same reason.
 func (s *Store) CreateUpdateAttempt(ctx context.Context, a *UpdateAttempt) error {
 	switch {
 	case a.Scope != UpdateScopeController && a.Scope != UpdateScopeHost:
@@ -106,6 +115,16 @@ func (s *Store) CreateUpdateAttempt(ctx context.Context, a *UpdateAttempt) error
 			if running == 0 {
 				return fmt.Errorf("%w: %s", ErrRolloutNotRunning, a.RolloutID)
 			}
+		}
+		// Read inside the transaction, under the single writer, so no other
+		// attempt of the target can be recorded between this and the insert.
+		var newest sql.NullInt64
+		if err := tx.QueryRowContext(ctx, `SELECT MAX(requested_at) FROM update_attempts
+			WHERE scope = ? AND host_id = ?`, a.Scope, a.HostID).Scan(&newest); err != nil {
+			return err
+		}
+		if newest.Valid && ms(a.RequestedAt) <= newest.Int64 {
+			a.RequestedAt = at(newest.Int64 + 1)
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO update_attempts (`+updateAttemptCols+`)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
@@ -144,6 +163,10 @@ func (s *Store) OpenUpdateAttempts(ctx context.Context) ([]UpdateAttempt, error)
 // ListUpdateAttempts returns attempts newest first. An empty scope matches
 // every scope and an empty hostID every target; limit is capped at 500, and
 // 50 stands for a limit of 0 or less.
+//
+// Within one target that is the order they were asked for, which
+// CreateUpdateAttempt guarantees. Attempts of different targets can share a
+// millisecond, and then only their random ids tell them apart.
 func (s *Store) ListUpdateAttempts(ctx context.Context, scope, hostID string, limit int) ([]UpdateAttempt, error) {
 	if limit <= 0 {
 		limit = 50
