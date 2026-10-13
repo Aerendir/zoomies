@@ -54,7 +54,18 @@ These facts do not attest applied limits or configuration/image equivalence.
 Missing runner evidence from older controllers is explicit null. Unsupported
 versions, malformed facts, inconsistent counts or unbound job identities are refused.
 
-Answers mark shortened text and omitted whole attempt and runner-job rows; aggregate
+The independently validated workflow-evidence-v1 whitelist adds retained trigger
+events, path fingerprints and nullable root-file commit/blob/content digests and
+byte counts. Run IDs bind to the original untrimmed arm; source commits bind to
+that exact attempt revision. Private raw paths/source text and future fields are
+excluded. Root collection does not attest executed bytes or cover reusable
+workflows/actions, inputs or test scope. Path fingerprints are not content
+identity; matching digests do not establish equivalent workloads. Older missing
+views stay null. Present unsupported versions or inconsistent facts are refused.
+Workflow full selected/root-source counts include source-omitted rows; shown is
+computed locally. Replay does not independently rehash absent source text.
+
+Answers mark shortened text and omitted whole attempt, runner-job and workflow rows; aggregate
 measures still describe the full retained selection. Text and structured output
 carry the same shown rows. Runner counts cover the source enumeration, which may
 be partial; per-arm shown counts and omission flags include both source and model
