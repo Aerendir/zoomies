@@ -43,7 +43,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 capture and replay API | Merged | ZF-243, [#987](https://github.com/eyupio/zoomies/pull/987), stacked on #986 | Explicit operator capture with comparisons:write plus jobs:read, one whole-request budget, scoped viewer replay and generated contracts. Focused API race, role/scope/contract checks, full auth/GitHub race suites, changed-package vet and strict docs pass. CLI replay merged; MCP/Eli replay is in slice 10; UI and CLI capture remain outstanding |
 | E2 CLI replay | Merged into API parent | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
 | E2 MCP/Eli replay | Merged | ZF-243, [#990](https://github.com/eyupio/zoomies/pull/990), targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
-| E2 web capture and inspection | Draft PR | ZF-243, [#991](https://github.com/eyupio/zoomies/pull/991), targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
+| E2 web capture and inspection | Merged | ZF-243, [#991](https://github.com/eyupio/zoomies/pull/991), targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
+| E2 CLI capture | Implemented, PR pending | ZF-243, targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1153,3 +1154,54 @@ For normal CI/local reproduction after make build, run comparisons.spec.ts with
 Playwright's desktop and mobile projects. Strict MkDocs passes with the documented
 repository-only header fallback for unavailable optional GitHub metadata. No live
 GitHub capture, actual experiment, model evaluation or new backend route was added.
+
+
+### E2 slice 12: explicit CLI capture, 13 October 2026
+
+After web #991 merged, codex/eli-comparison-cli-capture starts from main.
+`zoomies comparisons capture --file FILE` takes one documented strict JSON request,
+with `--file -` for stdin and a 32 KiB read bound. The caller supplies installation,
+repository, comparison kind, hypothesis/change, RFC 3339 window and baseline/
+candidate exact run/attempt pairs. Workflow capture also requires an exact retained
+revision-delta reference. Actor and evidence identity remain server-owned.
+
+Before any request, the CLI checks scope/metadata bounds, increasing window,
+non-empty arms, the ten-attempt combined bound, positive exact IDs and duplicate
+pairs across both arms. Decoder int64 fields preserve full GitHub run identity
+without floating-point rounding; unknown fields and trailing JSON are refused.
+The original validated JSON goes to one POST /comparisons, with no quota probe,
+automatic retry, follow-up GET or mutation exposed to MCP/Eli. The existing client
+and API enforce operator plus comparisons:write and jobs:read, configured history
+window, shared diagnostic budget and durable retention.
+
+Capture displays the returned immutable report through the same presenter as CLI
+replay: current versions and identity scope required, raw JSON retained including
+future fields/integer precision, and human unknowns/counts/directions/reasons.
+Failures warn against automatic retry because a failed collection can consume
+allowance or an unacknowledged response can leave retained evidence. Unsupported
+success responses are not retried. No local evidence file is written automatically.
+
+The agent skill classifies comparisons get as a read and comparisons capture as a
+change; the former missing classification is corrected in this slice. This edits
+the shipped agent guidance, not a request to operate a live controller here.
+Next: independent historical workload/configuration/cache evidence and complete
+selection. E2 remains in progress; no verified experiment, causal/cost-savings
+claim or live model evaluation is made by these adapter slices.
+
+
+Slice 12 validation: focused capture/replay race fixtures, generated CLI/MCP
+reference and group-help consistency, command/skill classification and skill flag
+checks pass. Generation, cmd/zoomies vet, strict docs and whitespace checks pass.
+The mutation-name guard now includes capture. Docs use the repository-only header
+fallback for unavailable optional GitHub metadata. No UI change, live controller
+operation, real GitHub capture, model run or full repository test was performed.
+
+Next agent should audit independently retained fields in internal/store job and
+runner records before extending internal/controller/experiment_snapshot.go. Never
+infer historical image/resources/workflow inputs/test scope/cache from current
+pool settings or from the operator's intended delta. Unsupported fields stay
+unknown. Design immutable observation provenance and cohort-completeness bounds
+before changing eligibility/rule versions. The ten-attempt on-demand capture cap
+is below the 30-completed-per-arm comparison threshold; it must not be silently
+lifted, batched or relabelled complete to obtain a ranking. Separate descriptive
+selected observations from any future independently matched cohort path.

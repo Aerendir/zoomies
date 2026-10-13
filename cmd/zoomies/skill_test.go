@@ -83,7 +83,7 @@ func TestEveryCommandIsPlacedInExactlyOneOfTheSkillsThreeLists(t *testing.T) {
 // whatever the skill says in prose: the verbs that mean "change" are what a
 // careless edit is most likely to file under Reads.
 func TestNoCommandThatChangesTheFleetIsListedAsARead(t *testing.T) {
-	changing := regexp.MustCompile(` (create|edit|delete|enable|disable|prewarm|import|drain|cordon|uncordon|apply|rerun|set|unset|revoke|rotate-secret|passwd|reset-two-step|purge|join-token|pause|resume|add|connect-proxmox|restore|import-env)$`)
+	changing := regexp.MustCompile(` (capture|create|edit|delete|enable|disable|prewarm|import|drain|cordon|uncordon|apply|rerun|set|unset|revoke|rotate-secret|passwd|reset-two-step|purge|join-token|pause|resume|add|connect-proxmox|restore|import-env)$`)
 	for _, command := range skillLists(t)["Reads"] {
 		if changing.MatchString(command) {
 			t.Errorf("`%s` is listed as a read, and its name says it changes something", command)

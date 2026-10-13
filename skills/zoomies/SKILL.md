@@ -91,6 +91,7 @@ These change nothing. Run them as the question needs.
 * `zoomies runners list`, `zoomies runners get`, `zoomies runners logs`
 * `zoomies problems list`
 * `zoomies events recent` (with `--wait` it holds a request for the next change, for 25 seconds at most, and changes nothing)
+* `zoomies comparisons get`
 * `zoomies jobs list`, `zoomies jobs stats`, `zoomies jobs get`, `zoomies jobs why`, `zoomies jobs advice`, `zoomies jobs pr-delay`
 * `zoomies analyse queue-wait`, `zoomies analyse compare`, `zoomies analyse host-pressure`, `zoomies analyse startup-failures`
 * `zoomies size-pins list`
@@ -121,6 +122,7 @@ minutes.
 * `zoomies pools export` (it writes a file in the working directory unless told `--file -`), `zoomies pools create`, `zoomies pools edit`, `zoomies pools delete`, `zoomies pools enable`, `zoomies pools disable`, `zoomies pools prewarm`, `zoomies pools import`
 * `zoomies runners drain`, `zoomies runners delete`
 * `zoomies problems apply`
+* `zoomies comparisons capture` (collects GitHub evidence and changes bounded shared history; never automatically retry)
 * `zoomies jobs rerun`
 * `zoomies kennel recheck`
 * `zoomies size-pins set`, `zoomies size-pins delete`
