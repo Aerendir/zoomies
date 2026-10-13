@@ -54,7 +54,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 CLI runner evidence | Merged | ZF-243, [#1006](https://github.com/eyupio/zoomies/pull/1006), based on main after #1004 | Shared capture/replay human view, validated REST whitelist, full coverage counts and explicit unknown/request/claim labels; raw JSON preserved. Focused race tests, vet and strict docs pass |
 | E2 private trigger/workflow context | Merged | ZF-243, [#1007](https://github.com/eyupio/zoomies/pull/1007), based on main after #1006 | Bounded optional exact-attempt metadata, identity recheck and immutable private retention; no workload equivalence or public contract change. Focused GitHub/controller race tests, vet and strict docs pass |
 | E2 push root-workflow digests | Merged | ZF-243, [#1012](https://github.com/eyupio/zoomies/pull/1012), based on main after #1007 | Commit-pinned bounded root-file read with private digests; eight-request reservation, no revision/equivalence promotion. GitHub/controller/API race tests, vet and strict docs pass |
-| E2 web workflow evidence | Ready for review | ZF-243, [#1014](https://github.com/eyupio/zoomies/pull/1014), based on main after #1012 | Separate bounded REST/UI projection with exact run IDs, unknowns and root-only coverage; fingerprints exclude raw paths. Controller/API race, 20 desktop/mobile checks, 109 UI unit tests, type/lint/build, vet and strict docs pass |
+| E2 web workflow evidence | Merged | ZF-243, [#1014](https://github.com/eyupio/zoomies/pull/1014), based on main after #1012 | Separate bounded REST/UI projection with exact run IDs, unknowns and root-only coverage; fingerprints exclude raw paths. Controller/API race, 20 desktop/mobile checks, 109 UI unit tests, type/lint/build, vet and strict docs pass |
+| E2 MCP/Eli workflow evidence | Ready for review | ZF-243, PR pending, based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1737,7 +1738,7 @@ conditions and fair complete selections, plus live model evaluation, remain open
 
 ### E2 slice 22: descriptive workflow evidence in REST/UI, 13 October 2026
 
-Ready for review [#1014](https://github.com/eyupio/zoomies/pull/1014), branch codex/eli-comparison-workflow-evidence-web, based on main after #1012
+Merged [#1014](https://github.com/eyupio/zoomies/pull/1014), branch codex/eli-comparison-workflow-evidence-web, based on main after #1012
 merged. Capture and verified offline replay now return optional workflow_evidence
 outside the immutable private envelope/report. The whitelist contains version
 workflow-evidence-v1, baseline/candidate full selected-attempt/root-source counts,
@@ -1785,3 +1786,66 @@ model. Workload/configuration/cache/test-scope/dependency and fair-selection pro
 non-push revision resolution and live model evaluation remain outstanding. Keep
 thirty completed attempts per arm and admission limits; descriptive digests do
 not justify workflow equivalence or an improvement ranking.
+
+
+### E2 slice 23: bounded MCP/Eli workflow evidence, 13 October 2026
+
+Prepared on codex/eli-comparison-workflow-evidence-mcp, based on main after #1014
+merged. get_retained_comparison still makes exactly one installation/repository
+scoped local-history GET with its existing read-only annotation and caller scope.
+No capture, refresh, source/log read, extra quota/provider call, action or direct
+store/controller import. CLI human presentation remains a following slice.
+
+Independent REST structs and a closed nested nullable output schema whitelist
+workflow-evidence-v1 trigger events, path fingerprints and root basis/commit/blob/
+content digests/byte counts. Private filenames, raw paths, source text, event
+payloads, actor/fleet identities and future fields do not reach models. Older
+missing views become workflow_evidence:null. Present unsupported/malformed views
+are refused. Required counters/flags/arrays never default missing data to zero.
+Run IDs must be canonical positive int64 decimal strings. Attempt keys are unique
+across arms and bind to the original untrimmed report arm. Full selected counts
+must match the original attempt inventory; root counts and source omissions must
+be consistent with shown rows. Event grammar, fingerprint/hash syntax, fixed
+root-file basis and 1 to 128 KiB source byte counts are validated. Root claims
+require event=push, a path fingerprint and commit equality with that exact
+attempt's original SourceRevision, before clipping or local row removal.
+
+Public hashes cannot reconstruct private path/source bytes or independently verify
+the storage digest. The controller verifies retained scope/input bindings; source
+collection checks bytes. MCP validates only public formats/associations. The
+boundary labels path versus content and root collection versus executed bytes,
+reusable workflows/actions, inputs and test scope. No workflow identity,
+controlled equivalence, eligibility, ranking, causal or cost claim is promoted.
+
+Workflow arms add locally computed shown counts, ignoring upstream shown fields.
+Full counters persist, including source-omitted rows. Global rows_omitted includes
+runner/workflow source omissions and any model truncation. Whole rows are balanced
+across six groups: runner, workflow and original attempt rows, per arm. Keep one
+of each available kind/arm when the budget allows; refuse if even summaries cannot
+fit. Text/structured projections match. Existing 64 KiB MCP/12 KiB Eli budgets
+include the expanded boundary, with the same 2 MiB input cap. Digests/IDs are never
+clipped. Validation binds against full source arms, not locally shortened ones.
+
+The scripted Eli fixture retains one push root stamp, one granted versus two
+requested CPUs and an unknown candidate root. It uses the real API/replay/tool
+path with one read-only call and keeps the injected hypothesis inside the quoted
+boundary. This proves transport/scripted presentation, not unscripted model
+reasoning or authentic workflow execution. No live model evaluation occurred.
+
+Validation completed: focused MCP race fixtures cover private/future exclusion,
+exact max-int64 IDs, nulls, legacy views, unsupported/malformed versions/counts/
+run/commit/hash/event/basis/size refusal, source/model omissions, combined six-group
+budgets and impossible budgets. Full MCP race suite, scripted Eli fixture,
+generated tool/command references and catalogue checks, vet, strict docs and
+whitespace pass. The wrong-commit fixture fails when its binding guard is removed.
+make generate refreshed only the normal catalogue source-revision metadata;
+entries are unchanged. Docs used the repository-only header fallback for unavailable
+optional GitHub metadata. No migration, dependency, public API/UI change or live provider run.
+
+Next agent: CLI capture/replay human workflow facts with the same original-arm
+bindings, counters, nulls and root-only labels, preserving raw structured JSON
+and the existing single request. Do not infer workflow execution/equivalence
+from a root digest. Independent transitive dependencies, non-push revisions,
+dispatch inputs/test scope, caches/host conditions, complete fair selections and
+live model evaluation remain open. Keep thirty completed attempts per arm and
+current admission limits.

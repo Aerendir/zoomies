@@ -1,0 +1,27 @@
+package mcp
+
+import "slices"
+
+func comparisonWorkflowSchema() map[string]any {
+	closed := func(props map[string]any) map[string]any {
+		required := []string{}
+		for key := range props {
+			required = append(required, key)
+		}
+		slices.Sort(required)
+		return object(required, props)
+	}
+	nullable := func(s map[string]any) map[string]any {
+		return map[string]any{"oneOf": []any{s, map[string]any{"type": "null"}}}
+	}
+	hash := func(n string) map[string]any {
+		return map[string]any{"type": "string", "pattern": "^[a-f0-9]{" + n + "}$"}
+	}
+	count := func() map[string]any { return map[string]any{"type": "integer", "minimum": 0} }
+	source := closed(map[string]any{"basis": map[string]any{"type": "string", "enum": []string{"push_head_sha_root_file"}}, "commit_sha": hash("40"), "blob_sha": hash("40"), "content_sha256": hash("64"), "bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": 131072}})
+	attempt := closed(map[string]any{"run_id": map[string]any{"type": "string", "pattern": "^[1-9][0-9]*$"}, "attempt": map[string]any{"type": "integer", "minimum": 1}, "event": nullable(map[string]any{"type": "string", "maxLength": 64, "pattern": "^[a-z0-9_]+$"}), "workflow_path_sha256": nullable(hash("64")), "root_source": nullable(source)})
+	arm := closed(map[string]any{"selected_attempts": count(), "root_sources": count(), "rows_omitted": map[string]any{"type": "boolean"}, "shown": count(), "attempts": map[string]any{"type": "array", "maxItems": 100, "items": attempt}})
+	evidence := closed(map[string]any{"version": map[string]any{"type": "string", "enum": []string{"workflow-evidence-v1"}}, "baseline": arm, "candidate": arm})
+	evidence["description"] = "Retained triggers, path fingerprints and root-file digests only. Collection does not attest executed bytes or cover reusable workflows/actions, inputs or test scope. Full counts include omitted rows; shown describes this answer. Null means an older controller supplied no view."
+	return nullable(evidence)
+}
