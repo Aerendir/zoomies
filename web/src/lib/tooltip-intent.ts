@@ -12,10 +12,12 @@
  * Returns the function that gives the wait up (the pointer left or pressed).
  */
 export function whenPointerMoves(el: Element, arm: () => void): () => void {
-  const moved = (): void => {
-    el.removeEventListener('pointermove', moved);
+  const doc = el.ownerDocument;
+  const moved = (event: PointerEvent): void => {
+    if (!event.composedPath().includes(el)) return;
+    doc.removeEventListener('pointermove', moved, true);
     arm();
   };
-  el.addEventListener('pointermove', moved);
-  return () => el.removeEventListener('pointermove', moved);
+  doc.addEventListener('pointermove', moved, true);
+  return () => doc.removeEventListener('pointermove', moved, true);
 }

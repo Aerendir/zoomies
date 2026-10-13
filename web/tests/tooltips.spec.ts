@@ -272,6 +272,7 @@ test.describe('the shared tooltip', () => {
     const more = nav(page).getByRole('button', { name: 'More' });
     await more.click();
     const tag = navMenu(page).locator('p.build');
+    const bubble = tag.locator('xpath=..').locator('.bubble');
     const box = await tag.boundingBox();
     expect(box, 'the build tag is in the sheet').not.toBeNull();
     const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
@@ -290,7 +291,7 @@ test.describe('the shared tooltip', () => {
 
     // A real move over it is a reach, and the wait starts then.
     await page.mouse.move(x + 2, y + 1);
-    await expect(page.locator('.bubble', { hasText: 'build' })).toBeVisible();
+    await expect(bubble).toBeVisible();
     // The first Escape is still the sheet's own once the bubble has gone.
     await page.keyboard.press('Escape');
     await expect(page.locator('.bubble')).toHaveCount(0);
@@ -393,6 +394,11 @@ test.describe('the shared tooltip', () => {
     });
     await navEntry(page, '/pools').hover();
     await expect(page.locator('.bubble:popover-open')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { __entrances: unknown[] }).__entrances.length),
+      )
+      .toBe(1);
     const [entrance] = await page.evaluate(
       () => (window as unknown as { __entrances: Array<Record<string, unknown>> }).__entrances,
     );
