@@ -986,6 +986,7 @@ export const prepareInstanceTransfer = () =>
   api.post<Result<'prepareInstanceTransfer'>>('/transfers/preparation', {});
 export const cancelInstanceTransfer = () =>
   api.del<Result<'cancelInstanceTransfer'>>('/transfers/preparation');
+export const unfenceInstance = () => api.post<Result<'unfence'>>('/recovery/unfence', {});
 export const exportInstanceTransfer = (passphrase: string) =>
   downloadEncryptedArchive('/transfers/export', passphrase);
 
