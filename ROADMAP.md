@@ -1757,7 +1757,8 @@ Dispatch and publication are later, separately authorised work.
 **Slices:** [eligibility plan](roadmap/plans/2026-10-12-eli-comparison-eligibility.md),
 [measurement plan](roadmap/plans/2026-10-12-eli-comparison-measurements.md),
 [bounded attempt collection](roadmap/plans/2026-10-13-eli-comparison-attempt-reader.md),
-[bounded GitHub attempt evidence](roadmap/plans/2026-10-13-eli-comparison-github-attempt.md).
+[bounded GitHub attempt evidence](roadmap/plans/2026-10-13-eli-comparison-github-attempt.md),
+[admitted attempt joins](roadmap/plans/2026-10-13-eli-comparison-admitted-join.md).
 No new dependency, store query, route, model call, dispatch or publication.
 
 ## 9. Kept for the day somebody asks
