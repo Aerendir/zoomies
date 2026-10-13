@@ -33,7 +33,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
 | E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and scripted scenarios merged in #959 |
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
-| E2 eligibility | In progress | ZF-243, current PR following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
+| E2 eligibility | Draft PR | ZF-243, [#973](https://github.com/eyupio/zoomies/pull/973), following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
+| E2 measurements | Draft PR | ZF-243, [#974](https://github.com/eyupio/zoomies/pull/974), stacked on #973 | Successful latency distribution, all-attempt execution/idle consumption, failure rate and descriptive changes. Complete analysis race tests and vet pass; no controller integration or live experiment |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -654,3 +655,39 @@ Validation: the new behavioural tests failed to compile before the contract
 existed. The complete analysis package race tests and vet pass with Go 1.27.2
 for this pure slice, as does `git diff --check`. Earlier broad validation evidence remains linked above; it is not a
 claim that the new slice passed a full repository run.
+
+### E2 measurement contract
+
+`MeasureExperiment` retains the eligibility result and outcome counts. The
+version is `selected-measures-v1`. Successful latency reports nearest-rank min,
+p50, p95 and max; p50 is ceil(0.50*n)-1 and p95 is ceil(0.95*n)-1 in a sorted
+zero-based array. Failure rate is failed/completed, with cancellations and
+superseded attempts visible in the eligibility counts, outside this denominator.
+
+Execution and allocated idle are separate all-attempt distributions, including
+failed, cancelled, superseded and pending attempts where measured. Missing counts
+are explicit. Totals are null if any relevant value is missing or no value was
+observed; known zero remains zero. Negative values and int64 sum overflow refuse
+the record. Execution means running time, not wall-clock latency or monetary cost.
+Allocated idle time must be independently observed and attributable; never derive
+it by subtracting unrelated host-wide counters. The pure core only checks the
+supplied figures, so controller verification remains essential.
+
+Descriptive change labels are permitted only for eligible cohorts. Successful
+latency needs at least 30 measured successes on both arms and no missing success
+measurements; execution/idle need complete measurements and at least 30 selected
+attempts per arm. Latency ranks p50; consumption ranks arithmetic mean per selected
+attempt, keeping totals visible for unequal cohort sizes. A 1.10 ratio in either
+direction is material. A five percentage point failure-rate difference is
+material, computed with integer cross-products to preserve the boundary. These
+fixed rules describe a difference, not statistical significance or causation.
+No overall winner, confidence interval, cost estimate or verified improvement is
+claimed, even when all descriptive directions improve.
+
+The next slice is bounded authorised controller assembly of retained selections.
+Prove repository/installation joins, completeness including failures, retention
+limits and missing telemetry before adding read-only transports. Neither this
+measurement slice nor its parent initiates jobs, writes GitHub or calls a model.
+Validation: tests failed before measurement implementation. Complete analysis
+race tests and vet pass, including exact thresholds, zero/missing values, nearest
+rank, unequal cohort sizes, failure/exclusion consumption, overflow and purity.

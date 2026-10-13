@@ -14,12 +14,17 @@ const MinExperimentSamples = 30
 const MaxExperimentAttempts = 2000
 
 type ExperimentAttempt struct {
-	RunID         int64     `json:"run_id"`
-	Attempt       int       `json:"attempt"`
-	ObservedAt    time.Time `json:"observed_at"`
-	Outcome       string    `json:"outcome"`
-	Cache         string    `json:"cache"`
-	HostCondition string    `json:"host_condition"`
+	// Nil is missing evidence; zero is an observed zero. Consumption stays
+	// attached to failed and excluded attempts rather than disappearing.
+	LatencyMS       *int64    `json:"latency_ms"`
+	ExecutionMS     *int64    `json:"execution_ms"`
+	AllocatedIdleMS *int64    `json:"allocated_idle_ms"`
+	RunID           int64     `json:"run_id"`
+	Attempt         int       `json:"attempt"`
+	ObservedAt      time.Time `json:"observed_at"`
+	Outcome         string    `json:"outcome"`
+	Cache           string    `json:"cache"`
+	HostCondition   string    `json:"host_condition"`
 }
 
 type ExperimentArm struct {
