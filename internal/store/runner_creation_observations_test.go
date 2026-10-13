@@ -35,6 +35,43 @@ func creationObservationFixture(t *testing.T, s *Store) (string, *RunnerCreation
 	mem := int64(8192)
 	return inst.ID, &RunnerCreationObservationData{Version: RunnerCreationObservationVersion, RunnerID: r.ID, HostID: host.ID, PoolID: pool.ID, TaskID: "task_one", IssuedAt: s.Now(), Issued: IssuedRunnerConfiguration{Backend: BackendDocker, CPUs: &cpu, MemoryMB: &mem, DockerMode: DockerNone, ResourceSource: AllocationFromPool}, Reported: ReportedRunnerCreation{DigestCoverage: "not_reported"}}
 }
+
+func TestRetainedRunnerCreationDigestDoesNotDependOnLiveAgeOrRunnerRows(t *testing.T) {
+	s := newTestStore(t)
+	installation, data := creationObservationFixture(t, s)
+	// JSON timestamps must retain their offset and sub-millisecond precision
+	// when a decoded observation is copied into a comparison envelope.
+	data.IssuedAt = time.Date(2026, 10, 13, 1, 2, 3, 123456789, time.FixedZone("fixture", 3600))
+	r, err := s.PutRunnerCreationObservation(context.Background(), installation, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ValidRetainedRunnerCreationObservation(r) {
+		t.Fatal("valid scoped digest rejected")
+	}
+	payload, _ := json.Marshal(r)
+	var copy RunnerCreationObservation
+	if err := json.Unmarshal(payload, &copy); err != nil || !ValidRetainedRunnerCreationObservation(&copy) {
+		t.Fatal("JSON round trip changed canonical digest", err)
+	}
+	copy.ReceivedAt = copy.ReceivedAt.Add(-2 * RunnerCreationObservationRetention)
+	if !ValidRetainedRunnerCreationObservation(&copy) {
+		t.Fatal("replay applied live expiry")
+	}
+	copy.InstallationID = "ins_foreign"
+	if ValidRetainedRunnerCreationObservation(&copy) {
+		t.Fatal("digest did not bind installation")
+	}
+	copy = *r
+	copy.Data.Issued.CPUs = new(float64)
+	*copy.Data.Issued.CPUs = 8
+	if ValidRetainedRunnerCreationObservation(&copy) {
+		t.Fatal("altered request accepted")
+	}
+	if ValidRetainedRunnerCreationObservation(nil) {
+		t.Fatal("missing evidence accepted")
+	}
+}
 func TestRunnerCreationObservationIsImmutableScopedAndSurvivesRunnerPruning(t *testing.T) {
 	s := newTestStore(t)
 	inst, d := creationObservationFixture(t, s)

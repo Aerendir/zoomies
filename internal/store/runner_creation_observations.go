@@ -107,6 +107,22 @@ func ValidRunnerCreationObservation(d *RunnerCreationObservationData) bool {
 	}
 	return true
 }
+
+// ValidRetainedRunnerCreationObservation checks the versioned inner digest without
+// reapplying the live store's expiry. A comparison can retain this evidence after
+// the observation table has expired or pruned its copy.
+func ValidRetainedRunnerCreationObservation(r *RunnerCreationObservation) bool {
+	if r == nil || r.InstallationID == "" || len(r.InstallationID) > 128 || r.ReceivedAt.IsZero() || !ValidRunnerCreationObservation(&r.Data) {
+		return false
+	}
+	payload, err := json.Marshal(runnerCreationObservationEnvelope{InstallationID: r.InstallationID, Data: r.Data})
+	if err != nil || len(payload) > MaxRunnerCreationObservationBytes {
+		return false
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]) == r.SHA256
+}
+
 func observationHash(s string) bool {
 	if len(s) != 64 {
 		return false
