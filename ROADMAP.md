@@ -1859,7 +1859,10 @@ round trip between different encryption keys preserves history and usable
 team credentials, source operator access cannot authenticate at the new
 controller, destination access works after restart, failures leave the source
 and live destination intact, and restored machine proofs remain unverified.
-See [the transfer design](roadmap/instance-transfer.md). The owner requested
+The browser import uses bounded upload chunks and polls background verification
+so a reverse proxy need not accept the whole archive in one request or wait for
+its authentication and re-sealing. The single-request import remains available
+for direct API clients. See [the transfer design](roadmap/instance-transfer.md). The owner requested
 this work on 9 October 2026; it is the next implementation priority.
 
 ### ZF-238: a Windows host joins with one pasted command

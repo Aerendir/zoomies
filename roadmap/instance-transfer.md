@@ -54,3 +54,20 @@ Missing secret coverage is a refusal, not a successful transfer with a broken
 credential. A schema test inventories encrypted columns so a future store
 cannot silently escape re-sealing. Unknown secret storage needs an explicit
 addition before a release may claim portable transfer.
+
+## Large browser uploads
+
+The Backups page sends encrypted instance archives in chunks of at most 8 MiB,
+then polls a background verification job. This avoids a reverse proxy's
+whole-request size limit and its response deadline during authentication,
+integrity checking and secret re-sealing. A failed chunk can be retried at its
+durable offset; selecting another file starts a new upload. Upload state is
+held by the controller process and does not survive restart. Ciphertext is
+removed when verification completes, when an upload is cancelled, or after
+24 hours. An expired file left by a previous process is removed on the next
+upload. The passphrase is held only in memory while verification runs.
+
+The multipart import API remains available for direct clients. Ordinary
+key-bound backup upload and encrypted archive download still use one request;
+operators behind a restrictive proxy can reach the controller directly for
+those operations. No history or credentials are removed to reduce archive size.
