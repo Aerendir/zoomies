@@ -620,7 +620,7 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 	for _, m := range candidates {
 		p := byProvider[m.ProviderID]
 		host := byHost[m.HostID]
-		if p == nil || host == nil || m.State != store.MachineReady || live[host.ID] > 0 {
+		if p == nil || host == nil || host.Retired || m.State != store.MachineReady || live[host.ID] > 0 {
 			continue
 		}
 		// The minimum is asked first, for a machine no pool can use as well:

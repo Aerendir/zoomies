@@ -908,6 +908,9 @@ func (c *Controller) hostProblems(ctx context.Context, out *[]Problem) error {
 	now := c.Now()
 
 	for _, h := range hosts {
+		if h.Retired {
+			continue
+		}
 		// The name is the agent's to choose, and the fix below goes through
 		// RemedyText, which turns a backtick pair into a command to copy.
 		label := naming.ForSentence(h.Name)
@@ -2164,7 +2167,7 @@ func (c *Controller) namedClassWhy(class store.SizeClass) (why, fix string) {
 // still reported. It ages the problem out on its own: once the second agent is
 // stopped the sessions stop swapping, and an operator who has fixed it should
 // not have to clear anything by hand.
-const duplicateAgentWindow = time.Hour
+const duplicateAgentWindow = store.DuplicateAgentWindow
 
 // unmatchedGrace is how long a queued job no pool here claims is given before
 // it is reported. GitHub's own runners take a job within seconds and another

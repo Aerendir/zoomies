@@ -95,7 +95,7 @@ These change nothing. Run them as the question needs.
 * `zoomies jobs list`, `zoomies jobs stats`, `zoomies jobs get`, `zoomies jobs why`, `zoomies jobs advice`, `zoomies jobs pr-delay`
 * `zoomies analyse queue-wait`, `zoomies analyse compare`, `zoomies analyse host-pressure`, `zoomies analyse startup-failures`
 * `zoomies size-pins list`
-* `zoomies hosts list`
+* `zoomies hosts list`, `zoomies hosts recovery`
 * `zoomies updates status`
 * `zoomies providers list`, `zoomies providers kinds`, `zoomies providers check`, `zoomies providers machines`, `zoomies providers orphans`
 * `zoomies installations list`
@@ -126,7 +126,7 @@ minutes.
 * `zoomies jobs rerun`
 * `zoomies kennel recheck`
 * `zoomies size-pins set`, `zoomies size-pins delete`
-* `zoomies hosts edit`, `zoomies hosts cordon`, `zoomies hosts drain`, `zoomies hosts uncordon`, `zoomies hosts delete`, `zoomies hosts join-token`
+* `zoomies hosts edit`, `zoomies hosts cordon`, `zoomies hosts drain`, `zoomies hosts uncordon`, `zoomies hosts delete`, `zoomies hosts retire`, `zoomies hosts join-token`
 * `zoomies updates check`, `zoomies updates apply`, `zoomies updates resume`, `zoomies updates cancel`
 * `zoomies providers connect-proxmox`, `zoomies providers add`, `zoomies providers edit`, `zoomies providers pause`, `zoomies providers resume`
 * `zoomies installations verify`

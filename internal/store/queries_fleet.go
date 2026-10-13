@@ -373,7 +373,7 @@ func (s *Store) CountPools(ctx context.Context) (int, error) {
 // CountHosts counts enrolled hosts, for limits.hosts.
 func (s *Store) CountHosts(ctx context.Context) (int, error) {
 	var n int
-	err := s.read.QueryRowContext(ctx, `SELECT COUNT(*) FROM hosts`).Scan(&n)
+	err := s.read.QueryRowContext(ctx, `SELECT COUNT(*) FROM hosts WHERE NOT EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL)`).Scan(&n)
 	return n, err
 }
 
@@ -628,6 +628,8 @@ const hostCols = `id, name, address, embedded, capacity, backends, backend_info,
 	protocol_version, incompatible, connection, usage, throttle, features, incidents, doctor,
 	runner_profile, size_class, doctor_checked_at`
 
+const hostReadCols = hostCols + `, EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND (completed_at IS NULL OR retired_at IS NOT NULL)), EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL)`
+
 func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
 	var embedded, cordoned, incompatible int
@@ -638,7 +640,7 @@ func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 		&h.MemoryMB, &h.Version, &cordoned, &h.TokenHash, &heartbeat, &created,
 		&h.AgentSessionID, &h.AgentSessionPrev, &h.AgentSessionAlternations, &altAt,
 		&h.DiskTotalMB, &h.DiskFreeMB, &h.ReserveCPUs, &h.ReserveMemoryMB, &h.ReserveDiskMB,
-		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &h.SizeClass, &doctorAt)
+		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &h.SizeClass, &doctorAt, &h.RecoveryRequired, &h.Retired)
 	if err != nil {
 		return nil, err
 	}
@@ -682,7 +684,7 @@ func (s *Store) CreateHost(ctx context.Context, h *Host) error {
 
 // GetHost returns one host with its live runner count filled in.
 func (s *Store) GetHost(ctx context.Context, id string) (*Host, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+hostCols+` FROM hosts WHERE id = ?`, id)
+	row := s.read.QueryRowContext(ctx, `SELECT `+hostReadCols+` FROM hosts WHERE id = ?`, id)
 	h, err := scanHost(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("host %s: %w", id, ErrNotFound)
@@ -695,7 +697,7 @@ func (s *Store) GetHost(ctx context.Context, id string) (*Host, error) {
 
 // GetHostByName returns a host by its unique name.
 func (s *Store) GetHostByName(ctx context.Context, name string) (*Host, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+hostCols+` FROM hosts WHERE name = ?`, name)
+	row := s.read.QueryRowContext(ctx, `SELECT `+hostReadCols+` FROM hosts WHERE name = ?`, name)
 	h, err := scanHost(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("host %q: %w", name, ErrNotFound)
@@ -753,7 +755,7 @@ func (s *Store) countRunnersByHost(ctx context.Context) (map[string]hostRunnerCo
 
 // ListHosts returns every host, with live runner counts.
 func (s *Store) ListHosts(ctx context.Context) ([]*Host, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+hostCols+` FROM hosts ORDER BY embedded DESC, name`)
+	rows, err := s.read.QueryContext(ctx, `SELECT `+hostReadCols+` FROM hosts ORDER BY embedded DESC, name`)
 	if err != nil {
 		return nil, err
 	}
@@ -774,7 +776,7 @@ func (s *Store) ListHosts(ctx context.Context) ([]*Host, error) {
 
 // FindHostByTokenHash authenticates an agent request.
 func (s *Store) FindHostByTokenHash(ctx context.Context, hash string) (*Host, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+hostCols+` FROM hosts WHERE token_hash = ? AND token_hash != ''`, hash)
+	row := s.read.QueryRowContext(ctx, `SELECT `+hostReadCols+` FROM hosts WHERE token_hash = ? AND token_hash != '' AND NOT EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL)`, hash)
 	h, err := scanHost(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -950,6 +952,13 @@ func (s *Store) DeleteHost(ctx context.Context, id string) ([]string, error) {
 func (s *Store) DeleteHostForgettingMachine(ctx context.Context, id, machineID string) ([]string, error) {
 	var runners []string
 	err := s.tx(ctx, func(tx *sql.Tx) error {
+		var retired int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_recovery WHERE host_id=? AND retired_at IS NOT NULL`, id).Scan(&retired); err != nil {
+			return err
+		}
+		if retired > 0 {
+			return fmt.Errorf("retired host records are retained for history: %w", ErrConflict)
+		}
 		if machineID != "" {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM machines WHERE id = ? AND state <> ?`, machineID, MachineDeleting); err != nil {
 				return err

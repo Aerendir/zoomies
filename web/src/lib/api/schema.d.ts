@@ -4463,6 +4463,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recovery/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect carried-over host recovery obligations */
+        get: operations["listRecoveryHosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recovery/hosts/{id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire an unreachable carried-over destination host record
+         * @description Requires the recovery fence, an offline carried-over host and confirmation of its exact ID. Retains history and records the actor and time. Revokes destination agent access and prevents re-enrolment of this record. Queues no task and cannot stop, erase or clean up an unreachable machine. Does not lift the fence or remove the host from another controller.
+         */
+        post: operations["retireRecoveryHost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recovery/unfence": {
         parameters: {
             query?: never;
@@ -4474,7 +4513,7 @@ export interface paths {
         put?: never;
         /**
          * Lift the recovery fence
-         * @description A person saying that a recovered fleet has been checked and may act on the world again. It is audited under its own action, because the audit log is where somebody later asks who decided that and when. Lifting an unfenced instance succeeds and changes nothing: two operators recovering one fleet will both press it.
+         * @description A person saying that a recovered fleet has been checked and may act on the world again. It is audited under its own action, because the audit log is where somebody later asks who decided that and when. Lifting an unfenced instance succeeds and changes nothing: two operators recovering one fleet will both press it. Refused while any carried-over host has neither freshly reconnected with valid credentials and passed health and protocol checks nor been explicitly retired.
          */
         post: operations["unfence"];
         delete?: never;
@@ -9886,7 +9925,25 @@ export interface components {
              */
             attempt_id: string;
         };
+        RecoveryHost: {
+            host_id: string;
+            name: string;
+            /** @enum {string} */
+            state: "awaiting_recovery" | "verified" | "retired";
+            /**
+             * Format: date-time
+             * @description Time recovery completed with this host freshly verified.
+             */
+            verified_at?: string;
+            /** Format: date-time */
+            retired_at?: string;
+            /** @description Identity that explicitly retired the destination record. */
+            retired_by?: string;
+        };
         Host: {
+            retired?: boolean;
+            /** @enum {string} */
+            recovery_state?: "awaiting_recovery" | "verified" | "retired";
             health_check?: components["schemas"]["HostHealthCheck"];
             doctor?: components["schemas"]["HostDoctorView"];
             usage?: components["schemas"]["HostUsage"];
@@ -19133,6 +19190,72 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Recovery"];
                 };
+            };
+        };
+    };
+    listRecoveryHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every carried-over host, including retired records */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: components["schemas"]["RecoveryHost"][];
+                        total?: number;
+                    };
+                };
+            };
+        };
+    };
+    retireRecoveryHost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Must exactly match the path host ID. */
+                    confirm_host_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Retired destination host record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Host"];
+                };
+            };
+            /** @description Unknown host */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing confirmation or host is not eligible */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

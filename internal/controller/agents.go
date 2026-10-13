@@ -147,6 +147,7 @@ func (t *taskQueues) forget(hostID string) {
 
 // taskQueue is one host's pending and in-flight work.
 type taskQueue struct {
+	retired  bool
 	mu       sync.Mutex
 	pending  []*leasedTask
 	inflight map[string]*leasedTask
@@ -233,6 +234,10 @@ func maxAttempts(kind agent.TaskKind) int {
 func (q *taskQueue) enqueue(t agent.Task) bool {
 	key := taskKey(t)
 	q.mu.Lock()
+	if q.retired {
+		q.mu.Unlock()
+		return false
+	}
 	for _, p := range q.pending {
 		if p.key == key {
 			q.mu.Unlock()
@@ -259,7 +264,7 @@ func (q *taskQueue) enqueue(t agent.Task) bool {
 func (q *taskQueue) take(n int, now time.Time) []agent.Task {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if len(q.pending) == 0 {
+	if q.retired || len(q.pending) == 0 {
 		return nil
 	}
 	n = min(n, len(q.pending))
@@ -543,6 +548,8 @@ func (c *Controller) Join(ctx context.Context, req agent.JoinRequest, ip string)
 }
 
 func (c *Controller) join(ctx context.Context, req agent.JoinRequest, ip string, embedded bool) (*agent.JoinResponse, error) {
+	c.recoveryMu.RLock()
+	defer c.recoveryMu.RUnlock()
 	// Refusals the agent's operator can act on are auth.Invalid, so the API
 	// answers them with the reason; anything else below is this controller
 	// failing, which the API answers with a request ID and logs.
@@ -584,6 +591,9 @@ func (c *Controller) join(ctx context.Context, req agent.JoinRequest, ip string,
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, fmt.Errorf("looking up host %q: %w", name, err)
 		}
+	}
+	if existing != nil && existing.Retired {
+		return nil, auth.Invalid("this host record is retired on this controller")
 	}
 	// What the host may call itself. The name is the agent's to choose and is
 	// written into the problems list, where the UI offers whatever sits between
@@ -715,12 +725,17 @@ func (c *Controller) join(ctx context.Context, req agent.JoinRequest, ip string,
 		// lingering as runners nobody will ever report on again; their GitHub
 		// registrations are tidied by the reaper and their workloads, if any
 		// survive, by the agent's own orphan sweep. The ID is kept so that
-		// audit rows and bookmarks still resolve.
-		if stale, err := c.st.ListRunnersForHost(ctx, existing.ID); err == nil && len(stale) > 0 {
+		// audit rows and bookmarks still resolve. A carried-over host instead
+		// keeps these rows: cutover must preserve its historical references.
+		if stale, err := c.st.ListRunnersForHost(ctx, existing.ID); !existing.RecoveryRequired && err == nil && len(stale) > 0 {
 			c.log.Warn("a host joined again while runners were still recorded against it; those rows are being dropped",
 				"host", existing.ID, "name", name, "runners", len(stale))
 		}
-		dropped, err := c.st.DeleteHost(ctx, existing.ID)
+		var dropped []string
+		var err error
+		if !existing.RecoveryRequired {
+			dropped, err = c.st.DeleteHost(ctx, existing.ID)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("replacing the previous registration of host %s: %w", name, err)
 		}
@@ -781,8 +796,17 @@ func (c *Controller) join(ctx context.Context, req agent.JoinRequest, ip string,
 		// and a rebuilt machine starts on no rung: if the pressure is still
 		// there its first heartbeats put it straight back on one.
 	}
-	if err := c.st.CreateHost(ctx, h); err != nil {
-		return nil, fmt.Errorf("registering host %s: %w", name, err)
+	var registrationErr error
+	if existing != nil && existing.RecoveryRequired {
+		registrationErr = c.st.ReenrolRecoveryHost(ctx, h)
+		if registrationErr == nil {
+			h, registrationErr = c.st.GetHost(ctx, h.ID)
+		}
+	} else {
+		registrationErr = c.st.CreateHost(ctx, h)
+	}
+	if registrationErr != nil {
+		return nil, fmt.Errorf("registering host %s: %w", name, registrationErr)
 	}
 
 	// The machine that minted this token now has a host. Linking it here
@@ -841,6 +865,10 @@ func (c *Controller) provesHost(h *store.Host, token string) bool {
 // Heartbeat records that a host is alive, merges anything its agent observed,
 // and tells the agent whether the controller still recognises it.
 func (c *Controller) Heartbeat(ctx context.Context, hostID string, req agent.HeartbeatRequest) (*agent.HeartbeatResponse, error) {
+	// A response must not authorise orphan cleanup after this record is retired.
+	// Finish in-flight observations before retirement or recovery can commit.
+	c.recoveryMu.RLock()
+	defer c.recoveryMu.RUnlock()
 	if err := c.checkReportSize(len(req.Runners)); err != nil {
 		return nil, err
 	}
@@ -859,6 +887,9 @@ func (c *Controller) Heartbeat(ctx context.Context, hostID string, req agent.Hea
 		return nil, err
 	}
 
+	if h.Retired {
+		return nil, agent.ErrHostGone
+	}
 	now := c.Now()
 	wasHealthy := h.Healthy(now)
 	var freshAt time.Time
@@ -1173,6 +1204,9 @@ func (c *Controller) unknownRunners(ctx context.Context, hostID string, reports 
 // enqueued by a reconcile reaches the agent in the same instant rather than up
 // to a poll interval later.
 func (c *Controller) PollTasks(ctx context.Context, hostID string, wait time.Duration) (*agent.TaskBatch, error) {
+	if h, err := c.st.GetHost(ctx, hostID); err == nil && h.Retired {
+		return nil, agent.ErrHostGone
+	}
 	if hostID == "" {
 		return nil, errors.New("a task poll carried no host ID; the agent must send the identity it was given at join")
 	}
@@ -1886,6 +1920,9 @@ func (c *Controller) checkHostHealth(ctx context.Context) {
 	}
 	now := c.Now()
 	for _, h := range hosts {
+		if h.Retired {
+			continue
+		}
 		healthy := h.Healthy(now)
 		if c.setHostHealth(h.ID, healthy) {
 			c.publishHost(h)

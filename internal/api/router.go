@@ -557,6 +557,8 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionTokensOwn)).Post("/purge", s.handlePurgeTokens)
 			r.With(s.require(auth.ActionTokensOwn)).Delete("/{id}", s.handleRevokeToken)
 		})
+		r.With(s.require(auth.ActionHostsRead)).Get("/recovery/hosts", s.handleRecoveryHosts)
+		r.With(s.require(auth.ActionHostsDelete)).Post("/recovery/hosts/{id}/retire", s.handleRetireRecoveryHost)
 		// Recovery: the fence a restore sets, and the one act that lifts it.
 		r.With(s.require(auth.ActionStatsRead)).Get("/recovery", s.handleGetRecovery)
 		r.With(s.require(auth.ActionRecoveryWrite)).Post("/recovery/unfence", s.handleUnfence)

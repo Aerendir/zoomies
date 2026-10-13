@@ -49,6 +49,10 @@ func portableSnapshot(t *testing.T, cfg *config.Config, st *store.Store) []byte 
 func TestACompleteInstanceMovesAcrossKeysAndKeepsItsDestinationInCharge(t *testing.T) {
 	ctx := context.Background()
 	src, st, key := host(t)
+	carried := &store.Host{Name: "carried-runner", TokenHash: "carried-credential", Capacity: 4}
+	if err := st.CreateHost(ctx, carried); err != nil {
+		t.Fatal(err)
+	}
 	team := &store.User{Username: "team", Role: store.RoleAdmin, PasswordHash: "team password hash"}
 	oldOperator := &store.User{Username: "old-operator", Role: store.Roles()[len(store.Roles())-1], PasswordHash: "old password hash"}
 	for _, u := range []*store.User{team, oldOperator} {
@@ -207,6 +211,17 @@ func TestACompleteInstanceMovesAcrossKeysAndKeepsItsDestinationInCharge(t *testi
 		t.Fatal(err)
 	}
 	defer live.Close()
+	recovered, err := live.GetHost(ctx, carried.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !recovered.RecoveryRequired || recovered.RecoveryState(live.Now()) != "awaiting_recovery" || recovered.TokenHash != carried.TokenHash {
+		t.Fatalf("import trusted source liveness or lost ownership: %+v", recovered)
+	}
+	original, err := st.GetHost(ctx, carried.ID)
+	if err != nil || original.LastHeartbeat.UnixMilli() != carried.LastHeartbeat.UnixMilli() || original.RecoveryRequired {
+		t.Fatalf("import modified source host: %+v %v", original, err)
+	}
 	retainedModel, err := live.GetAssistantProvider(ctx, destinationModel.ID)
 	if err != nil {
 		t.Fatal("destination model configuration lost", err)

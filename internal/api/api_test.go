@@ -917,6 +917,8 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "POST", path: "/api/v1/backups/remotes/offsite/copies/zoomies-19990101-000000/fetch", role: store.RolePlatform, action: auth.ActionBackupsWrite},
 		{method: "DELETE", path: "/api/v1/backups/remotes/offsite/copies/zoomies-19990101-000000", role: store.RolePlatform, action: auth.ActionBackupsWrite},
 
+		{method: "GET", path: "/api/v1/recovery/hosts", role: store.RoleViewer, action: auth.ActionHostsRead},
+		{method: "POST", path: "/api/v1/recovery/hosts/" + ids.host + "/retire", role: store.RoleAdmin, action: auth.ActionHostsDelete, body: map[string]any{"confirm_host_id": ids.host}},
 		{method: "GET", path: "/api/v1/recovery", role: store.RoleViewer, action: auth.ActionStatsRead},
 		{method: "POST", path: "/api/v1/recovery/unfence", role: store.RolePlatform, action: auth.ActionRecoveryWrite},
 

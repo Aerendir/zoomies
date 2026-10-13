@@ -21,6 +21,8 @@ func runHosts(ctx context.Context, e *env, args []string) error {
 		{"cordon", "<host-id>", "Keep its runners, accept no new ones", hostsCordon},
 		{"drain", "<host-id>", "Cordon it, then drain every runner on it", hostsDrain},
 		{"uncordon", "<host-id>", "Let it accept new runners again", hostsUncordon},
+		{"recovery", "", "Inspect carried-over hosts awaiting recovery", hostsRecovery},
+		{"retire", "<host-id>", "Retire an unreachable carried-over destination record", hostsRetire},
 		{"delete", "<host-id>", "Forget a host; refused while it still has runners", hostsDelete},
 		{"join-token", "create", "Mint a token that enrols a new host", hostsJoinToken},
 	}, args)
@@ -95,6 +97,9 @@ func hostsList(ctx context.Context, e *env, args []string) error {
 			if h.Healthy && !h.Cordoned {
 				health = p.paint(colourYellow, "throttled")
 			}
+		}
+		if h.RecoveryState != "" {
+			health = h.RecoveryState
 		}
 		rows = append(rows, []string{
 			h.Name,
@@ -467,5 +472,66 @@ func joinTokenCreate(ctx context.Context, e *env, args []string) error {
 	fmt.Fprintf(e.out, "expires   %s\n", token.ExpiresAt.Local().Format(time.RFC3339))
 	fmt.Fprintf(e.out, "capacity  %s\n", strconv.Itoa(token.Capacity))
 	fmt.Fprintln(e.out, "\nThis is the only time the token is shown. It may be redeemed once.")
+	return nil
+}
+
+func hostsRecovery(ctx context.Context, e *env, args []string) error {
+	fs := newFlagSet(e, "zoomies hosts recovery", "Inspect carried-over hosts: awaiting_recovery, verified or retired.")
+	cf := registerClientFlags(fs, true)
+	if err := fs.parse(args); err != nil {
+		return err
+	}
+	if err := fs.noMoreArgs(); err != nil {
+		return err
+	}
+	client, err := cf.client()
+	if err != nil {
+		return err
+	}
+	p, err := cf.printer(e)
+	if err != nil {
+		return err
+	}
+	var out listResponse[struct {
+		HostID string `json:"host_id"`
+		Name   string `json:"name"`
+		State  string `json:"state"`
+	}]
+	raw, err := client.get(ctx, "/recovery/hosts", nil, &out)
+	if err != nil {
+		return err
+	}
+	if p.structured() {
+		return p.emit(raw)
+	}
+	rows := make([][]string, 0, len(out.Items))
+	for _, h := range out.Items {
+		rows = append(rows, []string{h.HostID, h.Name, h.State})
+	}
+	p.table([]string{"ID", "HOST", "RECOVERY"}, rows)
+	return nil
+}
+func hostsRetire(ctx context.Context, e *env, args []string) error {
+	fs := newFlagSet(e, "zoomies hosts retire <host-id> --confirm-host-id <host-id>", "Retire an unreachable carried-over host record while fenced. This changes destination records only and cannot clean up the machine.")
+	cf := registerClientFlags(fs, false)
+	confirm := fs.String("confirm-host-id", "", "repeat the exact host ID to confirm destination-only retirement")
+	if err := fs.parse(args); err != nil {
+		return err
+	}
+	id, err := fs.oneArg("a host ID")
+	if err != nil {
+		return err
+	}
+	if *confirm != id {
+		return usagef("hosts retire", "--confirm-host-id must repeat the exact host ID")
+	}
+	client, err := cf.client()
+	if err != nil {
+		return err
+	}
+	if _, err := client.post(ctx, "/recovery/hosts/"+url.PathEscape(id)+"/retire", nil, map[string]any{"confirm_host_id": *confirm}, nil); err != nil {
+		return err
+	}
+	fmt.Fprintf(e.out, "Retired destination host record %s. The remote machine is untouched.\n", id)
 	return nil
 }

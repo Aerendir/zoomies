@@ -6847,6 +6847,60 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Recovery" }
 
+  /recovery/hosts:
+    get:
+      operationId: listRecoveryHosts
+      tags: [recovery]
+      summary: Inspect carried-over host recovery obligations
+      x-zoomies-role: viewer
+      responses:
+        "200":
+          description: Every carried-over host, including retired records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/RecoveryHost" }
+                  total: { type: integer }
+
+  /recovery/hosts/{id}/retire:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: retireRecoveryHost
+      tags: [recovery]
+      summary: Retire an unreachable carried-over destination host record
+      description: >-
+        Requires the recovery fence, an offline carried-over host and confirmation
+        of its exact ID. Retains history and records the actor and time. Revokes
+        destination agent access and prevents re-enrolment of this record. Queues
+        no task and cannot stop, erase or clean up an unreachable machine.
+        Does not lift the fence or remove the host from another controller.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm_host_id]
+              properties:
+                confirm_host_id: { type: string, description: Must exactly match the path host ID. }
+      responses:
+        "200":
+          description: Retired destination host record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Host" }
+        "404": { description: Unknown host }
+        "409": { description: Missing confirmation or host is not eligible }
+
   /recovery/unfence:
     post:
       operationId: unfence
@@ -6857,7 +6911,9 @@ paths:
         again. It is audited under its own action, because the audit log is where somebody
         later asks who decided that and when. Lifting an unfenced instance succeeds and
         changes nothing: two operators recovering one fleet will both press it.
-      x-zoomies-role: admin
+        Refused while any carried-over host has neither freshly reconnected with
+        valid credentials and passed health and protocol checks nor been explicitly retired.
+      x-zoomies-role: platform
       responses:
         "200":
           description: OK
@@ -13241,9 +13297,22 @@ components:
             wherever turning it on would let the host be asked; where it would not, as for a host
             the update helper can never be installed on, `reason` says what is in the way instead.
         attempt_id: { type: string, description: The attempt `state` describes, and empty with none., examples: [upd_k3fqz2mx7abcd] }
+    RecoveryHost:
+      type: object
+      required: [host_id, name, state]
+      properties:
+        host_id: { type: string }
+        name: { type: string }
+        state: { type: string, enum: [awaiting_recovery, verified, retired] }
+        verified_at: { type: string, format: date-time, description: Time recovery completed with this host freshly verified. }
+        retired_at: { type: string, format: date-time }
+        retired_by: { type: string, description: Identity that explicitly retired the destination record. }
+
     Host:
       type: object
       properties:
+        retired: { type: boolean }
+        recovery_state: { type: string, enum: [awaiting_recovery, verified, retired] }
         health_check: { $ref: "#/components/schemas/HostHealthCheck" }
         doctor: { $ref: "#/components/schemas/HostDoctorView" }
         usage: { $ref: "#/components/schemas/HostUsage" }

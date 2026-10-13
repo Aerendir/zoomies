@@ -347,6 +347,9 @@ func prepareTransferRestore(ctx context.Context, cfg *config.Config, entryDir st
 	if err == nil {
 		_, err = st.MarkMachinesUnverified(ctx)
 	}
+	if err == nil {
+		err = st.MarkTransferredHosts(ctx)
+	}
 	cerr := st.Close()
 	if err == nil {
 		err = cerr
