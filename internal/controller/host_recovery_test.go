@@ -121,6 +121,97 @@ func TestRetirementNeverDeliversCleanupAndCannotReenrol(t *testing.T) {
 	}
 }
 
+func TestRecoveryWaitsForAnInflightTaskPollBeforeRetiring(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	var block atomic.Bool
+	var enteredOnce sync.Once
+	entered, release := make(chan struct{}), make(chan struct{})
+	clock := func() time.Time {
+		if block.Load() {
+			enteredOnce.Do(func() { close(entered) })
+			<-release
+		}
+		return now
+	}
+	h := newHarnessAt(t, clock)
+	joined, err := h.c.Join(h.ctx, joinRequest("polling", h.joinToken(t, nil, 0)), "10.0.0.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.MarkTransferredHosts(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.SetRecoveryFence(h.ctx, true, "transfer"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.c.LoadFence(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	h.c.queues.get(joined.HostID).enqueue(agent.Task{Kind: agent.TaskStopRunner, RunnerID: "run_previous"})
+	block.Store(true)
+	pollDone := make(chan struct {
+		batch *agent.TaskBatch
+		err   error
+	}, 1)
+	go func() {
+		batch, err := h.c.PollTasks(h.ctx, joined.HostID, 0)
+		pollDone <- struct {
+			batch *agent.TaskBatch
+			err   error
+		}{batch, err}
+	}()
+	<-entered
+	retireDone := make(chan error, 1)
+	go func() {
+		retireDone <- h.c.RetireRecoveryHost(h.ctx, joined.HostID, joined.HostID, "administrator")
+	}()
+	select {
+	case err := <-retireDone:
+		t.Fatalf("retirement overtook the in-flight task poll: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	block.Store(false)
+	close(release)
+	poll := <-pollDone
+	if poll.err != nil || poll.batch == nil || len(poll.batch.Tasks) != 1 {
+		t.Fatalf("task poll failed: %+v", poll)
+	}
+	if err := <-retireDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentReportsWaitForRecoveryRetirementLock(t *testing.T) {
+	h := newHarness(t)
+	joined, err := h.c.Join(h.ctx, joinRequest("reporting", h.joinToken(t, nil, 0)), "10.0.0.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.c.recoveryMu.Lock()
+	resultDone := make(chan error, 1)
+	go func() {
+		resultDone <- h.c.ReportResult(h.ctx, joined.HostID, agent.TaskResult{})
+	}()
+	runnersDone := make(chan error, 1)
+	go func() {
+		runnersDone <- h.c.ReportRunners(h.ctx, joined.HostID, nil)
+	}()
+	select {
+	case err := <-resultDone:
+		t.Fatalf("task result crossed the recovery lock: %v", err)
+	case err := <-runnersDone:
+		t.Fatalf("runner report crossed the recovery lock: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	h.c.recoveryMu.Unlock()
+	if err := <-resultDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-runnersDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRetiredHostDoesNotCauseAutomaticMachineRelease(t *testing.T) {
 	p := demandProvider("lab")
 	pool := demandPool("alpha")
