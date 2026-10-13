@@ -16,7 +16,7 @@ func TestPushWorkflowSourceUsesTheImmutableCommitAndRetainsOnlyDigests(t *testin
 	for _, mode := range []string{"observed", "dispatch", "missing_path", "mutable_ref", "traversal", "url", "wrong_path", "bad_blob", "wrong_size", "directory", "symlink", "encoding", "oversized", "invalid_utf8", "permission", "missing", "submodule", "bad_base64", "empty", "movement"} {
 		t.Run(mode, func(t *testing.T) {
 			calls, runs, sources := 0, 0, 0
-			content := "name: private workflow\njobs: {}\n# private token text\n"
+			content := "name: private workflow\non: push\njobs:\n  private_job:\n    runs-on: linux\n    steps:\n      - uses: private_owner/private_repo@" + strings.Repeat("a", 40) + "\n      - uses: ./private-action\n# private token text\n"
 			workflowPath := ".github/workflows/build.yml"
 			event := "push"
 			switch mode {
@@ -116,6 +116,9 @@ func TestPushWorkflowSourceUsesTheImmutableCommitAndRetainsOnlyDigests(t *testin
 			s := e.WorkflowSource
 			if calls != 4 || sources != 1 || s == nil || !ValidExperimentWorkflowSource(e) || s.ContentSHA256 != hex.EncodeToString(digest[:]) || s.BlobSHA != contextGitBlobSHA(content) || s.CommitSHA != delayTestSHA || s.Bytes != len(content) {
 				t.Fatalf("lost or unpinned source: %+v calls=%d", e, calls)
+			}
+			if s.Dependencies == nil || s.Dependencies.Coverage != "enumerated" || s.Dependencies.Counts.Declarations != 2 || s.Dependencies.Counts.CommitPins != 1 || s.Dependencies.Counts.Local != 1 || s.Dependencies.SourceSHA256 != s.ContentSHA256 {
+				t.Fatal("source inventory not bound or collected")
 			}
 			raw, _ := json.Marshal(e)
 			if strings.Contains(string(raw), "private") || strings.Contains(string(raw), "download_url") {

@@ -967,6 +967,17 @@ unknown without a source request. The final attempt recheck still follows source
 collection. These root-file facts do not cover reusable workflows/actions, inputs
 or test scope, and do not set the comparison's verified workflow revision.
 
+The same root read also records a private, versioned inventory of root `uses`
+declarations. It keeps positions, reference fingerprints and literal commit/image
+pins, with full counts of pinned, floating, local, expression and unrecognised
+references and at most 100 rows. Raw reference names and source text are discarded.
+Unsupported YAML retains unknown coverage with null counts, never partial or zero
+claims. No dependency files are fetched or executed. This is a root-declaration
+inventory, not a resolved transitive graph; pins do not prove existence, execution,
+inputs or workload equivalence. Its content-digest binding and count/position
+consistency are checked during retention and offline replay. Older absent stamps
+remain unknown; this private inventory is not part of public/model views.
+
 `selected-runs-v2` retains unknown historical workflow revision, inputs/test scope,
 configuration, cache and host evidence as explicit inconclusive reasons. The window
 uses GitHub attempt start time, with unknown starts retained. Execution is summed

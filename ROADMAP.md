@@ -1777,7 +1777,8 @@ Dispatch and publication are later, separately authorised work.
 [push root-workflow source digests](roadmap/plans/2026-10-13-eli-comparison-workflow-source.md),
 [web workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-web.md),
 [bounded MCP/Eli workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-mcp.md),
-[CLI workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-cli.md).
+[CLI workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-cli.md),
+[private root dependency inventory](roadmap/plans/2026-10-13-eli-comparison-workflow-dependencies.md).
 The owner prioritised the web UI before CLI capture on 13 October 2026.
 These slices include bounded local retention and capture/replay routes. No new
 dependency, model call, dispatch or publication is introduced. Historical workload/

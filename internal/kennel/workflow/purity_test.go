@@ -19,7 +19,7 @@ import (
 // command would drag them along. A deliberate change here changes this list,
 // where a reviewer sees it.
 var allowedImports = []string{
-	"bytes", "errors", "io", "regexp", "strings", "unicode/utf8", "gopkg.in/yaml.v3",
+	"bytes", "crypto/sha256", "encoding/hex", "errors", "io", "regexp", "strconv", "strings", "unicode", "unicode/utf8", "gopkg.in/yaml.v3",
 }
 
 func sources(t *testing.T) []string {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/eyupio/zoomies/internal/kennel/workflow"
 	gh "github.com/google/go-github/v88/github"
 )
 
@@ -18,13 +19,14 @@ const ExperimentWorkflowSourceBytes = 128 * 1024
 // ExperimentWorkflowSource describes only the root file read at a push commit.
 // Its digest does not cover reusable workflows, actions, inputs or test scope.
 type ExperimentWorkflowSource struct {
-	Version       string `json:"version"`
-	Basis         string `json:"basis"`
-	CommitSHA     string `json:"commit_sha"`
-	Path          string `json:"path"`
-	BlobSHA       string `json:"blob_sha"`
-	ContentSHA256 string `json:"content_sha256"`
-	Bytes         int    `json:"bytes"`
+	Dependencies  *workflow.DependencyInventory `json:"dependencies,omitempty"`
+	Version       string                        `json:"version"`
+	Basis         string                        `json:"basis"`
+	CommitSHA     string                        `json:"commit_sha"`
+	Path          string                        `json:"path"`
+	BlobSHA       string                        `json:"blob_sha"`
+	ContentSHA256 string                        `json:"content_sha256"`
+	Bytes         int                           `json:"bytes"`
 }
 
 func experimentSourcePath(e *ExperimentAttemptEvidence) string {
@@ -61,7 +63,7 @@ func (c *appClient) readExperimentSource(ctx context.Context, owner, repo string
 		return nil, fmt.Errorf("github: comparison workflow source failed content integrity validation")
 	}
 	digest := sha256.Sum256(content)
-	return &ExperimentWorkflowSource{Version: "workflow-source-v1", Basis: "push_head_sha_root_file", CommitSHA: e.HeadSHA, Path: p, BlobSHA: f.GetSHA(), ContentSHA256: hex.EncodeToString(digest[:]), Bytes: len(content)}, nil
+	return &ExperimentWorkflowSource{Dependencies: workflow.InspectDependencies(content), Version: "workflow-source-v1", Basis: "push_head_sha_root_file", CommitSHA: e.HeadSHA, Path: p, BlobSHA: f.GetSHA(), ContentSHA256: hex.EncodeToString(digest[:]), Bytes: len(content)}, nil
 }
 
 // ValidExperimentWorkflowSource checks the retained association and digest forms.
@@ -78,5 +80,5 @@ func ValidExperimentWorkflowSource(e *ExperimentAttemptEvidence) bool {
 		_, err := hex.DecodeString(v)
 		return len(v) == n && err == nil && v == strings.ToLower(v)
 	}
-	return s.Version == "workflow-source-v1" && s.Basis == "push_head_sha_root_file" && experimentSourcePath(e) != "" && s.Path == e.WorkflowPath && s.CommitSHA == e.HeadSHA && s.Bytes > 0 && s.Bytes <= ExperimentWorkflowSourceBytes && validHash(s.BlobSHA, 40) && validHash(s.ContentSHA256, 64)
+	return workflow.ValidDependencyInventory(s.Dependencies, s.ContentSHA256) && s.Version == "workflow-source-v1" && s.Basis == "push_head_sha_root_file" && experimentSourcePath(e) != "" && s.Path == e.WorkflowPath && s.CommitSHA == e.HeadSHA && s.Bytes > 0 && s.Bytes <= ExperimentWorkflowSourceBytes && validHash(s.BlobSHA, 40) && validHash(s.ContentSHA256, 64)
 }
