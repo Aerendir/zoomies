@@ -119,7 +119,11 @@ type ProviderPlan struct {
 	Create int `json:"create"`
 	// Drain is the machines that have stopped earning their keep, newest
 	// created first so that the one with the least warmed cache goes first.
+	// Unfit is those of them that could never have earned it: no enabled
+	// pool's runner fits on them, so they went without waiting out the idle
+	// timeout, and the drain says why in different words.
 	Drain  []string `json:"drain,omitempty"`
+	Unfit  []string `json:"unfit,omitempty"`
 	Reason string   `json:"reason,omitempty"`
 	// Blocked says why Create is below what the queue asked for, and
 	// BlockedFix what to change. They are separate because the problems drawer
@@ -234,7 +238,7 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			// would answer, and this pool's waits on its hosts.
 			if ok && pp.Blocked != "" && pp.Desired > pp.Current {
 				if providerFor(providers, synth, pool, owned, s.Now) == nil {
-					v, _ := unservedVerdict(providers, synth, pool, s.Now, pp.Desired-pp.Current, queued[pool.ID])
+					v, _ := unservedVerdict(providers, synth, pool, owned, s.Now, pp.Desired-pp.Current, queued[pool.ID])
 					verdicts = append(verdicts, v)
 				} else {
 					verdicts = append(verdicts, waitingVerdict(pool, pp, queued[pool.ID]))
@@ -296,7 +300,7 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		}
 		p := providerFor(providers, synth, pool, owned, s.Now)
 		if p == nil {
-			v, refused := unservedVerdict(providers, synth, pool, s.Now, short, queued[pool.ID])
+			v, refused := unservedVerdict(providers, synth, pool, owned, s.Now, short, queued[pool.ID])
 			if refused != nil {
 				unserved = append(unserved, *refused)
 			}
@@ -315,13 +319,13 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		})
 	}
 
-	drains := drainable(s, byProvider, pools, planned, hosts, machines)
+	drains, unfit := drainable(s, byProvider, pools, planned, hosts, machines)
 
 	fleetRoom := s.Limits.MaxMachines - fleetOwned
 	fleetCreateRoom := s.Limits.MaxCreatesInFlight - fleetPending
 	out := MachinePlan{Providers: make([]ProviderPlan, 0, len(providers)), Unserved: unserved}
 	for _, p := range providers {
-		plan := ProviderPlan{ProviderID: p.ID, Have: have[p.ID], Drain: drains[p.ID]}
+		plan := ProviderPlan{ProviderID: p.ID, Have: have[p.ID], Drain: drains[p.ID], Unfit: unfit[p.ID]}
 		ds := demand[p.ID]
 		slots := 0
 		for _, d := range ds {
@@ -412,6 +416,7 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 // writing it to the database would put a host in the fleet that does not exist.
 func providerSynthHost(p *store.Provider, now time.Time) *store.Host {
 	pf := p.MachinePlatform.Normalized()
+	cpus, memoryMB := providerMachineSize(p)
 	return &store.Host{
 		ID:       "synthetic-" + p.ID,
 		Name:     p.Name,
@@ -427,8 +432,8 @@ func providerSynthHost(p *store.Provider, now time.Time) *store.Host {
 		Distro:    pf.OS,
 		OSVersion: pf.OSVersion,
 		Arch:      pf.Arch,
-		CPUs:      int(p.MachineCPUs),
-		MemoryMB:  p.MachineMemoryMB,
+		CPUs:      cpus,
+		MemoryMB:  memoryMB,
 		// A machine that has not been built has all of its disk free, and the
 		// host reserve then applies to it exactly as it would to the real one,
 		// so a provider offering a machine too small for a pool is refused here
@@ -440,6 +445,27 @@ func providerSynthHost(p *store.Provider, now time.Time) *store.Host {
 		// and the fleet would never buy anything.
 		LastHeartbeat: now,
 	}
+}
+
+// providerMachineSize is the processors and memory this provider's next machine
+// will have, as far as anything has said: the row's own figures wherever it
+// names them, and otherwise the size its machines were seen to be. Zero on a
+// field nothing has said anything about.
+//
+// The seen size is what makes a row that leaves the size to its template
+// judgeable at all. Without it the synthetic host measured nothing, and a host
+// that measured nothing fits every pool by slots alone, so the fleet rented
+// 3.9 GB machines for a pool whose runner needs 6.7 GB and filled the
+// provider's ceiling with machines that could never run a job.
+func providerMachineSize(p *store.Provider) (cpus int, memoryMB int64) {
+	cpus, memoryMB = int(p.MachineCPUs), p.MachineMemoryMB
+	if cpus <= 0 {
+		cpus = p.SeenCPUs
+	}
+	if memoryMB <= 0 {
+		memoryMB = p.SeenMemoryMB
+	}
+	return cpus, memoryMB
 }
 
 // providerServes is whether this provider may rent a machine for this pool:
@@ -522,7 +548,17 @@ func acceptsDemand(p *store.Provider, now time.Time) bool {
 // machine stopped being useful, and the cooldown is how long that has to keep
 // being true before the fleet pays the price of building it again -- a quiet
 // minute between two bursts must not destroy what the second burst wants.
-func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools []*store.Pool, planned map[string]scheduler.PoolPlan, hosts []*store.Host, machines []*store.Machine) map[string][]string {
+//
+// A machine that could place no runner of any enabled pool is not waiting for
+// a burst: it is the wrong machine, too small or the wrong kind, and nothing
+// that arrives will run on it. It is released once the cooldown alone has
+// passed, and returned in the second map as well so the drain can say so.
+// Held to the full idle timeout, it kept its provider at its ceiling for that
+// long with work queued, and the work waited on a machine that could never
+// take it. The cooldown still applies, so a pool switched off and on again in
+// one breath, or a host whose figures are a moment out of date, does not cost
+// a machine.
+func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools []*store.Pool, planned map[string]scheduler.PoolPlan, hosts []*store.Host, machines []*store.Machine) (map[string][]string, map[string][]string) {
 	byHost := make(map[string]*store.Host, len(hosts))
 	for _, h := range hosts {
 		byHost[h.ID] = h
@@ -580,7 +616,7 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 		}
 	}
 
-	out := map[string][]string{}
+	out, unfit := map[string][]string{}, map[string][]string{}
 	for _, m := range candidates {
 		p := byProvider[m.ProviderID]
 		host := byHost[m.HostID]
@@ -590,7 +626,12 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 		if p.MinMachines > 0 && offering[p.ID] <= p.MinMachines {
 			continue
 		}
-		if m.IdleSince == nil || s.Now.Sub(*m.IdleSince) < idleTimeout(p, s.Limits)+s.Limits.ScaleDownCooldown {
+		useless := runsNoPool(host, pools)
+		wait := idleTimeout(p, s.Limits) + s.Limits.ScaleDownCooldown
+		if useless {
+			wait = s.Limits.ScaleDownCooldown
+		}
+		if m.IdleSince == nil || s.Now.Sub(*m.IdleSince) < wait {
 			continue
 		}
 		// A host that has gone quiet is ruled out for every pool below, so the
@@ -624,8 +665,38 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 		}
 		offering[p.ID]--
 		out[p.ID] = append(out[p.ID], m.ID)
+		if useless {
+			unfit[p.ID] = append(unfit[p.ID], m.ID)
+		}
 	}
-	return out
+	return out, unfit
+}
+
+// runsNoPool is whether a host could place no runner of any enabled pool
+// whatever it waited for: each is the wrong backend, platform, selector or size
+// for it (scheduler.HostCouldRun). Availability is left out on purpose, because
+// a cordoned or silent host is waiting on a person, not the wrong machine.
+//
+// A host that has not said what it offers, or measured nothing, is not judged:
+// a machine whose agent joined a moment ago has not yet reported its backends,
+// and reads as the wrong kind of machine until it does. Nor is a fleet with no
+// enabled pool, whose operator has switched the work off rather than bought the
+// wrong machine for it.
+func runsNoPool(h *store.Host, pools []*store.Pool) bool {
+	if len(h.Backends) == 0 || (h.CPUs <= 0 && h.MemoryMB <= 0) {
+		return false
+	}
+	enabled := 0
+	for _, pool := range pools {
+		if !pool.Enabled {
+			continue
+		}
+		enabled++
+		if scheduler.HostCouldRun(h, pool) {
+			return false
+		}
+	}
+	return enabled > 0
 }
 
 // queuedByPool counts the queued jobs each pool has claimed, so a purchase can

@@ -221,6 +221,16 @@ func (c *Controller) CheckProvider(ctx context.Context, row *store.Provider) (Pr
 	if err := c.st.SetProviderChecked(ctx, row.ID, now, checkComplaint(report), encodeCheckReport(out)); err != nil {
 		c.log.Warn("could not record a provider check", "provider", row.ID, "error", err)
 	}
+	// The size a machine is built at when the row names none. It is what the
+	// fit check judges a provider's next machine by until one of its machines
+	// has joined and measured itself, and a check made after the template
+	// changed is newer than any machine built before it.
+	if report.BuildsCPUs > 0 && report.BuildsMemoryMB > 0 {
+		if _, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, report.BuildsCPUs, report.BuildsMemoryMB,
+			store.MachineSizeFromTemplate, now); err != nil {
+			c.log.Warn("could not record the size a provider builds", "provider", row.ID, "error", err)
+		}
+	}
 	if fresh, err := c.st.GetProvider(ctx, row.ID); err == nil {
 		c.PublishProvider(ctx, fresh)
 	}
