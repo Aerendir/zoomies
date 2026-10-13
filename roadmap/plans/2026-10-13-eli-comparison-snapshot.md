@@ -28,7 +28,7 @@ in a product flow. Admission remains in the collector, not this pure assembly.
 Validation: missing-metadata tests failed against v1 before the change; assembler
 tests failed to compile before implementation. Complete analysis race tests pass
 (1.208s), focused controller snapshot race tests pass (1.159s), and the additional
-bound/duration-overflow cases pass. Analysis/controller vet, Go formatting and
+bound/duration-overflow cases pass (1.062s). Analysis/controller vet, Go formatting and
 whitespace checks pass with Go 1.27.2. No full controller/repository run, live
 GitHub request or model/performance experiment. Existing descriptive threshold
 and period-analysis fixtures pass in the complete analysis package.
