@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/analysis"
 	"github.com/eyupio/zoomies/internal/assistant/assistanttest"
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/controller"
@@ -761,6 +762,124 @@ func TestEliIsShownWholeRowsOfALargeWindowAndACursorThatMatchesThem(t *testing.T
 	}
 	if decisions := fleetBlocks(toolMessage(t, reqs[1], "call_0_2"))[0]; !strings.HasPrefix(decisions, `{"items":[{"id":"`+route.Items[0].ID+`"`) {
 		t.Errorf("the newest decision, %s, was not kept first: %.200q", route.Items[0].ID, decisions)
+	}
+}
+
+// Eli reads at most 12 KiB of a tool's answer a block; a large finding must
+// reach it as whole rows. Cut by bytes, the model would be shown a pool with
+// some of its longest waits and not the rest, or a job's names with no job
+// line above to say what they belong to, and an answer built on either reads
+// a fragment as the whole. So the analysis is cut by the tool on whole pools,
+// and a last line says how many it kept and what reads the rest.
+func TestEliIsShownAWholeAnalysisUnderItsBlockCeiling(t *testing.T) {
+	h, cookie, srv := chatHarness(t)
+	allowFleetAccess(t, h, cookie, true)
+	inst := h.installation()
+	long := strings.Repeat("x", 250)
+	first := time.Now().Add(-3 * time.Hour)
+	for p := range analysis.MaxEvidencePools {
+		pool := h.pool(inst, fmt.Sprintf("pool-%02d", p))
+		for j := range analysis.MaxLongestPerPool {
+			queued := first.Add(time.Duration(p*analysis.MaxLongestPerPool+j) * time.Second)
+			// Every wait differs, so the order of the pools and of their
+			// longest waits is the analysis's and not a tie broken by chance.
+			started := queued.Add(time.Duration(60+p*analysis.MaxLongestPerPool+j) * time.Second)
+			eliJob(h, pool, eliJobRan(queued, started, started.Add(time.Minute), "success", func(j *store.Job) {
+				j.Repo, j.Workflow, j.JobName = "acme/"+long, long, long
+			}))
+		}
+	}
+
+	srv.Script = []assistanttest.Round{
+		{Calls: []assistanttest.Call{{Name: "queue_wait_breakdown", Arguments: `{}`}}},
+		{Text: "Every pool waited a minute or two."},
+	}
+	resp := h.do(request{method: http.MethodPost, path: assistantChat, cookie: cookie, readStream: true, body: chatBody("user", "Why did jobs wait today?")})
+	resp.mustStatus(t, http.StatusOK, "asking")
+	reqs := chatRequests(srv)
+	if len(reqs) < 2 {
+		t.Fatalf("the model was asked %d times", len(reqs))
+	}
+	blocks := fleetBlocks(toolMessage(t, reqs[1], "call_0_0"))
+	if len(blocks) != 3 {
+		t.Fatalf("the analysis was handed over as %d blocks, want the finding, the notice and the names: %.300q", len(blocks), blocks)
+	}
+	for i, b := range blocks {
+		if strings.HasPrefix(b, "[cut:") {
+			t.Errorf("block %d was cut by bytes: %.120q", i, b)
+		}
+		if len(b) > controller.AssistantWindowBlock {
+			t.Errorf("block %d is %d bytes, over Eli's %d", i, len(b), controller.AssistantWindowBlock)
+		}
+	}
+
+	// The route's own finding says which pools come first and which waits
+	// are each pool's longest.
+	var route analysis.QueueWaitFinding
+	h.do(request{method: http.MethodGet, path: "/api/v1/analysis/queue-wait", cookie: cookie}).into(t, &route)
+	if len(route.Evidence.Pools) != analysis.MaxEvidencePools {
+		t.Fatalf("the route's finding holds %d pools; the seed is not what this test is about", len(route.Evidence.Pools))
+	}
+
+	// What the model was shown of each pool: its line and the job lines
+	// under it, in order.
+	type shownPool struct {
+		id   string
+		jobs []string
+	}
+	var shown []shownPool
+	var note string
+	for _, line := range strings.Split(blocks[0], "\n") {
+		switch {
+		case strings.HasPrefix(line, "pool "):
+			shown = append(shown, shownPool{id: strings.Fields(line)[1]})
+		case strings.HasPrefix(line, "  job ") && len(shown) > 0:
+			shown[len(shown)-1].jobs = append(shown[len(shown)-1].jobs, strings.Fields(line)[1])
+		case strings.HasPrefix(line, "truncated: "):
+			note = line
+		}
+	}
+	if len(shown) == 0 || len(shown) == analysis.MaxEvidencePools {
+		t.Fatalf("the model was shown %d of %d pools, so no cut was tested", len(shown), analysis.MaxEvidencePools)
+	}
+	if want := fmt.Sprintf("truncated: %d of %d pools shown, to keep each block within %d KiB; pass pool_id",
+		len(shown), analysis.MaxEvidencePools, controller.AssistantWindowBlock>>10); !strings.HasPrefix(note, want) {
+		t.Errorf("the cut line is %q; want it to start %q", note, want)
+	}
+	var jobs []string
+	for i, p := range shown {
+		want := route.Evidence.Pools[i]
+		var longest []string
+		for _, w := range want.Longest {
+			longest = append(longest, w.JobID)
+		}
+		if p.id != want.PoolID || !slices.Equal(p.jobs, longest) {
+			t.Errorf("pool %d was shown as %s with waits %v; want %s whole, with %v", i, p.id, p.jobs, want.PoolID, longest)
+		}
+		jobs = append(jobs, p.jobs...)
+	}
+
+	// The names: every shown job's three, and no job's that was not shown.
+	var named []string
+	count := map[string]int{}
+	for _, line := range strings.Split(blocks[2], "\n") {
+		id, _, ok := strings.Cut(line, ": ")
+		if !ok {
+			t.Errorf("a line of the names block names nothing: %.120q", line)
+			continue
+		}
+		if count[id] == 0 {
+			named = append(named, id)
+		}
+		count[id]++
+	}
+	if !slices.Equal(named, jobs) {
+		t.Errorf("the names block names jobs %v; want the shown jobs %v", named, jobs)
+	}
+	for id, n := range count {
+		if n != 3 {
+			t.Errorf("job %s has %d names in the block, want its repository, workflow and name", id, n)
+		}
 	}
 }
 
