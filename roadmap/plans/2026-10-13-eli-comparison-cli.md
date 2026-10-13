@@ -1,6 +1,7 @@
 # ZF-243: retained comparison CLI replay
 
-13 October 2026. E2 slice 9, stacked on capture/replay API #987.
+13 October 2026. E2 slice 9, draft [#988](https://github.com/eyupio/zoomies/pull/988),
+stacked on capture/replay API #987.
 
 ## Contract
 

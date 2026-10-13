@@ -41,7 +41,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 observed snapshot assembly | Draft PR | ZF-243, [#985](https://github.com/eyupio/zoomies/pull/985), stacked on #982 | Versioned unknown-evidence handling, pinned outcomes and complete-enumeration job elapsed sums. Complete analysis and focused snapshot race tests, analysis/controller vet and whitespace checks pass. Selection stays unverified; no runtime surface or improvement ranking |
 | E2 retained evidence and replay | Draft PR | ZF-243, [#986](https://github.com/eyupio/zoomies/pull/986), stacked on #985 | Immutable bounded SQLite envelopes, atomic audit and offline replay. Focused retention/replay race tests, upgrade/backup checks and vet pass. No API/tool surface, controlled comparison or real experiment yet |
 | E2 capture and replay API | Draft PR | ZF-243, [#987](https://github.com/eyupio/zoomies/pull/987), stacked on #986 | Explicit operator capture with comparisons:write plus jobs:read, one whole-request budget, scoped viewer replay and generated contracts. Focused API race, role/scope/contract checks, full auth/GitHub race suites, changed-package vet and strict docs pass. CLI/MCP/Eli/UI remain outstanding |
-| E2 CLI replay | Implemented, PR pending | ZF-243, stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
+| E2 CLI replay | Draft PR | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1008,7 +1008,8 @@ claimed. CLI/MCP/Eli/UI adapters remain the next slice.
 
 ### E2 slice 9: CLI replay, 13 October 2026
 
-Stacked on #987, `codex/eli-comparison-cli`. The `zoomies comparisons get`
+Draft [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987,
+`codex/eli-comparison-cli`. The `zoomies comparisons get`
 command takes an explicit `cmp_` ID, `--installation ins_ID` and `--repo
 OWNER/REPO`. It performs one GET through the existing API client. Invalid scope
 fails before connecting. There is no capture, fallback collection or retry on
