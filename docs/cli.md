@@ -336,7 +336,18 @@ applied limits, image/configuration equivalence or experiment eligibility. Older
 controllers show evidence as unavailable; unsupported or inconsistent runner views
 stop human output before printing a report, with guidance to inspect JSON.
 
-JSON preserves the complete controller response. Replay makes one scoped read
+Workflow evidence shows each exact run/attempt's trigger, path fingerprint and
+nullable root-file commit/blob/content digests and byte count. Full counters for
+selected attempts and root sources include omitted rows; every returned row is
+shown. Path
+fingerprints describe names, not content. Root digests describe collected bytes,
+not attested execution, reusable workflows/actions, inputs or test scope. Matching
+digests do not establish equivalent workloads. Missing older views remain unknown;
+unsupported or inconsistent human views fail before any report is printed. Both
+capture and replay use the same presenter and existing single HTTP request.
+
+JSON preserves the complete controller response, including future workflow fields
+and versions. Replay makes one scoped read
 without GitHub collection. Missing, expired or evicted history is unavailable;
 the command does not capture replacement evidence. Capture remains an explicitly
 initiated operator write through `comparisons capture` or the [API](api-surface.md).
