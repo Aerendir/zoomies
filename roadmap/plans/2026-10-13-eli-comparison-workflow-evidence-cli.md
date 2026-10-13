@@ -1,6 +1,6 @@
 # ZF-243: show workflow facts in CLI comparisons
 
-13 October 2026. Prepared on main after #1015 merged.
+13 October 2026. Ready for review [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 merged.
 
 ## Behaviour
 
