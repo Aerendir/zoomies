@@ -1,6 +1,6 @@
 # ZF-243: retain private runner observation joins
 
-13 October 2026. Based on main after #994, #996 and #998 merged.
+13 October 2026. Draft [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #994, #996 and #998 merged.
 
 ## Behaviour
 
