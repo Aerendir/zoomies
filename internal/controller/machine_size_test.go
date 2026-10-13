@@ -354,3 +354,23 @@ func TestAMachineNoPoolFitsIsKeptWhileItMeetsItsProvidersMinimum(t *testing.T) {
 		t.Fatalf("drain = %v, create = %d; want the machine that meets the minimum kept and nothing bought", got.Drain, got.Create)
 	}
 }
+
+// A provider whose machines are short only of disk is told the disk they need,
+// not to add processors and memory they already have.
+func TestAProviderShortOnlyOfDiskIsToldTheDiskItsMachinesNeed(t *testing.T) {
+	p := smallProvider("lab")
+	p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB = 8, 32768, 20<<10
+	pool := demandPool("builds", "self-hosted", "linux", "x64")
+	pool.Resources = store.Resources{CPUs: 1, MemoryMB: 2048, DiskGB: 40}
+
+	misfit := machineFit(p, providerSynthHost(p, machineNow), pool)
+	if !misfit.Size {
+		t.Fatalf("a 20 GB disk was judged to fit a pool that asks for 40: %+v", misfit)
+	}
+	if !strings.Contains(misfit.Fix, "GB of disk (raise its machine size)") {
+		t.Errorf("fix %q does not name the disk the machines need", misfit.Fix)
+	}
+	if strings.Contains(misfit.Fix, "CPU") || strings.Contains(misfit.Fix, "of memory") {
+		t.Errorf("fix %q names processors or memory, which already fit", misfit.Fix)
+	}
+}

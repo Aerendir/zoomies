@@ -131,16 +131,40 @@ func (s *Store) UpdateProvider(ctx context.Context, p *Provider) error {
 	if err != nil {
 		return err
 	}
+	// The size a provider's machines were seen to be is evidence about the
+	// machines it built, so an edit to what decides that size (the size typed
+	// on the form, or the settings that pick the template) makes it evidence
+	// about a different machine. It is forgotten in the same statement rather
+	// than left for the fit check: an operator who clears a larger typed size
+	// to fall back on a smaller template would otherwise have the template
+	// judged at the old size, and the fleet would rent machines too small for
+	// the work. SQLite reads every column in a SET from the row as it was, so
+	// the comparison is against the old figures.
+	changed := `(machine_cpus <> ? OR machine_memory_mb <> ? OR settings <> ?)`
+	settings, err := p.Settings.Value()
+	if err != nil {
+		return err
+	}
+	shape := []any{p.MachineCPUs, p.MachineMemoryMB, settings}
+	args := []any{p.Name, p.Endpoint, p.CAPEM, p.MachineCAPEM, boolInt(p.InsecureSkipVerify), p.Settings,
+		p.MachineLabels, p.MachineCapacity, string(p.MachineBackend), platform,
+		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines, p.MinMachines,
+		p.MaxCreatesInFlight, p.IdleTimeout.Duration().Milliseconds(), p.CostPerMachineHour,
+		boolInt(p.Enabled), ms(p.UpdatedAt)}
+	for range 4 {
+		args = append(args, shape...)
+	}
+	args = append(args, p.ID)
 	res, err := s.exec(ctx, `UPDATE providers SET name=?, endpoint=?, ca_pem=?, machine_ca_pem=?,
 		insecure_skip_verify=?, settings=?, machine_labels=?, machine_capacity=?,
 		machine_backend=?, machine_platform=?, machine_cpus=?, machine_memory_mb=?,
 		machine_disk_mb=?, pool_selector=?, max_machines=?, min_machines=?, max_creates_in_flight=?,
-		idle_timeout_ms=?, cost_per_machine_hour=?, enabled=?, updated_at=? WHERE id=?`,
-		p.Name, p.Endpoint, p.CAPEM, p.MachineCAPEM, boolInt(p.InsecureSkipVerify), p.Settings,
-		p.MachineLabels, p.MachineCapacity, string(p.MachineBackend), platform,
-		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines, p.MinMachines,
-		p.MaxCreatesInFlight, p.IdleTimeout.Duration().Milliseconds(), p.CostPerMachineHour,
-		boolInt(p.Enabled), ms(p.UpdatedAt), p.ID)
+		idle_timeout_ms=?, cost_per_machine_hour=?, enabled=?, updated_at=?,
+		seen_cpus = CASE WHEN `+changed+` THEN 0 ELSE seen_cpus END,
+		seen_memory_mb = CASE WHEN `+changed+` THEN 0 ELSE seen_memory_mb END,
+		seen_from = CASE WHEN `+changed+` THEN '' ELSE seen_from END,
+		seen_at = CASE WHEN `+changed+` THEN NULL ELSE seen_at END
+		WHERE id=?`, args...)
 	if err != nil {
 		return wrapWrite(err)
 	}

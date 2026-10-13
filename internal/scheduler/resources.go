@@ -662,19 +662,29 @@ func HostShortfall(h *store.Host, p *store.Pool) string {
 	return "it is too small for this pool's limits"
 }
 
-// machineForMaxCPUs and machineForMaxMemoryMB bound MachineFor's search: past
-// them a pool is asking for more than one machine a provider rents, and the
-// answer is to change the pool rather than to name a size nobody can order.
+// machineForMaxCPUs, machineForMaxMemoryMB and machineForMaxDiskMB bound
+// MachineFor's search: past them a pool is asking for more than one machine a
+// provider rents, and the answer is to change the pool rather than to name a
+// size nobody can order.
 const (
 	machineForMaxCPUs     = 512
 	machineForMaxMemoryMB = 4 << 20
+	machineForMaxDiskMB   = 64 << 20
 )
 
-// MachineFor is the smallest machine, in whole processors and whole gigabytes,
-// that h would have to be for one runner of p to fit on it: HostFits asked of
-// larger copies of h, so the reserve, the slot count, the host's runner profile
-// and a docker-in-docker pair's split are all judged exactly as placement
-// judges them.
+// MachineSize is a machine named by MachineFor: whole processors, and memory
+// and disk in whole gigabytes. A field is zero where it is not part of the
+// answer, because the host never measured it or because it need not grow.
+type MachineSize struct {
+	CPUs     int
+	MemoryMB int64
+	DiskMB   int64
+}
+
+// MachineFor is the smallest machine that h would have to be for one runner
+// of p to fit on it: HostFits asked of larger copies of h, so the reserve, the
+// slot count, the host's runner profile and a docker-in-docker pair's split
+// are all judged exactly as placement judges them.
 //
 // It exists because a refusal that names only the figure that fell short ("it
 // has 3.3 GB to place on, and a runner is charged 6.7 GB") still leaves an
@@ -683,22 +693,23 @@ const (
 // because an inverse would be a second copy of the sizing rules, and the one
 // that drifted would be the one buying machines.
 //
-// A field h never measured is returned as it is: nothing constrains it, so
-// there is no size to name. ok is false when h already fits, or when nothing
-// up to the bounds above would, which is a pool asking for more than a machine.
-func MachineFor(h *store.Host, p *store.Pool) (cpus int, memoryMB int64, ok bool) {
+// It names only what has to grow. Processors and memory are named together
+// when either must, because that is a machine an operator can order; disk is
+// named on its own, and only when the machine is short of it, so a machine
+// that is merely short of disk is not told to grow what it already has. ok is
+// false when h already fits, when nothing up to the bounds above would, or when
+// nothing h measured has to grow.
+func MachineFor(h *store.Host, p *store.Pool) (MachineSize, bool) {
 	if h == nil || p == nil || HostFits(h, p) || ExcludedBySize(h, p) != nil {
-		return 0, 0, false
+		return MachineSize{}, false
 	}
 	try := *h
-	// Disk is not a size this names: a machine at its disk reserve is full
-	// rather than small, and HostShortfall says that in words of its own. It
-	// is set out of the way so that the search answers for processors and
-	// memory alone.
-	if try.DiskTotalMB > 0 {
-		try.DiskTotalMB, try.DiskFreeMB = math.MaxInt32, math.MaxInt32
+	// Disk out of the way first, so that the search for processors and memory
+	// answers for them alone; it is put back and searched for last.
+	if h.DiskTotalMB > 0 {
+		try.DiskTotalMB, try.DiskFreeMB = machineForMaxDiskMB, machineForMaxDiskMB
 	}
-	cpus, memoryMB = h.CPUs, h.MemoryMB
+	cpus, memoryMB := h.CPUs, h.MemoryMB
 	if h.CPUs > 0 {
 		// Processors first, with memory out of the way, then memory at the
 		// processors found: each field of a runner's size is judged on its own,
@@ -715,34 +726,69 @@ func MachineFor(h *store.Host, p *store.Pool) (cpus int, memoryMB int64, ok bool
 			}
 		}
 		if cpus == 0 {
-			return 0, 0, false
+			return MachineSize{}, false
 		}
 		try.CPUs = cpus
 	}
 	if h.MemoryMB > 0 {
-		lo, hi := h.MemoryMB, int64(machineForMaxMemoryMB)
-		try.MemoryMB = hi
+		try.MemoryMB = machineForMaxMemoryMB
 		if !HostFits(&try, p) {
-			return 0, 0, false
+			return MachineSize{}, false
 		}
 		// More memory never makes a runner fit less: a larger machine has the
 		// larger share and the larger allocatable, and the reserve that grows
 		// with it grows more slowly than it does.
-		for lo < hi {
-			mid := lo + (hi-lo)/2
-			try.MemoryMB = mid
-			if HostFits(&try, p) {
-				hi = mid
-			} else {
-				lo = mid + 1
-			}
-		}
-		// A whole gigabyte, because that is the unit a machine is ordered in,
-		// and a figure such as 7.3 GB invites typing 7.
-		memoryMB = (hi + 1023) / 1024 * 1024
+		memoryMB = smallestFitting(h.MemoryMB, machineForMaxMemoryMB, func(v int64) bool {
+			try.MemoryMB = v
+			return HostFits(&try, p)
+		})
+		try.MemoryMB = memoryMB
 	}
-	return cpus, memoryMB, true
+	var out MachineSize
+	if cpus > h.CPUs || memoryMB > h.MemoryMB {
+		out.CPUs, out.MemoryMB = cpus, wholeGB(memoryMB)
+	}
+	if h.DiskTotalMB > 0 {
+		// The disk already written on is written on however large the disk,
+		// so a larger machine adds to the total and the free space alike.
+		used := max(h.DiskTotalMB-h.DiskFreeMB, 0)
+		try.DiskTotalMB, try.DiskFreeMB = h.DiskTotalMB, h.DiskFreeMB
+		if !HostFits(&try, p) {
+			total := smallestFitting(h.DiskTotalMB, machineForMaxDiskMB, func(v int64) bool {
+				try.DiskTotalMB, try.DiskFreeMB = v, v-used
+				return HostFits(&try, p)
+			})
+			try.DiskTotalMB, try.DiskFreeMB = total, total-used
+			if !HostFits(&try, p) {
+				return MachineSize{}, false
+			}
+			out.DiskMB = wholeGB(total)
+		}
+	}
+	if out == (MachineSize{}) {
+		return MachineSize{}, false
+	}
+	return out, true
 }
+
+// smallestFitting is the least value in [lo, hi] for which fits holds, for a
+// fits that only ever turns from false to true as the value grows. It answers
+// hi when nothing smaller does.
+func smallestFitting(lo, hi int64, fits func(int64) bool) int64 {
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if fits(mid) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+	return hi
+}
+
+// wholeGB rounds a size up to a whole gigabyte, because that is the unit a
+// machine is ordered in, and a figure such as 7.3 GB invites typing 7.
+func wholeGB(mb int64) int64 { return (mb + 1023) / 1024 * 1024 }
 
 // charged explains the one case where the number an operator sees on the pool
 // is not the number the host is charged. A defaulted field needs no such
