@@ -176,10 +176,9 @@ test('choosing auto asks first, and cancelling leaves the mode as it was', async
   );
 });
 
-// The Update button is the platform role's, and it is the only control that acts.
-// What the page must still never offer is a way to install, apply or restart by
-// any other route, or to choose a release it was not shown.
-test("the buttons are Refresh and the platform role's Update, and nothing installs or applies", async ({
+// Both update buttons name their destination; neither installs or applies anything
+// without confirmation in the controller.
+test('the page offers the shown release and DEV, with no install or apply route', async ({
   page,
 }) => {
   await goto(page, PAGE, 'Updates');
@@ -189,9 +188,10 @@ test("the buttons are Refresh and the platform role's Update, and nothing instal
   await expect(main.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
   await expect(main.getByRole('button', { name: 'Update to v1.3.2', exact: true })).toBeVisible();
   const controllerPanel = main.getByRole('region', { name: 'Update this controller', exact: true });
+  await expect(controllerPanel.getByRole('button')).toHaveCount(2);
   await expect(
-    controllerPanel.getByRole('button', { name: /install|apply|upgrade|restart/i }),
-  ).toHaveCount(0);
+    controllerPanel.getByRole('button', { name: 'Upgrade to DEV', exact: true }),
+  ).toBeVisible();
   await expect(
     controllerPanel.getByRole('link', { name: /update now|install|apply|upgrade|restart/i }),
   ).toHaveCount(0);
@@ -872,6 +872,8 @@ test('the build changing to the release asked for is shown as the update done', 
 });
 
 test('an attempt the controller closed as succeeded is shown as done', async ({ page }) => {
+  // A live event would replace this test's status with the real fixture's release.
+  await page.route('**/api/v1/events**', (route) => route.abort());
   await serve(page, () => ({
     ...updatable(attemptIn('succeeded')),
     running: { version: '1.3.2', release: true },
@@ -882,7 +884,7 @@ test('an attempt the controller closed as succeeded is shown as done', async ({ 
   const done = attemptBlock(page, 'Updated to v1.3.2');
   await expect(done).toContainText('Updated');
   await expect(done).toContainText('runs 1.3.2 now');
-  await expect(update(page).getByRole('button')).toHaveCount(0);
+  await expect(updateButton(page)).toHaveCount(0);
   await expect(update(page)).toContainText('No newer release is on offer');
 });
 
