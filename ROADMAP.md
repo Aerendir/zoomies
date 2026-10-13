@@ -1763,7 +1763,9 @@ Dispatch and publication are later, separately authorised work.
 [retention and offline replay](roadmap/plans/2026-10-13-eli-comparison-retention.md),
 [capture/replay API](roadmap/plans/2026-10-13-eli-comparison-api.md),
 [CLI replay](roadmap/plans/2026-10-13-eli-comparison-cli.md),
-[MCP/Eli replay](roadmap/plans/2026-10-13-eli-comparison-mcp.md).
+[MCP/Eli replay](roadmap/plans/2026-10-13-eli-comparison-mcp.md),
+[web capture and inspection](roadmap/plans/2026-10-13-eli-comparison-web.md).
+The owner prioritised the web UI before CLI capture on 13 October 2026.
 No new dependency, store query, route, model call, dispatch or publication.
 
 ## 9. Kept for the day somebody asks
