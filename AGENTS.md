@@ -171,6 +171,19 @@ internal/cryptox    AES-256-GCM at rest, argon2id, token hashing
 internal/events     in-process pub/sub that the SSE endpoint fans out
 internal/migrate    rewriting workflows' runs-on lines
 internal/mcp        the fleet over MCP: tools, stdio and Streamable HTTP
+internal/aicontext  commit-pinned repository context, independent of the fleet
+internal/agentguidance  inspects a repository's agent instruction files without running them
+internal/analysis   evidence-backed findings computed from explicit snapshots
+internal/assistant  the model-provider contract behind the assistant, and its adapters
+internal/catalog    the one machine-readable list of problem codes and Kennel Club checks
+internal/cliconfig  ~/.config/zoomies/cli.yaml: where the CLI finds its controller
+internal/kennel     pure evaluation of what is wrong with a repository's workflows
+internal/machine    which host this process runs on: distribution, release, capacity
+internal/naming     the grammar for pool, host and runner names
+internal/prrepair   bounds what the model may edit when it proposes a pull request
+internal/redact     strips credentials and commit emails from text bound for a model
+internal/toolscan   reads workflows for the toolchains their jobs install
+internal/wsl        keeps an agent alive inside a WSL2 distro
 web/                the Svelte 5 UI
 test/e2e            the Docker end-to-end test, behind the `e2e` build tag
 api/openapi.yaml    the API contract both clients are generated from
