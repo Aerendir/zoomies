@@ -35,7 +35,9 @@ anything precious on this.*
 curl -fsSL https://zoomies.sh/install.sh | sh
 ```
 
-Just looking? Add `-s -- --demo` after `sh` and nothing is installed: a
+Just looking? [Explore the live demo](https://demo.zoomies.sh/) without
+installing anything or signing in. To run a local demo, add `-s -- --demo`
+after `sh` and nothing is installed: a
 controller with a fleet already in it runs on your machine only, and goes when
 you press Ctrl-C.
 

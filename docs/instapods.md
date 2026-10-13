@@ -340,8 +340,8 @@ pod installed the update helper that page hands an update to.
 
 ## The zoomies.sh demo
 
-The project's public demo, planned for `demo.zoomies.sh` and not running yet,
-is this guide with these choices: the web pod on Build with
+The project's [public demo](https://demo.zoomies.sh/) follows this guide with
+these choices: the web pod on Build with
 `ZOOMIES_PUBLIC_VIEW=true` and `ZOOMIES_VERSION=dev`, `demo.zoomies.sh` as its
 domain from before GitHub is connected, and a worker on Grow taking the jobs
 of a demo organisation whose public repositories run scheduled workflows only,
