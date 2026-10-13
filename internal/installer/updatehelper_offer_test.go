@@ -664,6 +664,9 @@ func TestTheHelperIsNotOfferedInTheRunThatAddsTheSharedMount(t *testing.T) {
 			in := strings.NewReader(tc.answers)
 			opts.Out, opts.In, opts.run = &out, in, host.runner.run
 			tc.configure(&opts)
+			// The runner this runs on may itself be a WSL2 distro, and the WSL
+			// question would take one of the answers meant for the helper.
+			opts.isWSL = func() bool { return false }
 			opts.helperHost = &upgradeHelperHost{
 				systemdDir: t.TempDir(), unitDir: host.opts.unitDir, stateDir: host.opts.helperStateDir,
 				resolve: func(string) (InstallHelperOptions, error) { return host.opts, nil },

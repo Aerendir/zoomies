@@ -1243,12 +1243,19 @@ test('a flagged row says Fixable, Advice or Optional, and an operator can copy t
         .click();
       expect(await page.evaluate(() => sessionStorage.getItem('copied'))).toBe(command);
     }
-    // Advice, Optional and an id that fails the pattern get the word, if any, and no button.
+    // Advice, Optional and an id that fails the pattern get the word, if any, and no
+    // preview to copy (their Fix asks Eli instead).
     const all = page.getByRole('button', { name: /Copy preview command/ });
     await expect(all).toHaveCount(3);
-    await expect(row('vm.swappiness').getByRole('button')).toHaveCount(0);
-    await expect(row('net.offload').getByRole('button')).toHaveCount(0);
-    await expect(row('cpu.x$(reboot)').getByRole('button')).toHaveCount(0);
+    await expect(
+      row('vm.swappiness').getByRole('button', { name: /Copy preview command/ }),
+    ).toHaveCount(0);
+    await expect(
+      row('net.offload').getByRole('button', { name: /Copy preview command/ }),
+    ).toHaveCount(0);
+    await expect(
+      row('cpu.x$(reboot)').getByRole('button', { name: /Copy preview command/ }),
+    ).toHaveCount(0);
     await expect(
       page.getByText('A Fixable row has a button that copies a read-only preview').first(),
     ).toBeVisible();
