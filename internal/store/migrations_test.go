@@ -113,6 +113,7 @@ var shippedMigrations = []string{
 	"0099_machine_resource_reuse.sql",
 	"0100_eli_repair_cleared.sql",
 	"0101_provider_machine_ca.sql",
+	"0102_provider_min_machines.sql",
 }
 
 // The two prefixes shared by files that already shipped. They sort by what
