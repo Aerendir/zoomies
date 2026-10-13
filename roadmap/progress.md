@@ -91,6 +91,23 @@ evidence.
 
 ## Log
 
+* 2026-10-13: ZF-237 browser import sends ciphertext in 8 MiB chunks and polls
+  background verification, avoiding whole-archive proxy limits and long
+  verification response waits. Uploads are identity-owned, capped and expiring;
+  identical retries are safe, interrupted chunks do not advance the offset,
+  and slow chunks have a separate bounded read deadline. The multipart import
+  remains compatible, and live replacement still needs staged restore and
+  source-stop acknowledgement. Backend race tests cover ownership, replay,
+  interruption, expiry, verification round trips and rejected archives. The
+  replay guard's regression was seen to fail with that guard removed. Desktop
+  and mobile handover passed in both themes, as did a 106,910 KiB browser upload
+  under an 8 MiB simulated proxy limit in all four layouts. Web client tests,
+  type checking, lint and production build passed. Targeted API race tests
+  and backup race tests passed; the full API race suite exceeded its default
+  ten-minute budget before finishing. Production proxy testing
+  remains outstanding; ordinary backup upload and archive download still use
+  one request. No archive history or credentials were removed.
+
 * 2026-10-11: ZF-206, Windows, tried by hand by the owner on a real Windows
   host: it joined and a job ran. The "has not run" wording is corrected in
   ROADMAP v3.10, `docs/index.md` and `docs/hosts-and-pools.md`; the support

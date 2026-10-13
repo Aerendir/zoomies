@@ -89,8 +89,9 @@ type Server struct {
 	cloudflare []*net.IPNet
 	manifests  *manifestStates
 
-	handler http.Handler
-	private privateConnections
+	handler   http.Handler
+	private   privateConnections
+	transfers transferUploads
 }
 
 // cfg is the configuration as it currently stands. It comes from the
@@ -267,6 +268,7 @@ const shutdownGrace = 15 * time.Second
 // service manager that starts a dependent unit on READY=1 is not racing the
 // bind.
 func (s *Server) ListenAndServe(ctx context.Context) error {
+	defer s.stopTransferUploads()
 	defer s.closeTailcat()
 	if err := s.resumeTailcat(ctx, tailcatCheckInterval, tailcatHealthyInterval); err != nil {
 		return err
