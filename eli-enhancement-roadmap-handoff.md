@@ -33,9 +33,10 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
 | E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and scripted scenarios merged in #959 |
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
-| E2 eligibility | Draft PR | ZF-243, [#973](https://github.com/eyupio/zoomies/pull/973), following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
-| E2 measurements | Draft PR | ZF-243, [#974](https://github.com/eyupio/zoomies/pull/974), stacked on #973 | Successful latency distribution, all-attempt execution/idle consumption, failure rate and descriptive changes. Complete analysis race tests and vet pass; no controller integration or live experiment |
-| E2 bounded retained-attempt collection | Draft PR | ZF-243, [#977](https://github.com/eyupio/zoomies/pull/977), stacked on #974 | Scoped store reader and bounded controller collection; explicit retained-only/truncated/unavailable/held-back coverage. Focused store/controller race tests, full analysis race tests, changed-package vet and whitespace checks pass. Full workflow selection remains unverified; no runtime surface |
+| E2 eligibility | Merged | ZF-243, [#973](https://github.com/eyupio/zoomies/pull/973), following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
+| E2 measurements | Merged | ZF-243, [#974](https://github.com/eyupio/zoomies/pull/974), stacked on #973 | Successful latency distribution, all-attempt execution/idle consumption, failure rate and descriptive changes. Complete analysis race tests and vet pass; no controller integration or live experiment |
+| E2 bounded retained-attempt collection | Merged | ZF-243, [#977](https://github.com/eyupio/zoomies/pull/977), stacked on #974 | Scoped store reader and bounded controller collection; explicit retained-only/truncated/unavailable/held-back coverage. Focused store/controller race tests, full analysis race tests, changed-package vet and whitespace checks pass. Full workflow selection remains unverified; no runtime surface |
+| E2 bounded GitHub attempt evidence | Draft PR | ZF-243, [#978](https://github.com/eyupio/zoomies/pull/978), targeting main after merged #977 | Exact run/attempt metadata and job enumeration, bounded bodies/pages and uncached identity recheck. Full GitHub package race tests and vet pass. No collector admission or runtime surface yet; workload/configuration evidence remains unknown |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -739,3 +740,51 @@ repository-installation mismatches, duplicate selections, both collection caps
 and minimal output. The behavioural tests failed to compile before implementation.
 Verification results are recorded in the slice plan; earlier broad-run evidence
 is not a claim that this new slice passed the entire repository suite.
+
+### E2 exact GitHub attempt evidence, 13 October 2026
+
+Slice 4 supplies `github.ExperimentAttemptReader`, an optional capability on the
+installation client. `ReadExperimentAttempt` uses the exact run/attempt endpoint
+and its jobs endpoint; it never substitutes the latest run, follows an API jobs
+URL, reads logs/source or dispatches work. Source head, repository, run, attempt
+and workflow numeric identity must match. All job outcomes remain visible.
+
+The reader has a 20-second deadline, five pages of 100 jobs, at most seven GET
+requests (two attempt metadata reads plus five pages), and the existing isolated
+4 MiB per-response diagnostic bound. It disables conditional caching only on its
+local clone, leaving the shared installation client unchanged. Names, labels,
+step output, actors, workflow paths and display titles are absent from the report.
+Repository/revision text still needs normal untrusted treatment in a future tool.
+
+`JobsCoverage` is `complete` only for a completed attempt with a conclusion and
+updated timestamp, consistent explicit total counts, unique pinned job identities,
+terminal job outcomes and pagination ending within the bound. Missing counts,
+duplicate jobs, inconsistent pagination, a cap or a non-terminal attempt produce
+`partial`. Invalid identity or changed head/workflow/status/conclusion/update or
+start timestamp refuses collection. Missing measurement timestamps stay nullable;
+full enumeration is not a claim of measured duration. UpdatedAt is not asserted
+to be the run's completion time. Failed jobs can coexist with an overall success
+(for example continue-on-error), so outcomes are retained rather than reinterpreted.
+
+Next: integrate into an on-demand controller join with installation holds,
+per-installation admission/quota reservations and a whole-cohort request bound
+before any caller can invoke it. A selected cohort of 100 attempts must not turn
+into an unadmitted 700-request diagnostic. Join exact numeric job identities and
+heads against #977's retained rows, keeping retention/missing fleet telemetry
+explicit. Full job enumeration does not establish fair cohort selection, workflow
+inputs/revision, test scope, observed cache/host state or historical image/resource
+configuration. These remain unsupported evidence, not current-setting guesses.
+No HTTP route, MCP tool, Eli allowlist entry or live provider call is added here.
+
+Tests first failed before the reader existed. Fixtures cover exact old-attempt
+paths, failures without private display text, foreign identities, collection
+movement, missing counts, duplicate rows, non-terminal attempts, page/job/request
+caps, oversized bodies, permission errors and invalid input before any read.
+Final validation is recorded in the slice plan. No real GitHub experiment or model
+assessment has run.
+
+Stack reconciliation for slice 4: #973, #974 and #977 merged during this work.
+Merged current main `b132dbfd` into the reader branch without conflicts; the
+reader PR now targets main rather than an open comparison parent. Go-GitHub
+remains v88.0.0. Main's dependency and analysis-route updates are included in the
+validation baseline, without claiming their implementation as part of this slice.
