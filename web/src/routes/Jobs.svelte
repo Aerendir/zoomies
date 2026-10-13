@@ -45,11 +45,13 @@
   import { readableJobText } from '$lib/jobs/name';
   import JobsInsights from '$lib/insights/JobsInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
-  import { getJobFacets, listJobs } from '$lib/api/client';
-  import type { Job } from '$lib/api/types';
+  import { analyseQueueWait, getJobFacets, listJobs } from '$lib/api/client';
+  import type { Job, QueueWaitFinding } from '$lib/api/types';
+  import AnalysisCard, { refusal } from '$lib/insights/AnalysisCard.svelte';
+  import { analysisWindow, CAUSE_WORDS, jobWords, wordFor } from '$lib/insights/analysis';
   import { events } from '$lib/api/sse';
   import { faultLabel, fleetFailed } from '$lib/faults';
-  import { formatDuration } from '$lib/format';
+  import { formatDuration, formatNumber, formatPercent, pluralise } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import {
     HOSTED,
@@ -139,6 +141,60 @@
 
   /** Bumped by the refresh button so the size-label report reads again too. */
   let adviceKey = $state(0);
+
+  /* -- why the queued jobs waited ---------------------------------------------
+   * The Queued view is where "why is this waiting?" is asked of the whole
+   * queue, so the queue-wait analysis sits there and nowhere else on the page.
+   * It reads the page's own dates, or the day before now when none are set,
+   * and the one pool the filter names; filtered to several pools it reads the
+   * fleet, since the analysis narrows to one pool or none.
+   * ------------------------------------------------------------------------ */
+
+  let wait = $state.raw<QueueWaitFinding | null>(null);
+  let waitError = $state<string | null>(null);
+  let waitLoading = $state(false);
+  const waitPool = $derived(filters.pool_id.length === 1 ? filters.pool_id[0] : undefined);
+  // Primitives, so a change to a filter the analysis does not read (a
+  // repository, a label) does not ask it again.
+  const waitSince = $derived(filters.since);
+  const waitUntil = $derived(filters.until);
+
+  $effect(() => {
+    if (view !== 'queued') return;
+    void adviceKey;
+    const period = analysisWindow(startOfMoment(waitSince), endOfMoment(waitUntil), Date.now());
+    const controller = new AbortController();
+    waitError = null;
+    if (!period) {
+      // A range typed backwards is the date picker's to point out.
+      wait = null;
+      waitLoading = false;
+      return;
+    }
+    waitLoading = true;
+    analyseQueueWait({ ...period, pool_id: waitPool }, controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) wait = next;
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        // The grid below is still true; only this card says what went wrong.
+        wait = null;
+        waitError = refusal(cause);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) waitLoading = false;
+      });
+    return () => controller.abort();
+  });
+
+  /** Every pool's longest waits, longest first, as one list. */
+  const longestWaits = $derived(
+    (wait?.evidence.pools ?? [])
+      .flatMap((p) => p.longest.map((j) => ({ ...j, pool: p.pool_name || p.pool_id })))
+      .sort((a, b) => b.wait_seconds - a.wait_seconds)
+      .slice(0, 5),
+  );
 
   /** Labels worth offering in the filter: what the pools answer to, plus what this page asked for. */
   const labelOptions = $derived.by(() => {
@@ -474,6 +530,100 @@
     onchange={patch}
     onclear={clearFilters}
   />
+
+  {#if view === 'queued'}
+    <AnalysisCard title="Why jobs waited" finding={wait} error={waitError} loading={waitLoading}>
+      {#if wait}
+        {@const ev = wait.evidence}
+        <dl class="facts">
+          <div>
+            <dt>Jobs</dt>
+            <dd class="figure">
+              {pluralise(ev.jobs, 'job')} queued, {formatNumber(ev.waited)} waited, {formatDuration(
+                ev.wait_seconds * 1000,
+              )} of waiting
+            </dd>
+          </div>
+          {#if !waitPool && ev.pools_cut > 0}
+            <div>
+              <dt>Pools</dt>
+              <dd>
+                {pluralise(ev.pools_cut, 'pool')} left out below and counted in the totals; filter to
+                one pool to read it whole.
+              </dd>
+            </div>
+          {/if}
+        </dl>
+        {#if ev.fleet.length}
+          <p class="rows-label" id="wait-causes">Where the wait went</p>
+          <ul class="rows" aria-labelledby="wait-causes">
+            {#each ev.fleet as c (c.cause)}
+              <li>
+                <span>{wordFor(CAUSE_WORDS, c.cause)}</span>
+                <span class="figure muted"
+                  >{formatPercent(c.share)}, {formatDuration(c.seconds * 1000)}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ev.pools.length > 1}
+          <p class="rows-label" id="wait-pools">By pool</p>
+          <ul class="rows" aria-labelledby="wait-pools">
+            {#each ev.pools as p (p.pool_id)}
+              <li>
+                {#if p.pool_id && !p.deleted}
+                  <a href="/pools/{p.pool_id}">{p.pool_name || p.pool_id}</a>
+                {:else}
+                  <span>{p.pool_name || (p.pool_id ? p.pool_id : 'No pool claimed them')}</span>
+                {/if}
+                {#if p.deleted}<span class="muted">deleted since</span>{/if}
+                <span class="figure muted"
+                  >{pluralise(p.jobs, 'job')}, {formatDuration(p.wait_seconds * 1000)} waiting{p.dominant
+                    ? `, most of it ${wordFor(CAUSE_WORDS, p.dominant).toLowerCase()}`
+                    : ''}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if longestWaits.length}
+          <p class="rows-label" id="wait-longest">Longest waits</p>
+          <ul class="rows" aria-labelledby="wait-longest">
+            {#each longestWaits as j (j.job_id)}
+              <li>
+                <span class="quoted">{jobWords(j) || j.job_id}</span>
+                <span class="figure muted"
+                  >{formatDuration(j.wait_seconds * 1000)} in {j.pool}, {wordFor(
+                    CAUSE_WORDS,
+                    j.cause,
+                  ).toLowerCase()}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ev.no_runner_record > 0}
+          <p class="evidence-note">
+            {pluralise(ev.no_runner_record, 'job')} waited past becoming eligible with no record of its
+            runner left, so that wait could not be split into startup and GitHub's hand-off.
+          </p>
+        {/if}
+        {#if ev.runner_kept > 0}
+          <p class="evidence-note">
+            {pluralise(ev.runner_kept, 'job')} waited on a runner its pool keeps between jobs, so that
+            wait could not be split either.
+          </p>
+        {/if}
+        {#if ev.jobs_truncated || ev.runners_truncated}
+          <p class="evidence-note">
+            A read stopped at its limit, so the newest records were read; a shorter period reads all
+            of them.
+          </p>
+        {/if}
+      {/if}
+    </AnalysisCard>
+  {/if}
 
   {#if filters.unmatched && unmatchedOnPage > 0}
     <UnmatchedNote count={unmatchedOnPage} />
