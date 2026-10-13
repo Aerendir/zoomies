@@ -1,6 +1,6 @@
 # ZF-243: retain private trigger/workflow context
 
-13 October 2026. Prepared on main after #1006 merged.
+13 October 2026. Ready for review [#1007](https://github.com/eyupio/zoomies/pull/1007), based on main after #1006 merged.
 
 ## Behaviour
 
