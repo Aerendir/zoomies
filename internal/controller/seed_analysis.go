@@ -287,6 +287,12 @@ func (s *analysisSeed) poolCeiling(ctx context.Context, arm *store.Pool, host *s
 // host's only starts in the window are the image fixture's. Each was queued
 // as it started, so the queue-wait analysis of their pool reads them as jobs
 // that did not wait, and neither counts them nor hedges on them (P17).
+//
+// No throttle is seeded on the host, though a real fleet with throttling on
+// would have stepped it down at this load. A throttle episode in the window
+// is evidence the startup and queue-wait analyses also read, so seeding one
+// would change what each of them names here; no finding over this window
+// claims the host was throttled, so leaving it out misleads nobody.
 func (s *analysisSeed) hostPressure(ctx context.Context, now time.Time, linux *store.Pool, host *store.Host) error {
 	const minutes, busy = 120, 20
 	first := s.from.Truncate(time.Minute)

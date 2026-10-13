@@ -107,6 +107,11 @@ func TestSeedDemoBuildsAFleet(t *testing.T) {
 	if total != 92 {
 		t.Fatalf("seeded %d jobs, want 92", total)
 	}
+	// The checks below walk one page; a seed that outgrew it would drop rows
+	// from them silently rather than fail.
+	if len(jobs) != total {
+		t.Fatalf("read %d of %d seeded jobs; raise the page limit", len(jobs), total)
+	}
 	var completed, queued, running, unmatched, elsewhere int
 	for _, j := range jobs {
 		switch j.State {
