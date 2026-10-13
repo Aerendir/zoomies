@@ -51,7 +51,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 private runner observation joins | Merged | ZF-243, [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #998 | Historical job/runner/pool scope, pinned GitHub job joins, independent observation digest and offline replay. Requested resources and agent claims do not promote eligibility. Focused controller/store race, shared admission, offline replay, vet and strict docs pass |
 | E2 web runner evidence inspection | Merged | ZF-243, [#1003](https://github.com/eyupio/zoomies/pull/1003), based on main after #1000 | Bounded descriptive projection, explicit grant/request/claim labels, nullable facts, per-job web inspection and omitted-row counts. Immutable report and eligibility unchanged. Focused race, 14 desktop/mobile fixtures, 109 UI unit tests, type/lint/build, vet and strict docs pass |
 | E2 MCP/Eli runner evidence | Merged | ZF-243, [#1004](https://github.com/eyupio/zoomies/pull/1004), based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
-| E2 CLI runner evidence | Ready for review | ZF-243, [#1006](https://github.com/eyupio/zoomies/pull/1006), based on main after #1004 | Shared capture/replay human view, validated REST whitelist, full coverage counts and explicit unknown/request/claim labels; raw JSON preserved. Focused race tests, vet and strict docs pass |
+| E2 CLI runner evidence | Merged | ZF-243, [#1006](https://github.com/eyupio/zoomies/pull/1006), based on main after #1004 | Shared capture/replay human view, validated REST whitelist, full coverage counts and explicit unknown/request/claim labels; raw JSON preserved. Focused race tests, vet and strict docs pass |
+| E2 private trigger/workflow context | Ready for review | ZF-243, [#1007](https://github.com/eyupio/zoomies/pull/1007), based on main after #1006 | Bounded optional exact-attempt metadata, identity recheck and immutable private retention; no workload equivalence or public contract change. Focused GitHub/controller race tests, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1585,7 +1586,7 @@ these descriptive facts into controlled experiment eligibility.
 
 ### E2 slice 19: CLI runner evidence, 13 October 2026
 
-Ready for review [#1006](https://github.com/eyupio/zoomies/pull/1006), branch codex/eli-comparison-runner-evidence-cli, based on main after #1004
+Merged [#1006](https://github.com/eyupio/zoomies/pull/1006), branch codex/eli-comparison-runner-evidence-cli, based on main after #1004
 merged. Both explicit capture and scoped replay share one human presenter and their
 existing single HTTP request. No additional collection, refresh or privileges.
 
@@ -1621,3 +1622,51 @@ before choosing a new provenance slice. Do not promote requests or agent claims
 into ResourceID/ImageID/ConfigurationID or controlled eligibility. Keep the thirty
 completed attempts per arm and current admission limits. Live model evaluation
 also remains outstanding; scripted fixtures only verify transport/presentation.
+
+
+### E2 slice 20: private trigger/workflow context, 13 October 2026
+
+Ready for review [#1007](https://github.com/eyupio/zoomies/pull/1007), branch codex/eli-comparison-trigger-provenance, based on main after #1006
+merged. Exact-attempt GitHub reads now retain optional event and workflow_path
+fields. The same initial/final attempt GETs recheck these fields around job
+pagination, including appearance/disappearance. Movement refuses collection.
+The seven-request maximum, response bound, deadline, quota and admission stay.
+No logs, source files, event payloads, dispatch inputs or additional URLs are read.
+
+Event is bounded to 64 lower-case ASCII letter/digit/underscore bytes. Workflow
+path is bounded to 1024 UTF-8 bytes and refuses control characters. Paths remain
+opaque untrusted descriptive strings, including GitHub's possible @ref suffix.
+There is deliberately no path parsing, URL following or assumption that HeadSHA
+identifies the executed workflow revision. Empty fields remain unknown. Alternate
+readers and offline replay pass through the same controller validation, so they
+cannot bypass these bounds.
+
+The optional fields are private retained inputs with omitempty. Older absent-field
+payloads remain byte-compatible and replay without enrichment. New retained bytes
+include the optional metadata in the existing storage digest. No migration or
+retention limit change. As with previous additive private-envelope fields, an older
+binary with a strict decoder cannot replay new fields it does not recognise.
+No public REST/OpenAPI/UI/CLI/MCP field or original report change is introduced.
+Trigger/path never set WorkflowRevision, InputsID, TestScopeID or any configuration,
+image/resource identity. SelectionComplete stays false; cache/host remain unknown.
+
+Validation completed: GitHub fixture-backed race tests pass for context capture,
+absence, movement and invalid fields with request counts unchanged. The movement
+fixture fails when the context identity recheck is removed. Controller fixtures
+cover private immutable capture/replay, legacy omission, alternate-reader refusal
+and byte-identical reports/eligibility with and without differing context.
+Focused controller comparison/snapshot tests and dedicated retention fixtures pass
+with race detection. Changed-package vet, strict docs and whitespace pass. Docs used
+the repository-only header fallback for unavailable optional GitHub metadata.
+No live GitHub/fleet/model call or new dependency.
+
+Next agent: expose a separately reviewed descriptive workload-context projection
+if needed, keeping filenames/repository text behind the existing untrusted-data
+boundary. Before collecting source, define which revision actually resolves the
+executed workflow for each event (pull_request can involve a merge ref;
+pull_request_target and reusable workflows need separate resolution). A run path,
+workflow ID, event and head SHA alone are not workflow-content or input proof.
+Bound any source reads in the whole-capture budget and persist content digests
+before considering WorkflowRevision. Dispatch inputs/test scope, caches, host
+conditions and fair complete selection remain unresolved. Live model evaluation
+is also still outstanding; keep thirty completed attempts per arm.
