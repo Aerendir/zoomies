@@ -1009,3 +1009,12 @@ Pool priority and an explicit Run now preference can defer ordinary work.
 This is an order for provisioning capacity. GitHub chooses which compatible job
 an available runner actually executes. Open a queue row for its current waiting
 explanation, including explicit paused/deleted demand.
+
+
+Historical comparison reports show recorded workflow evidence beside runner facts.
+Expand each run attempt for the retained trigger, path fingerprint and root-file
+commit/content digests. Missing sources remain unknown, including unsupported
+triggers and older captures. Root-file coverage excludes reusable workflows,
+actions, inputs and test scope and does not attest execution or matched workloads.
+Raw workflow filenames and source text are not returned. Digest details wrap on
+mobile; exact run IDs remain decimal strings in this view.

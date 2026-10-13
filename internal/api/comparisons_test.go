@@ -28,6 +28,7 @@ func (f *comparisonAPIFactory) For(ctx context.Context, inst *store.Installation
 }
 
 type comparisonAPIReader struct {
+	workflowSource bool
 	github.Client
 	at                time.Time
 	calls, quotaCalls atomic.Int32
@@ -45,7 +46,16 @@ func (f *comparisonAPIReader) ReadExperimentAttempt(_ context.Context, repo stri
 		return nil, f.err
 	}
 	end := f.at.Add(time.Minute)
-	return &github.ExperimentAttemptEvidence{Repository: repo, RunID: run, Attempt: attempt, HeadSHA: strings.Repeat("a", 40), WorkflowID: 20, Status: "completed", Conclusion: "failure", RunStartedAt: &f.at, UpdatedAt: &end, JobsCoverage: "complete", Jobs: []github.ExperimentAttemptJob{{ID: run + 100, Status: "completed", Conclusion: "failure", StartedAt: &f.at, CompletedAt: &end}}}, nil
+	out := &github.ExperimentAttemptEvidence{Repository: repo, RunID: run, Attempt: attempt, HeadSHA: strings.Repeat("a", 40), WorkflowID: 20, Status: "completed", Conclusion: "failure", RunStartedAt: &f.at, UpdatedAt: &end, JobsCoverage: "complete", Jobs: []github.ExperimentAttemptJob{{ID: run + 100, Status: "completed", Conclusion: "failure", StartedAt: &f.at, CompletedAt: &end}}}
+	if f.workflowSource {
+		out.Event = "workflow_dispatch"
+		if run == 10 {
+			out.Event = "push"
+			out.WorkflowPath = ".github/workflows/private-root.yml"
+			out.WorkflowSource = &github.ExperimentWorkflowSource{Version: "workflow-source-v1", Basis: "push_head_sha_root_file", CommitSHA: out.HeadSHA, Path: out.WorkflowPath, BlobSHA: strings.Repeat("b", 40), ContentSHA256: strings.Repeat("c", 64), Bytes: 100}
+		}
+	}
+	return out, nil
 }
 func comparisonAPIHarness(t *testing.T, opts ...func(*config.Config)) (*harness, string, *comparisonAPIReader, map[string]any) {
 	t.Helper()
@@ -253,4 +263,30 @@ func TestComparisonAPIProjectsRecordedGrantsWithoutPromotingEquivalenceOrRefresh
 		t.Fatal("replay changed evidence or collection budget")
 	}
 	assertShape(t, loadSpec(t), "RetainedExperimentComparison", captured.body)
+}
+
+func TestComparisonAPIProjectsRetainedWorkflowFactsWithoutReadingCurrentSource(t *testing.T) {
+	h, inst, reader, body := comparisonAPIHarness(t)
+	reader.workflowSource = true
+	token := h.token("operator", store.RoleOperator, "jobs:read", "comparisons:write")
+	capture := h.do(request{method: http.MethodPost, path: "/api/v1/comparisons", token: token, body: body})
+	capture.mustStatus(t, 201, "capture workflow facts")
+	var saved controller.RetainedExperimentComparison
+	if err := json.Unmarshal(capture.body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	v := saved.WorkflowEvidence
+	if v == nil || v.Baseline.RootSources != 1 || v.Candidate.RootSources != 0 || v.Candidate.Attempts[0].RootSource != nil || saved.Report.Snapshot.Baseline.WorkflowRevision != "" || saved.Report.Measurement.Eligibility.State != "inconclusive" {
+		t.Fatalf("workflow facts promoted or lost: %+v", saved)
+	}
+	if strings.Contains(string(capture.body), "private-root") || strings.Contains(string(capture.body), `"workflow_path":`) {
+		t.Fatal("private path leaked")
+	}
+	reader.workflowSource = false
+	viewer := h.token("viewer", store.RoleViewer, "jobs:read")
+	replay := h.do(request{method: http.MethodGet, path: "/api/v1/comparisons/" + saved.ID + "?installation_id=" + inst + "&repo=acme%2Frepo", token: viewer})
+	replay.mustStatus(t, 200, "replay workflow facts")
+	if string(capture.body) != string(replay.body) || reader.calls.Load() != 2 || reader.quotaCalls.Load() != 1 {
+		t.Fatal("replay enriched or recollected workflow facts")
+	}
 }

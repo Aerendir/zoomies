@@ -57,7 +57,7 @@ func TestRootWorkflowDigestsRetainPrivatelyWithoutPromotingWorkloadEquivalence(t
 	}
 	before, _ = json.Marshal(saved)
 	after, _ = json.Marshal(replay)
-	if string(before) != string(after) || strings.Contains(string(after), "private-root") || strings.Contains(string(after), "content_sha256") {
+	if string(before) != string(after) || strings.Contains(string(after), "private-root") {
 		t.Fatal("private source leaked or mutable input changed replay")
 	}
 }

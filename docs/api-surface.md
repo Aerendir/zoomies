@@ -905,6 +905,17 @@ of up to three failing checks per host and no values. See
 
 ## Retained historical comparisons
 
+The optional `workflow_evidence` response is a separate versioned descriptive
+projection of validated retained attempts. It shows exact decimal run IDs,
+nullable trigger events and SHA-256 path fingerprints, plus nullable root-file
+commit/blob/content digests and byte counts. It includes full selected/root-source
+counts and at most 100 attempt rows per arm with an omitted-row flag. Raw paths,
+source text, inputs and private fleet identities are excluded. Root files do not
+attest execution or cover reusable workflows, actions, inputs or test scope.
+Missing old facts remain null; replay makes no current source reads. The web UI
+shows root-only coverage and explicit unknowns. It refuses unknown view versions.
+The original retained report, storage digest and eligibility are unchanged.
+
 The optional `runner_evidence` response field is a versioned descriptive view
 computed from validated retained inputs. It returns at most 100 job rows per arm,
 with full enumerated-job, fleet-match, recorded-grant and runner-observation counts

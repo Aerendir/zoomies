@@ -386,3 +386,91 @@ test('public visitors make no history request', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Open report' })).toHaveCount(0);
   expect(reads).toBe(0);
 });
+
+const workflowEvidence = {
+  version: 'workflow-evidence-v1',
+  baseline: {
+    selected_attempts: 101,
+    root_sources: 100,
+    rows_omitted: true,
+    attempts: [
+      {
+        run_id: '9223372036854775807',
+        attempt: 1,
+        event: 'push',
+        workflow_path_sha256: 'e'.repeat(64),
+        root_source: {
+          basis: 'push_head_sha_root_file',
+          commit_sha: 'a'.repeat(40),
+          blob_sha: 'b'.repeat(40),
+          content_sha256: 'c'.repeat(64),
+          bytes: 128,
+        },
+      },
+    ],
+  },
+  candidate: {
+    selected_attempts: 1,
+    root_sources: 0,
+    rows_omitted: false,
+    attempts: [
+      { run_id: '11', attempt: 1, event: null, workflow_path_sha256: null, root_source: null },
+    ],
+  },
+};
+
+test('workflow evidence shows exact identities, root-only coverage and unknowns without mobile overflow', async ({
+  page,
+}) => {
+  let reads = 0;
+  await page.route('**/api/v1/comparisons/*?*', (route) => {
+    reads++;
+    return route.fulfill({ json: { ...retained, workflow_evidence: workflowEvidence } });
+  });
+  await goto(
+    page,
+    '/comparisons?id=cmp_fixture&installation_id=ins_fixture&repo=acme%2Frepo',
+    'Comparisons',
+  );
+  const facts = page.getByRole('region', { name: 'Recorded workflow evidence' });
+  await expect(
+    facts.getByText('Matching digests do not establish equivalent workloads.', { exact: false }),
+  ).toBeVisible();
+  await expect(
+    facts.getByText('Showing 1 attempts. Counts include omitted rows.', { exact: true }),
+  ).toBeVisible();
+  await facts.getByText('Baseline run 9223372036854775807, attempt 1', { exact: true }).click();
+  await expect(facts.getByText('Root file only', { exact: true })).toBeVisible();
+  const digest = facts.getByText('c'.repeat(64), { exact: true });
+  await expect(digest).toBeVisible();
+  expect((await digest.boundingBox())!.width).toBeGreaterThan(100);
+  await facts.getByText('Candidate run 11, attempt 1', { exact: true }).click();
+  await expect(facts.getByText('Unknown', { exact: true }).last()).toBeVisible();
+  await expect(page.getByText('Inconclusive', { exact: true })).toBeVisible();
+  expect(reads).toBe(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const version of ['absent', 'future']) {
+  test(`workflow evidence keeps ${version} views explicitly unknown`, async ({ page }) => {
+    const extra =
+      version === 'absent' ? {} : { workflow_evidence: { ...workflowEvidence, version: 'future' } };
+    await page.route('**/api/v1/comparisons/*?*', (route) =>
+      route.fulfill({ json: { ...retained, ...extra } }),
+    );
+    await goto(
+      page,
+      '/comparisons?id=cmp_fixture&installation_id=ins_fixture&repo=acme%2Frepo',
+      'Comparisons',
+    );
+    const facts = page.getByRole('region', { name: 'Recorded workflow evidence' });
+    await expect(
+      facts.getByText(
+        version === 'absent'
+          ? 'This controller did not provide workflow evidence. Missing facts remain unknown.'
+          : 'This workflow evidence version is unsupported. Its facts remain unknown in this view.',
+      ),
+    ).toBeVisible();
+    await expect(facts.getByText('c'.repeat(64), { exact: true })).toHaveCount(0);
+  });
+}
