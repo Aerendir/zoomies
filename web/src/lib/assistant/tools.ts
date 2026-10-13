@@ -8,6 +8,7 @@ const LABELS: Record<string, string> = {
   list_problems: 'the problems',
   list_jobs: 'jobs',
   get_job: 'a job',
+  get_retained_comparison: 'a retained historical comparison',
   get_pr_delay: 'a PR’s observed required-check delay',
   job_stats: 'job statistics',
   list_runners: 'runners',

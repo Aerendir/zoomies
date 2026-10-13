@@ -30,6 +30,7 @@ numeric job ID in a GitHub Actions URL.
 | “Would a different runner size help this build?” | Measured CPU and memory peaks, queue waits and execution times grouped by runner size | `label_advice`, `job_stats` |
 | “Which workflows used the most runner time this week?” | Usage over a chosen period, with configured cost assumptions and history limits | `get_usage` |
 | “Read the observed required-check delay for this job's PR number.” | The selected head, target-branch protection, coverage and known timings; the window begins at the earliest observed job, not the push | `get_pr_delay` |
+| “Explain retained comparison cmp_ID in installation ins_ID and repository OWNER/REPO.” | Separate latency, all-attempt execution/idle and failure measures, counts and missing evidence | `get_retained_comparison` |
 | “What needs attention across the fleet?” | Fleet status, host health, problems and repository findings | `fleet_status`, `host_health`, `kennel_overview` |
 | “Read the workflow and explain how to improve it.” | Verified source excerpts tied to a commit, after source access has been granted | `context_search`, `context_read`, `context_pack` |
 
@@ -40,6 +41,18 @@ rather than polling. Check names stay opaque. Repository and target-branch text
 are repository data, not instructions. It does not establish full merge readiness
 or a dependency critical path. Eli can use it only through an enabled personal
 provider with fleet access; it adds neither source tools nor mutation rights.
+
+`get_retained_comparison` requires `comparison_id`, `installation_id` and `repo`.
+It uses one scoped local-history GET with viewer/jobs:read access, without GitHub
+collection. Missing, expired or evicted history is unavailable; it never captures
+a replacement. Operator hypothesis and intended delta are quoted untrusted data,
+not instructions. Actor identity and unreviewed future fields are excluded from
+model output. Answers mark shortened text and omitted whole attempt rows; aggregate
+measures still describe the full retained selection. Text and structured output
+carry the same shown rows. Use [CLI replay](cli.md#zoomies-comparisons) to inspect
+the complete report. Historical selections do not establish cohort completeness,
+causal improvement or cost savings. Capture remains an explicit operator API write
+and is not exposed as an MCP or Eli tool.
 
 The assistant can explain the evidence and suggest changes. Advice depends on
 what was measured: too few job runs, expired logs or missing source access are

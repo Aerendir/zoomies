@@ -41,7 +41,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 observed snapshot assembly | Draft PR | ZF-243, [#985](https://github.com/eyupio/zoomies/pull/985), stacked on #982 | Versioned unknown-evidence handling, pinned outcomes and complete-enumeration job elapsed sums. Complete analysis and focused snapshot race tests, analysis/controller vet and whitespace checks pass. Selection stays unverified; no runtime surface or improvement ranking |
 | E2 retained evidence and replay | Draft PR | ZF-243, [#986](https://github.com/eyupio/zoomies/pull/986), stacked on #985 | Immutable bounded SQLite envelopes, atomic audit and offline replay. Focused retention/replay race tests, upgrade/backup checks and vet pass. No API/tool surface, controlled comparison or real experiment yet |
 | E2 capture and replay API | Draft PR | ZF-243, [#987](https://github.com/eyupio/zoomies/pull/987), stacked on #986 | Explicit operator capture with comparisons:write plus jobs:read, one whole-request budget, scoped viewer replay and generated contracts. Focused API race, role/scope/contract checks, full auth/GitHub race suites, changed-package vet and strict docs pass. CLI/MCP/Eli/UI remain outstanding |
-| E2 CLI replay | Draft PR | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
+| E2 CLI replay | Merged into API parent | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1035,3 +1035,48 @@ checks pass with the race detector. `go vet ./cmd/zoomies` and strict MkDocs pas
 `make generate` completed; only the command reference changed meaningfully.
 Optional GitHub header metadata was unavailable, so the docs used the documented
 repository-only header fallback. No live GitHub collection or model call ran.
+
+
+### E2 slice 10: bounded MCP/Eli replay, 13 October 2026
+
+`codex/eli-comparison-tools`, stacked on #987 after #988 merged into it. The new
+read-only `get_retained_comparison` tool takes comparison_id, installation_id and
+repo and makes exactly one GET to retained history. It is on Eli's explicit fleet
+allowlist and has a human tool label. No capture tool, automatic replacement,
+GitHub collection, polling or retry is introduced. Existing caller identity and
+viewer/jobs:read authorisation remain enforced by the API.
+
+A reviewed projection excludes initiating actor identity and unknown future
+fields. Hypothesis, intended delta, revision-delta reference and arm text are
+quoted JSON in a separate untrusted block. Free text is bounded and marks
+text_shortened. Response shape, evidence/repository identity and current rule and
+measurement versions are checked before presentation. Oversized or unsupported
+responses fail closed, with CLI inspection suggested.
+
+Both text and structured content carry the exact same shown whole attempt rows.
+Their total text budget follows the server window limit (12 KiB for Eli, at most
+64 KiB for MCP), including the fixed untrusted notice. If necessary, rows are
+removed from the ends of the arms; baseline_shown, candidate_shown and rows_omitted
+are explicit. Aggregates and eligibility counts still describe the full retained
+selection, never a recalculated visible subset. Actor identity is not sent by this
+tool. Full evidence remains accessible through authorised CLI/API replay.
+
+A scripted Eli scenario runs retained fake evidence through the real chat,
+toolbox, API and controller replay path. It checks an injected hypothesis remains
+inside its untrusted boundary and that inconclusive state, selection unknowns,
+failed-attempt execution and nullable latency reach the scripted model. This proves
+transport and fences, not unscripted model reasoning.
+
+Next: explicit CLI capture and UI initiation/inspection. Capture must require
+operator plus comparisons:write and jobs:read; never expose it as an Eli read-only
+operation. Complete controlled comparisons still require independently retained
+workload/configuration/input/cache evidence and cohort completeness. No actual
+experiment or live model evaluation is claimed.
+
+
+Slice 10 validation before final base update: full MCP race suite, focused Eli
+allowlist and scripted retained-report scenario race tests, changed MCP/controller/
+API package vet, tool-label unit test and formatting check, generation and strict
+docs pass. Docs used the repository-only header fallback for unavailable optional
+GitHub metadata. Parent #987 is now merged, so this slice targets main; #988's
+CLI replay was included in that parent. No live model evaluation has run.
