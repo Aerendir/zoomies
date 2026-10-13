@@ -951,6 +951,47 @@ Examples:
   zoomies jobs rerun job_2fq8xk3m
 ```
 
+### zoomies comparisons
+
+Replay retained historical comparison evidence
+
+```text
+Replay retained historical comparison evidence.
+
+Usage:
+  zoomies comparisons <subcommand> [flags]
+
+Subcommands:
+  get <comparison-id>                Read an immutable report in its installation and repository
+
+Run "zoomies comparisons <subcommand> --help" for the flags each one takes.
+```
+
+#### zoomies comparisons get
+
+Read an immutable report in its installation and repository
+
+```text
+Replay a retained report without GitHub collection or new capture. Requires viewer/jobs:read. Missing, expired or evicted history is unavailable; capture must be explicitly initiated through the API.
+
+Usage:
+  zoomies comparisons get <comparison-id> --installation ID --repo OWNER/REPO
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --installation             installation ID owning the retained evidence (required)
+  --output=table             table, json or yaml
+  --repo                     repository owning the retained evidence, OWNER/REPO (required)
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets
+  zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets --output json
+```
+
 ### zoomies why
 
 Why a job failed, stalled or is waiting

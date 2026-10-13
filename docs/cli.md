@@ -313,6 +313,26 @@ and quota reserve apply, so do not poll or automatically retry a 429.
 zoomies jobs pr-delay job_01abc --pull-number 42 --output json
 ```
 
+### `zoomies comparisons`
+
+`comparisons get <comparison-id> --installation ID --repo OWNER/REPO` replays
+immutable historical evidence through the API. It requires viewer access or a
+`jobs:read` token. The human output shows eligibility, inconclusive reasons,
+sample/missing counts and separate latency, execution and allocated idle figures.
+Unknown timings remain unknown; measured zero stays zero. Execution sums all
+GitHub job elapsed times, not runner billing. Historical selections do not prove
+cohort completeness, causal improvement or cost savings.
+
+```sh
+zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets
+zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets --output json
+```
+
+JSON preserves the complete controller response. Replay makes one scoped read
+without GitHub collection. Missing, expired or evicted history is unavailable;
+the command does not capture replacement evidence. Capture remains an explicitly
+initiated operator write through the [API](api-surface.md).
+
 ### `zoomies why`
 
 `why <job>` is the one question "why did this job fail, stall or run slow",

@@ -1761,7 +1761,8 @@ Dispatch and publication are later, separately authorised work.
 [admitted attempt joins](roadmap/plans/2026-10-13-eli-comparison-admitted-join.md),
 [observed snapshot assembly](roadmap/plans/2026-10-13-eli-comparison-snapshot.md),
 [retention and offline replay](roadmap/plans/2026-10-13-eli-comparison-retention.md),
-[capture/replay API](roadmap/plans/2026-10-13-eli-comparison-api.md).
+[capture/replay API](roadmap/plans/2026-10-13-eli-comparison-api.md),
+[CLI replay](roadmap/plans/2026-10-13-eli-comparison-cli.md).
 No new dependency, store query, route, model call, dispatch or publication.
 
 ## 9. Kept for the day somebody asks
