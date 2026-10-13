@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
@@ -207,6 +208,9 @@ func (c *Controller) CheckProvider(ctx context.Context, row *store.Provider) (Pr
 	if out.Findings == nil {
 		out.Findings = []config.Finding{}
 	}
+	if f, ok := machineCertificateFinding(row); ok {
+		out.Findings = append(out.Findings, f)
+	}
 	// The recorded error is the worst thing the check found, in one sentence,
 	// because that is what a card has room for; the findings are the whole of
 	// it and are returned to the caller who asked.
@@ -221,6 +225,34 @@ func (c *Controller) CheckProvider(ctx context.Context, row *store.Provider) (Pr
 		c.PublishProvider(ctx, fresh)
 	}
 	return out, nil
+}
+
+// machineCertificateFinding warns of a provider whose machines are told to
+// trust the certificate the controller uses for the hypervisor.
+//
+// A machine verifies the controller against its certificate and nothing else
+// once one is set, and a cluster's own authority has no reason to have signed
+// the controller. Set to the same text as the cluster's, it is almost always a
+// copy: an upgrade that split the one field into two gave existing providers
+// their cluster certificate here as well. The result is a machine that boots,
+// is bootstrapped and never joins, with the cause visible only in its own log
+// as "certificate signed by unknown authority".
+func machineCertificateFinding(row *store.Provider) (config.Finding, bool) {
+	machines := strings.TrimSpace(certificateAuthority(row.MachineCAPEM))
+	if machines == "" || machines != strings.TrimSpace(certificateAuthority(row.CAPEM)) {
+		return config.Finding{}, false
+	}
+	return config.Finding{
+		Code:     "provider.machine_ca_same_as_cluster",
+		Severity: config.SeverityWarning,
+		Title:    "machines are told to trust only the cluster's certificate for this controller",
+		Detail: "the certificate for machines is the same one this controller uses to reach the hypervisor. A machine " +
+			"trusts the file it is given for the controller and nothing else, so unless the cluster's authority also " +
+			"signed this controller's certificate, its agent will refuse the controller, never join, and log " +
+			"\"certificate signed by unknown authority\".",
+		Fix: "clear the certificate for machines if the controller is on a public certificate, or paste the authority " +
+			"that signed the controller's certificate.",
+	}, true
 }
 
 // storedCheck is what is kept of a preflight. The time and the provider are

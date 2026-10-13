@@ -267,6 +267,7 @@ var problemAudience = map[string]Audience{
 	"provider.quota_exhausted":                      AudienceFleet,
 	"provider.renting_off":                          AudienceFleet,
 	"provider.template_unverified":                  AudienceFleet,
+	"provider.machine_ca_same_as_cluster":           AudienceFleet,
 	"provider.unreachable":                          AudienceFleet,
 	"provider.unservable":                           AudienceFleet,
 	"provider.zone_missing":                         AudienceFleet,
