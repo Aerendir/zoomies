@@ -24,3 +24,7 @@ GitHub package race tests pass with Go 1.27.2 (4.565s), as do GitHub vet and dif
 whitespace checks. Tests used local fixture servers with explicit network access;
 no live GitHub or model calls and no full repository suite rerun. The five-page
 fixture reaches 500 jobs and exactly seven requests, retaining partial coverage.
+
+Parent reconciliation: #973/#974/#977 merged. Current main `b132dbfd` merged
+without conflicts. The complete GitHub race suite passes again on that baseline
+(5.225s), including main's updated dependencies. This PR now targets main.

@@ -22,7 +22,7 @@ func TestAnExactAttemptReadPreservesFailuresWithoutWorkflowText(t *testing.T) {
 	c := delayTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if r.Method != "GET" {
-			t.Fatal(r.Method)
+			t.Error(r.Method)
 		}
 		switch r.URL.Path {
 		case "/repos/acme/repo/actions/runs/10/attempts/2":
