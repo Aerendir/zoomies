@@ -194,6 +194,38 @@ test('the queue-wait card names its scope and the filters it cannot apply', () =
   );
 });
 
+// Two more filters narrow the Queued list to a part of it: a provisioning
+// status somebody chose (the default one is every waiting job, which the
+// card's period already says it is not) and the problems panel's unmatched
+// link. The card covers every pool under either, so it names them.
+test('a chosen provisioning filter is named, the default one is not', () => {
+  const none = { pool_id: [], repo: [], workflow: [], host_id: [], label: [], q: '' };
+  const id = (x: string) => x;
+  assert.deepEqual(queueWaitScope({ ...none, provisioning: ['paused'] }, id), {
+    scope: 'Every pool',
+    unapplied:
+      "The list's provisioning filter is not applied here: this analysis reads every pool, or one pool.",
+  });
+  // What the page passes when the address chose none: nothing.
+  assert.deepEqual(queueWaitScope({ ...none, provisioning: [] }, id), {
+    scope: 'Every pool',
+    unapplied: null,
+  });
+});
+
+test('the unmatched filter is named', () => {
+  const none = { pool_id: [], repo: [], workflow: [], host_id: [], label: [], q: '' };
+  assert.deepEqual(
+    queueWaitScope({ ...none, repo: ['acme/api'], unmatched: true }, (x) => x),
+    {
+      scope: 'Every pool',
+      unapplied:
+        "The list's repository and unmatched filters are not applied here: this analysis reads every pool, or one pool.",
+    },
+  );
+  assert.equal(queueWaitScope({ ...none, unmatched: false }, (x) => x).unapplied, null);
+});
+
 // A period card names its scope and its period above the summary; a
 // comparison names each side's own dates instead of the period asked for,
 // and that cancelled and skipped jobs were left out, both visible without

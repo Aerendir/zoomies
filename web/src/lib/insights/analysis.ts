@@ -77,6 +77,10 @@ export interface QueueListFilters {
   host_id: readonly string[];
   label: readonly string[];
   q: string;
+  /** Provisioning statuses the address chose; never the Queued view's default. */
+  provisioning?: readonly string[];
+  /** The "Unmatched only" switch, which the problems panel's link turns on. */
+  unmatched?: boolean;
 }
 
 /**
@@ -99,6 +103,8 @@ export function queueWaitScope(
     f.host_id.length ? 'host' : '',
     f.label.length ? 'label' : '',
     f.q.trim() ? 'search' : '',
+    f.provisioning?.length ? 'provisioning' : '',
+    f.unmatched ? 'unmatched' : '',
   ].filter((w) => w !== '');
   return {
     scope: one ? `Pool ${poolName(one)}` : 'Every pool',

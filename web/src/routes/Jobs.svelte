@@ -46,8 +46,9 @@
   import JobsInsights from '$lib/insights/JobsInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
   import { analyseQueueWait, getJobFacets, listJobs } from '$lib/api/client';
-  import type { Job, QueueWaitFinding } from '$lib/api/types';
+  import { PROVISIONING_STATUSES, type Job, type QueueWaitFinding } from '$lib/api/types';
   import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
+  import { router } from '$lib/router';
   import {
     analysisWindow,
     refusalOf,
@@ -160,6 +161,13 @@
   let wait = $state.raw<QueueWaitFinding | null>(null);
   let waitError = $state<{ message: string; refused: boolean } | null>(null);
   let waitLoading = $state(false);
+  // Queued work, whether or not a view button says so: the "Unmatched only"
+  // switch and the problems panel's unmatched link narrow the queued list to
+  // a part no view names, and that is still the queue somebody is asking
+  // about. The card then says it does not apply the narrowing (below).
+  const queuedShown = $derived(
+    view === 'queued' || (filters.state.length === 1 && filters.state[0] === 'queued'),
+  );
   const waitPool = $derived(filters.pool_id.length === 1 ? filters.pool_id[0] : undefined);
   // Primitives, so a change to a filter the analysis does not read (a
   // repository, a label) does not ask it again.
@@ -167,7 +175,7 @@
   const waitUntil = $derived(filters.until);
 
   $effect(() => {
-    if (view !== 'queued') return;
+    if (!queuedShown) return;
     void adviceKey;
     const period = analysisWindow(startOfMoment(waitSince), endOfMoment(waitUntil), Date.now());
     const controller = new AbortController();
@@ -199,7 +207,20 @@
   // What the card covers, and which of the list's filters it leaves out:
   // the route reads one pool or none, the list beside it much more.
   const waitScope = $derived(
-    queueWaitScope(filters, (poolId) => fleet.pool(poolId)?.name ?? poolId),
+    queueWaitScope(
+      {
+        ...filters,
+        // Only a provisioning status the address chose. The Queued view's own
+        // default is every waiting job, and the card's period already says it
+        // reads more than what waits now.
+        provisioning: router
+          .paramList('provisioning')
+          .some((v) => (PROVISIONING_STATUSES as readonly string[]).includes(v))
+          ? filters.provisioning
+          : [],
+      },
+      (poolId) => fleet.pool(poolId)?.name ?? poolId,
+    ),
   );
 
   /** Every pool's longest waits, longest first, as one list. */
@@ -545,7 +566,7 @@
     onclear={clearFilters}
   />
 
-  {#if view === 'queued'}
+  {#if queuedShown}
     <AnalysisCard
       title="Why jobs waited"
       finding={wait}

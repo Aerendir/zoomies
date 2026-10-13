@@ -125,6 +125,15 @@ test('the Queued card says it covers every pool when the list is narrowed furthe
   await expect(found.getByText("The list's repository filter is not applied here")).toBeVisible();
 });
 
+test('the Queued card names the unmatched filter it does not apply', async ({ page }) => {
+  // The problems panel's link opens Queued with unmatched on: the list is the
+  // jobs no pool claims, and the card still reads every pool.
+  await goto(page, '/jobs?state=queued&unmatched=true', 'Jobs');
+  const found = card(page, 'Why jobs waited');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await expect(found.getByText("The list's unmatched filter is not applied here")).toBeVisible();
+});
+
 test("the Queued card reads the list's own dates", async ({ page }) => {
   const requests = watchAnalysis(page, 'queue-wait');
   const day = (back: number) =>
