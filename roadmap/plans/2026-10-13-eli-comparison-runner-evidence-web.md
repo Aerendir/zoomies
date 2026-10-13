@@ -1,6 +1,6 @@
 # ZF-243: inspect descriptive runner evidence in the web report
 
-13 October 2026. Based on main after #1000 merged.
+13 October 2026. Ready for review [#1003](https://github.com/eyupio/zoomies/pull/1003), based on main after #1000 merged.
 
 ## Behaviour
 
@@ -37,7 +37,7 @@ containment. Type/lint/unit/build, focused race tests, vet and strict docs.
 Validation completed: focused controller/API/MCP race groups, all 14 desktop/mobile
 browser fixtures, all 109 UI unit tests, type/lint checks, production build, vet,
 strict docs and whitespace pass. Three relevant style/input unit fixtures pass after
-the mobile readability correction. The app shell is 141.3 KiB of its 200 KiB budget.
+the mobile readability correction. The app shell is 141.3 KB of its 200 KB budget.
 Docs used the repository-only header fallback. No live agent/backend/GitHub/model
 operation, migration or dependency.
 
