@@ -3,9 +3,10 @@
   import { analyseHostPressure, checkHostHealth, getHost, revokeHostCheck } from '$lib/api/client';
   import { events } from '$lib/api/sse';
   import type { Host, HostPressureFinding } from '$lib/api/types';
-  import AnalysisCard, { refusal } from '$lib/insights/AnalysisCard.svelte';
+  import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
   import {
     analysisWindow,
+    refusalOf,
     EVENT_WORDS,
     jobWords,
     PRESSURE_MEASURE_WORDS,
@@ -411,7 +412,7 @@
    * ------------------------------------------------------------------------ */
 
   let pressure = $state.raw<HostPressureFinding | null>(null);
-  let pressureError = $state<string | null>(null);
+  let pressureError = $state<{ message: string; refused: boolean } | null>(null);
   let pressureLoading = $state(false);
   let pressureKey = $state(0);
 
@@ -431,7 +432,7 @@
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         // The host's report is still the page's; only this card failed.
-        pressureError = refusal(cause);
+        pressureError = refusalOf(cause);
       })
       .finally(() => {
         if (!controller.signal.aborted) pressureLoading = false;

@@ -47,8 +47,15 @@
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
   import { analyseQueueWait, getJobFacets, listJobs } from '$lib/api/client';
   import type { Job, QueueWaitFinding } from '$lib/api/types';
-  import AnalysisCard, { refusal } from '$lib/insights/AnalysisCard.svelte';
-  import { analysisWindow, CAUSE_WORDS, jobWords, wordFor } from '$lib/insights/analysis';
+  import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
+  import {
+    analysisWindow,
+    refusalOf,
+    CAUSE_WORDS,
+    jobWords,
+    queueWaitScope,
+    wordFor,
+  } from '$lib/insights/analysis';
   import { events } from '$lib/api/sse';
   import { faultLabel, fleetFailed } from '$lib/faults';
   import { formatDuration, formatNumber, formatPercent, pluralise } from '$lib/format';
@@ -151,7 +158,7 @@
    * ------------------------------------------------------------------------ */
 
   let wait = $state.raw<QueueWaitFinding | null>(null);
-  let waitError = $state<string | null>(null);
+  let waitError = $state<{ message: string; refused: boolean } | null>(null);
   let waitLoading = $state(false);
   const waitPool = $derived(filters.pool_id.length === 1 ? filters.pool_id[0] : undefined);
   // Primitives, so a change to a filter the analysis does not read (a
@@ -164,10 +171,12 @@
     void adviceKey;
     const period = analysisWindow(startOfMoment(waitSince), endOfMoment(waitUntil), Date.now());
     const controller = new AbortController();
+    // The last window's answer goes at once: left standing while the next
+    // loads, it would sit under the new dates, as HostDetail's does not.
+    wait = null;
     waitError = null;
     if (!period) {
       // A range typed backwards is the date picker's to point out.
-      wait = null;
       waitLoading = false;
       return;
     }
@@ -179,14 +188,19 @@
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         // The grid below is still true; only this card says what went wrong.
-        wait = null;
-        waitError = refusal(cause);
+        waitError = refusalOf(cause);
       })
       .finally(() => {
         if (!controller.signal.aborted) waitLoading = false;
       });
     return () => controller.abort();
   });
+
+  // What the card covers, and which of the list's filters it leaves out:
+  // the route reads one pool or none, the list beside it much more.
+  const waitScope = $derived(
+    queueWaitScope(filters, (poolId) => fleet.pool(poolId)?.name ?? poolId),
+  );
 
   /** Every pool's longest waits, longest first, as one list. */
   const longestWaits = $derived(
@@ -532,7 +546,14 @@
   />
 
   {#if view === 'queued'}
-    <AnalysisCard title="Why jobs waited" finding={wait} error={waitError} loading={waitLoading}>
+    <AnalysisCard
+      title="Why jobs waited"
+      finding={wait}
+      error={waitError}
+      loading={waitLoading}
+      scope={waitScope.scope}
+      note={waitScope.unapplied}
+    >
       {#if wait}
         {@const ev = wait.evidence}
         <dl class="facts">

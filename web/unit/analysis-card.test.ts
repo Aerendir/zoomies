@@ -6,7 +6,10 @@ import {
   analysisContext,
   analysisWindow,
   confidenceWords,
+  findingDescription,
   jobWords,
+  queueWaitScope,
+  refusalOf,
   stepLine,
 } from '../src/lib/insights/analysis.ts';
 
@@ -150,4 +153,119 @@ test('the card wears no status colour', () => {
 // they would run in the operator's session.
 test('the card never renders text as markup', () => {
   assert.equal(card.includes('{@html'), false);
+});
+
+const plainTime = (iso: string) => iso.slice(0, 16).replace('T', ' ');
+
+// The route reads one pool or none, and the Queued view's grid can be narrowed
+// by much more. A card that showed the fleet's answer under a list narrowed to
+// one repository would read as that repository's, so it says what it covers
+// and which of the list's filters it does not apply.
+test('the queue-wait card names its scope and the filters it cannot apply', () => {
+  const none = { pool_id: [], repo: [], workflow: [], host_id: [], label: [], q: '' };
+  const name = (id: string) => (id === 'pool_a' ? 'linux' : id);
+  assert.deepEqual(queueWaitScope(none, name), { scope: 'Every pool', unapplied: null });
+  assert.deepEqual(queueWaitScope({ ...none, pool_id: ['pool_a'] }, name), {
+    scope: 'Pool linux',
+    unapplied: null,
+  });
+  assert.deepEqual(queueWaitScope({ ...none, repo: ['acme/api'] }, name), {
+    scope: 'Every pool',
+    unapplied:
+      "The list's repository filter is not applied here: this analysis reads every pool, or one pool.",
+  });
+  assert.deepEqual(
+    queueWaitScope(
+      {
+        pool_id: ['pool_a', 'pool_b'],
+        repo: [],
+        workflow: ['CI'],
+        host_id: ['host_1'],
+        label: ['gpu'],
+        q: 'build',
+      },
+      name,
+    ),
+    {
+      scope: 'Every pool',
+      unapplied:
+        "The list's pool, workflow, host, label and search filters are not applied here: this analysis reads every pool, or one pool.",
+    },
+  );
+});
+
+// A period card names its scope and its period above the summary; a
+// comparison names each side's own dates instead of the period asked for,
+// and that cancelled and skipped jobs were left out, both visible without
+// opening the evidence.
+test('a finding describes its own period, and a comparison each side', () => {
+  const base = {
+    since: '2026-10-12T12:00:00Z',
+    until: '2026-10-13T12:00:00Z',
+  };
+  assert.equal(
+    findingDescription({ ...base, analysis: 'queue_wait' }, plainTime, 'Every pool'),
+    'Every pool, 2026-10-12 12:00 to 2026-10-13 12:00',
+  );
+  assert.equal(
+    findingDescription({ ...base, analysis: 'host_pressure' }, plainTime),
+    '2026-10-12 12:00 to 2026-10-13 12:00',
+  );
+  assert.equal(
+    findingDescription(
+      {
+        ...base,
+        analysis: 'compare',
+        evidence: {
+          a: { label: 'v1.3.2', since: '2026-10-13T04:11:00Z', until: '2026-10-13T05:43:00Z' },
+          b: { label: 'v1.3.3', since: '2026-10-13T05:25:00Z', until: '2026-10-13T07:28:00Z' },
+          excluded: ['cancelled', 'skipped'],
+        },
+      },
+      plainTime,
+    ),
+    'v1.3.2 from 2026-10-13 04:11 to 2026-10-13 05:43; v1.3.3 from 2026-10-13 05:25 to 2026-10-13 07:28. Cancelled and skipped jobs are left out.',
+  );
+});
+
+// A 4xx is the route declining a question it understood (a period over the
+// limit, too few releases), which on Usage's default day is the ordinary
+// answer; announcing it as an alert would interrupt a screen reader every
+// time the page opens. A request that failed is an alert.
+test('a refusal is told apart from a failed request', () => {
+  assert.deepEqual(
+    refusalOf({ status: 409, message: 'fewer than two releases completed a job in this period' }),
+    { message: 'Fewer than two releases completed a job in this period.', refused: true },
+  );
+  assert.deepEqual(refusalOf({ status: 0, message: 'Could not reach the Zoomies API.' }), {
+    message: 'Could not reach the Zoomies API.',
+    refused: false,
+  });
+  assert.deepEqual(refusalOf(new Error('')), {
+    message: 'The analysis could not be read.',
+    refused: false,
+  });
+});
+
+// The server's 500 names no cause on purpose and carries its request ID in
+// detail; the card says which request to quote, once.
+test('a server failure names the request to quote', () => {
+  const generic =
+    'Quote the request ID to whoever operates this instance; the cause is in its log.';
+  assert.deepEqual(
+    refusalOf({
+      status: 500,
+      message: `something went wrong while analysing queue wait. ${generic}`,
+      detail: 'request req_01abc',
+    }),
+    {
+      message:
+        'Something went wrong while analysing queue wait. Quote req_01abc to whoever operates this instance; the cause is in its log.',
+      refused: false,
+    },
+  );
+  assert.deepEqual(refusalOf({ status: 502, message: 'bad gateway' }), {
+    message: `Bad gateway. ${generic}`,
+    refused: false,
+  });
 });

@@ -19,22 +19,6 @@
   repository names a workflow wrote, and the evidence a runner's failure
   message a host wrote; none of it is ever parsed as markup.
 -->
-<script lang="ts" module>
-  import { sentence } from '$lib/errors';
-
-  /**
-   * What a page shows when its analysis was not given: the route's own
-   * sentence, which says what to change (a period over limits.job_stats_window
-   * names the setting, a comparison with too few releases says to widen the
-   * period), rather than a generic failure that leaves the reader to guess.
-   */
-  export function refusal(cause: unknown): string {
-    return sentence(
-      cause instanceof Error && cause.message ? cause.message : 'The analysis could not be read',
-    );
-  }
-</script>
-
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { ExternalLink } from '@lucide/svelte';
@@ -42,44 +26,57 @@
   import AskEli from '$lib/assistant/AskEli.svelte';
   import Panel from '$lib/components/Panel.svelte';
   import { formatAbsolute } from '$lib/format';
-  import { analysisContext, confidenceWords, stepLine } from './analysis';
+  import { analysisContext, confidenceWords, findingDescription, stepLine } from './analysis';
 
   interface Props {
     title: string;
     finding: Finding | null;
-    /** The route's refusal as a sentence, or why it could not be asked. */
-    error: string | null;
+    /**
+     * Why there is no finding: `refusalOf`'s answer, a refusal the route gave
+     * or a request that failed, or a bare sentence, which is read as the
+     * latter.
+     */
+    error: string | { message: string; refused: boolean } | null;
     loading: boolean;
+    /** What the card covers, said before its period: "Every pool", "Pool linux". */
+    scope?: string;
+    /** A line under the summary, for what the page shows that the card does not. */
+    note?: string | null;
     /** The analysis's own evidence, drawn by the page that knows its shape. */
     children?: Snippet;
   }
 
-  let { title, finding, error, loading, children }: Props = $props();
+  let { title, finding, error, loading, scope, note = null, children }: Props = $props();
+
+  const problem = $derived(
+    error === null ? null : typeof error === 'string' ? { message: error, refused: false } : error,
+  );
 
   const steps = $derived(
     finding ? finding.next_steps.map((s) => ({ ...stepLine(s), code: s.code ?? null })) : [],
   );
 
-  // A comparison's two sides each carry their own dates, which can differ
-  // from the period asked for (a release ran for part of it, a side read from
-  // the roll-up ends at a midnight). The asked period above them would read
-  // as the span both sides cover, so the evidence gives each side's instead.
-  const period = $derived(
-    finding && finding.analysis !== 'compare'
-      ? `${formatAbsolute(finding.since)} to ${formatAbsolute(finding.until)}`
-      : undefined,
+  // A period card says what it covers and when; a comparison says each
+  // side's own dates and what it left out, which are what its figures mean
+  // and must not wait behind the folded evidence (findingDescription).
+  const description = $derived(
+    finding ? findingDescription(finding, formatAbsolute, scope) : scope,
   );
 </script>
 
-<Panel {title} description={period} class="analysis-card">
+<Panel {title} {description} class="analysis-card">
   {#snippet actions()}
     {#if finding}<AskEli context={analysisContext(title, finding)} />{/if}
   {/snippet}
   <div class="body" aria-busy={loading ? 'true' : undefined}>
-    {#if error}
-      <p class="note" role="alert">{error}</p>
+    {#if problem}
+      <!-- A refusal is the route's ordinary answer to a question it cannot
+           take (Usage's default day often has one release); announced as an
+           alert it would interrupt a screen reader each time the page opens. -->
+      <p class="note" role={problem.refused ? 'status' : 'alert'}>{problem.message}</p>
     {:else if finding}
       <p class="summary" data-testid="analysis-summary">{finding.summary}</p>
+      {#if note}<p class="note">{note}</p>{/if}
       <p class="confidence">
         {confidenceWords(finding.confidence, finding.confidence_reason)}
       </p>

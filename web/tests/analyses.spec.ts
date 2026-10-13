@@ -65,6 +65,11 @@ async function expectOneAnswer(
  * no new library, so these are the checks a machine can make honestly.
  */
 async function expectAccessible(page: Page, title: string): Promise<void> {
+  // Open, so the evidence's links are name-checked and its rows are laid out
+  // at the width the check below measures; folded, the tree skips them.
+  const evidence = card(page, title).locator('details');
+  await evidence.locator('summary').click();
+  await expect(evidence).toHaveAttribute('open', '');
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
   await expect(page.getByRole('main')).toHaveCount(1);
   await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
@@ -108,6 +113,66 @@ test('the Queued view says why jobs waited, as the route does', async ({ page })
   await expectAccessible(page, 'Why jobs waited');
 });
 
+test('the Queued card says it covers every pool when the list is narrowed further', async ({
+  page,
+}) => {
+  await goto(page, `/jobs?state=queued&repo=${encodeURIComponent(FIXTURE.repos[0])}`, 'Jobs');
+  const found = card(page, 'Why jobs waited');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  // The route reads one pool or none, so the list's repository filter is not
+  // the card's, and the card says what it covers instead of borrowing it.
+  await expect(found.getByText(/^Every pool, /)).toBeVisible();
+  await expect(found.getByText("The list's repository filter is not applied here")).toBeVisible();
+});
+
+test("the Queued card reads the list's own dates", async ({ page }) => {
+  const requests = watchAnalysis(page, 'queue-wait');
+  const day = (back: number) =>
+    page.evaluate((n) => {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      const pad = (v: number) => String(v).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }, back);
+  await goto(page, '/jobs', 'Jobs');
+  const since = await day(3);
+  const until = await day(2);
+  await goto(page, `/jobs?state=queued&since=${since}&until=${until}`, 'Jobs');
+  await expectOneAnswer(page, 'Why jobs waited', requests);
+  const query = new URL(requests.at(-1)!).searchParams;
+  // The whole of each day on the operator's clock, as the list reads them.
+  const expected = await page.evaluate(
+    ([s, u]) => [
+      new Date(`${s}T00:00:00`).toISOString(),
+      new Date(`${u}T23:59:59.999`).toISOString(),
+    ],
+    [since, until],
+  );
+  expect([query.get('since'), query.get('until')]).toEqual(expected);
+});
+
+test('a new window does not leave the last answer standing while it loads', async ({ page }) => {
+  let held = 0;
+  await page.route('**/api/v1/analysis/queue-wait**', async (route) => {
+    // The first answer arrives; every later one is held, so what the card
+    // shows meanwhile is what it shows while a new window loads.
+    if (held++ === 0) await route.continue();
+  });
+  await goto(page, '/jobs?state=queued', 'Jobs');
+  const found = card(page, 'Why jobs waited');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await page.evaluate(() => {
+    const d = new Date(Date.now() - 2 * 24 * 3600 * 1000);
+    const pad = (v: number) => String(v).padStart(2, '0');
+    const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    history.pushState({}, '', `/jobs?state=queued&since=${day}`);
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect.poll(() => held).toBeGreaterThan(1);
+  await expect(found.getByTestId('analysis-summary')).toHaveCount(0);
+  await expect(found.getByText('Working it out')).toBeVisible();
+});
+
 test('the card is the Queued view’s alone', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
   await expect(page.locator('tbody tr[data-row]').first()).toBeVisible();
@@ -121,9 +186,21 @@ test('Usage compares releases beside its table, as the route does', async ({ pag
   const finding = await expectOneAnswer(page, title, requests);
   // The demo's two releases ran fewer than thirty jobs each.
   expect(finding.summary).toContain('not ranked');
-  // The comparison leaves cancelled and skipped jobs out of every figure, and
-  // says so where the figures are.
-  await expect(card(page, title)).toContainText('Cancelled and skipped jobs are left out');
+  // The page's own range: thirty days, today included, from local midnight.
+  const start = await page.evaluate(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29).toISOString();
+  });
+  expect(new URL(requests.at(-1)!).searchParams.get('since')).toBe(start);
+  // With the evidence folded, each side's own dates and what was left out
+  // are still on the card: they are what the figures mean.
+  const found = card(page, title);
+  await expect(found.locator('details')).not.toHaveAttribute('open', '');
+  await expect(
+    found.getByText(
+      /^v1\.3\.2 from .+; v1\.3\.3 from .+\. Cancelled and skipped jobs are left out\.$/,
+    ),
+  ).toBeVisible();
   await expectAccessible(page, title);
 });
 
@@ -174,14 +251,37 @@ test("a refusal is the route's own sentence, and the page's facts stand", async 
   );
   await goto(page, '/runners?state=failed', 'Runners');
   const found = card(page, 'What keeps failing to start');
-  await expect(found.getByRole('alert')).toHaveText(
+  // A refusal is the route declining a question it understood: a status,
+  // which a screen reader reads when it is next idle, not an alert.
+  await expect(found.getByRole('alert')).toHaveCount(0);
+  await expect(found.getByRole('status')).toHaveText(
     'The period from since to until is 91 days, and an analysis covers at most 90 days; narrow it, or raise limits.job_stats_window.',
   );
   // The list of runners is still the page's to show. Its grid, not a row:
-  // the demo's failed runners are reaped as the shared fleet runs, so whether
-  // any is left by the time this runs is not this test's question.
+  // whether any runner is still in the failed state by the time this runs is
+  // not this test's question.
   await expect(page.getByRole('grid', { name: 'Runners' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Runners' })).toBeVisible();
+});
+
+test('a failed request is an alert, and names the request to quote', async ({ page }) => {
+  await page.route('**/api/v1/analysis/startup-failures**', (route) =>
+    route.fulfill({
+      status: 500,
+      json: {
+        error: {
+          code: 'internal',
+          message:
+            'something went wrong while analysing startup failures. Quote the request ID to whoever operates this instance; the cause is in its log.',
+          detail: 'request req_test01',
+        },
+      },
+    }),
+  );
+  await goto(page, '/runners?state=failed', 'Runners');
+  await expect(card(page, 'What keeps failing to start').getByRole('alert')).toHaveText(
+    'Something went wrong while analysing startup failures. Quote req_test01 to whoever operates this instance; the cause is in its log.',
+  );
 });
 
 /** Collected rather than dismissed quietly: a dialog here is the bug. */

@@ -18,9 +18,10 @@
   import { usageContext } from '$lib/assistant/contexts';
   import InstallationReport from '$lib/usage/InstallationReport.svelte';
   import ReleaseTable from '$lib/usage/ReleaseTable.svelte';
-  import AnalysisCard, { refusal } from '$lib/insights/AnalysisCard.svelte';
+  import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
   import {
     analysisWindow,
+    refusalOf,
     changeFigure,
     DIRECTION_WORDS,
     MEASURE_WORDS,
@@ -37,7 +38,6 @@
     formatDuration,
     formatNumber,
     formatPercent,
-    joinWords,
     pluralise,
   } from '$lib/format';
   import Button from '$lib/components/Button.svelte';
@@ -192,7 +192,7 @@
    * ------------------------------------------------------------------------ */
 
   let compare = $state.raw<CompareFinding | null>(null);
-  let compareError = $state<string | null>(null);
+  let compareError = $state<{ message: string; refused: boolean } | null>(null);
   let compareLoading = $state(false);
   const compareFrom = $derived(query.from);
   const compareTo = $derived(query.to);
@@ -217,19 +217,13 @@
         if (controller.signal.aborted) return;
         // The report and the table are still true; only this card failed.
         compare = null;
-        compareError = refusal(cause);
+        compareError = refusalOf(cause);
       })
       .finally(() => {
         if (!controller.signal.aborted) compareLoading = false;
       });
     return () => controller.abort();
   });
-
-  /** "Cancelled and skipped jobs", from what the comparison says it left out. */
-  function leftOut(excluded: readonly string[]): string {
-    const words = joinWords(excluded);
-    return words.charAt(0).toUpperCase() + words.slice(1);
-  }
 
   const entity = $derived(router.param('entity'));
   const rows = $derived((report?.items ?? []).filter((r) => !entity || r.key === entity));
@@ -576,12 +570,6 @@
   >
     {#if compare}
       {@const ev = compare.evidence}
-      {#if ev.excluded.length}
-        <p class="evidence-note">
-          {leftOut(ev.excluded)} jobs are left out of every figure: they stop when somebody says so, not
-          when the work is done.
-        </p>
-      {/if}
       {#each [{ side: ev.a, name: 'Earlier' }, { side: ev.b, name: 'Later' }] as { side, name } (name)}
         <dl class="facts" aria-label="{name}: {side.label}">
           <div>

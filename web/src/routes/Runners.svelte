@@ -27,8 +27,14 @@
   } from '$lib/api/types';
   import { formatAbsolute, formatBytes, formatNumber, formatPercent, pluralise } from '$lib/format';
   import { faultLabel } from '$lib/faults';
-  import AnalysisCard, { refusal } from '$lib/insights/AnalysisCard.svelte';
-  import { analysisWindow, EXPLANATION_WORDS, STAGE_WORDS, wordFor } from '$lib/insights/analysis';
+  import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
+  import {
+    analysisWindow,
+    refusalOf,
+    EXPLANATION_WORDS,
+    STAGE_WORDS,
+    wordFor,
+  } from '$lib/insights/analysis';
   import { registerSearch } from '$lib/keys';
   import { navigate, router } from '$lib/router';
   import { runnerStatus } from '$lib/status';
@@ -88,7 +94,7 @@
 
   const failedShown = $derived(states.includes('failed'));
   let startup = $state.raw<StartupFailuresFinding | null>(null);
-  let startupError = $state<string | null>(null);
+  let startupError = $state<{ message: string; refused: boolean } | null>(null);
   let startupLoading = $state(false);
   let startupKey = $state(0);
 
@@ -110,7 +116,7 @@
         if (controller.signal.aborted) return;
         // The list of failed runners is still the page's; only this card failed.
         startup = null;
-        startupError = refusal(cause);
+        startupError = refusalOf(cause);
       })
       .finally(() => {
         if (!controller.signal.aborted) startupLoading = false;

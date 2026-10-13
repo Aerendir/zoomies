@@ -10,7 +10,8 @@
  * the evidence's enumerations and the plumbing around the one request.
  */
 import type { EliContext } from '../assistant/prompts';
-import { formatDuration, formatPercent } from '../format';
+import { sentence, supportHint } from '../errors';
+import { formatDuration, formatPercent, joinWords } from '../format';
 import { readableJobText } from '../jobs/name';
 
 /** How far to lean on a finding, as words: the level, and what was thin. */
@@ -66,6 +67,110 @@ export function analysisWindow(
   const start = since ? Date.parse(since) : end - DAY_MS;
   if (Number.isNaN(end) || Number.isNaN(start) || start >= end) return null;
   return { since: new Date(start).toISOString(), until: new Date(end).toISOString() };
+}
+
+/** The list's filters, as far as the queue-wait card needs to know them. */
+export interface QueueListFilters {
+  pool_id: readonly string[];
+  repo: readonly string[];
+  workflow: readonly string[];
+  host_id: readonly string[];
+  label: readonly string[];
+  q: string;
+}
+
+/**
+ * What the Queued view's card covers, and which of the list's filters it does
+ * not. The route narrows to one pool or none, and the list beside it can be
+ * narrowed by much more; the fleet's answer under a list narrowed to one
+ * repository would read as that repository's, and could send an operator to
+ * raise the wrong pool's ceiling. So the card says its scope, and names the
+ * filters it leaves out rather than borrowing their meaning.
+ */
+export function queueWaitScope(
+  f: QueueListFilters,
+  poolName: (id: string) => string,
+): { scope: string; unapplied: string | null } {
+  const one = f.pool_id.length === 1 ? f.pool_id[0] : undefined;
+  const left = [
+    f.pool_id.length > 1 ? 'pool' : '',
+    f.repo.length ? 'repository' : '',
+    f.workflow.length ? 'workflow' : '',
+    f.host_id.length ? 'host' : '',
+    f.label.length ? 'label' : '',
+    f.q.trim() ? 'search' : '',
+  ].filter((w) => w !== '');
+  return {
+    scope: one ? `Pool ${poolName(one)}` : 'Every pool',
+    unapplied: left.length
+      ? `The list's ${joinWords(left)} ${left.length === 1 ? 'filter is' : 'filters are'} not applied here: this analysis reads every pool, or one pool.`
+      : null,
+  };
+}
+
+/** The fields a card's description line is drawn from. */
+export interface DescribedFinding {
+  analysis: string;
+  since: string;
+  until: string;
+  evidence?: unknown;
+}
+
+interface ComparedSides {
+  a: { label: string; since: string; until: string };
+  b: { label: string; since: string; until: string };
+  excluded: readonly string[];
+}
+
+/**
+ * The line under a card's title: its scope and period. A comparison names
+ * each side's own dates instead, since a side can cover less than the period
+ * asked for (a release ran for part of it, a roll-up side ends at a midnight)
+ * and the asked period would read as the span both cover; and it says what
+ * it left out, because that is what every figure below it means.
+ */
+export function findingDescription(
+  f: DescribedFinding,
+  format: (iso: string) => string,
+  scope?: string,
+): string {
+  if (f.analysis === 'compare' && f.evidence) {
+    const ev = f.evidence as ComparedSides;
+    const side = (x: ComparedSides['a']) =>
+      `${x.label} from ${format(x.since)} to ${format(x.until)}`;
+    const left = joinWords(ev.excluded);
+    const out = left ? ` ${left.charAt(0).toUpperCase()}${left.slice(1)} jobs are left out.` : '';
+    return `${side(ev.a)}; ${side(ev.b)}.${out}`;
+  }
+  const period = `${format(f.since)} to ${format(f.until)}`;
+  return scope ? `${scope}, ${period}` : period;
+}
+
+/**
+ * What a card shows when its analysis was not given, and whether that is a
+ * refusal. A 4xx is the route declining a question it understood (a period
+ * over limits.job_stats_window, too few releases to compare), in its own
+ * sentence that says what to change; on Usage's default day that is the
+ * ordinary answer, so it is a status, not an alert. Anything else is a
+ * request that failed. A server failure names no cause on purpose and carries
+ * its request ID in `detail`, so the card says which request to quote.
+ */
+export function refusalOf(cause: unknown): { message: string; refused: boolean } {
+  const c = (cause ?? {}) as { status?: unknown; message?: unknown; detail?: unknown };
+  const status = typeof c.status === 'number' ? c.status : undefined;
+  const raw =
+    typeof c.message === 'string' && c.message.trim()
+      ? c.message
+      : 'The analysis could not be read';
+  if (status !== undefined && status >= 500) {
+    const id = typeof c.detail === 'string' ? /^request (\S+)$/.exec(c.detail)?.[1] : undefined;
+    const said = raw.replace(supportHint(), '').trim();
+    return { message: `${sentence(said)} ${supportHint(id)}`, refused: false };
+  }
+  return {
+    message: sentence(raw),
+    refused: status !== undefined && status >= 400 && status < 500,
+  };
 }
 
 /** What the card hands Eli: the fields every finding shares. */
