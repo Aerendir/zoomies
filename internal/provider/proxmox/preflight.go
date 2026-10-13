@@ -465,6 +465,14 @@ func (pf *preflight) checkTemplate(ctx context.Context, usable []string) {
 		})
 		return
 	}
+	// A clone is given the template's processors and memory wherever the row
+	// names no size of its own (configure sets cores and memory only when the
+	// shape asks), so the template's are the size the machine will be.
+	// Sockets multiply cores, and an unset count is one socket.
+	if cores := int(cfg.Cores); cores > 0 {
+		pf.report.BuildsCPUs = cores * max(int(cfg.Sockets), 1)
+	}
+	pf.report.BuildsMemoryMB = int64(cfg.Memory)
 	if !cfg.HasDisk() {
 		pf.add(config.Finding{
 			Code: "proxmox.template_no_disk", Severity: config.SeverityError, Setting: SettingTemplateID,

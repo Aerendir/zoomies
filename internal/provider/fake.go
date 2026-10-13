@@ -81,6 +81,9 @@ type Fake interface {
 	// SetQuota caps how many machines the fake will hold; creates past it are
 	// refused with FailureQuota.
 	SetQuota(max int)
+	// SetBuilds makes Preflight report the size a machine is built at when
+	// the row names none, the way a provider that clones a template does.
+	SetBuilds(cpus int, memoryMB int64)
 	// SetDelay makes an operation take time, honoured against ctx.Done() so a
 	// test can prove a deadline is enforced.
 	SetDelay(op string, d time.Duration)
@@ -244,6 +247,10 @@ type fakeCore struct {
 	delays     map[string]time.Duration
 	async      map[string]int
 	quota      int
+	// builds is the size Preflight reports a machine is built at when the row
+	// names none, as a provider that clones a template would.
+	buildsCPUs     int
+	buildsMemoryMB int64
 }
 
 func newFakeCore(o fakeOptions) *fakeCore {
@@ -367,6 +374,12 @@ func (f *fakeCore) SetQuota(max int) {
 	f.quota = max
 }
 
+func (f *fakeCore) SetBuilds(cpus int, memoryMB int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.buildsCPUs, f.buildsMemoryMB = cpus, memoryMB
+}
+
 func (f *fakeCore) SetDelay(op string, d time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -409,7 +422,9 @@ func (f *fakeCore) Preflight(ctx context.Context) Report {
 			Fix:      "This is the in-memory fake; a test asked it to refuse.",
 		}}}
 	}
-	return Report{Reachable: true, Version: "fake-1"}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return Report{Reachable: true, Version: "fake-1", BuildsCPUs: f.buildsCPUs, BuildsMemoryMB: f.buildsMemoryMB}
 }
 
 func (f *fakeCore) Allocate(ctx context.Context, spec MachineSpec) (MachineRef, error) {
