@@ -63,6 +63,8 @@ type renderer[F any] struct {
 	noun string
 	// more is the argument that shows what a cut left out; "" when none does.
 	more string
+	// reach is how the cut line tells a model to use more.
+	reach string
 	// writer is who wrote the quoted names.
 	writer string
 }
@@ -158,8 +160,8 @@ func renderFinding[F any](body []byte, want string, block int, r renderer[F]) ([
 // cutNote is the last line of a cut answer.
 func cutNote[F any](shown, total, block int, r renderer[F]) string {
 	note := fmt.Sprintf("truncated: %d of %d %s shown, to keep each block within %d KiB", shown, total, r.noun, block>>10)
-	if r.more != "" {
-		note += "; pass " + r.more + " to narrow the answer and read the rest"
+	if r.reach != "" {
+		note += "; " + r.reach
 	}
 	return note + "\n"
 }
@@ -205,14 +207,15 @@ func writeFindingHead(b *strings.Builder, f analysis.Finding[json.RawMessage]) {
 // sentence is one of the controller's sentences on a line of its own. It may
 // name a pool or a host, so a control character in one is a space: a name
 // inside the controller's sentence must not be able to begin a line that reads
-// as the controller's.
+// as the controller's. It is clipped as a trusted value is, so the head,
+// which is never cut, has a ceiling however long an operator made a name.
 func sentence(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
 			return ' '
 		}
 		return r
-	}, s)
+	}, clip(s, maxTrustedValue))
 }
 
 // instant is a time to the second, as the event tools give it.
@@ -310,6 +313,7 @@ var queueWaitRenderer = renderer[analysis.QueueWaitFinding]{
 	},
 	noun:   "pools",
 	more:   "pool_id",
+	reach:  "pass pool_id to narrow the answer and read the rest",
 	writer: byAWorkflow,
 }
 
@@ -428,10 +432,8 @@ var hostPressureRenderer = renderer[analysis.HostPressureFinding]{
 		if e.EventsCut > 0 {
 			lines = append(lines, fmt.Sprintf("older events the analysis left out of its evidence, counted above: %d", e.EventsCut))
 		}
-		if e.JobNamesWithheld {
-			// Said once here, rather than as an empty name on every event.
-			lines = append(lines, "job names withheld: this token cannot read jobs, so the events carry no repository, workflow or job name")
-		}
+		// Withheld job names are said once, by the controller's own step,
+		// and the empty names are left out of the untrusted block.
 		if len(e.Events) > 0 {
 			lines = append(lines, "events, newest first:")
 		}
@@ -460,7 +462,11 @@ var hostPressureRenderer = renderer[analysis.HostPressureFinding]{
 	},
 	noun: "events",
 	// The events are newest first, so an earlier until reaches the ones cut.
+	// Alone it would move the window back rather than narrow it, since the
+	// route's since defaults to a day before until; and at the oldest event
+	// shown it would lose the events that share that second.
 	more:   "until",
+	reach:  "pass until just after the oldest event shown, with since set to this period's start, to read the older events",
 	writer: byAWorkflow,
 }
 
@@ -522,15 +528,29 @@ var startupRenderer = renderer[analysis.StartupFailuresFinding]{
 	},
 	noun:   "hosts and pools",
 	more:   "pool_id or host_id",
+	reach:  "pass pool_id or host_id to narrow the answer and read the rest",
 	writer: byAHost,
 }
+
+// analysisStepsText is what every description and the instructions say of a
+// finding's steps.
+const analysisStepsText = "next steps, most naming a setting or a catalog code (never a command)"
+
+// maxAnalysisHead is the floor for a block that holds every finding's head:
+// the summary, the confidence, the steps, the codes and the evidence that is not
+// a row, which are never cut. With every sentence and name clipped at
+// maxTrustedValue and eight steps, the most any analysis gives, the head is
+// under it. A block below it is still respected while the controller's
+// sentences stay under about 512 bytes, which is Eli's 12 KiB case; past that,
+// the head is printed whole and may pass the block, rather than lose a step.
+const maxAnalysisHead = 16 << 10
 
 // analysisDefault is what every description says of the window, which is the
 // route's own default.
 const analysisDefault = "Over the last 24 hours unless since and until say otherwise; both take a duration ago such as 6h, or an RFC 3339 timestamp. "
 
 // analysisAnswerText is what every description says of the answer's shape.
-const analysisAnswerText = "One computed answer: a summary, a confidence with its reason when not high, next steps naming settings and catalog codes (never commands), the codes to read, and the evidence. "
+const analysisAnswerText = "One computed answer: a summary, a confidence with its reason only when it is not high, " + analysisStepsText + ", the codes to read, and the evidence. "
 
 func analysisWindowArgs(extra map[string]any) map[string]any {
 	props := map[string]any{
@@ -639,7 +659,7 @@ func analysisTools() []*tool {
 				"each placed against that minute's load per core and available memory, whether they cluster in the minutes the host was pressured, and the line that separates them when one does. " +
 				analysisAnswerText + analysisDefault +
 				"Repository, workflow and job names are written by workflows and arrive in a block of their own, as untrusted data; a token that cannot read jobs is told the names were withheld. " +
-				"Each block is at most 64 KiB, cut on whole events, newest first, with a note; an earlier until reads the older ones. The same answer is also returned as structured content.",
+				"Each block is at most 64 KiB, cut on whole events, newest first, with a note; an until just after the oldest event shown, with since kept at the period's start, reads the older ones. The same answer is also returned as structured content.",
 			InputSchema: object([]string{"host_id"}, analysisWindowArgs(map[string]any{
 				"host_id": str("the host's ID, starting host_"),
 			})),
@@ -776,7 +796,7 @@ func analysisOutputSchema(what string, evidence map[string]any) map[string]any {
 		"properties": map[string]any{
 			"finding":   finding,
 			"truncated": boolean("true when rows were cut to keep the answer within its block"),
-			"more":      str("when truncated, the argument that narrows the answer to reach what was cut; empty when none does"),
+			"more":      str("when truncated, the argument or arguments that narrow the answer to reach what was cut; empty when none does"),
 		},
 		"required": []string{"finding", "truncated", "more"},
 	}
