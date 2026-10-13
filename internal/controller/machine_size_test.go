@@ -333,3 +333,24 @@ func TestAConnectionCheckRecordsTheSizeTheProviderBuildsAndThePairingJudgesIt(t 
 		t.Fatalf("%d machines were bought from a template too small for the pool", got)
 	}
 }
+
+// A provider's minimum is bought for whatever the pools need, so a machine that
+// meets it is kept even when no pool can use it: releasing it early would only
+// have the next pass buy the same machine again to make the minimum up.
+func TestAMachineNoPoolFitsIsKeptWhileItMeetsItsProvidersMinimum(t *testing.T) {
+	p, pool := smallProvider("lab"), dindPool("alpha")
+	p.MinMachines = 1
+	host := smallVMHost("host_1")
+	m := demandMachine("mach_1", p, store.MachineReady, 4*time.Hour)
+	m.HostID, m.IdleSince = host.ID, ptrTime(machineNow.Add(-time.Hour))
+	s := MachineSnapshot{
+		Now: machineNow, Pools: []*store.Pool{pool}, Hosts: []*store.Host{host},
+		Providers: []*store.Provider{p}, Machines: []*store.Machine{m}, Limits: demandLimits(),
+		Plan: scheduler.Plan{Pools: []scheduler.PoolPlan{demandPoolPlan(pool, 0, 0, 0, "")}},
+	}
+
+	got := planFor(t, DecideMachines(s), p.ID)
+	if len(got.Drain) != 0 || got.Create != 0 {
+		t.Fatalf("drain = %v, create = %d; want the machine that meets the minimum kept and nothing bought", got.Drain, got.Create)
+	}
+}
