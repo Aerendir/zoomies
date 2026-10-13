@@ -301,8 +301,10 @@ test('an upgrade under an open tab reloads even just after another failure', asy
 
   // The chunk is gone, the way an upgrade leaves it, until the tab reloads.
   let reloaded = false;
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) reloaded = true;
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      reloaded = true;
+    }
   });
   await page.route(/\/assets\/Hosts\.[^/]*\.js$/, async (route) => {
     if (!reloaded) {

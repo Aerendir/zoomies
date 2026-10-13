@@ -289,8 +289,9 @@ test.describe('the shared tooltip', () => {
     await expect(page.locator('.bubble', { hasText: 'development build' })).toHaveCount(0);
     await expect(page.locator('.bubble')).toHaveCount(0);
 
-    // A real move over it is a reach, and the wait starts then.
-    await page.mouse.move(x + 2, y + 1);
+    // Move onto its current box: reopening the sheet must not make the old
+    // coordinates a few pixels short of the tag.
+    await tag.hover();
     await expect(bubble).toBeVisible();
     // The first Escape is still the sheet's own once the bubble has gone.
     await page.keyboard.press('Escape');
