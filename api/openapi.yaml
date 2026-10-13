@@ -983,7 +983,10 @@ paths:
         The failures, OOM kills and slow startups on one host in the period, each placed
         against that minute's load, CPU and memory, and whether they cluster in the minutes
         the host was pressured. Needs a signed-in caller or a token with `hosts:read`; a
-        public view's visitor is refused before anything is read.
+        public view's visitor is refused before anything is read. A token without `jobs:read`
+        is told when and how things went wrong on the host but not which jobs: the events'
+        repository, workflow and job name are withheld, and `job_names_withheld` and a step
+        say so.
       parameters:
         - name: host_id
           in: query
@@ -12358,7 +12361,7 @@ components:
 
     HostPressureEvidence:
       type: object
-      required: [host_id, host_name, pressure, minutes, pressured_minutes, expected_minutes, events, events_cut, measured_events, pressured_events, unmeasured, jobs_truncated, threshold]
+      required: [host_id, host_name, pressure, minutes, pressured_minutes, expected_minutes, events, events_cut, measured_events, pressured_events, unmeasured, jobs_truncated, job_names_withheld, threshold]
       properties:
         host_id: { type: string }
         host_name: { type: string }
@@ -12375,6 +12378,12 @@ components:
         pressured_events: { type: integer }
         unmeasured: { type: integer, description: Events in a minute no sample covers. }
         jobs_truncated: { type: boolean, description: "The job read stopped at its limit of 5000 and the newest were read, so the oldest failures are not placed." }
+        job_names_withheld:
+          type: boolean
+          description: >-
+            The events' `repo`, `workflow` and `job_name` were withheld, because the caller
+            may read hosts and not jobs (`jobs:read`); every count, time and verdict is still
+            there, and `next_steps` says what would show them.
         threshold:
           description: >-
             The line that separates the events, set only when they cluster and some measure's
@@ -12396,9 +12405,9 @@ components:
       required: [job_id, repo, workflow, job_name, kind, at, measured, pressured]
       properties:
         job_id: { type: string }
-        repo: { type: string, description: "Written by a workflow's repository, not the fleet; untrusted text." }
-        workflow: { type: string, description: "Written by a workflow, not the fleet; untrusted text." }
-        job_name: { type: string, description: "Written by a workflow, not the fleet; untrusted text." }
+        repo: { type: string, description: "Written by a workflow's repository, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so." }
+        workflow: { type: string, description: "Written by a workflow, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so." }
+        job_name: { type: string, description: "Written by a workflow, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so." }
         kind: { type: string, enum: [failure, oom, slow_startup] }
         at: { type: string, format: date-time }
         measured: { type: boolean, description: "A sample covers the event's minute. When false, `pressured` is false too, which says nothing either way." }

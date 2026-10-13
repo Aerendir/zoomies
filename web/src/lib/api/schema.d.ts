@@ -573,7 +573,7 @@ export interface paths {
         };
         /**
          * Whether what went wrong on a host came under pressure
-         * @description The failures, OOM kills and slow startups on one host in the period, each placed against that minute's load, CPU and memory, and whether they cluster in the minutes the host was pressured. Needs a signed-in caller or a token with `hosts:read`; a public view's visitor is refused before anything is read.
+         * @description The failures, OOM kills and slow startups on one host in the period, each placed against that minute's load, CPU and memory, and whether they cluster in the minutes the host was pressured. Needs a signed-in caller or a token with `hosts:read`; a public view's visitor is refused before anything is read. A token without `jobs:read` is told when and how things went wrong on the host but not which jobs: the events' repository, workflow and job name are withheld, and `job_names_withheld` and a step say so.
          */
         get: operations["analyseHostPressure"];
         put?: never;
@@ -9133,6 +9133,8 @@ export interface components {
             unmeasured: number;
             /** @description The job read stopped at its limit of 5000 and the newest were read, so the oldest failures are not placed. */
             jobs_truncated: boolean;
+            /** @description The events' `repo`, `workflow` and `job_name` were withheld, because the caller may read hosts and not jobs (`jobs:read`); every count, time and verdict is still there, and `next_steps` says what would show them. */
+            job_names_withheld: boolean;
             /** @description The line that separates the events, set only when they cluster and some measure's line separates them; a line drawn where nothing clusters would read as the cause. */
             threshold: components["schemas"]["HostPressureThreshold"] | null;
         };
@@ -9148,11 +9150,11 @@ export interface components {
         };
         HostPressureEvent: {
             job_id: string;
-            /** @description Written by a workflow's repository, not the fleet; untrusted text. */
+            /** @description Written by a workflow's repository, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so. */
             repo: string;
-            /** @description Written by a workflow, not the fleet; untrusted text. */
+            /** @description Written by a workflow, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so. */
             workflow: string;
-            /** @description Written by a workflow, not the fleet; untrusted text. */
+            /** @description Written by a workflow, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so. */
             job_name: string;
             /** @enum {string} */
             kind: "failure" | "oom" | "slow_startup";

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/analysis"
+	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -140,6 +142,12 @@ func (s *Server) handleAnalyseHostPressure(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	f, err := s.ctrl.AnalyseHostPressure(r.Context(), win, hostID)
+	// The route is gated on hosts.read, and a host's view names no job: a
+	// token narrowed to hosts:read is told when things went wrong and how,
+	// never which jobs they were, which only jobs.read may read.
+	if err == nil && !auth.Allowed(Identity(r.Context()), auth.ActionJobsRead) {
+		f = analysis.WithholdJobNames(f)
+	}
 	s.answerAnalysis(w, r, "analysing host pressure", f, err)
 }
 

@@ -728,3 +728,108 @@ func TestTheConventionsNameTheAnalysisRefusals(t *testing.T) {
 		t.Errorf("the Conventions' list of error codes does not name the analysis refusals: %q", bullet)
 	}
 }
+
+// pressedHostWithFailures is a host with two hours of samples and three
+// failed jobs on it, each carrying a name no other fixture uses, so a body
+// that names them is found by searching for the names alone.
+func (h *harness) pressedHostWithFailures(t *testing.T) (*store.Host, time.Time, time.Time) {
+	t.Helper()
+	pool := h.pool(h.installation(), "linux")
+	host := h.host("pressed")
+	since, until := analysisWindowForTest(2 * time.Hour)
+	var samples []store.HostSample
+	for m := since; m.Before(until); m = m.Add(time.Minute) {
+		load, free := 3.0, int64(6_000)
+		samples = append(samples, store.HostSample{HostID: host.ID, At: m, Capacity: 4, CPUs: 4, MemoryMB: 8_000,
+			LoadAverage1: &load, MemoryAvailableMB: &free})
+	}
+	if err := h.st.RecordHostSamples(h.ctx, samples); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 3 {
+		queued := since.Add(time.Duration(30+i) * time.Minute)
+		started, done := queued.Add(5*time.Second), queued.Add(65*time.Second)
+		j, _, err := h.st.ApplyJob(h.ctx, &store.Job{
+			GitHubJobID: int64(5_000 + i), GitHubRunID: 1, Repo: "acme/secret-repository", Workflow: "secret-workflow", JobName: "secret-job",
+			Labels: store.StringSlice{"self-hosted", "linux", "x64"}, State: store.JobCompleted, Conclusion: "failure",
+			InstallationID: pool.InstallationID, PoolID: pool.ID, Matched: true, RunnerName: "zoomies-abc",
+			QueuedAt: queued, StartedAt: &started, CompletedAt: &done,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.st.StampJobVersions(h.ctx, j.ID, store.JobVersions{HostID: host.ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return host, since, until
+}
+
+// A token that may read hosts and not jobs is told how a host's failures
+// sat against its pressure, and never which jobs they were: the job names
+// are what jobs.read guards, and nothing an analysis joins may leave to a
+// caller who could not already read it.
+func TestHostPressureWithholdsJobNamesFromATokenThatCannotReadJobs(t *testing.T) {
+	h := newHarness(t)
+	host, since, until := h.pressedHostWithFailures(t)
+	path := "/api/v1/analysis/host-pressure" + analysisQuery(since, until, url.Values{"host_id": {host.ID}})
+
+	resp := h.do(request{method: http.MethodGet, path: path, token: h.token("hosts only", store.RoleViewer, "hosts:read")})
+	resp.mustStatus(t, http.StatusOK, "host pressure for a token that cannot read jobs")
+	for _, name := range []string{"acme/secret-repository", "secret-workflow", "secret-job"} {
+		if strings.Contains(string(resp.body), name) {
+			t.Errorf("a token without jobs.read was shown %q: %s", name, truncate(resp.body))
+		}
+	}
+	var got analysis.HostPressureFinding
+	resp.into(t, &got)
+	full, err := h.ctrl.AnalyseHostPressure(h.ctx, controller.AnalysisWindow{Since: since, Until: until}, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(full.Evidence.Events) != 3 {
+		t.Fatalf("the controller placed %d events; the seed is not what this test is about", len(full.Evidence.Events))
+	}
+	if !got.Evidence.JobNamesWithheld {
+		t.Error("the finding does not say the job names were withheld")
+	}
+	// Everything but the names is the finding a reader of jobs gets.
+	if got.Summary != full.Summary || got.Confidence != full.Confidence || len(got.Evidence.Events) != len(full.Evidence.Events) ||
+		got.Evidence.PressuredEvents != full.Evidence.PressuredEvents || got.Evidence.MeasuredEvents != full.Evidence.MeasuredEvents {
+		t.Errorf("withholding the names changed the finding:\n got %+v\nwant %+v", got, full)
+	}
+	for i, ev := range got.Evidence.Events {
+		if want := full.Evidence.Events[i]; ev.JobID != want.JobID || ev.Kind != want.Kind || !ev.At.Equal(want.At) || ev.Pressured != want.Pressured {
+			t.Errorf("event %d is %+v; want %+v with only its names left out", i, ev, want)
+		}
+	}
+	if !slices.ContainsFunc(got.NextSteps, func(s analysis.NextStep) bool { return s.Text == analysis.JobNamesWithheldText }) {
+		t.Errorf("the finding does not say why the names are missing or what would show them: %+v", got.NextSteps)
+	}
+}
+
+func TestHostPressureNamesTheJobsToATokenThatMayReadThem(t *testing.T) {
+	h := newHarness(t)
+	host, since, until := h.pressedHostWithFailures(t)
+	path := "/api/v1/analysis/host-pressure" + analysisQuery(since, until, url.Values{"host_id": {host.ID}})
+
+	resp := h.do(request{method: http.MethodGet, path: path, token: h.token("hosts and jobs", store.RoleViewer, "hosts:read", "jobs:read")})
+	resp.mustStatus(t, http.StatusOK, "host pressure for a token that can read jobs")
+	var got analysis.HostPressureFinding
+	resp.into(t, &got)
+	if len(got.Evidence.Events) != 3 || got.Evidence.Events[0].JobName != "secret-job" || got.Evidence.Events[0].Repo != "acme/secret-repository" ||
+		got.Evidence.Events[0].Workflow != "secret-workflow" {
+		t.Errorf("a token that may read jobs was not shown their names: %+v", got.Evidence.Events)
+	}
+	if got.Evidence.JobNamesWithheld {
+		t.Error("the finding says the names were withheld from a token that may read them")
+	}
+	if slices.ContainsFunc(got.NextSteps, func(s analysis.NextStep) bool { return s.Text == analysis.JobNamesWithheldText }) {
+		t.Errorf("the finding says the names were left out when they were not: %+v", got.NextSteps)
+	}
+	want, err := h.ctrl.AnalyseHostPressure(h.ctx, controller.AnalysisWindow{Since: since, Until: until}, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sameJSON(t, resp.body, want)
+}

@@ -917,3 +917,33 @@ func TestAHostWithNoNameIsNamedByItsID(t *testing.T) {
 		t.Errorf("summary %q, want it named by its id", f.Summary)
 	}
 }
+
+// Withholding the job names leaves the caller's own finding as it was (the
+// route renders one and the controller may keep the other), changes nothing
+// but the names, and claims nothing withheld when there were no events.
+func TestWithholdingJobNamesLeavesEverythingElseAndTheOriginalAlone(t *testing.T) {
+	at := pressBase.Add(time.Minute)
+	f := HostPressureFinding{Summary: "s", NextSteps: []NextStep{{Text: "fix it", Code: "host.pressure"}}, Codes: []string{"host.pressure"},
+		Evidence: HostPressureEvidence{HostID: "host_1", PressuredEvents: 1, Events: []BadEvent{
+			{JobID: "job_1", Repo: "acme/app", Workflow: "ci", JobName: "build", Kind: EventFailure, At: at, Measured: true, Pressured: true}}}}
+
+	got := WithholdJobNames(f)
+	if ev := got.Evidence.Events[0]; ev.Repo != "" || ev.Workflow != "" || ev.JobName != "" ||
+		ev.JobID != "job_1" || ev.Kind != EventFailure || !ev.At.Equal(at) || !ev.Measured || !ev.Pressured {
+		t.Errorf("the withheld event is %+v; want only its names left out", ev)
+	}
+	if !got.Evidence.JobNamesWithheld || got.Evidence.PressuredEvents != 1 || got.Summary != "s" {
+		t.Errorf("the withheld finding is %+v", got)
+	}
+	if n := len(got.NextSteps); n != 2 || got.NextSteps[0].Text != "fix it" || got.NextSteps[1].Text != JobNamesWithheldText {
+		t.Errorf("the steps are %+v; want the finding's own, then why the names are missing", got.NextSteps)
+	}
+	if f.Evidence.Events[0].JobName != "build" || len(f.NextSteps) != 1 || f.Evidence.JobNamesWithheld {
+		t.Errorf("withholding changed the finding it was given: %+v", f)
+	}
+
+	none := WithholdJobNames(HostPressureFinding{NextSteps: []NextStep{}, Evidence: HostPressureEvidence{Events: []BadEvent{}}})
+	if none.Evidence.JobNamesWithheld || len(none.NextSteps) != 0 {
+		t.Errorf("a finding with no events says names were withheld: %+v", none)
+	}
+}

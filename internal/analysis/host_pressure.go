@@ -146,6 +146,9 @@ type HostPressureEvidence struct {
 	PressuredEvents int        `json:"pressured_events"`
 	Unmeasured      int        `json:"unmeasured"`
 	JobsTruncated   bool       `json:"jobs_truncated"`
+	// JobNamesWithheld says the events' repository, workflow and job name
+	// were left out, because the reader may read hosts and not jobs.
+	JobNamesWithheld bool `json:"job_names_withheld"`
 	// Threshold is set only when the events cluster and some measure's line
 	// separates them; a line drawn where nothing clusters would be read as
 	// the cause.
@@ -634,4 +637,28 @@ func coverage(part, whole int) string {
 		return fmt.Sprintf("%d%%", p)
 	}
 	return "under 1%"
+}
+
+// JobNamesWithheldText is the step a finding carries when its events' job
+// names were left out: it says why, and what would show them.
+const JobNamesWithheldText = "The repository, workflow and job name of each event were left out, because this token cannot read jobs; use a token that also has the jobs:read scope to see which jobs they were."
+
+// WithholdJobNames is the finding for a reader who may read hosts and not
+// jobs. A host's view names no job, so the events lose their repository,
+// workflow and job name, which jobs.read guards; every count, time, verdict
+// and job id stays, so the answer to the question is the same answer. A
+// finding with no events has nothing to withhold and is returned as it is.
+func WithholdJobNames(f HostPressureFinding) HostPressureFinding {
+	if len(f.Evidence.Events) == 0 {
+		return f
+	}
+	// A copy, so the caller's finding keeps its names.
+	events := slices.Clone(f.Evidence.Events)
+	for i := range events {
+		events[i].Repo, events[i].Workflow, events[i].JobName = "", "", ""
+	}
+	f.Evidence.Events = events
+	f.Evidence.JobNamesWithheld = true
+	f.NextSteps = append(slices.Clone(f.NextSteps), NextStep{Text: JobNamesWithheldText})
+	return f
 }
