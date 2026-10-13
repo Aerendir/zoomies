@@ -1,6 +1,6 @@
 # ZF-243: capture known runner create results
 
-13 October 2026. Stacked on observation foundation #996.
+13 October 2026. Draft [#998](https://github.com/eyupio/zoomies/pull/998), stacked on observation foundation #996.
 
 ## Behaviour
 

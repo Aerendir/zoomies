@@ -47,7 +47,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 CLI capture | Merged | ZF-243, [#993](https://github.com/eyupio/zoomies/pull/993), targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
 | E2 recorded grant provenance | Draft PR | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
 | E2 runner observation foundation | Draft PR | ZF-243, [#996](https://github.com/eyupio/zoomies/pull/996), stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Live result integration remains next |
-| E2 runner result integration | Implemented, PR pending | ZF-243, stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
+| E2 runner result integration | Draft PR | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1334,7 +1334,8 @@ operation, public API/schema/tool/UI change, GitHub/model call or experiment.
 
 ### E2 slice 15: runner result integration, 13 October 2026
 
-codex/eli-runner-observation-results stacks on draft #996. ReportResult attempts
+Draft [#998](https://github.com/eyupio/zoomies/pull/998), branch
+codex/eli-runner-observation-results, stacks on draft #996. ReportResult attempts
 observation retention only after the existing host-to-runner ownership check.
 The per-host in-flight queue must hold an exact successful create task with the
 same task ID, runner ID, pool ID and spec identity; missing/unknown-after-restart,
