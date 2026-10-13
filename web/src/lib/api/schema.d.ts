@@ -11629,6 +11629,76 @@ export interface components {
             /** Format: int64 */
             run_id: number;
         };
+        ExperimentRecordedGrantView: {
+            /** @enum {string} */
+            basis: "retained_job_granted_size_v1";
+            /** @enum {string} */
+            source: "pool" | "host" | "profile" | "reduced" | "history";
+            cpus: number | null;
+            /** Format: int64 */
+            memory_mb: number | null;
+        };
+        ExperimentRunnerRequestView: {
+            /** @enum {string} */
+            backend: "docker" | "podman" | "process";
+            /** @description Fingerprint of the dispatched image reference, not verified image identity. */
+            image_reference_sha256: string;
+            cpus: number | null;
+            /** Format: int64 */
+            memory_mb: number | null;
+            resource_source: string;
+            docker_mode: string;
+            cpu_typed: boolean;
+            memory_typed: boolean;
+        };
+        ExperimentRunnerObservationView: {
+            sha256: string;
+            /** Format: date-time */
+            issued_at: string;
+            /** Format: date-time */
+            received_at: string;
+            requested: components["schemas"]["ExperimentRunnerRequestView"];
+            /** @description Unverified agent-reported digest, never proof of image equivalence. */
+            image_digest: string | null;
+            /** @enum {string} */
+            digest_coverage: "reported" | "not_reported" | "unsupported";
+            /** Format: date-time */
+            agent_completed_at: string | null;
+            /** Format: date-time */
+            agent_container_started_at: string | null;
+        };
+        ExperimentRunnerEvidenceJob: {
+            /** @description Exact decimal identity, represented as text to avoid browser rounding. */
+            run_id: string;
+            /** Format: int64 */
+            attempt: number;
+            /** @description Exact decimal identity, represented as text to avoid browser rounding. */
+            github_job_id: string;
+            fleet_matched: boolean;
+            recorded_grant: components["schemas"]["ExperimentRecordedGrantView"] | null;
+            observation: components["schemas"]["ExperimentRunnerObservationView"] | null;
+        };
+        ExperimentRunnerEvidenceArm: {
+            /**
+             * Format: int64
+             * @description Jobs enumerated in selected attempts, including partial attempts; not proof of full workflow coverage.
+             */
+            selected_jobs: number;
+            /** Format: int64 */
+            matched_jobs: number;
+            /** Format: int64 */
+            recorded_grants: number;
+            /** Format: int64 */
+            runner_observations: number;
+            rows_omitted: boolean;
+            jobs: components["schemas"]["ExperimentRunnerEvidenceJob"][];
+        };
+        ExperimentRunnerEvidence: {
+            /** @enum {string} */
+            version: "runner-evidence-v1";
+            baseline: components["schemas"]["ExperimentRunnerEvidenceArm"];
+            candidate: components["schemas"]["ExperimentRunnerEvidenceArm"];
+        };
         ExperimentComparisonReport: {
             /** @enum {string} */
             execution_basis: "sum_of_all_github_job_elapsed_times";
@@ -11715,6 +11785,8 @@ export interface components {
             until: string;
         };
         RetainedExperimentComparison: {
+            /** @description Bounded descriptive view from validated retained inputs only. At most 100 job rows per arm; counts include omitted rows. Requested fields and agent claims do not establish applied limits or controlled equivalence. Absent on older controllers. */
+            runner_evidence?: components["schemas"]["ExperimentRunnerEvidence"];
             /** Format: date-time */
             created_at: string;
             id: string;

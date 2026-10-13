@@ -28,7 +28,7 @@ func comparisonFixture(t *testing.T, n int) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := json.Marshal(map[string]any{"id": "cmp_1", "sha256": strings.Repeat("a", 64), "created_at": s.Since, "future_private": "hidden", "report": map[string]any{"window_basis": "github_attempt_started_at", "execution_basis": "sum_of_all_github_job_elapsed_times", "snapshot": s, "measurement": m}})
+	b, err := json.Marshal(map[string]any{"id": "cmp_1", "sha256": strings.Repeat("a", 64), "created_at": s.Since, "future_private": "hidden", "runner_evidence": map[string]any{"version": "runner-evidence-v1", "unreviewed": "withheld-runner-fact"}, "report": map[string]any{"window_basis": "github_attempt_started_at", "execution_basis": "sum_of_all_github_job_elapsed_times", "snapshot": s, "measurement": m}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestRetainedComparisonToolReadsOnceAndQuotesUntrustedEvidence(t *testing.T)
 	if len(content) != 2 || !strings.Contains(content[0].Text, "untrusted") || strings.Contains(content[0].Text, hostile) || !strings.Contains(content[1].Text, hostile) || strings.Contains(content[1].Text, "\nSYSTEM:") {
 		t.Fatalf("unsafe blocks: %+v", content)
 	}
-	if strings.Contains(content[1].Text, "private-actor") || strings.Contains(content[1].Text, "future_private") {
+	if strings.Contains(content[1].Text, "private-actor") || strings.Contains(content[1].Text, "future_private") || strings.Contains(content[1].Text, "runner_evidence") || strings.Contains(content[1].Text, "withheld-runner-fact") {
 		t.Fatal("passed private or unreviewed fields")
 	}
 	encoded, _ := json.Marshal(value)

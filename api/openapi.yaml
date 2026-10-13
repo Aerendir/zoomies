@@ -15317,6 +15317,206 @@ components:
       - run_id
       - attempt
       type: object
+    ExperimentRecordedGrantView:
+      type: object
+      additionalProperties: false
+      properties:
+        basis:
+          type: string
+          enum:
+          - retained_job_granted_size_v1
+        source:
+          type: string
+          enum:
+          - pool
+          - host
+          - profile
+          - reduced
+          - history
+        cpus:
+          type: number
+          nullable: true
+          exclusiveMinimum: true
+          minimum: 0
+        memory_mb:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+      required:
+      - basis
+      - source
+      - cpus
+      - memory_mb
+    ExperimentRunnerRequestView:
+      type: object
+      additionalProperties: false
+      properties:
+        backend:
+          type: string
+          enum:
+          - docker
+          - podman
+          - process
+        image_reference_sha256:
+          type: string
+          description: Fingerprint of the dispatched image reference, not verified image identity.
+        cpus:
+          type: number
+          nullable: true
+          exclusiveMinimum: true
+          minimum: 0
+        memory_mb:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+        resource_source:
+          type: string
+        docker_mode:
+          type: string
+        cpu_typed:
+          type: boolean
+        memory_typed:
+          type: boolean
+      required:
+      - backend
+      - image_reference_sha256
+      - cpus
+      - memory_mb
+      - resource_source
+      - docker_mode
+      - cpu_typed
+      - memory_typed
+    ExperimentRunnerObservationView:
+      type: object
+      additionalProperties: false
+      properties:
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        issued_at:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+        requested:
+          $ref: '#/components/schemas/ExperimentRunnerRequestView'
+        image_digest:
+          type: string
+          nullable: true
+          description: Unverified agent-reported digest, never proof of image equivalence.
+        digest_coverage:
+          type: string
+          enum:
+          - reported
+          - not_reported
+          - unsupported
+        agent_completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        agent_container_started_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - sha256
+      - issued_at
+      - received_at
+      - requested
+      - image_digest
+      - digest_coverage
+      - agent_completed_at
+      - agent_container_started_at
+    ExperimentRunnerEvidenceJob:
+      type: object
+      additionalProperties: false
+      properties:
+        run_id:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          maxLength: 19
+          description: Exact decimal identity, represented as text to avoid browser rounding.
+        attempt:
+          type: integer
+          format: int64
+          minimum: 1
+        github_job_id:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          maxLength: 19
+          description: Exact decimal identity, represented as text to avoid browser rounding.
+        fleet_matched:
+          type: boolean
+        recorded_grant:
+          allOf:
+          - $ref: '#/components/schemas/ExperimentRecordedGrantView'
+          nullable: true
+        observation:
+          allOf:
+          - $ref: '#/components/schemas/ExperimentRunnerObservationView'
+          nullable: true
+      required:
+      - run_id
+      - attempt
+      - github_job_id
+      - fleet_matched
+      - recorded_grant
+      - observation
+    ExperimentRunnerEvidenceArm:
+      type: object
+      additionalProperties: false
+      properties:
+        selected_jobs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Jobs enumerated in selected attempts, including partial attempts; not proof of full
+            workflow coverage.
+        matched_jobs:
+          type: integer
+          format: int64
+          minimum: 0
+        recorded_grants:
+          type: integer
+          format: int64
+          minimum: 0
+        runner_observations:
+          type: integer
+          format: int64
+          minimum: 0
+        rows_omitted:
+          type: boolean
+        jobs:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ExperimentRunnerEvidenceJob'
+      required:
+      - selected_jobs
+      - matched_jobs
+      - recorded_grants
+      - runner_observations
+      - rows_omitted
+      - jobs
+    ExperimentRunnerEvidence:
+      type: object
+      additionalProperties: false
+      properties:
+        version:
+          type: string
+          enum:
+          - runner-evidence-v1
+        baseline:
+          $ref: '#/components/schemas/ExperimentRunnerEvidenceArm'
+        candidate:
+          $ref: '#/components/schemas/ExperimentRunnerEvidenceArm'
+      required:
+      - version
+      - baseline
+      - candidate
     ExperimentComparisonReport:
       additionalProperties: false
       properties:
@@ -15564,6 +15764,9 @@ components:
     RetainedExperimentComparison:
       additionalProperties: false
       properties:
+        runner_evidence:
+          description: Bounded descriptive view from validated retained inputs only. At most 100 job rows per arm; counts include omitted rows. Requested fields and agent claims do not establish applied limits or controlled equivalence. Absent on older controllers.
+          $ref: '#/components/schemas/ExperimentRunnerEvidence'
         created_at:
           format: date-time
           type: string

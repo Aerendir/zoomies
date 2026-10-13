@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { RetainedComparison } from '$lib/api/types';
   import { measuredMS } from './input';
+  import RunnerEvidence from './RunnerEvidence.svelte';
   let { report }: { report: RetainedComparison } = $props();
   let heading = $state<HTMLHeadingElement | null>(null);
   onMount(() => {
@@ -112,6 +113,7 @@
       </div>
     </details>
   {/each}
+  <RunnerEvidence evidence={report.runner_evidence} />
 </section>
 
 <style>
