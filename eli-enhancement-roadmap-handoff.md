@@ -56,7 +56,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 push root-workflow digests | Merged | ZF-243, [#1012](https://github.com/eyupio/zoomies/pull/1012), based on main after #1007 | Commit-pinned bounded root-file read with private digests; eight-request reservation, no revision/equivalence promotion. GitHub/controller/API race tests, vet and strict docs pass |
 | E2 web workflow evidence | Merged | ZF-243, [#1014](https://github.com/eyupio/zoomies/pull/1014), based on main after #1012 | Separate bounded REST/UI projection with exact run IDs, unknowns and root-only coverage; fingerprints exclude raw paths. Controller/API race, 20 desktop/mobile checks, 109 UI unit tests, type/lint/build, vet and strict docs pass |
 | E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
-| E2 CLI workflow evidence | Ready for review | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
+| E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
+| E2 private root dependency inventory | Ready for review | ZF-243, PR pending, based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1854,7 +1855,7 @@ current admission limits.
 
 ### E2 slice 24: CLI workflow evidence, 13 October 2026
 
-Ready for review [#1016](https://github.com/eyupio/zoomies/pull/1016), branch codex/eli-comparison-workflow-evidence-cli, based on main after #1015
+Merged [#1016](https://github.com/eyupio/zoomies/pull/1016), branch codex/eli-comparison-workflow-evidence-cli, based on main after #1015
 merged. Explicit capture and scoped replay share the human presenter and their
 existing single POST/GET respectively. No new collection, retries, scope or
 provider/model/source call. Help/flags/command descriptions remain unchanged.
@@ -1906,3 +1907,74 @@ dispatch inputs/test scope, cache/host conditions and fair complete selections a
 also unresolved. Keep the thirty completed attempts per arm, ten-attempt capture
 limit, eight-request reservation and current admission bounds. Live model evaluation
 remains outstanding; fixture passing does not demonstrate unscripted reasoning.
+
+
+### E2 slice 25: private root dependency inventory, 13 October 2026
+
+Prepared on codex/eli-comparison-workflow-dependencies, based on main after #1016
+merged. The existing push-only immutable root-file read now inspects its already
+validated bytes before discarding them. No additional source, blob, action, image,
+local path or reusable workflow is fetched or executed. Eight-request reservation,
+whole-capture admission/deadline, 128 KiB source and 2 MiB retained limits stay.
+
+The pure internal/kennel/workflow parser now shares parseRoot with the existing
+Kennel inspector: one UTF-8 YAML document, at most 256 KiB, 20,000 nodes and depth
+50, no aliases/anchors/merge keys or duplicate mappings. Inputs above MaxBytes are
+refused before hashing. Its explicit pure-import allowlist adds crypto/sha256,
+encoding/hex, strconv and unicode for fingerprints and metadata validation; no
+clock, filesystem, environment, network or repository-package imports. Existing
+Kennel behaviour stays under the same parse/refusal rules.
+
+workflow-dependencies-v1 / root_uses_declarations inventories root job-workflow
+and step-action uses positions. Each row has job/step index, line, declaration
+kind, reference kind, pin kind, SHA-256 of the exact scalar value and nullable
+literal pin revision. Literal remote 40-hex commits and Docker SHA-256 pins are
+classified separately from floating refs, unresolved local paths, expressions
+and unrecognised values. Job-level remote references require a canonical reusable
+workflow path; malformed job/image references cannot become known pins. Names,
+raw paths, scalar reference text, inputs and source text are not retained.
+
+At most 100 rows persist in stable root job/step order. Full counters retain all
+declarations and each classification, with rows_omitted covering the remainder.
+Enumeration means recognised root uses syntax only, not valid workflow execution
+or complete runtime dependencies. Unsupported YAML/shapes discard partial facts,
+record unsupported coverage with null counts and empty rows. Runs/scripts and
+container/service declarations are outside this inventory, as are transitive
+workflow/action dependencies. A literal pin is not proof the object exists or ran.
+
+An optional dependencies stamp lives inside the private WorkflowSource and is
+bound to its content SHA-256. Retention/alternate readers/replay validate version,
+basis, source binding, coverage/nullability, total/class counters, omission bounds,
+unique positions, known declaration/reference/pin combinations, fingerprints and
+nullable literal revisions. Replay does not reconstruct discarded YAML or
+independently rehash references; the storage digest covers the retained metadata.
+Older absent stamps remain unknown without enrichment or byte changes. Older
+strict-decoder binaries cannot replay new fields they do not recognise.
+
+Public REST/UI/MCP/CLI workflow views keep explicit existing whitelists, excluding
+the new inventory. Original reports, eligibility, WorkflowRevision and all workload/
+configuration identities are unchanged. No API schema, dependency or migration.
+
+Validation completed: full workflow-parser and GitHub race suites pass, covering
+classification, privacy, unknown shapes, row bounds/full counts, invalid metadata
+and source collection with four requests unchanged. Controller fixtures check
+private immutable capture/replay, source binding/refusal and unchanged public
+reports/views/eligibility. Vet, strict docs and whitespace pass. The digest-binding
+fixture fails when its guard is removed. A short two-worker fuzz run passed 2,249
+inputs without inconsistent retained metadata; known zero uses and unsupported
+null counts are checked separately. Docs used the repository-only header fallback
+for unavailable optional GitHub metadata.
+No live source, provider, model or fleet operation.
+
+Next agent: review a separate descriptive dependency-provenance projection for
+REST/UI first, preserving root-declaration-only coverage, null unsupported counts,
+full totals/omissions, exact positions and no raw names/source/refs. Model and CLI
+presenters follow independent reviewed whitelists and current budgets. Before any
+new collection, define immutable resolution and whole-request bounds for reusable
+workflows, action manifests, local actions and container images. Authorise each repository/caller/installation
+before crossing repository boundaries; never follow arbitrary response/reference
+URLs or enrich replay history. Root uses syntax
+and literal pins alone cannot promote WorkflowRevision or workload equivalence.
+Non-push revisions, inputs/test scope, caches/host conditions, fair complete
+selections and live model evaluation remain outstanding; keep the current thirty
+completed attempts per arm and ten-attempt capture limit.

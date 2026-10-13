@@ -91,22 +91,10 @@ var (
 // which declaration supplied a value. The caller records an unreadable file.
 func Inspect(data []byte) (Facts, error) {
 	var out Facts
-	if len(data) == 0 || len(data) > MaxBytes || !utf8.Valid(data) {
-		return Facts{}, errUnsupported
+	root, err := parseRoot(data)
+	if err != nil {
+		return Facts{}, err
 	}
-	var doc yaml.Node
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	if decoder.Decode(&doc) != nil || len(doc.Content) != 1 {
-		return Facts{}, errUnsupported
-	}
-	var extra yaml.Node
-	if decoder.Decode(&extra) != io.EOF {
-		return Facts{}, errUnsupported
-	}
-	if !bounded(&doc) || doc.Content[0].Kind != yaml.MappingNode {
-		return Facts{}, errUnsupported
-	}
-	root := doc.Content[0]
 	jobs := field(root, "jobs")
 	if jobs == nil || jobs.Kind != yaml.MappingNode || len(jobs.Content) == 0 {
 		return Facts{}, errUnsupported
@@ -386,4 +374,24 @@ func contains(xs []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// Share the same graph bounds and refusal rules across repository inspectors.
+func parseRoot(data []byte) (*yaml.Node, error) {
+	if len(data) == 0 || len(data) > MaxBytes || !utf8.Valid(data) {
+		return nil, errUnsupported
+	}
+	var doc yaml.Node
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	if decoder.Decode(&doc) != nil || len(doc.Content) != 1 {
+		return nil, errUnsupported
+	}
+	var extra yaml.Node
+	if decoder.Decode(&extra) != io.EOF {
+		return nil, errUnsupported
+	}
+	if !bounded(&doc) || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, errUnsupported
+	}
+	return doc.Content[0], nil
 }
