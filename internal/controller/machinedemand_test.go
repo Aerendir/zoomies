@@ -845,3 +845,101 @@ func TestDemandGoesToAProviderThatMayBuyBeforeOneThatMayNot(t *testing.T) {
 		})
 	}
 }
+
+// A minimum is bought with no work waiting at all: the point of it is that the
+// first job finds a machine already up rather than waiting for a clone.
+func TestAProviderBuysUpToItsMinimumWithNoDemand(t *testing.T) {
+	p := demandProvider("lab")
+	p.MinMachines = 2
+	s := MachineSnapshot{
+		Now: machineNow, Providers: []*store.Provider{p}, Limits: demandLimits(),
+	}
+
+	got := planFor(t, DecideMachines(s), p.ID)
+	if got.Create != 2 || got.Wanted != 2 {
+		t.Fatalf("create/wanted = %d/%d, want 2/2 to meet the minimum", got.Create, got.Wanted)
+	}
+}
+
+// Machines already up count toward the minimum, and so does demand: a pool
+// that needs one machine must not push the total past the floor.
+func TestDemandAndReadyMachinesCountTowardTheMinimum(t *testing.T) {
+	p := demandProvider("lab")
+	p.MinMachines = 3
+	pool := demandPool("alpha")
+	host := demandHost("host_1", 2, 2)
+	ready := demandMachine("mach_ready", p, store.MachineReady, 3*time.Hour)
+	ready.HostID = host.ID
+	s := MachineSnapshot{
+		Now: machineNow, Pools: []*store.Pool{pool}, Hosts: []*store.Host{host},
+		Providers: []*store.Provider{p}, Machines: []*store.Machine{ready},
+		Jobs: demandJobs(2), Limits: demandLimits(),
+		Plan: scheduler.Plan{Pools: []scheduler.PoolPlan{demandPoolPlan(pool, 2, 4, 2, "capacity")}},
+	}
+
+	got := planFor(t, DecideMachines(s), p.ID)
+	if got.Create != 2 {
+		t.Fatalf("create = %d, want 2 (one for the work, one more to reach 3 with the ready machine)", got.Create)
+	}
+}
+
+// The minimum never outranks a ceiling: it is a floor inside the maximum the
+// operator is willing to pay for.
+func TestTheMinimumIsHeldBackByTheMaximum(t *testing.T) {
+	p := demandProvider("lab")
+	p.MinMachines, p.MaxMachines = 5, 2
+	s := MachineSnapshot{Now: machineNow, Providers: []*store.Provider{p}, Limits: demandLimits()}
+
+	if got := planFor(t, DecideMachines(s), p.ID); got.Create != 2 {
+		t.Fatalf("create = %d, want 2 (the provider's maximum)", got.Create)
+	}
+}
+
+// A provider that may not buy keeps no floor: pausing or disabling it must
+// stop spending, not quietly keep topping it up.
+func TestNoMinimumIsKeptOnAProviderThatMayNotBuy(t *testing.T) {
+	for name, mutate := range map[string]func(*store.Provider){
+		"disabled": func(p *store.Provider) { p.Enabled = false },
+		"paused":   func(p *store.Provider) { p.Paused = true },
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := demandProvider("lab")
+			p.MinMachines = 2
+			mutate(p)
+			s := MachineSnapshot{Now: machineNow, Providers: []*store.Provider{p}, Limits: demandLimits()}
+
+			if got := planFor(t, DecideMachines(s), p.ID); got.Create != 0 {
+				t.Fatalf("create = %d, want 0 for a %s provider", got.Create, name)
+			}
+		})
+	}
+}
+
+// Idle machines are released only down to the minimum, however long they have
+// sat unused.
+func TestIdleMachinesAreKeptDownToTheMinimum(t *testing.T) {
+	for _, tc := range []struct {
+		min, wantDrain int
+	}{{0, 2}, {1, 1}, {2, 0}} {
+		p := demandProvider("lab")
+		p.MinMachines = tc.min
+		pool := demandPool("alpha")
+		var hosts []*store.Host
+		var machines []*store.Machine
+		for _, id := range []string{"a", "b"} {
+			h := demandHost("host_"+id, 2, 0)
+			m := demandMachine("mach_"+id, p, store.MachineReady, 6*time.Hour)
+			m.HostID, m.IdleSince = h.ID, ptrTime(machineNow.Add(-2*time.Hour))
+			hosts, machines = append(hosts, h), append(machines, m)
+		}
+		s := MachineSnapshot{
+			Now: machineNow, Pools: []*store.Pool{pool}, Hosts: hosts,
+			Providers: []*store.Provider{p}, Machines: machines, Limits: demandLimits(),
+			Plan: scheduler.Plan{Pools: []scheduler.PoolPlan{demandPoolPlan(pool, 0, 0, 0, "")}},
+		}
+
+		if got := planFor(t, DecideMachines(s), p.ID); len(got.Drain) != tc.wantDrain {
+			t.Fatalf("min %d: drain = %v, want %d released", tc.min, got.Drain, tc.wantDrain)
+		}
+	}
+}

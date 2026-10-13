@@ -101,6 +101,7 @@ func commands() []*command {
 		{"problems", groupFleet, "What is wrong, and the changes the controller proposes for it", runProblems},
 		{"jobs", groupFleet, "Job history, queue waits and outcomes", runJobs},
 		{"why", groupFleet, "Why a job failed, stalled or is waiting", runWhy},
+		{"analyse", groupFleet, "Why a period was slow, whether a release was worse, and which host or pool is failing", runAnalyse},
 		{"kennel", groupFleet, "Kennel Club: how the repositories this fleet serves measure up, and a check that runs on a checkout without a controller", runKennel},
 		{"size-pins", groupFleet, "Put a job, or a repository, in a size class by hand", runSizePins},
 		{"auto-pools", groupFleet, "What the controller keeps for each size of host", runAutoPools},

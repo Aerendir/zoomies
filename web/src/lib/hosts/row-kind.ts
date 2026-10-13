@@ -68,5 +68,7 @@ export function previewCommand(check: DoctorResult): string | null {
  */
 export function fixCommand(check: DoctorResult): string | null {
   if (check.status !== 'warn' || check.accepted) return null;
-  return check.command || (check.actionable === true ? previewCommand(check) : null);
+  if (check.command) return check.command;
+  // An Optional row is a trade-off to read about first, so it gets no preview to copy.
+  return check.actionable === true && check.optional !== true ? previewCommand(check) : null;
 }

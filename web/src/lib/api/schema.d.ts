@@ -10008,6 +10008,8 @@ export interface components {
             };
             /** @description The ceiling on machines this provider may own at once. Zero rents nothing, exactly as a pool's max_runners of zero runs nothing. */
             max_machines?: number;
+            /** @description How many machines this provider keeps whether or not anything is waiting. It buys up to it when it owns fewer and releases none below it however long they have been idle. It counts against the most it may own. Zero keeps none. */
+            min_machines?: number;
             /** @description How many machines may be being built at once. */
             max_creates_in_flight?: number;
             /**
@@ -10110,6 +10112,11 @@ export interface components {
             };
             /** @default 0 */
             max_machines: number;
+            /**
+             * @description Machines to keep whether or not anything is waiting; at most max_machines.
+             * @default 0
+             */
+            min_machines: number;
             /** @default 1 */
             max_creates_in_flight: number;
             idle_timeout?: components["schemas"]["Duration"];

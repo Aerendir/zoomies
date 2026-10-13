@@ -80,7 +80,8 @@ func TestAStructuredToolAnswersBothBlocksAndStructuredContent(t *testing.T) {
 		}
 		others++
 		_, has := tl["outputSchema"]
-		if want := tl["name"] == "recent_events" || tl["name"] == "wait_for_change"; has != want {
+		structured := []any{"recent_events", "wait_for_change", "queue_wait_breakdown", "compare_periods", "host_pressure", "startup_failures"}
+		if want := slices.Contains(structured, tl["name"]); has != want {
 			t.Errorf("%v: outputSchema present = %v, want %v (only the tools that answer structured content have one)", tl["name"], has, want)
 		}
 	}
