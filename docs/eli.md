@@ -152,13 +152,14 @@ It can read the fleet's recent past as well: what changed lately, the scheduler'
 decisions and the reason for each, the minute-by-minute samples of the fleet and
 of each host, a runner's timeline and the workflow runs, and it can wait for the
 next change. Four questions it answers from one look, each the same answer an agent
-sees: why a period's jobs waited (every second put down to one cause, for the fleet
-and each pool, with each pool's longest waits by job), whether a release or a period
-was worse (the two sides' durations, queue waits, startups, failure rates and OOM
-kill rates, measure by measure), whether a host fails when it is busy (its failures,
-OOM kills and slow startups placed against that minute's load and memory), and which
-host or pool keeps failing to start runners (how many of its starts failed, since
-when, at which stage and with which fault, and its last failed runner's message).
+sees and [`zoomies analyse`](cli.md#zoomies-analyse) prints: why a period's jobs
+waited (every second put down to one cause, for the fleet and each pool, with each
+pool's longest waits by job), whether a release or a period was worse (the two
+sides' durations, queue waits, startups, failure rates and OOM kill rates, measure
+by measure), whether a host fails when it is busy (its failures, OOM kills and slow
+startups placed against that minute's load and memory), and which host or pool keeps
+failing to start runners (how many of its starts failed, since when, at which stage
+and with which fault, and its last failed runner's message).
 The job names and failure messages these quote are written by workflows and hosts,
 and reach Eli set apart as untrusted, never as instructions. Host pressure names the
 jobs only when the person asking can read jobs; otherwise it says the names were

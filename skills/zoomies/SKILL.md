@@ -70,6 +70,12 @@ on), how far to trust it, the evidence, and the next steps in order. Exit status
 not narrow it down. Report the class and the evidence, then offer the first
 next step; do not invent a cause the answer does not give.
 
+For a period rather than one job, `zoomies analyse` asks the fleet:
+`queue-wait` (why jobs waited), `compare` (whether a release or a period was
+worse), `host-pressure --host <id>` (whether a host fails when it is busy) and
+`startup-failures` (which host or pool keeps failing to start runners). Report
+the summary and the confidence with its reason, then offer the first next step.
+
 ## What may be run
 
 Every command and subcommand is in exactly one of these three lists, and a test
@@ -86,6 +92,7 @@ These change nothing. Run them as the question needs.
 * `zoomies problems list`
 * `zoomies events recent` (with `--wait` it holds a request for the next change, for 25 seconds at most, and changes nothing)
 * `zoomies jobs list`, `zoomies jobs stats`, `zoomies jobs get`, `zoomies jobs why`, `zoomies jobs advice`, `zoomies jobs pr-delay`
+* `zoomies analyse queue-wait`, `zoomies analyse compare`, `zoomies analyse host-pressure`, `zoomies analyse startup-failures`
 * `zoomies size-pins list`
 * `zoomies hosts list`
 * `zoomies updates status`

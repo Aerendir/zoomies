@@ -981,6 +981,135 @@ Examples:
   zoomies why job_01abc --output json
 ```
 
+### zoomies analyse
+
+Why a period was slow, whether a release was worse, and which host or pool is failing
+
+```text
+Why a period was slow, whether a release was worse, and which host or pool is failing. Each reads the last 24 hours unless --since and --until say otherwise.
+
+Usage:
+  zoomies analyse <subcommand> [flags]
+
+Subcommands:
+  queue-wait [--pool id]             Why the jobs queued in a period waited, cause by cause, for the fleet and each pool
+  compare [--by version|period] [--a v] [--b v]  What got worse and what got better between two releases, or a period and the one before
+  host-pressure --host id            Whether one host's failures, OOM kills and slow starts came when it was busy
+  startup-failures [--pool id] [--host id]  Which host or pool keeps failing to start runners, since when and why
+
+Run "zoomies analyse <subcommand> --help" for the flags each one takes.
+```
+
+#### zoomies analyse queue-wait
+
+Why the jobs queued in a period waited, cause by cause, for the fleet and each pool
+
+```text
+Why the jobs queued in a period waited: every second put down to one cause, for the fleet and each pool, with each pool's longest waits.
+
+Usage:
+  zoomies analyse queue-wait [--since t] [--until t] [--pool id]
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --pool                     only this pool's jobs and conditions (a pool ID)
+  --since                    start of the period, included: a duration ago such as 6h or 7d, or a date (default 24 hours before --until)
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --until                    end of the period, not included, in the same forms (default now)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies analyse queue-wait
+  zoomies analyse queue-wait --since 6h --pool pool_01abc
+  zoomies analyse queue-wait --since 2026-10-12 --until 2026-10-13 --output json
+```
+
+#### zoomies analyse compare
+
+What got worse and what got better between two releases, or a period and the one before
+
+```text
+What got worse and what got better: two releases' jobs, or a period against the one of the same length before it, measure by measure.
+
+Usage:
+  zoomies analyse compare [--by version|period] [--a v] [--b v] [--since t] [--until t]
+
+Flags:
+  --a                        the earlier release, such as v1.3.2 (default the newest whose last job came before b's); only --by version
+  --b                        the later release, such as v1.3.3 (default the newest to complete a job in the period); only --by version
+  --by=version               version compares two releases; period compares the period with the one before it
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --since                    start of the period, included: a duration ago such as 6h or 7d, or a date (default 24 hours before --until)
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --until                    end of the period, not included, in the same forms (default now)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies analyse compare --since 14d
+  zoomies analyse compare --a v1.3.2 --b v1.3.3 --since 30d
+  zoomies analyse compare --by period --since 7d
+```
+
+#### zoomies analyse host-pressure
+
+Whether one host's failures, OOM kills and slow starts came when it was busy
+
+```text
+Whether what went wrong on one host came when it was busy: its failures, OOM kills and slow startups against that minute's load and memory.
+
+Usage:
+  zoomies analyse host-pressure --host id [--since t] [--until t]
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --host                     the host to read (a host ID, required)
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --since                    start of the period, included: a duration ago such as 6h or 7d, or a date (default 24 hours before --until)
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --until                    end of the period, not included, in the same forms (default now)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies analyse host-pressure --host host_01abc
+  zoomies analyse host-pressure --host host_01abc --since 7d --output json
+```
+
+#### zoomies analyse startup-failures
+
+Which host or pool keeps failing to start runners, since when and why
+
+```text
+Which host or pool keeps failing to start runners: how many starts failed, since when, at which stage, with which fault, and why.
+
+Usage:
+  zoomies analyse startup-failures [--pool id] [--host id] [--since t] [--until t]
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --host                     only this host's starts (a host ID)
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --pool                     only this pool's starts (a pool ID)
+  --since                    start of the period, included: a duration ago such as 6h or 7d, or a date (default 24 hours before --until)
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --until                    end of the period, not included, in the same forms (default now)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies analyse startup-failures
+  zoomies analyse startup-failures --host host_01abc --since 7d
+  zoomies analyse startup-failures --pool pool_01abc --output json
+```
+
 ### zoomies kennel
 
 Kennel Club: how the repositories this fleet serves measure up, and a check that runs on a checkout without a controller

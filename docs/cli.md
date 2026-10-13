@@ -344,6 +344,53 @@ Exit codes: `0` diagnosed, `1` another error, `2` no such job, `3` not enough
 data (the class is `unknown`; the explanation is still printed, with what was
 missing). A script can tell "the fleet broke it" from "the fleet could not say".
 
+### `zoomies analyse`
+
+`analyse` asks the questions about a period rather than one job, each answered
+by one read of the controller's `/api/v1/analysis` routes: the same finding an
+agent's tools and Eli read, laid out for a terminal. Each prints the summary,
+the period, the **confidence** with its reason when it is not high, the
+evidence as tables, and the next steps numbered with the setting and the
+catalog code each names.
+
+| Command | What it answers |
+| --- | --- |
+| `analyse queue-wait [--pool <pool-id>]` | Why the jobs queued in the period waited: every second put down to one cause (`held_for_review`, `unmatched`, `pool_ceiling`, `throttled`, `no_room`, `runner_startup`, `github_delay`, or `unattributed`), for the fleet and each pool, with each pool's longest waits by job. |
+| `analyse compare [--by version\|period] [--a <release>] [--b <release>]` | What got worse and what got better, measure by measure. By version (the default), two releases' jobs: `--b` is the later (left out, the newest to complete a job in the period) and `--a` the earlier (left out, the newest whose last job came before `--b`'s). By period, the period against the one of the same length before it, with no `--a` or `--b`. |
+| `analyse host-pressure --host <host-id>` | Whether one host's failures, OOM kills and slow startups came in the minutes it was busy, and the line that separates them when one does. |
+| `analyse startup-failures [--pool <pool-id>] [--host <host-id>]` | Which hosts and pools keep failing to start runners: how many starts failed, since when, at which stage, with which fault, what explains them, and each one's last failed start. |
+
+Each reads the last 24 hours unless `--since` and `--until` say otherwise; both
+take a duration ago (`6h`, `7d`) or a date, as `jobs list` does, and a period
+is at most `limits.job_stats_window`. A comparison shows each side's own dates,
+not the period asked for: a release's side runs from its first job to its
+last, and a side older than `retention.jobs` is read from the daily roll-up in
+whole UTC days, counts only, with the time it was asked to reach beside it
+when the two differ. With fewer than 30 jobs on either side nothing is ranked,
+and the summary says the sample is too small.
+
+```sh
+zoomies analyse queue-wait --since 6h
+zoomies analyse compare --a v1.3.2 --b v1.3.3 --since 30d
+zoomies analyse host-pressure --host host_01abc --since 7d
+zoomies analyse startup-failures --pool pool_01abc --output json
+```
+
+A refusal is the controller's sentence saying what to change, with exit `1`:
+one release named twice, fewer than two releases in the period, a side that
+cannot be read in whole days, or a pool or host this fleet does not have. An
+unknown `--by`, `--a` or `--b` with `--by period`, and `host-pressure` without
+`--host` are refused before anything is asked, with exit `2`. Host pressure
+names the jobs only for a token that can also read jobs; otherwise its steps
+say the names were left out, and its table has no columns for them.
+Repository, workflow and job names, and a runner's failure message, are
+written by workflows and hosts, so they are printed with control characters
+replaced, as every other command prints them.
+
+`--output json` is the route's body as the controller sent it. An answer of
+another analysis or a version this CLI does not know is refused rather than
+printed as this one; upgrade the controller and the CLI together.
+
 ### `zoomies kennel`
 
 `kennel` is [Kennel Club](kennel-club.md) in a terminal: how the repositories
