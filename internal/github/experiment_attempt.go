@@ -19,11 +19,12 @@ type ExperimentAttemptReader interface {
 
 var _ ExperimentAttemptReader = (*appClient)(nil)
 
-const ExperimentAttemptMaximumRequests = 7
+const ExperimentAttemptMaximumRequests = 8
 
 var ErrExperimentAttemptChanged = errors.New("github: comparison attempt changed during collection; refresh its evidence")
 
 type ExperimentAttemptEvidence struct {
+	WorkflowSource *ExperimentWorkflowSource `json:"workflow_source,omitempty"`
 	// These are descriptive attempt metadata, not workflow contents or inputs.
 	Event        string                 `json:"event,omitempty"`
 	WorkflowPath string                 `json:"workflow_path,omitempty"`
@@ -135,6 +136,10 @@ func (c *appClient) ReadExperimentAttempt(ctx context.Context, repo string, runI
 			complete = false
 			break
 		}
+	}
+	out.WorkflowSource, err = bounded.readExperimentSource(ctx, owner, name, out)
+	if err != nil {
+		return nil, err
 	}
 	final, err := read()
 	if err != nil {
