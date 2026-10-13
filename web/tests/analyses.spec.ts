@@ -126,8 +126,8 @@ test('the Queued card says it covers every pool when the list is narrowed furthe
 });
 
 test('the Queued card names the unmatched filter it does not apply', async ({ page }) => {
-  // The problems panel's link opens Queued with unmatched on: the list is the
-  // jobs no pool claims, and the card still reads every pool.
+  // An address that keeps the list queued with unmatched on narrows it to the
+  // jobs no pool claims, while the card still reads every pool.
   await goto(page, '/jobs?state=queued&unmatched=true', 'Jobs');
   const found = card(page, 'Why jobs waited');
   await expect(found.getByTestId('analysis-summary')).toBeVisible();

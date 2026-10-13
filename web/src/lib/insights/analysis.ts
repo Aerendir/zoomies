@@ -79,7 +79,7 @@ export interface QueueListFilters {
   q: string;
   /** Provisioning statuses the address chose; never the Queued view's default. */
   provisioning?: readonly string[];
-  /** The "Unmatched only" switch, which the problems panel's link turns on. */
+  /** Unmatched, when an address keeps the list queued with it on. */
   unmatched?: boolean;
 }
 

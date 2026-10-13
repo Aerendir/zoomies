@@ -161,10 +161,11 @@
   let wait = $state.raw<QueueWaitFinding | null>(null);
   let waitError = $state<{ message: string; refused: boolean } | null>(null);
   let waitLoading = $state(false);
-  // Queued work, whether or not a view button says so: the "Unmatched only"
-  // switch and the problems panel's unmatched link narrow the queued list to
-  // a part no view names, and that is still the queue somebody is asking
-  // about. The card then says it does not apply the narrowing (below).
+  // Queued work, whether or not a view button says so: an address that keeps
+  // the list's state at queued while narrowing it (with unmatched, say) is
+  // still the queue somebody is asking about, and the card then says it does
+  // not apply the narrowing (below). The UI itself never writes such an
+  // address: the "Unmatched only" switch clears the state.
   const queuedShown = $derived(
     view === 'queued' || (filters.state.length === 1 && filters.state[0] === 'queued'),
   );

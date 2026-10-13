@@ -194,10 +194,10 @@ test('the queue-wait card names its scope and the filters it cannot apply', () =
   );
 });
 
-// Two more filters narrow the Queued list to a part of it: a provisioning
+// Two more filters narrow the queued list to a part of it: a provisioning
 // status somebody chose (the default one is every waiting job, which the
-// card's period already says it is not) and the problems panel's unmatched
-// link. The card covers every pool under either, so it names them.
+// card's period already says it is not) and unmatched. The card covers every
+// pool under either, so it names them.
 test('a chosen provisioning filter is named, the default one is not', () => {
   const none = { pool_id: [], repo: [], workflow: [], host_id: [], label: [], q: '' };
   const id = (x: string) => x;
