@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strconv"
@@ -69,6 +70,10 @@ func presentComparison(p *printer, raw []byte, out *comparisonItem, id, repo str
 		return p.emit(raw)
 	}
 	r := out.Report
+	runners, err := parseCLIRunnerEvidence(out.RunnerEvidence, r.Snapshot.Baseline, r.Snapshot.Candidate)
+	if err != nil {
+		return err
+	}
 	m := r.Measurement
 	p.keyValues([][2]string{{"comparison", plain(out.ID)}, {"repository", plain(r.Snapshot.Repository)}, {"created", plain(out.CreatedAt)}, {"sha256", plain(out.SHA256)}, {"eligibility", plain(m.Eligibility.State)}, {"window basis", plain(r.WindowBasis)}, {"execution basis", plain(r.ExecutionBasis)}, {"latency change", plain(m.LatencyChange)}, {"execution mean change", plain(m.ExecutionChange)}, {"allocated idle mean change", plain(m.AllocatedIdleChange)}, {"failure rate change", plain(m.FailureChange)}})
 	counts := [][]string{}
@@ -88,6 +93,7 @@ func presentComparison(p *printer, raw []byte, out *comparisonItem, id, repo str
 		p.note("Inconclusive evidence: %s", plain(reason))
 	}
 	p.note("Selected attempts do not establish cohort completeness, causal improvement or cost savings. Execution sums all GitHub job elapsed times; unknown is not zero.")
+	printCLIRunnerEvidence(p, runners)
 	return nil
 }
 
@@ -103,10 +109,11 @@ func comparisonMillis(v *int64) string {
 }
 
 type comparisonItem struct {
-	ID        string `json:"id"`
-	SHA256    string `json:"sha256"`
-	CreatedAt string `json:"created_at"`
-	Report    *struct {
+	RunnerEvidence json.RawMessage `json:"runner_evidence"`
+	ID             string          `json:"id"`
+	SHA256         string          `json:"sha256"`
+	CreatedAt      string          `json:"created_at"`
+	Report         *struct {
 		WindowBasis    string                         `json:"window_basis"`
 		ExecutionBasis string                         `json:"execution_basis"`
 		Snapshot       analysis.ExperimentSnapshot    `json:"snapshot"`

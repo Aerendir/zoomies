@@ -50,7 +50,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 runner result integration | Merged | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
 | E2 private runner observation joins | Merged | ZF-243, [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #998 | Historical job/runner/pool scope, pinned GitHub job joins, independent observation digest and offline replay. Requested resources and agent claims do not promote eligibility. Focused controller/store race, shared admission, offline replay, vet and strict docs pass |
 | E2 web runner evidence inspection | Merged | ZF-243, [#1003](https://github.com/eyupio/zoomies/pull/1003), based on main after #1000 | Bounded descriptive projection, explicit grant/request/claim labels, nullable facts, per-job web inspection and omitted-row counts. Immutable report and eligibility unchanged. Focused race, 14 desktop/mobile fixtures, 109 UI unit tests, type/lint/build, vet and strict docs pass |
-| E2 MCP/Eli runner evidence | Ready for review | ZF-243, [#1004](https://github.com/eyupio/zoomies/pull/1004), based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
+| E2 MCP/Eli runner evidence | Merged | ZF-243, [#1004](https://github.com/eyupio/zoomies/pull/1004), based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
+| E2 CLI runner evidence | Ready for review | ZF-243, PR pending, based on main after #1004 | Shared capture/replay human view, validated REST whitelist, full coverage counts and explicit unknown/request/claim labels; raw JSON preserved. Focused race tests, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1516,7 +1517,7 @@ attempts per arm and existing admission limits.
 
 ### E2 slice 18: bounded MCP/Eli runner evidence, 13 October 2026
 
-Open [#1004](https://github.com/eyupio/zoomies/pull/1004), branch
+Merged [#1004](https://github.com/eyupio/zoomies/pull/1004), branch
 codex/eli-comparison-runner-evidence-mcp, starts from main after #1003 merged.
 The existing get_retained_comparison tool still performs one installation/repository
 scoped local-history GET. Its role/scope checks, read-only annotation and arguments
@@ -1580,3 +1581,43 @@ with scope, full counts, per-row unknowns, omitted-row flags and request/claim l
 CLI JSON already preserves the REST view. Independent historical workload/configuration/
 cache/selection proof and live model evaluation remain outstanding; do not convert
 these descriptive facts into controlled experiment eligibility.
+
+
+### E2 slice 19: CLI runner evidence, 13 October 2026
+
+Prepared on codex/eli-comparison-runner-evidence-cli, based on main after #1004
+merged. Both explicit capture and scoped replay share one human presenter and their
+existing single HTTP request. No additional collection, refresh or privileges.
+
+An independent REST whitelist validates runner-evidence-v1, required counters,
+arrays and flags, bounded rows/attempts, canonical job IDs, unique shown job IDs,
+original arm run/attempt bindings and count/omission consistency. Grants require
+known basis/source and positive nullable dimensions. Requests validate backend,
+source, Docker mode and explicit typed flags. Supplied clocks and digest syntax
+are checked; this cannot independently verify the private observation hash.
+Unsupported or inconsistent views fail before any human report is printed.
+Older absent views remain explicitly unavailable. Structured output bypasses this
+human decoder and preserves the raw response, including future fields/versions
+and exact numbers. Human output excludes unreviewed/private fields.
+
+Each arm shows full enumeration/match/grant/observation counts, returned job rows
+and controller omission flags. Every returned REST row is shown without a second
+local truncation. Decimal IDs and fractional CPUs retain their numeric precision.
+Assignment records, dispatched requests and unverified agent reports are labelled
+separately. Missing resources, digest claims and clocks stay unknown; agent and
+controller clocks remain distinct. Eligibility, measurement versions, sample
+counts and inconclusive reasons are unchanged. No causal or cost inference.
+
+Validation: focused CLI capture/replay race tests pass, including one-request
+transport, omitted rows, unknown/zero values, int64 IDs, raw future-version JSON,
+private-field exclusion and refusal before printing malformed facts. The presentation fixture also fails when the new output is removed. Vet, strict
+documentation and whitespace checks pass. Docs used the repository-only header
+fallback for unavailable optional GitHub metadata. No API/UI/schema/dependency/migration,
+live model/provider/backend operation or generated command-description change.
+
+Next agent: historical workload/configuration/cache and fair complete selection
+proof remain outstanding. Inspect the ZF-243 rules and retained snapshot contracts
+before choosing a new provenance slice. Do not promote requests or agent claims
+into ResourceID/ImageID/ConfigurationID or controlled eligibility. Keep the thirty
+completed attempts per arm and current admission limits. Live model evaluation
+also remains outstanding; scripted fixtures only verify transport/presentation.

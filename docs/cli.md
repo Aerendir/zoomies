@@ -328,6 +328,14 @@ zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets
 zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets --output json
 ```
 
+Capture and replay also show descriptive runner evidence: recorded assignment
+grants, dispatched requests, unverified agent digest/time claims and coverage counts.
+Missing dimensions and clocks remain unknown. Full enumeration counts include
+controller-omitted rows and may themselves be partial. These facts do not prove
+applied limits, image/configuration equivalence or experiment eligibility. Older
+controllers show evidence as unavailable; unsupported or inconsistent runner views
+stop human output before printing a report, with guidance to inspect JSON.
+
 JSON preserves the complete controller response. Replay makes one scoped read
 without GitHub collection. Missing, expired or evicted history is unavailable;
 the command does not capture replacement evidence. Capture remains an explicitly
