@@ -926,7 +926,7 @@ not yet export it. Capture is a local mutation, not a read-only tool operation.
 
 Both arms share the diagnostic gate with PR delay: one flight per installation and
 20 admissions per rolling hour, in memory until restart. Quota preflight retains
-half of core allowance after the worst-case seven requests per attempt. A 429 gives
+half of core allowance after the worst-case eight requests per attempt. A 429 gives
 Retry-After for a manual retry. The observation window must fit
 `limits.job_stats_window`. No automatic batching, model call, dispatch or publication
 occurs. GET replay spends no GitHub allowance and refuses unsupported versions or
@@ -938,6 +938,18 @@ requests. Missing fields remain absent; bounded paths are opaque untrusted text,
 never fetched or resolved. Neither field proves workflow contents, dispatch inputs
 or test scope, and neither appears in the public report or runner-evidence view.
 Older captures replay with these fields unknown; their stored bytes are unchanged.
+
+For push attempts with a canonical local `.github/workflows/*.yml` or `.yaml` path
+without an `@ref` suffix, capture also reads the root workflow at the attempt's
+immutable head commit. The GitHub App needs repository contents read permission.
+One inline JSON read validates file identity, base64 encoding, UTF-8, a 128 KiB
+size bound and Git blob integrity. A private versioned stamp retains the commit,
+path, blob SHA, SHA-256 content digest and byte count, excluding source text.
+Permission, missing-file and integrity failures refuse capture; there is no retry
+at a branch or download URL. Other triggers and ambiguous paths leave source
+unknown without a source request. The final attempt recheck still follows source
+collection. These root-file facts do not cover reusable workflows/actions, inputs
+or test scope, and do not set the comparison's verified workflow revision.
 
 `selected-runs-v2` retains unknown historical workflow revision, inputs/test scope,
 configuration, cache and host evidence as explicit inconclusive reasons. The window
