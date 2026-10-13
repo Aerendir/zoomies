@@ -184,6 +184,15 @@ func trimComparisonRow(p *comparisonProjection) bool {
 			}})
 		}
 	}
+	if p.WorkflowEvidence != nil {
+		for _, side := range []*comparisonWorkflowArm{p.WorkflowEvidence.Baseline, p.WorkflowEvidence.Candidate} {
+			groups = append(groups, group{len(side.Attempts), func() {
+				side.Attempts = side.Attempts[:len(side.Attempts)-1]
+				side.Shown = len(side.Attempts)
+				*side.RowsOmitted = true
+			}})
+		}
+	}
 	groups = append(groups, group{len(p.Baseline.Attempts), func() { p.Baseline.Attempts = p.Baseline.Attempts[:len(p.Baseline.Attempts)-1] }}, group{len(p.Candidate.Attempts), func() { p.Candidate.Attempts = p.Candidate.Attempts[:len(p.Candidate.Attempts)-1] }})
 	chosen := -1
 	for i, g := range groups {

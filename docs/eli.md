@@ -52,7 +52,11 @@ repository. Its read-only tool explains separate measurements and missing eviden
 without collecting GitHub data or capturing a replacement. Operator text remains
 untrusted evidence. It reports shortened text or omitted rows explicitly, with
 aggregates still based on the full selection. Actor identity is excluded from this
-tool's model output. See [the MCP contract](mcp.md#what-you-can-ask) for limits.
+tool's model output. Retained workflow facts include trigger events, path
+fingerprints and nullable root-file digests, without raw filenames or source text.
+Root-file coverage does not attest execution or establish equivalence of
+dependencies, inputs, test scope or workloads. Full counts include omitted rows; missing facts
+remain unknown. See [the MCP contract](mcp.md#what-you-can-ask) for limits.
 
 For an existing PR with failed checks, [PR repairs](#set-up-pr-repairs) are a
 separate opt-in: Eli can read bounded source, publish a change to the PR branch

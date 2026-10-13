@@ -3,6 +3,7 @@
   import type { RetainedComparison } from '$lib/api/types';
   import { measuredMS } from './input';
   import RunnerEvidence from './RunnerEvidence.svelte';
+  import WorkflowEvidence from './WorkflowEvidence.svelte';
   let { report }: { report: RetainedComparison } = $props();
   let heading = $state<HTMLHeadingElement | null>(null);
   onMount(() => {
@@ -114,6 +115,7 @@
     </details>
   {/each}
   <RunnerEvidence evidence={report.runner_evidence} />
+  <WorkflowEvidence evidence={report.workflow_evidence} />
 </section>
 
 <style>

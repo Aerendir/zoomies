@@ -513,6 +513,11 @@ fenced controller is not restarted by its own runtime.
 | DELETE | `/api/v1/transfers/preparation` | process operator | Cancel before the fence; saved pools resume. Once fenced, use the explicit recovery action after checking that no destination is running. |
 | POST | `/api/v1/transfers/export` | process operator | Download a mandatory passphrase-encrypted complete instance, with fleet secrets under a disposable transfer key. Requires a drained and fenced source. |
 | POST | `/api/v1/transfers/import` | process operator | Multipart `file` and `passphrase`; authenticate, verify and re-seal for the destination key. Returns a prepared backup and inventory counts. Stage using the restore route with `source_stopped: true`, then restart; the destination must be empty and have its own operator access. |
+| POST | `/api/v1/transfers/uploads` | process operator | Start an identity-owned upload with its archive size (up to 8 GiB); returns its id, durable offset and 8 MiB chunk limit. Expires after 24 hours; restart requires a new upload. |
+| GET | `/api/v1/transfers/uploads/{id}` | process operator | Read the durable offset and verification state, with the prepared backup when verified or an error when failed. |
+| DELETE | `/api/v1/transfers/uploads/{id}` | process operator | Discard uploaded ciphertext before verification, or its finished receipt; refuses while verification runs. |
+| POST | `/api/v1/transfers/uploads/{id}/chunks?offset=N` | process operator | Append up to 8 MiB of ciphertext. Identical replay accepted; changed replay, wrong offset and truncated bodies refused. |
+| POST | `/api/v1/transfers/uploads/{id}/verify` | process operator | JSON passphrase; returns 202 immediately and verifies in the background, independently of the browser request. Repeated calls return the same job; live data is unchanged. |
 | GET | `/api/v1/backups` | platform | Every backup in `backup.directory` and every copy the store took before migrating, newest first, each with what its manifest says and whether a restore of it would be refused (`restorable`, `restore_problem`); the schedule and its last outcome; the restore waiting for a restart, if any; and what became of the last one. |
 | POST | `/api/v1/backups` | platform | Take one now: `VACUUM INTO`, integrity checked, with its manifest. Retention runs afterwards. `409` while another is being taken. |
 | POST | `/api/v1/backups/upload` | platform | `multipart/form-data`: the archive in `file`, and for an encrypted one its `passphrase`. Unpacked into a staging directory, verified, then listed under the name its manifest gives it. Bounded by its own limit rather than the API's, since an archive is the whole database. |
@@ -902,6 +907,17 @@ of up to three failing checks per host and no values. See
 
 ## Retained historical comparisons
 
+The optional `workflow_evidence` response is a separate versioned descriptive
+projection of validated retained attempts. It shows exact decimal run IDs,
+nullable trigger events and SHA-256 path fingerprints, plus nullable root-file
+commit/blob/content digests and byte counts. It includes full selected/root-source
+counts and at most 100 attempt rows per arm with an omitted-row flag. Raw paths,
+source text, inputs and private fleet identities are excluded. Root files do not
+attest execution or cover reusable workflows, actions, inputs or test scope.
+Missing old facts remain null; replay makes no current source reads. The web UI
+shows root-only coverage and explicit unknowns. It refuses unknown view versions.
+The original retained report, storage digest and eligibility are unchanged.
+
 The optional `runner_evidence` response field is a versioned descriptive view
 computed from validated retained inputs. It returns at most 100 job rows per arm,
 with full enumerated-job, fleet-match, recorded-grant and runner-observation counts
@@ -928,7 +944,7 @@ not yet export it. Capture is a local mutation, not a read-only tool operation.
 
 Both arms share the diagnostic gate with PR delay: one flight per installation and
 20 admissions per rolling hour, in memory until restart. Quota preflight retains
-half of core allowance after the worst-case seven requests per attempt. A 429 gives
+half of core allowance after the worst-case eight requests per attempt. A 429 gives
 Retry-After for a manual retry. The observation window must fit
 `limits.job_stats_window`. No automatic batching, model call, dispatch or publication
 occurs. GET replay spends no GitHub allowance and refuses unsupported versions or
@@ -940,6 +956,18 @@ requests. Missing fields remain absent; bounded paths are opaque untrusted text,
 never fetched or resolved. Neither field proves workflow contents, dispatch inputs
 or test scope, and neither appears in the public report or runner-evidence view.
 Older captures replay with these fields unknown; their stored bytes are unchanged.
+
+For push attempts with a canonical local `.github/workflows/*.yml` or `.yaml` path
+without an `@ref` suffix, capture also reads the root workflow at the attempt's
+immutable head commit. The GitHub App needs repository contents read permission.
+One inline JSON read validates file identity, base64 encoding, UTF-8, a 128 KiB
+size bound and Git blob integrity. A private versioned stamp retains the commit,
+path, blob SHA, SHA-256 content digest and byte count, excluding source text.
+Permission, missing-file and integrity failures refuse capture; there is no retry
+at a branch or download URL. Other triggers and ambiguous paths leave source
+unknown without a source request. The final attempt recheck still follows source
+collection. These root-file facts do not cover reusable workflows/actions, inputs
+or test scope, and do not set the comparison's verified workflow revision.
 
 `selected-runs-v2` retains unknown historical workflow revision, inputs/test scope,
 configuration, cache and host evidence as explicit inconclusive reasons. The window

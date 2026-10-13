@@ -52,7 +52,11 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 web runner evidence inspection | Merged | ZF-243, [#1003](https://github.com/eyupio/zoomies/pull/1003), based on main after #1000 | Bounded descriptive projection, explicit grant/request/claim labels, nullable facts, per-job web inspection and omitted-row counts. Immutable report and eligibility unchanged. Focused race, 14 desktop/mobile fixtures, 109 UI unit tests, type/lint/build, vet and strict docs pass |
 | E2 MCP/Eli runner evidence | Merged | ZF-243, [#1004](https://github.com/eyupio/zoomies/pull/1004), based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
 | E2 CLI runner evidence | Merged | ZF-243, [#1006](https://github.com/eyupio/zoomies/pull/1006), based on main after #1004 | Shared capture/replay human view, validated REST whitelist, full coverage counts and explicit unknown/request/claim labels; raw JSON preserved. Focused race tests, vet and strict docs pass |
-| E2 private trigger/workflow context | Ready for review | ZF-243, [#1007](https://github.com/eyupio/zoomies/pull/1007), based on main after #1006 | Bounded optional exact-attempt metadata, identity recheck and immutable private retention; no workload equivalence or public contract change. Focused GitHub/controller race tests, vet and strict docs pass |
+| E2 private trigger/workflow context | Merged | ZF-243, [#1007](https://github.com/eyupio/zoomies/pull/1007), based on main after #1006 | Bounded optional exact-attempt metadata, identity recheck and immutable private retention; no workload equivalence or public contract change. Focused GitHub/controller race tests, vet and strict docs pass |
+| E2 push root-workflow digests | Merged | ZF-243, [#1012](https://github.com/eyupio/zoomies/pull/1012), based on main after #1007 | Commit-pinned bounded root-file read with private digests; eight-request reservation, no revision/equivalence promotion. GitHub/controller/API race tests, vet and strict docs pass |
+| E2 web workflow evidence | Merged | ZF-243, [#1014](https://github.com/eyupio/zoomies/pull/1014), based on main after #1012 | Separate bounded REST/UI projection with exact run IDs, unknowns and root-only coverage; fingerprints exclude raw paths. Controller/API race, 20 desktop/mobile checks, 109 UI unit tests, type/lint/build, vet and strict docs pass |
+| E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
+| E2 CLI workflow evidence | Ready for review | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1626,7 +1630,7 @@ also remains outstanding; scripted fixtures only verify transport/presentation.
 
 ### E2 slice 20: private trigger/workflow context, 13 October 2026
 
-Ready for review [#1007](https://github.com/eyupio/zoomies/pull/1007), branch codex/eli-comparison-trigger-provenance, based on main after #1006
+Merged [#1007](https://github.com/eyupio/zoomies/pull/1007), branch codex/eli-comparison-trigger-provenance, based on main after #1006
 merged. Exact-attempt GitHub reads now retain optional event and workflow_path
 fields. The same initial/final attempt GETs recheck these fields around job
 pagination, including appearance/disappearance. Movement refuses collection.
@@ -1670,3 +1674,235 @@ Bound any source reads in the whole-capture budget and persist content digests
 before considering WorkflowRevision. Dispatch inputs/test scope, caches, host
 conditions and fair complete selection remain unresolved. Live model evaluation
 is also still outstanding; keep thirty completed attempts per arm.
+
+
+### E2 slice 21: private push root-workflow source digests, 13 October 2026
+
+Merged [#1012](https://github.com/eyupio/zoomies/pull/1012), branch codex/eli-comparison-workflow-source, based on main after #1007 merged.
+For event=push only, a canonical direct .github/workflows file with .yml/.yaml
+extension and no @ref/URL/query/fragment/percent/backslash ambiguity can be read at
+the retained HeadSHA. This establishes root-file bytes at that push commit, not
+proof of executed dependencies or workload equivalence. Other events, absent paths
+and ambiguous paths skip source collection. There is no parsing or ref guessing.
+
+One repository-scoped Contents GET uses Ref=HeadSHA on the same isolated bounded
+GitHub client. It requires App contents read permission. The response must be one
+inline base64 file with the exact requested path, no reported directory/symlink/submodule,
+1 to 128 KiB declared and actual UTF-8 bytes, and a matching Git blob SHA. No
+returned download URL, raw source URL, branch, logs or repository file is followed.
+Source errors, missing files and permission failures fail capture through existing
+error handling. No branch fallback, automatic retry or replacement observation.
+The final attempt GET still rechecks the trigger/path/head/status/timestamps after
+job and source collection. Overall deadline and 4 MiB response-body cap stay.
+
+ExperimentAttemptMaximumRequests is now eight (two attempt GETs, five job pages,
+one root-file GET). Controller admission and whole-capture quota preflight use the
+same constant, reserving eight for every selected attempt, including unsupported
+ones, before spending reads. Maximum ten selected attempts and half-core quota
+reserve remain unchanged. No new privileges for the initiating API caller.
+
+Private optional workflow_source has workflow-source-v1, push_head_sha_root_file
+basis, commit/path binding, Git blob SHA, SHA-256 content digest and byte count.
+Source text is not retained or projected publicly. The Contents API can resolve
+a symlink as a file; this slice does not independently inspect tree modes and
+does not attest that GitHub executed these bytes. Controller validates version,
+basis, event/path/commit binding, bounds and hash syntax for alternate readers and
+replay. Only collection validates actual content bytes; replay cannot independently
+reconstruct the Git/content hashes from digests alone. Existing storage digest
+covers the private stamp. Old absent stamps remain unknown and byte-compatible;
+older strict-decoder binaries cannot replay new private fields they do not know.
+
+Public report/runner-view schemas, report bytes, WorkflowRevision, InputsID,
+TestScopeID, resource/image/configuration IDs and eligibility stay unchanged.
+Differences in root-file digests are descriptive evidence, not a controlled delta.
+No migrations, dependency, source retention expansion, UI/CLI/MCP/model changes.
+
+Validation completed: fixture-backed GitHub race tests cover pinned commits,
+unsupported contexts without extra reads, identity/encoding/type/size/integrity
+failures, source privacy and final metadata movement. Controller fixtures cover
+private immutable retention, unchanged reports/eligibility, alternate-reader
+binding checks and the exact eight-request quota boundary. Capture/replay API
+race tests pass. The bad-blob fixture fails when the integrity guard is removed.
+Changed-package vet, strict docs and whitespace pass. Docs used the repository-only
+header fallback for unavailable optional GitHub metadata. No live GitHub/model/
+fleet operation. Keep all completed/failed selections and current sample limits.
+
+Next agent: add a reviewed descriptive source-provenance projection if useful,
+with nullable unsupported facts and explicit root-file-only coverage. Keep paths
+behind the untrusted repository text boundary. Resolve pull_request merge refs,
+pull_request_target and reusable dependencies separately before broadening
+collection; never infer the executed workflow solely from HeadSHA for those
+triggers. Root digests alone cannot fill WorkflowRevision until transitive
+workflow/action coverage is specified. Dispatch inputs, test scope, caches, host
+conditions and fair complete selections, plus live model evaluation, remain open.
+
+
+### E2 slice 22: descriptive workflow evidence in REST/UI, 13 October 2026
+
+Merged [#1014](https://github.com/eyupio/zoomies/pull/1014), branch codex/eli-comparison-workflow-evidence-web, based on main after #1012
+merged. Capture and verified offline replay now return optional workflow_evidence
+outside the immutable private envelope/report. The whitelist contains version
+workflow-evidence-v1, baseline/candidate full selected-attempt/root-source counts,
+omitted-row flags and at most 100 attempt rows each. Run IDs are exact decimal
+strings. Events, SHA-256 fingerprints of the complete opaque retained path and
+root sources are nullable. A root source exposes only basis, commit SHA, Git blob
+SHA, SHA-256 content digest and byte count. No raw paths, filenames, source text,
+private fleet IDs, event payloads or dispatch inputs. Returned fields are copied.
+
+No new collection, repository source read, privilege, migration or dependency.
+Older inputs project null facts without enrichment; older controllers omit the
+view. Original report bytes, digest, measurement/rule versions, verified identities
+and eligibility remain unchanged. The OpenAPI and generated Go/TypeScript copies
+are updated. CLI JSON preserves the new raw field; MCP/Eli and CLI human output
+need separate reviewed presenters rather than forwarding it wholesale.
+
+The UI adds Recorded workflow evidence, full coverage summaries and native details
+for each exact run/attempt. Digests and identities wrap in a token-based grid on
+mobile. The explanatory boundary distinguishes path fingerprints from content,
+root-file collection from executed bytes, and root coverage from reusable
+workflows/actions, dispatch inputs and test scope. Missing facts stay Unknown;
+unsupported view versions are explicitly unknown. Rows omitted from a view do
+not change selected cohort counts or sample eligibility.
+
+Validation completed: controller fixtures check exact max-int64 IDs, nullable
+facts, copied values and bounded rows/full counts. Capture/replay API fixture
+checks retained source transport, privacy, immutable replay and unchanged reads/
+quota/report eligibility. Older foundation fixtures now allow deliberately public
+whitelisted events/content digests while continuing to refuse private raw paths.
+Desktop/mobile browser fixtures check unknown/older/future versions, root-only
+coverage, exact IDs, digest readability, one read and no page overflow.
+All 20 comparison browser checks pass on desktop/mobile, including digest
+readability and no overflow. All 109 UI unit tests, type/lint checks and both UI
+builds pass within shell/status budgets. Changed-package vet, embedded OpenAPI
+source matching, strict docs and whitespace pass. The exact-ID fixture fails when
+decimal-string encoding is removed. Docs used the repository-only header fallback
+for unavailable optional GitHub metadata. No real source/model/provider/fleet
+operation; fixtures verify presentation.
+
+Next agent: independently validate and present this reviewed shape to MCP/Eli
+within existing 64 KiB/12 KiB budgets and quoted untrusted-evidence boundaries,
+then add CLI human presentation. Preserve original arm bindings, full counters,
+nullable facts and root-only claims. Do not copy future/raw response fields to a
+model. Workload/configuration/cache/test-scope/dependency and fair-selection proof,
+non-push revision resolution and live model evaluation remain outstanding. Keep
+thirty completed attempts per arm and admission limits; descriptive digests do
+not justify workflow equivalence or an improvement ranking.
+
+
+### E2 slice 23: bounded MCP/Eli workflow evidence, 13 October 2026
+
+Merged [#1015](https://github.com/eyupio/zoomies/pull/1015), branch codex/eli-comparison-workflow-evidence-mcp, based on main after #1014
+merged. get_retained_comparison still makes exactly one installation/repository
+scoped local-history GET with its existing read-only annotation and caller scope.
+No capture, refresh, source/log read, extra quota/provider call, action or direct
+store/controller import. CLI human presentation remains a following slice.
+
+Independent REST structs and a closed nested nullable output schema whitelist
+workflow-evidence-v1 trigger events, path fingerprints and root basis/commit/blob/
+content digests/byte counts. Private filenames, raw paths, source text, event
+payloads, actor/fleet identities and future fields do not reach models. Older
+missing views become workflow_evidence:null. Present unsupported/malformed views
+are refused. Required counters/flags/arrays never default missing data to zero.
+Run IDs must be canonical positive int64 decimal strings. Attempt keys are unique
+across arms and bind to the original untrimmed report arm. Full selected counts
+must match the original attempt inventory; root counts and source omissions must
+be consistent with shown rows. Event grammar, fingerprint/hash syntax, fixed
+root-file basis and 1 to 128 KiB source byte counts are validated. Root claims
+require event=push, a path fingerprint and commit equality with that exact
+attempt's original SourceRevision, before clipping or local row removal.
+
+Public hashes cannot reconstruct private path/source bytes or independently verify
+the storage digest. The controller verifies retained scope/input bindings; source
+collection checks bytes. MCP validates only public formats/associations. The
+boundary labels path versus content and root collection versus executed bytes,
+reusable workflows/actions, inputs and test scope. No workflow identity,
+controlled equivalence, eligibility, ranking, causal or cost claim is promoted.
+
+Workflow arms add locally computed shown counts, ignoring upstream shown fields.
+Full counters persist, including source-omitted rows. Global rows_omitted includes
+runner/workflow source omissions and any model truncation. Whole rows are balanced
+across six groups: runner, workflow and original attempt rows, per arm. Keep one
+of each available kind/arm when the budget allows; refuse if even summaries cannot
+fit. Text/structured projections match. Existing 64 KiB MCP/12 KiB Eli budgets
+include the expanded boundary, with the same 2 MiB input cap. Digests/IDs are never
+clipped. Validation binds against full source arms, not locally shortened ones.
+
+The scripted Eli fixture retains one push root stamp, one granted versus two
+requested CPUs and an unknown candidate root. It uses the real API/replay/tool
+path with one read-only call and keeps the injected hypothesis inside the quoted
+boundary. This proves transport/scripted presentation, not unscripted model
+reasoning or authentic workflow execution. No live model evaluation occurred.
+
+Validation completed: focused MCP race fixtures cover private/future exclusion,
+exact max-int64 IDs, nulls, legacy views, unsupported/malformed versions/counts/
+run/commit/hash/event/basis/size refusal, source/model omissions, combined six-group
+budgets and impossible budgets. Full MCP race suite, scripted Eli fixture,
+generated tool/command references and catalogue checks, vet, strict docs and
+whitespace pass. The wrong-commit fixture fails when its binding guard is removed.
+make generate refreshed only the normal catalogue source-revision metadata;
+entries are unchanged. Docs used the repository-only header fallback for unavailable
+optional GitHub metadata. No migration, dependency, public API/UI change or live provider run.
+
+Next agent: CLI capture/replay human workflow facts with the same original-arm
+bindings, counters, nulls and root-only labels, preserving raw structured JSON
+and the existing single request. Do not infer workflow execution/equivalence
+from a root digest. Independent transitive dependencies, non-push revisions,
+dispatch inputs/test scope, caches/host conditions, complete fair selections and
+live model evaluation remain open. Keep thirty completed attempts per arm and
+current admission limits.
+
+
+### E2 slice 24: CLI workflow evidence, 13 October 2026
+
+Ready for review [#1016](https://github.com/eyupio/zoomies/pull/1016), branch codex/eli-comparison-workflow-evidence-cli, based on main after #1015
+merged. Explicit capture and scoped replay share the human presenter and their
+existing single POST/GET respectively. No new collection, retries, scope or
+provider/model/source call. Help/flags/command descriptions remain unchanged.
+
+Independent REST structs validate workflow-evidence-v1, both arms and required
+counters/flags/arrays, at most 100 rows and original attempts per arm, canonical
+positive decimal int64 run IDs, positive attempt numbers, unique keys across arms
+and membership in the original corresponding report. Full selected counters must
+match that original inventory; root/source omission counts remain consistent.
+Events use bounded grammar, path/content fingerprints and Git hashes validate
+syntax, roots require push, a path fingerprint, known root-file basis, 1 to 128 KiB
+bytes and exact source-commit equality with the corresponding attempt revision.
+Private/future fields are omitted from human output. Public hashes cannot verify
+missing source/path bytes or independently reconstruct the private storage hash.
+
+Both runner and workflow views are decoded/validated before any human report is
+printed. Present unsupported or malformed facts return an actionable error to
+inspect JSON/check controller version. Absent older workflow views remain unknown.
+Structured output bypasses human decoders and preserves raw JSON, including future
+workflow versions/fields and exact numbers. Original comparison scope/report-version
+checks remain in force for all output formats.
+
+Human output shows full selected/root-source counts, controller omission notices
+and every returned workflow row without local truncation. Per-row exact identities,
+trigger, path fingerprint and root-only digest/byte details retain null/unknowns.
+Path fingerprints are labels, not content identity. Root collection is not attested
+execution, reusable dependency/input/test-scope or workload-equivalence proof.
+Eligibility, measurement versions, original counts and unknown/zero timings stay.
+No API/UI/MCP schema change, migration, dependency or generator-description change.
+
+Validation completed: focused CLI capture/replay race fixtures cover one request,
+exact max-int64 IDs, full counts/source omissions, null/legacy values, unknown/zero
+measures, unsupported/inconsistent fields refused before printing, original commit/
+run binding, private/future terminal-text exclusion and raw future-version JSON.
+Vet, strict docs and whitespace pass. The presentation fixture fails when workflow
+output is removed. Docs used the repository-only header fallback for unavailable
+optional GitHub metadata. No live provider run.
+
+Next agent: descriptive runner and root-workflow evidence now has REST/UI, MCP/Eli
+and CLI presenters. E2 remains in progress: do not confuse these with independently
+verified workload/configuration/cache evidence. Consider a bounded private dependency
+inventory during the existing push root-file read, without retaining raw source or
+spending extra requests. Define known static pins versus expressions, floating refs,
+reusable workflows and unresolved local actions, with explicit unknown coverage,
+before adding collection or promoting WorkflowRevision. Persist any new provenance
+inside the immutable private envelope, keep legacy absence and replay semantics,
+and review future public/model fields separately. Non-push revision resolution,
+dispatch inputs/test scope, cache/host conditions and fair complete selections are
+also unresolved. Keep the thirty completed attempts per arm, ten-attempt capture
+limit, eight-request reservation and current admission bounds. Live model evaluation
+remains outstanding; fixture passing does not demonstrate unscripted reasoning.

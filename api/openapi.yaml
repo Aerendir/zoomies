@@ -7026,6 +7026,122 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /transfers/uploads:
+    post:
+      operationId: createTransferUpload
+      tags: [backups]
+      x-zoomies-role: platform
+      summary: Start a bounded complete-instance archive upload
+      description: >-
+        Upload ciphertext in chunks no larger than chunk_bytes, then request verification.
+        Uploads belong to the creating identity, expire after 24 hours and do not survive
+        a controller restart. At most two active uploads per identity and sixteen overall.
+        This avoids reverse-proxy request-size limits; the existing multipart import remains available.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [size]
+              properties:
+                size: { type: integer, format: int64, minimum: 1, maximum: 8589934592 }
+      responses:
+        "201":
+          description: Upload created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferUpload" }
+        "400": { description: Invalid upload request }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /transfers/uploads/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      operationId: getTransferUpload
+      tags: [backups]
+      x-zoomies-role: platform
+      summary: Read an upload offset and verification result
+      responses:
+        "200":
+          description: Current upload state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferUpload" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: cancelTransferUpload
+      tags: [backups]
+      x-zoomies-role: platform
+      summary: Discard an upload that is not being verified
+      responses:
+        "204": { description: Upload discarded }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /transfers/uploads/{id}/chunks:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      operationId: uploadTransferChunk
+      tags: [backups]
+      x-zoomies-role: platform
+      summary: Append a bounded archive chunk
+      description: >-
+        An identical replay is accepted, changed or out-of-order bytes are refused.
+        A truncated request does not advance the offset. Read the upload after a lost
+        response to discover the durable offset before retrying.
+      parameters:
+        - name: offset
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 0 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary, maxLength: 8388608 }
+      responses:
+        "200":
+          description: Chunk saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferUpload" }
+        "400": { description: Invalid upload request }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { description: Chunk exceeds 8 MiB }
+
+  /transfers/uploads/{id}/verify:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      operationId: verifyTransferUpload
+      tags: [backups]
+      x-zoomies-role: platform
+      summary: Verify and seal a completed archive in the background
+      description: >-
+        Returns immediately. Poll the upload until verified or failed. The passphrase
+        is held only in memory while verifying; verification has a two-hour limit and
+        removes uploaded ciphertext on completion. Repeated requests return the same job.
+        Verification leaves live data unchanged; staging and applying remain separate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [passphrase]
+              properties:
+                passphrase: { type: string, format: password, minLength: 1, maxLength: 4096 }
+      responses:
+        "202":
+          description: Verification started or already requested
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferUpload" }
+        "400": { description: Invalid upload request }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /transfers/import:
     post:
       operationId: importInstanceTransfer
@@ -11219,6 +11335,18 @@ components:
         inventory:
           type: object
           additionalProperties: { type: integer, format: int64 }
+
+    TransferUpload:
+      type: object
+      required: [id, size, offset, chunk_bytes, state]
+      properties:
+        id: { type: string }
+        size: { type: integer, format: int64 }
+        offset: { type: integer, format: int64 }
+        chunk_bytes: { type: integer, format: int64 }
+        state: { type: string, enum: [uploading, verifying, verified, failed, cancelled] }
+        backup: { $ref: "#/components/schemas/Backup" }
+        error: { type: string }
 
     Backup:
       type: object
@@ -15570,6 +15698,80 @@ components:
       - runner_observations
       - rows_omitted
       - jobs
+    ExperimentRootSourceView:
+      type: object
+      additionalProperties: false
+      properties:
+        basis:
+          type: string
+          enum: [push_head_sha_root_file]
+        commit_sha:
+          type: string
+          pattern: ^[a-f0-9]{40}([a-f0-9]{24})?$
+        blob_sha:
+          type: string
+          pattern: ^[a-f0-9]{40}$
+        content_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        bytes:
+          type: integer
+          minimum: 1
+          maximum: 131072
+      required: [basis, commit_sha, blob_sha, content_sha256, bytes]
+    ExperimentWorkflowEvidenceAttempt:
+      type: object
+      additionalProperties: false
+      properties:
+        run_id:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        attempt:
+          type: integer
+          minimum: 1
+        event:
+          type: string
+          nullable: true
+          maxLength: 64
+        workflow_path_sha256:
+          type: string
+          nullable: true
+          pattern: ^[a-f0-9]{64}$
+        root_source:
+          allOf:
+          - $ref: '#/components/schemas/ExperimentRootSourceView'
+          nullable: true
+      required: [run_id, attempt, event, workflow_path_sha256, root_source]
+    ExperimentWorkflowEvidenceArm:
+      type: object
+      additionalProperties: false
+      properties:
+        selected_attempts:
+          type: integer
+          minimum: 0
+        root_sources:
+          type: integer
+          minimum: 0
+        rows_omitted:
+          type: boolean
+        attempts:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ExperimentWorkflowEvidenceAttempt'
+      required: [selected_attempts, root_sources, rows_omitted, attempts]
+    ExperimentWorkflowEvidence:
+      type: object
+      additionalProperties: false
+      properties:
+        version:
+          type: string
+          enum: [workflow-evidence-v1]
+        baseline:
+          $ref: '#/components/schemas/ExperimentWorkflowEvidenceArm'
+        candidate:
+          $ref: '#/components/schemas/ExperimentWorkflowEvidenceArm'
+      required: [version, baseline, candidate]
     ExperimentRunnerEvidence:
       type: object
       additionalProperties: false
@@ -15833,6 +16035,9 @@ components:
     RetainedExperimentComparison:
       additionalProperties: false
       properties:
+        workflow_evidence:
+          description: Descriptive retained trigger, path fingerprint and root-file digests only. Missing facts remain null. No source text or filenames; no workflow equivalence or execution attestation. Absent on older controllers.
+          $ref: '#/components/schemas/ExperimentWorkflowEvidence'
         runner_evidence:
           description: Bounded descriptive view from validated retained inputs only. At most 100 job rows per arm; counts include omitted rows. Requested fields and agent claims do not establish applied limits or controlled equivalence. Absent on older controllers.
           $ref: '#/components/schemas/ExperimentRunnerEvidence'

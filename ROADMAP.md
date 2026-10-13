@@ -1773,7 +1773,11 @@ Dispatch and publication are later, separately authorised work.
 [web runner evidence inspection](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-web.md),
 [bounded MCP/Eli runner evidence](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-mcp.md),
 [CLI runner evidence](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-cli.md),
-[private trigger/workflow context](roadmap/plans/2026-10-13-eli-comparison-trigger-provenance.md).
+[private trigger/workflow context](roadmap/plans/2026-10-13-eli-comparison-trigger-provenance.md),
+[push root-workflow source digests](roadmap/plans/2026-10-13-eli-comparison-workflow-source.md),
+[web workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-web.md),
+[bounded MCP/Eli workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-mcp.md),
+[CLI workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-cli.md).
 The owner prioritised the web UI before CLI capture on 13 October 2026.
 These slices include bounded local retention and capture/replay routes. No new
 dependency, model call, dispatch or publication is introduced. Historical workload/
@@ -1858,7 +1862,10 @@ round trip between different encryption keys preserves history and usable
 team credentials, source operator access cannot authenticate at the new
 controller, destination access works after restart, failures leave the source
 and live destination intact, and restored machine proofs remain unverified.
-See [the transfer design](roadmap/instance-transfer.md). The owner requested
+The browser import uses bounded upload chunks and polls background verification
+so a reverse proxy need not accept the whole archive in one request or wait for
+its authentication and re-sealing. The single-request import remains available
+for direct API clients. See [the transfer design](roadmap/instance-transfer.md). The owner requested
 this work on 9 October 2026; it is the next implementation priority.
 
 ### ZF-238: a Windows host joins with one pasted command
