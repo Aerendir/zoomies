@@ -94,3 +94,55 @@ func TestAMachineIsNeverGivenSomethingThatIsNotACertificate(t *testing.T) {
 		})
 	}
 }
+
+// A provider whose machines are told to trust the cluster's own certificate for
+// the controller is almost always one an upgrade copied it into, and its
+// machines then refuse a controller on a public certificate and never join. The
+// provider check says so before a machine is rented to find out.
+func TestTheProviderCheckWarnsWhenMachinesTrustOnlyTheClustersCertificate(t *testing.T) {
+	cluster := testCertificatePEM(t, "pve-root-ca")
+	tests := []struct {
+		name      string
+		ca, which string
+		warn      bool
+	}{
+		{"the same certificate for both", cluster, cluster, true},
+		{"the same certificate with different trailing space", cluster, cluster + "\n\n", true},
+		{"a different certificate for the controller", cluster, testCertificatePEM(t, "controller-ca"), false},
+		{"no certificate for machines", cluster, "", false},
+		{"no certificate for the cluster", "", cluster, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.enableProviders(t)
+			row := h.providerRow(t, "lab")
+			row.CAPEM, row.MachineCAPEM = tc.ca, tc.which
+			if err := h.st.UpdateProvider(h.ctx, row); err != nil {
+				t.Fatalf("UpdateProvider: %v", err)
+			}
+			got, err := h.c.CheckProvider(h.ctx, row)
+			if err != nil {
+				t.Fatalf("CheckProvider: %v", err)
+			}
+			var found *config.Finding
+			for i := range got.Findings {
+				if got.Findings[i].Code == "provider.machine_ca_same_as_cluster" {
+					found = &got.Findings[i]
+				}
+			}
+			if tc.warn && found == nil {
+				t.Fatalf("no warning; findings = %+v", got.Findings)
+			}
+			if !tc.warn && found != nil {
+				t.Fatalf("an unexpected warning: %+v", *found)
+			}
+			if tc.warn && found.Severity != config.SeverityWarning {
+				t.Errorf("severity = %q, want a warning: the setup is legal and sometimes right", found.Severity)
+			}
+			if tc.warn && !got.OK {
+				t.Error("a warning made the check fail; the provider can still rent")
+			}
+		})
+	}
+}
