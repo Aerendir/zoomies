@@ -904,7 +904,7 @@ snapshot storage, real provider/model call or causal experiment is claimed.
 
 ### E2 immutable evidence retention and replay, 13 October 2026
 
-Slice 7 follows #985. Migration `0102_comparison_evidence.sql` stores a complete
+Slice 7 follows #985. Migration `0104_comparison_evidence.sql` stores a complete
 versioned envelope, scope, initiating actor, digest and creation time. The `cmp_`
 ID is minted by the controller; caller record identity/initiator are replaced by
 server identity and the authenticated actor before assembly. SQL stays in store.
