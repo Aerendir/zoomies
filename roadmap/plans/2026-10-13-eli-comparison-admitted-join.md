@@ -28,7 +28,7 @@ Validation: the first controller test attempt was blocked by sandbox networking
 while fetching main's updated dependencies. With explicit per-command network
 access, new behavioural tests failed to compile before implementation. Focused
 race checks then passed for joins/admission and the shared PR gate (11.683s),
-additional quota/reader/hold/batch cases (9.030s), and the unsupported-reader guard.
+additional quota/reader/hold/batch cases (9.030s), and the unsupported-reader guard (7.037s).
 These runs cover every new test; they are not a full controller or repository run.
 Controller vet, Go formatting and diff whitespace checks pass. Local fake GitHub
 fixtures only; no live provider/model call or real configuration experiment.
