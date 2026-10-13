@@ -15,7 +15,7 @@ coordinating agent reconciles these tracks with current code and records new or
 changed work in ROADMAP.md, using existing packages where the work overlaps.
 The track IDs below are local handoff identifiers, not allocated ZF numbers.
 
-## Execution status, updated 12 October 2026
+## Execution status, updated 13 October 2026
 
 The owner subsequently authorised implementation and stacked PRs. This section
 is the live handoff record for that work; ROADMAP.md and `roadmap/progress.md`
@@ -33,7 +33,10 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
 | E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and scripted scenarios merged in #959 |
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
-| E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
+| E2 eligibility | Draft PR | ZF-243, [#973](https://github.com/eyupio/zoomies/pull/973), following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
+| E2 measurements | Draft PR | ZF-243, [#974](https://github.com/eyupio/zoomies/pull/974), stacked on #973 | Successful latency distribution, all-attempt execution/idle consumption, failure rate and descriptive changes. Complete analysis race tests and vet pass; no controller integration or live experiment |
+| E2 bounded retained-attempt collection | Draft PR | ZF-243, [#977](https://github.com/eyupio/zoomies/pull/977), stacked on #974 | Scoped store reader and bounded controller collection; explicit retained-only/truncated/unavailable/held-back coverage. Focused store/controller race tests, full analysis race tests, changed-package vet and whitespace checks pass. Full workflow selection remains unverified; no runtime surface |
+| E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
 | E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; complete installer package race tests pass |
@@ -613,3 +616,126 @@ do not block creation of this handoff or independent read-only design work:
 
 Success is an evidence-backed improvement loop that operators can inspect and
 control, delivered through the Zoomies capabilities they already use.
+
+## E2 implementation handoff, 12 October 2026
+
+ZF-241 now has a period comparison on main. ZF-243 supplies the distinct selected
+historical configuration comparison; do not convert a period finding into a
+controlled experiment. The first slice is `internal/analysis/experiment.go`.
+`AssessExperiment` is pure and consumes a retained `ExperimentSnapshot`.
+
+- `selected-runs-v1` requires 30 completed attempts per arm, counting success
+  and failure. Cancelled/superseded outcomes are separate counts; pending and
+  unknown outcomes make the result inconclusive. An eligible result does not
+  assert success, causation, authorisation or verified improvement.
+- Selection completeness is supplied evidence, not independently verified by the
+  pure core. The controller must check access and load all selected attempts,
+  including failures. Retain the snapshot beside the result. Identity is run ID
+  plus attempt number, unique across both arms; the repository scopes it.
+- Runner comparisons require identical source/workflow revisions, inputs and
+  test scope. Workflow comparisons need a retained exact revision delta.
+  Both arms retain configuration, image and resource identifiers. These
+  identifiers refer to evidence; they do not prove its contents themselves.
+- Cache classifications must be observed cold/warm and match. Mixed cache
+  cohorts are conservatively inconclusive in v1. Quiet hosts must be observed;
+  unknown or busy hosts are explicit caveats. No cache hit or host state is
+  inferred. Observation windows are half-open, with at most 2000 attempts per arm.
+- Stable reason codes are sorted. Structural errors refuse malformed records;
+  missing analytical evidence returns an inconclusive result. No raw workflow
+  text is rendered to an agent in this slice.
+
+Next agent: implement pure measurement over retained attempt evidence. Keep
+successful latency and all-attempt consumption separate, retain failed and
+cancelled consumption, report missing measurements without inventing zero, and
+show sample counts/dispersion. Version regression thresholds before observing
+results. An eligible cohort still must not produce a causal claim. Follow with
+bounded authorised controller assembly, read-only API, CLI/MCP/Eli and a contextual
+card. Dispatch, optimisation publication and live model evaluation remain unrun.
+
+Validation: the new behavioural tests failed to compile before the contract
+existed. The complete analysis package race tests and vet pass with Go 1.27.2
+for this pure slice, as does `git diff --check`. Earlier broad validation evidence remains linked above; it is not a
+claim that the new slice passed a full repository run.
+
+### E2 measurement contract
+
+`MeasureExperiment` retains the eligibility result and outcome counts. The
+version is `selected-measures-v1`. Successful latency reports nearest-rank min,
+p50, p95 and max; p50 is ceil(0.50*n)-1 and p95 is ceil(0.95*n)-1 in a sorted
+zero-based array. Failure rate is failed/completed, with cancellations and
+superseded attempts visible in the eligibility counts, outside this denominator.
+
+Execution and allocated idle are separate all-attempt distributions, including
+failed, cancelled, superseded and pending attempts where measured. Missing counts
+are explicit. Totals are null if any relevant value is missing or no value was
+observed; known zero remains zero. Negative values and int64 sum overflow refuse
+the record. Execution means running time, not wall-clock latency or monetary cost.
+Allocated idle time must be independently observed and attributable; never derive
+it by subtracting unrelated host-wide counters. The pure core only checks the
+supplied figures, so controller verification remains essential.
+
+Descriptive change labels are permitted only for eligible cohorts. Successful
+latency needs at least 30 measured successes on both arms and no missing success
+measurements; execution/idle need complete measurements and at least 30 selected
+attempts per arm. Latency ranks p50; consumption ranks arithmetic mean per selected
+attempt, keeping totals visible for unequal cohort sizes. A 1.10 ratio in either
+direction is material. A five percentage point failure-rate difference is
+material, computed with integer cross-products to preserve the boundary. These
+fixed rules describe a difference, not statistical significance or causation.
+No overall winner, confidence interval, cost estimate or verified improvement is
+claimed, even when all descriptive directions improve.
+
+The next slice is bounded authorised controller assembly of retained selections.
+Prove repository/installation joins, completeness including failures, retention
+limits and missing telemetry before adding read-only transports. Neither this
+measurement slice nor its parent initiates jobs, writes GitHub or calls a model.
+Validation: tests failed before measurement implementation. Complete analysis
+race tests and vet pass, including exact thresholds, zero/missing values, nearest
+rank, unequal cohort sizes, failure/exclusion consumption, overflow and purity.
+
+## E2 collection handoff, 13 October 2026
+
+Slice 3 follows draft #974. Main was reconciled at `266ad99f`; #973 and #974
+remain open. Their older Go/Node dependency baseline is preserved in this stack;
+no dependency update is mixed into this implementation.
+
+`Store.ListExperimentAttemptJobs` scopes every read to repository, installation,
+run ID and exact attempt number. It preserves every conclusion and pending state,
+orders queued_at/id, takes a limit of 1..1000, fetches at most limit+1 and reports
+truncation. Empty rows mean no retained evidence. It does not filter by window:
+cutting jobs at window edges could make an incomplete attempt look complete.
+
+`Controller.CollectExperimentAttempts` requires a transport-authorised caller;
+installation coverage is checked here, but caller authorisation is not granted
+by an installation/repository join. It selects 1..100 unique positive run/attempt
+identities, imposes a 20-second deadline, returns at most 1000 jobs per attempt
+and 2000 jobs across the selection. Queries fetch one extra row to detect a
+per-attempt truncation. Remaining attempts after exhausting the total budget are
+held back rather than silently omitted. The report has only job identity,
+revision, state/conclusion and timestamps; no job names, workflow names, log tails
+or workflow outputs. Repository/revision strings remain untrusted in any future
+agent adapter. No REST route or tool exposes these reports yet.
+
+Coverage values: `retained_only`, `truncated`, `not_available`, `held_back`.
+`SelectionComplete` is always false. Retention and missed deliveries can hide
+jobs, and full workflow coverage includes jobs the fleet may not run. Existing
+rows do not prove workflow inputs, workflow revision, observed cache classification,
+historical runner/image/resource configuration, quiet hosts or attributable idle.
+Do not fill these with current pool settings, guessed caches, zero or a complete
+selection assertion. The collector makes no GitHub call and mints no credential.
+
+Next agent: design the bounded join to independently retained workload/configuration
+and complete workflow-attempt evidence before building an ExperimentSnapshot.
+Pin source revision, workflow revision, test scope, exact inputs and configuration
+at the selected attempts, and retain every failure. Unknowns keep comparisons
+inconclusive. Full workflow wall-clock latency must not be inferred from the
+first/last retained fleet job. Execution sums need all selected job measurements;
+allocated idle and monetary attribution need separate supported evidence.
+Public-visitor refusal, role checks, repository scope and explicit incomplete
+coverage must hold before any read-only API/CLI/MCP/Eli/UI surface is added.
+
+Tests cover exact scoping, retries, all outcomes, invalid bounds, empty history,
+repository-installation mismatches, duplicate selections, both collection caps
+and minimal output. The behavioural tests failed to compile before implementation.
+Verification results are recorded in the slice plan; earlier broad-run evidence
+is not a claim that this new slice passed the entire repository suite.
