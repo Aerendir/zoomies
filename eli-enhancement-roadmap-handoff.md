@@ -33,7 +33,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 admission and read-only API | Merged | [#943](https://github.com/eyupio/zoomies/pull/943), following #938 | Focused analysis/controller/API race tests, route/spec coverage, embedded contract equality, full lint and strict docs build pass; regenerated OpenAPI/server/web contracts; staticcheck was unavailable and skipped |
 | E1 CLI and agent tools | Merged | [#947](https://github.com/eyupio/zoomies/pull/947), following merged #943 | One-request CLI and MCP wrappers, Eli read-tool allowlist and public-visitor refusal; focused race and reference tests pass against the resolved parent, as does strict docs. Contextual UI and scripted scenarios merged in #959 |
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
-| E2 to E6 | Not started | Dependencies and sequence below | No comparison dispatch, optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
+| E2 eligibility | In progress | ZF-243, current PR following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
+| E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
 | E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; complete installer package race tests pass |
@@ -613,3 +614,43 @@ do not block creation of this handoff or independent read-only design work:
 
 Success is an evidence-backed improvement loop that operators can inspect and
 control, delivered through the Zoomies capabilities they already use.
+
+## E2 implementation handoff, 12 October 2026
+
+ZF-241 now has a period comparison on main. ZF-243 supplies the distinct selected
+historical configuration comparison; do not convert a period finding into a
+controlled experiment. The first slice is `internal/analysis/experiment.go`.
+`AssessExperiment` is pure and consumes a retained `ExperimentSnapshot`.
+
+- `selected-runs-v1` requires 30 completed attempts per arm, counting success
+  and failure. Cancelled/superseded outcomes are separate counts; pending and
+  unknown outcomes make the result inconclusive. An eligible result does not
+  assert success, causation, authorisation or verified improvement.
+- Selection completeness is supplied evidence, not independently verified by the
+  pure core. The controller must check access and load all selected attempts,
+  including failures. Retain the snapshot beside the result. Identity is run ID
+  plus attempt number, unique across both arms; the repository scopes it.
+- Runner comparisons require identical source/workflow revisions, inputs and
+  test scope. Workflow comparisons need a retained exact revision delta.
+  Both arms retain configuration, image and resource identifiers. These
+  identifiers refer to evidence; they do not prove its contents themselves.
+- Cache classifications must be observed cold/warm and match. Mixed cache
+  cohorts are conservatively inconclusive in v1. Quiet hosts must be observed;
+  unknown or busy hosts are explicit caveats. No cache hit or host state is
+  inferred. Observation windows are half-open, with at most 2000 attempts per arm.
+- Stable reason codes are sorted. Structural errors refuse malformed records;
+  missing analytical evidence returns an inconclusive result. No raw workflow
+  text is rendered to an agent in this slice.
+
+Next agent: implement pure measurement over retained attempt evidence. Keep
+successful latency and all-attempt consumption separate, retain failed and
+cancelled consumption, report missing measurements without inventing zero, and
+show sample counts/dispersion. Version regression thresholds before observing
+results. An eligible cohort still must not produce a causal claim. Follow with
+bounded authorised controller assembly, read-only API, CLI/MCP/Eli and a contextual
+card. Dispatch, optimisation publication and live model evaluation remain unrun.
+
+Validation: the new behavioural tests failed to compile before the contract
+existed. The complete analysis package race tests and vet pass with Go 1.27.2
+for this pure slice, as does `git diff --check`. Earlier broad validation evidence remains linked above; it is not a
+claim that the new slice passed a full repository run.
