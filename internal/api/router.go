@@ -297,6 +297,9 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionLogsRead)).Get("/{id}/logs/download", s.handleDownloadRunnerLogs)
 		})
 
+		r.With(s.require(auth.ActionComparisonsWrite), s.require(auth.ActionJobsRead), s.refuseVisitors).Post("/comparisons", s.handleCaptureComparison)
+		r.With(s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/comparisons/{id}", s.handleGetComparison)
+
 		// Jobs.
 		r.With(s.require(auth.ActionUsageRead)).Get("/usage", s.handleUsage)
 		r.With(s.require(auth.ActionUsageRead)).Get("/usage.csv", s.handleUsageCSV)

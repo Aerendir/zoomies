@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +18,8 @@ type ExperimentAttemptReader interface {
 var _ ExperimentAttemptReader = (*appClient)(nil)
 
 const ExperimentAttemptMaximumRequests = 7
+
+var ErrExperimentAttemptChanged = errors.New("github: comparison attempt changed during collection; refresh its evidence")
 
 type ExperimentAttemptEvidence struct {
 	Repository   string                 `json:"repository"`
@@ -139,7 +142,7 @@ func (c *appClient) ReadExperimentAttempt(ctx context.Context, repo string, runI
 		return a.Time.Equal(b.Time)
 	}
 	if final.GetHeadSHA() != out.HeadSHA || final.GetWorkflowID() != out.WorkflowID || final.GetStatus() != out.Status || final.GetConclusion() != out.Conclusion || !sameStamp(initial.UpdatedAt, final.UpdatedAt) || !sameStamp(initial.RunStartedAt, final.RunStartedAt) {
-		return nil, fmt.Errorf("github: comparison attempt changed during collection; refresh its evidence")
+		return nil, ErrExperimentAttemptChanged
 	}
 	if complete && ended && total == len(out.Jobs) {
 		out.JobsCoverage = "complete"

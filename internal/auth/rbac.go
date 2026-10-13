@@ -45,6 +45,7 @@ const (
 	ActionJobsRead          Action = "jobs.read"
 	ActionJobsCancel        Action = "jobs.cancel"
 	ActionJobsRerun         Action = "jobs.rerun"
+	ActionComparisonsWrite  Action = "comparisons.write"
 )
 const ActionUsageRead Action = "usage.read"
 
@@ -299,8 +300,9 @@ var actionRoles = map[Action]store.Role{
 	// Operator rather than viewer: a re-run spends the organisation's GitHub
 	// minutes and can have whatever side effects the workflow has, which is
 	// the same bar cancelling one clears.
-	ActionJobsRerun: store.RoleOperator,
-	ActionUsageRead: store.RoleViewer,
+	ActionJobsRerun:        store.RoleOperator,
+	ActionComparisonsWrite: store.RoleOperator,
+	ActionUsageRead:        store.RoleViewer,
 	// Operator: it makes a change, as the pool and host updates it stands in for do.
 	ActionProblemsApply: store.RoleOperator,
 

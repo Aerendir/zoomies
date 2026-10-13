@@ -92,3 +92,27 @@ func (c *Controller) ReplayExperimentComparison(ctx context.Context, installatio
 	}
 	return &RetainedExperimentComparison{ID: row.ID, SHA256: row.SHA256, CreatedAt: row.CreatedAt, Report: recomputed}, nil
 }
+
+// CaptureExperimentComparison admits both arms as one bounded diagnostic.
+// It validates the operator record before spending quota and never loops batches.
+func (c *Controller) CaptureExperimentComparison(ctx context.Context, actor *store.AuditEvent, record ExperimentComparisonRecord, installation string, baseline, candidate []ExperimentAttemptSelection) (*RetainedExperimentComparison, error) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	if actor == nil || actor.ActorID == "" || len(baseline) < 1 || len(candidate) < 1 || len(baseline)+len(candidate) > maxExperimentRemoteAttempts {
+		return nil, ErrExperimentEvidence
+	}
+	// Empty arms are intentionally inconclusive, so this checks only the record
+	// structure before the expensive read, without inventing workload evidence.
+	_, err := analysis.AssessExperiment(analysis.ExperimentSnapshot{RuleVersion: analysis.ExperimentRuleVersion, Kind: record.Kind, Repository: record.Repository, InitiatingUser: actor.ActorID, Hypothesis: record.Hypothesis, IntendedDelta: record.IntendedDelta, EvidenceID: "preflight", RevisionDeltaID: record.RevisionDeltaID, Since: record.Since, Until: record.Until})
+	if err != nil {
+		return nil, ErrExperimentEvidence
+	}
+	selected := append(append([]ExperimentAttemptSelection{}, baseline...), candidate...)
+	joined, err := c.CollectExperimentEvidence(ctx, installation, record.Repository, selected)
+	if err != nil {
+		return nil, err
+	}
+	a := &ExperimentJoinedEvidence{Repository: joined.Repository, InstallationID: joined.InstallationID, Attempts: joined.Attempts[:len(baseline)]}
+	b := &ExperimentJoinedEvidence{Repository: joined.Repository, InstallationID: joined.InstallationID, Attempts: joined.Attempts[len(baseline):]}
+	return c.RetainExperimentComparison(ctx, actor, record, a, b)
+}
