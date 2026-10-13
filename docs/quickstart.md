@@ -43,6 +43,14 @@ collects the Docker Compose, CLI and API equivalents.
 
 ## Just looking?
 
+Open the [live demo](https://demo.zoomies.sh/) to explore a running fleet in
+your browser without installing anything or signing in. It uses [public
+view](public-view.md): visitors can read the fleet, while settings, Eli and
+changes require sign-in.
+
+To explore a throwaway fixture fleet on your own machine, including Eli, run
+the local demo:
+
 ```sh
 curl -fsSL https://zoomies.sh/install.sh | sh -s -- --demo
 ```
