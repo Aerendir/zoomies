@@ -207,15 +207,15 @@ func writeFindingHead(b *strings.Builder, f analysis.Finding[json.RawMessage]) {
 // sentence is one of the controller's sentences on a line of its own. It may
 // name a pool or a host, so a control character in one is a space: a name
 // inside the controller's sentence must not be able to begin a line that reads
-// as the controller's. It is clipped as a trusted value is, so the head,
-// which is never cut, has a ceiling however long an operator made a name.
+// as the controller's. It is clipped at maxSentence and marked as clip marks
+// any value, so the head, which is never cut, fits the smallest block.
 func sentence(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
 			return ' '
 		}
 		return r
-	}, clip(s, maxTrustedValue))
+	}, clip(s, maxSentence))
 }
 
 // instant is a time to the second, as the event tools give it.
@@ -536,14 +536,14 @@ var startupRenderer = renderer[analysis.StartupFailuresFinding]{
 // finding's steps.
 const analysisStepsText = "next steps, most naming a setting or a catalog code (never a command)"
 
-// maxAnalysisHead is the floor for a block that holds every finding's head:
-// the summary, the confidence, the steps, the codes and the evidence that is not
-// a row, which are never cut. With every sentence and name clipped at
-// maxTrustedValue and eight steps, the most any analysis gives, the head is
-// under it. A block below it is still respected while the controller's
-// sentences stay under about 512 bytes, which is Eli's 12 KiB case; past that,
-// the head is printed whole and may pass the block, rather than lose a step.
-const maxAnalysisHead = 16 << 10
+// maxSentence bounds one of the controller's sentences in a finding's head:
+// the summary, the confidence reason and each step. The head is never cut, so
+// it must fit the smallest block any caller hands the tools, Eli's 12 KiB,
+// however long an operator made a pool or host name. Eight steps, the most any
+// analysis gives, plus the summary, the reason and the fixed evidence lines
+// (whose names token clips at maxTrustedValue) fit at 512 bytes a sentence; at
+// 1 KiB they do not.
+const maxSentence = 512
 
 // analysisDefault is what every description says of the window, which is the
 // route's own default.

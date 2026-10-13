@@ -377,20 +377,21 @@ func TestAHostPressureCutSaysHowToReachTheOlderEvents(t *testing.T) {
 	}
 }
 
+// smallestWindowBlock is the smallest block any caller hands the tools: Eli's
+// 12 KiB (AssistantWindowBlock, which this package may not import).
+const smallestWindowBlock = 12 << 10
+
 // The head is printed whole, so its ceiling is computed rather than hoped for:
-// every sentence and every name clipped at maxTrustedValue, with eight steps,
-// the most any analysis gives (a comparison's window step, one for each of six
-// families of measure, and updates.mode). That worst head fits maxAnalysisHead,
-// the floor under which a block may be passed; and with every sentence at most
-// 512 bytes, which is a step's words around a 256-byte pool or host name, it
-// fits Eli's 12 KiB.
+// every sentence and every name far longer than any clip, with eight steps, the
+// most any analysis gives (a comparison's window step, one for each of six
+// families of measure, and updates.mode). That worst head fits the smallest
+// block a caller is given, with no floor above it.
 func TestTheWorstHeadAFindingCanHaveFitsItsCeiling(t *testing.T) {
 	codes := []string{"jobs.unmatched", "host.throttled", "pool.no_capacity", "pool.queue_wait_high", "pool.runners_failing", "pool.no_eligible_host", "jobs.oom_killed", "jobs.workflow_failing"}
 	for _, tc := range []struct {
 		sentence, name, block int
 	}{
-		{4 << 10, 4 << 10, maxAnalysisHead},
-		{512, 256, 12 << 10},
+		{4 << 10, 4 << 10, smallestWindowBlock},
 	} {
 		long, name := strings.Repeat("x", tc.sentence), strings.Repeat("n", tc.name)
 		steps := make([]analysis.NextStep, 8)
@@ -437,8 +438,13 @@ func TestTheWorstHeadAFindingCanHaveFitsItsCeiling(t *testing.T) {
 			if len(blocks[0]) > tc.block {
 				t.Errorf("%s, sentences of %d bytes: the head is %d bytes, over the %d byte block", call.tool, tc.sentence, len(blocks[0]), tc.block)
 			}
-			if strings.Contains(blocks[0], strings.Repeat("x", maxTrustedValue+1)) || strings.Contains(blocks[0], strings.Repeat("n", maxTrustedValue+1)) {
+			if strings.Contains(blocks[0], strings.Repeat("x", maxSentence+1)) || strings.Contains(blocks[0], strings.Repeat("n", maxTrustedValue+1)) {
 				t.Errorf("%s: a sentence or a name was not clipped", call.tool)
+			}
+			// A cut sentence is marked as a cut value is, so a reader knows the
+			// controller said more than is shown.
+			if want := strings.Repeat("x", maxSentence) + "...\n"; !strings.HasPrefix(blocks[0], want) {
+				t.Errorf("%s: the cut summary is not marked as cut:\n%.80s", call.tool, blocks[0])
 			}
 		}
 	}
