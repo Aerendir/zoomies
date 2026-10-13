@@ -74,9 +74,12 @@ func TestSeedDemoBuildsAFleet(t *testing.T) {
 		t.Fatalf("seeded %d hosts, want 3", len(hosts))
 	}
 
+	// A dozen across the state machine, and the analysis fixture's twenty-three
+	// from a day back: twelve slow starts, the four that held the arm pool at
+	// its ceiling, and seven starts on the host that could not pull the image.
 	runners := h.runners()
-	if len(runners) != 12 {
-		t.Fatalf("seeded %d runners, want 12", len(runners))
+	if len(runners) != 35 {
+		t.Fatalf("seeded %d runners, want 35", len(runners))
 	}
 	states := map[store.RunnerState]int{}
 	for _, r := range runners {
@@ -96,11 +99,13 @@ func TestSeedDemoBuildsAFleet(t *testing.T) {
 		t.Fatalf("ListJobs: %v", err)
 	}
 	// Fifty of a morning's history, the two on a vendor's runners, the backlog
-	// that explains the runners this fleet has not finished starting, and the
-	// two older failures seeded for why: a job GitHub timed out and a job
-	// whose runner never registered.
-	if total != 57 {
-		t.Fatalf("seeded %d jobs, want 57", total)
+	// that explains the runners this fleet has not finished starting, the two
+	// older failures seeded for why (a job GitHub timed out and a job whose
+	// runner never registered), and the analysis fixture's thirty-five from a
+	// day back: twelve slow to start, four nightly shards and the twelve they
+	// held up, and seven that failed on a host under pressure.
+	if total != 92 {
+		t.Fatalf("seeded %d jobs, want 92", total)
 	}
 	var completed, queued, running, unmatched, elsewhere int
 	for _, j := range jobs {

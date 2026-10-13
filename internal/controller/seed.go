@@ -211,6 +211,10 @@ func (c *Controller) SeedDemo(ctx context.Context) error {
 	if err := c.seedHostSamples(ctx, now, hosts, runners); err != nil {
 		return err
 	}
+	// After the day's host samples, because it rewrites two hours of them.
+	if err := c.seedAnalyses(ctx, now, pool1, pool2, hosts); err != nil {
+		return err
+	}
 
 	c.log.Info("seeded the demo fleet",
 		"pools", len(demoPoolNames), "hosts", len(hosts), "runners", len(runners),
