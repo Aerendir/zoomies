@@ -54,7 +54,10 @@ func registerAnalyseWindow(fs *flagSet) analyseWindow {
 
 // set puts the period on the query as the instants the route reads.
 func (w analyseWindow) set(cmd string, q url.Values) error {
-	for name, raw := range map[string]string{"since": *w.since, "until": *w.until} {
+	// A slice, not a map: with both unreadable, the error names the same one
+	// on every run.
+	for _, f := range []struct{ name, raw string }{{"since", *w.since}, {"until", *w.until}} {
+		name, raw := f.name, f.raw
 		if raw == "" {
 			continue
 		}
@@ -70,9 +73,9 @@ func (w analyseWindow) set(cmd string, q url.Values) error {
 // readFinding asks a route for its finding and refuses one of another
 // analysis or version. The two fields are read alone first, so an answer of
 // another shape is refused before its evidence is read as this one's. A
-// refusal from the route comes back as it came: its message is the route's
-// own sentence, saying which field, which release or which id, and what to
-// change.
+// refusal from the route keeps its message, the route's own sentence saying
+// which field, which release or which id and what to change, made safe for the
+// terminal and with its stable code beside it.
 func readFinding[E any](ctx context.Context, cf *clientFlags, path string, q url.Values, name, version string) (analysis.Finding[E], []byte, error) {
 	var f analysis.Finding[E]
 	client, err := cf.client()
@@ -81,7 +84,7 @@ func readFinding[E any](ctx context.Context, cf *clientFlags, path string, q url
 	}
 	raw, err := client.get(ctx, path, q, nil)
 	if err != nil {
-		return f, nil, err
+		return f, nil, plainAPIError(err)
 	}
 	var id struct {
 		Analysis string `json:"analysis"`

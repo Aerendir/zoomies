@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/analysis"
+	"github.com/eyupio/zoomies/internal/controller"
 )
 
 var (
@@ -237,14 +238,16 @@ func TestAnalyseCompareByPeriodRefusesARelease(t *testing.T) {
 	}
 }
 
-// A refusal is the route's own sentence: which release, what to change. A
+// A refusal is the route's own sentence (which release, what to change) with
+// its stable code beside it, so a script and a person read the same refusal. A
 // sentence of the CLI's own would be a guess at what the controller meant.
 func TestAnalyseCompareShowsTheRoutesRefusal(t *testing.T) {
-	const sentence = "fewer than two releases completed a job in this period, so there is nothing to compare; widen since, or compare by=period"
+	sentence := controller.ErrTooFewReleases.Error()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := json.Marshal(map[string]any{"error": map[string]string{"code": "analysis.too_few_releases", "message": sentence}})
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"error":{"code":"analysis.too_few_releases","message":"` + sentence + `"}}`))
+		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
 	_, errOut, code := runCLIFailing(t, "analyse", "compare", "--url", srv.URL)
@@ -253,6 +256,24 @@ func TestAnalyseCompareShowsTheRoutesRefusal(t *testing.T) {
 	}
 	if !strings.Contains(errOut, sentence) {
 		t.Errorf("the route's sentence did not reach the terminal:\n%s", errOut)
+	}
+	if !strings.Contains(errOut, "(analysis.too_few_releases)") {
+		t.Errorf("the refusal's code did not reach the terminal:\n%s", errOut)
+	}
+}
+
+// With both ends of the period unreadable, the error names the same one every
+// time: an answer that changes between two runs of one command reads as two
+// different mistakes.
+func TestAnalyseNamesTheSameBadFlagEveryTime(t *testing.T) {
+	for range 50 {
+		_, errOut, code := runCLIFailing(t, "analyse", "queue-wait", "--since", "soon", "--until", "later", "--url", "http://127.0.0.1:1")
+		if code != exitUsage {
+			t.Fatalf("exit %d, want %d", code, exitUsage)
+		}
+		if !strings.Contains(errOut, `--since "soon"`) || strings.Contains(errOut, "--until") {
+			t.Fatalf("the error does not name --since alone:\n%s", errOut)
+		}
 	}
 }
 

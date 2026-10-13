@@ -376,9 +376,10 @@ zoomies analyse host-pressure --host host_01abc --since 7d
 zoomies analyse startup-failures --pool pool_01abc --output json
 ```
 
-A refusal is the controller's sentence saying what to change, with exit `1`:
-one release named twice, fewer than two releases in the period, a side that
-cannot be read in whole days, or a pool or host this fleet does not have. An
+A refusal is the controller's sentence saying what to change, with its code
+(such as `analysis.too_few_releases`) beside it and exit `1`: one release named
+twice, fewer than two releases in the period, a side that cannot be read in
+whole days, or a pool or host this fleet does not have. An
 unknown `--by`, `--a` or `--b` with `--by period`, and `host-pressure` without
 `--host` are refused before anything is asked, with exit `2`. Host pressure
 names the jobs only for a token that can also read jobs; otherwise its steps
