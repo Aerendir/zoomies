@@ -1,6 +1,6 @@
 # ZF-243: expose bounded runner evidence to MCP and Eli
 
-13 October 2026. Based on main after #1003 merged.
+13 October 2026. Ready for review [#1004](https://github.com/eyupio/zoomies/pull/1004), based on main after #1003 merged.
 
 ## Behaviour
 

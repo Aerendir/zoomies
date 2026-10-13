@@ -50,7 +50,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 runner result integration | Merged | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
 | E2 private runner observation joins | Merged | ZF-243, [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #998 | Historical job/runner/pool scope, pinned GitHub job joins, independent observation digest and offline replay. Requested resources and agent claims do not promote eligibility. Focused controller/store race, shared admission, offline replay, vet and strict docs pass |
 | E2 web runner evidence inspection | Merged | ZF-243, [#1003](https://github.com/eyupio/zoomies/pull/1003), based on main after #1000 | Bounded descriptive projection, explicit grant/request/claim labels, nullable facts, per-job web inspection and omitted-row counts. Immutable report and eligibility unchanged. Focused race, 14 desktop/mobile fixtures, 109 UI unit tests, type/lint/build, vet and strict docs pass |
-| E2 MCP/Eli runner evidence | Implemented, PR pending | ZF-243, based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
+| E2 MCP/Eli runner evidence | Ready for review | ZF-243, [#1004](https://github.com/eyupio/zoomies/pull/1004), based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1516,7 +1516,8 @@ attempts per arm and existing admission limits.
 
 ### E2 slice 18: bounded MCP/Eli runner evidence, 13 October 2026
 
-Branch codex/eli-comparison-runner-evidence-mcp starts from main after #1003 merged.
+Open [#1004](https://github.com/eyupio/zoomies/pull/1004), branch
+codex/eli-comparison-runner-evidence-mcp, starts from main after #1003 merged.
 The existing get_retained_comparison tool still performs one installation/repository
 scoped local-history GET. Its role/scope checks, read-only annotation and arguments
 are unchanged; no capture, batching, refresh, direct store/controller access, GitHub
