@@ -1,6 +1,7 @@
 # ZF-243: web capture and retained inspection
 
-13 October 2026. The owner prioritised the web UI before CLI capture.
+13 October 2026. Draft [#991](https://github.com/eyupio/zoomies/pull/991).
+The owner prioritised the web UI before CLI capture.
 Starts from merged MCP/Eli replay #990 on main.
 
 ## Behaviour
