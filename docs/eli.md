@@ -37,6 +37,13 @@ explanations and available runner logs, but chat does not apply changes or read
 repository source. [Troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp)
 takes a diagnosis into a fix or measured optimisation.
 
+For a retained historical comparison, give Eli the `cmp_` ID, installation ID and
+repository. Its read-only tool explains separate measurements and missing evidence
+without collecting GitHub data or capturing a replacement. Operator text remains
+untrusted evidence. It reports shortened text or omitted rows explicitly, with
+aggregates still based on the full selection. Actor identity is excluded from this
+tool's model output. See [the MCP contract](mcp.md#what-you-can-ask) for limits.
+
 For an existing PR with failed checks, [PR repairs](#set-up-pr-repairs) are a
 separate opt-in: Eli can read bounded source, publish a change to the PR branch
 and watch GitHub's checks. It never merges the PR. Prefer your own assistant?
