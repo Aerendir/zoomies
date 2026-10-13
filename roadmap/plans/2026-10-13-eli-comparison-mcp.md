@@ -1,6 +1,6 @@
 # ZF-243: bounded MCP/Eli retained replay
 
-13 October 2026. E2 slice 10, stacked on #987 after CLI #988 merged into it.
+13 October 2026. E2 slice 10, targets main after #987 merged with CLI #988 included.
 
 ## Contract
 
@@ -29,3 +29,8 @@ collection, actual experiment or UI browser run is claimed.
 CLI capture and UI inspection/initiation remain explicit operator writes.
 Independently retained workload/configuration/cache evidence and complete selection
 are still necessary before meaningful controlled comparisons can be eligible.
+
+Validation completed: full MCP race passes; focused scripted Eli replay, allowlist
+and generated reference race checks pass again on updated main. Changed-package
+vet, strict docs and the tool-label unit/format checks pass. Optional GitHub docs
+metadata used the documented repository-only fallback.
