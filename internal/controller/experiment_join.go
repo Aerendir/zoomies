@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/github"
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 const maxExperimentRemoteAttempts = 10
@@ -21,9 +22,13 @@ func (e *ExperimentAdmissionError) Error() string { return ErrExperimentAdmissio
 func (e *ExperimentAdmissionError) Unwrap() error { return ErrExperimentAdmission }
 
 type ExperimentMatchedJob struct {
-	RecordedGrant *ExperimentRecordedGrant `json:"recorded_grant,omitempty"`
-	GitHubJobID   int64                    `json:"github_job_id"`
-	FleetJobID    string                   `json:"fleet_job_id"`
+	RunnerCreation *store.RunnerCreationObservation `json:"runner_creation,omitempty"`
+	RunnerID       string                           `json:"runner_id,omitempty"`
+	PoolID         string                           `json:"pool_id,omitempty"`
+	HostID         string                           `json:"host_id,omitempty"`
+	RecordedGrant  *ExperimentRecordedGrant         `json:"recorded_grant,omitempty"`
+	GitHubJobID    int64                            `json:"github_job_id"`
+	FleetJobID     string                           `json:"fleet_job_id"`
 }
 
 type ExperimentJoinedAttempt struct {
@@ -154,7 +159,7 @@ func joinExperimentAttempt(remote *github.ExperimentAttemptEvidence, retained Ex
 	for _, j := range remote.Jobs {
 		row, ok := local[j.ID]
 		if ok && row.HeadSHA == remote.HeadSHA {
-			r.MatchedJobs = append(r.MatchedJobs, ExperimentMatchedJob{GitHubJobID: j.ID, FleetJobID: row.JobID, RecordedGrant: cloneExperimentGrant(row.RecordedGrant)})
+			r.MatchedJobs = append(r.MatchedJobs, ExperimentMatchedJob{RunnerCreation: cloneExperimentRunnerCreation(row.RunnerCreation), RunnerID: row.RunnerID, PoolID: row.PoolID, HostID: row.HostID, GitHubJobID: j.ID, FleetJobID: row.JobID, RecordedGrant: cloneExperimentGrant(row.RecordedGrant)})
 			delete(local, j.ID)
 		} else {
 			r.MissingJobIDs = append(r.MissingJobIDs, j.ID)

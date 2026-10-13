@@ -45,9 +45,10 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 MCP/Eli replay | Merged | ZF-243, [#990](https://github.com/eyupio/zoomies/pull/990), targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
 | E2 web capture and inspection | Merged | ZF-243, [#991](https://github.com/eyupio/zoomies/pull/991), targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
 | E2 CLI capture | Merged | ZF-243, [#993](https://github.com/eyupio/zoomies/pull/993), targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
-| E2 recorded grant provenance | Draft PR | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
-| E2 runner observation foundation | Draft PR | ZF-243, [#996](https://github.com/eyupio/zoomies/pull/996), stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Live result integration remains next |
-| E2 runner result integration | Draft PR | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
+| E2 recorded grant provenance | Merged | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
+| E2 runner observation foundation | Merged | ZF-243, [#996](https://github.com/eyupio/zoomies/pull/996), stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Result integration merged in #998 |
+| E2 runner result integration | Merged | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
+| E2 private runner observation joins | Draft PR | ZF-243, [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #998 | Historical job/runner/pool scope, pinned GitHub job joins, independent observation digest and offline replay. Requested resources and agent claims do not promote eligibility. Focused controller/store race, shared admission, offline replay, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1384,3 +1385,62 @@ remove-lease recovery, lost-task-queue cleanup and closed-store lease-preservati
 checks pass. Controller vet, strict docs and whitespace pass. Docs used the
 repository-only header fallback for unavailable optional GitHub metadata. No live
 agent/backend/GitHub/model run, new migration, public schema or ranking change.
+
+
+### E2 slice 16: private runner observation joins, 13 October 2026
+
+Draft [#1000](https://github.com/eyupio/zoomies/pull/1000), branch
+codex/eli-comparison-runner-observations, starts from main after #994,
+#996 and #998 merged. Collection reads the existing scoped job rows, then at most
+one installation/runner observation per linked job. Missing runner or pool links,
+missing observations, foreign installation lookups and expired source observations
+remain absent. Existing pool links must match the observation; an available
+historical job host stamp must also match. An absent job host stamp does not invent
+one: the observation keeps its original reported-host binding. Conflicting links,
+corrupt digests and storage errors refuse capture rather than substitute current
+settings. No current runner, pool, host, image or resource lookup is performed.
+
+The existing remote GitHub job ID plus pinned head revision join gates copying the
+observation. Matched private rows retain job runner/pool/host links and the complete
+bounded issued/reported whitelist, original installation-scoped digest and controller
+receipt time. Every optional scalar pointer is copied. The observation digest covers
+installation and Data; receipt time and job bindings are protected by the outer
+comparison digest. Digests check integrity, not independent backend attestation.
+
+Assembly/replay validate the versioned observation digest, installation, historical
+runner/pool/available host, remote job identity and non-empty fleet job identity.
+Observation-bearing attempts refuse duplicate GitHub/fleet job bindings, including
+rows without an observation. The same observed ephemeral runner cannot supply two
+selected jobs across either arm. This is conservative: repeated runner links need a
+separate reviewed multi-job evidence contract. No current rows or source-observation
+age are consulted on replay. Copied evidence follows the comparison's own retention;
+the original observation can expire or be pruned independently.
+
+Public reports, REST/OpenAPI, CLI, MCP/Eli and web contracts remain unchanged. No
+ResourceID, ImageID, ConfigurationID, workflow/input/cache equivalence, agent clock
+latency or cohort completeness is inferred. Missing CPU/memory/digest facts retain
+their foundation's null/coverage semantics. Requested fields describe dispatched
+requests; reported digest/times describe agent claims, including possible adoption.
+
+Bounds remain 2,000 collected local jobs, at most 2,000 indexed observation reads,
+one whole-request 20-second budget, ten total remote attempts and existing shared
+quota admission. The 4 KiB source payload bound and 2 MiB private comparison envelope
+bound remain enforced; an oversized comparison is refused, never silently trimmed.
+The in-memory collection can exceed the final retention limit. Optional new private
+fields preserve replay of older envelopes. Older binaries with strict decoders reject
+new observation-bearing envelopes, so rollback can lose replay compatibility.
+
+Next: design reviewed descriptive public comparison fields and web inspection for
+recorded grants and issued/reported runner observations, with per-job scope, partial
+coverage and request/claim labels. Keep eligibility and ranking inconclusive until
+independent workload/configuration/cache/selection proof exists. Public schema changes
+must regenerate the API and web clients and review the bounded MCP/Eli projection.
+
+Validation completed: collection, pruning/expiry, private retention/replay,
+shared-admission capture, deep-copy, revision/scope and malformed/duplicate provenance
+fixtures pass with race detection; source digest JSON round-trip with offset and
+sub-millisecond timestamps passes. Altered inner observations refuse replay even
+with a fresh outer storage digest. Existing collection bounds, grant provenance,
+snapshots, retention/replay and shared-admission fixtures pass. Controller/store
+vet, strict docs and whitespace pass. Docs used the repository-only header fallback.
+No live backend/agent/GitHub/model operation or new migration/dependency.
