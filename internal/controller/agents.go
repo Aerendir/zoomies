@@ -1204,6 +1204,8 @@ func (c *Controller) unknownRunners(ctx context.Context, hostID string, reports 
 // enqueued by a reconcile reaches the agent in the same instant rather than up
 // to a poll interval later.
 func (c *Controller) PollTasks(ctx context.Context, hostID string, wait time.Duration) (*agent.TaskBatch, error) {
+	c.recoveryMu.RLock()
+	defer c.recoveryMu.RUnlock()
 	if h, err := c.st.GetHost(ctx, hostID); err == nil && h.Retired {
 		return nil, agent.ErrHostGone
 	}
@@ -1281,6 +1283,8 @@ func (c *Controller) stampIssued(ctx context.Context, tasks []agent.Task) {
 
 // ReportResult applies the outcome of one task and clears its lease.
 func (c *Controller) ReportResult(ctx context.Context, hostID string, res agent.TaskResult) (resultErr error) {
+	c.recoveryMu.RLock()
+	defer c.recoveryMu.RUnlock()
 	defer func() {
 		if resultErr == nil {
 			c.queues.get(hostID).complete(res.TaskID)
@@ -1566,6 +1570,8 @@ func (c *Controller) noteCleanupSucceeded(ctx context.Context, r *store.Runner, 
 // ReportRunners merges an agent's observations outside the heartbeat cycle, so
 // a runner coming up is visible immediately rather than up to a beat later.
 func (c *Controller) ReportRunners(ctx context.Context, hostID string, reports []agent.RunnerReport) error {
+	c.recoveryMu.RLock()
+	defer c.recoveryMu.RUnlock()
 	if hostID == "" {
 		return errors.New("a runner report carried no host ID; the agent must send the identity it was given at join")
 	}
