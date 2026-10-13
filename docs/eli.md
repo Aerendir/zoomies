@@ -37,6 +37,16 @@ explanations and available runner logs, but chat does not apply changes or read
 repository source. [Troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp)
 takes a diagnosis into a fix or measured optimisation.
 
+Use **Compare runs** from Job history to capture and inspect a historical
+comparison. Capture requires an operator and saves shared repository evidence;
+it does not dispatch jobs or change runners. Select exact GitHub run attempts,
+including failures, describe the intended change and choose the observation
+window. Existing reports open through a scoped shareable link and need only
+reader access. Missing history stays unavailable rather than triggering a new
+capture. The page keeps unknown timings distinct from measured zero and shows
+separate latency, consumption and reliability, sample coverage and inconclusive
+reasons. Inspect each arm's identities and attempt rows before drawing conclusions.
+
 For a retained historical comparison, give Eli the `cmp_` ID, installation ID and
 repository. Its read-only tool explains separate measurements and missing evidence
 without collecting GitHub data or capturing a replacement. Operator text remains

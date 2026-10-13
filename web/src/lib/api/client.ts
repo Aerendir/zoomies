@@ -1371,3 +1371,17 @@ export const listEliOpportunities = () =>
   api.get<Result<'listEliOpportunities'>>('/assistant/repairs/opportunities');
 export const actEliOpportunity = (id: string, body: Body<'actEliOpportunity'>) =>
   api.post<Result<'actEliOpportunity'>>(`/assistant/repairs/opportunities/${enc(id)}`, { body });
+
+/** Capture changes shared history; replay never collects GitHub evidence. */
+export const captureComparison = (body: import('./types').ComparisonCaptureRequest) =>
+  api.post<import('./types').RetainedComparison>('/comparisons', { body });
+export const getComparison = (
+  id: string,
+  installation: string,
+  repo: string,
+  signal?: AbortSignal,
+) =>
+  api.get<import('./types').RetainedComparison>('/comparisons/' + encodeURIComponent(id), {
+    query: { installation_id: installation, repo },
+    signal,
+  });

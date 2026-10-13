@@ -449,7 +449,8 @@
     ? 'Every workflow job GitHub has told Zoomies about, whatever ran it.'
     : 'The workflow jobs this fleet claims, runs, or is waiting to run.'}
   onrefresh={refreshPage}
-/>
+  ><Button href="/comparisons" variant="secondary">Compare runs</Button></PageHeader
+>
 
 <JobsInsights others={filters.all} />
 <details class="activity-history">

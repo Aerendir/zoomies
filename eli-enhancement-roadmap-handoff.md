@@ -42,7 +42,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 retained evidence and replay | Merged | ZF-243, [#986](https://github.com/eyupio/zoomies/pull/986), stacked on #985 | Immutable bounded SQLite envelopes, atomic audit and offline replay. Focused retention/replay race tests, upgrade/backup checks and vet pass. No API/tool surface, controlled comparison or real experiment yet |
 | E2 capture and replay API | Merged | ZF-243, [#987](https://github.com/eyupio/zoomies/pull/987), stacked on #986 | Explicit operator capture with comparisons:write plus jobs:read, one whole-request budget, scoped viewer replay and generated contracts. Focused API race, role/scope/contract checks, full auth/GitHub race suites, changed-package vet and strict docs pass. CLI replay merged; MCP/Eli replay is in slice 10; UI and CLI capture remain outstanding |
 | E2 CLI replay | Merged into API parent | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
-| E2 MCP/Eli replay | Draft PR | ZF-243, [#990](https://github.com/eyupio/zoomies/pull/990), targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
+| E2 MCP/Eli replay | Merged | ZF-243, [#990](https://github.com/eyupio/zoomies/pull/990), targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
+| E2 web capture and inspection | Implemented, PR pending | ZF-243, targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1090,3 +1091,64 @@ reference and tool-description consistency tests. MCP/controller/API vet and str
 docs pass on that final base. Full MCP race passed before the base update; adapter
 code was unchanged by the merge. The UI tool-label unit fixture and formatting
 check pass. Working-tree whitespace checks pass. CLI capture and UI remain next.
+
+
+### E2 slice 11: web UI first, 13 October 2026
+
+The owner explicitly prioritised the web UI before CLI capture. Work starts from
+merged #990 on main, branch codex/eli-comparison-web. A lazy /comparisons route
+is reachable through Compare runs on Jobs. Reader replay takes explicit
+installation, repository and comparison IDs; successful capture/replay writes only
+those scope identifiers into the shareable URL, never the hypothesis or selections.
+No history-list API exists, so the UI does not invent a history catalogue.
+
+Operator capture is an explicit form submission: kind, hypothesis, intended
+change, exact baseline/candidate run attempts and an increasing timestamp window.
+Workflow capture additionally asks for a retained exact revision-delta reference.
+The form validates positive safely representable IDs, duplicates across arms and
+the ten-attempt combined bound before POST. API authorisation and budget enforcement
+remain authoritative. Capture preserves failures, does not dispatch jobs or alter
+runners, and saves bounded shared history. Viewer forms only replay; public
+visitors receive a sign-in explanation without history requests.
+
+The report shows separate change measures, eligibility reasons, sample/missing
+counts, p50/p95/total, failure rate and all outcome counts. Unknown differs from
+observed zero. Each arm exposes workload identity fields and exact attempt rows,
+including failures and nullable latency/execution/idle, cache/host unknowns. Operator
+text is escaped ordinary text, never HTML. The digest identifies the retained
+server envelope. Reports are historical, not proof of causality or cost savings.
+Tables scroll inside their regions rather than expanding the mobile viewport.
+
+Replay never collects GitHub evidence. Missing/expired/evicted or differently
+scoped history is unavailable, with no replacement capture. 429 holds manual
+requests until Retry-After, with no automatic retry or polling. Request sequencing
+and aborts prevent stale GET responses replacing newer navigation; mutations are
+not silently cancelled or retried. Capture's successful response is shown directly
+without an extra GET. Latest query scope can open a retained report automatically.
+
+Browser fixtures drive the real controller/application shell, with shaped
+comparison responses because CI has no live GitHub evidence. They verify explicit
+capture, bookmark replay, unknown/zero, safe operator text, retained failures,
+mobile overflow, unavailable history, rate limiting and viewer gating. These do
+not prove live GitHub capture; backend capture/replay already has fixture tests.
+Next after the UI: CLI capture, then independent historical workload/configuration/
+cache evidence and cohort completeness. No actual experiment or live model run.
+
+
+Slice 11 validation completed: Svelte check reports zero errors/warnings;
+changed-file ESLint/Prettier and comparison input/design-token/block-spacing
+unit fixtures pass. Production build and rebuilt Go binary pass, with app shell
+141.0 KiB against 200 KiB and status 18.6 KiB against 30 KiB. Eight browser tests
+(four scenarios each on desktop/mobile) pass against the real monitoring controller
+with shaped comparison responses. Required-control and ErrorState selectors were
+corrected during test development; the final browser run passes all eight.
+Desktop/mobile screenshots were inspected. Capture/read focus the report heading;
+errors receive focus so mobile and keyboard users can find the result.
+
+Local browser command used a temporary focused Playwright configuration at
+/workspace/eli-tooling/comparison-playwright.mjs and /usr/bin/chromium. It runs the
+same monitoring fixture and desktop/mobile devices as the repository configuration.
+For normal CI/local reproduction after make build, run comparisons.spec.ts with
+Playwright's desktop and mobile projects. Strict MkDocs passes with the documented
+repository-only header fallback for unavailable optional GitHub metadata. No live
+GitHub capture, actual experiment, model evaluation or new backend route was added.
