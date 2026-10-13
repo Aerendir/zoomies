@@ -456,36 +456,47 @@ func TestAJobOnADeletedPoolIsNamedByItsIDNotDropped(t *testing.T) {
 	}
 }
 
+// A pool or host the fleet does not have is not found, and says which it
+// was and its id, so the route can tell the reader without reading the
+// error's text, and errors.Is still finds store.ErrNotFound.
 func TestAnalyseOnAnUnknownPoolOrHostIsNotFound(t *testing.T) {
 	f := newAnalysisFleet(t)
 	gone := f.pool("gone", nil)
 	if _, _, err := f.st.DeletePool(f.ctx, gone.ID); err != nil {
 		t.Fatal(err)
 	}
-	for name, call := range map[string]func() error{
-		"queue wait on a pool that never was": func() error {
+	for name, c := range map[string]struct {
+		call     func() error
+		kind, id string
+	}{
+		"queue wait on a pool that never was": {func() error {
 			_, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, "pool_missing")
 			return err
-		},
-		"queue wait on a deleted pool": func() error {
+		}, "pool", "pool_missing"},
+		"queue wait on a deleted pool": {func() error {
 			_, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, gone.ID)
 			return err
-		},
-		"host pressure": func() error {
+		}, "pool", gone.ID},
+		"host pressure": {func() error {
 			_, err := f.c.AnalyseHostPressure(f.ctx, analysisPeriod, "host_missing")
 			return err
-		},
-		"startup failures on a pool": func() error {
+		}, "host", "host_missing"},
+		"startup failures on a pool": {func() error {
 			_, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, "pool_missing", "")
 			return err
-		},
-		"startup failures on a host": func() error {
+		}, "pool", "pool_missing"},
+		"startup failures on a host": {func() error {
 			_, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, "", "host_missing")
 			return err
-		},
+		}, "host", "host_missing"},
 	} {
-		if err := call(); !errors.Is(err, store.ErrNotFound) {
+		err := c.call()
+		if !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("%s: %v, want store.ErrNotFound", name, err)
+		}
+		var nf NotFoundError
+		if !errors.As(err, &nf) || nf.Kind != c.kind || nf.ID != c.id {
+			t.Errorf("%s: %#v, want a NotFoundError for %s %s", name, err, c.kind, c.id)
 		}
 	}
 }

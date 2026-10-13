@@ -12638,8 +12638,8 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description The request is well formed and the fleet's records cannot answer it as asked. `analysis.too_few_releases` is a comparison by version asked to choose a release when fewer than two completed a job in the period; `analysis.whole_days_only` (on `since`) is a comparison by period with a side older than `retention.jobs` and no midnight inside it to end on. The message names what to change. */
-            422: {
+            /** @description A refusal with a code of its own, as the update refusals are: the request is well formed and the fleet's records refuse it. `analysis.too_few_releases` is a comparison by version asked to choose a release when fewer than two completed a job in the period; `analysis.whole_days_only` (on `since`) is a comparison by period with a side older than `retention.jobs` and no midnight inside it to end on. The message names what to change. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

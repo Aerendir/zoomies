@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/controller"
@@ -66,25 +65,26 @@ func (s *Server) analysisWindow(w http.ResponseWriter, r *http.Request) (control
 // says what to change, under a code of their own. A pair that is one release
 // is a 400: no data makes it answerable. A fleet without two releases to
 // choose, or a period past retention.jobs with no midnight to end on, is a
-// 422: the request is well formed and the fleet's records cannot answer it
-// as asked, which is what a client offers a different question for.
+// 409: the request is well formed and the fleet's records refuse it, as
+// update.nothing_newer is a 409 for a fleet with nothing newer to take. A 422
+// here means a form's fields are wrong, and these name no field to fix.
 func (s *Server) answerAnalysis(w http.ResponseWriter, r *http.Request, doing string, finding any, err error) {
+	var missing controller.NotFoundError
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusOK, finding)
+	case errors.As(err, &missing):
+		notFound(w, fmt.Sprintf("there is no %s %s in this fleet; it may have been removed, or the id is wrong", missing.Kind, missing.ID))
 	case errors.Is(err, store.ErrNotFound):
-		// The controller and the store name what was missing as "pool
-		// pool_ab12: not found"; the id is what the reader needs.
-		what := strings.TrimSuffix(err.Error(), ": "+store.ErrNotFound.Error())
-		notFound(w, "there is no "+what+" in this fleet; it may have been removed, or the id is wrong")
+		notFound(w, err.Error())
 	case errors.Is(err, controller.ErrSameRelease):
 		writeError(w, http.StatusBadRequest, errorEnvelope{Error: errorBody{
 			Code: codeAnalysisSameRelease, Message: err.Error(), Field: "a"}})
 	case errors.Is(err, controller.ErrTooFewReleases):
-		writeError(w, http.StatusUnprocessableEntity, errorEnvelope{Error: errorBody{
+		writeError(w, http.StatusConflict, errorEnvelope{Error: errorBody{
 			Code: codeAnalysisTooFewReleases, Message: err.Error()}})
 	case errors.Is(err, controller.ErrWholeDaysOnly):
-		writeError(w, http.StatusUnprocessableEntity, errorEnvelope{Error: errorBody{
+		writeError(w, http.StatusConflict, errorEnvelope{Error: errorBody{
 			Code: codeAnalysisWholeDaysOnly, Message: err.Error(), Field: "since"}})
 	default:
 		s.internal(w, r, doing, err)

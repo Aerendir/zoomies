@@ -54,6 +54,19 @@ var ErrSameRelease = errors.New("a and b name the same release, so there is noth
 // says which side and what to change.
 var ErrWholeDaysOnly = errors.New("a period older than retention.jobs can only be read in whole UTC days")
 
+// NotFoundError is a pool or host an analysis was narrowed to that the fleet
+// does not have. It carries what was asked for, so a caller can say so in its
+// own words rather than reading this error's text, which a later wrap would
+// change; it unwraps to store.ErrNotFound, so errors.Is still finds it.
+type NotFoundError struct {
+	// Kind is "pool" or "host".
+	Kind, ID string
+}
+
+func (e NotFoundError) Error() string { return e.Kind + " " + e.ID + ": not found" }
+
+func (e NotFoundError) Unwrap() error { return store.ErrNotFound }
+
 type wholeDaysError struct {
 	which        string
 	since, until time.Time
@@ -183,7 +196,7 @@ func (c *Controller) queueWaitSnapshot(ctx context.Context, w AnalysisWindow, po
 	}
 	byID := poolsByID(pools)
 	if poolID != "" && byID[poolID] == nil {
-		return snap, fmt.Errorf("pool %s: %w", poolID, store.ErrNotFound)
+		return snap, NotFoundError{Kind: "pool", ID: poolID}
 	}
 	// Queued in the period, not active in it: the wait is not clamped at
 	// Since, so a job queued before it would bring its earlier wait along.
@@ -795,8 +808,11 @@ func (c *Controller) hostPressureSnapshot(ctx context.Context, w AnalysisWindow,
 		return snap, err
 	}
 	h, err := c.st.GetHost(ctx, hostID)
+	if errors.Is(err, store.ErrNotFound) {
+		return snap, NotFoundError{Kind: "host", ID: hostID}
+	}
 	if err != nil {
-		return snap, err
+		return snap, fmt.Errorf("reading host %s: %w", hostID, err)
 	}
 	snap.HostName = h.Name
 	// The throttle's own memory test is the host's reserve, which has no
@@ -882,10 +898,10 @@ func (c *Controller) startupSnapshot(ctx context.Context, w AnalysisWindow, pool
 	}
 	poolByID, hostByID := poolsByID(pools), hostsByID(hosts)
 	if poolID != "" && poolByID[poolID] == nil {
-		return snap, fmt.Errorf("pool %s: %w", poolID, store.ErrNotFound)
+		return snap, NotFoundError{Kind: "pool", ID: poolID}
 	}
 	if hostID != "" && hostByID[hostID] == nil {
-		return snap, fmt.Errorf("host %s: %w", hostID, store.ErrNotFound)
+		return snap, NotFoundError{Kind: "host", ID: hostID}
 	}
 	spans, more, err := c.st.RunnerSpans(ctx, store.RunnerSpanFilter{Since: w.Since, Until: w.Until, PoolID: poolID, HostID: hostID}, analysis.MaxReadJobs)
 	if err != nil {

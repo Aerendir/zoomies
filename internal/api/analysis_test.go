@@ -2,8 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -121,10 +126,11 @@ func TestCompareRouteSaysASmallSampleIsSmall(t *testing.T) {
 }
 
 // Each comparison the fleet cannot make is refused with the controller's own
-// sentence and a code a client can choose what to offer by: a pair that is
-// one release can never be compared as asked, and a fleet without two
-// releases, or a period past retention with no midnight to end on, is the
-// data's answer, not a mistake in the request.
+// sentence and a code a client can choose what to offer by. A pair that is
+// one release can never be compared as asked, so it is a 400. A fleet
+// without two releases, or a period past retention with no midnight to end
+// on, is a well-formed request the fleet's records refuse, which this API
+// answers with a 409 and a code of its own, as it does update.nothing_newer.
 func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) {
 	h := newHarness(t, func(c *config.Config) { c.Retention.Jobs = 30 * time.Hour })
 	pool := h.pool(h.installation(), "linux")
@@ -146,15 +152,17 @@ func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) 
 	}{
 		"a by it does not know": {query: analysisQuery(since, until, url.Values{"by": {"week"}}),
 			status: http.StatusBadRequest, code: codeBadRequest, field: "by", wantSubstring: "version or period"},
-		"releases named to a comparison by period": {query: analysisQuery(since, until, url.Values{"by": {"period"}, "a": {"v1.3.2"}}),
+		"a release named as a to a comparison by period": {query: analysisQuery(since, until, url.Values{"by": {"period"}, "a": {"v1.3.2"}}),
 			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "by=version"},
+		"a release named as b to a comparison by period": {query: analysisQuery(since, until, url.Values{"by": {"period"}, "b": {"v1.3.3"}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "by=version"},
 		"the same release twice": {query: analysisQuery(since, until, url.Values{"a": {"v1.3.3"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeAnalysisSameRelease, field: "a", want: controller.ErrSameRelease},
 		"a fleet with no two releases": {query: analysisQuery(since, until, nil),
-			status: http.StatusUnprocessableEntity, code: codeAnalysisTooFewReleases, want: controller.ErrTooFewReleases},
+			status: http.StatusConflict, code: codeAnalysisTooFewReleases, want: controller.ErrTooFewReleases},
 		"a period past retention with no midnight to end on": {
 			query:  analysisQuery(midnight.AddDate(0, 0, -3).Add(8*time.Hour), midnight.AddDate(0, 0, -3).Add(14*time.Hour), url.Values{"by": {"period"}}),
-			status: http.StatusUnprocessableEntity, code: codeAnalysisWholeDaysOnly, field: "since", wantSubstring: "is older than retention.jobs, so it can only be read in whole UTC days"},
+			status: http.StatusConflict, code: codeAnalysisWholeDaysOnly, field: "since", wantSubstring: "is older than retention.jobs, so it can only be read in whole UTC days"},
 	} {
 		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/compare" + c.query, cookie: cookie})
 		if resp.status != c.status {
@@ -223,10 +231,13 @@ func TestHostPressureRouteNeedsAHost(t *testing.T) {
 		t.Errorf("the refusal is %q on %q; want bad_request on host_id", env.Error.Code, env.Error.Field)
 	}
 
+	// The whole sentence, because it is built from what the controller says
+	// was missing and not from its error's wording, which a later wrap would
+	// change.
 	missing := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/host-pressure?host_id=host_missing", cookie: cookie})
 	missing.mustStatus(t, http.StatusNotFound, "a host the fleet does not have")
-	if msg := missing.errorMessage(t); !strings.Contains(msg, "host_missing") {
-		t.Errorf("the 404 does not name the host asked for: %q", msg)
+	if msg, want := missing.errorMessage(t), "there is no host host_missing in this fleet; it may have been removed, or the id is wrong"; msg != want {
+		t.Errorf("the 404 says %q; want %q", msg, want)
 	}
 }
 
@@ -535,4 +546,185 @@ func refOf(prop map[string]any) string {
 		}
 	}
 	return ""
+}
+
+// analysisConstants reads internal/analysis's source and returns its string
+// constants by group: a typed group by its type's name, every other constant
+// by its own name, and each const block by the name of every constant in
+// it, so a group with no shared prefix (the directions) is found by one
+// member and gains a value the moment the block does. It also returns the
+// names in the compare measures table.
+func analysisConstants(t *testing.T) (byType map[string][]string, byName map[string]string, blocks map[string][]string, measures []string) {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join("..", "analysis", "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byType, byName, blocks = map[string][]string{}, map[string]string{}, map[string][]string{}
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatalf("reading %s: %v", path, err)
+		}
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			if gen.Tok == token.VAR {
+				for _, spec := range gen.Specs {
+					vs := spec.(*ast.ValueSpec)
+					for i, name := range vs.Names {
+						if name.Name == "compareMeasures" {
+							measures = append(measures, tableNames(t, vs.Values[i])...)
+						}
+					}
+				}
+				continue
+			}
+			if gen.Tok != token.CONST {
+				continue
+			}
+			var names, values []string
+			for _, spec := range gen.Specs {
+				vs := spec.(*ast.ValueSpec)
+				for i, name := range vs.Names {
+					if i >= len(vs.Values) {
+						continue
+					}
+					lit, ok := vs.Values[i].(*ast.BasicLit)
+					if !ok || lit.Kind != token.STRING || !name.IsExported() {
+						continue
+					}
+					v := strings.Trim(lit.Value, `"`)
+					byName[name.Name] = v
+					names, values = append(names, name.Name), append(values, v)
+					if typ, ok := vs.Type.(*ast.Ident); ok {
+						byType[typ.Name] = append(byType[typ.Name], v)
+					}
+				}
+			}
+			for _, n := range names {
+				blocks[n] = values
+			}
+		}
+	}
+	return byType, byName, blocks, measures
+}
+
+// tableNames is the name field of each element of a composite literal.
+func tableNames(t *testing.T, expr ast.Expr) []string {
+	t.Helper()
+	table, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		t.Fatalf("compareMeasures is not a table literal")
+	}
+	var out []string
+	for _, elt := range table.Elts {
+		row, ok := elt.(*ast.CompositeLit)
+		if !ok {
+			continue
+		}
+		for _, field := range row.Elts {
+			kv, ok := field.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			if key, _ := kv.Key.(*ast.Ident); key != nil && key.Name == "name" {
+				if lit, ok := kv.Value.(*ast.BasicLit); ok {
+					out = append(out, strings.Trim(lit.Value, `"`))
+				}
+			}
+		}
+	}
+	return out
+}
+
+// withPrefix is the values of the constants whose names start with prefix.
+func withPrefix(byName map[string]string, prefix string) []string {
+	var out []string
+	for name, v := range byName {
+		if strings.HasPrefix(name, prefix) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// The contract's enums are written by hand from internal/analysis's
+// constants, and a generated client switches on them: a value the analysis
+// sends and the enum lacks is one a strict client mistypes, which is how
+// the job timeline's source enum once went wrong. Each enum is held to its
+// constants both ways.
+func TestTheAnalysisEnumsAreTheAnalysisConstants(t *testing.T) {
+	doc := loadSpec(t)
+	byType, byName, blocks, measures := analysisConstants(t)
+	if len(byType["WaitCause"]) == 0 || len(measures) == 0 || len(blocks["Regressed"]) == 0 || len(blocks["HostPressured"]) == 0 {
+		t.Fatalf("read %d wait causes, %d measures, directions %v and host verdicts %v, so this read the source wrongly",
+			len(byType["WaitCause"]), len(measures), blocks["Regressed"], blocks["HostPressured"])
+	}
+	// A dominant is empty when nothing leads, and the constants have no
+	// empty one; the enum's "" is that case, not a constant.
+	empty := func(values []string) []string { return append([]string{""}, values...) }
+	for _, c := range []struct {
+		schema, property string
+		want             []string
+	}{
+		{"QueueWaitCause", "cause", byType["WaitCause"]},
+		{"QueueWaitJob", "cause", byType["WaitCause"]},
+		{"QueueWaitPool", "dominant", empty(byType["WaitCause"])},
+		{"QueueWaitFinding", "dominant", empty(byType["WaitCause"])},
+		{"CompareChange", "measure", measures},
+		{"CompareFinding", "dominant", empty(measures)},
+		{"CompareChange", "direction", blocks["Regressed"]},
+		{"HostPressureFinding", "dominant", empty(blocks["HostPressured"])},
+		{"HostPressureEvent", "kind", withPrefix(byName, "Event")},
+		{"HostPressureThreshold", "measure", withPrefix(byName, "Measure")},
+		{"StartupFailureGroup", "scope", withPrefix(byName, "Scope")},
+		{"StartupFailureGroup", "stage", withPrefix(byName, "Stage")},
+		{"StartupFailureGroup", "explanation", empty(withPrefix(byName, "Explain"))},
+	} {
+		props, _ := flattenSchema(t, doc, schemaByName(t, doc, c.schema))
+		var inDoc []string
+		enum, _ := props[c.property]["enum"].([]any)
+		for _, v := range enum {
+			s, _ := v.(string)
+			inDoc = append(inDoc, s)
+		}
+		for _, v := range c.want {
+			if !slices.Contains(inDoc, v) {
+				t.Errorf("%s.%s: internal/analysis sends %q and the enum in api/openapi.yaml does not have it", c.schema, c.property, v)
+			}
+		}
+		for _, v := range inDoc {
+			if !slices.Contains(c.want, v) {
+				t.Errorf("%s.%s: the enum in api/openapi.yaml has %q and internal/analysis has no constant for it", c.schema, c.property, v)
+			}
+		}
+	}
+}
+
+// The error codes are listed by family in the Conventions, and the analysis
+// refusals are a family a client switches on like the update ones.
+func TestTheConventionsNameTheAnalysisRefusals(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "api-surface.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	start := strings.Index(doc, "* Errors return")
+	if start < 0 {
+		t.Fatal("docs/api-surface.md has no Conventions bullet about errors")
+	}
+	bullet := doc[start:]
+	if end := strings.Index(bullet[1:], "\n* "); end >= 0 {
+		bullet = bullet[:end+1]
+	}
+	// The bullet is wrapped, so its words are compared and not its lines.
+	if !strings.Contains(strings.Join(strings.Fields(bullet), " "), "the `analysis.*` refusals listed under [Analyses](#analyses)") {
+		t.Errorf("the Conventions' list of error codes does not name the analysis refusals: %q", bullet)
+	}
 }
