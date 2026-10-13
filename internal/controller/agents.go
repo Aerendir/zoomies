@@ -162,10 +162,11 @@ type taskQueue struct {
 }
 
 type leasedTask struct {
-	task     agent.Task
-	key      string
-	attempts int
-	expires  time.Time
+	creationTask agent.Task
+	task         agent.Task
+	key          string
+	attempts     int
+	expires      time.Time
 }
 
 // taskKey is what makes enqueueing idempotent: one outstanding task per kind
@@ -267,13 +268,19 @@ func (q *taskQueue) take(n int, now time.Time) []agent.Task {
 		lt.attempts++
 		lt.task.IssuedAt = now
 		lt.task.Attempt = lt.attempts
+		lt.creationTask = freezeRunnerCreationTask(lt.task)
 		if lease := requeueAfter(lt.task.Kind); lease > 0 {
 			lt.expires = now.Add(lease)
 		} else {
 			lt.expires = time.Time{}
 		}
 		q.inflight[lt.task.ID] = lt
-		out = append(out, lt.task)
+		delivered := lt.task
+		if delivered.Spec != nil {
+			spec := *delivered.Spec
+			delivered.Spec = &spec
+		}
+		out = append(out, delivered)
 	}
 	q.pending = slices.Delete(q.pending, 0, n)
 	return out
@@ -286,6 +293,17 @@ func (q *taskQueue) peek(taskID string) (agent.Task, bool) {
 	lt, ok := q.inflight[taskID]
 	if ok {
 		return lt.task, true
+	}
+	return agent.Task{}, false
+}
+
+// creationTaskSnapshot is a non-secret copy captured before a task leaves the
+// controller. It cannot be reconstructed after the in-memory queue is lost.
+func (q *taskQueue) creationTaskSnapshot(taskID string) (agent.Task, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if lt, ok := q.inflight[taskID]; ok && lt.creationTask.Spec != nil {
+		return lt.creationTask, true
 	}
 	return agent.Task{}, false
 }
@@ -1324,6 +1342,8 @@ func (c *Controller) ReportResult(ctx context.Context, hostID string, res agent.
 	if r.HostID != hostID {
 		return fmt.Errorf("host %s reported on runner %s, which belongs to host %s", hostID, r.ID, r.HostID)
 	}
+
+	c.recordRunnerCreationResult(ctx, hostID, r, res)
 
 	if res.Handle != "" && string(res.Handle) != r.ContainerID {
 		if err := c.st.SetRunnerContainer(ctx, r.ID, string(res.Handle)); err != nil {

@@ -1,19 +1,21 @@
 package controller
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/agent"
+	"github.com/eyupio/zoomies/internal/backend"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
-// Projection only: the next slice will call this after authenticating and
-// correlating a live create result. No full Spec, credentials, environment,
+// Projection after authenticating and correlating a live create result. No full Spec, credentials, environment,
 // workload handle, names, errors, logs or current pool settings enter the record.
 func buildRunnerCreationObservation(host string, task agent.Task, res agent.TaskResult) (*store.RunnerCreationObservationData, error) {
 	if task.Kind != agent.TaskCreateRunner || !res.OK || res.NotStarted {
@@ -65,4 +67,54 @@ func buildRunnerCreationObservation(host string, task agent.Task, res agent.Task
 		return nil, store.ErrInvalidRunnerCreationObservation
 	}
 	return d, nil
+}
+
+// The embedded agent shares task pointers with the controller. Freeze only the
+// fields this evidence permits, before handing the task to either transport.
+func freezeRunnerCreationTask(t agent.Task) agent.Task {
+	if t.Kind != agent.TaskCreateRunner || t.Spec == nil {
+		return agent.Task{}
+	}
+	spec := t.Spec
+	return agent.Task{ID: t.ID, Kind: t.Kind, RunnerID: t.RunnerID, PoolID: t.PoolID, Backend: t.Backend, IssuedAt: t.IssuedAt, Spec: &backend.Spec{RunnerID: spec.RunnerID, PoolID: spec.PoolID, Image: spec.Image, Resources: store.Resources{CPUs: spec.Resources.CPUs, MemoryMB: spec.Resources.MemoryMB}, ResourcesSource: spec.ResourcesSource, DockerMode: spec.DockerMode, CPUTyped: spec.CPUTyped, MemoryTyped: spec.MemoryTyped}}
+}
+
+// Evidence collection must not trap a live runner or block cleanup. Missing
+// observations remain missing; no fallback to current configuration is allowed.
+// Lifecycle writes retain their existing error/lease retry behaviour.
+func (c *Controller) recordRunnerCreationResult(ctx context.Context, host string, r *store.Runner, res agent.TaskResult) {
+	if !res.OK || res.NotStarted || r.HostID != host {
+		return
+	}
+	task, known := c.queues.get(host).creationTaskSnapshot(res.TaskID)
+	if !known || task.RunnerID != r.ID || task.PoolID != r.PoolID {
+		return
+	}
+	data, err := buildRunnerCreationObservation(host, task, res)
+	if err != nil {
+		c.log.Warn("runner creation observation unavailable", "runner", r.ID, "task", res.TaskID, "reason", "invalid_projection")
+		return
+	}
+	if data == nil {
+		return
+	}
+	// Scope is current ownership at receipt, not proof of installation ownership
+	// at issue. Store checks it again atomically with the first observation write.
+	pool, err := c.st.GetPool(ctx, r.PoolID)
+	if err != nil || pool.InstallationID == "" {
+		c.log.Warn("runner creation observation unavailable", "runner", r.ID, "task", res.TaskID, "reason", "scope_unavailable")
+		return
+	}
+	if _, err := c.st.PutRunnerCreationObservation(ctx, pool.InstallationID, data); err != nil {
+		reason := "storage_failure"
+		switch {
+		case errors.Is(err, store.ErrConflict):
+			reason = "immutable_conflict"
+		case errors.Is(err, store.ErrNotFound):
+			reason = "expired_observation"
+		case errors.Is(err, store.ErrInvalidRunnerCreationObservation):
+			reason = "invalid_observation"
+		}
+		c.log.Warn("runner creation observation unavailable", "runner", r.ID, "task", res.TaskID, "reason", reason)
+	}
 }
