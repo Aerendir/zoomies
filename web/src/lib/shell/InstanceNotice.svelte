@@ -3,10 +3,28 @@
   import { fleet } from '$lib/state/fleet.svelte';
   import { notifications } from '$lib/state/notifications.svelte';
   import Button from '$lib/components/Button.svelte';
+  import { unfenceInstance, ApiError } from '$lib/api/client';
 
   let { showFence = true }: { showFence?: boolean } = $props();
 
   const fence = $derived(fleet.problems.find((problem) => problem.code === 'recovery.fenced'));
+
+  let lifting = $state(false);
+  let failure = $state('');
+  async function lift() {
+    lifting = true;
+    failure = '';
+    try {
+      await unfenceInstance();
+    } catch (cause) {
+      failure =
+        cause instanceof ApiError || cause instanceof Error
+          ? cause.message
+          : 'The fence was not lifted. Try again.';
+    } finally {
+      lifting = false;
+    }
+  }
 </script>
 
 {#if session.meta?.demo}
@@ -21,6 +39,10 @@
     <span>Fleet actions are paused. Verify the migration or recovery before lifting the fence.</span
     >
     <Button size="sm" onclick={() => (notifications.open = true)}>Review the fence</Button>
+    <Button size="sm" variant="danger" onclick={() => void lift()} loading={lifting}
+      >Lift the fence</Button
+    >
+    {#if failure}<span role="alert">{failure}</span>{/if}
   </aside>
 {/if}
 

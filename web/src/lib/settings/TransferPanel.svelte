@@ -8,12 +8,14 @@
   import RestartWait from './RestartWait.svelte';
   import { saveBlob } from './backups';
   import { transferSteps, waitLabel, waitTone } from './transfer';
+  import { fleet } from '$lib/state/fleet.svelte';
   import { events } from '$lib/api/sse';
   import {
     ApiError,
     getTransferPreparation,
     prepareInstanceTransfer,
     cancelInstanceTransfer,
+    unfenceInstance,
     exportInstanceTransfer,
     importInstanceTransfer,
     stageRestore,
@@ -97,6 +99,19 @@
       busy = false;
     }
   }
+  const fenced = $derived(fleet.problems.some((problem) => problem.code === 'recovery.fenced'));
+  async function liftFence() {
+    busy = true;
+    error = '';
+    try {
+      await unfenceInstance();
+      progress = await getTransferPreparation();
+    } catch (cause) {
+      describe(cause);
+    } finally {
+      busy = false;
+    }
+  }
   async function download() {
     busy = true;
     error = '';
@@ -151,6 +166,13 @@
     Keep your fleet configuration, history and credentials when moving to another controller. The
     destination keeps its own operator access and encryption key.
   </p>
+  {#if fenced}
+    <p role="status">
+      This instance is fenced. Once the migration has been abandoned or the destination is verified,
+      lift the fence so this controller can act again. Check that no destination is running first.
+    </p>
+    <Button variant="danger" onclick={() => void liftFence()} loading={busy}>Lift the fence</Button>
+  {/if}
   {#if restarting}
     <RestartWait reason="Importing the complete instance and keeping it fenced for verification." />
   {:else}
