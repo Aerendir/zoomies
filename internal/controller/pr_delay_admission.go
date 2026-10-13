@@ -21,7 +21,8 @@ type PRDelayAdmissionError struct {
 func (e *PRDelayAdmissionError) Error() string { return ErrPRDelayAdmission.Error() }
 func (e *PRDelayAdmissionError) Unwrap() error { return ErrPRDelayAdmission }
 
-// Admission is per installation, not per person: several viewers share the
+// Admission is shared by PR-delay and workflow comparison diagnostics.
+// It is per installation, not per person: several viewers share the
 // same GitHub quota. One in-flight read also prevents overlapping snapshots
 // from spending that quota before any of them sees its updated remainder.
 func (c *Controller) admitPRDelay(installation string) (func(), error) {

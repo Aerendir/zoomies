@@ -36,7 +36,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 eligibility | Merged | ZF-243, [#973](https://github.com/eyupio/zoomies/pull/973), following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
 | E2 measurements | Merged | ZF-243, [#974](https://github.com/eyupio/zoomies/pull/974), stacked on #973 | Successful latency distribution, all-attempt execution/idle consumption, failure rate and descriptive changes. Complete analysis race tests and vet pass; no controller integration or live experiment |
 | E2 bounded retained-attempt collection | Merged | ZF-243, [#977](https://github.com/eyupio/zoomies/pull/977), stacked on #974 | Scoped store reader and bounded controller collection; explicit retained-only/truncated/unavailable/held-back coverage. Focused store/controller race tests, full analysis race tests, changed-package vet and whitespace checks pass. Full workflow selection remains unverified; no runtime surface |
-| E2 bounded GitHub attempt evidence | Draft PR | ZF-243, [#978](https://github.com/eyupio/zoomies/pull/978), targeting main after merged #977 | Exact run/attempt metadata and job enumeration, bounded bodies/pages and uncached identity recheck. Full GitHub package race tests and vet pass. No collector admission or runtime surface yet; workload/configuration evidence remains unknown |
+| E2 bounded GitHub attempt evidence | Merged | ZF-243, [#978](https://github.com/eyupio/zoomies/pull/978), targeting main after merged #977 | Exact run/attempt metadata and job enumeration, bounded bodies/pages and uncached identity recheck. Full GitHub package race tests and vet pass. No collector admission or runtime surface yet; workload/configuration evidence remains unknown |
+| E2 admitted attempt joins | In progress | ZF-243, current PR following merged #978; baseline `a132e6a2` | Shared diagnostic admission, quota reservation and exact remote/fleet identity joins. Focused controller race tests and vet pass. Cohort completeness and configuration/input/cache evidence stay unverified; no transport |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -788,3 +789,50 @@ Merged current main `b132dbfd` into the reader branch without conflicts; the
 reader PR now targets main rather than an open comparison parent. Go-GitHub
 remains v88.0.0. Main's dependency and analysis-route updates are included in the
 validation baseline, without claiming their implementation as part of this slice.
+
+### E2 admitted attempt joins, 13 October 2026
+
+Slice 5 follows merged #978 and starts from main `a132e6a2`. The collector
+`CollectExperimentEvidence` is only for a caller already authorised to read jobs;
+there is no route or agent tool in this slice. It validates the repository's
+installation and exact selected run/attempt identities before spending requests.
+
+Remote collection accepts at most ten unique attempts under one 20-second
+deadline. The PR-delay per-installation admission gate is deliberately shared:
+one diagnostic flight and 20 admitted collections per rolling hour. A busy refusal
+is free; quota/refusal/read failures after admission consume an allowance. The
+memory gate resets on restart. Separate gates would allow concurrent diagnostic
+spending of one installation's quota. Error translation supplies an E2-specific
+admission sentinel and RetryAfter without changing E1's API contract.
+
+Quota must be structurally valid and leave half the reported core allowance after
+seven potential reads per selected attempt. The rate-limit request is uncharged.
+Thus one ten-attempt batch is bounded to 70 charged reads plus the quota read.
+Existing installation holds are checked before quota and each attempt; new rate
+limit errors establish a hold. Every exit releases the shared flight. A cohort
+of thirty attempts per arm needs explicitly retained batches; no automatic loop
+or background poll collects it, and no fairness/completeness assertion is made.
+
+The join requires exact repository, installation, run, attempt, source head and
+numeric job identities. Missing jobs and extra retained fleet rows stay explicit.
+`FleetIdentityCoverage` describes identity matching only, not measured execution,
+cache state or full telemetry. It cannot be complete unless GitHub enumeration
+and bounded local rows permit it. Truncation/unknown history remain separate
+coverage facts. Reports retain no workflow names, step output or logs. Source and
+repository strings still need untrusted treatment in any future agent adapter.
+
+`SelectionComplete` remains false, regardless of an individual attempt's full
+job enumeration. This slice derives no latency from the run's updated timestamp,
+no cost from idle allocation, and no historical configuration from today's pool.
+Next: establish independently retained workflow revision/inputs, test scope,
+historical configuration and observed cache/host evidence; assemble reproducible
+comparison snapshots and keep unsupported evidence inconclusive. Then add role-
+and repository-scoped read-only transports with public-visitor refusal and bounded
+responses. Dispatch/publication and real experiment/model evaluation remain unrun.
+
+Slice 5 verification: all new behavioural cases pass under race detection across
+focused runs, together with the existing PR admission/quota regression cases.
+Controller vet and diff whitespace checks pass. Dependency downloads and localhost
+fixture servers required explicit per-command network access. The first attempt
+without that access was blocked; it was not a passing run. No full controller or
+repository test command, real GitHub call or live model assessment is claimed.
