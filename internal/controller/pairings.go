@@ -158,15 +158,48 @@ func machineSizeSaid(p *store.Provider) string {
 // It never says to raise the provider's maximum machines. Every machine it
 // would buy is the one that is too small.
 func machineSizeFix(p *store.Provider, machine *store.Host, pool *store.Pool) string {
-	where := "set its machine size, or give the template it clones more processors and memory"
-	if p.MachineCPUs > 0 || p.MachineMemoryMB > 0 {
+	need, ok := scheduler.MachineFor(machine, pool)
+	if !ok {
+		where := "set its machine size, or enlarge the template it clones"
+		if p.MachineCPUs > 0 || p.MachineMemoryMB > 0 || p.MachineDiskMB > 0 {
+			where = "raise its machine size"
+		}
+		return fmt.Sprintf("Give %s's machines a larger size (%s), or lower this pool's minimum runner size.", p.Name, where)
+	}
+	// The template's half of the sentence names what it has to give, so an
+	// operator short only of disk is not sent to add processors as well.
+	var more []string
+	if need.CPUs > 0 || need.MemoryMB > 0 {
+		more = append(more, "processors", "memory")
+	}
+	if need.DiskMB > 0 {
+		more = append(more, "disk")
+	}
+	where := "set its machine size, or give the template it clones more " + andList(more)
+	if p.MachineCPUs > 0 || p.MachineMemoryMB > 0 || p.MachineDiskMB > 0 {
 		where = "raise its machine size"
 	}
-	size := "more processors and memory"
-	if cpus, memoryMB, ok := scheduler.MachineFor(machine, pool); ok {
-		size = "at least " + machineSize(cpus, memoryMB)
+	size := machineSize(need.CPUs, need.MemoryMB)
+	if need.DiskMB > 0 {
+		disk := scheduler.FormatMB(need.DiskMB) + " of disk"
+		if size == "" {
+			size = disk
+		} else {
+			size = strings.ReplaceAll(size, " and ", ", ") + " and " + disk
+		}
 	}
-	return fmt.Sprintf("Give %s's machines %s (%s), or lower this pool's minimum runner size.", p.Name, size, where)
+	return fmt.Sprintf("Give %s's machines at least %s (%s), or lower this pool's minimum runner size.", p.Name, size, where)
+}
+
+// andList joins words the way a sentence does: "a", "a and b", "a, b and c".
+func andList(words []string) string {
+	switch len(words) {
+	case 0:
+		return ""
+	case 1:
+		return words[0]
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
 }
 
 // machineSize writes a machine's processors and memory as an operator would

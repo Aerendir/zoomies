@@ -333,3 +333,44 @@ func TestAConnectionCheckRecordsTheSizeTheProviderBuildsAndThePairingJudgesIt(t 
 		t.Fatalf("%d machines were bought from a template too small for the pool", got)
 	}
 }
+
+// A provider's minimum is bought for whatever the pools need, so a machine that
+// meets it is kept even when no pool can use it: releasing it early would only
+// have the next pass buy the same machine again to make the minimum up.
+func TestAMachineNoPoolFitsIsKeptWhileItMeetsItsProvidersMinimum(t *testing.T) {
+	p, pool := smallProvider("lab"), dindPool("alpha")
+	p.MinMachines = 1
+	host := smallVMHost("host_1")
+	m := demandMachine("mach_1", p, store.MachineReady, 4*time.Hour)
+	m.HostID, m.IdleSince = host.ID, ptrTime(machineNow.Add(-time.Hour))
+	s := MachineSnapshot{
+		Now: machineNow, Pools: []*store.Pool{pool}, Hosts: []*store.Host{host},
+		Providers: []*store.Provider{p}, Machines: []*store.Machine{m}, Limits: demandLimits(),
+		Plan: scheduler.Plan{Pools: []scheduler.PoolPlan{demandPoolPlan(pool, 0, 0, 0, "")}},
+	}
+
+	got := planFor(t, DecideMachines(s), p.ID)
+	if len(got.Drain) != 0 || got.Create != 0 {
+		t.Fatalf("drain = %v, create = %d; want the machine that meets the minimum kept and nothing bought", got.Drain, got.Create)
+	}
+}
+
+// A provider whose machines are short only of disk is told the disk they need,
+// not to add processors and memory they already have.
+func TestAProviderShortOnlyOfDiskIsToldTheDiskItsMachinesNeed(t *testing.T) {
+	p := smallProvider("lab")
+	p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB = 8, 32768, 20<<10
+	pool := demandPool("builds", "self-hosted", "linux", "x64")
+	pool.Resources = store.Resources{CPUs: 1, MemoryMB: 2048, DiskGB: 40}
+
+	misfit := machineFit(p, providerSynthHost(p, machineNow), pool)
+	if !misfit.Size {
+		t.Fatalf("a 20 GB disk was judged to fit a pool that asks for 40: %+v", misfit)
+	}
+	if !strings.Contains(misfit.Fix, "GB of disk (raise its machine size)") {
+		t.Errorf("fix %q does not name the disk the machines need", misfit.Fix)
+	}
+	if strings.Contains(misfit.Fix, "CPU") || strings.Contains(misfit.Fix, "of memory") {
+		t.Errorf("fix %q names processors or memory, which already fit", misfit.Fix)
+	}
+}

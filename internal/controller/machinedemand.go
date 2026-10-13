@@ -623,6 +623,10 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 		if p == nil || host == nil || m.State != store.MachineReady || live[host.ID] > 0 {
 			continue
 		}
+		// The minimum is asked first, for a machine no pool can use as well:
+		// the minimum is bought for whatever the pools need, so releasing one
+		// of the machines that meet it would only buy the same machine again
+		// on the next pass.
 		if p.MinMachines > 0 && offering[p.ID] <= p.MinMachines {
 			continue
 		}

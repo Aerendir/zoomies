@@ -60,3 +60,49 @@ func TestAProvidersSeenMachineSizeIsOnlyEverReplacedByNewerEvidence(t *testing.T
 		t.Errorf("updated_at moved from %v to %v for an observation", created.UpdatedAt, got.UpdatedAt)
 	}
 }
+
+// The seen size is evidence about the machines the provider built at the shape
+// it had then. An edit that changes the shape (the size typed on the form, or
+// the settings that pick the template) makes it evidence about some other
+// machine, so it is forgotten; an edit to anything else keeps it.
+func TestAProvidersSeenSizeIsForgottenWhenItsMachineShapeChanges(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		edit       func(*Provider)
+		wantForgot bool
+	}{
+		{"its maximum machines", func(p *Provider) { p.MaxMachines = 9 }, false},
+		{"its typed size cleared for the template", func(p *Provider) { p.MachineCPUs, p.MachineMemoryMB = 0, 0 }, true},
+		{"its template", func(p *Provider) { p.Settings = StringMap{"template_id": "9200"} }, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestStore(t)
+			ctx := context.Background()
+			p := &Provider{Kind: ProviderFake, Name: "lab", MachineCPUs: 8, MachineMemoryMB: 16384,
+				Settings: StringMap{"template_id": "9100"}, MaxMachines: 2}
+			if err := s.CreateProvider(ctx, p); err != nil {
+				t.Fatalf("CreateProvider: %v", err)
+			}
+			if _, err := s.SetProviderMachineSizeSeen(ctx, p.ID, 8, 15800, MachineSizeFromMachine, time.Now()); err != nil {
+				t.Fatalf("SetProviderMachineSizeSeen: %v", err)
+			}
+			row, err := s.GetProvider(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("GetProvider: %v", err)
+			}
+			tc.edit(row)
+			if err := s.UpdateProvider(ctx, row); err != nil {
+				t.Fatalf("UpdateProvider: %v", err)
+			}
+			got, err := s.GetProvider(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("GetProvider: %v", err)
+			}
+			forgot := got.SeenCPUs == 0 && got.SeenMemoryMB == 0 && got.SeenFrom == "" && got.SeenAt == nil
+			kept := got.SeenCPUs == 8 && got.SeenMemoryMB == 15800 && got.SeenAt != nil
+			if tc.wantForgot && !forgot || !tc.wantForgot && !kept {
+				t.Fatalf("seen = %d CPUs, %d MB from %q at %v; want forgotten = %v", got.SeenCPUs, got.SeenMemoryMB, got.SeenFrom, got.SeenAt, tc.wantForgot)
+			}
+		})
+	}
+}
