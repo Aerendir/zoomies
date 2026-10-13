@@ -316,6 +316,7 @@
   .tiles {
     display: grid;
     gap: var(--z-space-4);
+    row-gap: var(--z-space-2);
     /* Six tiles, so the column count is a divisor of six at every width: three
        up with room, two on a tablet, one on a phone. Four columns left the
        second row two-thirds empty, which is what the shipped screenshot

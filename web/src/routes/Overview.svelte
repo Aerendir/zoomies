@@ -151,7 +151,7 @@
   .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--z-space-6);
+    gap: var(--z-space-3);
   }
   /*
     Two rows on the left -- the pools, then the running jobs, placed in source
