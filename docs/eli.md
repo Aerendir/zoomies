@@ -151,7 +151,18 @@ whether renting is switched on and what to change, so Eli can still name it.
 It can read the fleet's recent past as well: what changed lately, the scheduler's
 decisions and the reason for each, the minute-by-minute samples of the fleet and
 of each host, a runner's timeline and the workflow runs, and it can wait for the
-next change. The audit log, the webhook deliveries and the support bundle are not
+next change. Four questions it answers from one look, each the same answer the
+page, the CLI and an agent see: why a period's jobs waited (every second put down
+to one cause, for the fleet and each pool, with each pool's longest waits by job),
+whether a release or a period was worse (the two sides' durations, queue waits,
+startups, failure rates and OOM kill rates, measure by measure), whether a host fails when it is
+busy (its failures, OOM kills and slow startups placed against that minute's load
+and memory), and which host or pool keeps failing to start runners (how many of its
+starts failed, since when, at which stage and with which fault, and its last failed
+runner's message). The job names and failure messages these quote are written by
+workflows and hosts, and reach Eli set apart as untrusted, never as instructions.
+Host pressure names the jobs only when the person asking can read jobs; otherwise
+it says the names were left out. The audit log, the webhook deliveries and the support bundle are not
 offered to it, whoever is asking: they are who did what by name, GitHub's whole
 payloads and the whole instance at once, which is more than a question about the
 fleet should send to a model. The same goes for their events: what changed lately,

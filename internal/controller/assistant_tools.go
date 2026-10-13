@@ -33,6 +33,7 @@ var AssistantFleetTools = []string{
 	"list_providers", "provider_pairings", "list_machines", "get_catalog", "get_usage", "get_pr_delay",
 	"recent_events", "wait_for_change", "scaling_decisions", "fleet_samples",
 	"host_samples", "runner_timeline", "list_workflow_runs",
+	"queue_wait_breakdown", "compare_periods", "host_pressure", "startup_failures",
 }
 
 // What one question may cost in tools. Eli answers from what it looked at, and a
