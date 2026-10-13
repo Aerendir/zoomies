@@ -900,6 +900,22 @@ of up to three failing checks per host and no values. See
 
 ## Retained historical comparisons
 
+The optional `runner_evidence` response field is a versioned descriptive view
+computed from validated retained inputs. It returns at most 100 job rows per arm,
+with full enumerated-job, fleet-match, recorded-grant and runner-observation counts
+and an explicit omitted-row flag. Partial enumeration is not full workflow coverage.
+Run and GitHub job identities are exact decimal strings, avoiding browser rounding.
+Missing grants and observations are null. Assignment stamps, dispatched requests
+and agent-reported digest/times remain distinct; none proves applied limits or
+configuration/image equivalence. Host, pool, runner, task and actor identities are
+excluded from this view. No raw image references, credentials or logs are returned.
+
+The view does not alter the immutable envelope, report, digest, eligibility or
+ranking. Replay can project older retained inputs without reading current rows or
+refreshing source observations. Older controllers may omit the field. The web UI
+shows these facts and gaps; the bounded MCP/Eli projection deliberately excludes
+the new field pending a separate review. CLI JSON responses preserve it.
+
 Capture retains the complete input beside its report, with an atomic audit event
 and server-generated comparison ID. Public visitors are refused. History is shared
 by authorised repository readers, bounded to 2 MiB per envelope, 32 records per

@@ -92,6 +92,146 @@ const retained = {
   },
 };
 
+const runnerEvidence = {
+  version: 'runner-evidence-v1',
+  baseline: {
+    selected_jobs: 101,
+    matched_jobs: 101,
+    recorded_grants: 101,
+    runner_observations: 1,
+    rows_omitted: true,
+    jobs: [
+      {
+        run_id: '10',
+        attempt: 1,
+        github_job_id: '110',
+        fleet_matched: true,
+        recorded_grant: {
+          basis: 'retained_job_granted_size_v1',
+          source: 'pool',
+          cpus: 1,
+          memory_mb: 4096,
+        },
+        observation: {
+          sha256: 'a'.repeat(64),
+          issued_at: '2026-10-13T00:00:00Z',
+          received_at: '2026-10-13T00:02:00Z',
+          requested: {
+            backend: 'docker',
+            image_reference_sha256: 'b'.repeat(64),
+            cpus: 2,
+            memory_mb: null,
+            resource_source: '',
+            docker_mode: 'dind',
+            cpu_typed: true,
+            memory_typed: false,
+          },
+          image_digest: 'sha256:' + 'c'.repeat(64),
+          digest_coverage: 'reported',
+          agent_completed_at: null,
+          agent_container_started_at: null,
+        },
+      },
+    ],
+  },
+  candidate: {
+    selected_jobs: 1,
+    matched_jobs: 0,
+    recorded_grants: 0,
+    runner_observations: 0,
+    rows_omitted: false,
+    jobs: [
+      {
+        run_id: '11',
+        attempt: 1,
+        github_job_id: '9007199254740993',
+        fleet_matched: false,
+        recorded_grant: null,
+        observation: null,
+      },
+    ],
+  },
+};
+
+for (const [coverage, label] of [
+  ['unsupported', 'Unsupported report'],
+  ['not_reported', 'Not reported'],
+]) {
+  test(`runner evidence preserves ${coverage} agent digest coverage`, async ({ page }) => {
+    const base = runnerEvidence.baseline.jobs[0]!;
+    const evidence = {
+      ...runnerEvidence,
+      baseline: {
+        ...runnerEvidence.baseline,
+        jobs: [
+          {
+            ...base,
+            observation: { ...base.observation, image_digest: null, digest_coverage: coverage },
+          },
+        ],
+      },
+    };
+    await page.route('**/api/v1/comparisons/*?*', (route) =>
+      route.fulfill({ json: { ...retained, runner_evidence: evidence } }),
+    );
+    await goto(
+      page,
+      '/comparisons?id=cmp_fixture&installation_id=ins_fixture&repo=acme%2Frepo',
+      'Comparisons',
+    );
+    await page.getByText('Baseline recorded runner facts', { exact: true }).click();
+    const facts = page.getByRole('region', { name: 'Baseline runner facts', exact: true });
+    await expect(facts.getByText(`Image digest: ${label}`, { exact: true })).toBeVisible();
+    await facts.getByText('Observation details for job 110', { exact: true }).click();
+    await expect(facts.getByText('Unknown', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Inconclusive', { exact: true })).toBeVisible();
+  });
+}
+
+test('runner evidence separates assignment, requests and claims with bounded coverage on desktop and mobile', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/comparisons/*?*', (route) =>
+    route.fulfill({ json: { ...retained, runner_evidence: runnerEvidence } }),
+  );
+  await goto(
+    page,
+    '/comparisons?id=cmp_fixture&installation_id=ins_fixture&repo=acme%2Frepo',
+    'Comparisons',
+  );
+  await expect(
+    page.getByRole('heading', { name: 'Recorded runner evidence', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Showing 1 of 101 jobs. Additional rows are omitted.', { exact: true }),
+  ).toBeVisible();
+  await page.getByText('Baseline recorded runner facts', { exact: true }).click();
+  const facts = page.getByRole('region', { name: 'Baseline runner facts', exact: true });
+  await expect(facts.getByText('1 CPUs / 4096 MB', { exact: true })).toBeVisible();
+  await expect(facts.getByText('2 CPUs / Unknown MB', { exact: true })).toBeVisible();
+  await facts.getByText('Observation details for job 110', { exact: true }).click();
+  await expect(
+    facts.getByText(runnerEvidence.baseline.jobs[0]!.observation.image_digest, { exact: true }),
+  ).toBeVisible();
+  const digestBox = await facts
+    .getByText(runnerEvidence.baseline.jobs[0]!.observation.image_digest, { exact: true })
+    .boundingBox();
+  expect(digestBox?.width).toBeGreaterThan(150);
+  await expect(facts.getByText('Unknown', { exact: true }).first()).toBeVisible();
+  await facts.focus();
+  await expect(facts).toBeFocused();
+  await page.getByText('Candidate recorded runner facts', { exact: true }).click();
+  const candidate = page.getByRole('region', { name: 'Candidate runner facts', exact: true });
+  await expect(candidate.getByText('No retained observation', { exact: true })).toBeVisible();
+  await expect(candidate.getByText('Not recorded', { exact: true })).toBeVisible();
+  await expect(candidate.getByRole('rowheader')).toContainText('Job 9007199254740993');
+  await expect(page.getByText('Inconclusive', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: test.info().outputPath('runner-evidence.png'), fullPage: true });
+});
+
 // The real controller serves the application and role/session state. The
 // comparison response is a fixture for GitHub evidence unavailable in CI.
 test('operator capture is explicit, immutable replay is shareable and unknown stays distinct from zero', async ({
@@ -129,6 +269,12 @@ test('operator capture is explicit, immutable replay is shareable and unknown st
   expect(captures).toBe(1);
   expect(reads).toBe(0);
   await expect(page.getByRole('heading', { name: 'Retained report' })).toBeFocused();
+  await expect(
+    page.getByText(
+      'This controller did not provide runner evidence. Missing facts remain unknown.',
+      { exact: true },
+    ),
+  ).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath('comparison.png'),
   });

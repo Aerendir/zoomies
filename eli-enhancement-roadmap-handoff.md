@@ -48,7 +48,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 recorded grant provenance | Merged | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
 | E2 runner observation foundation | Merged | ZF-243, [#996](https://github.com/eyupio/zoomies/pull/996), stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Result integration merged in #998 |
 | E2 runner result integration | Merged | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
-| E2 private runner observation joins | Draft PR | ZF-243, [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #998 | Historical job/runner/pool scope, pinned GitHub job joins, independent observation digest and offline replay. Requested resources and agent claims do not promote eligibility. Focused controller/store race, shared admission, offline replay, vet and strict docs pass |
+| E2 private runner observation joins | Merged | ZF-243, [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #998 | Historical job/runner/pool scope, pinned GitHub job joins, independent observation digest and offline replay. Requested resources and agent claims do not promote eligibility. Focused controller/store race, shared admission, offline replay, vet and strict docs pass |
+| E2 web runner evidence inspection | Implemented, PR pending | ZF-243, based on main after #1000 | Bounded descriptive projection, explicit grant/request/claim labels, nullable facts, per-job web inspection and omitted-row counts. Immutable report and eligibility unchanged. Focused race, 14 desktop/mobile fixtures, 109 UI unit tests, type/lint/build, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1444,3 +1445,68 @@ with a fresh outer storage digest. Existing collection bounds, grant provenance,
 snapshots, retention/replay and shared-admission fixtures pass. Controller/store
 vet, strict docs and whitespace pass. Docs used the repository-only header fallback.
 No live backend/agent/GitHub/model operation or new migration/dependency.
+
+
+### E2 slice 17: web runner evidence inspection, 13 October 2026
+
+Branch codex/eli-comparison-runner-evidence-web starts from main after #1000 merged.
+The optional runner_evidence field is added to the existing scoped capture/replay
+response, with runner-evidence-v1, baseline/candidate summaries and at most 100 job
+rows per arm in retained attempt/GitHub job order. Summary counts cover all jobs in
+the selected retained enumeration, including omitted rows; partial enumeration is
+not complete workflow coverage. Unmatched jobs and missing grants/observations stay
+visible as null facts. No current configuration, source observation or GitHub read
+is added. Public visitors and existing role/scope/mutation guards remain unchanged. Run/job
+identities in the new view are decimal strings so browsers cannot round int64 IDs.
+
+Controller wiring builds an explicit response whitelist only after existing input
+validation and durable capture or verified replay. Assignment stamps, requested
+CPU/memory/backend/image-reference fingerprint/Docker settings and reported digest/
+agent times remain separate. Observation SHA, controller dispatch/receipt stamps
+and claim coverage are descriptive; hashes prove integrity, not backend attestation.
+All optional pointer values are copied. Host/pool/runner/task/installation/actor IDs,
+raw image references, credentials, environment, logs and handles are excluded from
+the new view. Existing report actor semantics are unchanged.
+
+The view is outside the immutable envelope and original report. Older envelopes
+can gain descriptive projections without rewriting stored bytes, changing digests
+or suppressing validation. The response version identifies the projection contract.
+Selection, timing measures, ResourceID/ImageID/ConfigurationID, inconclusive reasons
+and ranking are untouched. Counts and response truncation do not admit extra cohort
+samples or establish workload/cache/configuration equivalence. Retention boundaries
+and source observation expiry remain independent.
+
+The web report shows counts and explicit missing/omitted facts, with expandable
+job facts and observation details. Recorded assignment sizes and requested sizes
+are separate columns. Agent digest coverage distinguishes reported, unsupported
+and absent reports; null dimensions/times say Unknown. Controller and agent clocks
+are labelled and are not subtracted. Image fingerprints and claims are not presented
+as verified images. Escaped Svelte text, token styles, keyboard-scrollable tables
+and phone containment follow the existing UI contract. Visual review found narrow
+phone digest columns; observation detail grids now keep a one-off 20rem minimum
+measure inside the horizontally scrolling table, with a browser readability guard.
+Older controllers without
+runner_evidence show an explicit unknown fallback.
+
+OpenAPI and both generated API copies include the bounded optional response view.
+CLI raw JSON preserves it; CLI human output is unchanged. MCP/Eli deliberately
+excludes runner_evidence through its existing whitelist, with an explicit fixture
+for the new field. No tool description, model data budget or generated tool catalogue
+is changed. Follow-on MCP/Eli exposure needs its own reviewed projection and bounds.
+
+Validation completed: pure public whitelist/deep-copy, null/bounded-count, old
+report replay, source pruning, API scoped capture/replay and schema shapes, existing
+permission/visitor/same-origin/quota fixtures and MCP exclusion pass with race detection. All 14 desktop/mobile web
+fixtures pass on the rebuilt binary, including the visual-review spacing correction
+and digest readability guard. All 109 UI unit tests pass; three relevant style/input
+unit fixtures also pass after the spacing correction. Type/lint checks, production
+UI build, changed-package vet, strict documentation and whitespace pass. App shell
+is 141.3 KiB gzipped within its 200 KiB budget. Docs used the repository-only header
+fallback for unavailable optional GitHub metadata. No live agent/backend/GitHub/model
+operation, migration or dependency was introduced.
+
+Next: extend bounded MCP/Eli and CLI human presentation from the reviewed REST shape
+with the same request/claim and unknown/partial-coverage semantics. Do not forward
+raw response fields wholesale to a model. Independent workload/configuration/cache
+proof and fair complete selection are still outstanding; keep the thirty completed
+attempts per arm and existing admission limits.

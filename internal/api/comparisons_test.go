@@ -171,16 +171,31 @@ func TestComparisonAPIMetadataMovementReturnsAConflict(t *testing.T) {
 	}
 }
 
-func TestComparisonAPIRecordedGrantsStayPrivateAndReplayDoesNotRefreshThem(t *testing.T) {
+func TestComparisonAPIProjectsRecordedGrantsWithoutPromotingEquivalenceOrRefreshingThem(t *testing.T) {
 	h, inst, reader, body := comparisonAPIHarness(t)
+	installation, err := h.st.GetInstallation(h.ctx, inst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := h.pool(installation, "runner-evidence")
+	host := h.host("runner-evidence-host")
+	runner := h.runner(pool, host, store.RunnerProvisioning)
 	for _, run := range []int64{10, 11} {
-		j, err := h.st.UpsertJob(h.ctx, &store.Job{GitHubJobID: run + 100, GitHubRunID: run, RunAttempt: 1, Repo: "acme/repo", InstallationID: inst, HeadSHA: strings.Repeat("a", 40), QueuedAt: reader.at, State: store.JobCompleted, Conclusion: "failure"})
+		input := &store.Job{GitHubJobID: run + 100, GitHubRunID: run, RunAttempt: 1, Repo: "acme/repo", InstallationID: inst, HeadSHA: strings.Repeat("a", 40), QueuedAt: reader.at, State: store.JobCompleted, Conclusion: "failure"}
+		if run == 10 {
+			input.RunnerID, input.PoolID, input.HostID = runner.ID, pool.ID, host.ID
+		}
+		j, err := h.st.UpsertJob(h.ctx, input)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := h.st.StampJobGranted(h.ctx, j.ID, 2, 8192, store.AllocationFromPool); err != nil {
 			t.Fatal(err)
 		}
+	}
+	cpu := 2.0
+	if _, err := h.st.PutRunnerCreationObservation(h.ctx, inst, &store.RunnerCreationObservationData{Version: store.RunnerCreationObservationVersion, RunnerID: runner.ID, HostID: host.ID, PoolID: pool.ID, TaskID: "task_fixture", IssuedAt: reader.at, Issued: store.IssuedRunnerConfiguration{Backend: store.BackendDocker, CPUs: &cpu, DockerMode: store.DockerNone}, Reported: store.ReportedRunnerCreation{DigestCoverage: "unsupported"}}); err != nil {
+		t.Fatal(err)
 	}
 	token := h.token("operator", store.RoleOperator, "jobs:read", "comparisons:write")
 	captured := h.do(request{method: http.MethodPost, path: "/api/v1/comparisons", token: token, body: body})
@@ -209,8 +224,28 @@ func TestComparisonAPIRecordedGrantsStayPrivateAndReplayDoesNotRefreshThem(t *te
 			t.Fatal("grant not durably retained")
 		}
 	}
-	if strings.Contains(string(captured.body), "recorded_grant") || saved.Report.Snapshot.Baseline.ResourceID != "" || saved.Report.Measurement.Eligibility.State != "inconclusive" {
+	if saved.RunnerEvidence == nil || saved.RunnerEvidence.Baseline.RecordedGrants != 1 || saved.RunnerEvidence.Baseline.RunnerObservations != 1 || *saved.RunnerEvidence.Baseline.Jobs[0].RecordedGrant.CPUs != 2 || saved.Report.Snapshot.Baseline.ResourceID != "" || saved.Report.Measurement.Eligibility.State != "inconclusive" {
 		t.Fatal("private grant promoted public equivalence")
+	}
+	spec := loadSpec(t)
+	project := saved.RunnerEvidence
+	for _, check := range []struct {
+		name  string
+		value any
+	}{
+		{"ExperimentRunnerEvidence", project}, {"ExperimentRunnerEvidenceArm", project.Baseline}, {"ExperimentRunnerEvidenceJob", project.Baseline.Jobs[0]}, {"ExperimentRecordedGrantView", project.Baseline.Jobs[0].RecordedGrant}, {"ExperimentRunnerObservationView", project.Baseline.Jobs[0].Observation}, {"ExperimentRunnerRequestView", project.Baseline.Jobs[0].Observation.Requested},
+	} {
+		payload, err := json.Marshal(check.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertShape(t, spec, check.name, payload)
+	}
+	if strings.Contains(string(captured.body), "task_fixture") || strings.Contains(string(captured.body), runner.ID) || strings.Contains(string(captured.body), host.ID) {
+		t.Fatal("private runner identity leaked")
+	}
+	if err := h.st.DeleteRunner(h.ctx, runner.ID); err != nil {
+		t.Fatal(err)
 	}
 	replay := h.do(request{method: http.MethodGet, path: fmt.Sprintf("/api/v1/comparisons/%s?installation_id=%s&repo=acme/repo", saved.ID, inst), token: token})
 	replay.mustStatus(t, 200, "offline replay")
