@@ -72,6 +72,11 @@ type CompareSide struct {
 	// having run: where the oldest rows were pruned before the roll-up first
 	// ran, jobs did run, and nobody can now say how many.
 	NoRecordBefore *time.Time `json:"no_record_before"`
+	// AskedUntil is where the period asked for ends. A CountsOnly side can
+	// end before it, because the roll-up reads whole UTC days: the hours
+	// from Until to AskedUntil are then the other side's or neither side's,
+	// and only this says so once Until has moved. Zero when not known.
+	AskedUntil time.Time `json:"asked_until"`
 }
 
 // unread is a side the fleet keeps no counts for at all.
@@ -238,17 +243,17 @@ func Compare(s CompareSnapshot) (CompareFinding, error) {
 
 	switch {
 	case s.A.unread() && s.B.unread():
-		f.Summary = fmt.Sprintf("The fleet keeps no counts from before %s, so neither %s nor %s could be read, and there is nothing to compare.",
-			stamp(*s.B.NoRecordBefore), w.a, w.b)
+		f.Summary = fmt.Sprintf("The fleet keeps no counts from before %s, so neither %s nor %s could be read, and there is nothing to compare%s.",
+			stamp(*s.B.NoRecordBefore), w.a, w.b, w.cutOff(s, s.B, true))
 		f.ConfidenceReason = fmt.Sprintf("the fleet keeps no counts from before %s, so neither side could be read", stamp(*s.B.NoRecordBefore))
 	case s.A.unread() || s.B.unread():
-		gone, other := s.A, w.b
+		gone, other, later := s.A, w.b, false
 		if s.B.unread() {
-			gone, other = s.B, w.a
+			gone, other, later = s.B, w.a, true
 		}
 		f.ConfidenceReason = fmt.Sprintf("the fleet keeps no counts from before %s, so %s could not be read", stamp(*gone.NoRecordBefore), gone.Label)
-		f.Summary = fmt.Sprintf("The fleet keeps no counts from before %s, so %s could not be read, and there is nothing to compare %s with.",
-			stamp(*gone.NoRecordBefore), gone.Label, other)
+		f.Summary = fmt.Sprintf("The fleet keeps no counts from before %s, so %s could not be read, and there is nothing to compare %s with%s.",
+			stamp(*gone.NoRecordBefore), gone.Label, other, w.cutOff(s, gone, later))
 	case na == 0 && nb == 0:
 		f.Summary, f.ConfidenceReason = w.neitherRan(), "neither side ran a job"
 	case na == 0:
@@ -549,17 +554,41 @@ func (w wording) doubts(s CompareSnapshot) []string {
 
 func stamp(t time.Time) string { return t.UTC().Format("2006-01-02 15:04 UTC") }
 
-// coverage is what a side read from the roll-up leaves out, each with its
-// cause, for a comparison both of whose sides were read; the dates alone
-// would be the only other place it showed.
+// cutOff is what an unread side's summary adds when the fleet's counts begin
+// inside the hours it asked for, after the midnight its read stopped at:
+// those hours are on record, and "could not be read" alone would say they
+// were lost. An earlier side's are the later side's when its counts begin
+// there; otherwise they are neither side's.
+func (w wording) cutOff(s CompareSnapshot, gone CompareSide, later bool) string {
+	first, end := *gone.NoRecordBefore, gone.AskedUntil
+	if !first.Before(end) {
+		return ""
+	}
+	which, went := "earlier", "on neither side"
+	switch {
+	case later:
+		which = "later"
+	case !s.B.Since.After(first):
+		went = "in " + w.b
+	}
+	return fmt.Sprintf("; the roll-up keeps whole UTC days, so the jobs queued from %s to %s, the %s period's last hours, are counted %s",
+		stamp(first), stamp(end), which, went)
+}
+
+// coverage is what a side read from the roll-up leaves out, or leaves to the
+// other side, each with its cause; the dates alone would be the only other
+// place it showed. An unread side's summary says its own.
 //
 // A side whose counts begin later than asked says the fleet keeps none
 // before. Between the sides, hours can be in neither count for one of two
 // reasons: the later side's counts begin late, and nothing before them is
 // on record; or the roll-up keeps whole UTC days, and the earlier side ends
-// at the last midnight it could read whole.
+// at the last midnight it could read whole. The same whole days can start
+// the later side at its first midnight, before the period asked for, so the
+// earlier side's last hours are counted in it, and end it at its last, so
+// the hours after are counted on neither side.
 func (w wording) coverage(s CompareSnapshot) []string {
-	if s.A.unread() || s.B.unread() {
+	if s.B.unread() {
 		return nil
 	}
 	late := func(side CompareSide) string {
@@ -567,19 +596,35 @@ func (w wording) coverage(s CompareSnapshot) []string {
 			stamp(*side.NoRecordBefore), side.Label)
 	}
 	var out []string
-	if s.A.NoRecordBefore != nil {
-		out = append(out, late(s.A))
+	// An unread earlier side's summary already says what became of its
+	// hours; the later side's own end is still this function's to name.
+	if !s.A.unread() {
+		if s.A.NoRecordBefore != nil {
+			out = append(out, late(s.A))
+		}
+		between := !s.A.Until.IsZero() && s.A.Until.Before(s.B.Since)
+		switch {
+		case between && s.B.NoRecordBefore != nil:
+			out = append(out, fmt.Sprintf("the fleet keeps no counts from before %s, so the hours from %s to %s, between the two periods, are counted on neither side",
+				stamp(*s.B.NoRecordBefore), stamp(s.A.Until), stamp(s.B.Since)))
+		case s.B.NoRecordBefore != nil:
+			out = append(out, late(s.B))
+		case between && s.A.CountsOnly:
+			out = append(out, fmt.Sprintf("the roll-up keeps whole UTC days, so the jobs queued from %s to %s, between the two periods, are counted on neither side",
+				stamp(s.A.Until), stamp(s.B.Since)))
+		}
+		// The later side read from its first midnight begins before the
+		// period asked for, so the earlier side's last hours are its own.
+		if s.B.CountsOnly && s.B.Since.Before(s.A.AskedUntil) {
+			out = append(out, fmt.Sprintf("the roll-up keeps whole UTC days, so %s begins earlier than the period asked for, and the jobs queued from %s to %s are counted in it, not in %s",
+				s.B.Label, stamp(s.B.Since), stamp(s.A.AskedUntil), s.A.Label))
+		}
 	}
-	between := !s.A.Until.IsZero() && s.A.Until.Before(s.B.Since)
-	switch {
-	case between && s.B.NoRecordBefore != nil:
-		out = append(out, fmt.Sprintf("the fleet keeps no counts from before %s, so the hours from %s to %s, between the two periods, are counted on neither side",
-			stamp(*s.B.NoRecordBefore), stamp(s.A.Until), stamp(s.B.Since)))
-	case s.B.NoRecordBefore != nil:
-		out = append(out, late(s.B))
-	case between && s.A.CountsOnly:
-		out = append(out, fmt.Sprintf("the roll-up keeps whole UTC days, so the jobs queued from %s to %s, between the two periods, are counted on neither side",
-			stamp(s.A.Until), stamp(s.B.Since)))
+	// The later side ended at the last midnight the roll-up read whole, and
+	// nothing comes after it to count the rest.
+	if s.B.CountsOnly && s.B.Until.Before(s.B.AskedUntil) {
+		out = append(out, fmt.Sprintf("the roll-up keeps whole UTC days, so %s ends earlier than the period asked for, and the jobs queued from %s to %s, after its last whole day, are counted on neither side",
+			s.B.Label, stamp(s.B.Until), stamp(s.B.AskedUntil)))
 	}
 	return out
 }

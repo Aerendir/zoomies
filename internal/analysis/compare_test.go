@@ -552,6 +552,62 @@ func TestASideWhoseCountsBeginLateSaysTheFleetKeepsNoneBefore(t *testing.T) {
 	}
 }
 
+// A side read from the roll-up can end before the end asked for. The hours
+// between are then the other side's, or neither side's, and the finding says
+// which: a label naming the span read differs from the request whenever
+// anything is cut, so it cannot say it alone.
+func TestASideEndingBeforeTheEndAskedForSaysWhereThoseHoursWent(t *testing.T) {
+	s := periods(15, 20)
+	s.A.CountsOnly, s.B.CountsOnly = true, true
+	s.A.AskedUntil = compareBase.Add(6 * time.Hour)
+	s.B.Label, s.B.AskedUntil = "the 24 hours to 2026-10-12 08:00 UTC", s.B.Until.Add(6*time.Hour)
+	f := mustCompare(t, s)
+	for _, want := range []string{
+		"the roll-up keeps whole UTC days, so the 24 hours to 2026-10-12 08:00 UTC begins earlier than the period asked for, " +
+			"and the jobs queued from 2026-10-11 08:00 UTC to 2026-10-11 14:00 UTC are counted in it, not in the 24 hours before",
+		"the roll-up keeps whole UTC days, so the 24 hours to 2026-10-12 08:00 UTC ends earlier than the period asked for, " +
+			"and the jobs queued from 2026-10-12 08:00 UTC to 2026-10-12 14:00 UTC, after its last whole day, are counted on neither side",
+	} {
+		if !strings.Contains(f.ConfidenceReason, want) {
+			t.Errorf("reason %q does not say %q", f.ConfidenceReason, want)
+		}
+	}
+
+	// An earlier side that could not be read says where the fleet's counts
+	// begin and what became of its hours from there to its asked end.
+	first := compareBase.Add(-4 * time.Hour)
+	for name, c := range map[string]struct {
+		bSince time.Time
+		went   string
+	}{
+		"in the later side": {first, "are counted in the last 24 hours."},
+		"on neither side":   {compareBase, "are counted on neither side."},
+	} {
+		s := periods(0, 20)
+		s.A.CountsOnly, s.A.Since, s.A.Until, s.A.NoRecordBefore = true, first.Truncate(24*time.Hour), first.Truncate(24*time.Hour), &first
+		s.A.AskedUntil, s.B.Since = compareBase, c.bSince
+		f := mustCompare(t, s)
+		want := "The fleet keeps no counts from before 2026-10-11 04:00 UTC, so the 24 hours before could not be read, and there is nothing to compare the last 24 hours with; " +
+			"the roll-up keeps whole UTC days, so the jobs queued from 2026-10-11 04:00 UTC to 2026-10-11 08:00 UTC, the earlier period's last hours, " + c.went
+		if f.Summary != want {
+			t.Errorf("%s: summary\n got %q\nwant %q", name, f.Summary, want)
+		}
+	}
+
+	// With the counts beginning inside the later side's last asked hours,
+	// neither side could be read, and those hours are on record all the same.
+	later := compareBase.Add(20 * time.Hour)
+	s = periods(0, 0)
+	s.A.CountsOnly, s.A.Since, s.A.Until, s.A.NoRecordBefore = true, compareBase, compareBase, &later
+	s.B.CountsOnly, s.B.Since, s.B.Until, s.B.NoRecordBefore = true, compareBase.Add(16*time.Hour), compareBase.Add(16*time.Hour), &later
+	s.B.AskedUntil = compareBase.Add(24 * time.Hour)
+	f = mustCompare(t, s)
+	if want := "The fleet keeps no counts from before 2026-10-12 04:00 UTC, so neither the 24 hours before nor the last 24 hours could be read, and there is nothing to compare; " +
+		"the roll-up keeps whole UTC days, so the jobs queued from 2026-10-12 04:00 UTC to 2026-10-12 08:00 UTC, the later period's last hours, are counted on neither side."; f.Summary != want {
+		t.Errorf("neither read: summary\n got %q\nwant %q", f.Summary, want)
+	}
+}
+
 func TestAPeriodComparisonIsWordedForPeriods(t *testing.T) {
 	s := periods(120, 120)
 	s.B.Figures.Duration = spread(120, time.Minute, 9*time.Minute)

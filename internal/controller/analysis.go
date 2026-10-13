@@ -62,7 +62,7 @@ type wholeDaysError struct {
 func (e wholeDaysError) Error() string {
 	const layout = "2006-01-02 15:04 UTC"
 	return fmt.Sprintf("%s, %s to %s, is older than retention.jobs, so it can only be read in whole UTC days from the usage roll-up, "+
-		"and it has no midnight inside it to end on; choose a period of at least a whole day, or one no longer than half of retention.jobs",
+		"and it has no midnight inside it to end on; choose a period of at least a whole day, or, for a period ending now, one no longer than half of retention.jobs",
 		e.which, e.since.UTC().Format(layout), e.until.UTC().Format(layout))
 }
 
@@ -563,7 +563,7 @@ func (c *Controller) releaseSides(ctx context.Context, req CompareRequest, w Ana
 // first and last were queued in, so the fleet's size is read over the time
 // it was the release running.
 func (c *Controller) releaseSide(ctx context.Context, version string, w AnalysisWindow, spans []store.VersionSpan, more bool, cut *time.Time) (analysis.CompareSide, error) {
-	side := analysis.CompareSide{Label: version, Since: w.Since, Until: w.Until}
+	side := analysis.CompareSide{Label: version, Since: w.Since, Until: w.Until, AskedUntil: w.Until}
 	i := slices.IndexFunc(spans, func(s store.VersionSpan) bool { return s.Version == version })
 	if i >= 0 {
 		side.Since = later(w.Since, spans[i].First.Truncate(time.Minute))
@@ -642,7 +642,7 @@ func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time
 		// Nothing before the later side's counts is on record, so the
 		// earlier side has nothing to read: it is said to be unread, never
 		// read as a period in which no jobs ran.
-		a = analysis.CompareSide{Since: aw.Until, Until: aw.Until, CountsOnly: true, NoRecordBefore: b.NoRecordBefore}
+		a = analysis.CompareSide{Since: aw.Until, Until: aw.Until, AskedUntil: aw.Until, CountsOnly: true, NoRecordBefore: b.NoRecordBefore}
 	} else if a, err = c.periodSide(ctx, aw, earlier(aw.Until, b.Since), cut, "the earlier period"); err != nil {
 		return a, b, err
 	}
@@ -658,9 +658,14 @@ func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time
 	a.Label = "the " + words(a) + " before"
 	b.Label = "the last " + words(b)
 	// "The last" is a promise about now; a period that ended earlier says
-	// when.
-	if now.Sub(b.Until) > time.Minute || b.Until.Sub(now) > time.Minute {
-		b.Label = "the " + words(b) + " to " + b.Until.UTC().Format("2006-01-02 15:04 UTC")
+	// when. A side that could not be read is named for the span asked for,
+	// its end included.
+	end := b.Until
+	if !b.Since.Before(b.Until) {
+		end = b.AskedUntil
+	}
+	if now.Sub(end) > time.Minute || end.Sub(now) > time.Minute {
+		b.Label = "the " + words(b) + " to " + end.UTC().Format("2006-01-02 15:04 UTC")
 	}
 	return a, b, nil
 }
@@ -675,13 +680,14 @@ func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time
 // is never a side whose jobs are cut short, because the roll-up keeps every
 // day.
 func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, to time.Time, cut *time.Time, which string) (analysis.CompareSide, error) {
-	side := analysis.CompareSide{Since: w.Since, Until: to}
+	side := analysis.CompareSide{Since: w.Since, Until: to, AskedUntil: w.Until}
 	if cut != nil && w.Since.Before(*cut) {
 		// A day the roll-up has absorbed is read whole, so a side ending
 		// partway through one would count that day's later hours, which are
 		// the other side's. It ends at that day's midnight instead: its Until
-		// says so, its label names the span it covers, and the comparison's
-		// doubts name the hours between it and the other side. A side with
+		// says so, its label names the span it covers, and, because its
+		// AskedUntil keeps the end asked for, the comparison's doubts name
+		// the hours cut off and which side, if either, counts them. A side with
 		// no midnight inside it to end on cannot be read apart from the
 		// other, and is refused. A day not yet absorbed is read from the
 		// rows, to the instant.
@@ -713,6 +719,20 @@ func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, to time.T
 		side.Since, side.Until, side.CountsOnly = from, to, true
 		if from.After(w.Since) {
 			side.NoRecordBefore = &from
+			if !from.Before(to) && to.Before(w.Until) {
+				// Read short of its asked end, an unread side learns only
+				// that nothing is on record before the end of that read: a
+				// midnight, or where the later side's counts begin. The
+				// fleet's counts can begin later, inside the hours cut off,
+				// which are then the later side's or neither side's. Asked
+				// over the whole span, the store says where they begin, and
+				// that is the instant to name.
+				_, first, _, err := c.st.InstallationCountsBetween(ctx, w.Since, w.Until)
+				if err != nil {
+					return side, fmt.Errorf("reading the usage roll-up: %w", err)
+				}
+				side.NoRecordBefore = &first
+			}
 		}
 	} else {
 		figures, err := c.jobFigures(ctx, store.JobFilter{Since: &w.Since, Until: &to})
