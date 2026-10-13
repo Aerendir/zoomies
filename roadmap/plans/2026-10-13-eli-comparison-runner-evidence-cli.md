@@ -1,6 +1,6 @@
 # ZF-243: show runner evidence in CLI comparisons
 
-13 October 2026. Prepared on main after #1004 merged.
+13 October 2026. Ready for review [#1006](https://github.com/eyupio/zoomies/pull/1006), based on main after #1004 merged.
 
 ## Behaviour
 
