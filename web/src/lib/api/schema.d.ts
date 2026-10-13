@@ -10445,7 +10445,7 @@ export interface components {
             fit_why?: string;
             /** @description The first thing standing in the way */
             why?: string;
-            /** @description What to change */
+            /** @description What to change: for a selector's refusal, or the size the provider's machines would need when they are too small for the pool. */
             fix?: string;
         };
         /** @description Whether this fleet is renting machines and what it decided about each pool it had something to say about. The switches are read when the request is made; the verdicts are the last machine pass's. */

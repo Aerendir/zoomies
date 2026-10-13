@@ -458,3 +458,17 @@ func TestSetupCheckNamesSDNUseWhenTheTokenIsShownNoBridges(t *testing.T) {
 		}
 	}
 }
+
+// A provider row that names no size builds whatever its template is, and the
+// fit check can only judge a machine whose size something has said. The
+// preflight is where the template is read, so it reports the template's size:
+// without it, a template too small for a pool fits every pool by slots alone,
+// and the fleet finds out only once it has paid for the machine.
+func TestPreflightReportsTheSizeTheTemplateBuilds(t *testing.T) {
+	f := newFakePVE(t, nil)
+
+	report := Preflight(context.Background(), f.client(t), healthyPrereqs())
+	if report.BuildsCPUs != 2 || report.BuildsMemoryMB != 4096 {
+		t.Fatalf("builds %d CPUs and %d MB, want the template's 2 cores and 4096 MB", report.BuildsCPUs, report.BuildsMemoryMB)
+	}
+}

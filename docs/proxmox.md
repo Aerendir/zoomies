@@ -345,6 +345,29 @@ A machine is rented for a pool only when all three of these hold:
    labels, and the size are all checked against the machine the provider would
    build, before anything is paid for.
 
+The size is judged the way placement judges a host: after the host's reserve,
+cut into the provider's machine capacity, with a docker-in-docker runner's
+slot big enough that the thinner of the runner and its daemon still gets the
+pool's minimum. A daemon given 15% of a slot's memory under a 1 GB minimum
+needs a slot of about 6.7 GB, so a 4 GB machine is too small for that pool
+however many of them are rented.
+
+When the **Machine shape** leaves CPUs and memory empty, each clone is the
+template's size, and the controller judges it at the size it was last seen
+to be: the template's, read by the connection check, and then what a machine
+built from it measured itself as once its agent joined. Run the check after
+changing the template, so the next machine is judged at the new size. A
+provider whose size nothing has said yet is judged as a host that measured
+nothing, which fits by slots alone; its first machine is how the size is
+learnt.
+
+A provider whose machines are too small for a pool rents nothing for it, and
+says so with the size they would have to be: "Give proxmox-lab's machines at
+least 2 CPUs and 8 GB of memory (set its machine size, or give the template it
+clones more processors and memory), or lower this pool's minimum runner size."
+It never suggests a higher maximum, since every machine that would buy is the
+one that is too small.
+
 Both selectors are empty by default, which is what every pool and provider
 meant before they could say otherwise, so nothing changes until one is set.
 Every entry has to be satisfied, and case does not matter, as
@@ -387,7 +410,7 @@ while renting is switched off, so it can say what would have been rented.
 | `on_its_way` | Machines already being built cover the pool, so the next runners start there. | Nothing; wait for them. |
 | `waiting` | The scheduler could not place the pool for a reason a machine does not answer: a host that could run it is cordoned, silent, incompatible, held or still starting runners. A machine is rented only once every host that could run the pool is full. | Wait for those hosts to clear, or uncordon, repair or remove the ones that are unavailable. |
 | `ceiling` | A limit stopped the purchase: the fleet's maximum or a provider's own. The sentence names which. | Raise the limit it names. |
-| `unserved` | No provider will rent for this pool: a selector says no, or no provider builds a machine the pool could use. | Change the selector the sentence quotes, give a provider machines that suit the pool, or change the pool. |
+| `unserved` | No provider will rent for this pool: a selector says no, or no provider builds a machine the pool could use. A machine too small for the pool is said as that, with the size it would have to be and the machines the provider already owns at that size. | Change the selector the sentence quotes, give the provider's machines the size the sentence names, or change the pool. |
 | `held` | A provider may not buy at the moment, for the reason the sentence gives. | Clear the reason, for example resume a paused provider. |
 | `off` | Renting is switched off, so nothing is rented. The sentence says what would have been rented, or that a machine being built is not being finished. | Turn on **Rent machines** in Settings, and set **Machines the fleet may rent** to the most you are willing to pay for. |
 
@@ -423,6 +446,12 @@ sequenceDiagram
     Z->>PVE: verify ownership, then delete
     Z->>PVE: inspect until the VM is really gone
 ```
+
+A ready machine that no enabled pool's runner fits on (too small, or the wrong
+backend, platform or labels for every pool) is not kept for the next burst,
+because nothing that arrives will run on it. It is released once the scale-down
+cooldown has passed, without waiting out the idle timeout as well, so it does
+not hold the provider's maximum while work is queued.
 
 Two of those steps are the whole design and are worth stating plainly:
 

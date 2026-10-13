@@ -238,6 +238,9 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if c.mayAct() {
+		c.noteMachineSizes(ctx, env)
+	}
 	// Off is off, whoever asked, and a controller that may not act is held as
 	// well: provider and runner mutations share the same authority boundary.
 	// The pass still decides and keeps the verdict, as a fenced scheduling
@@ -265,6 +268,41 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	c.stepMachines(ctx, env)
 	c.publishDerived(ctx)
 	return nil
+}
+
+// noteMachineSizes records, for each provider, the size the newest of its
+// machines whose agent has joined measured itself as. It is the evidence the fit
+// check judges the provider's next machine by when its row names no size, and
+// it is better evidence than the template's: it is the figure placement will
+// judge the machine by, after whatever the guest's kernel kept for itself.
+//
+// It is written down rather than read off the machines each pass, because the
+// machines that show a shape too small are the ones released for it, and a
+// fleet that forgot why would rent the same machine again as soon as they had
+// gone. The row in env is updated as well, so this pass decides on it.
+func (c *Controller) noteMachineSizes(ctx context.Context, env *machineEnv) {
+	ms := slices.Clone(env.list)
+	slices.SortStableFunc(ms, func(a, b *store.Machine) int { return a.CreatedAt.Compare(b.CreatedAt) })
+	for _, m := range ms {
+		row, h := env.byID[m.ProviderID], env.hosts[m.HostID]
+		if row == nil || h == nil || m.HostID == "" || h.CPUs <= 0 || h.MemoryMB <= 0 {
+			continue
+		}
+		at := m.CreatedAt.Truncate(time.Millisecond)
+		if row.SeenAt != nil && (at.Before(*row.SeenAt) ||
+			(at.Equal(*row.SeenAt) && row.SeenFrom == store.MachineSizeFromMachine &&
+				row.SeenCPUs == h.CPUs && row.SeenMemoryMB == h.MemoryMB)) {
+			continue
+		}
+		wrote, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, h.CPUs, h.MemoryMB, store.MachineSizeFromMachine, at)
+		if err != nil {
+			c.log.Warn("could not record the size a provider's machine measured", "provider", row.Name, "machine", m.ID, "error", err)
+			continue
+		}
+		if wrote {
+			row.SeenCPUs, row.SeenMemoryMB, row.SeenFrom, row.SeenAt = h.CPUs, h.MemoryMB, store.MachineSizeFromMachine, &at
+		}
+	}
 }
 
 // machineEnv is one pass's view of the world, gathered once.
@@ -628,7 +666,11 @@ func (c *Controller) applyMachinePlan(ctx context.Context, env *machineEnv, plan
 			}
 		}
 		for _, id := range pp.Drain {
-			c.beginDrain(ctx, env, id)
+			why := "this machine's pools have had no queued work for long enough that it is no longer worth paying for"
+			if slices.Contains(pp.Unfit, id) {
+				why = "no enabled pool's runner fits on this machine, so it was released without waiting out the idle timeout"
+			}
+			c.beginDrain(ctx, env, id, why)
 		}
 	}
 }
@@ -703,7 +745,7 @@ func (c *Controller) reviveDraining(ctx context.Context, env *machineEnv, row *s
 
 // beginDrain cordons a machine's host and moves the machine to draining, which
 // is reversible right up until the delete starts.
-func (c *Controller) beginDrain(ctx context.Context, env *machineEnv, id string) {
+func (c *Controller) beginDrain(ctx context.Context, env *machineEnv, id, why string) {
 	m := env.machine(id)
 	if m == nil || m.State != store.MachineReady {
 		return
@@ -717,8 +759,7 @@ func (c *Controller) beginDrain(ctx context.Context, env *machineEnv, id string)
 			c.publishHost(h)
 		}
 	}
-	c.transitionMachine(ctx, env, m, store.MachineDraining,
-		"this machine's pools have had no queued work for long enough that it is no longer worth paying for")
+	c.transitionMachine(ctx, env, m, store.MachineDraining, why)
 }
 
 func (e *machineEnv) machine(id string) *store.Machine {
@@ -1746,6 +1787,21 @@ func unservableProviders(providers []*store.Provider, pools []*store.Pool, now t
 		}
 	}
 	return out
+}
+
+// tooSmallFor is the first enabled pool, by name, whose runners a provider's
+// machine is the right kind for and too small to hold, with what is wrong.
+func tooSmallFor(p *store.Provider, pools []*store.Pool, now time.Time) (*store.Pool, machineMisfit, bool) {
+	synth := providerSynthHost(p, now)
+	for _, pool := range sortedPoolsForMachines(pools) {
+		if !pool.Enabled {
+			continue
+		}
+		if misfit := machineFit(p, synth, pool); misfit.Size {
+			return pool, misfit, true
+		}
+	}
+	return nil, machineMisfit{}, false
 }
 
 // providerLabelFor names a provider in a metric or a sentence, falling back to
