@@ -46,7 +46,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 web capture and inspection | Merged | ZF-243, [#991](https://github.com/eyupio/zoomies/pull/991), targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
 | E2 CLI capture | Merged | ZF-243, [#993](https://github.com/eyupio/zoomies/pull/993), targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
 | E2 recorded grant provenance | Draft PR | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
-| E2 runner observation foundation | Implemented, PR pending | ZF-243, stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Live result integration remains next |
+| E2 runner observation foundation | Draft PR | ZF-243, [#996](https://github.com/eyupio/zoomies/pull/996), stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Live result integration remains next |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1268,6 +1268,7 @@ No new dependency, SQL, migration, public route/schema, tool, UI or model call.
 
 ### E2 slice 14: runner observation foundation, 13 October 2026
 
+Draft [#996](https://github.com/eyupio/zoomies/pull/996),
 codex/eli-runner-observation-foundation stacks on draft #994. This slice implements
 storage and a pure projection only; it does not change ReportResult or begin
 collecting runtime observations. That live integration is the next reviewable

@@ -1,6 +1,7 @@
 # ZF-243: immutable runner observation foundation
 
-13 October 2026. Stacked on recorded grant provenance #994.
+13 October 2026. Draft [#996](https://github.com/eyupio/zoomies/pull/996),
+stacked on recorded grant provenance #994.
 
 ## Contract
 
