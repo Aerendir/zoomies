@@ -485,6 +485,53 @@ func TestAnAnalysisIsCutOnWholeRowsUnderTheServersWindowBlock(t *testing.T) {
 	}
 }
 
+// A cut note is reserved only once a cut is needed: an answer whose rows fit
+// the block without one must arrive whole, not lose its last row to make room
+// for a note saying it was cut.
+func TestAnAnswerThatFitsWithoutACutNoteIsNotCut(t *testing.T) {
+	body := []byte(analysisBody(t, queueWaitFinding(3, 1, 20)))
+	whole, _, err := renderFinding(body, analysis.QueueWaitVersion, maxWindowBlock, queueWaitRenderer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := 0
+	for _, c := range whole {
+		block = max(block, len(c.Text))
+	}
+	content, answer, err := renderFinding(body, analysis.QueueWaitVersion, block, queueWaitRenderer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := answer.(analysisAnswer[analysis.QueueWaitFinding])
+	if got.Truncated || content[0].Text != whole[0].Text {
+		t.Errorf("an answer of exactly %d bytes was cut (truncated %v):\n%s", block, got.Truncated, content[0].Text)
+	}
+}
+
+// Once a cut is needed the note is reserved, so the cut text, note and all,
+// still fits the block: a block one byte short of the whole answer cuts it,
+// and says so, without passing the ceiling.
+func TestAnAnswerOneByteTooLongIsCutWithinItsBlock(t *testing.T) {
+	body := []byte(analysisBody(t, queueWaitFinding(40, 0, 0)))
+	whole, _, err := renderFinding(body, analysis.QueueWaitVersion, maxWindowBlock, queueWaitRenderer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := len(whole[0].Text) - 1
+	content, answer, err := renderFinding(body, analysis.QueueWaitVersion, block, queueWaitRenderer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !answer.(analysisAnswer[analysis.QueueWaitFinding]).Truncated || !strings.Contains(content[0].Text, "truncated: ") {
+		t.Fatalf("an answer one byte over its block was not cut:\n%s", content[0].Text)
+	}
+	for i, c := range content {
+		if len(c.Text) > block {
+			t.Errorf("text block %d is %d bytes, over the %d it was given", i, len(c.Text), block)
+		}
+	}
+}
+
 func TestAnAnalysisAnswerOfAnotherShapeIsRefused(t *testing.T) {
 	compare := analysisBodies(t)["/analysis/compare"]
 	wrongVersion := strings.Replace(analysisBodies(t)["/analysis/queue-wait"], analysis.QueueWaitVersion, "queue-wait-v2", 1)

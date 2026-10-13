@@ -105,9 +105,19 @@ func renderFinding[F any](body []byte, want string, block int, r renderer[F]) ([
 		top.WriteString(line + "\n")
 	}
 	rows := r.rows(f)
-	// The trailer counts against the block, sized for the longest it could be,
-	// because where the cut falls is not known until it has fallen.
-	budget := block - top.Len() - len(cutNote(len(rows), len(rows), block, r))
+	// An answer that fits whole, text and structured copy alike, needs no
+	// trailer, so none is reserved: a note reserved up front would cut the
+	// last row of an answer that fitted. Once any cut is needed, the trailer
+	// counts against the block, sized for the longest it could be, because
+	// where the cut falls is not known until it has fallen.
+	budget := block - top.Len()
+	whole, err := json.Marshal(analysisAnswer[F]{Finding: f})
+	if err != nil {
+		return nil, nil, err
+	}
+	if !rowsFit(rows, budget, block) || len(whole) > maxWindowBlock {
+		budget -= len(cutNote(len(rows), len(rows), block, r))
+	}
 
 	var trusted, quoted strings.Builder
 	shown := 0
@@ -155,6 +165,25 @@ func renderFinding[F any](body []byte, want string, block int, r renderer[F]) ([
 		)
 	}
 	return content, answer, nil
+}
+
+// rowsFit is whether every row fits: the trusted lines within budget and the
+// quoted names within the block they have to themselves.
+func rowsFit(rows []findingRow, budget, block int) bool {
+	quoted := 0
+	for _, row := range rows {
+		quoted += len(row.quoted)
+	}
+	return rowsLen(rows) <= budget && quoted <= block
+}
+
+// rowsLen is the length of the rows' trusted lines.
+func rowsLen(rows []findingRow) int {
+	n := 0
+	for _, row := range rows {
+		n += len(row.line)
+	}
+	return n
 }
 
 // cutNote is the last line of a cut answer.
