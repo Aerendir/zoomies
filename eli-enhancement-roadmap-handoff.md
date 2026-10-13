@@ -46,6 +46,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 web capture and inspection | Merged | ZF-243, [#991](https://github.com/eyupio/zoomies/pull/991), targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
 | E2 CLI capture | Merged | ZF-243, [#993](https://github.com/eyupio/zoomies/pull/993), targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
 | E2 recorded grant provenance | Draft PR | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
+| E2 runner observation foundation | Draft PR | ZF-243, [#996](https://github.com/eyupio/zoomies/pull/996), stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Live result integration remains next |
+| E2 runner result integration | Draft PR | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1263,3 +1265,122 @@ keeping the public schema/report unchanged and replay at zero additional GitHub/
 quota calls. Controller/API vet, strict docs and whitespace checks pass. Docs use
 the repository-only header fallback for unavailable optional GitHub metadata.
 No new dependency, SQL, migration, public route/schema, tool, UI or model call.
+
+
+### E2 slice 14: runner observation foundation, 13 October 2026
+
+Draft [#996](https://github.com/eyupio/zoomies/pull/996),
+codex/eli-runner-observation-foundation stacks on draft #994. This slice implements
+storage and a pure projection only; it does not change ReportResult or begin
+collecting runtime observations. That live integration is the next reviewable
+slice, after the lifecycle and retention contract is established.
+
+Migration 0104 stores one immutable retained create-result observation per runner,
+with installation scope bound inside the hashed typed envelope. The store verifies
+live runner/pool/host/installation identity on a first write. Identical retries
+preserve controller receipt time and can acknowledge an existing observation after
+runner pruning; conflicting values refuse. Reads require exact installation/runner
+scope, valid hash, supported version, whitelisted fields and unexpired controller receipt
+time. Installation removal cascades observations; runner/host/pool pruning does not
+remove them. Logical limits: 4 KiB per payload, 2,000 per installation, 10,000 globally
+and 30-day read validity. Eviction uses insertion sequence, including frozen clocks;
+retries cannot renew expiry. Freed SQLite pages need not immediately shrink the DB.
+Full database backups carry the table; installation archives currently omit it.
+
+The version is runner-create-result-v1. Issued fields are only backend, fingerprint
+of the exact image reference, nullable requested CPU/memory, allocation source,
+Docker mode and typed-resource flags. The literal image reference is not retained,
+since it could be a credentialed URI. Full Spec, credentials, environment/JIT
+config, names, workload handles, logs, errors, cache paths and repository source are
+excluded. Requested values do not prove applied limits; missing zero resource
+settings remain unknown, not observed zero. Full resource/configuration identity
+still cannot be established from this subset.
+
+Agent-reported fields are a syntactically valid SHA-256 image digest and nullable
+reported completion/container-start times. Missing versus unsupported digests are
+explicit, with unsupported raw text discarded. Agent clocks are not controller
+clocks; no ordering across them is asserted. An agent's successful create result
+can represent adoption, so this is not proof of a newly created container. The pure
+projection requires exact task/result/spec identities, a controller issue time,
+successful create and no NotStarted flag. It deep-copies retained pointers and does
+not infer facts from current pool/runner data. Result authentication and in-flight
+queue correlation remain the caller's responsibility.
+
+The migration guard exposed the existing shipped 0102 pair (comparison evidence
+and provider minimums). Their ledger names are preserved, the pair is explicitly
+grandfathered, and a third file under any grandfathered prefix is now refused.
+New observation migration uses the unused 0104 prefix. No shipped migration renamed.
+
+Next: call the projection from ReportResult only after authenticated host ownership
+and exact known in-flight task/spec identity are checked. Resolve installation from
+the matched runner/pool, persist before completing the task lease, and define
+handling for retries, conflicts, unsupported legacy reports and storage failure
+without blocking runner cleanup or inventing evidence. Keep not-started/failed,
+foreign, unknown-after-restart and mismatched results unobserved. Add real result
+handler fixtures before connecting observations to comparison joins. No public
+API/UI/tool field or comparison ranking changes are introduced by this foundation.
+
+
+Slice 14 validation completed: focused store/controller race fixtures pass for
+immutable scoped observations, copied pointers, credential/JIT/env/handle/error
+exclusion, legacy/unsupported unknowns, malformed identity, hash and shape integrity,
+runner pruning, installation deletion, per-installation/global count bounds and
+30-day expiry without renewal. Migration-name and idempotent-open checks pass,
+as does the existing full database backup metadata check. Store/controller vet,
+strict docs and whitespace pass. Docs used the repository-only header fallback
+for unavailable optional GitHub metadata. No live ReportResult wiring, agent
+operation, public API/schema/tool/UI change, GitHub/model call or experiment.
+
+
+### E2 slice 15: runner result integration, 13 October 2026
+
+Draft [#998](https://github.com/eyupio/zoomies/pull/998), branch
+codex/eli-runner-observation-results, stacks on draft #996. ReportResult attempts
+observation retention only after the existing host-to-runner ownership check.
+The per-host in-flight queue must hold an exact successful create task with the
+same task ID, runner ID, pool ID and spec identity; missing/unknown-after-restart,
+failed, NotStarted, foreign and mismatched results do not create evidence.
+Legacy missing Kind is accepted only through the known create-task identity.
+
+At queue dispatch, an evidence whitelist is frozen in the leased task before it
+leaves the controller. The delivered task gets its own top-level Spec copy so
+embedded-agent scalar preparation cannot rewrite the controller's queued spec.
+The frozen whitelist excludes credentials and environment; the in-memory image
+reference is used only to compute the retained fingerprint. Requested scalar
+resource fields and reported digest/timestamps retain the foundation's limits.
+Redelivery takes a new dispatch snapshot; an existing immutable first observation
+is never overwritten. Queue loss cannot reconstruct evidence from current state.
+
+Installation ownership is resolved from the matched runner/pool at result receipt,
+and the store verifies that ownership atomically. It is not proof of installation
+ownership when the task was originally issued. No current resource/image settings
+are copied into the issued evidence. Agent clocks remain distinct from controller
+receipt/dispatch clocks; successful create may be adoption. Applied CPU/memory,
+full configuration, workload/cache equivalence and cohort completeness stay unknown.
+
+The explicit persistence policy is best effort for observation data. The attempt
+happens before existing lifecycle writes and deferred task acknowledgement. A
+projection/scope/storage failure, expired observation or immutable conflict logs a
+bounded reason and leaves evidence missing; it does not create a new result error,
+trap a live runner or block cleanup. Logs contain runner/task IDs and a stable
+reason, not the Spec, raw result, credentials or backend errors. Existing lifecycle
+write failures still return errors and keep their leases recoverable. Observation
+writes are not automatic retries; an agent's existing result/lease retry is handled
+idempotently by storage or leaves the first observation intact. A duplicate after
+acknowledgement is unknown to the queue and cannot renew observation age.
+
+Next: bind retained observations to selected job/runner/installation and pinned
+GitHub job identity in the comparison collection/join, copy provenance into private
+comparison envelopes, and expose only reviewed descriptive fields through a later
+public report/UI contract. Do not populate ResourceID/ConfigurationID or verified
+image/workload equivalence from requested fields or an unverified agent claim.
+Keep admission, ten-attempt selection bounds, thirty-per-arm gate and fixed rules.
+
+
+Slice 15 validation completed: focused new result/projection fixtures plus existing
+embedded transport, poll/dedup/requeue, failed/not-started task, foreign-host,
+create-secret and failed-log fixtures pass with race detection. Additional cleanup,
+remove-lease recovery, lost-task-queue cleanup and closed-store lease-preservation
+checks pass. Controller vet, strict docs and whitespace pass. Docs used the
+repository-only header fallback for unavailable optional GitHub metadata. No live
+agent/backend/GitHub/model run, new migration, public schema or ranking change.
