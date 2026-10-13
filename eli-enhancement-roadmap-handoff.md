@@ -57,7 +57,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 web workflow evidence | Merged | ZF-243, [#1014](https://github.com/eyupio/zoomies/pull/1014), based on main after #1012 | Separate bounded REST/UI projection with exact run IDs, unknowns and root-only coverage; fingerprints exclude raw paths. Controller/API race, 20 desktop/mobile checks, 109 UI unit tests, type/lint/build, vet and strict docs pass |
 | E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
 | E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
-| E2 private root dependency inventory | Ready for review | ZF-243, PR pending, based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
+| E2 private root dependency inventory | Ready for review | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1911,7 +1911,7 @@ remains outstanding; fixture passing does not demonstrate unscripted reasoning.
 
 ### E2 slice 25: private root dependency inventory, 13 October 2026
 
-Prepared on codex/eli-comparison-workflow-dependencies, based on main after #1016
+Ready for review [#1018](https://github.com/eyupio/zoomies/pull/1018), branch codex/eli-comparison-workflow-dependencies, based on main after #1016
 merged. The existing push-only immutable root-file read now inspects its already
 validated bytes before discarding them. No additional source, blob, action, image,
 local path or reusable workflow is fetched or executed. Eight-request reservation,

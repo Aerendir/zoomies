@@ -1,6 +1,6 @@
 # ZF-243: retain private root dependency declarations
 
-13 October 2026. Prepared on main after #1016 merged.
+13 October 2026. Ready for review [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 merged.
 
 ## Behaviour
 
