@@ -1,6 +1,6 @@
 # ZF-243: present bounded workflow evidence to MCP and Eli
 
-13 October 2026. Prepared on main after #1014 merged.
+13 October 2026. Ready for review [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 merged.
 
 ## Behaviour
 
