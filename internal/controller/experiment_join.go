@@ -21,8 +21,9 @@ func (e *ExperimentAdmissionError) Error() string { return ErrExperimentAdmissio
 func (e *ExperimentAdmissionError) Unwrap() error { return ErrExperimentAdmission }
 
 type ExperimentMatchedJob struct {
-	GitHubJobID int64  `json:"github_job_id"`
-	FleetJobID  string `json:"fleet_job_id"`
+	RecordedGrant *ExperimentRecordedGrant `json:"recorded_grant,omitempty"`
+	GitHubJobID   int64                    `json:"github_job_id"`
+	FleetJobID    string                   `json:"fleet_job_id"`
 }
 
 type ExperimentJoinedAttempt struct {
@@ -153,7 +154,7 @@ func joinExperimentAttempt(remote *github.ExperimentAttemptEvidence, retained Ex
 	for _, j := range remote.Jobs {
 		row, ok := local[j.ID]
 		if ok && row.HeadSHA == remote.HeadSHA {
-			r.MatchedJobs = append(r.MatchedJobs, ExperimentMatchedJob{GitHubJobID: j.ID, FleetJobID: row.JobID})
+			r.MatchedJobs = append(r.MatchedJobs, ExperimentMatchedJob{GitHubJobID: j.ID, FleetJobID: row.JobID, RecordedGrant: cloneExperimentGrant(row.RecordedGrant)})
 			delete(local, j.ID)
 		} else {
 			r.MissingJobIDs = append(r.MissingJobIDs, j.ID)

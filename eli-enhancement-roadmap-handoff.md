@@ -44,7 +44,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 CLI replay | Merged into API parent | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
 | E2 MCP/Eli replay | Merged | ZF-243, [#990](https://github.com/eyupio/zoomies/pull/990), targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
 | E2 web capture and inspection | Merged | ZF-243, [#991](https://github.com/eyupio/zoomies/pull/991), targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
-| E2 CLI capture | Draft PR | ZF-243, [#993](https://github.com/eyupio/zoomies/pull/993), targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
+| E2 CLI capture | Merged | ZF-243, [#993](https://github.com/eyupio/zoomies/pull/993), targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
+| E2 recorded grant provenance | Draft PR | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1206,3 +1207,59 @@ before changing eligibility/rule versions. The ten-attempt on-demand capture cap
 is below the 30-completed-per-arm comparison threshold; it must not be silently
 lifted, batched or relabelled complete to obtain a ranking. Separate descriptive
 selected observations from any future independently matched cohort path.
+
+
+### E2 slice 13: recorded grant provenance, 13 October 2026
+
+Draft [#994](https://github.com/eyupio/zoomies/pull/994).
+Starts from merged CLI capture #993 on main, branch
+codex/eli-comparison-grant-provenance. The evidence audit found existing historical
+job stamps: GrantedCPUs, GrantedMemoryMB and GrantedSource, written once by
+store.StampJobGranted after migration 0071. Zero/empty mean unrecorded; partial
+records cannot be made into known zero allocations. Runner.ImageDigest and current
+pool/host settings are mutable and are not used to infer historical identity.
+
+The recorded size is a controller calculation, not independent backend attestation.
+controller/job_versions.go grantedSize can account for Docker-in-Docker using pool
+settings at assignment time. These stamps therefore do not establish exact applied
+limits, CPU/memory bursts, image digest, full resource/configuration identity, cache,
+workflow inputs or test scope. No stamp observation time exists, so neither the
+job's start nor its queued timestamp is fabricated as the observation time.
+
+CollectExperimentAttempts projects an optional recorded_grant object from scoped
+job rows. Its basis is retained_job_granted_size_v1, source is a known allocation
+source, and CPU/memory dimensions are individually nullable. Legacy/missing/unknown
+provenance stays absent; negative or non-finite figures refuse inconsistent evidence.
+The join deep-copies grants only onto matched GitHub job IDs with the exact pinned
+head, and comparison assembly validates version, source, positive dimensions and
+binding to enumerated job identity before retention or replay. Failed jobs are not
+filtered out. Collection bounds, shared admission/quota, ten-attempt capture cap
+and all rule/measurement versions remain unchanged.
+
+The grant facts live in the immutable private retained envelope, alongside joined
+input evidence. They do not yet add a public API/report/MCP/CLI/UI field. Old records
+omit the optional field and continue replaying. New grant-bearing records require
+a controller that recognises the field: an older strict decoder refuses them on
+rollback rather than silently interpreting new provenance. No migration, old-data
+rewrite or new SQL/query is introduced. Current observed reports still have blank
+ResourceID/ImageID/ConfigurationID and SelectionComplete false; the same recorded
+stamp on two arms never manufactures eligibility or cost/confidence claims.
+
+Next: design a bounded immutable runner-creation observation from authenticated
+agent results and the exact issued task, with a whitelist of non-secret image/
+resource fields. Do not retain the full backend.Spec or environment/JIT token.
+Record controller-issued versus agent-reported/applied facts separately, bind them
+to the runner and selected job identity, and plan retention/cleanup before wiring
+those facts into a report. Workflow revision/inputs/test scope/cache and fair cohort
+selection remain separate unresolved evidence. Keep the thirty-per-arm threshold
+and on-demand budget; no automatic batches to turn selected observations eligible.
+
+
+Slice 13 validation completed: focused controller race tests covering grant
+projection/binding, collection/join/snapshot/retention/replay pass; store first-stamp
+and pre-migration upgrade race checks pass. All comparison API race fixtures pass,
+including a new capture test that freezes grants in the private envelope while
+keeping the public schema/report unchanged and replay at zero additional GitHub/
+quota calls. Controller/API vet, strict docs and whitespace checks pass. Docs use
+the repository-only header fallback for unavailable optional GitHub metadata.
+No new dependency, SQL, migration, public route/schema, tool, UI or model call.

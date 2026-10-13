@@ -44,6 +44,9 @@ func AssembleExperimentComparison(record ExperimentComparisonRecord, a, b *Exper
 			if attempt.Remote == nil || len(attempt.Remote.Jobs) > 500 {
 				return nil, ErrExperimentEvidence
 			}
+			if err := validateExperimentGrants(attempt); err != nil {
+				return nil, err
+			}
 			for _, job := range attempt.Remote.Jobs {
 				if seenJobs[job.ID] {
 					return nil, fmt.Errorf("%w: a GitHub job appears in more than one selected attempt", ErrExperimentEvidence)
