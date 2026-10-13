@@ -62,7 +62,7 @@ type wholeDaysError struct {
 func (e wholeDaysError) Error() string {
 	const layout = "2006-01-02 15:04 UTC"
 	return fmt.Sprintf("%s, %s to %s, is older than retention.jobs, so it can only be read in whole UTC days from the usage roll-up, "+
-		"and it has no midnight inside it to end on; choose a period of at least a whole day, or one within retention.jobs",
+		"and it has no midnight inside it to end on; choose a period of at least a whole day, or one no longer than half of retention.jobs",
 		e.which, e.since.UTC().Format(layout), e.until.UTC().Format(layout))
 }
 
@@ -628,12 +628,22 @@ func (c *Controller) jobFigures(ctx context.Context, f store.JobFilter) (analysi
 // it begins.
 func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time.Time, cut *time.Time) (analysis.CompareSide, analysis.CompareSide, error) {
 	span := w.Until.Sub(w.Since)
-	a, err := c.periodSide(ctx, AnalysisWindow{Since: w.Since.Add(-span), Until: w.Since}, cut, "the earlier period")
+	aw := AnalysisWindow{Since: w.Since.Add(-span), Until: w.Since}
+	// The later side first: a side read from the roll-up begins where the
+	// store's counts begin, which can be its first midnight, before the
+	// period asked for. The earlier side ends there, so no hour is in both
+	// counts.
+	b, err := c.periodSide(ctx, w, w.Until, cut, "the period")
 	if err != nil {
-		return a, analysis.CompareSide{}, err
+		return analysis.CompareSide{}, b, err
 	}
-	b, err := c.periodSide(ctx, w, cut, "the period")
-	if err != nil {
+	var a analysis.CompareSide
+	if b.NoRecordBefore != nil {
+		// Nothing before the later side's counts is on record, so the
+		// earlier side has nothing to read: it is said to be unread, never
+		// read as a period in which no jobs ran.
+		a = analysis.CompareSide{Since: aw.Until, Until: aw.Until, CountsOnly: true, NoRecordBefore: b.NoRecordBefore}
+	} else if a, err = c.periodSide(ctx, aw, earlier(aw.Until, b.Since), cut, "the earlier period"); err != nil {
 		return a, b, err
 	}
 	// Each side is named for the span its counts cover: one read from the
@@ -655,14 +665,17 @@ func (c *Controller) periodSides(ctx context.Context, w AnalysisWindow, now time
 	return a, b, nil
 }
 
-// periodSide is one period's jobs. One that starts before the retention line
-// is read from the daily roll-up instead (decision 5): counts only, whole
-// UTC days from the midnight before its start. Its Since is where those
-// counts are complete from, that midnight or the fleet's first record if it
-// is later, never a start the read did not keep to. It is never a side whose
-// jobs are cut short, because the roll-up keeps every day.
-func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, cut *time.Time, which string) (analysis.CompareSide, error) {
-	side := analysis.CompareSide{Since: w.Since, Until: w.Until}
+// periodSide is the jobs of the period w asks for, read up to the instant to
+// (w.Until, or where the later side's counts begin). One that starts before
+// the retention line is read from the daily roll-up instead (decision 5):
+// counts only, whole UTC days from the midnight before its start, and its
+// dates are the span the store says it read, never the span asked for. Its
+// Since is where the counts are complete from: that midnight, or the
+// fleet's first record if it is later, which NoRecordBefore then names. It
+// is never a side whose jobs are cut short, because the roll-up keeps every
+// day.
+func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, to time.Time, cut *time.Time, which string) (analysis.CompareSide, error) {
+	side := analysis.CompareSide{Since: w.Since, Until: to}
 	if cut != nil && w.Since.Before(*cut) {
 		// A day the roll-up has absorbed is read whole, so a side ending
 		// partway through one would count that day's later hours, which are
@@ -672,8 +685,7 @@ func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, cut *time
 		// no midnight inside it to end on cannot be read apart from the
 		// other, and is refused. A day not yet absorbed is read from the
 		// rows, to the instant.
-		to := w.Until
-		if midnight := w.Until.Truncate(24 * time.Hour); !midnight.Equal(w.Until) {
+		if midnight := to.Truncate(24 * time.Hour); !midnight.Equal(to) {
 			rolled, err := c.st.InstallationRollupUntil(ctx)
 			if err != nil {
 				return side, fmt.Errorf("reading the usage roll-up: %w", err)
@@ -685,6 +697,11 @@ func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, cut *time
 				to = midnight
 			}
 		}
+		if !to.After(w.Since) {
+			// The other side's counts begin at or before this side's start:
+			// what is left of it has no midnight of its own to end on.
+			return side, wholeDaysError{which: which, since: w.Since, until: w.Until}
+		}
 		counts, from, _, err := c.st.InstallationCountsBetween(ctx, w.Since, to)
 		if err != nil {
 			return side, fmt.Errorf("reading the usage roll-up: %w", err)
@@ -694,8 +711,11 @@ func (c *Controller) periodSide(ctx context.Context, w AnalysisWindow, cut *time
 			side.Figures.FleetFailed += n.FleetFault
 		}
 		side.Since, side.Until, side.CountsOnly = from, to, true
+		if from.After(w.Since) {
+			side.NoRecordBefore = &from
+		}
 	} else {
-		figures, err := c.jobFigures(ctx, store.JobFilter{Since: &w.Since, Until: &w.Until})
+		figures, err := c.jobFigures(ctx, store.JobFilter{Since: &w.Since, Until: &to})
 		if err != nil {
 			return side, err
 		}

@@ -508,6 +508,50 @@ func TestACountsOnlySideNamesTheHoursCountedOnNeitherSide(t *testing.T) {
 	}
 }
 
+// A side the fleet keeps no counts for is not a side where no jobs ran: on a
+// fleet whose oldest rows were pruned before the roll-up first ran, jobs did
+// run, and nobody can now say how many.
+func TestASideTheFleetKeepsNoCountsForIsNotOneWhereNoJobsRan(t *testing.T) {
+	first := compareBase.Add(8 * time.Hour)
+	s := periods(0, 15)
+	s.A.CountsOnly, s.A.Since, s.A.Until, s.A.NoRecordBefore = true, compareBase, compareBase, &first
+	s.B.CountsOnly, s.B.Since, s.B.NoRecordBefore = true, first, &first
+	s.B.Label = "the 16 hours to 2026-10-12 08:00 UTC"
+	f := mustCompare(t, s)
+	if want := "The fleet keeps no counts from before 2026-10-11 16:00 UTC, so the 24 hours before could not be read, and there is nothing to compare the 16 hours to 2026-10-12 08:00 UTC with."; f.Summary != want {
+		t.Errorf("summary\n got %q\nwant %q", f.Summary, want)
+	}
+	if want := "the fleet keeps no counts from before 2026-10-11 16:00 UTC, so the 24 hours before could not be read"; f.ConfidenceReason != want || f.Confidence != Low {
+		t.Errorf("confidence %s, reason\n got %q\nwant %q", f.Confidence, f.ConfidenceReason, want)
+	}
+}
+
+// A side whose counts begin later than the period asked for says why, and the
+// hours between the sides that no record covers are put down to that, not to
+// whole days.
+func TestASideWhoseCountsBeginLateSaysTheFleetKeepsNoneBefore(t *testing.T) {
+	first := compareBase.Add(-30 * time.Hour)
+	s := periods(15, 20)
+	s.A.CountsOnly, s.A.Since, s.A.Until, s.A.NoRecordBefore = true, first, compareBase, &first
+	s.A.Label = "the 30 hours before"
+	f := mustCompare(t, s)
+	if want := "the fleet keeps no counts from before 2026-10-10 02:00 UTC, so the 30 hours before begins there, later than the period asked for"; !strings.Contains(f.ConfidenceReason, want) {
+		t.Errorf("reason %q does not say %q", f.ConfidenceReason, want)
+	}
+
+	later := compareBase.Add(5 * time.Hour)
+	s = periods(15, 20)
+	s.A.CountsOnly, s.A.Until = true, compareBase.Add(-3*time.Hour)
+	s.B.CountsOnly, s.B.Since, s.B.NoRecordBefore = true, later, &later
+	f = mustCompare(t, s)
+	if want := "the fleet keeps no counts from before 2026-10-11 13:00 UTC, so the hours from 2026-10-11 05:00 UTC to 2026-10-11 13:00 UTC, between the two periods, are counted on neither side"; !strings.Contains(f.ConfidenceReason, want) {
+		t.Errorf("reason %q does not say %q", f.ConfidenceReason, want)
+	}
+	if strings.Contains(f.ConfidenceReason, "whole UTC days") || strings.Contains(f.ConfidenceReason, "begins there") {
+		t.Errorf("reason %q blames whole days, or says the gap twice", f.ConfidenceReason)
+	}
+}
+
 func TestAPeriodComparisonIsWordedForPeriods(t *testing.T) {
 	s := periods(120, 120)
 	s.B.Figures.Duration = spread(120, time.Minute, 9*time.Minute)

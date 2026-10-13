@@ -1026,7 +1026,7 @@ func TestASubDayCountsOnlySideEndingOffAMidnightIsRefused(t *testing.T) {
 			t.Errorf("%s: %v, want ErrWholeDaysOnly", name, err)
 			continue
 		}
-		for _, want := range []string{"older than retention.jobs", "whole UTC days", "choose a period of at least a whole day, or one within retention.jobs"} {
+		for _, want := range []string{"older than retention.jobs", "whole UTC days", "choose a period of at least a whole day, or one no longer than half of retention.jobs"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%s: %q does not say %q", name, err, want)
 			}
@@ -1073,5 +1073,172 @@ func TestAPeriodTooLongIsRefusedInDaysAndHours(t *testing.T) {
 	}
 	if _, err := f.c.AnalyseQueueWait(f.ctx, AnalysisWindow{Since: analysisNow, Until: analysisNow}, ""); err == nil {
 		t.Error("a period with no length was accepted")
+	}
+}
+
+// countsFleet is a fleet whose jobs each ran on one of its runners at the
+// given instants, rolled up to the midnight before rolledTo when it is set,
+// as the background loop does each day.
+func countsFleet(t *testing.T, retention time.Duration, rolledTo time.Time, jobs ...time.Time) *analysisFleet {
+	t.Helper()
+	f := newAnalysisFleet(t)
+	f.c.UpdateConfig(func(c *config.Config) { c.Retention.Jobs = retention })
+	for i, q := range jobs {
+		f.job("", q, func(j *store.Job) {
+			ran(q.Add(time.Minute), q.Add(5*time.Minute), "success")(j)
+			j.RunnerID = fmt.Sprintf("run_%d", i)
+		})
+	}
+	if !rolledTo.IsZero() {
+		if _, err := f.st.RollUpInstallations(f.ctx, rolledTo, time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return f
+}
+
+func dayAt(d, h int) time.Time {
+	return analysisNow.Truncate(24*time.Hour).AddDate(0, 0, d).Add(time.Duration(h) * time.Hour)
+}
+
+// The later side, read from the roll-up's rows, begins at its own first
+// midnight; the earlier side ends there, so no hour is in both counts. The
+// re-review's probe: the roll-up has not reached the later side's first day,
+// whose jobs at 03:00 were counted on both sides.
+func TestTheEarlierSideEndsWhereTheLaterSidesCountsBegin(t *testing.T) {
+	jobs := []time.Time{dayAt(-4, 5), dayAt(-3, 10), dayAt(-3, 11), dayAt(-3, 12)}
+	for range 4 {
+		jobs = append(jobs, dayAt(-2, 3))
+	}
+	jobs = append(jobs, dayAt(-2, 20), dayAt(-2, 21))
+	f := countsFleet(t, 48*time.Hour, dayAt(-2, 0), jobs...)
+	got, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: dayAt(-2, 6), Until: dayAt(-1, 6)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := got.Evidence.A, got.Evidence.B
+	if !a.Until.Equal(b.Since) || !b.Since.Equal(dayAt(-2, 0)) || a.Figures.Jobs != 3 || b.Figures.Jobs != 6 {
+		t.Errorf("A %v to %v with %d jobs, B %v to %v with %d; want A to end where B begins, at %v, with 3 and 6",
+			a.Since, a.Until, a.Figures.Jobs, b.Since, b.Until, b.Figures.Jobs, dayAt(-2, 0))
+	}
+	if a.Label != "the 24 hours before" || b.Label != "the 30 hours to 2026-10-11 06:00 UTC" {
+		t.Errorf("labels %q and %q", a.Label, b.Label)
+	}
+}
+
+// Before the fleet's first record there is nothing to count. A side wholly
+// before it could not be read, which is not the same as no jobs having run;
+// a side partly before it begins at the record and says so.
+func TestASideBeforeTheFleetsFirstRecordSaysSoRatherThanNoJobsRan(t *testing.T) {
+	f := countsFleet(t, 48*time.Hour, time.Time{}, dayAt(-2, 16), dayAt(-2, 20))
+	got, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: dayAt(-2, 6), Until: dayAt(-1, 6)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "The fleet keeps no counts from before 2026-10-10 16:00 UTC, so the 24 hours before could not be read, and there is nothing to compare the 14 hours to 2026-10-11 06:00 UTC with."; got.Summary != want {
+		t.Errorf("wholly before: summary\n got %q\nwant %q", got.Summary, want)
+	}
+	if b := got.Evidence.B; b.Figures.Jobs != 2 || b.NoRecordBefore == nil || !b.NoRecordBefore.Equal(dayAt(-2, 16)) {
+		t.Errorf("wholly before: B = %+v", b)
+	}
+
+	f = countsFleet(t, 48*time.Hour, time.Time{}, dayAt(-3, 12), dayAt(-2, 5), dayAt(-2, 6), dayAt(-1, 1), dayAt(-1, 2), dayAt(-1, 3))
+	got, err = f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: dayAt(-2, 18), Until: analysisNow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := got.Evidence.A
+	if !a.CountsOnly || a.Figures.Jobs != 3 || !a.Since.Equal(dayAt(-3, 12)) || a.Label != "the 30 hours before" {
+		t.Errorf("partly before: A = %q, counts only %v from %v, %d jobs; want the 30 hours before from %v with 3", a.Label, a.CountsOnly, a.Since, a.Figures.Jobs, dayAt(-3, 12))
+	}
+	if want := "the fleet keeps no counts from before 2026-10-09 12:00 UTC, so the 30 hours before begins there, later than the period asked for"; !strings.Contains(got.ConfidenceReason, want) {
+		t.Errorf("partly before: reason %q does not say %q", got.ConfidenceReason, want)
+	}
+}
+
+// Every boundary of the counts-only path, each checked for the same three
+// things: no hour is in both counts, every job is counted where its side's
+// dates say, and whatever falls between the sides is named with its cause.
+func TestEveryCountsOnlyBoundaryCountsEachJobOnceAndNamesWhatItLeavesOut(t *testing.T) {
+	for _, c := range []struct {
+		name         string
+		retention    time.Duration
+		rolledTo     time.Time
+		jobs         []time.Time
+		since, until time.Time
+		aJobs, bJobs int
+		says, never  string
+	}{
+		{name: "later side within retention, earlier side's end day rolled up", retention: 48 * time.Hour, rolledTo: dayAt(-1, 0),
+			jobs: []time.Time{dayAt(-5, 5), dayAt(-3, 20), dayAt(-2, 5), dayAt(-2, 16)}, since: dayAt(-2, 15), until: analysisNow,
+			aJobs: 1, bJobs: 1, says: "the roll-up keeps whole UTC days, so the jobs queued from 2026-10-10 00:00 UTC to 2026-10-10 15:00 UTC"},
+		{name: "later side within retention, earlier side's end day not rolled up", retention: 48 * time.Hour,
+			jobs: []time.Time{dayAt(-5, 5), dayAt(-3, 20), dayAt(-2, 5), dayAt(-2, 16)}, since: dayAt(-2, 15), until: analysisNow,
+			aJobs: 2, bJobs: 1, never: "neither side"},
+		{name: "later side past retention, its first day not rolled up", retention: 48 * time.Hour, rolledTo: dayAt(-2, 0),
+			jobs: []time.Time{dayAt(-4, 5), dayAt(-3, 10), dayAt(-2, 3), dayAt(-2, 20)}, since: dayAt(-2, 6), until: dayAt(-1, 6),
+			aJobs: 1, bJobs: 2, never: "neither side"},
+		{name: "later side past retention, its first day rolled up", retention: 48 * time.Hour, rolledTo: dayAt(-1, 0),
+			jobs: []time.Time{dayAt(-4, 5), dayAt(-3, 10), dayAt(-2, 3), dayAt(-1, 3)}, since: dayAt(-2, 6), until: dayAt(-1, 6),
+			aJobs: 1, bJobs: 2, never: "neither side"},
+		{name: "sides meeting on a midnight leave no hours out", retention: 48 * time.Hour, rolledTo: analysisNow,
+			jobs: []time.Time{dayAt(-4, 5), dayAt(-2, 23), dayAt(-1, 1)}, since: dayAt(-1, 0), until: analysisNow,
+			aJobs: 1, bJobs: 1, never: "neither side"},
+		{name: "both sides past retention, the later one ending off a rolled midnight", retention: 48 * time.Hour, rolledTo: analysisNow,
+			jobs: []time.Time{dayAt(-5, 5), dayAt(-4, 5), dayAt(-3, 5), dayAt(-2, 5)}, since: dayAt(-3, 12), until: dayAt(-2, 12),
+			aJobs: 1, bJobs: 1, never: "neither side"},
+		{name: "the earlier side partly before the first record", retention: 48 * time.Hour,
+			jobs: []time.Time{dayAt(-3, 12), dayAt(-2, 5), dayAt(-1, 1)}, since: dayAt(-2, 18), until: analysisNow,
+			aJobs: 2, bJobs: 1, says: "the fleet keeps no counts from before 2026-10-09 12:00 UTC"},
+		{name: "the earlier side wholly before the first record, the later partly", retention: 48 * time.Hour,
+			jobs: []time.Time{dayAt(-2, 16), dayAt(-2, 20)}, since: dayAt(-2, 6), until: dayAt(-1, 6),
+			aJobs: 0, bJobs: 2, says: "could not be read"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := countsFleet(t, c.retention, c.rolledTo, c.jobs...)
+			got, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: c.since, Until: c.until})
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, b := got.Evidence.A, got.Evidence.B
+			if b.Since.Before(a.Until) {
+				t.Errorf("A ends at %v, after B begins at %v: the hours between are counted twice", a.Until, b.Since)
+			}
+			in := func(since, until time.Time) int {
+				n := 0
+				for _, q := range c.jobs {
+					if !q.Before(since) && q.Before(until) {
+						n++
+					}
+				}
+				return n
+			}
+			if a.Figures.Jobs != c.aJobs || in(a.Since, a.Until) != c.aJobs || b.Figures.Jobs != c.bJobs || in(b.Since, b.Until) != c.bJobs {
+				t.Errorf("A %v to %v counts %d (its dates hold %d), B %v to %v counts %d (%d); want %d and %d",
+					a.Since, a.Until, a.Figures.Jobs, in(a.Since, a.Until), b.Since, b.Until, b.Figures.Jobs, in(b.Since, b.Until), c.aJobs, c.bJobs)
+			}
+			said := got.Summary + " " + got.ConfidenceReason
+			if c.says != "" && !strings.Contains(said, c.says) {
+				t.Errorf("finding %q does not say %q", said, c.says)
+			}
+			if c.never != "" && strings.Contains(said, c.never) {
+				t.Errorf("finding %q says %q", said, c.never)
+			}
+			if a.Figures.Jobs == 0 && strings.Contains(said, "No jobs ran") {
+				t.Errorf("a side that could not be read is said to have run nothing: %q", said)
+			}
+		})
+	}
+}
+
+// A later side read from the roll-up's rows begins at its first midnight, so
+// an earlier side wholly inside that day would be counted in the later one:
+// what is left of it is nothing, and it is refused rather than said to have
+// run no jobs.
+func TestAnEarlierSideWhollyInsideTheLaterSidesFirstDayIsRefused(t *testing.T) {
+	f := countsFleet(t, 24*time.Hour, dayAt(-1, 0), dayAt(-3, 5), dayAt(-1, 3), dayAt(-1, 8))
+	_, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: dayAt(-1, 6), Until: dayAt(-1, 12)})
+	if !errors.Is(err, ErrWholeDaysOnly) || !strings.Contains(err.Error(), "the earlier period, 2026-10-11 00:00 UTC to 2026-10-11 06:00 UTC") {
+		t.Errorf("%v, want the earlier period refused", err)
 	}
 }
