@@ -445,6 +445,7 @@ test('a provider round-trips through a draft and back, without ever carrying its
     machine_memory_mb: 16384,
     machine_disk_mb: 65536,
     max_machines: 6,
+    min_machines: 2,
     max_creates_in_flight: 2,
     idle_timeout_ms: 900_000,
     cost_per_machine_hour: 0.08,
@@ -464,6 +465,7 @@ test('a provider round-trips through a draft and back, without ever carrying its
   assert.equal(body.machine_capacity, 4);
   assert.equal(body.machine_cpus, 8);
   assert.equal(body.max_machines, 6);
+  assert.equal(body.min_machines, 2);
   assert.equal(body.max_creates_in_flight, 2);
   assert.equal(body.idle_timeout, '15m');
   assert.equal(body.cost_per_machine_hour, 0.08);
@@ -478,6 +480,7 @@ test('a provider that says nothing about a setting takes the draft default rathe
   const draft = draftFromProvider({ id: 'prv_1', kind: 'proxmox', name: 'pve' } as Provider);
   assert.equal(draft.machine_capacity, '2');
   assert.equal(draft.max_machines, '0');
+  assert.equal(draft.min_machines, '0', 'a provider with no minimum keeps none');
   assert.equal(draft.max_creates_in_flight, '1');
   assert.equal(draft.idle_timeout, '15m');
   assert.equal(draft.machine_backend, 'docker');
@@ -824,4 +827,31 @@ test('a private connection address goes out once and a blank box on an edit keep
   const direct = toProviderBody({ ...stored, connection: 'direct', tailcat_address: address });
   assert.equal(direct.connection, 'direct');
   assert.equal('tailcat_address' in direct, false);
+});
+
+test('the minimum is a whole number no larger than the maximum it counts against', () => {
+  const base = {
+    ...emptyDraft(),
+    kind: 'proxmox',
+    name: 'pve',
+    endpoint: 'https://pve.example.com:8006',
+    max_machines: '4',
+  };
+  assert.equal(draftErrors({ ...base, min_machines: '2' }, []).min_machines, undefined);
+  assert.equal(
+    draftErrors({ ...base, min_machines: '0' }, []).min_machines,
+    undefined,
+    'zero keeps none',
+  );
+  assert.ok(
+    draftErrors({ ...base, min_machines: '5' }, []).min_machines,
+    'more than it may own could never be met',
+  );
+  assert.ok(draftErrors({ ...base, min_machines: '-1' }, []).min_machines);
+  assert.ok(draftErrors({ ...base, min_machines: '1.5' }, []).min_machines);
+  assert.equal(
+    toProviderBody({ ...base, min_machines: '' }).min_machines,
+    0,
+    'a cleared box keeps none',
+  );
 });

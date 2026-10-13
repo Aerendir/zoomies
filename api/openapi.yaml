@@ -13325,6 +13325,12 @@ components:
           description: >-
             The ceiling on machines this provider may own at once. Zero rents nothing,
             exactly as a pool's max_runners of zero runs nothing.
+        min_machines:
+          type: integer
+          description: >-
+            How many machines this provider keeps whether or not anything is waiting. It buys
+            up to it when it owns fewer and releases none below it however long they have been
+            idle. It counts against the most it may own. Zero keeps none.
         max_creates_in_flight: { type: integer, description: How many machines may be being built at once. }
         idle_timeout_ms: { type: integer, format: int64, description: How long a machine may sit with nothing to do before it is drained. }
         cost_per_machine_hour: { type: number }
@@ -13426,6 +13432,7 @@ components:
         machine_disk_mb: { type: integer, format: int64, minimum: 0 }
         pool_selector: { type: object, additionalProperties: { type: string } }
         max_machines: { type: integer, minimum: 0, default: 0 }
+        min_machines: { type: integer, minimum: 0, default: 0, description: Machines to keep whether or not anything is waiting; at most max_machines. }
         max_creates_in_flight: { type: integer, minimum: 0, default: 1 }
         idle_timeout: { $ref: "#/components/schemas/Duration" }
         cost_per_machine_hour: { type: number, minimum: 0 }

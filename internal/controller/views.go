@@ -1800,6 +1800,7 @@ type ProviderView struct {
 
 	PoolSelector       map[string]string `json:"pool_selector"`
 	MaxMachines        int               `json:"max_machines"`
+	MinMachines        int               `json:"min_machines"`
 	MaxCreatesInFlight int               `json:"max_creates_in_flight"`
 	IdleTimeoutMS      int64             `json:"idle_timeout_ms,omitempty"`
 	CostPerMachineHour float64           `json:"cost_per_machine_hour,omitempty"`
@@ -1865,6 +1866,7 @@ func (c *Controller) ProviderView(p *store.Provider, machines []*store.Machine) 
 		MachineDiskMB:         p.MachineDiskMB,
 		PoolSelector:          emptyMap(p.PoolSelector),
 		MaxMachines:           p.MaxMachines,
+		MinMachines:           p.MinMachines,
 		MaxCreatesInFlight:    p.MaxCreatesInFlight,
 		IdleTimeoutMS:         millis(time.Duration(p.IdleTimeout)),
 		CostPerMachineHour:    p.CostPerMachineHour,

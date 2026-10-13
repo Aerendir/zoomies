@@ -1228,6 +1228,24 @@
         </Field>
 
         <Field
+          label="Minimum machines"
+          hint="Kept running even when nothing is waiting, so the first job after a quiet spell does not wait for a clone. They are paid for while idle, and count against the maximum. Zero keeps none."
+          error={errors.min_machines}
+        >
+          {#snippet children({ id, describedBy, invalid })}
+            <Input
+              bind:value={draft.min_machines}
+              {id}
+              {describedBy}
+              {invalid}
+              type="number"
+              min={0}
+              onblur={() => touch('min_machines')}
+            />
+          {/snippet}
+        </Field>
+
+        <Field
           label="Machines built at once"
           hint="A hypervisor cloning four templates at once is slower at all four than it would have been at one."
           error={errors.max_creates_in_flight}

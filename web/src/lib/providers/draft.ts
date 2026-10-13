@@ -81,6 +81,7 @@ export const STEP_FIELDS: readonly (readonly string[])[] = [
   ],
   [
     'max_machines',
+    'min_machines',
     'max_creates_in_flight',
     'idle_timeout',
     'cost_per_machine_hour',
@@ -111,6 +112,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   machine_platform: 'Operating system',
   machine_labels: 'Machine labels',
   max_machines: 'Maximum machines',
+  min_machines: 'Minimum machines',
   max_creates_in_flight: 'Machines built at once',
   idle_timeout: 'Idle timeout',
   cost_per_machine_hour: 'Cost per machine-hour',
@@ -179,6 +181,7 @@ export interface ProviderDraft {
   machine_os_version: string;
   machine_arch: string;
   max_machines: string;
+  min_machines: string;
   max_creates_in_flight: string;
   idle_timeout: string;
   cost_per_machine_hour: string;
@@ -211,6 +214,8 @@ export function emptyDraft(): ProviderDraft {
     // Zero rents nothing, which is the safe default and the one an operator
     // has to change on purpose before any money is spent.
     max_machines: '0',
+    // None kept, which is what every provider did before there was a minimum.
+    min_machines: '0',
     max_creates_in_flight: '1',
     idle_timeout: '15m',
     cost_per_machine_hour: '',
@@ -250,6 +255,7 @@ export function draftFromProvider(provider: Provider): ProviderDraft {
     machine_os_version: provider.machine_platform?.os_version ?? '',
     machine_arch: provider.machine_platform?.arch ?? '',
     max_machines: fromNumber(provider.max_machines) || '0',
+    min_machines: fromNumber(provider.min_machines) || '0',
     max_creates_in_flight: fromNumber(provider.max_creates_in_flight) || '1',
     idle_timeout: msToDuration(provider.idle_timeout_ms) || base.idle_timeout,
     cost_per_machine_hour: fromNumber(provider.cost_per_machine_hour),
@@ -322,6 +328,7 @@ export function toProviderBody(
     machine_capacity: num(draft.machine_capacity) ?? 2,
     machine_backend: draft.machine_backend as BackendKind,
     max_machines: num(draft.max_machines) ?? 0,
+    min_machines: num(draft.min_machines) ?? 0,
     max_creates_in_flight: num(draft.max_creates_in_flight) ?? 1,
     enabled: draft.enabled,
   };
@@ -472,6 +479,11 @@ export function draftErrors(
   const max = num(draft.max_machines);
   if (max === undefined || max < 0 || !Number.isInteger(max))
     out.max_machines = 'A whole number of machines, or zero to rent nothing.';
+  const min = num(draft.min_machines);
+  if (min === undefined || min < 0 || !Number.isInteger(min))
+    out.min_machines = 'A whole number of machines, or zero to keep none.';
+  else if (max !== undefined && min > max)
+    out.min_machines = 'No more than the maximum, which it counts against.';
   const inFlight = num(draft.max_creates_in_flight);
   if (inFlight === undefined || inFlight < 1)
     out.max_creates_in_flight = 'At least one, or nothing would ever be built.';
