@@ -87,10 +87,19 @@ func (c *Controller) checkAnalysisWindow(w AnalysisWindow) error {
 		return errors.New("an analysis needs a period whose since is before its until")
 	}
 	if limit := c.cfg().Limits.JobStatsSpan(); w.Until.Sub(w.Since) > limit {
-		return fmt.Errorf("the period from since to until is %s, and an analysis covers at most %s; narrow it, or raise limits.job_stats_window",
-			daysAndHours(w.Until.Sub(w.Since), true), daysAndHours(limit, false))
+		return errors.New(SpanRefusal(w.Until.Sub(w.Since), limit, "an analysis covers"))
 	}
 	return nil
+}
+
+// SpanRefusal is the sentence that refuses a period longer than
+// limits.job_stats_window, which bounds the job statistics and every analysis
+// alike. what is the reader and its verb, "job statistics cover" or "an
+// analysis covers", so the routes and this package say one sentence and
+// neither borrows the other's noun.
+func SpanRefusal(span, limit time.Duration, what string) string {
+	return fmt.Sprintf("the period from since to until is %s, and %s at most %s; narrow it, or raise limits.job_stats_window",
+		daysAndHours(span, true), what, daysAndHours(limit, false))
 }
 
 // daysAndHours says a length the way limits.job_stats_window is thought of,

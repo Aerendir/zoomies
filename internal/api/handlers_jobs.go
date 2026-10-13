@@ -295,14 +295,7 @@ func (s *Server) handleJobStats(w http.ResponseWriter, r *http.Request) {
 		since := filter.Until.Add(-min(defaultStatsSpan, limit))
 		filter.Since = &since
 	}
-	if !filter.Since.Before(*filter.Until) {
-		badRequestField(w, "since", "since must be before until")
-		return
-	}
-	if filter.Until.Sub(*filter.Since) > limit {
-		badRequestField(w, "since", fmt.Sprintf(
-			"the window from since to until is %s, and job statistics cover at most %s; narrow it, or raise limits.job_stats_window",
-			filter.Until.Sub(*filter.Since).Round(time.Hour), limit))
+	if !s.statsWindowFits(w, *filter.Since, *filter.Until, "job statistics cover") {
 		return
 	}
 	// Statistics are of finished work, and the listing's own state filter
