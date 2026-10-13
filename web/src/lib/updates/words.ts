@@ -323,11 +323,15 @@ export function confirmControllerUpdate(
     title: 'Update the controller',
     description: `Update this controller from ${running} to ${tag}?`,
     consequences: [
-      ...(release
-        ? []
-        : [
-            'This build is not from a release. A build from main is usually ahead of the newest release, so this may take the controller back to older code.',
-          ]),
+      ...(tag === 'dev'
+        ? [
+            'DEV installs the latest development build from main. It may contain untested changes and is a moving channel.',
+          ]
+        : release
+          ? []
+          : [
+              'This build is not from a release. A build from main is usually ahead of the newest release, so this may take the controller back to older code.',
+            ]),
       'The controller restarts. This page loses its connection for a short while and finds it again by itself.',
       'Jobs that are running keep running.',
       'If the release changes the database, a copy of it is kept first beside the database, and the last two copies are kept. A release that changes nothing there takes none.',

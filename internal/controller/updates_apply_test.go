@@ -1068,3 +1068,23 @@ func TestARequestThatWasWrittenIsAnsweredEvenWhenTheStatusCannotBeRead(t *testin
 		t.Errorf("view = %+v, want the mode, the helper and a sentence", view)
 	}
 }
+
+func TestAnExplicitDevelopmentUpdateWritesTheDevChannelRequest(t *testing.T) {
+	h := newHarness(t)
+	h.readyToUpdate()
+	view, err := h.c.RequestControllerUpdate(h.ctx, alice, updates.DevTag)
+	if err != nil {
+		t.Fatalf("requesting DEV: %v", err)
+	}
+	req := h.takeRequest()
+	if req.Tag != updates.DevTag || view.Controller == nil || view.Controller.To != updates.DevTag {
+		t.Fatalf("request = %+v, controller = %+v, want DEV", req, view.Controller)
+	}
+	if state, _, ended := h.c.controllerOutcome(h.openAttempts()[0]); ended {
+		t.Fatalf("the old release completed DEV as %s", state)
+	}
+	withVersion(t, "main-sha-abc1234")
+	if state, _, ended := h.c.controllerOutcome(h.openAttempts()[0]); !ended || state != store.UpdateSucceeded {
+		t.Fatalf("the running DEV build ended=%v state=%s", ended, state)
+	}
+}
