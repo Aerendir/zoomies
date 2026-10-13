@@ -9,11 +9,13 @@ import (
 
 // A version is fixed before looking at a cohort; changing the sample rule
 // after seeing its failures would let a caller choose the answer.
-const ExperimentRuleVersion = "selected-runs-v1"
+const ExperimentRuleVersion = "selected-runs-v2"
 const MinExperimentSamples = 30
 const MaxExperimentAttempts = 2000
 
 type ExperimentAttempt struct {
+	SourceRevision string `json:"source_revision"`
+	WorkflowID     int64  `json:"workflow_id"`
 	// Nil is missing evidence; zero is an observed zero. Consumption stays
 	// attached to failed and excluded attempts rather than disappearing.
 	LatencyMS       *int64    `json:"latency_ms"`
@@ -95,17 +97,17 @@ func AssessExperiment(s ExperimentSnapshot) (ExperimentEligibility, error) {
 		return r, fmt.Errorf("provide an increasing observation window")
 	}
 	reasons := map[string]bool{}
-	if s.Baseline.InputsID != s.Candidate.InputsID {
+	if strings.TrimSpace(s.Baseline.InputsID) != "" && strings.TrimSpace(s.Candidate.InputsID) != "" && s.Baseline.InputsID != s.Candidate.InputsID {
 		reasons["inputs_mismatch"] = true
 	}
-	if s.Baseline.TestScopeID != s.Candidate.TestScopeID {
+	if strings.TrimSpace(s.Baseline.TestScopeID) != "" && strings.TrimSpace(s.Candidate.TestScopeID) != "" && s.Baseline.TestScopeID != s.Candidate.TestScopeID {
 		reasons["test_scope_mismatch"] = true
 	}
 	if s.Kind == "runner" {
-		if s.Baseline.SourceRevision != s.Candidate.SourceRevision {
+		if strings.TrimSpace(s.Baseline.SourceRevision) != "" && strings.TrimSpace(s.Candidate.SourceRevision) != "" && s.Baseline.SourceRevision != s.Candidate.SourceRevision {
 			reasons["source_mismatch"] = true
 		}
-		if s.Baseline.WorkflowRevision != s.Candidate.WorkflowRevision {
+		if strings.TrimSpace(s.Baseline.WorkflowRevision) != "" && strings.TrimSpace(s.Candidate.WorkflowRevision) != "" && s.Baseline.WorkflowRevision != s.Candidate.WorkflowRevision {
 			reasons["workflow_mismatch"] = true
 		}
 	} else if strings.TrimSpace(s.RevisionDeltaID) == "" {
@@ -119,9 +121,12 @@ func AssessExperiment(s ExperimentSnapshot) (ExperimentEligibility, error) {
 	seen := map[[2]int64]bool{}
 	caches := [2]string{}
 	for index, arm := range []ExperimentArm{s.Baseline, s.Candidate} {
-		for _, value := range []string{arm.SourceRevision, arm.WorkflowRevision, arm.InputsID, arm.TestScopeID, arm.ConfigurationID, arm.ImageID, arm.ResourceID} {
-			if strings.TrimSpace(value) == "" || len(value) > 4096 {
-				return r, fmt.Errorf("retain each arm's revision, workload, configuration, image and resource identifiers within 4096 bytes")
+		for _, field := range []struct{ value, reason string }{{arm.SourceRevision, "source_unknown"}, {arm.WorkflowRevision, "workflow_revision_unknown"}, {arm.InputsID, "inputs_unknown"}, {arm.TestScopeID, "test_scope_unknown"}, {arm.ConfigurationID, "configuration_unknown"}, {arm.ImageID, "image_unknown"}, {arm.ResourceID, "resource_unknown"}} {
+			if len(field.value) > 4096 {
+				return r, fmt.Errorf("retain arm evidence identifiers within 4096 bytes")
+			}
+			if strings.TrimSpace(field.value) == "" {
+				reasons[field.reason] = true
 			}
 		}
 		if len(arm.Attempts) > MaxExperimentAttempts {
@@ -137,8 +142,16 @@ func AssessExperiment(s ExperimentSnapshot) (ExperimentEligibility, error) {
 				return r, fmt.Errorf("select each positive run and attempt identity once across both arms")
 			}
 			seen[key] = true
-			if a.ObservedAt.Before(s.Since) || !a.ObservedAt.Before(s.Until) {
+			if a.ObservedAt.IsZero() {
+				reasons["observation_time_unknown"] = true
+			} else if a.ObservedAt.Before(s.Since) || !a.ObservedAt.Before(s.Until) {
 				return r, fmt.Errorf("select attempts inside the observation window")
+			}
+			if len(a.SourceRevision) > 4096 || a.WorkflowID < 0 {
+				return r, fmt.Errorf("retain bounded attempt revision and non-negative workflow identity")
+			}
+			if a.SourceRevision != "" && arm.SourceRevision != "" && a.SourceRevision != arm.SourceRevision {
+				reasons["source_mismatch"] = true
 			}
 			switch a.Outcome {
 			case "success":

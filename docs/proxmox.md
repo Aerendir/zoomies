@@ -13,6 +13,15 @@ fleet can run them, a **provider** clones a prepared VM template on your Proxmox
 VE cluster, installs the Zoomies agent inside it, runs the work, and destroys
 the machine again once it has been idle long enough.
 
+Two settings on each provider decide how much it keeps running between bursts.
+**Idle timeout** (default 15 minutes) is how long a machine's host must have had
+no runner on it before the machine is deleted; `0` deletes it as soon as nothing
+needs it. **Minimum machines** (default 0) is a floor: the provider buys up to
+that many with no work waiting, so the first job finds a machine already up, and
+never deletes an idle machine below it. A minimum counts against the provider's
+maximum, so it cannot be set higher, and a provider that is disabled, paused or
+standing down keeps no floor at all.
+
 The machine is an ordinary Zoomies host. It appears on the Hosts page, runs the
 same runner backend, and is drained the same way. What is different is that
 Zoomies created it, knows it did, and is the only thing allowed to delete it.

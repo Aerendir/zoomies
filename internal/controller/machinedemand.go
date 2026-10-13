@@ -173,6 +173,10 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 	// question -- a failed machine whose VM was created still costs -- and
 	// Pending() is the in-flight one.
 	owned, pending, have := map[string]int{}, map[string]int{}, map[string]int{}
+	// offering is the machines that are, or are about to be, working capacity:
+	// pending or ready. A failed machine still owns a resource and still costs,
+	// but it is not one the provider's minimum is met by.
+	offering := map[string]int{}
 	// credit is the shared ledger's second half: what each machine that is
 	// still on its way may be counted for, at most once in total however many
 	// pools its shape happens to match.
@@ -200,6 +204,9 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		}
 		if m.Owns() || m.State.Pending() {
 			have[p.ID]++
+		}
+		if m.State.Offers() {
+			offering[p.ID]++
 		}
 	}
 
@@ -325,9 +332,18 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 			slots += d.slots
 		}
 		want := ceilDiv(slots, providerSlots(p))
-		plan.Wanted = plan.Have + want
+		// The provider's minimum is bought for on top of demand: the machines
+		// it already offers and the ones this pass buys for the queue count
+		// towards it, so a busy provider is not made to buy a floor as well.
+		// A provider that may not take new demand (disabled, paused or standing
+		// down) is not asked for one either.
+		floor := 0
+		if p.MinMachines > 0 && acceptsDemand(p, s.Now) {
+			floor = max(p.MinMachines-offering[p.ID]-want, 0)
+		}
+		plan.Wanted = plan.Have + want + floor
 
-		create, because, fix, setting := want, "", "", ""
+		create, because, fix, setting := want+floor, "", "", ""
 		// Each ceiling in turn, and the sentence kept is whichever one actually
 		// binds: an operator told to raise a limit that was not the one holding
 		// them back has been sent to the wrong screen. The fleet's two are
@@ -356,8 +372,20 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		fleetRoom -= create
 		fleetCreateRoom -= create
 		if create > 0 {
-			plan.Reason = fmt.Sprintf("buy %s on %s: %s", plural(create, "machine"), p.Name, demandReason(ds))
+			switch {
+			case want == 0:
+				plan.Reason = fmt.Sprintf("buy %s on %s: its minimum is %s and it has %d",
+					plural(create, "machine"), p.Name, plural(p.MinMachines, "machine"), offering[p.ID])
+			case floor > 0 && create > want:
+				plan.Reason = fmt.Sprintf("buy %s on %s: %s, and %s to meet its minimum of %d",
+					plural(create, "machine"), p.Name, demandReason(ds), fmt.Sprintf("%d of them", create-want), p.MinMachines)
+			default:
+				plan.Reason = fmt.Sprintf("buy %s on %s: %s", plural(create, "machine"), p.Name, demandReason(ds))
+			}
 		}
+		// Blocked is about the queue's machines only: demand comes first in
+		// create, so a purchase at least as big as want has met it, and a
+		// minimum still being built up one at a time is not a fault.
 		if create < want {
 			plan.Blocked = fmt.Sprintf("%s not bought: %s", plural(want-create, "machine"), because)
 			plan.BlockedFix = fix
@@ -512,8 +540,9 @@ func acceptsDemand(p *store.Provider, now time.Time) bool {
 // provider.
 //
 // A machine qualifies when it is ready, its host is running nothing, it has
-// been idle for the provider's idle timeout plus one scale-down cooldown, and
-// removing its slots would not reopen a shortfall for any pool it serves. The
+// been idle for the provider's idle timeout plus one scale-down cooldown,
+// removing its slots would not reopen a shortfall for any pool it serves, and
+// the provider would still offer its minimum afterwards. The
 // two durations are added rather than checked separately because they say
 // different things about the same observation: the idle timeout is when a
 // machine stopped being useful, and the cooldown is how long that has to keep
@@ -577,11 +606,24 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 		return strings.Compare(a.ID, b.ID)
 	})
 
+	// A provider's minimum is machines it keeps however idle they are, so a
+	// release is granted only while the provider would still offer that many
+	// afterwards. The count is a ledger like slack: each grant spends one.
+	offering := map[string]int{}
+	for _, m := range machines {
+		if m.State.Offers() {
+			offering[m.ProviderID]++
+		}
+	}
+
 	out, unfit := map[string][]string{}, map[string][]string{}
 	for _, m := range candidates {
 		p := byProvider[m.ProviderID]
 		host := byHost[m.HostID]
 		if p == nil || host == nil || m.State != store.MachineReady || live[host.ID] > 0 {
+			continue
+		}
+		if p.MinMachines > 0 && offering[p.ID] <= p.MinMachines {
 			continue
 		}
 		useless := runsNoPool(host, pools)
@@ -621,6 +663,7 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 		for _, pool := range served {
 			slack[pool.ID] -= host.EffectiveCapacity()
 		}
+		offering[p.ID]--
 		out[p.ID] = append(out[p.ID], m.ID)
 		if useless {
 			unfit[p.ID] = append(unfit[p.ID], m.ID)

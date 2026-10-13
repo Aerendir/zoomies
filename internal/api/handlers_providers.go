@@ -185,6 +185,7 @@ type providerInput struct {
 
 	PoolSelector       *map[string]string `json:"pool_selector"`
 	MaxMachines        *int               `json:"max_machines"`
+	MinMachines        *int               `json:"min_machines"`
 	MaxCreatesInFlight *int               `json:"max_creates_in_flight"`
 	IdleTimeout        *string            `json:"idle_timeout"`
 	CostPerMachineHour *float64           `json:"cost_per_machine_hour"`
@@ -273,6 +274,9 @@ func (in *providerInput) apply(p *store.Provider) []fieldError {
 	if in.MaxMachines != nil {
 		p.MaxMachines = *in.MaxMachines
 	}
+	if in.MinMachines != nil {
+		p.MinMachines = *in.MinMachines
+	}
 	if in.MaxCreatesInFlight != nil {
 		p.MaxCreatesInFlight = *in.MaxCreatesInFlight
 	}
@@ -324,6 +328,16 @@ func (in *providerInput) apply(p *store.Provider) []fieldError {
 	}
 	if p.MaxMachines < 0 {
 		add("max_machines", "a ceiling cannot be negative; use 0 to rent nothing")
+	}
+	switch {
+	case p.MinMachines < 0:
+		add("min_machines", "a minimum cannot be negative; use 0 to keep no machines when nothing needs them")
+	case p.MinMachines > p.MaxMachines:
+		// The minimum is machines the provider owns, so it is counted against the
+		// ceiling: a minimum above it could never be met, and the provider would
+		// try for ever.
+		add("min_machines", fmt.Sprintf("the minimum (%d) cannot be more than the most machines this provider may own (%d); "+
+			"raise that, or lower the minimum", p.MinMachines, p.MaxMachines))
 	}
 	if p.MaxCreatesInFlight < 0 {
 		add("max_creates_in_flight", "a ceiling cannot be negative; use 1 to build one machine at a time")

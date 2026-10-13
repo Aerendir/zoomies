@@ -87,7 +87,12 @@ type Provider struct {
 	// MaxCreatesInFlight is the ceiling on how many it may be creating. The
 	// second exists because a hypervisor cloning four templates at once is
 	// slower at all four than it would have been at one.
-	MaxMachines        int      `json:"max_machines"`
+	MaxMachines int `json:"max_machines"`
+	// MinMachines is how many machines this provider keeps whether or not
+	// anything is waiting: it buys up to it when it owns fewer, and releases
+	// none below it however long they have been idle. It counts against
+	// MaxMachines, so it can never be larger. Zero keeps none.
+	MinMachines        int      `json:"min_machines"`
 	MaxCreatesInFlight int      `json:"max_creates_in_flight"`
 	IdleTimeout        Duration `json:"idle_timeout"`
 	CostPerMachineHour float64  `json:"cost_per_machine_hour,omitempty"`

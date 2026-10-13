@@ -26,7 +26,7 @@ const providerCols = `id, kind, name, endpoint, ca_pem, insecure_skip_verify, se
 	max_creates_in_flight, idle_timeout_ms, cost_per_machine_hour, enabled, paused,
 	paused_reason, paused_until, consecutive_failures, last_check_at, last_check_error,
 	last_sweep_at, created_at, updated_at, tailcat_address_enc, last_check_report, machine_ca_pem,
-	seen_cpus, seen_memory_mb, seen_from, seen_at`
+	min_machines, seen_cpus, seen_memory_mb, seen_from, seen_at`
 
 func scanProvider(sc interface{ Scan(...any) error }) (*Provider, error) {
 	var p Provider
@@ -40,7 +40,7 @@ func scanProvider(sc interface{ Scan(...any) error }) (*Provider, error) {
 		&p.MaxCreatesInFlight, &idle, &p.CostPerMachineHour, &enabled, &paused,
 		&p.PausedReason, &pausedUntil, &p.ConsecutiveFailures, &checked, &p.LastCheckError,
 		&swept, &created, &updated, &p.TailcatAddressEnc, &p.LastCheckReport, &p.MachineCAPEM,
-		&p.SeenCPUs, &p.SeenMemoryMB, &p.SeenFrom, &seen)
+		&p.MinMachines, &p.SeenCPUs, &p.SeenMemoryMB, &p.SeenFrom, &seen)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (s *Store) CreateProvider(ctx context.Context, p *Provider) error {
 		return err
 	}
 	_, err = s.exec(ctx, `INSERT INTO providers (`+providerCols+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, string(p.Kind), p.Name, p.Endpoint, p.CAPEM, boolInt(p.InsecureSkipVerify),
 		p.Settings, p.CredentialsEnc, p.MachineLabels, p.MachineCapacity,
 		string(p.MachineBackend), platform, p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB,
@@ -82,7 +82,7 @@ func (s *Store) CreateProvider(ctx context.Context, p *Provider) error {
 		boolInt(p.Enabled), boolInt(p.Paused), p.PausedReason, msp(p.PausedUntil),
 		p.ConsecutiveFailures, msp(p.LastCheckAt), p.LastCheckError, msp(p.LastSweepAt),
 		ms(p.CreatedAt), ms(p.UpdatedAt), p.TailcatAddressEnc, p.LastCheckReport, p.MachineCAPEM,
-		p.SeenCPUs, p.SeenMemoryMB, p.SeenFrom, msp(p.SeenAt))
+		p.MinMachines, p.SeenCPUs, p.SeenMemoryMB, p.SeenFrom, msp(p.SeenAt))
 	return wrapWrite(err)
 }
 
@@ -134,11 +134,11 @@ func (s *Store) UpdateProvider(ctx context.Context, p *Provider) error {
 	res, err := s.exec(ctx, `UPDATE providers SET name=?, endpoint=?, ca_pem=?, machine_ca_pem=?,
 		insecure_skip_verify=?, settings=?, machine_labels=?, machine_capacity=?,
 		machine_backend=?, machine_platform=?, machine_cpus=?, machine_memory_mb=?,
-		machine_disk_mb=?, pool_selector=?, max_machines=?, max_creates_in_flight=?,
+		machine_disk_mb=?, pool_selector=?, max_machines=?, min_machines=?, max_creates_in_flight=?,
 		idle_timeout_ms=?, cost_per_machine_hour=?, enabled=?, updated_at=? WHERE id=?`,
 		p.Name, p.Endpoint, p.CAPEM, p.MachineCAPEM, boolInt(p.InsecureSkipVerify), p.Settings,
 		p.MachineLabels, p.MachineCapacity, string(p.MachineBackend), platform,
-		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines,
+		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines, p.MinMachines,
 		p.MaxCreatesInFlight, p.IdleTimeout.Duration().Milliseconds(), p.CostPerMachineHour,
 		boolInt(p.Enabled), ms(p.UpdatedAt), p.ID)
 	if err != nil {
