@@ -11693,6 +11693,33 @@ export interface components {
             rows_omitted: boolean;
             jobs: components["schemas"]["ExperimentRunnerEvidenceJob"][];
         };
+        ExperimentRootSourceView: {
+            /** @enum {string} */
+            basis: "push_head_sha_root_file";
+            commit_sha: string;
+            blob_sha: string;
+            content_sha256: string;
+            bytes: number;
+        };
+        ExperimentWorkflowEvidenceAttempt: {
+            run_id: string;
+            attempt: number;
+            event: string | null;
+            workflow_path_sha256: string | null;
+            root_source: components["schemas"]["ExperimentRootSourceView"] | null;
+        };
+        ExperimentWorkflowEvidenceArm: {
+            selected_attempts: number;
+            root_sources: number;
+            rows_omitted: boolean;
+            attempts: components["schemas"]["ExperimentWorkflowEvidenceAttempt"][];
+        };
+        ExperimentWorkflowEvidence: {
+            /** @enum {string} */
+            version: "workflow-evidence-v1";
+            baseline: components["schemas"]["ExperimentWorkflowEvidenceArm"];
+            candidate: components["schemas"]["ExperimentWorkflowEvidenceArm"];
+        };
         ExperimentRunnerEvidence: {
             /** @enum {string} */
             version: "runner-evidence-v1";
@@ -11785,6 +11812,8 @@ export interface components {
             until: string;
         };
         RetainedExperimentComparison: {
+            /** @description Descriptive retained trigger, path fingerprint and root-file digests only. Missing facts remain null. No source text or filenames; no workflow equivalence or execution attestation. Absent on older controllers. */
+            workflow_evidence?: components["schemas"]["ExperimentWorkflowEvidence"];
             /** @description Bounded descriptive view from validated retained inputs only. At most 100 job rows per arm; counts include omitted rows. Requested fields and agent claims do not establish applied limits or controlled equivalence. Absent on older controllers. */
             runner_evidence?: components["schemas"]["ExperimentRunnerEvidence"];
             /** Format: date-time */

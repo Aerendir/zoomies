@@ -53,7 +53,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 MCP/Eli runner evidence | Merged | ZF-243, [#1004](https://github.com/eyupio/zoomies/pull/1004), based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
 | E2 CLI runner evidence | Merged | ZF-243, [#1006](https://github.com/eyupio/zoomies/pull/1006), based on main after #1004 | Shared capture/replay human view, validated REST whitelist, full coverage counts and explicit unknown/request/claim labels; raw JSON preserved. Focused race tests, vet and strict docs pass |
 | E2 private trigger/workflow context | Merged | ZF-243, [#1007](https://github.com/eyupio/zoomies/pull/1007), based on main after #1006 | Bounded optional exact-attempt metadata, identity recheck and immutable private retention; no workload equivalence or public contract change. Focused GitHub/controller race tests, vet and strict docs pass |
-| E2 push root-workflow digests | Ready for review | ZF-243, [#1012](https://github.com/eyupio/zoomies/pull/1012), based on main after #1007 | Commit-pinned bounded root-file read with private digests; eight-request reservation, no revision/equivalence promotion. GitHub/controller/API race tests, vet and strict docs pass |
+| E2 push root-workflow digests | Merged | ZF-243, [#1012](https://github.com/eyupio/zoomies/pull/1012), based on main after #1007 | Commit-pinned bounded root-file read with private digests; eight-request reservation, no revision/equivalence promotion. GitHub/controller/API race tests, vet and strict docs pass |
+| E2 web workflow evidence | Ready for review | ZF-243, PR pending, based on main after #1012 | Separate bounded REST/UI projection with exact run IDs, unknowns and root-only coverage; fingerprints exclude raw paths. Controller/API race, 20 desktop/mobile checks, 109 UI unit tests, type/lint/build, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1675,7 +1676,7 @@ is also still outstanding; keep thirty completed attempts per arm.
 
 ### E2 slice 21: private push root-workflow source digests, 13 October 2026
 
-Ready for review [#1012](https://github.com/eyupio/zoomies/pull/1012), branch codex/eli-comparison-workflow-source, based on main after #1007 merged.
+Merged [#1012](https://github.com/eyupio/zoomies/pull/1012), branch codex/eli-comparison-workflow-source, based on main after #1007 merged.
 For event=push only, a canonical direct .github/workflows file with .yml/.yaml
 extension and no @ref/URL/query/fragment/percent/backslash ambiguity can be read at
 the retained HeadSHA. This establishes root-file bytes at that push commit, not
@@ -1732,3 +1733,55 @@ collection; never infer the executed workflow solely from HeadSHA for those
 triggers. Root digests alone cannot fill WorkflowRevision until transitive
 workflow/action coverage is specified. Dispatch inputs, test scope, caches, host
 conditions and fair complete selections, plus live model evaluation, remain open.
+
+
+### E2 slice 22: descriptive workflow evidence in REST/UI, 13 October 2026
+
+Prepared on codex/eli-comparison-workflow-evidence-web, based on main after #1012
+merged. Capture and verified offline replay now return optional workflow_evidence
+outside the immutable private envelope/report. The whitelist contains version
+workflow-evidence-v1, baseline/candidate full selected-attempt/root-source counts,
+omitted-row flags and at most 100 attempt rows each. Run IDs are exact decimal
+strings. Events, SHA-256 fingerprints of the complete opaque retained path and
+root sources are nullable. A root source exposes only basis, commit SHA, Git blob
+SHA, SHA-256 content digest and byte count. No raw paths, filenames, source text,
+private fleet IDs, event payloads or dispatch inputs. Returned fields are copied.
+
+No new collection, repository source read, privilege, migration or dependency.
+Older inputs project null facts without enrichment; older controllers omit the
+view. Original report bytes, digest, measurement/rule versions, verified identities
+and eligibility remain unchanged. The OpenAPI and generated Go/TypeScript copies
+are updated. CLI JSON preserves the new raw field; MCP/Eli and CLI human output
+need separate reviewed presenters rather than forwarding it wholesale.
+
+The UI adds Recorded workflow evidence, full coverage summaries and native details
+for each exact run/attempt. Digests and identities wrap in a token-based grid on
+mobile. The explanatory boundary distinguishes path fingerprints from content,
+root-file collection from executed bytes, and root coverage from reusable
+workflows/actions, dispatch inputs and test scope. Missing facts stay Unknown;
+unsupported view versions are explicitly unknown. Rows omitted from a view do
+not change selected cohort counts or sample eligibility.
+
+Validation completed: controller fixtures check exact max-int64 IDs, nullable
+facts, copied values and bounded rows/full counts. Capture/replay API fixture
+checks retained source transport, privacy, immutable replay and unchanged reads/
+quota/report eligibility. Older foundation fixtures now allow deliberately public
+whitelisted events/content digests while continuing to refuse private raw paths.
+Desktop/mobile browser fixtures check unknown/older/future versions, root-only
+coverage, exact IDs, digest readability, one read and no page overflow.
+All 20 comparison browser checks pass on desktop/mobile, including digest
+readability and no overflow. All 109 UI unit tests, type/lint checks and both UI
+builds pass within shell/status budgets. Changed-package vet, embedded OpenAPI
+source matching, strict docs and whitespace pass. The exact-ID fixture fails when
+decimal-string encoding is removed. Docs used the repository-only header fallback
+for unavailable optional GitHub metadata. No real source/model/provider/fleet
+operation; fixtures verify presentation.
+
+Next agent: independently validate and present this reviewed shape to MCP/Eli
+within existing 64 KiB/12 KiB budgets and quoted untrusted-evidence boundaries,
+then add CLI human presentation. Preserve original arm bindings, full counters,
+nullable facts and root-only claims. Do not copy future/raw response fields to a
+model. Workload/configuration/cache/test-scope/dependency and fair-selection proof,
+non-push revision resolution and live model evaluation remain outstanding. Keep
+thirty completed attempts per arm and admission limits; descriptive digests do
+not justify workflow equivalence or an improvement ranking.

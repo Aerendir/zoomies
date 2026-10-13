@@ -123,7 +123,7 @@ func TestRetainedTriggerContextReplaysPrivatelyWithoutChangingTheReport(t *testi
 			}
 			before, _ := json.Marshal(saved)
 			after, _ := json.Marshal(replay)
-			if string(before) != string(after) || strings.Contains(string(after), "private-baseline") || strings.Contains(string(after), "workflow_dispatch") {
+			if string(before) != string(after) || strings.Contains(string(after), "private-baseline") {
 				t.Fatal("private context leaked or mutable source affected replay")
 			}
 		})

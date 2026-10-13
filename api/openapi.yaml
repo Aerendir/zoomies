@@ -15501,6 +15501,80 @@ components:
       - runner_observations
       - rows_omitted
       - jobs
+    ExperimentRootSourceView:
+      type: object
+      additionalProperties: false
+      properties:
+        basis:
+          type: string
+          enum: [push_head_sha_root_file]
+        commit_sha:
+          type: string
+          pattern: ^[a-f0-9]{40}([a-f0-9]{24})?$
+        blob_sha:
+          type: string
+          pattern: ^[a-f0-9]{40}$
+        content_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        bytes:
+          type: integer
+          minimum: 1
+          maximum: 131072
+      required: [basis, commit_sha, blob_sha, content_sha256, bytes]
+    ExperimentWorkflowEvidenceAttempt:
+      type: object
+      additionalProperties: false
+      properties:
+        run_id:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        attempt:
+          type: integer
+          minimum: 1
+        event:
+          type: string
+          nullable: true
+          maxLength: 64
+        workflow_path_sha256:
+          type: string
+          nullable: true
+          pattern: ^[a-f0-9]{64}$
+        root_source:
+          allOf:
+          - $ref: '#/components/schemas/ExperimentRootSourceView'
+          nullable: true
+      required: [run_id, attempt, event, workflow_path_sha256, root_source]
+    ExperimentWorkflowEvidenceArm:
+      type: object
+      additionalProperties: false
+      properties:
+        selected_attempts:
+          type: integer
+          minimum: 0
+        root_sources:
+          type: integer
+          minimum: 0
+        rows_omitted:
+          type: boolean
+        attempts:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ExperimentWorkflowEvidenceAttempt'
+      required: [selected_attempts, root_sources, rows_omitted, attempts]
+    ExperimentWorkflowEvidence:
+      type: object
+      additionalProperties: false
+      properties:
+        version:
+          type: string
+          enum: [workflow-evidence-v1]
+        baseline:
+          $ref: '#/components/schemas/ExperimentWorkflowEvidenceArm'
+        candidate:
+          $ref: '#/components/schemas/ExperimentWorkflowEvidenceArm'
+      required: [version, baseline, candidate]
     ExperimentRunnerEvidence:
       type: object
       additionalProperties: false
@@ -15764,6 +15838,9 @@ components:
     RetainedExperimentComparison:
       additionalProperties: false
       properties:
+        workflow_evidence:
+          description: Descriptive retained trigger, path fingerprint and root-file digests only. Missing facts remain null. No source text or filenames; no workflow equivalence or execution attestation. Absent on older controllers.
+          $ref: '#/components/schemas/ExperimentWorkflowEvidence'
         runner_evidence:
           description: Bounded descriptive view from validated retained inputs only. At most 100 job rows per arm; counts include omitted rows. Requested fields and agent claims do not establish applied limits or controlled equivalence. Absent on older controllers.
           $ref: '#/components/schemas/ExperimentRunnerEvidence'
