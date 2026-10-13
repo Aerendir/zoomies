@@ -990,3 +990,30 @@ func TestADirectProviderOnAPrivateAddressIsRefusedUntilThePlatformAllowsIt(t *te
 		})
 	}
 }
+
+// A minimum is money spent while nothing runs, so a nonsense one is refused
+// where it is typed rather than quietly clamped by the planner later.
+func TestAMinimumOfMachinesMustFitInsideTheMaximum(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.user("admin", store.RoleAdmin)
+	cookie := h.session(admin)
+	prov := h.provider("proxmox-lab")
+
+	for name, tc := range map[string]struct {
+		body map[string]any
+		want string
+	}{
+		"negative":      {map[string]any{"min_machines": -1}, "cannot be negative"},
+		"above the max": {map[string]any{"min_machines": prov.MaxMachines + 1}, "cannot be more than the most machines"},
+	} {
+		resp := h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie, body: tc.body})
+		resp.mustStatus(t, http.StatusUnprocessableEntity, name)
+		if msg := string(resp.body); !strings.Contains(msg, tc.want) {
+			t.Errorf("%s: message = %q, want it to contain %q", name, msg, tc.want)
+		}
+	}
+
+	ok := h.do(request{method: http.MethodPatch, path: "/api/v1/providers/" + prov.ID, cookie: cookie,
+		body: map[string]any{"min_machines": 0}})
+	ok.mustStatus(t, http.StatusOK, "a minimum of zero")
+}
