@@ -21,14 +21,15 @@ type ExperimentAttemptSelection struct {
 }
 
 type ExperimentRetainedJob struct {
-	JobID       string         `json:"job_id"`
-	GitHubJobID int64          `json:"github_job_id"`
-	HeadSHA     string         `json:"head_sha"`
-	State       store.JobState `json:"state"`
-	Conclusion  string         `json:"conclusion"`
-	QueuedAt    time.Time      `json:"queued_at"`
-	StartedAt   *time.Time     `json:"started_at"`
-	CompletedAt *time.Time     `json:"completed_at"`
+	RecordedGrant *ExperimentRecordedGrant `json:"recorded_grant,omitempty"`
+	JobID         string                   `json:"job_id"`
+	GitHubJobID   int64                    `json:"github_job_id"`
+	HeadSHA       string                   `json:"head_sha"`
+	State         store.JobState           `json:"state"`
+	Conclusion    string                   `json:"conclusion"`
+	QueuedAt      time.Time                `json:"queued_at"`
+	StartedAt     *time.Time               `json:"started_at"`
+	CompletedAt   *time.Time               `json:"completed_at"`
 }
 
 type ExperimentRetainedAttempt struct {
@@ -83,7 +84,11 @@ func (c *Controller) CollectExperimentAttempts(ctx context.Context, installation
 				return nil, err
 			}
 			for _, j := range jobs {
-				a.Jobs = append(a.Jobs, ExperimentRetainedJob{JobID: j.ID, GitHubJobID: j.GitHubJobID, HeadSHA: j.HeadSHA, State: j.State, Conclusion: j.Conclusion, QueuedAt: j.QueuedAt, StartedAt: j.StartedAt, CompletedAt: j.CompletedAt})
+				grant, err := experimentRecordedGrant(j)
+				if err != nil {
+					return nil, err
+				}
+				a.Jobs = append(a.Jobs, ExperimentRetainedJob{RecordedGrant: grant, JobID: j.ID, GitHubJobID: j.GitHubJobID, HeadSHA: j.HeadSHA, State: j.State, Conclusion: j.Conclusion, QueuedAt: j.QueuedAt, StartedAt: j.StartedAt, CompletedAt: j.CompletedAt})
 			}
 			budget -= len(jobs)
 			switch {

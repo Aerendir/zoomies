@@ -170,3 +170,52 @@ func TestComparisonAPIMetadataMovementReturnsAConflict(t *testing.T) {
 		t.Fatal("moving attempt was retried or retained")
 	}
 }
+
+func TestComparisonAPIRecordedGrantsStayPrivateAndReplayDoesNotRefreshThem(t *testing.T) {
+	h, inst, reader, body := comparisonAPIHarness(t)
+	for _, run := range []int64{10, 11} {
+		j, err := h.st.UpsertJob(h.ctx, &store.Job{GitHubJobID: run + 100, GitHubRunID: run, RunAttempt: 1, Repo: "acme/repo", InstallationID: inst, HeadSHA: strings.Repeat("a", 40), QueuedAt: reader.at, State: store.JobCompleted, Conclusion: "failure"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.st.StampJobGranted(h.ctx, j.ID, 2, 8192, store.AllocationFromPool); err != nil {
+			t.Fatal(err)
+		}
+	}
+	token := h.token("operator", store.RoleOperator, "jobs:read", "comparisons:write")
+	captured := h.do(request{method: http.MethodPost, path: "/api/v1/comparisons", token: token, body: body})
+	captured.mustStatus(t, 201, "capture recorded grants")
+	var saved controller.RetainedExperimentComparison
+	if err := json.Unmarshal(captured.body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	row, err := h.st.GetComparisonEvidence(h.ctx, inst, "acme/repo", saved.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		Baseline  *controller.ExperimentJoinedEvidence `json:"baseline"`
+		Candidate *controller.ExperimentJoinedEvidence `json:"candidate"`
+	}
+	if err := json.Unmarshal(row.Payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	for _, side := range []*controller.ExperimentJoinedEvidence{envelope.Baseline, envelope.Candidate} {
+		if side == nil || len(side.Attempts) != 1 || len(side.Attempts[0].MatchedJobs) != 1 {
+			t.Fatal("grant not joined to pinned job")
+		}
+		g := side.Attempts[0].MatchedJobs[0].RecordedGrant
+		if g == nil || g.CPUs == nil || *g.CPUs != 2 || g.MemoryMB == nil || *g.MemoryMB != 8192 {
+			t.Fatal("grant not durably retained")
+		}
+	}
+	if strings.Contains(string(captured.body), "recorded_grant") || saved.Report.Snapshot.Baseline.ResourceID != "" || saved.Report.Measurement.Eligibility.State != "inconclusive" {
+		t.Fatal("private grant promoted public equivalence")
+	}
+	replay := h.do(request{method: http.MethodGet, path: fmt.Sprintf("/api/v1/comparisons/%s?installation_id=%s&repo=acme/repo", saved.ID, inst), token: token})
+	replay.mustStatus(t, 200, "offline replay")
+	if string(replay.body) != string(captured.body) || reader.calls.Load() != 2 || reader.quotaCalls.Load() != 1 {
+		t.Fatal("replay changed evidence or collection budget")
+	}
+	assertShape(t, loadSpec(t), "RetainedExperimentComparison", captured.body)
+}
