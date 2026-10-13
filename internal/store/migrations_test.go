@@ -116,12 +116,13 @@ var shippedMigrations = []string{
 	"0102_comparison_evidence.sql",
 	"0102_provider_min_machines.sql",
 	"0103_provider_machine_size_seen.sql",
+	"0104_runner_creation_observations.sql",
 }
 
-// The two prefixes shared by files that already shipped. They sort by what
+// The prefixes shared by pairs of files that already shipped. They sort by what
 // follows the underscore, which happened to be the right order; nothing after
 // them may rely on that again.
-var grandfatheredPrefixes = map[string]bool{"0005": true, "0006": true}
+var grandfatheredPrefixes = map[string]bool{"0005": true, "0006": true, "0102": true}
 
 func TestMigrationNamesAreFixedAndNewPrefixesAreUnique(t *testing.T) {
 	entries, err := fs.ReadDir(migrationFS, "migrations")
@@ -142,12 +143,14 @@ func TestMigrationNamesAreFixedAndNewPrefixesAreUnique(t *testing.T) {
 	}
 
 	seen := map[string]string{}
+	counts := map[string]int{}
 	for _, name := range names {
 		prefix, _, ok := strings.Cut(name, "_")
 		if !ok || len(prefix) != 4 || strings.Trim(prefix, "0123456789") != "" {
 			t.Fatalf("%s does not start with a four-digit prefix and an underscore", name)
 		}
-		if other, dup := seen[prefix]; dup && !grandfatheredPrefixes[prefix] {
+		counts[prefix]++
+		if other, dup := seen[prefix]; dup && (!grandfatheredPrefixes[prefix] || counts[prefix] > 2) {
 			t.Fatalf("%s and %s share the prefix %s; take the next unused number", other, name, prefix)
 		}
 		seen[prefix] = name

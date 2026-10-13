@@ -27,8 +27,8 @@ import (
 // renaming one re-applies its DDL on every existing database, which fails or
 // worse. And a new file takes the next unused numeric prefix, alone: two files
 // sharing a prefix sort on what follows the underscore, which is a fact about
-// spelling and not about the order the schema needs. Two such pairs already
-// shipped (0005 and 0006) and stay as they are, because of the first rule.
+// spelling and not about the order the schema needs. Pairs which already shipped stay as they are, because of the first rule.
+// migrations_test.go records those exceptions and refuses another file in a pair.
 //
 //go:embed migrations/*.sql
 var migrationFS embed.FS
