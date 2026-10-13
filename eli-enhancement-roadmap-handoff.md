@@ -15,7 +15,7 @@ coordinating agent reconciles these tracks with current code and records new or
 changed work in ROADMAP.md, using existing packages where the work overlaps.
 The track IDs below are local handoff identifiers, not allocated ZF numbers.
 
-## Execution status, updated 12 October 2026
+## Execution status, updated 13 October 2026
 
 The owner subsequently authorised implementation and stacked PRs. This section
 is the live handoff record for that work; ROADMAP.md and `roadmap/progress.md`
@@ -35,6 +35,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E1 contextual UI and scripted scenarios | Merged | [#959](https://github.com/eyupio/zoomies/pull/959), following merged #947; baseline `66ff3857` | Desktop/mobile browser tests, scripted Eli race scenarios, focused UI checks, production asset budgets and strict docs pass. Snapshot-only context, nullable timings and manual Retry-After hold are covered. No live model evaluation has run |
 | E2 eligibility | Draft PR | ZF-243, [#973](https://github.com/eyupio/zoomies/pull/973), following merged #971; baseline `1f4bcef8` | Pure selected-attempt contract, fixed rules and explicit inconclusive reasons. Measures, verified controller selection and transports follow. No dispatch or causal claim |
 | E2 measurements | Draft PR | ZF-243, [#974](https://github.com/eyupio/zoomies/pull/974), stacked on #973 | Successful latency distribution, all-attempt execution/idle consumption, failure rate and descriptive changes. Complete analysis race tests and vet pass; no controller integration or live experiment |
+| E2 bounded retained-attempt collection | In progress | ZF-243, current PR following #974 | Scoped store reader and bounded controller collection; explicit retained-only/truncated/unavailable/held-back coverage. Focused store/controller race tests, full analysis race tests, changed-package vet and whitespace checks pass. Full workflow selection remains unverified; no runtime surface |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -691,3 +692,50 @@ measurement slice nor its parent initiates jobs, writes GitHub or calls a model.
 Validation: tests failed before measurement implementation. Complete analysis
 race tests and vet pass, including exact thresholds, zero/missing values, nearest
 rank, unequal cohort sizes, failure/exclusion consumption, overflow and purity.
+
+## E2 collection handoff, 13 October 2026
+
+Slice 3 follows draft #974. Main was reconciled at `266ad99f`; #973 and #974
+remain open. Their older Go/Node dependency baseline is preserved in this stack;
+no dependency update is mixed into this implementation.
+
+`Store.ListExperimentAttemptJobs` scopes every read to repository, installation,
+run ID and exact attempt number. It preserves every conclusion and pending state,
+orders queued_at/id, takes a limit of 1..1000, fetches at most limit+1 and reports
+truncation. Empty rows mean no retained evidence. It does not filter by window:
+cutting jobs at window edges could make an incomplete attempt look complete.
+
+`Controller.CollectExperimentAttempts` requires a transport-authorised caller;
+installation coverage is checked here, but caller authorisation is not granted
+by an installation/repository join. It selects 1..100 unique positive run/attempt
+identities, imposes a 20-second deadline, returns at most 1000 jobs per attempt
+and 2000 jobs across the selection. Queries fetch one extra row to detect a
+per-attempt truncation. Remaining attempts after exhausting the total budget are
+held back rather than silently omitted. The report has only job identity,
+revision, state/conclusion and timestamps; no job names, workflow names, log tails
+or workflow outputs. Repository/revision strings remain untrusted in any future
+agent adapter. No REST route or tool exposes these reports yet.
+
+Coverage values: `retained_only`, `truncated`, `not_available`, `held_back`.
+`SelectionComplete` is always false. Retention and missed deliveries can hide
+jobs, and full workflow coverage includes jobs the fleet may not run. Existing
+rows do not prove workflow inputs, workflow revision, observed cache classification,
+historical runner/image/resource configuration, quiet hosts or attributable idle.
+Do not fill these with current pool settings, guessed caches, zero or a complete
+selection assertion. The collector makes no GitHub call and mints no credential.
+
+Next agent: design the bounded join to independently retained workload/configuration
+and complete workflow-attempt evidence before building an ExperimentSnapshot.
+Pin source revision, workflow revision, test scope, exact inputs and configuration
+at the selected attempts, and retain every failure. Unknowns keep comparisons
+inconclusive. Full workflow wall-clock latency must not be inferred from the
+first/last retained fleet job. Execution sums need all selected job measurements;
+allocated idle and monetary attribution need separate supported evidence.
+Public-visitor refusal, role checks, repository scope and explicit incomplete
+coverage must hold before any read-only API/CLI/MCP/Eli/UI surface is added.
+
+Tests cover exact scoping, retries, all outcomes, invalid bounds, empty history,
+repository-installation mismatches, duplicate selections, both collection caps
+and minimal output. The behavioural tests failed to compile before implementation.
+Verification results are recorded in the slice plan; earlier broad-run evidence
+is not a claim that this new slice passed the entire repository suite.

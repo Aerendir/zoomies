@@ -1755,7 +1755,8 @@ as a trade-off, and no causal or verified-improvement claim from historical data
 Dispatch and publication are later, separately authorised work.
 
 **Slices:** [eligibility plan](roadmap/plans/2026-10-12-eli-comparison-eligibility.md),
-[measurement plan](roadmap/plans/2026-10-12-eli-comparison-measurements.md).
+[measurement plan](roadmap/plans/2026-10-12-eli-comparison-measurements.md),
+[bounded attempt collection](roadmap/plans/2026-10-13-eli-comparison-attempt-reader.md).
 No new dependency, store query, route, model call, dispatch or publication.
 
 ## 9. Kept for the day somebody asks
