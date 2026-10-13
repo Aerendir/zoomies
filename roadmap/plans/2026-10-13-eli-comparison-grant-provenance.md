@@ -1,6 +1,7 @@
 # ZF-243: retain recorded job grant provenance
 
-13 October 2026. Starts after merged CLI #993, without changing experiment rules.
+13 October 2026. Draft [#994](https://github.com/eyupio/zoomies/pull/994).
+Starts after merged CLI #993, without changing experiment rules.
 
 ## Evidence audit
 

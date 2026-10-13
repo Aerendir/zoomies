@@ -45,7 +45,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 MCP/Eli replay | Merged | ZF-243, [#990](https://github.com/eyupio/zoomies/pull/990), targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
 | E2 web capture and inspection | Merged | ZF-243, [#991](https://github.com/eyupio/zoomies/pull/991), targets main after #990 merged | Owner prioritised web before CLI capture. Explicit operator form, scoped viewer bookmarks, full retained measurements/attempts, manual Retry-After, escaped text and responsive tables. Eight desktop/mobile browser fixtures, type/lint/unit/build/docs checks pass |
 | E2 CLI capture | Merged | ZF-243, [#993](https://github.com/eyupio/zoomies/pull/993), targets main after #991 merged | Explicit bounded JSON file/stdin, exact int64 identities, strict selection validation, one POST and shared replay presentation. Focused CLI/reference/skill race, generation, vet and strict docs pass. Historical workload/configuration/cache evidence remains outstanding |
-| E2 recorded grant provenance | Implemented, PR pending | ZF-243, targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
+| E2 recorded grant provenance | Draft PR | ZF-243, [#994](https://github.com/eyupio/zoomies/pull/994), targets main after #993 merged | First-assignment controller grant stamps retained privately with versioned basis, nullable dimensions and pinned-job binding. Focused controller/store/API race, vet and strict docs pass. No resource equivalence, backend attestation or public field |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1211,6 +1211,7 @@ selected observations from any future independently matched cohort path.
 
 ### E2 slice 13: recorded grant provenance, 13 October 2026
 
+Draft [#994](https://github.com/eyupio/zoomies/pull/994).
 Starts from merged CLI capture #993 on main, branch
 codex/eli-comparison-grant-provenance. The evidence audit found existing historical
 job stamps: GrantedCPUs, GrantedMemoryMB and GrantedSource, written once by
