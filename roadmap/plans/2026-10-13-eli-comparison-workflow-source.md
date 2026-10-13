@@ -1,6 +1,6 @@
 # ZF-243: retain push root-workflow source digests
 
-13 October 2026. Prepared on main after #1007 merged.
+13 October 2026. Ready for review [#1012](https://github.com/eyupio/zoomies/pull/1012), based on main after #1007 merged.
 
 ## Behaviour
 
