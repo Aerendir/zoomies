@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -92,7 +93,7 @@ func TestAnAttemptCannotAppearTwiceOrInBothArms(t *testing.T) {
 
 func TestAnExperimentRequiresAReproducibleBoundedRecord(t *testing.T) {
 	changes := []func(*ExperimentSnapshot){
-		func(s *ExperimentSnapshot) { s.RuleVersion = "future" }, func(s *ExperimentSnapshot) { s.Repository = "" }, func(s *ExperimentSnapshot) { s.EvidenceID = "" }, func(s *ExperimentSnapshot) { s.InitiatingUser = "" }, func(s *ExperimentSnapshot) { s.Hypothesis = "" }, func(s *ExperimentSnapshot) { s.IntendedDelta = "" }, func(s *ExperimentSnapshot) { s.Until = s.Since }, func(s *ExperimentSnapshot) { s.Candidate.ImageID = "" }, func(s *ExperimentSnapshot) { s.Candidate.Attempts[0].ObservedAt = s.Until }, func(s *ExperimentSnapshot) { s.Candidate.Attempts[0].Outcome = "invented" }, func(s *ExperimentSnapshot) { s.Candidate.Attempts = make([]ExperimentAttempt, MaxExperimentAttempts+1) },
+		func(s *ExperimentSnapshot) { s.RuleVersion = "future" }, func(s *ExperimentSnapshot) { s.Repository = "" }, func(s *ExperimentSnapshot) { s.EvidenceID = "" }, func(s *ExperimentSnapshot) { s.InitiatingUser = "" }, func(s *ExperimentSnapshot) { s.Hypothesis = "" }, func(s *ExperimentSnapshot) { s.IntendedDelta = "" }, func(s *ExperimentSnapshot) { s.Until = s.Since }, func(s *ExperimentSnapshot) { s.Candidate.ImageID = strings.Repeat("x", 4097) }, func(s *ExperimentSnapshot) { s.Candidate.Attempts[0].ObservedAt = s.Until }, func(s *ExperimentSnapshot) { s.Candidate.Attempts[0].Outcome = "invented" }, func(s *ExperimentSnapshot) { s.Candidate.Attempts = make([]ExperimentAttempt, MaxExperimentAttempts+1) },
 	}
 	for i, change := range changes {
 		s := experimentFixture()
@@ -142,5 +143,39 @@ func TestEligibilityIsDeterministicAndDoesNotRewriteEvidence(t *testing.T) {
 	}
 	if s.Candidate.Attempts[0].Cache != "unknown" || s.Candidate.Attempts[0].HostCondition != "busy" || s.Candidate.SelectionComplete {
 		t.Fatal("evidence rewritten")
+	}
+}
+
+func TestMissingHistoricalMetadataIsInconclusiveRatherThanMalformed(t *testing.T) {
+	cases := []struct {
+		reason string
+		change func(*ExperimentSnapshot)
+	}{
+		{"source_unknown", func(s *ExperimentSnapshot) { s.Candidate.SourceRevision = "" }},
+		{"workflow_revision_unknown", func(s *ExperimentSnapshot) { s.Candidate.WorkflowRevision = "" }},
+		{"inputs_unknown", func(s *ExperimentSnapshot) { s.Candidate.InputsID = "" }},
+		{"test_scope_unknown", func(s *ExperimentSnapshot) { s.Candidate.TestScopeID = "" }},
+		{"configuration_unknown", func(s *ExperimentSnapshot) { s.Candidate.ConfigurationID = "" }},
+		{"image_unknown", func(s *ExperimentSnapshot) { s.Candidate.ImageID = "" }},
+		{"resource_unknown", func(s *ExperimentSnapshot) { s.Candidate.ResourceID = "" }},
+		{"observation_time_unknown", func(s *ExperimentSnapshot) { s.Candidate.Attempts[0].ObservedAt = time.Time{} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.reason, func(t *testing.T) {
+			s := experimentFixture()
+			tc.change(&s)
+			r, err := AssessExperiment(s)
+			if err != nil || r.State != "inconclusive" || !slices.Contains(r.Reasons, tc.reason) {
+				t.Fatalf("got %+v, %v", r, err)
+			}
+		})
+	}
+}
+
+func TestARecordedV1SnapshotIsNotSilentlyReinterpretedAsV2(t *testing.T) {
+	s := experimentFixture()
+	s.RuleVersion = "selected-runs-v1"
+	if _, err := AssessExperiment(s); err == nil {
+		t.Fatal("v1 silently reinterpreted")
 	}
 }

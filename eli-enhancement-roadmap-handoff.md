@@ -38,6 +38,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 bounded retained-attempt collection | Merged | ZF-243, [#977](https://github.com/eyupio/zoomies/pull/977), stacked on #974 | Scoped store reader and bounded controller collection; explicit retained-only/truncated/unavailable/held-back coverage. Focused store/controller race tests, full analysis race tests, changed-package vet and whitespace checks pass. Full workflow selection remains unverified; no runtime surface |
 | E2 bounded GitHub attempt evidence | Merged | ZF-243, [#978](https://github.com/eyupio/zoomies/pull/978), targeting main after merged #977 | Exact run/attempt metadata and job enumeration, bounded bodies/pages and uncached identity recheck. Full GitHub package race tests and vet pass. No collector admission or runtime surface yet; workload/configuration evidence remains unknown |
 | E2 admitted attempt joins | Draft PR | ZF-243, [#982](https://github.com/eyupio/zoomies/pull/982), following merged #978; baseline `a132e6a2` | Shared diagnostic admission, quota reservation and exact remote/fleet identity joins. Focused controller race tests and vet pass. Cohort completeness and configuration/input/cache evidence stay unverified; no transport |
+| E2 observed snapshot assembly | In progress | ZF-243, current PR following #982 | Versioned unknown-evidence handling, pinned outcomes and complete-enumeration job elapsed sums. Complete analysis and focused snapshot race tests, analysis/controller vet and whitespace checks pass. Selection stays unverified; no runtime surface or improvement ranking |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -836,3 +837,61 @@ Controller vet and diff whitespace checks pass. Dependency downloads and localho
 fixture servers required explicit per-command network access. The first attempt
 without that access was blocked; it was not a passing run. No full controller or
 repository test command, real GitHub call or live model assessment is claimed.
+
+### E2 observed snapshot assembly, 13 October 2026
+
+Slice 6 follows #982. `AssembleExperimentComparison` accepts two admitted joined
+collections plus an operator comparison record and returns the snapshot with its
+pure descriptive measurements. No caller or repository access is granted here.
+Retain the input collections beside the report; an evidence identifier/hypothesis
+is not independent proof of workload/configuration or durable persistence.
+
+Eligibility version `selected-runs-v2` replaces v1's rejection of absent arm
+metadata with explicit inconclusive reasons: source_unknown,
+workflow_revision_unknown, inputs_unknown, test_scope_unknown,
+configuration_unknown, image_unknown and resource_unknown. Unknown attempt start
+time has observation_time_unknown. Known mismatches, duplicate run/attempt IDs,
+oversized identifiers, invalid records/windows and known out-of-window starts
+still fail or retain their established mismatch reason as appropriate. A v1
+snapshot is refused rather than silently reevaluated under v2. The minimum sample
+rule and `selected-measures-v1` descriptive thresholds are unchanged.
+
+The assembler retains each attempt's source SHA and numeric workflow ID. A common
+source is recorded only if every attempt in the arm matches; mixed heads remain
+visible on individual attempts with the arm's source unknown. Workflow ID is
+never substituted for workflow revision or test scope. Repository and installation
+must agree across both collections. Arms are bounded to 100 attempts, each with
+at most 500 jobs, and a GitHub job cannot be reused to inflate different samples.
+SelectionComplete remains false even if supplied collections claim otherwise.
+
+Window basis is `github_attempt_started_at`, with unknown starts retained rather
+than dropped. Completed success maps to success; failure/timed_out/startup_failure
+to failure; cancelled to cancellation. Pending runs remain pending. Other terminal
+conclusions stay unknown with the raw conclusion retained in the input evidence.
+Every selected attempt survives assembly, including failures and cancellations.
+
+Execution basis is `sum_of_all_github_job_elapsed_times`, across all jobs and
+runner providers, not just the fleet. A total exists only with complete enumeration
+and every valid started/completed pair; zero is observed zero, missing/empty/partial
+measurements stay null. Reversed, overflowing or duration-saturated timestamps
+refuse the record. This is summed observed job elapsed time, not CPU utilisation,
+monetary cost or allocated idle. No workflow latency is inferred from UpdatedAt
+or first/last fleet job, and no cache hit, quiet host, workflow inputs, historical
+image or resource setting is invented. Those fields remain unknown.
+
+Both arms can report objective outcome counts and observed consumption, while
+eligibility stays inconclusive and every descriptive change label stays
+not_enough. The next product boundary is retaining these evidence snapshots and
+adding authorised read-only diagnosis surfaces, with explicit unsupported evidence.
+Controlled comparisons still need independently retained workload/configuration,
+input/test-scope and observed cache/host evidence. Do not require guessed metadata
+to serve an honest incomplete historical report. Dispatch/publication and live
+model/performance evaluation remain unrun.
+
+Slice 6 validation: v1 first failed the new missing-evidence behaviour tests;
+assembly tests failed before implementation. Complete analysis race tests and
+focused snapshot race tests pass, including pure package boundaries, known
+thresholds, unknown metadata, large inconclusive cohorts, mixed sources, duplicate
+jobs, missing/zero elapsed time and bounded/overflowing evidence. Changed-package
+vet and whitespace checks pass. No full controller/repository test pass, durable
+snapshot storage, real provider/model call or causal experiment is claimed.
