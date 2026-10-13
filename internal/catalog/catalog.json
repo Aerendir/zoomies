@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "5b2a0f4",
+  "generated_from": "f8330a0",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2639,6 +2639,20 @@
       "setting": "provider.interval",
       "docs_html": "https://zoomies.sh/problem-codes/#configuration-infrastructure-providers",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#configuration-infrastructure-providers"
+    },
+    {
+      "id": "provider.machine_ca_same_as_cluster",
+      "kind": "problem",
+      "title": "provider.machine_ca_same_as_cluster",
+      "category": "reliability",
+      "severity": "warning",
+      "detection": "runtime",
+      "detects": "The certificate for machines is the same one the controller uses to reach the hypervisor. A machine trusts the file it is given for the controller and nothing else, so unless the cluster's authority also signed the controller, its agent refuses the controller, never joins, and logs `certificate signed by unknown authority`. Found by the provider's check.",
+      "fix": "Clear the certificate for machines if the controller is on a public certificate, or paste the authority that signed the controller's certificate.",
+      "verify": null,
+      "status_sentence": "Machines may refuse this controller's certificate and never join.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
     },
     {
       "id": "provider.machine_failed",
