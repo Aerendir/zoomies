@@ -216,6 +216,8 @@ type Controller struct {
 	// reconcileMu makes a pass mutually exclusive with itself, so a timer tick
 	// landing on top of a nudge cannot double-create runners.
 	reconcileMu sync.Mutex
+	// recoveryMu orders host reconnection and retirement before recovery resumes.
+	recoveryMu sync.RWMutex
 	// lifecycleCalls tracks the GitHub calls a reconcile pass detaches --
 	// minting a credential for a create, deleting a registration for a
 	// remove -- which run apart from the pass that decided them for the same
@@ -765,13 +767,12 @@ func (c *Controller) Fenced() store.RecoveryFence {
 // It writes the database first and the in-memory copy second, so a failed
 // write leaves a fenced controller rather than one that believes it is free.
 func (c *Controller) Unfence(ctx context.Context) error {
-	if err := c.st.DeleteSetting(ctx, store.SettingTransferDraining); err != nil {
+	c.recoveryMu.Lock()
+	defer c.recoveryMu.Unlock()
+	if err := c.st.CompleteRecovery(ctx); err != nil {
 		return err
 	}
 	c.transferDraining.Store(false)
-	if err := c.st.SetRecoveryFence(ctx, false, ""); err != nil {
-		return err
-	}
 	if err := c.LoadFence(ctx); err != nil {
 		return err
 	}

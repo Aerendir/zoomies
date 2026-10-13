@@ -488,7 +488,9 @@ through `POST /installations/manifest` asks for them only when the request says
 | Method | Path | Role | Notes |
 | --- | --- | --- | --- |
 | GET | `/api/v1/recovery` | viewer | Whether this fleet is held for recovery, and why. |
-| POST | `/api/v1/recovery/unfence` | platform | Lift it. Audited under its own action; lifting an unfenced instance succeeds and changes nothing. |
+| GET | `/api/v1/recovery/hosts` | viewer | Carried-over hosts with `host_id`, `name`, `state` (`awaiting_recovery`, `verified`, `retired`), and retirement actor and time where applicable. Scope `hosts:read`. |
+| POST | `/api/v1/recovery/hosts/{id}/retire` | admin | While fenced, explicitly retire an offline carried-over destination record with `{ "confirm_host_id": "<exact-path-id>" }`. Retains history and attribution; revokes destination agent access. Queues no task and cannot clean up the machine. Unknown hosts are 404; missing or mismatched confirmation, online, new or already retired hosts are 409. Scope `hosts:delete`. |
+| POST | `/api/v1/recovery/unfence` | platform | Lift it only after every carried-over host is freshly verified or explicitly retired. Audited under its own action; lifting an unfenced instance succeeds and changes nothing. |
 
 `zoomies restore` marks a restored database for recovery, and a controller
 reading that mark decides as normal and applies none of it: no runner is
@@ -747,7 +749,7 @@ two calls to a route above.
 zoomies pools list | get | create | edit | delete | enable | disable | prewarm
 zoomies runners list | get | drain | delete | logs
 zoomies jobs list | get
-zoomies hosts list | cordon | uncordon | delete
+zoomies hosts list | recovery | retire | cordon | uncordon | delete
 zoomies hosts join-token create
 zoomies providers list | check | pause | resume | machines | orphans
 zoomies installations list | verify

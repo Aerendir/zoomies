@@ -460,6 +460,10 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "reading the host", err)
 		return
 	}
+	if h.RecoveryRequired {
+		conflict(w, "carried-over host records are retained for recovery and history; retire an unreachable record through recovery instead")
+		return
+	}
 	if !force {
 		switch m, merr := s.ctrl.Store().GetMachineByHost(r.Context(), id); {
 		case merr == nil && m != nil:

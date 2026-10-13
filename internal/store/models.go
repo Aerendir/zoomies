@@ -1089,7 +1089,9 @@ func (p *Pool) Dangerous() []string {
 
 // Host is an agent process and the machine it runs on.
 type Host struct {
-	Doctor HostDoctor `json:"doctor,omitempty"`
+	RecoveryRequired bool       `json:"-"`
+	Retired          bool       `json:"retired"`
+	Doctor           HostDoctor `json:"doctor,omitempty"`
 	// DoctorBodyAt is when the stored report body was written, which is older
 	// than Doctor.CheckedAt once reports that said nothing new have arrived. The
 	// controller rewrites a body no later than doctorBodyMaxAge after this.
@@ -1267,7 +1269,7 @@ const HeartbeatTimeout = 90 * time.Second
 
 // Healthy reports whether the agent has checked in recently enough.
 func (h *Host) Healthy(now time.Time) bool {
-	return now.Sub(h.LastHeartbeat) < HeartbeatTimeout
+	return !h.Retired && now.Sub(h.LastHeartbeat) < HeartbeatTimeout
 }
 
 // Available reports whether the scheduler may place a new runner here.
@@ -1371,6 +1373,9 @@ func (h *Host) SelectorValue(key string) string {
 // configured capacity would say, and that is the number the scheduler and the
 // Hosts page both have to use, or the page promises slots the pass refuses.
 func (h *Host) Free() int {
+	if h.Retired {
+		return 0
+	}
 	if n := h.EffectiveCapacity() - h.ActiveRunners; n > 0 {
 		return n
 	}

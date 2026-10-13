@@ -637,7 +637,8 @@ secrets are omitted from the archive. Sessions, unused enrolment tokens and old 
 are invalidated; external sign-in needs a destination identity mapping.
 
 After restart, sign in using the destination's operator credentials. The fleet
-stays fenced: repoint agents and GitHub webhooks, check provider gateways and
+stays fenced: inspect carried-over hosts with `zoomies hosts recovery` (or
+`GET /api/v1/recovery/hosts`), repoint agents and GitHub webhooks, check provider gateways and
 verify rented-machine ownership before lifting the fence. Backup remotes are
 retained without source backup credentials and disabled until configured. A restored machine is marked unverified.
 Keep the source stopped while the destination runs. To abandon cutover, stop the
@@ -669,3 +670,58 @@ bounded to 8 GiB. Inflated database bytes and archive padding are also bounded;
 metadata members may not exceed 1 MiB. Wrong passphrases, corruption, unsupported
 schemas, unknown encrypted columns, occupied destinations and unreadable secrets
 are refused before replacing the live database. No passphrase is staged or logged.
+
+### Resolve carried-over runner hosts
+
+The destination discards the source hosts' last heartbeat on import. Each
+carried-over active record starts as `awaiting_recovery`, including hosts offline at
+cutover. A fresh authenticated connection must pass the existing health and
+protocol checks without a current duplicate-agent warning to read as `verified`.
+A stale or incompatible host remains unresolved. The host list also reports
+`recovery_state`; the recovery list includes retirement time and actor. Once the platform lifts
+the fence, verified entries record the completion time and return to the normal
+host lifecycle. A later complete import requires fresh checks again. Retired
+records remain retired.
+
+For a reachable runner, stop its agent service, mint a join token on the
+**destination** with `zoomies hosts join-token create`, and run the supported
+host-side command with the new controller address:
+
+```sh
+zoomies agent join https://new-controller.example --token <destination-join-token> --yes
+```
+
+Use the same state directory as the previous installation, preserving its
+`work/agent.json` credentials: they prove ownership of the carried-over record.
+For a custom state directory, pass `--state-dir` with that directory.
+A re-enrolment keeps the host ID and historical runner references. The command
+needs only the destination, not the source controller, and does not remove a
+record from the source. Do not copy another host's credentials. A runner whose
+credentials are lost cannot claim that record with a join token alone.
+
+An administrator can explicitly retire an unreachable carried-over record while
+the destination remains fenced:
+
+```sh
+zoomies hosts recovery
+zoomies hosts retire host_example --confirm-host-id host_example
+```
+
+The API equivalent is `POST /api/v1/recovery/hosts/host_example/retire` with
+`{"confirm_host_id":"host_example"}`. Unknown hosts, online hosts, hosts that were
+not carried over, already retired hosts and mismatched confirmations are refused.
+Retirement retains the host, usage, runner history and audit references and
+records who decided it and when. It revokes destination agent access, prevents
+that record re-enrolling, and excludes it from scheduling and automatic machine
+release. It queues no task and **cannot stop, erase or clean up an unreachable
+machine**. Any workloads, files or services left there need separate attention
+when an operator can reach it. No timeout, import or failed reconnection retires
+a record automatically.
+
+The platform role still owns `POST /api/v1/recovery/unfence`; fleet administrators
+and ordinary users cannot lift it. The controller refuses that operation until
+every carried-over host is freshly verified or explicitly retired. Resolving
+hosts does not lift the fence automatically or replace the webhook, gateway,
+source-shutdown and ownership checks above. This procedure applies once the
+destination controller is reachable; it cannot recover an unreachable machine
+hosting the controller.

@@ -1463,6 +1463,8 @@ Subcommands:
   cordon <host-id>                   Keep its runners, accept no new ones
   drain <host-id>                    Cordon it, then drain every runner on it
   uncordon <host-id>                 Let it accept new runners again
+  recovery                           Inspect carried-over hosts awaiting recovery
+  retire <host-id>                   Retire an unreachable carried-over destination record
   delete <host-id>                   Forget a host; refused while it still has runners
   join-token create                  Mint a token that enrols a new host
 
@@ -1592,6 +1594,44 @@ Usage:
 
 Flags:
   --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+```
+
+#### zoomies hosts recovery
+
+Inspect carried-over hosts awaiting recovery
+
+```text
+Inspect carried-over hosts: awaiting_recovery, verified or retired.
+
+Usage:
+  zoomies hosts recovery
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+```
+
+#### zoomies hosts retire
+
+Retire an unreachable carried-over destination record
+
+```text
+Retire an unreachable carried-over host record while fenced. This changes destination records only and cannot clean up the machine.
+
+Usage:
+  zoomies hosts retire <host-id> --confirm-host-id <host-id>
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --confirm-host-id          repeat the exact host ID to confirm destination-only retirement
   --insecure                 do not verify the controller's certificate
   --timeout=30s              how long to wait for one request
   --token                    an API token (or ZOOMIES_TOKEN)
