@@ -1770,7 +1770,8 @@ Dispatch and publication are later, separately authorised work.
 [runner observation foundation](roadmap/plans/2026-10-13-eli-runner-observation-foundation.md),
 [runner result integration](roadmap/plans/2026-10-13-eli-runner-observation-results.md),
 [private runner observation joins](roadmap/plans/2026-10-13-eli-comparison-runner-observations.md),
-[web runner evidence inspection](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-web.md).
+[web runner evidence inspection](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-web.md),
+[bounded MCP/Eli runner evidence](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-mcp.md).
 The owner prioritised the web UI before CLI capture on 13 October 2026.
 These slices include bounded local retention and capture/replay routes. No new
 dependency, model call, dispatch or publication is introduced. Historical workload/

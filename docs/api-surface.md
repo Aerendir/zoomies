@@ -913,8 +913,9 @@ excluded from this view. No raw image references, credentials or logs are return
 The view does not alter the immutable envelope, report, digest, eligibility or
 ranking. Replay can project older retained inputs without reading current rows or
 refreshing source observations. Older controllers may omit the field. The web UI
-shows these facts and gaps; the bounded MCP/Eli projection deliberately excludes
-the new field pending a separate review. CLI JSON responses preserve it.
+shows these facts and gaps; MCP/Eli uses an independent reviewed whitelist with
+whole-row trimming, coverage counts and explicit unknowns. CLI JSON responses
+preserve the REST view.
 
 Capture retains the complete input beside its report, with an atomic audit event
 and server-generated comparison ID. Public visitors are refused. History is shared

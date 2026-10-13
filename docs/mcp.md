@@ -47,9 +47,20 @@ It uses one scoped local-history GET with viewer/jobs:read access, without GitHu
 collection. Missing, expired or evicted history is unavailable; it never captures
 a replacement. Operator hypothesis and intended delta are quoted untrusted data,
 not instructions. Actor identity and unreviewed future fields are excluded from
-model output. Answers mark shortened text and omitted whole attempt rows; aggregate
+model output. The reviewed runner-evidence-v1 whitelist includes controller assignment grants,
+dispatched requests and unverified agent digest/times, with exact decimal run/job
+identities. It excludes private host/pool/runner/task identities and future fields.
+These facts do not attest applied limits or configuration/image equivalence.
+Missing runner evidence from older controllers is explicit null. Unsupported
+versions, malformed facts, inconsistent counts or unbound job identities are refused.
+
+Answers mark shortened text and omitted whole attempt and runner-job rows; aggregate
 measures still describe the full retained selection. Text and structured output
-carry the same shown rows. Use [CLI replay](cli.md#zoomies-comparisons) to inspect
+carry the same shown rows. Runner counts cover the source enumeration, which may
+be partial; per-arm shown counts and omission flags include both source and model
+truncation. The 64 KiB MCP and 12 KiB Eli text budgets include the untrusted-data
+boundary. Whole-row trimming preserves counts and nulls, retaining one row of each
+available kind per arm when the budget permits. Use [CLI replay](cli.md#zoomies-comparisons) to inspect
 the complete report. Historical selections do not establish cohort completeness,
 causal improvement or cost savings. Capture remains an explicit operator API write
 and is not exposed as an MCP or Eli tool.

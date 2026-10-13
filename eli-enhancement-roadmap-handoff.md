@@ -49,7 +49,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 runner observation foundation | Merged | ZF-243, [#996](https://github.com/eyupio/zoomies/pull/996), stacked on #994 | Bounded immutable installation-scoped storage and non-secret issued/reported projection. Store/controller race, migration idempotency/name guard, backup metadata, vet and strict docs pass. Result integration merged in #998 |
 | E2 runner result integration | Merged | ZF-243, [#998](https://github.com/eyupio/zoomies/pull/998), stacked on #996 | Dispatch-frozen whitelist, exact known create-result correlation, host ownership and best-effort retention before normal acknowledgement. Focused queue/result/ownership/cleanup race, vet and strict docs pass. No public comparison or eligibility change |
 | E2 private runner observation joins | Merged | ZF-243, [#1000](https://github.com/eyupio/zoomies/pull/1000), based on main after #998 | Historical job/runner/pool scope, pinned GitHub job joins, independent observation digest and offline replay. Requested resources and agent claims do not promote eligibility. Focused controller/store race, shared admission, offline replay, vet and strict docs pass |
-| E2 web runner evidence inspection | Ready for review | ZF-243, [#1003](https://github.com/eyupio/zoomies/pull/1003), based on main after #1000 | Bounded descriptive projection, explicit grant/request/claim labels, nullable facts, per-job web inspection and omitted-row counts. Immutable report and eligibility unchanged. Focused race, 14 desktop/mobile fixtures, 109 UI unit tests, type/lint/build, vet and strict docs pass |
+| E2 web runner evidence inspection | Merged | ZF-243, [#1003](https://github.com/eyupio/zoomies/pull/1003), based on main after #1000 | Bounded descriptive projection, explicit grant/request/claim labels, nullable facts, per-job web inspection and omitted-row counts. Immutable report and eligibility unchanged. Focused race, 14 desktop/mobile fixtures, 109 UI unit tests, type/lint/build, vet and strict docs pass |
+| E2 MCP/Eli runner evidence | Implemented, PR pending | ZF-243, based on main after #1003 | Reviewed REST-only whitelist, version/count/run-attempt validation, exact identities, null facts and whole-row bounds. Request/claim semantics and eligibility preserved. Full/focused MCP race, scripted Eli route, generated references, vet and strict docs pass |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1511,3 +1512,70 @@ with the same request/claim and unknown/partial-coverage semantics. Do not forwa
 raw response fields wholesale to a model. Independent workload/configuration/cache
 proof and fair complete selection are still outstanding; keep the thirty completed
 attempts per arm and existing admission limits.
+
+
+### E2 slice 18: bounded MCP/Eli runner evidence, 13 October 2026
+
+Branch codex/eli-comparison-runner-evidence-mcp starts from main after #1003 merged.
+The existing get_retained_comparison tool still performs one installation/repository
+scoped local-history GET. Its role/scope checks, read-only annotation and arguments
+are unchanged; no capture, batching, refresh, direct store/controller access, GitHub
+read or additional model/provider call is introduced. CLI human output is next.
+
+Independent MCP structs whitelist reviewed grant, request, agent-report and coverage
+fields. Future/private fields are excluded at every level, including actor/host/pool/
+runner/task identities, raw image references, credentials and logs. Run/job IDs remain
+canonical positive int64 decimal strings. Nullable dimensions and agent clocks remain unknown. Required counts and typed
+flags never default from missing data. Older controllers without the
+view produce runner_evidence:null; present unsupported/malformed v1 data is refused,
+not silently treated as missing. Digest coverage preserves reported/not_reported/
+unsupported with nullable claims and separate controller/agent clocks.
+
+Validation checks runner-evidence-v1, both arms and required counters/flags/arrays,
+at most 100 source job rows and 100 source attempts per arm, count ordering and
+consistency with shown/omitted rows, canonical globally unique shown job IDs and
+run/attempt membership in the original untrimmed corresponding report arm. Grant
+basis/source and positive finite dimensions, backend/source/Docker enums, explicit
+request typed flags, non-zero supplied clocks and digest/fingerprint syntax are
+checked. Public fields cannot reconstruct the private observation hash: the server
+checks durable scope/digests at replay; MCP checks formats and bindings available in
+the public view. This is not independent attestation or proof of hidden row identity.
+
+The JSON output schema names closed nested whitelists and nullable facts. Each
+runner arm adds a locally computed shown count; any upstream shown field is ignored.
+Source enumeration counters are never clipped into subset counters. Source omission
+flags persist, and the global rows_omitted flag covers either source or model row
+omission. Runner-job rows and original attempt rows are trimmed whole across arms,
+keeping at least one of each available kind per arm when the byte budget permits.
+If summaries alone cannot fit, the tool refuses. Text and structured JSON are the
+same projection. Existing 64 KiB MCP and 12 KiB Eli text budgets include the boundary;
+input response size remains capped at 2 MiB. No hashes or identities are clipped.
+
+The boundary explicitly labels assignment stamps, dispatched requests and unverified
+agent claims, distinct clocks, partial enumeration and missing evidence. No ResourceID,
+ImageID, ConfigurationID, eligibility, measurement, sample count, causal improvement
+or cost inference is changed. A returned subset is not a smaller experiment. The
+original quoted operator/repository evidence boundary remains in force.
+
+The scripted Eli scenario now retains a scope-checked observation plus one granted
+CPU and two requested CPUs. It traverses the real tool/API/replay route, preserves
+candidate missing facts and the injected hypothesis fence, and performs exactly one
+read-only tool call. This verifies transport and scripted presentation, not live
+model reasoning or a real fleet experiment. No external model evaluation occurred.
+
+Validation completed: focused and full MCP race tests pass; budgets for both MCP/Eli,
+private/future-field exclusion at all levels, decimal IDs above browser precision,
+nullable claims, older controllers, source omission, malformed/version/scope/count/
+resource/digest/clock rejection and impossible budgets; scripted Eli fixture; generated
+MCP reference generation, CLI description/reference race checks, changed-package
+vet, strict docs and whitespace pass. The normal catalogue source-revision metadata
+was refreshed by make generate; catalogue content and schema checks pass. Docs used
+the repository-only header fallback for unavailable optional GitHub metadata. No
+live model/backend/agent/GitHub operation, dependency, migration or public API/UI
+contract change.
+
+Next: show reviewed descriptive runner evidence in CLI human-readable comparisons,
+with scope, full counts, per-row unknowns, omitted-row flags and request/claim labels.
+CLI JSON already preserves the REST view. Independent historical workload/configuration/
+cache/selection proof and live model evaluation remain outstanding; do not convert
+these descriptive facts into controlled experiment eligibility.
