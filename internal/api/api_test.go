@@ -793,6 +793,12 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "GET", path: "/api/v1/events/recent", role: store.RoleViewer, action: auth.ActionEventsRead},
 		{method: "GET", path: "/api/v1/usage", role: store.RoleViewer, action: auth.ActionUsageRead},
 		{method: "GET", path: "/api/v1/usage.csv", role: store.RoleViewer, action: auth.ActionUsageRead},
+		// The analyses. Host pressure names no host_id here, so it answers
+		// 400, which is past both gates and all a walk asks of it.
+		{method: "GET", path: "/api/v1/analysis/queue-wait", role: store.RoleViewer, action: auth.ActionJobsRead, visitorDenied: true},
+		{method: "GET", path: "/api/v1/analysis/compare", role: store.RoleViewer, action: auth.ActionJobsRead, visitorDenied: true},
+		{method: "GET", path: "/api/v1/analysis/host-pressure", role: store.RoleViewer, action: auth.ActionHostsRead, visitorDenied: true},
+		{method: "GET", path: "/api/v1/analysis/startup-failures", role: store.RoleViewer, action: auth.ActionRunnersRead, visitorDenied: true},
 		{method: "GET", path: "/api/v1/updates", role: store.RoleViewer, action: auth.ActionUpdatesRead},
 		{method: "POST", path: "/api/v1/updates/check", role: store.RoleAdmin, action: auth.ActionUpdatesCheck},
 		{method: "POST", path: "/api/v1/updates/controller", role: store.RolePlatform, action: auth.ActionUpdatesApply},

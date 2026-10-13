@@ -48,6 +48,7 @@ Conventions:
   `bad_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`,
   `unprocessable`, `too_large`, `rate_limited`, `limit_reached`, the `update.*`
   refusals and `update.check_failed` listed under [Updates](#updates),
+  the `analysis.*` refusals listed under [Analyses](#analyses),
   `assistant.provider_failed` (a 502, listed under the assistant's routes), `assistant.provider_not_yours` (a 403: the provider is somebody else's own subscription), and `internal`.
 * Timestamps are RFC 3339 with a `Z` offset. Durations are Go duration strings
   (`"5m"`, `"1h30s"`).
@@ -264,6 +265,26 @@ the same way.
 and workflow groupings, because a runner idles on behalf of a pool and never on
 behalf of a repository; the response's `allocation_attributable` says so once
 for the whole report, so a client can drop the column rather than print zeroes.
+
+## Analyses
+
+Each route answers with one finding: a `summary`, a `confidence` with the
+`confidence_reason` whenever it is not `high`, `next_steps` naming a setting or a
+catalog code, and the `evidence` the summary rests on. Each reads `[since, until)`:
+`until` defaults to now and `since` to a day before it, and a period that does not
+end after it starts, or one longer than `limits.job_stats_window` (90 days unless
+set), is a `400` on `since` naming the setting. A public view's visitor is refused
+before anything is read: a finding joins jobs, hosts, runners and the audit log,
+which the public view never shows together. Repository, workflow and job names in
+the evidence, and a host's failure messages, are written by a workflow or a host,
+and the contract marks them untrusted.
+
+| Method | Path | Role | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/v1/analysis/queue-wait` | viewer, signed in | Every second the jobs queued in the period waited, each put down to one cause: `held_for_review`, `unmatched`, `pool_ceiling`, `throttled`, `no_room`, `runner_startup`, `github_delay`, or `unattributed` where the fleet keeps no record to say. `pool_id` narrows it to one pool and its own conditions; a pool the fleet does not have is a `404` naming it. Gated on `jobs:read`. |
+| GET | `/api/v1/analysis/compare` | viewer, signed in | What got worse and what got better: `by=version` (the default) sets two releases' jobs in the period side by side, the latest two to complete a job unless `a` and `b` name them, and `by=period` sets the period against the one of the same length before it. Cancelled and skipped jobs are left out of every figure. Under 30 jobs on either side nothing is ranked and the summary says the sample is too small. A side older than `retention.jobs` is counts only, read from the daily roll-up in whole UTC days, and carries `asked_until` and `no_record_before` to say what it could not read. `by` that is neither, or `a` or `b` sent with `by=period`, is a `400`; the same release twice is a `400` with `analysis.same_release`; fewer than two releases to choose from is a `409` with `analysis.too_few_releases`, and a period side past retention with no midnight to end on a `409` with `analysis.whole_days_only`: well-formed requests the fleet's records refuse, each with the sentence that says what to change. Gated on `jobs:read`. |
+| GET | `/api/v1/analysis/host-pressure` | viewer, signed in | Whether the failures, OOM kills and slow startups on one host came in the minutes it was pressured, against that minute's load per core, CPU and memory and the host's own memory reserve. `host_id` is required: without it the request is a `400`, and a host the fleet does not have is a `404` naming it. Gated on `hosts:read`, which names no job: a token without `jobs:read` is told when and how things went wrong but not which jobs, with each event's repository, workflow and job name withheld and `job_names_withheld` and a step saying so. |
+| GET | `/api/v1/analysis/startup-failures` | viewer, signed in | The host or pool that keeps failing to start runners in the period, where its starts stopped, and what its failures are put down to (the image, an incident its host reports, or a throttle), with when it began failing and, if it has, when it recovered. `pool_id` and `host_id` narrow it, alone or together; one the fleet does not have is a `404` naming it. Gated on `runners:read`. |
 
 ## Hosts and agents
 

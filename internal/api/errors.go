@@ -55,6 +55,16 @@ const (
 	codeUpdateRolloutHalted    = "update.rollout_halted"
 )
 
+// The comparisons the fleet cannot make. Each has a code of its own because a
+// client offers something different for each: two releases to choose from,
+// a comparison by period instead, or a period of whole days. The message is
+// the controller's, which says which.
+const (
+	codeAnalysisSameRelease    = "analysis.same_release"
+	codeAnalysisTooFewReleases = "analysis.too_few_releases"
+	codeAnalysisWholeDaysOnly  = "analysis.whole_days_only"
+)
+
 // codeUpdateCheckFailed is the one update code that is not a refusal and not a 409:
 // the request was fine and GitHub, or the network to it, did not let the check
 // finish. It is a 502 so that a client can tell a thing to retry from a thing to

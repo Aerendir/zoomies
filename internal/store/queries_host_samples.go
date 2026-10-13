@@ -81,10 +81,7 @@ func (s *Store) RecordHostSamples(ctx context.Context, samples []HostSample) err
 // and grouped by host. An empty hostID means every host; the Hosts page asks
 // for all of them at once, since the chart is one picture of the fleet.
 func (s *Store) ListHostSamples(ctx context.Context, since time.Time, hostID string) ([]HostSample, error) {
-	query := `SELECT host_id, at, capacity, active_runners, cpu_percent, load_average_1m,
-		cpus, memory_mb, memory_available_mb, allocatable_cpus, allocatable_memory_mb,
-		reserved_cpus, reserved_memory_mb, disk_total_mb, disk_free_mb
-		FROM host_samples WHERE at >= ?`
+	query := `SELECT ` + hostSampleCols + ` FROM host_samples WHERE at >= ?`
 	args := []any{ms(since)}
 	if hostID != "" {
 		query += ` AND host_id = ?`
@@ -97,34 +94,49 @@ func (s *Store) ListHostSamples(ctx context.Context, since time.Time, hostID str
 	defer rows.Close()
 	var out []HostSample
 	for rows.Next() {
-		var h HostSample
-		var t int64
-		var cpu, load, reservedCPUs sql.NullFloat64
-		var memAvail, reservedMem sql.NullInt64
-		if err := rows.Scan(&h.HostID, &t, &h.Capacity, &h.ActiveRunners, &cpu, &load,
-			&h.CPUs, &h.MemoryMB, &memAvail, &h.AllocatableCPUs, &h.AllocatableMemoryMB,
-			&reservedCPUs, &reservedMem, &h.DiskTotalMB, &h.DiskFreeMB); err != nil {
+		h, err := scanHostSample(rows)
+		if err != nil {
 			return nil, err
-		}
-		h.At = at(t)
-		if cpu.Valid {
-			h.CPUPercent = &cpu.Float64
-		}
-		if load.Valid {
-			h.LoadAverage1 = &load.Float64
-		}
-		if memAvail.Valid {
-			h.MemoryAvailableMB = &memAvail.Int64
-		}
-		if reservedCPUs.Valid {
-			h.ReservedCPUs = &reservedCPUs.Float64
-		}
-		if reservedMem.Valid {
-			h.ReservedMemoryMB = &reservedMem.Int64
 		}
 		out = append(out, h)
 	}
 	return out, rows.Err()
+}
+
+// hostSampleCols and scanHostSample are one sample's columns and their scan,
+// shared by every read of host_samples so a column added to one cannot be
+// missing from another.
+const hostSampleCols = `host_id, at, capacity, active_runners, cpu_percent, load_average_1m,
+	cpus, memory_mb, memory_available_mb, allocatable_cpus, allocatable_memory_mb,
+	reserved_cpus, reserved_memory_mb, disk_total_mb, disk_free_mb`
+
+func scanHostSample(sc interface{ Scan(...any) error }) (HostSample, error) {
+	var h HostSample
+	var t int64
+	var cpu, load, reservedCPUs sql.NullFloat64
+	var memAvail, reservedMem sql.NullInt64
+	if err := sc.Scan(&h.HostID, &t, &h.Capacity, &h.ActiveRunners, &cpu, &load,
+		&h.CPUs, &h.MemoryMB, &memAvail, &h.AllocatableCPUs, &h.AllocatableMemoryMB,
+		&reservedCPUs, &reservedMem, &h.DiskTotalMB, &h.DiskFreeMB); err != nil {
+		return HostSample{}, err
+	}
+	h.At = at(t)
+	if cpu.Valid {
+		h.CPUPercent = &cpu.Float64
+	}
+	if load.Valid {
+		h.LoadAverage1 = &load.Float64
+	}
+	if memAvail.Valid {
+		h.MemoryAvailableMB = &memAvail.Int64
+	}
+	if reservedCPUs.Valid {
+		h.ReservedCPUs = &reservedCPUs.Float64
+	}
+	if reservedMem.Valid {
+		h.ReservedMemoryMB = &reservedMem.Int64
+	}
+	return h, nil
 }
 
 // PruneHostSamples deletes host samples older than the cutoff.
