@@ -39,6 +39,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 bounded GitHub attempt evidence | Merged | ZF-243, [#978](https://github.com/eyupio/zoomies/pull/978), targeting main after merged #977 | Exact run/attempt metadata and job enumeration, bounded bodies/pages and uncached identity recheck. Full GitHub package race tests and vet pass. No collector admission or runtime surface yet; workload/configuration evidence remains unknown |
 | E2 admitted attempt joins | Draft PR | ZF-243, [#982](https://github.com/eyupio/zoomies/pull/982), following merged #978; baseline `a132e6a2` | Shared diagnostic admission, quota reservation and exact remote/fleet identity joins. Focused controller race tests and vet pass. Cohort completeness and configuration/input/cache evidence stay unverified; no transport |
 | E2 observed snapshot assembly | Draft PR | ZF-243, [#985](https://github.com/eyupio/zoomies/pull/985), stacked on #982 | Versioned unknown-evidence handling, pinned outcomes and complete-enumeration job elapsed sums. Complete analysis and focused snapshot race tests, analysis/controller vet and whitespace checks pass. Selection stays unverified; no runtime surface or improvement ranking |
+| E2 retained evidence and replay | Draft PR | ZF-243, [#986](https://github.com/eyupio/zoomies/pull/986), stacked on #985 | Immutable bounded SQLite envelopes, atomic audit and offline replay. Focused retention/replay race tests, upgrade/backup checks and vet pass. No API/tool surface, controlled comparison or real experiment yet |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -895,3 +896,60 @@ thresholds, unknown metadata, large inconclusive cohorts, mixed sources, duplica
 jobs, missing/zero elapsed time and bounded/overflowing evidence. Changed-package
 vet and whitespace checks pass. No full controller/repository test pass, durable
 snapshot storage, real provider/model call or causal experiment is claimed.
+
+### E2 immutable evidence retention and replay, 13 October 2026
+
+Slice 7 follows #985. Migration `0102_comparison_evidence.sql` stores a complete
+versioned envelope, scope, initiating actor, digest and creation time. The `cmp_`
+ID is minted by the controller; caller record identity/initiator are replaced by
+server identity and the authenticated actor before assembly. SQL stays in store.
+The transport still must authorise that actor and the repository action.
+
+Bounds: 2 MiB per envelope, 32 records per installation, 256 globally and 30-day
+read validity. New inserts prune expired/oldest records atomically, using insertion
+sequence so equal timestamps cannot evict the just-created record. Reads hide
+expired evidence even without a later insert. Same-ID/same-content retries preserve
+original creation time and write no duplicate audit; changed content/scope/actor
+conflicts. Corrupt payloads cannot succeed as retries. Expired retained rows cannot
+be renewed by an idempotent retry. Eviction and installation deletion make evidence
+unavailable, not an empty comparison. Row limits bound logical payload storage;
+SQLite may retain freed pages for reuse rather than immediately shrink its file.
+
+`RetainExperimentComparison` builds the envelope from the operator record,
+baseline/candidate admitted inputs and assembled result. It returns only after the
+row and comparison.evidence_retained audit commit in one transaction. No audit
+payload includes the hypothesis or raw evidence; it records actor and comparison ID.
+Hashes check content integrity, not authorisation or authenticity of external data.
+No client-supplied raw envelope is accepted by a transport in this slice.
+
+`ReplayExperimentComparison` reads by exact installation/repository/ID, checks
+stored digest and envelope version, decodes a strict typed envelope, checks actor/
+scope/server ID/current eligibility version and recomputes from the saved inputs.
+The stored report must match recomputation. No GitHub client, current pool settings,
+rate admission or model is involved; fixtures use a controller with no provider
+factory. Unsupported versions are refused, not silently reinterpreted.
+
+The envelope contains the complete inputs beside the snapshot/result, making the
+saved observations reproducible within supported versions and retention. Metadata
+unknowns and selection incompleteness remain unchanged; replay does not promote
+confidence, infer configuration, issue jobs or claim verified improvement.
+Full database backup retains this table. Installation-specific exports remain an
+allowlisted archive and do not yet include comparison history: an import would need
+explicit handling of immutable IDs/scopes and digests. Do not promise portability
+of this history through installation export in the forthcoming product flow.
+
+Next: authorised capture/read/replay routes with explicit public-visitor refusal,
+actor ownership of the request record, payload/query limits and no-store responses.
+Capture must have a whole-request remote budget rather than independently looping
+baseline and candidate batches. Retained reads/replay must not refresh GitHub.
+Then CLI/MCP/Eli/UI adapters should show incomplete historical evidence and retention
+limits. Structured input/output and operator-written hypothesis text need the usual
+untrusted treatment. Dispatch/publication and real model/performance runs remain
+unimplemented; controlled comparisons still need independently retained workload,
+input/test-scope, configuration and observed cache/host evidence.
+
+Capture changes retained history and appends audit, so a future MCP capture tool
+must describe that mutation accurately and must not be labelled readOnlyHint.
+Retained get/replay can remain read-only. Eli's existing read-tool allowlist must
+not silently trigger captures; start with explicitly initiated capture in the
+operator flow and offer the already retained report to Eli.
