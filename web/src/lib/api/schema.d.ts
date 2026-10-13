@@ -5280,6 +5280,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/comparisons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Capture and retain an observed historical comparison
+         * @description Explicit local history mutation with atomic audit. Requires operator and both jobs:read and comparisons:write token scopes and an identified caller; public visitors are refused. Request body is at most 32 KiB. Both arms together select 2 to 10 unique exact run attempts, use one diagnostic admission and quota preflight, and share a 20-second deadline. The installation keeps half its core quota after at most 70 charged reads. The diagnostic gate is shared with PR delay: one flight and 20 admissions per rolling hour, in memory until restart. The window must fit limits.job_stats_window. Unknown workload/configuration/cache evidence stays inconclusive, with no causal or improvement claim. Retained history is shared by repository readers: 2 MiB per envelope, 32 per installation, 256 globally, and 30-day validity. This is not dispatch, publication, or a read-only operation.
+         */
+        post: operations["captureComparison"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/comparisons/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Replay a scoped retained comparison without GitHub reads
+         * @description Requires viewer/jobs:read; public visitors are refused. Supply exactly one installation_id and repo and no other query arguments. Checks the stored digest, supported versions and recomputed report using retained input only, with no current pool settings, GitHub quota or model call. Expired, evicted, deleted or differently scoped records are unavailable, not empty successful comparisons. Operator-written hypothesis, intended delta, repository and revision strings are untrusted text for agents.
+         */
+        get: operations["getRetainedComparison"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -11533,6 +11576,148 @@ export interface components {
              * @description Nanoseconds to wait before polling again
              */
             backoff?: number;
+        };
+        ComparisonCaptureRequest: {
+            baseline: components["schemas"]["ExperimentAttemptSelection"][];
+            candidate: components["schemas"]["ExperimentAttemptSelection"][];
+            hypothesis: string;
+            installation_id: string;
+            intended_delta: string;
+            /** @enum {string} */
+            kind: "runner" | "workflow";
+            repository: string;
+            revision_delta_id?: string;
+            /** Format: date-time */
+            since: string;
+            /** Format: date-time */
+            until: string;
+        };
+        ExperimentArm: {
+            attempts: components["schemas"]["ExperimentAttempt"][];
+            configuration_id: string;
+            image_id: string;
+            inputs_id: string;
+            resource_id: string;
+            selection_complete: boolean;
+            source_revision: string;
+            test_scope_id: string;
+            workflow_revision: string;
+        };
+        /** @description Pinned observed attempt. Empty historical fields and unknown start time stay explicit; elapsed time is not CPU usage or monetary cost. */
+        ExperimentAttempt: {
+            allocated_idle_ms: number | null;
+            /** Format: int64 */
+            attempt: number;
+            cache: string;
+            execution_ms: number | null;
+            host_condition: string;
+            latency_ms: number | null;
+            /** Format: date-time */
+            observed_at: string;
+            outcome: string;
+            /** Format: int64 */
+            run_id: number;
+            source_revision: string;
+            /** Format: int64 */
+            workflow_id: number;
+        };
+        ExperimentAttemptSelection: {
+            /** Format: int64 */
+            attempt: number;
+            /** Format: int64 */
+            run_id: number;
+        };
+        ExperimentComparisonReport: {
+            /** @enum {string} */
+            execution_basis: "sum_of_all_github_job_elapsed_times";
+            measurement: components["schemas"]["ExperimentMeasurement"];
+            snapshot: components["schemas"]["ExperimentSnapshot"];
+            /** @enum {string} */
+            window_basis: "github_attempt_started_at";
+        };
+        ExperimentCounts: {
+            /** Format: int64 */
+            cancelled: number;
+            /** Format: int64 */
+            completed: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            selected: number;
+            /** Format: int64 */
+            succeeded: number;
+            /** Format: int64 */
+            superseded: number;
+            /** Format: int64 */
+            unknown: number;
+        };
+        ExperimentDistribution: {
+            max_ms: number | null;
+            min_ms: number | null;
+            /** Format: int64 */
+            missing: number;
+            p50_ms: number | null;
+            p95_ms: number | null;
+            /** Format: int64 */
+            samples: number;
+            total_ms: number | null;
+        };
+        /** @description Missing metadata stays inconclusive; historical diagnosis does not establish causation or verified improvement. */
+        ExperimentEligibility: {
+            baseline: components["schemas"]["ExperimentCounts"];
+            candidate: components["schemas"]["ExperimentCounts"];
+            /** Format: int64 */
+            minimum_samples: number;
+            reasons: string[];
+            rule_version: string;
+            /** @enum {string} */
+            state: "eligible" | "inconclusive";
+        };
+        ExperimentMeasurement: {
+            /** @enum {string} */
+            allocated_idle_mean_change: "improved" | "regressed" | "unchanged" | "not_enough";
+            baseline: components["schemas"]["ExperimentMeasures"];
+            candidate: components["schemas"]["ExperimentMeasures"];
+            eligibility: components["schemas"]["ExperimentEligibility"];
+            /** @enum {string} */
+            execution_mean_change: "improved" | "regressed" | "unchanged" | "not_enough";
+            /** @enum {string} */
+            failure_rate_change: "improved" | "regressed" | "unchanged" | "not_enough";
+            /** @enum {string} */
+            latency_change: "improved" | "regressed" | "unchanged" | "not_enough";
+            /** @enum {string} */
+            version: "selected-measures-v1";
+        };
+        ExperimentMeasures: {
+            all_attempt_allocated_idle: components["schemas"]["ExperimentDistribution"];
+            all_attempt_execution: components["schemas"]["ExperimentDistribution"];
+            failure_rate: number | null;
+            successful_latency: components["schemas"]["ExperimentDistribution"];
+        };
+        ExperimentSnapshot: {
+            baseline: components["schemas"]["ExperimentArm"];
+            candidate: components["schemas"]["ExperimentArm"];
+            evidence_id: string;
+            hypothesis: string;
+            /** @description Authenticated audit actor identifier; may identify a token rather than its owning account. */
+            initiating_user: string;
+            intended_delta: string;
+            kind: string;
+            repository: string;
+            revision_delta_id: string;
+            /** @enum {string} */
+            rule_version: "selected-runs-v2";
+            /** Format: date-time */
+            since: string;
+            /** Format: date-time */
+            until: string;
+        };
+        RetainedExperimentComparison: {
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            report: components["schemas"]["ExperimentComparisonReport"];
+            sha256: string;
         };
     };
     responses: {
@@ -19890,6 +20075,108 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    captureComparison: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComparisonCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Audited retained snapshot; Cache-Control is no-store. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetainedExperimentComparison"];
+                };
+            };
+            /** @description Invalid, oversized, duplicate or inconsistent selection/record. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Unsupported reader, moving attempt metadata, collection deadline, or retained evidence bound. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Diagnostic/GitHub quota refusal; Retry-After indicates when to retry manually. */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getRetainedComparison: {
+        parameters: {
+            query: {
+                installation_id: string;
+                repo: string;
+            };
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified retained report; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetainedExperimentComparison"];
+                };
+            };
+            /** @description Invalid query, comparison ID or unsupported/inconsistent evidence version. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Stored content integrity cannot be verified. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
         };
     };

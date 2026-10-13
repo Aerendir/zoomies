@@ -40,6 +40,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 admitted attempt joins | Draft PR | ZF-243, [#982](https://github.com/eyupio/zoomies/pull/982), following merged #978; baseline `a132e6a2` | Shared diagnostic admission, quota reservation and exact remote/fleet identity joins. Focused controller race tests and vet pass. Cohort completeness and configuration/input/cache evidence stay unverified; no transport |
 | E2 observed snapshot assembly | Draft PR | ZF-243, [#985](https://github.com/eyupio/zoomies/pull/985), stacked on #982 | Versioned unknown-evidence handling, pinned outcomes and complete-enumeration job elapsed sums. Complete analysis and focused snapshot race tests, analysis/controller vet and whitespace checks pass. Selection stays unverified; no runtime surface or improvement ranking |
 | E2 retained evidence and replay | Draft PR | ZF-243, [#986](https://github.com/eyupio/zoomies/pull/986), stacked on #985 | Immutable bounded SQLite envelopes, atomic audit and offline replay. Focused retention/replay race tests, upgrade/backup checks and vet pass. No API/tool surface, controlled comparison or real experiment yet |
+| E2 capture and replay API | Draft PR | ZF-243, [#987](https://github.com/eyupio/zoomies/pull/987), stacked on #986 | Explicit operator capture with comparisons:write plus jobs:read, one whole-request budget, scoped viewer replay and generated contracts. Focused API race, role/scope/contract checks, full auth/GitHub race suites, changed-package vet and strict docs pass. CLI/MCP/Eli/UI remain outstanding |
+| E2 CLI replay | Draft PR | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -953,3 +955,83 @@ must describe that mutation accurately and must not be labelled readOnlyHint.
 Retained get/replay can remain read-only. Eli's existing read-tool allowlist must
 not silently trigger captures; start with explicitly initiated capture in the
 operator flow and offer the already retained report to Eli.
+
+### E2 authorised capture/replay API, 13 October 2026
+
+Slice 8 follows #986. POST /comparisons changes shared local history and requires
+operator plus both comparisons:write and jobs:read for bearer tokens. Viewer/read-
+only job tokens cannot capture. GET /comparisons/{id} requires viewer/jobs:read.
+Public visitors are refused on both routes before evidence collection. Capture
+requires an identified principal; no actor, server evidence ID or raw envelope can
+be supplied in its strict request. InitiatingUser records the authenticated audit
+actor identifier, which can be a token rather than the owning account. The write
+scope is deliberate: capture can evict old history and appends audit, so it must
+not inherit write authority from jobs:read alone.
+
+Capture combines baseline/candidate selections before any remote read: 2..10 unique
+run/attempt identities total, one shared diagnostic admission and one quota request,
+with seven possible reads per selected attempt reserved before collection. A single
+20-second parent context covers collection and retention. The operator record is
+prevalidated and the window must fit limits.job_stats_window. There is no automatic
+loop, per-arm fresh budget, GitHub dispatch or external publication.
+
+The 32 KiB JSON body rejects unknown fields and trailing content. Get/replay requires
+exactly one installation_id and repo with no other query arguments and a bounded
+cmp_ identifier. Replay uses saved input only; missing/expired/evicted/differently
+scoped records are 404 rather than an empty cohort. Successful and handled-error
+responses are no-store. Admission/GitHub refusals are 429 with Retry-After;
+unsupported/deadline/storage-bound cases are 409. Hypothesis/configuration claims
+stay unverified and selection completeness remains false.
+
+The OpenAPI source now describes request, retained response, snapshot, counts,
+measurements and nullable distributions. Embedded server contract and web types
+are generated from it. The new capture action is in auth's role/scope table and
+API role/scope route coverage. Capture must stay off Eli's read-tool allowlist;
+retained get/replay can be a read-only MCP tool. Before adding adapters, test
+whole-row model response bounds and untrusted operator text. No UI or model call
+is introduced here. Authorised callers share retained report history, with its
+30-day/32-per-installation/256-global limits explicitly documented.
+
+Slice 8 verification: capture/replay and negative auth/body/quota cases pass under
+race; viewer replay spends no GitHub reads and appends no duplicate audit. Token
+write-only without jobs:read, read-only jobs tokens and viewer wildcard tokens
+cannot capture. Cookie requests retain the same-origin guard. Public visitors are
+refused on both paths. Metadata movement is a typed GitHub error rendered as 409
+without automatic retry or retention. Strict queries reject duplicate, unknown
+and malformed arguments. Full auth and GitHub race suites pass; scope/action,
+operation role, router/spec and response-shape checks pass. Route normalisation
+first failed on slash-bearing query values, then passed after stripping query text
+and recognising cmp_ IDs. Contracts regenerated, vet/whitespace checks and strict
+docs pass. No full API/repository test pass or live model/provider experiment is
+claimed. CLI/MCP/Eli/UI adapters remain the next slice.
+
+
+### E2 slice 9: CLI replay, 13 October 2026
+
+Draft [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987,
+`codex/eli-comparison-cli`. The `zoomies comparisons get`
+command takes an explicit `cmp_` ID, `--installation ins_ID` and `--repo
+OWNER/REPO`. It performs one GET through the existing API client. Invalid scope
+fails before connecting. There is no capture, fallback collection or retry on
+missing history. Viewer/jobs:read permissions remain enforced by the API.
+
+JSON forwards the complete raw response, including future fields and integer
+precision. Human output shows supported rule/measurement versions, eligibility,
+all inconclusive reasons, separate change directions, sample/missing counts and
+p50/p95/total integer milliseconds. Unknown and measured zero remain distinct.
+The adapter refuses missing reports, mismatched evidence/repository identity and
+unsupported rule versions. It does not recompute or reinterpret retained evidence.
+
+Next: add a bounded read-only MCP/Eli retained-report adapter. Operator hypothesis
+and intended delta are untrusted text; use the existing quoted evidence mechanism,
+respect model/tool byte limits, and keep structured rows aligned with visible rows.
+Never expose capture as an Eli read-only tool. CLI capture and UI remain separate
+explicit operator write slices. Controlled comparisons still require independently
+retained workload/configuration/input/cache evidence and complete selection.
+
+
+Slice 9 validation: focused comparison fixtures and command reference/group-help
+checks pass with the race detector. `go vet ./cmd/zoomies` and strict MkDocs pass.
+`make generate` completed; only the command reference changed meaningfully.
+Optional GitHub header metadata was unavailable, so the docs used the documented
+repository-only header fallback. No live GitHub collection or model call ran.

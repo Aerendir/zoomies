@@ -697,7 +697,8 @@ type route struct {
 	// routes, and the three self-service ones every signed-in identity may
 	// call. It is written out beside the role for the same reason the role is
 	// -- a column read back off the router would agree with a mistake.
-	action auth.Action
+	action           auth.Action
+	additionalScopes []string
 }
 
 // routeTable is every route in api/openapi.yaml, plus health and the spec.
@@ -860,6 +861,8 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "GET", path: "/api/v1/provisioning", role: store.RoleViewer, action: auth.ActionJobsRead},
 		{method: "GET", path: "/api/v1/provisioning/selection", role: store.RoleViewer, action: auth.ActionJobsRead},
 		{method: "POST", path: "/api/v1/provisioning/bulk", role: store.RoleOperator, action: auth.ActionProvisioningWrite},
+		{method: "POST", path: "/api/v1/comparisons", role: store.RoleOperator, action: auth.ActionComparisonsWrite, additionalScopes: []string{"jobs:read"}, visitorDenied: true},
+		{method: "GET", path: "/api/v1/comparisons/cmp_missing?installation_id=ins_missing&repo=acme/repo", role: store.RoleViewer, action: auth.ActionJobsRead, visitorDenied: true},
 		{method: "GET", path: "/api/v1/jobs", role: store.RoleViewer, action: auth.ActionJobsRead},
 		{method: "GET", path: "/api/v1/workflow-runs", role: store.RoleViewer, action: auth.ActionJobsRead},
 		{method: "POST", path: "/api/v1/workflow-runs/cancel", role: store.RoleOperator, action: auth.ActionJobsCancel,
@@ -1228,7 +1231,7 @@ func TestScopedTokenRouteAuthorisation(t *testing.T) {
 				// At the route's own role, so this half tests the scope
 				// and nothing else.
 				allowed := h.do(request{method: rt.method, path: rt.path, body: rt.body,
-					token: h.token(scope+" for "+rt.method+" "+rt.path, rt.role, scope)})
+					token: h.token(scope+" for "+rt.method+" "+rt.path, rt.role, append([]string{scope}, rt.additionalScopes...)...)})
 				if rt.accountOnly {
 					allowed.mustStatus(t, http.StatusForbidden, "source membership cannot be inferred from a token scope")
 					continue
@@ -1392,6 +1395,7 @@ func TestEveryOperationRecordsItsRole(t *testing.T) {
 // normalisePath turns a concrete test path back into the template the OpenAPI
 // document uses, so the two can be compared.
 func normalisePath(p string) string {
+	p, _, _ = strings.Cut(p, "?")
 	p = strings.TrimPrefix(p, "/api/v1")
 	parts := strings.Split(p, "/")
 	for i, part := range parts {
@@ -1430,7 +1434,7 @@ func normalisePath(p string) string {
 		}
 		if strings.HasPrefix(part, "ins_") || strings.HasPrefix(part, "pool_") ||
 			strings.HasPrefix(part, "run_") || strings.HasPrefix(part, "host_") ||
-			strings.HasPrefix(part, "job_") || strings.HasPrefix(part, "prv_") ||
+			strings.HasPrefix(part, "job_") || strings.HasPrefix(part, "cmp_") || strings.HasPrefix(part, "prv_") ||
 			strings.HasPrefix(part, "mach_") || strings.HasPrefix(part, "zoomies-") || part == "missing" {
 			parts[i] = "{id}"
 		}

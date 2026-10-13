@@ -220,6 +220,8 @@ give each repository a cache without an installation per repository.
 | GET | `/api/v1/jobs/{id}/events` | viewer | The job's timeline: what Zoomies observed and did about it, oldest first, each entry a sentence with its `kind` (`queued`, `waiting`, `approved`, `claimed`, `unmatched`, `started`, `completed`, `runner_lost`, `runner_returned`, `cancel_requested`, `runner_start_failed`, `rerun_requested`) and `source` (`webhook`, `poller`, `agent`, `controller`, and `recovery` for a re-run the fleet decided on rather than a person). Written from what each delivery changed rather than from the delivery itself, so a redelivery adds nothing. `runner_lost` is the one entry GitHub cannot produce: the runner died under the job, and GitHub will report an ordinary failure. `runner_start_failed` is the failure that touches no job at all: a runner this pool started died before it could take one, so this job is still queued and the next runner may run it, written here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. Every change to it is accompanied by a `job.updated` frame, which is when the UI refetches it. |
 | GET | `/api/v1/jobs/{id}/explanation` | viewer | Why this job is where it is: one sentence with a detail and, where there is something to do, a fix; its `class` from a closed set with a `confidence` and the reason when that is not high; `evidence` a person can check; the catalog `problem_code`; `next_steps` in order; and `log_excerpt`, the runner's kept lines up to the one that decided the class (`?logs=N`, default 12, `0` for none, at most 40). Computed on the controller from the last scheduler plan, the pool that claimed it, and the runner and host behind it, so `blocked` distinguishes a fleet that is merely busy, which clears itself, from one that will never place this job. It is a separate route rather than a field on the job because it is computed from the fleet around the job rather than from its row, and a copy of the job delivered by the event stream would carry a stale one. |
 | GET | `/api/v1/jobs/{id}/pr-delay?pull_number=N` | viewer, signed in | On-demand required-check delay for the selected job's PR head, gated by the `jobs:read` token scope. Public visitors are refused before quota or evidence reads. Uses its recorded installation and the PR's actual target branch. Reports opaque check IDs, coverage, known timing and `window_basis: earliest_observed_job`, not time since push or full merge readiness. Missing history remains incomplete. At most 20 admissions per installation per rolling hour and one in flight; quota preflight preserves half the reported core allowance before a bounded read. In-memory admission counters reset on restart. A 429 carries Retry-After; stale, closed or retargeted PRs are 409. No source read, model call or write. |
+| POST | `/api/v1/comparisons` | operator, signed in | Explicitly capture shared retained comparison history. Bearer tokens need both `comparisons:write` and `jobs:read`; read-only job tokens cannot capture. Strict 32 KiB body, baseline/candidate together 2 to 10 unique exact run attempts, one diagnostic admission/quota preflight and a shared 20-second deadline. Operator hypothesis and intended delta are hypotheses, not evidence of past configuration. Captures are audited; unknown metadata remains inconclusive. |
+| GET | `/api/v1/comparisons/{id}?installation_id=ID&repo=OWNER/REPO` | viewer, signed in | Replay exact scoped retained evidence without GitHub or current pool reads. Duplicate or undocumented query arguments are refused. Expired/evicted/deleted records are 404, not empty comparisons. Responses are no-store and identify the authenticated audit actor, which may be a token. |
 | GET | `/api/v1/jobs/facets` | viewer | Distinct repos, workflows and conclusions, for the filter menus. |
 | GET | `/api/v1/workflow-runs` | viewer | One row per workflow run (the "#1009" GitHub's Actions tab lists) summing up the jobs GitHub reported under it over the latest attempt of each job, the way GitHub's own run page does: `state` and `conclusion` are the run's own, `jobs` counts how its jobs are getting on (including `expedited`, `paused` and `removed`, what an operator has done to the queued ones' demand, each part of `queued` rather than beside it) and `queued_at`, `started_at` and `completed_at` are the first job queued, the first started and the last finished. Nothing is stored for a run; it is derived from its jobs, so a run and the jobs `/jobs?repo=&run_id=` lists for it cannot disagree. Takes `/jobs`'s filters, read at the run's level: the status ones (`state`, `conclusion`, `failed`, `faulted`, `workflow_failed`, `cancelling`) name the run's own status (a run with one job running and another queued is running, and a run whose only failure was re-run to success has not failed) and every other filter keeps a run whenever any job of it matches, so a run arrives whole rather than reduced to the job that matched. This is what the Workflows page lists. |
 | POST | `/api/v1/workflow-runs/cancel` | operator | What the Workflows page's own run rows call, since a run has no ID of its own, only `repo` + `github_run_id`, to reach through `/jobs/{id}/cancel` the way JobDrawer does. Body: `{ "repo": "owner/name", "run_id": 1, "force": false }`; behaves exactly like cancelling through one of the run's jobs, down to the same config gate, GitHub App permission, and local pausing of queued and running work, except every job of the run still in hand gets the timeline entry, not only whichever job a caller happened to have in hand. Returns `202` with `jobs`, how many of the run's jobs this fleet knows about. `404` for a run this fleet has never heard of; `409` when every job of it has already completed. |
@@ -895,3 +897,31 @@ change from before the summary. A token reads it with `hosts:read`, with
 (`host.updated`). `stats:read`, which opens the problems, shows less: the titles
 of up to three failing checks per host and no values. See
 [Who can read the check detail](host-health.md#who-can-read-the-check-detail).
+
+## Retained historical comparisons
+
+Capture retains the complete input beside its report, with an atomic audit event
+and server-generated comparison ID. Public visitors are refused. History is shared
+by authorised repository readers, bounded to 2 MiB per envelope, 32 records per
+installation and 256 globally, with 30-day validity. New captures may evict older
+records. The database backup preserves history; installation-specific archives do
+not yet export it. Capture is a local mutation, not a read-only tool operation.
+
+Both arms share the diagnostic gate with PR delay: one flight per installation and
+20 admissions per rolling hour, in memory until restart. Quota preflight retains
+half of core allowance after the worst-case seven requests per attempt. A 429 gives
+Retry-After for a manual retry. The observation window must fit
+`limits.job_stats_window`. No automatic batching, model call, dispatch or publication
+occurs. GET replay spends no GitHub allowance and refuses unsupported versions or
+inconsistent retained results.
+
+`selected-runs-v2` retains unknown historical workflow revision, inputs/test scope,
+configuration, cache and host evidence as explicit inconclusive reasons. The window
+uses GitHub attempt start time, with unknown starts retained. Execution is summed
+observed elapsed time for every GitHub job only when complete enumeration and every
+timestamp pair support it, including failures and cancellations. Missing is null;
+observed zero remains zero. Workflow latency, allocated idle and monetary costs are
+not inferred. Historical diagnosis does not establish causation or verified
+improvement, and unknown evidence receives no descriptive improvement ranking.
+Operator-written hypothesis/delta and repository/revision strings are untrusted
+text for any agent consuming the report.

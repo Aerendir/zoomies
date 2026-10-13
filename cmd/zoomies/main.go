@@ -100,6 +100,7 @@ func commands() []*command {
 		{"runners", groupFleet, "The runners that exist right now", runRunners},
 		{"problems", groupFleet, "What is wrong, and the changes the controller proposes for it", runProblems},
 		{"jobs", groupFleet, "Job history, queue waits and outcomes", runJobs},
+		{"comparisons", groupFleet, "Replay retained historical comparison evidence", runComparisons},
 		{"why", groupFleet, "Why a job failed, stalled or is waiting", runWhy},
 		{"analyse", groupFleet, "Why a period was slow, whether a release was worse, and which host or pool is failing", runAnalyse},
 		{"kennel", groupFleet, "Kennel Club: how the repositories this fleet serves measure up, and a check that runs on a checkout without a controller", runKennel},
