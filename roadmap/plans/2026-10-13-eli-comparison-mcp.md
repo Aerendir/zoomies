@@ -1,6 +1,7 @@
 # ZF-243: bounded MCP/Eli retained replay
 
-13 October 2026. E2 slice 10, targets main after #987 merged with CLI #988 included.
+13 October 2026. E2 slice 10, draft [#990](https://github.com/eyupio/zoomies/pull/990),
+targets main after #987 merged with CLI #988 included.
 
 ## Contract
 

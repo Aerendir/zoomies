@@ -42,7 +42,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 retained evidence and replay | Merged | ZF-243, [#986](https://github.com/eyupio/zoomies/pull/986), stacked on #985 | Immutable bounded SQLite envelopes, atomic audit and offline replay. Focused retention/replay race tests, upgrade/backup checks and vet pass. No API/tool surface, controlled comparison or real experiment yet |
 | E2 capture and replay API | Merged | ZF-243, [#987](https://github.com/eyupio/zoomies/pull/987), stacked on #986 | Explicit operator capture with comparisons:write plus jobs:read, one whole-request budget, scoped viewer replay and generated contracts. Focused API race, role/scope/contract checks, full auth/GitHub race suites, changed-package vet and strict docs pass. CLI replay merged; MCP/Eli replay is in slice 10; UI and CLI capture remain outstanding |
 | E2 CLI replay | Merged into API parent | ZF-243, [#988](https://github.com/eyupio/zoomies/pull/988), stacked on #987 | Explicit installation/repository scope, one retained GET, raw JSON preservation and unknown/zero display. Focused CLI race, generated command reference checks, vet and strict docs pass. MCP/Eli/UI and CLI capture remain outstanding |
-| E2 MCP/Eli replay | Implemented, PR pending | ZF-243, targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
+| E2 MCP/Eli replay | Draft PR | ZF-243, [#990](https://github.com/eyupio/zoomies/pull/990), targets main after #987 merged | One scoped retained GET; bounded matching text/structured rows, quoted operator evidence, actor exclusion and explicit truncation. Full MCP race and focused scripted Eli route pass. UI and CLI capture remain outstanding |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1040,6 +1040,7 @@ repository-only header fallback. No live GitHub collection or model call ran.
 
 ### E2 slice 10: bounded MCP/Eli replay, 13 October 2026
 
+Draft [#990](https://github.com/eyupio/zoomies/pull/990),
 `codex/eli-comparison-tools`, targets main after #987 merged with #988 included. The new
 read-only `get_retained_comparison` tool takes comparison_id, installation_id and
 repo and makes exactly one GET to retained history. It is on Eli's explicit fleet
