@@ -1,6 +1,7 @@
 # ZF-243: explicit CLI capture
 
-13 October 2026. Starts after merged web #991, following the owner's UI-first order.
+13 October 2026. Draft [#993](https://github.com/eyupio/zoomies/pull/993).
+Starts after merged web #991, following the owner's UI-first order.
 
 ## Behaviour
 
