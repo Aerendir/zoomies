@@ -91,8 +91,12 @@ type HostPressureSnapshot struct {
 	HostID, HostName string
 	Minutes          []HostMinute
 	// Jobs are those that started or completed on the host in the period.
-	Jobs       []HostJob
-	Thresholds PressureThresholds
+	Jobs []HostJob
+	// JobsTruncated says the job read stopped at MaxReadJobs, keeping the
+	// newest: a busy host over a long period runs more than that, and the
+	// failures among the oldest are then not there to place.
+	JobsTruncated bool
+	Thresholds    PressureThresholds
 }
 
 // BadEvent is one thing that went wrong on the host and the minute it came
@@ -141,6 +145,10 @@ type HostPressureEvidence struct {
 	MeasuredEvents  int        `json:"measured_events"`
 	PressuredEvents int        `json:"pressured_events"`
 	Unmeasured      int        `json:"unmeasured"`
+	JobsTruncated   bool       `json:"jobs_truncated"`
+	// JobNamesWithheld says the events' repository, workflow and job name
+	// were left out, because the reader may read hosts and not jobs.
+	JobNamesWithheld bool `json:"job_names_withheld"`
 	// Threshold is set only when the events cluster and some measure's line
 	// separates them; a line drawn where nothing clusters would be read as
 	// the cause.
@@ -243,7 +251,7 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 		}
 	}
 	e := HostPressureEvidence{HostID: s.HostID, HostName: s.HostName, Pressure: s.Thresholds,
-		Minutes: len(samples), ExpectedMinutes: int(end.Sub(first) / time.Minute)}
+		Minutes: len(samples), ExpectedMinutes: int(end.Sub(first) / time.Minute), JobsTruncated: s.JobsTruncated}
 	for _, m := range samples {
 		if m.pressured(s.Thresholds) {
 			e.PressuredMinutes++
@@ -310,10 +318,18 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 		gap = fmt.Sprintf("; %d of %d fell where the host sent no samples", e.Unmeasured, len(events))
 		theMeasured = func(what string) string { return fmt.Sprintf("the %d %s in measured minutes", len(measured), what) }
 	}
+	// A cut job read kept the newest jobs, so "none" or "only two" is true of
+	// those alone: the sentences say so, and the reason says why.
+	among, older, cut := "", "", ""
+	if s.JobsTruncated {
+		among = fmt.Sprintf(" among the newest %d jobs it ran", MaxReadJobs)
+		older = "; the older ones were not read"
+		cut = fmt.Sprintf("; also, the period held more than %d jobs on this host; the newest %d were read, so narrow since", MaxReadJobs, MaxReadJobs)
+	}
 	switch {
 	case len(events) == 0:
-		f.Confidence, f.ConfidenceReason = Low, "there were no failures, OOM kills or slow startups to compare with its load"
-		f.Summary = fmt.Sprintf("%s had no failures, OOM kills or slow startups in this period.", host)
+		f.Confidence, f.ConfidenceReason = Low, "there were no failures, OOM kills or slow startups to compare with its load"+among+cut
+		f.Summary = fmt.Sprintf("%s had no failures, OOM kills or slow startups%s in this period%s.", host, among, older)
 	case e.Minutes == 0:
 		f.Confidence = Low
 		f.ConfidenceReason = "no samples with its load, CPU or memory cover this period: an agent too old to report them sends none, " +
@@ -325,8 +341,8 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 			NextStep{Setting: "retention.samples", Text: "If the period is older than retention.samples keeps, its samples are gone; ask about a more recent period, or keep samples longer for next time."})
 	case len(events) < minPressureEvents:
 		few := fmt.Sprintf("only %s: too few to say whether they follow its load", anyBad(len(events)))
-		f.Confidence, f.ConfidenceReason = Low, few
-		f.Summary = fmt.Sprintf("%s had only %s in this period: too few to say whether they follow its load.", host, anyBad(len(events)))
+		f.Confidence, f.ConfidenceReason = Low, few+cut
+		f.Summary = fmt.Sprintf("%s had only %s%s in this period: too few to say whether they follow its load%s.", host, anyBad(len(events)), among, older)
 	case len(measured) < minPressureEvents:
 		f.Confidence = Low
 		f.ConfidenceReason = fmt.Sprintf("only %d of its %s came in a minute with a sample: too few to say whether they follow its load",
@@ -414,6 +430,9 @@ func HostPressure(s HostPressureSnapshot) (HostPressureFinding, error) {
 		}
 		if e.Minutes*10 < e.ExpectedMinutes*9 {
 			reasons = append(reasons, "samples cover "+coverage(e.Minutes, e.ExpectedMinutes)+" of the period")
+		}
+		if s.JobsTruncated {
+			reasons = append(reasons, fmt.Sprintf("the period held more than %d jobs on this host; the newest %d were read, so narrow since", MaxReadJobs, MaxReadJobs))
 		}
 		f.Confidence = High
 		if len(reasons) > 0 {
@@ -618,4 +637,28 @@ func coverage(part, whole int) string {
 		return fmt.Sprintf("%d%%", p)
 	}
 	return "under 1%"
+}
+
+// JobNamesWithheldText is the step a finding carries when its events' job
+// names were left out: it says why, and what would show them.
+const JobNamesWithheldText = "The repository, workflow and job name of each event were left out, because this token cannot read jobs; use a token that also has the jobs:read scope to see which jobs they were."
+
+// WithholdJobNames is the finding for a reader who may read hosts and not
+// jobs. A host's view names no job, so the events lose their repository,
+// workflow and job name, which jobs.read guards; every count, time, verdict
+// and job id stays, so the answer to the question is the same answer. A
+// finding with no events has nothing to withhold and is returned as it is.
+func WithholdJobNames(f HostPressureFinding) HostPressureFinding {
+	if len(f.Evidence.Events) == 0 {
+		return f
+	}
+	// A copy, so the caller's finding keeps its names.
+	events := slices.Clone(f.Evidence.Events)
+	for i := range events {
+		events[i].Repo, events[i].Workflow, events[i].JobName = "", "", ""
+	}
+	f.Evidence.Events = events
+	f.Evidence.JobNamesWithheld = true
+	f.NextSteps = append(slices.Clone(f.NextSteps), NextStep{Text: JobNamesWithheldText})
+	return f
 }

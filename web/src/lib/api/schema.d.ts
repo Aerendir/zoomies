@@ -524,6 +524,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analysis/queue-wait": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Why jobs waited
+         * @description Every second the jobs queued in the period waited, each put down to exactly one cause, for the fleet or for one pool. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
+         */
+        get: operations["analyseQueueWait"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analysis/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What got worse and what got better
+         * @description Two releases' jobs in the period, or the period against the one of the same length before it, measure by measure. Cancelled and skipped jobs are left out of every figure, and the response says so in `excluded`. Under 30 jobs on either side nothing is ranked, and the summary says the sample is too small. A side older than `retention.jobs` is read from the daily roll-up: counts only, in whole UTC days. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
+         */
+        get: operations["analyseCompare"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analysis/host-pressure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether what went wrong on a host came under pressure
+         * @description The failures, OOM kills and slow startups on one host in the period, each placed against that minute's load, CPU and memory, and whether they cluster in the minutes the host was pressured. Needs a signed-in caller or a token with `hosts:read`; a public view's visitor is refused before anything is read. A token without `jobs:read` is told when and how things went wrong on the host but not which jobs: the events' repository, workflow and job name are withheld, and `job_names_withheld` and a step say so.
+         */
+        get: operations["analyseHostPressure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analysis/startup-failures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which host or pool keeps failing to start runners
+         * @description The runners asked for in the period, grouped by the host and the pool that keep failing to start them, with where each start stopped and what the failures are put down to. Narrowed to one pool, one host, or both. Needs a signed-in caller or a token with `runners:read`; a public view's visitor is refused before anything is read.
+         */
+        get: operations["analyseStartupFailures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/meta": {
         parameters: {
             query?: never;
@@ -5481,7 +5561,7 @@ export interface components {
         ErrorEnvelope: {
             error: {
                 /** @enum {string} */
-                code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "internal";
+                code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "analysis.same_release" | "analysis.too_few_releases" | "analysis.whole_days_only" | "internal";
                 /** @description Written for a person to read */
                 message: string;
                 /** @description The form field at fault, or on a `limit_reached` refusal the `limits.*` setting that refused. */
@@ -8807,6 +8887,355 @@ export interface components {
             truncated: boolean;
             groups: components["schemas"]["JobStatsGroup"][];
         };
+        /** @description The one shape every analysis answers in, so the API, the CLI, the MCP tools and the UI render the same answer. Each finding below is these fields with its own `evidence`. */
+        AnalysisFinding: {
+            /** @enum {string} */
+            analysis: "queue_wait" | "compare" | "host_pressure" | "startup_failures";
+            /** @description The evidence's version. A reader refuses a version it does not know rather than misreading its evidence. */
+            version: string;
+            /**
+             * Format: date-time
+             * @description Start of what the finding covers, included.
+             */
+            since: string;
+            /**
+             * Format: date-time
+             * @description End of what the finding covers, not included.
+             */
+            until: string;
+            /** @description The answer in one or two sentences. Always set. */
+            summary: string;
+            /** @description What the summary leads with; empty when nothing does. */
+            dominant: string;
+            /**
+             * @description How far a reader may lean on the finding.
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low";
+            /** @description What was thin. Present exactly when `confidence` is not `high`. */
+            confidence_reason?: string;
+            /** @description What to change, most telling first. Never null. */
+            next_steps: components["schemas"]["AnalysisNextStep"][];
+            /** @description Every catalog code the steps name, once each. Never null. */
+            codes: string[];
+        };
+        /** @description A setting or a catalog code to look at, never a command to paste. */
+        AnalysisNextStep: {
+            text: string;
+            /** @description A settings key, or a pool or host field such as `pool.max_runners`. */
+            setting?: string;
+            /** @description A catalog code. */
+            code?: string;
+            /** @description The code's catalog page. */
+            link?: string;
+        };
+        QueueWaitFinding: components["schemas"]["AnalysisFinding"] & {
+            /** @enum {string} */
+            analysis: "queue_wait";
+            /** @enum {string} */
+            version: "queue-wait-v1";
+            /**
+             * @description The cause that took the most of the wait; empty when no job waited.
+             * @enum {string}
+             */
+            dominant: "" | "held_for_review" | "unmatched" | "pool_ceiling" | "throttled" | "no_room" | "runner_startup" | "github_delay" | "unattributed";
+            evidence: components["schemas"]["QueueWaitEvidence"];
+        };
+        QueueWaitEvidence: {
+            /** @description Every cause's share of the whole wait, largest first. */
+            fleet: components["schemas"]["QueueWaitCause"][];
+            /** @description Each pool's wait, longest first, cut to the fifty that waited longest; `pools_cut` says how many more there were. `fleet`, `jobs` and `wait_seconds` still count every pool. */
+            pools: components["schemas"]["QueueWaitPool"][];
+            /** @description The jobs queued in the period that were read. */
+            jobs: number;
+            /** @description Those of them that waited at all. */
+            waited: number;
+            /**
+             * Format: int64
+             * @description The whole wait, in seconds.
+             */
+            wait_seconds: number;
+            /** @description Jobs that waited past becoming eligible with no record of their runner left, so that wait could not be split into startup and GitHub's hand-off. */
+            no_runner_record: number;
+            /** @description Jobs that waited past becoming eligible on a runner their pool keeps between jobs, asked for before the job was queued, so that wait could not be split either. */
+            runner_kept: number;
+            /** @description The job read stopped at its limit of 5000 and the newest were read. */
+            jobs_truncated: boolean;
+            /** @description A pool's runner read stopped at its limit, so its time at the ceiling may be short. */
+            runners_truncated: boolean;
+            /** @description Pools left out of `pools`. */
+            pools_cut: number;
+        };
+        QueueWaitCause: {
+            /**
+             * @description `unattributed` is time the fleet keeps no record to explain, such as a pool with no eligible host (`pool.no_eligible_host`); naming a cause for it would be a guess.
+             * @enum {string}
+             */
+            cause: "held_for_review" | "unmatched" | "pool_ceiling" | "throttled" | "no_room" | "runner_startup" | "github_delay" | "unattributed";
+            /** Format: int64 */
+            seconds: number;
+            /** @description The fraction of the wait, to two places. */
+            share: number;
+        };
+        QueueWaitPool: {
+            /** @description Empty for the jobs no pool claimed. */
+            pool_id: string;
+            pool_name: string;
+            /** @description The pool has been deleted since, so only the minutes it was recorded blocked are known. */
+            deleted: boolean;
+            jobs: number;
+            /** Format: int64 */
+            wait_seconds: number;
+            causes: components["schemas"]["QueueWaitCause"][];
+            /**
+             * @description The pool's largest cause; empty for a pool whose jobs did not wait.
+             * @enum {string}
+             */
+            dominant: "" | "held_for_review" | "unmatched" | "pool_ceiling" | "throttled" | "no_room" | "runner_startup" | "github_delay" | "unattributed";
+            /** @description The pool's longest waits, longest first, at most five. */
+            longest: components["schemas"]["QueueWaitJob"][];
+        };
+        QueueWaitJob: {
+            job_id: string;
+            /** @description Written by a workflow's repository, not the fleet; untrusted text. */
+            repo: string;
+            /** @description Written by a workflow, not the fleet; untrusted text. */
+            workflow: string;
+            /** @description Written by a workflow, not the fleet; untrusted text. */
+            job_name: string;
+            /** Format: int64 */
+            wait_seconds: number;
+            /**
+             * @description The cause that took the most of this job's wait.
+             * @enum {string}
+             */
+            cause: "held_for_review" | "unmatched" | "pool_ceiling" | "throttled" | "no_room" | "runner_startup" | "github_delay" | "unattributed";
+        };
+        CompareFinding: components["schemas"]["AnalysisFinding"] & {
+            /** @enum {string} */
+            analysis: "compare";
+            /** @enum {string} */
+            version: "compare-v1";
+            /**
+             * @description The measure that moved furthest, a regression before any improvement; empty when nothing moved or nothing was ranked.
+             * @enum {string}
+             */
+            dominant: "" | "duration_p50" | "duration_p95" | "queue_wait_p50" | "queue_wait_p95" | "startup_p50" | "startup_p95" | "fleet_failure_rate" | "failure_rate" | "oom_rate";
+            evidence: components["schemas"]["CompareEvidence"];
+        };
+        CompareEvidence: {
+            /** @enum {string} */
+            by: "version" | "period";
+            a: components["schemas"]["CompareSide"];
+            b: components["schemas"]["CompareSide"];
+            /** @description One row for every measure, in a fixed order, so a reader finds a measure by name whether or not it moved. */
+            changes: components["schemas"]["CompareChange"][];
+            /** @description The conclusions left out of every figure, `cancelled` and `skipped`. */
+            excluded: string[];
+            /** @description The database could not compute percentiles, so no time was compared. */
+            percentiles_unavailable: boolean;
+        };
+        CompareSide: {
+            /** @description A release such as `v1.3.3`, or a period that reads after "in", such as "the 24 hours before". */
+            label: string;
+            /**
+             * Format: date-time
+             * @description Where this side's figures begin, which can differ from the period asked for.
+             */
+            since: string;
+            /**
+             * Format: date-time
+             * @description Where this side's figures end.
+             */
+            until: string;
+            figures: components["schemas"]["CompareFigures"];
+            /** @description This side is older than `retention.jobs` and was read from the daily roll-up, so its figures hold `jobs` and `fleet_failed` and nothing else; a zero elsewhere is not a measurement. */
+            counts_only: boolean;
+            /**
+             * Format: date-time
+             * @description On a release side reaching past `retention.jobs`, where its jobs begin to be gone. No roll-up records which release ran a job.
+             */
+            jobs_gone_before: string | null;
+            /** @description The fleet's slots on offer, averaged over the side's sampled minutes; null when no sample covers it. */
+            mean_slots: number | null;
+            /**
+             * Format: date-time
+             * @description On a `counts_only` side whose counts begin later than the period asked for: the fleet keeps no counts before this instant. A side whose `since` is not before its `until` could not be read at all, which is not the same as no jobs having run.
+             */
+            no_record_before: string | null;
+            /**
+             * Format: date-time
+             * @description Where the period asked for ends. Never null. A `counts_only` side can end before it, because the roll-up reads whole UTC days; the hours from `until` to here are then the other side's or neither side's.
+             */
+            asked_until: string;
+        };
+        CompareFigures: {
+            /** @description Completed jobs, cancelled and skipped left out. */
+            jobs: number;
+            succeeded: number;
+            /** @description Failures on either side, so `fleet_failed` is part of it. */
+            failed: number;
+            /** @description Jobs lost to this fleet rather than to the workflow. */
+            fleet_failed: number;
+            oom_killed: number;
+            duration: components["schemas"]["JobPercentiles"];
+            queue_wait: components["schemas"]["JobPercentiles"];
+            startup: components["schemas"]["JobPercentiles"];
+        };
+        CompareChange: {
+            /** @enum {string} */
+            measure: "duration_p50" | "duration_p95" | "queue_wait_p50" | "queue_wait_p95" | "startup_p50" | "startup_p95" | "fleet_failure_rate" | "failure_rate" | "oom_rate";
+            /**
+             * @description `ms` for a time, `rate` for a fraction of the side's jobs.
+             * @enum {string}
+             */
+            unit: "ms" | "rate";
+            /**
+             * @description `not_enough` is a measure the sample cannot judge, which is not the same as one that held still.
+             * @enum {string}
+             */
+            direction: "regressed" | "improved" | "unchanged" | "not_enough";
+            /** @description Side `a`'s value. */
+            from: number | null;
+            /** @description Side `b`'s value. */
+            to: number | null;
+            /** @description How far the measure moved against its bar, whichever way: the larger time over the smaller, or a rate's difference over five points. Null when it could not be judged, and for a time that moved from nothing. */
+            ratio: number | null;
+        };
+        HostPressureFinding: components["schemas"]["AnalysisFinding"] & {
+            /** @enum {string} */
+            analysis: "host_pressure";
+            /** @enum {string} */
+            version: "host-pressure-v1";
+            /**
+             * @description `pressure` when what went wrong came in the pressured minutes, `not_pressure` when it did not; empty when there is too little to say.
+             * @enum {string}
+             */
+            dominant: "" | "pressure" | "not_pressure";
+            evidence: components["schemas"]["HostPressureEvidence"];
+        };
+        HostPressureEvidence: {
+            host_id: string;
+            host_name: string;
+            pressure: components["schemas"]["HostPressureThresholds"];
+            /** @description The sampled minutes with any measure. */
+            minutes: number;
+            pressured_minutes: number;
+            /** @description How many minutes the period holds. */
+            expected_minutes: number;
+            /** @description The newest twenty things that went wrong, newest first; `events_cut` says how many older ones were left out. The counts take in every one. */
+            events: components["schemas"]["HostPressureEvent"][];
+            events_cut: number;
+            /** @description Events in a minute a sample covers. */
+            measured_events: number;
+            pressured_events: number;
+            /** @description Events in a minute no sample covers. */
+            unmeasured: number;
+            /** @description The job read stopped at its limit of 5000 and the newest were read, so the oldest failures are not placed. */
+            jobs_truncated: boolean;
+            /** @description The events' `repo`, `workflow` and `job_name` were withheld, because the caller may read hosts and not jobs (`jobs:read`); every count, time and verdict is still there, and `next_steps` says what would show them. */
+            job_names_withheld: boolean;
+            /** @description The line that separates the events, set only when they cluster and some measure's line separates them; a line drawn where nothing clusters would read as the cause. */
+            threshold: components["schemas"]["HostPressureThreshold"] | null;
+        };
+        /** @description What a minute was judged pressured by. */
+        HostPressureThresholds: {
+            /** @description The one-minute load average over the host's cores. */
+            load_per_cpu: number;
+            /**
+             * Format: int64
+             * @description The host's memory reserve; a minute with no more than this available is pressured.
+             */
+            memory_reserve_mb: number;
+        };
+        HostPressureEvent: {
+            job_id: string;
+            /** @description Written by a workflow's repository, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so. */
+            repo: string;
+            /** @description Written by a workflow, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so. */
+            workflow: string;
+            /** @description Written by a workflow, not the fleet; untrusted text. Withheld (empty) without jobs:read, and `job_names_withheld` says so. */
+            job_name: string;
+            /** @enum {string} */
+            kind: "failure" | "oom" | "slow_startup";
+            /** Format: date-time */
+            at: string;
+            /** @description A sample covers the event's minute. When false, `pressured` is false too, which says nothing either way. */
+            measured: boolean;
+            pressured: boolean;
+        };
+        HostPressureThreshold: {
+            /** @enum {string} */
+            measure: "load_per_cpu" | "cpu_percent" | "memory_used";
+            /** @description A load per core, a CPU percentage, or a fraction of memory in use. */
+            value: number;
+            /** @description The share of the measured events at or over the line. */
+            event_share: number;
+            /** @description The share of the sampled minutes at or over the line. */
+            minute_share: number;
+        };
+        StartupFailuresFinding: components["schemas"]["AnalysisFinding"] & {
+            /** @enum {string} */
+            analysis: "startup_failures";
+            /** @enum {string} */
+            version: "startup-failures-v1";
+            /** @description The group that keeps failing, as `host:` or `pool:` and its id; empty when none does. */
+            dominant: string;
+            evidence: components["schemas"]["StartupFailuresEvidence"];
+        };
+        StartupFailuresEvidence: {
+            /** @description The hosts and pools that keep failing, most failures first, cut to twenty; `groups_cut` says how many more there were. When none keeps failing but one failed three times or more, it holds that one. */
+            groups: components["schemas"]["StartupFailureGroup"][];
+            groups_cut: number;
+            /** @description Starts asked for in the period with a recorded outcome. */
+            starts: number;
+            failures: number;
+            /** @description Starts with no recorded outcome, in neither `starts` nor `failures`. */
+            unknown: number;
+            /** @description The runner read stopped at its limit of 5000. */
+            truncated: boolean;
+        };
+        StartupFailureGroup: {
+            /** @enum {string} */
+            scope: "host" | "pool";
+            id: string;
+            name: string;
+            /** @description Set on a host's group that counts one pool's starts alone: the host that pool's failures all fell on while it started on others, which is the host's trouble and not the pool's. Empty otherwise. */
+            pool_id: string;
+            starts: number;
+            failures: number;
+            /** @description Starts with no recorded outcome, in neither `starts` nor `failures`. */
+            unknown: number;
+            /**
+             * Format: date-time
+             * @description The first failure after the last start that registered before the latest failure.
+             */
+            failing_since: string;
+            /**
+             * Format: date-time
+             * @description The first start that registered after the latest failure; null while it is still failing.
+             */
+            recovered_at: string | null;
+            /** Format: date-time */
+            last_at: string;
+            /**
+             * @description Where its failures most often stopped.
+             * @enum {string}
+             */
+            stage: "before_container" | "before_registration" | "after_registration";
+            /** @description The fault its failures most often recorded. */
+            fault_kind: string;
+            /**
+             * @description What its failures are put down to; empty when nothing explains them.
+             * @enum {string}
+             */
+            explanation: "" | "image" | "image_pull_incident" | "runtime_incident" | "throttle";
+            /** @description How many of its failures the explanation covers. */
+            explained: number;
+            last_runner_id: string;
+            /** @description The latest failure as the host reported it. Written by a host, not the fleet; untrusted text. */
+            last_message: string;
+        };
         JobStep: {
             number?: number;
             name?: string;
@@ -11174,6 +11603,15 @@ export interface components {
                 };
             };
         };
+        /** @description A `since` or `until` that is not an RFC 3339 instant, a period that does not end after it starts, or one longer than `limits.job_stats_window`, each on the field at fault, and on host pressure a request naming no `host_id`. */
+        AnalysisBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         /** @description Too many attempts. Retry-After says how long to wait. */
         RateLimited: {
             headers: {
@@ -11191,6 +11629,10 @@ export interface components {
         PathID: string;
         Limit: number;
         Offset: number;
+        /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+        AnalysisSince: string;
+        /** @description End of the period, not included. Defaults to now. */
+        AnalysisUntil: string;
         /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
         EliRepairGroup: "attention" | "active" | "passed";
         /** @description Only repairs whose repository contains this text, ignoring case. The 200 characters are counted as sent, spaces included; spaces at either end are then dropped. */
@@ -12125,6 +12567,152 @@ export interface operations {
                     "text/csv": string;
                 };
             };
+        };
+    };
+    analyseQueueWait: {
+        parameters: {
+            query?: {
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                since?: components["parameters"]["AnalysisSince"];
+                /** @description End of the period, not included. Defaults to now. */
+                until?: components["parameters"]["AnalysisUntil"];
+                /** @description Only the jobs of this pool, and its own conditions. A pool the fleet does not have is a 404. */
+                pool_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The finding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueWaitFinding"];
+                };
+            };
+            400: components["responses"]["AnalysisBadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    analyseCompare: {
+        parameters: {
+            query?: {
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                since?: components["parameters"]["AnalysisSince"];
+                /** @description End of the period, not included. Defaults to now. */
+                until?: components["parameters"]["AnalysisUntil"];
+                /** @description `version` compares two releases, `period` the period with the one before it. Anything else is a 400. */
+                by?: "version" | "period";
+                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400. */
+                a?: string;
+                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400. */
+                b?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The finding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareFinding"];
+                };
+            };
+            /** @description A period that does not end after it starts or is longer than `limits.job_stats_window` (on `since`), a `by` that is neither `version` nor `period`, a release named to a comparison by period, or `analysis.same_release` (on `a`) when `a` and `b` name one release. The message says what to change. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A refusal with a code of its own, as the update refusals are: the request is well formed and the fleet's records refuse it. `analysis.too_few_releases` is a comparison by version asked to choose a release when fewer than two completed a job in the period; `analysis.whole_days_only` (on `since`) is a comparison by period with a side older than `retention.jobs` and no midnight inside it to end on. The message names what to change. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    analyseHostPressure: {
+        parameters: {
+            query: {
+                /** @description The host to read. Left out it is a 400; a host the fleet does not have is a 404. */
+                host_id: string;
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                since?: components["parameters"]["AnalysisSince"];
+                /** @description End of the period, not included. Defaults to now. */
+                until?: components["parameters"]["AnalysisUntil"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The finding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostPressureFinding"];
+                };
+            };
+            400: components["responses"]["AnalysisBadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    analyseStartupFailures: {
+        parameters: {
+            query?: {
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                since?: components["parameters"]["AnalysisSince"];
+                /** @description End of the period, not included. Defaults to now. */
+                until?: components["parameters"]["AnalysisUntil"];
+                /** @description Only the starts for this pool. A pool the fleet does not have is a 404. */
+                pool_id?: string;
+                /** @description Only the starts on this host. A host the fleet does not have is a 404. */
+                host_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The finding. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartupFailuresFinding"];
+                };
+            };
+            400: components["responses"]["AnalysisBadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getMeta: {

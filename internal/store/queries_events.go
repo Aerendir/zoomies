@@ -468,8 +468,14 @@ type JobFilter struct {
 	RunnerIDs   []string
 	States      []JobState
 	Conclusions []string
-	Labels      []string
-	Search      string
+	// ExcludeConclusions leaves out the jobs with one of these conclusions,
+	// from every count and figure as well as from a listing. A comparison
+	// leaves cancelled and skipped jobs out this way: they stop when somebody
+	// says so, and a release whose users cancelled more would otherwise look
+	// faster and more reliable for it.
+	ExcludeConclusions []string
+	Labels             []string
+	Search             string
 	// Since is inclusive and Until exclusive: a job queued exactly at Since is
 	// in, one queued exactly at Until is out. Half-open so that two windows
 	// cut at the same instant -- the last 30 days and the 30 before -- share
@@ -702,6 +708,12 @@ func jobWhere(f JobFilter) (string, []any) {
 	inClause("pool_id", f.PoolIDs)
 	inClause("runner_id", f.RunnerIDs)
 	inClause("conclusion", f.Conclusions)
+	if len(f.ExcludeConclusions) > 0 {
+		cond = append(cond, `conclusion NOT IN (`+strings.TrimSuffix(strings.Repeat("?,", len(f.ExcludeConclusions)), ",")+`)`)
+		for _, c := range f.ExcludeConclusions {
+			args = append(args, c)
+		}
+	}
 	inClause("job_name", f.JobNames)
 	inClause("host_id", f.HostIDs)
 	inClause("("+sizeSQL+")", f.Sizes)

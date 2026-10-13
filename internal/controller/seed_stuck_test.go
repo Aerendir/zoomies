@@ -47,8 +47,8 @@ func TestSeedStuckAddsAThrottledHostThatStaysThrottled(t *testing.T) {
 		placed.AllocatedCPUs != 1.87 || placed.AllocatedMemoryMB != 3968 {
 		t.Fatalf("runner on the throttled host = %+v; want a busy one allocated the host's share", placed)
 	}
-	if got := len(h.runners()); got != 12 {
-		t.Fatalf("the fixture has %d runners, want the demo's 12: the runner was to be moved, not added", got)
+	if got := len(h.runners()); got != 35 {
+		t.Fatalf("the fixture has %d runners, want the demo's 35: the runner was to be moved, not added", got)
 	}
 
 	// Seeding again is a no-op.

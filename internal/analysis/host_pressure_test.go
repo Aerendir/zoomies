@@ -668,6 +668,43 @@ func TestASharePercentageNeverRoundsToAClaim(t *testing.T) {
 	}
 }
 
+// The jobs are read newest first up to MaxReadJobs, so on a busy host over a
+// long period the oldest are not there to place; a pattern drawn from the
+// rest says so rather than reading as the whole period's.
+func TestATruncatedJobReadKeepsHostPressureFromHigh(t *testing.T) {
+	s := pressSnapshot(loadMinutes(120, 20, 2.5, 0.5), failedIn(1, 4, 7, 10, 13, 16, 60))
+	s.JobsTruncated = true
+	f := mustPressure(t, s)
+	if f.Dominant != "pressure" || f.Confidence != Medium || !f.Evidence.JobsTruncated {
+		t.Errorf("dominant %q at %s, truncated %v; want pressure at medium, and said", f.Dominant, f.Confidence, f.Evidence.JobsTruncated)
+	}
+	if want := "the period held more than 5000 jobs on this host; the newest 5000 were read, so narrow since"; f.ConfidenceReason != want {
+		t.Errorf("reason\n got %q\nwant %q", f.ConfidenceReason, want)
+	}
+}
+
+// A cut read kept the newest jobs, so a host with no failures among them, or
+// only a few, may have had more among the ones not read; the sentence says
+// what was read and not more.
+func TestACutJobReadNeverSaysTheHostHadNoFailures(t *testing.T) {
+	for _, c := range []struct {
+		jobs            []HostJob
+		summary, reason string
+	}{
+		{nil, "demo-builder-2 had no failures, OOM kills or slow startups among the newest 5000 jobs it ran in this period; the older ones were not read.",
+			"there were no failures, OOM kills or slow startups to compare with its load among the newest 5000 jobs it ran; also, the period held more than 5000 jobs on this host; the newest 5000 were read, so narrow since"},
+		{failedIn(1), "demo-builder-2 had only 1 failure, OOM kill or slow startup among the newest 5000 jobs it ran in this period: too few to say whether they follow its load; the older ones were not read.",
+			"only 1 failure, OOM kill or slow startup: too few to say whether they follow its load; also, the period held more than 5000 jobs on this host; the newest 5000 were read, so narrow since"},
+	} {
+		s := pressSnapshot(loadMinutes(120, 20, 2.5, 0.5), c.jobs)
+		s.JobsTruncated = true
+		f := mustPressure(t, s)
+		if f.Summary != c.summary || f.ConfidenceReason != c.reason || f.Confidence != Low {
+			t.Errorf("got %s\n %q\n %q\nwant\n %q\n %q", f.Confidence, f.Summary, f.ConfidenceReason, c.summary, c.reason)
+		}
+	}
+}
+
 func TestEveryMediumReasonIsGivenJoined(t *testing.T) {
 	f := mustPressure(t, pressSnapshot(loadMinutes(120, 20, 2.5, 0.5)[:96], failedIn(1, 4, 7)))
 	if want := "only 3 failures came in a measured minute, too few to be sure of the pattern; also, samples cover 80% of the period"; f.ConfidenceReason != want {
@@ -878,5 +915,35 @@ func TestAHostWithNoNameIsNamedByItsID(t *testing.T) {
 	f := mustPressure(t, s)
 	if !strings.HasPrefix(f.Summary, "host_demob's failures") {
 		t.Errorf("summary %q, want it named by its id", f.Summary)
+	}
+}
+
+// Withholding the job names leaves the caller's own finding as it was (the
+// route renders one and the controller may keep the other), changes nothing
+// but the names, and claims nothing withheld when there were no events.
+func TestWithholdingJobNamesLeavesEverythingElseAndTheOriginalAlone(t *testing.T) {
+	at := pressBase.Add(time.Minute)
+	f := HostPressureFinding{Summary: "s", NextSteps: []NextStep{{Text: "fix it", Code: "host.pressure"}}, Codes: []string{"host.pressure"},
+		Evidence: HostPressureEvidence{HostID: "host_1", PressuredEvents: 1, Events: []BadEvent{
+			{JobID: "job_1", Repo: "acme/app", Workflow: "ci", JobName: "build", Kind: EventFailure, At: at, Measured: true, Pressured: true}}}}
+
+	got := WithholdJobNames(f)
+	if ev := got.Evidence.Events[0]; ev.Repo != "" || ev.Workflow != "" || ev.JobName != "" ||
+		ev.JobID != "job_1" || ev.Kind != EventFailure || !ev.At.Equal(at) || !ev.Measured || !ev.Pressured {
+		t.Errorf("the withheld event is %+v; want only its names left out", ev)
+	}
+	if !got.Evidence.JobNamesWithheld || got.Evidence.PressuredEvents != 1 || got.Summary != "s" {
+		t.Errorf("the withheld finding is %+v", got)
+	}
+	if n := len(got.NextSteps); n != 2 || got.NextSteps[0].Text != "fix it" || got.NextSteps[1].Text != JobNamesWithheldText {
+		t.Errorf("the steps are %+v; want the finding's own, then why the names are missing", got.NextSteps)
+	}
+	if f.Evidence.Events[0].JobName != "build" || len(f.NextSteps) != 1 || f.Evidence.JobNamesWithheld {
+		t.Errorf("withholding changed the finding it was given: %+v", f)
+	}
+
+	none := WithholdJobNames(HostPressureFinding{NextSteps: []NextStep{}, Evidence: HostPressureEvidence{Events: []BadEvent{}}})
+	if none.Evidence.JobNamesWithheld || len(none.NextSteps) != 0 {
+		t.Errorf("a finding with no events says names were withheld: %+v", none)
 	}
 }
