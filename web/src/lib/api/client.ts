@@ -151,8 +151,9 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
   };
   if (options.signal) init.signal = options.signal;
   if (options.body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    init.body = JSON.stringify(options.body);
+    headers['Content-Type'] =
+      options.body instanceof Blob ? 'application/octet-stream' : 'application/json';
+    init.body = options.body instanceof Blob ? options.body : JSON.stringify(options.body);
   }
 
   let response: Response;
@@ -1028,13 +1029,21 @@ export function uploadBackup(
 ): Promise<Result<'uploadBackup'>> {
   return uploadArchive('/backups/upload', file, passphrase, onProgress);
 }
-export function importInstanceTransfer(
-  file: File,
-  passphrase: string,
-  onProgress?: (fraction: number) => void,
-): Promise<Result<'importInstanceTransfer'>> {
-  return uploadArchive('/transfers/import', file, passphrase, onProgress);
-}
+export const createTransferUpload = (size: number) =>
+  api.post<Result<'createTransferUpload'>>('/transfers/uploads', { body: { size } });
+export const getTransferUpload = (id: string) =>
+  api.get<Result<'getTransferUpload'>>(`/transfers/uploads/${enc(id)}`);
+export const uploadTransferChunk = (id: string, offset: number, body: Blob) =>
+  api.post<Result<'uploadTransferChunk'>>(`/transfers/uploads/${enc(id)}/chunks`, {
+    body,
+    query: { offset },
+  });
+export const verifyTransferUpload = (id: string, passphrase: string) =>
+  api.post<Result<'verifyTransferUpload'>>(`/transfers/uploads/${enc(id)}/verify`, {
+    body: { passphrase },
+  });
+export const cancelTransferUpload = (id: string) => api.del(`/transfers/uploads/${enc(id)}`);
+
 function uploadArchive(
   path: string,
   file: File,

@@ -4552,6 +4552,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/transfers/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a bounded complete-instance archive upload
+         * @description Upload ciphertext in chunks no larger than chunk_bytes, then request verification. Uploads belong to the creating identity, expire after 24 hours and do not survive a controller restart. At most two active uploads per identity and sixteen overall. This avoids reverse-proxy request-size limits; the existing multipart import remains available.
+         */
+        post: operations["createTransferUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transfers/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /** Read an upload offset and verification result */
+        get: operations["getTransferUpload"];
+        put?: never;
+        post?: never;
+        /** Discard an upload that is not being verified */
+        delete: operations["cancelTransferUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transfers/uploads/{id}/chunks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append a bounded archive chunk
+         * @description An identical replay is accepted, changed or out-of-order bytes are refused. A truncated request does not advance the offset. Read the upload after a lost response to discover the durable offset before retrying.
+         */
+        post: operations["uploadTransferChunk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transfers/uploads/{id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify and seal a completed archive in the background
+         * @description Returns immediately. Poll the upload until verified or failed. The passphrase is held only in memory while verifying; verification has a two-hour limit and removes uploaded ciphertext on completion. Repeated requests return the same job. Verification leaves live data unchanged; staging and applying remain separate.
+         */
+        post: operations["verifyTransferUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transfers/import": {
         parameters: {
             query?: never;
@@ -7967,6 +8054,19 @@ export interface components {
             inventory: {
                 [key: string]: number;
             };
+        };
+        TransferUpload: {
+            id: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            offset: number;
+            /** Format: int64 */
+            chunk_bytes: number;
+            /** @enum {string} */
+            state: "uploading" | "verifying" | "verified" | "failed" | "cancelled";
+            backup?: components["schemas"]["Backup"];
+            error?: string;
         };
         /** @description One backup, as the Backups tab lists it. The manifest's facts are lifted out flat. */
         Backup: {
@@ -19155,6 +19255,172 @@ export interface operations {
             };
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    createTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    size: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            /** @description Invalid upload request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current upload state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upload discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    uploadTransferChunk: {
+        parameters: {
+            query: {
+                offset: number;
+            };
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Chunk saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            /** @description Invalid upload request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Chunk exceeds 8 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    verifyTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: password */
+                    passphrase: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Verification started or already requested */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            /** @description Invalid upload request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     importInstanceTransfer: {

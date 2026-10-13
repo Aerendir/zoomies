@@ -110,6 +110,11 @@ func (s *Server) routes() http.Handler {
 		r.Use(s.authenticate)
 		r.With(s.require(auth.ActionBackupsWrite)).Post("/api/v1/backups/upload", s.handleUploadBackup)
 		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/import", s.handleImportTransfer)
+		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/uploads", s.handleCreateTransferUpload)
+		r.With(s.require(auth.ActionBackupsRestore)).Get("/api/v1/transfers/uploads/{id}", s.handleGetTransferUpload)
+		r.With(s.require(auth.ActionBackupsRestore)).Delete("/api/v1/transfers/uploads/{id}", s.handleCancelTransferUpload)
+		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/uploads/{id}/chunks", s.handleTransferChunk)
+		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/uploads/{id}/verify", s.handleVerifyTransferUpload)
 		// An installation archive is history rather than a request, and the
 		// handler bounds it itself for the same reason.
 		r.With(s.require(auth.ActionInstallationsWrite)).Post("/api/v1/installations/import", s.handleImportInstallation)
