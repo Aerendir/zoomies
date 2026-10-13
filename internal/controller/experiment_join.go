@@ -114,7 +114,7 @@ func (c *Controller) CollectExperimentEvidence(ctx context.Context, installation
 }
 
 func validateExperimentRemote(e *github.ExperimentAttemptEvidence, repo string, s ExperimentAttemptSelection) error {
-	if e == nil || e.Repository != repo || e.RunID != s.RunID || e.Attempt != s.Attempt || e.WorkflowID <= 0 || len(e.Jobs) > 500 || (e.JobsCoverage != "complete" && e.JobsCoverage != "partial") || !experimentStatus(e.Status) || !experimentConclusion(e.Conclusion) {
+	if e == nil || !github.ValidExperimentAttemptContext(e.Event, e.WorkflowPath) || e.Repository != repo || e.RunID != s.RunID || e.Attempt != s.Attempt || e.WorkflowID <= 0 || len(e.Jobs) > 500 || (e.JobsCoverage != "complete" && e.JobsCoverage != "partial") || !experimentStatus(e.Status) || !experimentConclusion(e.Conclusion) {
 		return ErrExperimentEvidence
 	}
 	if len(e.HeadSHA) != 40 && len(e.HeadSHA) != 64 {

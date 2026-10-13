@@ -932,6 +932,13 @@ Retry-After for a manual retry. The observation window must fit
 occurs. GET replay spends no GitHub allowance and refuses unsupported versions or
 inconsistent retained results.
 
+Exact-attempt collection also retains GitHub's optional trigger event and workflow
+path privately. Both fields are rechecked after job enumeration, without extra
+requests. Missing fields remain absent; bounded paths are opaque untrusted text,
+never fetched or resolved. Neither field proves workflow contents, dispatch inputs
+or test scope, and neither appears in the public report or runner-evidence view.
+Older captures replay with these fields unknown; their stored bytes are unchanged.
+
 `selected-runs-v2` retains unknown historical workflow revision, inputs/test scope,
 configuration, cache and host evidence as explicit inconclusive reasons. The window
 uses GitHub attempt start time, with unknown starts retained. Execution is summed

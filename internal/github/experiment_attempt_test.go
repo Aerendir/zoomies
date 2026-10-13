@@ -155,3 +155,78 @@ func TestAttemptEvidenceRefusesInvalidIdentitiesBeforeAnyRead(t *testing.T) {
 		t.Fatalf("spent %d reads", calls)
 	}
 }
+
+func TestAttemptTriggerAndWorkflowPathArePinnedWithoutAdditionalReads(t *testing.T) {
+	for _, mode := range []string{"present", "absent", "event_changes", "path_changes", "event_disappears", "path_disappears", "event_appears", "path_appears", "invalid_event", "oversized_path", "control_path"} {
+		t.Run(mode, func(t *testing.T) {
+			calls, runs := 0, 0
+			c := delayTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if strings.HasSuffix(r.URL.Path, "/jobs") {
+					fmt.Fprintf(w, `{"total_count":1,"jobs":[%s]}`, experimentJobJSON(1))
+					return
+				}
+				runs++
+				event, path := "workflow_dispatch", ".github/workflows/build.yml@refs/heads/main"
+				if mode == "absent" {
+					event, path = "", ""
+				}
+				if runs == 1 && mode == "event_appears" {
+					event = ""
+				}
+				if runs == 1 && mode == "path_appears" {
+					path = ""
+				}
+				if runs > 1 {
+					switch mode {
+					case "event_changes":
+						event = "push"
+					case "path_changes":
+						path = ".github/workflows/other.yml"
+					case "event_disappears":
+						event = ""
+					case "path_disappears":
+						path = ""
+					}
+				}
+				switch mode {
+				case "invalid_event":
+					event = "push\nprivate"
+				case "oversized_path":
+					path = strings.Repeat("x", 1025)
+				case "control_path":
+					path = "file\x1b[31m"
+				}
+				payload := strings.TrimSuffix(experimentRunJSON(delayTestSHA), "}") + fmt.Sprintf(`,"event":%q,"path":%q,"display_title":"private title","inputs":{"token":"private secret"}}`, event, path)
+				fmt.Fprint(w, payload)
+			})
+			e, err := c.ReadExperimentAttempt(context.Background(), "acme/repo", 10, 2)
+			if mode != "present" && mode != "absent" {
+				if err == nil {
+					t.Fatal("changed or invalid context accepted")
+				}
+				if strings.HasPrefix(mode, "invalid") || mode == "oversized_path" || mode == "control_path" {
+					if calls != 1 {
+						t.Fatalf("invalid context spent %d reads", calls)
+					}
+				} else if calls != 3 {
+					t.Fatalf("identity recheck spent %d reads", calls)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 3 {
+				t.Fatalf("spent %d reads", calls)
+			}
+			if mode == "present" && (e.Event != "workflow_dispatch" || e.WorkflowPath != ".github/workflows/build.yml@refs/heads/main") {
+				t.Fatalf("lost context: %+v", e)
+			}
+			b, _ := json.Marshal(e)
+			if strings.Contains(string(b), "private") || mode == "absent" && (strings.Contains(string(b), `"event"`) || strings.Contains(string(b), `"workflow_path"`)) {
+				t.Fatalf("unexpected projection %s", b)
+			}
+		})
+	}
+}
