@@ -9092,6 +9092,7 @@ components:
         bootstrap_required: { type: boolean, description: True when no user exists yet. `/readyz` carries the same field, so a provisioner can wait on one endpoint. }
         tailcat_available: { type: boolean, description: Whether private enrolment is enabled and the controller has its encryption key. Relay connectivity is checked at enrolment. }
         auth_disabled: { type: boolean, description: True when authentication has been switched off in the configuration. }
+        demo: { type: boolean, description: True when this controller is running with the seeded demo fleet. }
         public_view:
           type: boolean
           description: >-
@@ -14738,10 +14739,11 @@ components:
         tag:
           type: string
           description: >-
-            The release to take, such as `v1.3.5`. Left out, it is the newest release that can be
-            installed on this system. A tag that is not of that form, is not in the list the
-            controller last read, or is not newer than the running build is refused with
-            `update.nothing_newer`.
+            The release to take, such as `v1.3.5`, or `dev` for the latest development build.
+            Left out, it is the newest release that can be installed on this system.
+            DEV is an explicit manual choice and does not use the release list or soak.
+            Other tags must name a newer release in the list the controller last read,
+            or they are refused with `update.nothing_newer`.
           examples: [v1.3.5]
     StartHostRolloutRequest:
       type: object

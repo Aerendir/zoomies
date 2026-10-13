@@ -6155,6 +6155,8 @@ export interface components {
             tailcat_available?: boolean;
             /** @description True when authentication has been switched off in the configuration. */
             auth_disabled?: boolean;
+            /** @description True when this controller is running with the seeded demo fleet. */
+            demo?: boolean;
             /** @description True when `security.public_view` is on: a caller with no credential reads the fleet as a visitor, whose session has the kind `public`. False whenever authentication is switched off. */
             public_view?: boolean;
             oidc_enabled?: boolean;
@@ -11120,7 +11122,7 @@ export interface components {
         };
         UpdateControllerRequest: {
             /**
-             * @description The release to take, such as `v1.3.5`. Left out, it is the newest release that can be installed on this system. A tag that is not of that form, is not in the list the controller last read, or is not newer than the running build is refused with `update.nothing_newer`.
+             * @description The release to take, such as `v1.3.5`, or `dev` for the latest development build. Left out, it is the newest release that can be installed on this system. DEV is an explicit manual choice and does not use the release list or soak. Other tags must name a newer release in the list the controller last read, or they are refused with `update.nothing_newer`.
              * @example v1.3.5
              */
             tag?: string;

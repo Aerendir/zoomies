@@ -736,3 +736,10 @@ test('nothing a rollout says carries an em dash or its stand-in', () => {
     assert.doesNotMatch(JSON.stringify(words), /\u2014| -- /, state);
   }
 });
+
+test('DEV confirmation identifies the moving development channel without a release downgrade warning', () => {
+  const words = confirmControllerUpdate('dev', 'main-sha-abc1234', false);
+  assert.match(words.description, /to dev/);
+  assert.ok(words.consequences.some((line) => line.includes('moving channel')));
+  assert.ok(!words.consequences.some((line) => line.includes('older code')));
+});

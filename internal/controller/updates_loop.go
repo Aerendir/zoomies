@@ -365,6 +365,13 @@ func timedOutText(a store.UpdateAttempt) string {
 func (c *Controller) controllerOutcome(a store.UpdateAttempt) (state, text string, ended bool) {
 	arrived := runsAtLeast(version.Version, a.ToVersion)
 	res, answered := c.resultFor(a)
+	if a.ToVersion == updates.DevTag {
+		// A moving channel is proved by the running build, not the channel name.
+		arrived = version.IsMainBuild(version.Version) && version.Version != a.FromVersion
+		if answered && res.OK {
+			arrived = version.IsMainBuild(version.Version) && version.Version == res.To
+		}
+	}
 	switch {
 	case arrived:
 		if answered && !res.OK {

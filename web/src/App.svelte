@@ -32,6 +32,7 @@
   import Bootstrap from './routes/Bootstrap.svelte';
   import Login from './routes/Login.svelte';
   import EliWidget from '$lib/assistant/EliWidget.svelte';
+  import InstanceNotice from '$lib/shell/InstanceNotice.svelte';
   import { upgrade } from '$lib/state/upgrade.svelte';
 
   let paletteOpen = $state(false);
@@ -168,10 +169,10 @@
   </main>
 {:else if session.phase === 'bootstrap'}
   <main id="main" class="centred"><Bootstrap /></main>
-{:else if !authenticated && !(router.route.bare && router.query.has('error'))}
+{:else if (!authenticated || router.pathname === '/login') && !(router.route.bare && router.query.has('error'))}
   <!-- Full bleed, not centred: the sign-in page is a layout of its own, a
        brand panel beside the form, and it fills the window. -->
-  <main id="main"><Login /></main>
+  <main id="main"><InstanceNotice showFence={false} /><Login /></main>
 {:else if router.route.bare}
   <!-- A page that stands alone: the MCP consent screen. A refusal it shows
        needs nobody signed in, because the client's request was the problem,
@@ -194,6 +195,7 @@
   <div class="app">
     <Nav menuOpen={navMenuOpen} onmore={() => (navMenuOpen = !navMenuOpen)} />
     <div class="column">
+      <InstanceNotice />
       <TopBar onpalette={() => (paletteOpen = true)} onshortcuts={() => (shortcutsOpen = true)} />
       {#if session.visitor && router.pathname !== '/login'}<VisitorNotice />{/if}
       <main id="main" tabindex="-1">

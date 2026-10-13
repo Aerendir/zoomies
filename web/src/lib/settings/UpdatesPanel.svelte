@@ -309,6 +309,28 @@
             {/if}
           </div>
         {/if}
+        {#if canUpdate && status.mode !== 'off' && status.helper.state === 'ready' && offer?.kind !== 'in-flight'}
+          <div class="dev-update">
+            <p class="reason">
+              DEV follows the latest build from main and may include changes that have not been
+              released.
+            </p>
+            <Button onclick={() => ask('dev')}>Upgrade to DEV</Button>
+          </div>
+        {:else if canUpdate && offer?.kind === 'none' && offer.upgradeCommand}
+          <div class="dev-update">
+            <p class="reason">
+              To upgrade to the latest DEV build, run this on the controller's host. DEV may include
+              changes that have not been released.
+            </p>
+            <CopyButton
+              value={`${offer.upgradeCommand} --version dev`}
+              label="Copy the DEV upgrade command"
+              showValue
+              showLabel
+            />
+          </div>
+        {/if}
       </Panel>
 
       {#if status.rollout}
@@ -367,6 +389,13 @@
 {/if}
 
 <style>
+  .dev-update {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--z-space-3);
+    margin-top: var(--z-space-4);
+  }
   .stack {
     display: flex;
     flex-direction: column;

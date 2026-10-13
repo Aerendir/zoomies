@@ -265,6 +265,10 @@ func (c *Controller) requestedView(a store.UpdateAttempt, helper UpdatesHelper) 
 // The soak is not applied. It is how long auto waits on its own; a person
 // pressing the button has decided.
 func (c *Controller) controllerTarget(tag string) (string, error) {
+	// DEV is an explicit manual choice and never enters the release planner.
+	if tag == updates.DevTag {
+		return tag, nil
+	}
 	state := c.latestRelease()
 	if state == nil || state.Releases == nil {
 		return "", fmt.Errorf("%w: this controller has not read the release list yet; check for releases, then try again", ErrUpdateNothingNewer)

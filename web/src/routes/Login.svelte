@@ -206,7 +206,7 @@
    * Zoomies is. The brand panel and the full-window layout are for the screen
    * that has nothing else on it.
    */
-  const embedded = $derived(session.phase === 'ready');
+  const embedded = $derived(session.phase === 'ready' && router.pathname !== '/login');
 
   /**
    * The address being signed in to, as the browser reached it. Somebody with

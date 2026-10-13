@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/eyupio/zoomies/internal/auth"
+	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/version"
 )
 
@@ -24,6 +25,7 @@ import (
 // what decides whether to show a password form, a single sign-on button, or the
 // first-run bootstrap form. Nothing in it is a secret.
 type metaResponse struct {
+	Demo              bool   `json:"demo"`
 	TailcatAvailable  bool   `json:"tailcat_available"`
 	Version           string `json:"version"`
 	VersionChannel    string `json:"version_channel,omitempty"`
@@ -83,6 +85,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := metaResponse{
+		Demo:                        controller.DemoRequested(),
 		TailcatAvailable:            s.tailcatAvailable(),
 		Version:                     version.Short(),
 		VersionChannel:              version.Channel(version.Version),
