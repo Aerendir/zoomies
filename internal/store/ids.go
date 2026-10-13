@@ -14,6 +14,7 @@ const (
 	PrefixHost         = "host"
 	PrefixRunner       = "run"
 	PrefixJob          = "job"
+	PrefixComparison   = "cmp"
 	PrefixAudit        = "aud"
 	PrefixUser         = "usr"
 	PrefixSession      = "ses"
