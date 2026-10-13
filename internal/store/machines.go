@@ -114,7 +114,27 @@ type Provider struct {
 	LastSweepAt     *time.Time `json:"last_sweep_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
+
+	// SeenCPUs and SeenMemoryMB are the size this provider's machines turned
+	// out to be, for a row that names none of its own (MachineCPUs and
+	// MachineMemoryMB win wherever they are set). SeenFrom says where the
+	// figures came from, MachineSizeFromTemplate or MachineSizeFromMachine,
+	// and SeenAt when they were true. They are observations, written by the
+	// controller and never by a form: see SetProviderMachineSizeSeen.
+	SeenCPUs     int        `json:"seen_cpus,omitempty"`
+	SeenMemoryMB int64      `json:"seen_memory_mb,omitempty"`
+	SeenFrom     string     `json:"seen_from,omitempty"`
+	SeenAt       *time.Time `json:"seen_at,omitempty"`
 }
+
+// Where a provider's seen machine size came from. A template's size is what the
+// hypervisor says it will build; a machine's is what one it built measured
+// itself as, which is the figure placement judges and is a little smaller,
+// because a guest's kernel keeps some of what it was given.
+const (
+	MachineSizeFromTemplate = "template"
+	MachineSizeFromMachine  = "machine"
+)
 
 // ---------------------------------------------------------------------------
 // Machines

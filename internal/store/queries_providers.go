@@ -26,21 +26,21 @@ const providerCols = `id, kind, name, endpoint, ca_pem, insecure_skip_verify, se
 	max_creates_in_flight, idle_timeout_ms, cost_per_machine_hour, enabled, paused,
 	paused_reason, paused_until, consecutive_failures, last_check_at, last_check_error,
 	last_sweep_at, created_at, updated_at, tailcat_address_enc, last_check_report, machine_ca_pem,
-	min_machines`
+	min_machines, seen_cpus, seen_memory_mb, seen_from, seen_at`
 
 func scanProvider(sc interface{ Scan(...any) error }) (*Provider, error) {
 	var p Provider
 	var insecure, enabled, paused int
 	var idle, created, updated int64
 	var platform string
-	var pausedUntil, checked, swept sql.NullInt64
+	var pausedUntil, checked, swept, seen sql.NullInt64
 	err := sc.Scan(&p.ID, &p.Kind, &p.Name, &p.Endpoint, &p.CAPEM, &insecure, &p.Settings,
 		&p.CredentialsEnc, &p.MachineLabels, &p.MachineCapacity, &p.MachineBackend, &platform,
 		&p.MachineCPUs, &p.MachineMemoryMB, &p.MachineDiskMB, &p.PoolSelector, &p.MaxMachines,
 		&p.MaxCreatesInFlight, &idle, &p.CostPerMachineHour, &enabled, &paused,
 		&p.PausedReason, &pausedUntil, &p.ConsecutiveFailures, &checked, &p.LastCheckError,
 		&swept, &created, &updated, &p.TailcatAddressEnc, &p.LastCheckReport, &p.MachineCAPEM,
-		&p.MinMachines)
+		&p.MinMachines, &p.SeenCPUs, &p.SeenMemoryMB, &p.SeenFrom, &seen)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +48,7 @@ func scanProvider(sc interface{ Scan(...any) error }) (*Provider, error) {
 	p.IdleTimeout = Duration(time.Duration(idle) * time.Millisecond)
 	p.CreatedAt, p.UpdatedAt = at(created), at(updated)
 	p.PausedUntil, p.LastCheckAt, p.LastSweepAt = atp(pausedUntil), atp(checked), atp(swept)
+	p.SeenAt = atp(seen)
 	if err := unmarshalJSON(platform, &p.MachinePlatform); err != nil {
 		return nil, fmt.Errorf("provider %s: decoding the machine platform: %w", p.ID, err)
 	}
@@ -72,7 +73,7 @@ func (s *Store) CreateProvider(ctx context.Context, p *Provider) error {
 		return err
 	}
 	_, err = s.exec(ctx, `INSERT INTO providers (`+providerCols+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, string(p.Kind), p.Name, p.Endpoint, p.CAPEM, boolInt(p.InsecureSkipVerify),
 		p.Settings, p.CredentialsEnc, p.MachineLabels, p.MachineCapacity,
 		string(p.MachineBackend), platform, p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB,
@@ -81,7 +82,7 @@ func (s *Store) CreateProvider(ctx context.Context, p *Provider) error {
 		boolInt(p.Enabled), boolInt(p.Paused), p.PausedReason, msp(p.PausedUntil),
 		p.ConsecutiveFailures, msp(p.LastCheckAt), p.LastCheckError, msp(p.LastSweepAt),
 		ms(p.CreatedAt), ms(p.UpdatedAt), p.TailcatAddressEnc, p.LastCheckReport, p.MachineCAPEM,
-		p.MinMachines)
+		p.MinMachines, p.SeenCPUs, p.SeenMemoryMB, p.SeenFrom, msp(p.SeenAt))
 	return wrapWrite(err)
 }
 
@@ -130,16 +131,40 @@ func (s *Store) UpdateProvider(ctx context.Context, p *Provider) error {
 	if err != nil {
 		return err
 	}
+	// The size a provider's machines were seen to be is evidence about the
+	// machines it built, so an edit to what decides that size (the size typed
+	// on the form, or the settings that pick the template) makes it evidence
+	// about a different machine. It is forgotten in the same statement rather
+	// than left for the fit check: an operator who clears a larger typed size
+	// to fall back on a smaller template would otherwise have the template
+	// judged at the old size, and the fleet would rent machines too small for
+	// the work. SQLite reads every column in a SET from the row as it was, so
+	// the comparison is against the old figures.
+	changed := `(machine_cpus <> ? OR machine_memory_mb <> ? OR settings <> ?)`
+	settings, err := p.Settings.Value()
+	if err != nil {
+		return err
+	}
+	shape := []any{p.MachineCPUs, p.MachineMemoryMB, settings}
+	args := []any{p.Name, p.Endpoint, p.CAPEM, p.MachineCAPEM, boolInt(p.InsecureSkipVerify), p.Settings,
+		p.MachineLabels, p.MachineCapacity, string(p.MachineBackend), platform,
+		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines, p.MinMachines,
+		p.MaxCreatesInFlight, p.IdleTimeout.Duration().Milliseconds(), p.CostPerMachineHour,
+		boolInt(p.Enabled), ms(p.UpdatedAt)}
+	for range 4 {
+		args = append(args, shape...)
+	}
+	args = append(args, p.ID)
 	res, err := s.exec(ctx, `UPDATE providers SET name=?, endpoint=?, ca_pem=?, machine_ca_pem=?,
 		insecure_skip_verify=?, settings=?, machine_labels=?, machine_capacity=?,
 		machine_backend=?, machine_platform=?, machine_cpus=?, machine_memory_mb=?,
 		machine_disk_mb=?, pool_selector=?, max_machines=?, min_machines=?, max_creates_in_flight=?,
-		idle_timeout_ms=?, cost_per_machine_hour=?, enabled=?, updated_at=? WHERE id=?`,
-		p.Name, p.Endpoint, p.CAPEM, p.MachineCAPEM, boolInt(p.InsecureSkipVerify), p.Settings,
-		p.MachineLabels, p.MachineCapacity, string(p.MachineBackend), platform,
-		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines, p.MinMachines,
-		p.MaxCreatesInFlight, p.IdleTimeout.Duration().Milliseconds(), p.CostPerMachineHour,
-		boolInt(p.Enabled), ms(p.UpdatedAt), p.ID)
+		idle_timeout_ms=?, cost_per_machine_hour=?, enabled=?, updated_at=?,
+		seen_cpus = CASE WHEN `+changed+` THEN 0 ELSE seen_cpus END,
+		seen_memory_mb = CASE WHEN `+changed+` THEN 0 ELSE seen_memory_mb END,
+		seen_from = CASE WHEN `+changed+` THEN '' ELSE seen_from END,
+		seen_at = CASE WHEN `+changed+` THEN NULL ELSE seen_at END
+		WHERE id=?`, args...)
 	if err != nil {
 		return wrapWrite(err)
 	}
@@ -191,6 +216,30 @@ func (s *Store) SetProviderChecked(ctx context.Context, id string, at time.Time,
 	_, err := s.exec(ctx, `UPDATE providers SET last_check_at=?, last_check_error=?, last_check_report=? WHERE id=?`,
 		ms(at), checkErr, report, id)
 	return err
+}
+
+// SetProviderMachineSizeSeen records the size this provider's machines turned
+// out to be, and where the figures came from.
+//
+// It is an observation writer, so it leaves updated_at alone like the check
+// and the breaker do. It writes only evidence at least as new as what the row
+// already holds: a machine built before a connection check read a larger
+// template is not evidence about the machines the provider builds now, and a
+// pass that wrote it anyway would undo the check every minute. It reports
+// whether it wrote, so a caller holding a copy of the row knows to update it.
+func (s *Store) SetProviderMachineSizeSeen(ctx context.Context, id string, cpus int, memoryMB int64, from string, at time.Time) (bool, error) {
+	res, err := s.exec(ctx, `UPDATE providers SET seen_cpus=?, seen_memory_mb=?, seen_from=?, seen_at=?
+		WHERE id=? AND (seen_at IS NULL OR seen_at <= ?)
+		AND (seen_cpus <> ? OR seen_memory_mb <> ? OR seen_from <> ? OR seen_at IS NULL OR seen_at <> ?)`,
+		cpus, memoryMB, from, ms(at), id, ms(at), cpus, memoryMB, from, ms(at))
+	if err != nil {
+		return false, wrapWrite(err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // SetProviderPaused is the kill switch: a provider paused buys nothing, and

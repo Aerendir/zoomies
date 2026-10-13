@@ -556,6 +556,17 @@ type Report struct {
 	// record: "it worked" is worth little without "against what".
 	Version  string
 	Findings []config.Finding
+	// BuildsCPUs and BuildsMemoryMB are the size a machine is given when the
+	// provider row names none, as the provider itself reads it: a cloned
+	// template's processors and memory, for instance. Zero on a field it could
+	// not read, or where there is no such default.
+	//
+	// They are reported because a row that leaves its size to the provider
+	// otherwise describes a machine of no known size, and a machine of no
+	// known size fits every pool: the fleet would rent it for work it is too
+	// small to run, and find out only once it had paid for it.
+	BuildsCPUs     int
+	BuildsMemoryMB int64
 }
 
 // OK reports whether preflight found nothing that stops this provider being

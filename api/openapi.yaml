@@ -14030,7 +14030,7 @@ components:
         fits: { type: boolean, description: The machine this provider builds is one the pool's runners could be placed on. }
         fit_why: { type: string, description: What about the machine does not suit the pool, when `fits` is false. }
         why: { type: string, description: The first thing standing in the way, in the setting's own terms. Absent when `serves`. }
-        fix: { type: string, description: What to change, for a selector's refusal. }
+        fix: { type: string, description: "What to change: for a selector's refusal, or the size the provider's machines would need when they are too small for the pool." }
 
     Renting:
       type: object

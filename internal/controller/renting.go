@@ -175,12 +175,19 @@ func onItsWayVerdict(pool *store.Pool, p *store.Provider, coming int, since time
 // two cannot come to say different things.
 //
 // A selector that says no was somebody's choice, so it is quoted with its own
-// fix. Otherwise no provider builds a machine the pool could use, and the first
-// provider by name is the example given: every provider's machine has failed a
-// test of shape to get here, so the first one's mismatch always has something
-// to say. There is always a first, because DecideMachines decides nothing for
-// a fleet with no provider.
-func unservedVerdict(providers []*store.Provider, synth map[string]*store.Host, pool *store.Pool, now time.Time, short, queued int) (PoolRenting, *UnservedPool) {
+// fix. Otherwise no provider builds a machine the pool could use, and one
+// provider's mismatch is the example given: the first by name whose selectors
+// allow the pool, because that is the provider an operator means to rent from,
+// or the first of all when none does. Every provider's machine has failed a
+// test of shape to get here, so its mismatch always has something to say.
+// There is always a first, because DecideMachines decides nothing for a fleet
+// with no provider.
+//
+// A machine too small for the pool is said as that, with the size it would
+// have to be, and with the machines the provider already owns, which are the
+// same size. Those are what fill its ceiling, and a pool told only that the
+// ceiling was reached would be sent to raise it and buy more of them.
+func unservedVerdict(providers []*store.Provider, synth map[string]*store.Host, pool *store.Pool, owned map[string]int, now time.Time, short, queued int) (PoolRenting, *UnservedPool) {
 	v := PoolRenting{PoolID: pool.ID, PoolName: pool.Name, State: RentingUnserved, Queued: queued, Short: short}
 	if refused, ok := unservedBy(providers, synth, pool, now); ok {
 		v.Summary = "No provider will rent for this pool. " + sentence(refused.Why)
@@ -188,8 +195,25 @@ func unservedVerdict(providers []*store.Provider, synth map[string]*store.Host, 
 		return v, &refused
 	}
 	first := providers[0]
-	v.Summary = "No provider builds a machine this pool could use. " + first.Name + ": " + machineFit(synth[first.ID], pool)
+	for _, p := range providers {
+		if scheduler.Pair(p, pool).Agrees {
+			first = p
+			break
+		}
+	}
+	misfit := machineFit(first, synth[first.ID], pool)
+	v.Summary = "No provider builds a machine this pool could use. " + first.Name + ": " + misfit.Why
 	v.Fix = unservedFitFix
+	if misfit.Fix != "" {
+		v.Fix = misfit.Fix
+	}
+	if n := owned[first.ID]; misfit.Size && n > 0 {
+		owns := fmt.Sprintf("The %d machines it owns are", n)
+		if n == 1 {
+			owns = "The machine it owns is"
+		}
+		v.Summary += " " + owns + " the same size, so a higher maximum would only buy more machines this pool cannot use."
+	}
 	return v, nil
 }
 

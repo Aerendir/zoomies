@@ -571,7 +571,7 @@ func (c *Controller) machineProblems(ctx context.Context, out *[]Problem) error 
 			})
 		}
 		if slices.Contains(unservable, p.ID) {
-			*out = append(*out, Problem{
+			prob := Problem{
 				Code:     "provider.unservable",
 				Severity: config.SeverityWarning,
 				Title:    fmt.Sprintf("no pool could ever run work on %s's machines", p.Name),
@@ -580,7 +580,17 @@ func (c *Controller) machineProblems(ctx context.Context, out *[]Problem) error 
 				Fix: "give the provider's machines the labels a pool selects on, or change its backend and " +
 					"platform to something a pool asks for.",
 				TargetKind: "provider", TargetID: p.ID,
-			})
+			}
+			// A machine of the right kind that is too small is a different
+			// fix from labels or a backend: the size it would have to be. It
+			// is named for the first pool it is too small for, because that
+			// pool is the one its operator rented the provider for.
+			if pool, misfit, ok := tooSmallFor(p, pools, now); ok {
+				prob.Detail = fmt.Sprintf("the machines this provider offers are too small for pool %s, and match no other enabled pool, "+
+					"so anything it buys would sit idle and be paid for. %s", pool.Name, misfit.Why)
+				prob.Fix = misfit.Fix
+			}
+			*out = append(*out, prob)
 		}
 		if p.LastCheckAt == nil || p.LastCheckAt.Before(p.UpdatedAt) {
 			*out = append(*out, Problem{

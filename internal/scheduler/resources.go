@@ -662,6 +662,134 @@ func HostShortfall(h *store.Host, p *store.Pool) string {
 	return "it is too small for this pool's limits"
 }
 
+// machineForMaxCPUs, machineForMaxMemoryMB and machineForMaxDiskMB bound
+// MachineFor's search: past them a pool is asking for more than one machine a
+// provider rents, and the answer is to change the pool rather than to name a
+// size nobody can order.
+const (
+	machineForMaxCPUs     = 512
+	machineForMaxMemoryMB = 4 << 20
+	machineForMaxDiskMB   = 64 << 20
+)
+
+// MachineSize is a machine named by MachineFor: whole processors, and memory
+// and disk in whole gigabytes. A field is zero where it is not part of the
+// answer, because the host never measured it or because it need not grow.
+type MachineSize struct {
+	CPUs     int
+	MemoryMB int64
+	DiskMB   int64
+}
+
+// MachineFor is the smallest machine that h would have to be for one runner
+// of p to fit on it: HostFits asked of larger copies of h, so the reserve, the
+// slot count, the host's runner profile and a docker-in-docker pair's split
+// are all judged exactly as placement judges them.
+//
+// It exists because a refusal that names only the figure that fell short ("it
+// has 3.3 GB to place on, and a runner is charged 6.7 GB") still leaves an
+// operator to work out what machine to order, through a reserve that grows with
+// the machine. The search asks HostFits rather than inverting its arithmetic,
+// because an inverse would be a second copy of the sizing rules, and the one
+// that drifted would be the one buying machines.
+//
+// It names only what has to grow. Processors and memory are named together
+// when either must, because that is a machine an operator can order; disk is
+// named on its own, and only when the machine is short of it, so a machine
+// that is merely short of disk is not told to grow what it already has. ok is
+// false when h already fits, when nothing up to the bounds above would, or when
+// nothing h measured has to grow.
+func MachineFor(h *store.Host, p *store.Pool) (MachineSize, bool) {
+	if h == nil || p == nil || HostFits(h, p) || ExcludedBySize(h, p) != nil {
+		return MachineSize{}, false
+	}
+	try := *h
+	// Disk out of the way first, so that the search for processors and memory
+	// answers for them alone; it is put back and searched for last.
+	if h.DiskTotalMB > 0 {
+		try.DiskTotalMB, try.DiskFreeMB = machineForMaxDiskMB, machineForMaxDiskMB
+	}
+	cpus, memoryMB := h.CPUs, h.MemoryMB
+	if h.CPUs > 0 {
+		// Processors first, with memory out of the way, then memory at the
+		// processors found: each field of a runner's size is judged on its own,
+		// so the two searches do not disagree about each other.
+		if h.MemoryMB > 0 {
+			try.MemoryMB = machineForMaxMemoryMB
+		}
+		cpus = 0
+		for n := max(h.CPUs, 1); n <= machineForMaxCPUs; n++ {
+			try.CPUs = n
+			if HostFits(&try, p) {
+				cpus = n
+				break
+			}
+		}
+		if cpus == 0 {
+			return MachineSize{}, false
+		}
+		try.CPUs = cpus
+	}
+	if h.MemoryMB > 0 {
+		try.MemoryMB = machineForMaxMemoryMB
+		if !HostFits(&try, p) {
+			return MachineSize{}, false
+		}
+		// More memory never makes a runner fit less: a larger machine has the
+		// larger share and the larger allocatable, and the reserve that grows
+		// with it grows more slowly than it does.
+		memoryMB = smallestFitting(h.MemoryMB, machineForMaxMemoryMB, func(v int64) bool {
+			try.MemoryMB = v
+			return HostFits(&try, p)
+		})
+		try.MemoryMB = memoryMB
+	}
+	var out MachineSize
+	if cpus > h.CPUs || memoryMB > h.MemoryMB {
+		out.CPUs, out.MemoryMB = cpus, wholeGB(memoryMB)
+	}
+	if h.DiskTotalMB > 0 {
+		// The disk already written on is written on however large the disk,
+		// so a larger machine adds to the total and the free space alike.
+		used := max(h.DiskTotalMB-h.DiskFreeMB, 0)
+		try.DiskTotalMB, try.DiskFreeMB = h.DiskTotalMB, h.DiskFreeMB
+		if !HostFits(&try, p) {
+			total := smallestFitting(h.DiskTotalMB, machineForMaxDiskMB, func(v int64) bool {
+				try.DiskTotalMB, try.DiskFreeMB = v, v-used
+				return HostFits(&try, p)
+			})
+			try.DiskTotalMB, try.DiskFreeMB = total, total-used
+			if !HostFits(&try, p) {
+				return MachineSize{}, false
+			}
+			out.DiskMB = wholeGB(total)
+		}
+	}
+	if out == (MachineSize{}) {
+		return MachineSize{}, false
+	}
+	return out, true
+}
+
+// smallestFitting is the least value in [lo, hi] for which fits holds, for a
+// fits that only ever turns from false to true as the value grows. It answers
+// hi when nothing smaller does.
+func smallestFitting(lo, hi int64, fits func(int64) bool) int64 {
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if fits(mid) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+	return hi
+}
+
+// wholeGB rounds a size up to a whole gigabyte, because that is the unit a
+// machine is ordered in, and a figure such as 7.3 GB invites typing 7.
+func wholeGB(mb int64) int64 { return (mb + 1023) / 1024 * 1024 }
+
 // charged explains the one case where the number an operator sees on the pool
 // is not the number the host is charged. A defaulted field needs no such
 // sentence even though it doubles too: its doubled share is capped at the
@@ -679,17 +807,32 @@ func charged(set, dind bool) string {
 // lower -- and nothing else in the sentence says where the charge came from.
 func minimumCharged(p *store.Pool, field string) string {
 	floor := MinimumSlot(p)
-	pair := ""
-	if p.DockerMode == store.DockerDinD {
-		pair = ", twice over for a runner and its Docker daemon, which share one slot"
-	}
 	switch {
 	case field == "cpu" && floor.CPUs > 0:
-		return fmt.Sprintf(", this pool's minimum of %s CPU a container%s", formatCPUs(max(p.Resources.MinCPUs, store.MinRunnerCPUs)), pair)
+		return fmt.Sprintf(", this pool's minimum of %s CPU a container%s", formatCPUs(max(p.Resources.MinCPUs, store.MinRunnerCPUs)),
+			pairCharged(p, p.Resources.DaemonCPUPercent()))
 	case field == "memory" && floor.MemoryMB > 0:
-		return fmt.Sprintf(", this pool's minimum of %s a container%s", formatMB(max(p.Resources.MinMemoryMB, store.MinRunnerMemoryMB)), pair)
+		return fmt.Sprintf(", this pool's minimum of %s a container%s", formatMB(max(p.Resources.MinMemoryMB, store.MinRunnerMemoryMB)),
+			pairCharged(p, p.Resources.DaemonMemoryPercent()))
 	}
 	return ""
+}
+
+// pairCharged says how a docker-in-docker runner's minimum became its slot's.
+// An even split is twice the minimum, and says so; an uneven one is the minimum
+// held by the thinner of the two shares, which is a much larger slot than
+// "twice over" would let an operator work out. A daemon given 15% of the
+// memory needs a slot of nearly seven times the minimum, and that figure is
+// the whole reason a 4 GB machine refuses a pool whose minimum is 1 GB.
+func pairCharged(p *store.Pool, daemonPercent int) string {
+	if p.DockerMode != store.DockerDinD {
+		return ""
+	}
+	thinner := min(daemonPercent, 100-daemonPercent)
+	if thinner*2 == 100 {
+		return ", twice over for a runner and its Docker daemon, which share one slot"
+	}
+	return fmt.Sprintf(", which has to fit in the %d%% of a slot the thinner of a runner and its Docker daemon is given", thinner)
 }
 
 // FormatCPUs is formatCPUs for the problems that quote a host's share, so the
