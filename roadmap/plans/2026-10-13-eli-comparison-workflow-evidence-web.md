@@ -1,6 +1,6 @@
 # ZF-243: inspect descriptive workflow evidence in the web UI
 
-13 October 2026. Prepared on main after #1012 merged.
+13 October 2026. Ready for review [#1014](https://github.com/eyupio/zoomies/pull/1014), based on main after #1012 merged.
 
 ## Behaviour
 
