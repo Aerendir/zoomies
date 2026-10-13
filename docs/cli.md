@@ -331,7 +331,46 @@ zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets -
 JSON preserves the complete controller response. Replay makes one scoped read
 without GitHub collection. Missing, expired or evicted history is unavailable;
 the command does not capture replacement evidence. Capture remains an explicitly
-initiated operator write through the [API](api-surface.md).
+initiated operator write through `comparisons capture` or the [API](api-surface.md).
+
+`comparisons capture --file selection.json` sends one explicit collection request.
+Use an identified operator account or a token with both `comparisons:write` and
+`jobs:read`. It reads selected GitHub attempts and retains shared repository
+evidence; it does not dispatch jobs or change runner configuration. `--file -`
+reads stdin. Input is one strict JSON request within 32 KiB, with no actor or
+evidence ID supplied by the caller. Exact run IDs remain 64-bit integers.
+
+```json
+{
+  "installation_id": "ins_01abc",
+  "repository": "acme/widgets",
+  "kind": "runner",
+  "hypothesis": "A larger runner reduces build latency",
+  "intended_delta": "Increase the runner resource size",
+  "since": "2026-10-12T00:00:00Z",
+  "until": "2026-10-13T00:00:00Z",
+  "baseline": [{"run_id": 123456, "attempt": 1}],
+  "candidate": [{"run_id": 123457, "attempt": 1}]
+}
+```
+
+Choose your own scope, exact attempts and window. Both arms need at least one
+attempt and together accept at most ten unique run/attempt pairs. Include failures.
+Workflow comparisons additionally require a retained exact `revision_delta_id`.
+The controller enforces its configured history window, authorisation and shared
+diagnostic admission/quota bounds. Unknown workloads and incomplete selection
+remain inconclusive.
+
+```sh
+zoomies comparisons capture --file selection.json --output json
+```
+
+The successful response is displayed directly, without a follow-up GET. JSON
+preserves the complete retained response. History is bounded and valid for 30 days.
+Never automatically retry capture: even a failed collection can consume the
+diagnostic allowance, and a lost response may have already retained evidence.
+Use a returned ID for scoped replay when available. Capture is a change command
+in the agent skill and is not offered as an MCP/Eli read-only tool.
 
 ### `zoomies why`
 

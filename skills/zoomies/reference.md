@@ -953,18 +953,43 @@ Examples:
 
 ### zoomies comparisons
 
-Replay retained historical comparison evidence
+Capture and replay historical comparison evidence
 
 ```text
-Replay retained historical comparison evidence.
+Capture and replay selected historical comparison evidence.
 
 Usage:
   zoomies comparisons <subcommand> [flags]
 
 Subcommands:
+  capture --file FILE                Explicitly collect and retain selected attempt evidence
   get <comparison-id>                Read an immutable report in its installation and repository
 
 Run "zoomies comparisons <subcommand> --help" for the flags each one takes.
+```
+
+#### zoomies comparisons capture
+
+Explicitly collect and retain selected attempt evidence
+
+```text
+Explicitly read selected GitHub attempts and retain shared comparison evidence. Requires an identified operator and comparisons:write plus jobs:read token scopes. This changes bounded shared history, not jobs or runners. Never automatically retry a capture; collection may consume the installation's diagnostic allowance even on failure. Unknown workload/cache/host evidence remains inconclusive.
+
+Usage:
+  zoomies comparisons capture --file FILE
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --file                     one documented comparison request as JSON, at most 32 KiB; - reads stdin (required)
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies comparisons capture --file selection.json
+  zoomies comparisons capture --file selection.json --output json
 ```
 
 #### zoomies comparisons get
@@ -972,7 +997,7 @@ Run "zoomies comparisons <subcommand> --help" for the flags each one takes.
 Read an immutable report in its installation and repository
 
 ```text
-Replay a retained report without GitHub collection or new capture. Requires viewer/jobs:read. Missing, expired or evicted history is unavailable; capture must be explicitly initiated through the API.
+Replay a retained report without GitHub collection or new capture. Requires viewer/jobs:read. Missing, expired or evicted history is unavailable; capture must be explicitly initiated with comparisons capture or through the API.
 
 Usage:
   zoomies comparisons get <comparison-id> --installation ID --repo OWNER/REPO
