@@ -1931,3 +1931,105 @@ fixtures table. For the demo finding, start a controller with
 
 Screenshots were captured throughout and deliberately not committed, as in
 Part 1; the recipe regenerates any of them.
+
+## 14 October 2026: screenshot-led theme and current-source review
+
+This is a new review, not a reopening of every historical finding above. The earlier audit and its correction history are preserved. Controller source reviewed at `dd539a76`. All 17 supplied screenshots were visually reviewed as design references; they are not screenshots of this checkout. Their exact CSS sizes and contrast cannot be recovered reliably from the images.
+
+**Verdict:** keep the technical credibility and useful fleet data. Do not copy the reference's miniature text, wall of navigation tabs, or permanently clipped assistant layout. Offer its navy/cyan visual character as an optional **Mission Control** style. Keep the current navigation, API contracts, fixed status meanings and saved preferences.
+
+**Evidence and limits:** built the current web UI successfully, built the Go controller, and ran the real controller with the repository's temporary seeded fleet. Chromium inspection covered `/`, `/pools`, `/runners`, `/workflows`, `/jobs`, `/queue`, `/usage`, `/hosts`, `/providers`, `/repairs`, `/kennel`, `/migrate`, `/audit`, `/settings/appearance` at 1440×900 and 375×900. None had page-level horizontal overflow. This was monitoring under the fixture's disabled authentication, not a production sign-in, GitHub connection, real job or repair execution. Bootstrap, authenticated onboarding and external GitHub steps were reviewed in source and existing test definitions. An additional first-run browser capture was blocked by the automatic approval service's usage limit. No production credentials, workflow changes or real host operations were used.
+
+The detailed coding-agent handoff is [THEME_IMPLEMENTATION_PLAN.md](THEME_IMPLEMENTATION_PLAN.md). The interactive design is [mockups.html](design/theme-review/mockups.html); the [capture index](design/theme-review/README.md) distinguishes concepts from current-app evidence. Concepts have illustrative data, not performance claims. Their review toolbar, placeholder symbols and shortened navigation are not production specifications.
+
+### 1. Critical
+
+#### C-T1: Proving the first job still requires changing a repository
+
+- **Pass:** First-time user.
+- **Where:** `web/src/lib/pools/TestJob.svelte`, `web/src/lib/pools/test-job.ts`, `web/src/lib/overview/FirstRun.svelte`; `/`, `/pools/:id`; desktop and mobile. Source-confirmed.
+- **Problem:** the test job is a substantial improvement over migrating production workflows, but the user must put a new YAML file on the repository's default branch and switch to GitHub Actions to dispatch it. A user without repository write access, or facing protected-branch review, cannot reach the first-run milestone immediately. The reference's “Dispatch test job” button is not a current capability and must not be reproduced as if it works.
+- **Fix:** expose an explicit repository selection and prerequisite check before generating the file. Explain write permissions, branch protection and the requirement that `workflow_dispatch` be on the default branch. Keep Copy workflow and link to the selected repository's Actions page. Where an existing suitable test workflow is discoverable through a documented API, offer dispatch with explicit user initiation and show its returned run ID; otherwise show “Add workflow in GitHub”, never a fictitious dispatch button. Preserve the manual path and never modify a repository automatically. Show queued, runner starting, running and completed states from authoritative events, including actionable failure. Any new workflow-discovery/dispatch endpoint is a separate contract change, not part of the palette patch.
+
+#### C-T2: Mobile Jobs hides the work behind a dashboard of controls
+
+- **Pass:** Designer / First-time user.
+- **Where:** `web/src/routes/Jobs.svelte`, `web/src/lib/jobs/JobFilters.svelte`, `web/src/lib/components/DataGrid.svelte`, `web/src/lib/state/prefs.svelte.ts`; `/jobs`, 375×900. Browser-confirmed in `design/theme-review/current-jobs-375.png`.
+- **Problem:** six metric cards, outcomes, activity exploration and the filter stack precede the rows. The captured first job row starts well below the first screen. Rows is the default; the visible starting columns include State and Failed at, with repository and job identity off to the side. An operator checking a queued build cannot answer the immediate question without substantial scrolling and then sideways navigation. The page fits the viewport, but fits is not the same as usable.
+- **Fix:** put status tabs, search, a Filters button with active count, and the job list before supplementary analytics on phones. Move the metrics/outcomes into a collapsed “Fleet context” section. Default a fresh Mission Control phone grid to Cards only if the user has no explicit global or per-grid layout choice; preserve all existing Rows/Cards choices, column order and width. The first card must show job name, repository, status, wait/run and Inspect. Reveal every remaining field in labelled detail. For Rows retain local horizontal scrolling and make job identity part of the initial useful column set when no saved column order exists. Do not reset saved layouts.
+
+### 2. High impact
+
+#### H-T1: The reference looks technical by making everything tiny
+
+- **Pass:** Designer.
+- **Where:** all supplied reference images, particularly Runners, Jobs, Audit and Settings; proposed `web/src/lib/styles/tokens.css` overrides. Reference-only, not a claim that current fonts are equally small.
+- **Problem:** labels, help text, pills and controls become decorative texture at normal display scale. Most of the interface has similar visual weight; coloured micro-badges substitute for hierarchy. Copying it verbatim would sacrifice comprehension and touch operation for a screenshot aesthetic.
+- **Fix:** use 14px readable body text, 13px technical values, 12px nonessential metadata, 16px panel headings, 28px page headings and 28–32px metrics. Keep UI language in Inter; reserve JetBrains Mono for identifiers, YAML, logs and numbers needing alignment. Give coarse-pointer actions at least 44×44px targets and inputs 16px text. Test real contrast pairs; do not infer WCAG compliance from the image.
+
+#### H-T2: Historical activity gets the best real estate while current problems wait
+
+- **Pass:** Designer.
+- **Where:** `web/src/routes/Overview.svelte`, `web/src/lib/overview/FleetActivity.svelte`, `FleetMetrics.svelte`, `ProblemsSummary.svelte`; `/`, 1440×900 and 375×900. Source and browser-confirmed.
+- **Problem:** the activity matrix comes before six metrics, followed by the problems summary and pool utilisation. On a phone the metrics use a single column. This is a monitoring app; its first question should be what is blocked now, not the shape of yesterday's activity. A working historical chart does not compensate for late visibility of a blocked queue.
+- **Fix:** after any first-run checklist, show the concise problems summary, a primary live-metrics group and pools/active jobs before activity history. Retain all six metrics, moving startup and registration timing into a secondary group or expandable performance section. The concept shows four primary values as an information-hierarchy example; the implementation must preserve the existing timing contracts and scope toggle. Use two phone columns only where labels and values remain readable; fall back to one at increased text size.
+
+#### H-T3: Rows/Cards exists, but the new phone reader has to discover it
+
+- **Pass:** First-time user.
+- **Where:** `web/src/lib/state/prefs.svelte.ts`, `web/src/lib/settings/AppearancePanel.svelte`, `web/src/lib/components/DataGrid.svelte`; Runners, Jobs, Audit, Settings record tables; 375px. Source-confirmed and demonstrated on Jobs.
+- **Problem:** the default is Rows everywhere. It preserves desktop familiarity, but unfamiliar users get a sideways-scrolling record before learning the alternate layout. A theme must not quietly overwrite existing preferences to solve this.
+- **Fix:** introduce a validated style-aware fallback for a fresh Mission Control phone grid. Resolution order: explicit per-grid view, explicit global phone view, new-style default, current Classic default. Offer Cards/Rows near the list and label the scroll region. Keep saved widths/order, sort and selection available in both layouts; do not drop accessibility table roles when displaying cards.
+
+#### H-T4: The reference assistant clips the page it is supposed to explain
+
+- **Pass:** Designer.
+- **Where:** `2026-10-14_08-07-55.png`; current `web/src/lib/assistant/EliWidget.svelte`, `sheet.ts`, `movable.ts`; desktop assistant and 375px sheet. Reference-only layout defect; current source already implements floating, movable and mobile-sheet behaviour.
+- **Problem:** the right-hand assistant occupies the screenshot's edge while dashboard content ends underneath it. Tables and charts become partially hidden. Persistent empty assistant space also competes with the primary operational task.
+- **Fix:** reuse the current widget. Keep it closed until requested. If docking is later introduced, measure remaining content width and reflow explicitly; do not simply overlay a wide permanent panel. On phones preserve inert background, focus containment, visual-viewport keyboard handling and close/back navigation. Test 375px and 200% zoom. The Problems drawer can be modal; the nonmodal desktop assistant must retain its existing interaction model.
+
+#### H-T5: Pool capacity requires a precise denominator
+
+- **Pass:** Designer.
+- **Where:** reference Overview and Pools; current `web/src/lib/overview/PoolUtilisation.svelte`, `web/src/routes/Pools.svelte`, `PoolDetail.svelte`; desktop/mobile.
+- **Problem:** “busy/live”, floor/ceiling and host slots are different measures. A pretty progress bar with “4 / 8” invites users to read spare *live* runners as spare *host* capacity. The current pool verdict and warnings explain considerably more than the reference cards.
+- **Fix:** preserve current verdicts and capacity explanations. Label each bar's numerator and denominator, retain floor/ceiling marks, and show “At ceiling” or “No matching host” in words plus an icon. The mock's simplified available-runner count is illustrative and must not be used as a scheduling-capacity calculation.
+
+#### H-T6: Selected colours must not redefine familiar operational states
+
+- **Pass:** Designer.
+- **Where:** reference badges across every page; `web/src/lib/status.ts`, `web/src/lib/styles/tokens.css`, `web/src/lib/state/status-style.ts`; every viewport.
+- **Problem:** the reference uses cyan for controls, active CI, icons and data; purple for automatic routing, memory loans and AI; green for outcomes and general availability. Treating all of these as interchangeable accent colour makes a theme look consistent while making state interpretation inconsistent.
+- **Fix:** use semantic tokens. Keep idle, busy, pending, draining, danger and neutral mappings and shapes intact. Apply cyan to navigational actions through the theme's accent tokens; retain status tokens with measured accessible light/dark variants. AI decoration or routing tags must not borrow danger/pending semantics. Off/Cute/Standard vocabulary remains an independent preference.
+
+### 3. Nice to have
+
+#### N-T1: Add visual style as a separate setting, not a fourth colour mode
+
+- **Pass:** Designer / First-time user.
+- **Where:** `web/src/lib/state/theme.svelte.ts`, `web/index.html`, `web/src/lib/settings/AppearancePanel.svelte`, `web/src/lib/shell/NavMenu.svelte`; `/settings/appearance`, all widths.
+- **Problem:** current ThemeChoice is exactly System/Light/Dark and has a working first-paint bootstrap. Appending “Mission Control” to it conflates palette with mode and creates an ambiguous system setting.
+- **Fix:** add separate Classic/Mission Control preview cards, a validated browser-local style key and `data-ui-style`. Retain the existing colour-mode key and selection. Apply both before first paint, handle blocked storage, and keep the phone menu in sync. Switching style must preserve current route, unsaved drafts, focus, column choices and the assistant conversation.
+
+#### N-T2: Use panel hierarchy, not a border around every sentence
+
+- **Pass:** Designer.
+- **Where:** references Pools, Hosts, Providers and repairs; corresponding route components, all widths.
+- **Problem:** cards contain inset cards containing badges containing bordered controls. Equally strong borders erase the distinction between grouping, state and action.
+- **Fix:** keep one primary boundary per panel; use whitespace and dividers inside it. Use inset surfaces for code or bounded diagnostics, not every field. Keep destructive controls visually distinct, labelled and permission-aware. Use the existing button, input and drawer components rather than route-specific copies.
+
+#### N-T3: Reference analytics lack readable measurement context
+
+- **Pass:** Designer.
+- **Where:** reference Usage chart; current `web/src/lib/usage/UsageInsights.svelte`, `web/src/routes/Usage.svelte`; desktop/mobile.
+- **Problem:** the reference's smooth cyan area has dates but no obvious vertical unit/scale. It looks polished and tells little. The current chart implementation already has axes and separates unlike measures, so replacing it with the reference is a regression.
+- **Fix:** keep current axes, crosshair and measure-specific plots. Restyle surfaces and series through tokens, keep estimates marked as estimates, and retain provenance/rate explanations and CSV export. Do not invent savings or smooth measured points into implied data.
+
+#### N-T4: Consistent live, empty, loading and failure states need a theme gallery
+
+- **Pass:** Designer.
+- **Where:** shared `Button.svelte`, `IconButton.svelte`, `Segmented.svelte`, `ErrorState.svelte`, `Skeleton.svelte`, `EmptyState.svelte`, `Drawer.svelte`, `DataGrid.svelte`; all routes and widths.
+- **Problem:** supplied screenshots mostly show populated happy paths. They provide no evidence of disabled permissions, disconnected SSE, stale cached data, failed fetch, empty filtered list or keyboard focus treatment.
+- **Fix:** capture these states in a development-only component gallery or existing fixture route. Verify first load failure separately from a disconnected stream with last-known data. Preserve readable reason text for disabled controls, focus rings and retry actions across both styles and modes. Check actual component filenames before adding a gallery; do not create duplicate primitives just for the theme.
+
+**Specific checks requested:** the controller has no commercial upgrade/paywall flow. Its `state/upgrade.svelte.ts` means refreshing a tab after a software deployment, not an upsell. No simultaneous commercial nagging was found here. Eli repair offers and fleet Problems are operational notifications and should stay evidence-triggered. Current FirstRun uses installation, host, pool and fleet-owned job state, not a decorative completed checklist; unrelated or merely queued jobs do not complete it. No goal-question form whose answers are ignored was found. Real GitHub permission errors, host enrolment and assistant streaming still require targeted fixture validation before release.

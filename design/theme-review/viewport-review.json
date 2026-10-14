@@ -1,0 +1,258 @@
+[
+  {
+    "width": 1440,
+    "route": "/",
+    "heading": "Overview",
+    "scrollWidth": 1440,
+    "bodyText": "Overview\n\nWhat this fleet is doing right now. Trends, waits and outcomes cover the last hour.\n\nRefresh\nOther runners\nActivity matrix\n1d\n7d\n30d\n90d\n1y\nJob outcomes\nQueued jobs\nRunner time\nCapacity reached\n00:00\n06:00\n12:00\n18:00\nOc"
+  },
+  {
+    "width": 1440,
+    "route": "/pools",
+    "heading": "Pools",
+    "scrollWidth": 1440,
+    "bodyText": "Pools\n\nA pool decides what labels your runners answer to, and how many of them exist.\n\nRefresh\nExport\nImport\nCreate a pool\nAny status\nEnabled\nDisabled\nPools in view\n2\n2 enabled · 0 disabled\nMatched job queue\n5\nWaiting jobs claimed"
+  },
+  {
+    "width": 1440,
+    "route": "/runners",
+    "heading": "Runners",
+    "scrollWidth": 1440,
+    "bodyText": "Runners\n\nEvery runner the controller knows about right now, and what it is doing.\n\nRefresh\nFleet context · live snapshot\nExplore usage history\nJob queue depth\n↗\n6\nJobs waiting to start\nBusy runners\n↗\n3\nExecuting a job\nIdle runners"
+  },
+  {
+    "width": 1440,
+    "route": "/workflows",
+    "heading": "Workflows",
+    "scrollWidth": 1440,
+    "bodyText": "Workflows\n\nThe workflow runs this fleet claims, runs or is waiting to run, and the jobs inside each.\n\nRefresh\nRunning\nQueued\nFailed\nOur failures\nFinished\nAll\nWorkflow runs\nEvery job\nRepository\nWorkflow\nPool\nHost\nLabel\nOutcome\nStat"
+  },
+  {
+    "width": 1440,
+    "route": "/jobs",
+    "heading": "Jobs",
+    "scrollWidth": 1440,
+    "bodyText": "Jobs\n\nThe workflow jobs this fleet claims, runs, or is waiting to run.\n\nRefresh\nCompare runs\n\nZoomies jobs · fleet-wide context; table filters apply below\n\nQueued now\n↗\n6\nWaiting to start\nRunning now\n↗\n3\nJobs in progress\nCompleted"
+  },
+  {
+    "width": 1440,
+    "route": "/queue",
+    "heading": "Queue",
+    "scrollWidth": 1440,
+    "bodyText": "Queue\n\nShape runner demand. Keep the right work moving.\n\nRefresh\nSave view\nView runners\nReady\n6\nNormal provisioning demand\nRun now\n0\nPrioritised within pool priority\nPaused\n0\nDemand on hold\nRemoved\n0\nRemoved demand · can be restor"
+  },
+  {
+    "width": 1440,
+    "route": "/usage",
+    "heading": "Usage",
+    "scrollWidth": 1440,
+    "bodyText": "Usage\n\nThis fleet's runner capacity and job activity over a range of hours or days. Jobs GitHub ran on its own hosted runners are not counted: they used no runner here.\n\nRefresh\nExport CSV\nFrom\nto\nGroup by\nPool\nHost\nInstallation\nR"
+  },
+  {
+    "width": 1440,
+    "route": "/hosts",
+    "heading": "Hosts",
+    "scrollWidth": 1440,
+    "bodyText": "Hosts\n\nThe machines that run runners, and how much room each one has left.\n\n3 hosts · 3 connected · 9 of 12 runner slots in use · 1 via Tailcat\n\nRefresh\nUsage history\nAdd a host\n\nAvailable host slots\n2\nConnected, uncordoned, compa"
+  },
+  {
+    "width": 1440,
+    "route": "/providers",
+    "heading": "Providers",
+    "scrollWidth": 1440,
+    "bodyText": "Providers\n\nWhere machines are rented from. A machine becomes a host when its agent joins, and is deleted when the work runs out.\n\n1 provider · 2 machines\n\nRefresh\nAdd a provider\nMachines owned\n2\nHolding a resource somebody is bein"
+  },
+  {
+    "width": 1440,
+    "route": "/repairs",
+    "heading": "Eli repairs",
+    "scrollWidth": 1440,
+    "bodyText": "Eli repairs\n\nCatch failed PR checks, review repair offers and follow the result.\n\nRefresh\nModel providers\nPR repairs\n\nEli diagnoses a failure, pushes one repair commit and watches CI. Normal PR review stays in place.\n\nRepair setup"
+  },
+  {
+    "width": 1440,
+    "route": "/kennel",
+    "heading": "Kennel Club",
+    "scrollWidth": 1440,
+    "bodyText": "STANDARDS\n\nCheck repository standards\n\nKennel Club is off and reads nothing.\n\nOverview\nRepositories\n\nFOR ASSISTANTS\n\nAI Context\nKennel Club\n\nHow the repositories this fleet serves measure up against what affects CI and the fleet.\n"
+  },
+  {
+    "width": 1440,
+    "route": "/migrate",
+    "heading": "Migrate repositories",
+    "scrollWidth": 1440,
+    "bodyText": "Migrate repositories\n\nRewrite runs-on in your workflows and open a pull request on each repository. You see the exact diff before anything is opened.\n\n1\nInstallation\nWhich installation to read through.\n2\nRepositories\nWhich ones to"
+  },
+  {
+    "width": 1440,
+    "route": "/audit",
+    "heading": "Audit",
+    "scrollWidth": 1440,
+    "bodyText": "Audit\n\nEvery change made through Zoomies, and who made it.\n\nRefresh\nAny action\nhost.join\ninstallation.create\npool.create\npool.update\nrunner.drain\nAny kind of thing\nhost\ninstallation\npool\nrunner\nAnyone\nci-bot\nbob\nzoomies\nalice\nFrom"
+  },
+  {
+    "width": 1440,
+    "route": "/settings/appearance",
+    "heading": "Appearance",
+    "scrollWidth": 1440,
+    "bodyText": "YOU\n\nEli AI Assistant\nAccount\nMCP connections\nAppearance\nEvents\n\nACCESS\n\nUsers\nAPI tokens\nMCP clients\n\nCONTROLLER\n\nConfiguration\nBackups\nUpdates\nAbout\nAppearance\n\nTheme, logo style and navigation stay in this browser. Table widths"
+  },
+  {
+    "width": 375,
+    "route": "/",
+    "heading": "Overview",
+    "scrollWidth": 375,
+    "bodyText": "Overview\n\nWhat this fleet is doing right now. Trends, waits and outcomes cover the last hour.\n\nRefresh\nOther runners\nActivity matrix\n1d\n7d\n30d\n90d\n1y\nJob outcomes\nQueued jobs\nRunner time\nCapacity reached\n00:00\n06:00\n12:00\n18:00\nOc"
+  },
+  {
+    "width": 375,
+    "route": "/pools",
+    "heading": "Pools",
+    "scrollWidth": 375,
+    "bodyText": "Pools\n\nA pool decides what labels your runners answer to, and how many of them exist.\n\nRefresh\nExport\nImport\nCreate a pool\nAny status\nEnabled\nDisabled\nPools in view\n2\n2 enabled · 0 disabled\nMatched job queue\n5\nWaiting jobs claimed"
+  },
+  {
+    "width": 375,
+    "route": "/runners",
+    "heading": "Runners",
+    "scrollWidth": 375,
+    "bodyText": "Runners\n\nEvery runner the controller knows about right now, and what it is doing.\n\nRefresh\nFleet context · live snapshot\nExplore usage history\nJob queue depth\n↗\n6\nJobs waiting to start\nBusy runners\n↗\n3\nExecuting a job\nIdle runners"
+  },
+  {
+    "width": 375,
+    "route": "/workflows",
+    "heading": "Workflows",
+    "scrollWidth": 375,
+    "bodyText": "Workflows\n\nThe workflow runs this fleet claims, runs or is waiting to run, and the jobs inside each.\n\nRefresh\nRunning\nQueued\nFailed\nOur failures\nFinished\nAll\nWorkflow runs\nEvery job\nRepository\nWorkflow\nPool\nHost\nLabel\nOutcome\nStat"
+  },
+  {
+    "width": 375,
+    "route": "/jobs",
+    "heading": "Jobs",
+    "scrollWidth": 375,
+    "bodyText": "Jobs\n\nThe workflow jobs this fleet claims, runs, or is waiting to run.\n\nRefresh\nCompare runs\n\nZoomies jobs · fleet-wide context; table filters apply below\n\nQueued now\n↗\n6\nWaiting to start\nRunning now\n↗\n3\nJobs in progress\nCompleted"
+  },
+  {
+    "width": 375,
+    "route": "/queue",
+    "heading": "Queue",
+    "scrollWidth": 375,
+    "bodyText": "Queue\n\nShape runner demand. Keep the right work moving.\n\nRefresh\nSave view\nView runners\nReady\n6\nNormal provisioning demand\nRun now\n0\nPrioritised within pool priority\nPaused\n0\nDemand on hold\nRemoved\n0\nRemoved demand · can be restor"
+  },
+  {
+    "width": 375,
+    "route": "/usage",
+    "heading": "Usage",
+    "scrollWidth": 375,
+    "bodyText": "Usage\n\nThis fleet's runner capacity and job activity over a range of hours or days. Jobs GitHub ran on its own hosted runners are not counted: they used no runner here.\n\nRefresh\nExport CSV\nFrom\nto\nGroup by\nPool\nHost\nInstallation\nR"
+  },
+  {
+    "width": 375,
+    "route": "/hosts",
+    "heading": "Hosts",
+    "scrollWidth": 375,
+    "bodyText": "Hosts\n\nThe machines that run runners, and how much room each one has left.\n\n3 hosts · 3 connected · 9 of 12 runner slots in use · 1 via Tailcat\n\nRefresh\nUsage history\nAdd a host\n\nAvailable host slots\n2\nConnected, uncordoned, compa"
+  },
+  {
+    "width": 375,
+    "route": "/providers",
+    "heading": "Providers",
+    "scrollWidth": 375,
+    "bodyText": "Providers\n\nWhere machines are rented from. A machine becomes a host when its agent joins, and is deleted when the work runs out.\n\n1 provider · 2 machines\n\nRefresh\nAdd a provider\nMachines owned\n2\nHolding a resource somebody is bein"
+  },
+  {
+    "width": 375,
+    "route": "/repairs",
+    "heading": "Eli repairs",
+    "scrollWidth": 375,
+    "bodyText": "Eli repairs\n\nCatch failed PR checks, review repair offers and follow the result.\n\nRefresh\nModel providers\nPR repairs\n\nEli diagnoses a failure, pushes one repair commit and watches CI. Normal PR review stays in place.\n\nRepair setup"
+  },
+  {
+    "width": 375,
+    "route": "/kennel",
+    "heading": "Kennel Club",
+    "scrollWidth": 375,
+    "bodyText": "STANDARDS\n\nCheck repository standards\n\nKennel Club is off and reads nothing.\n\nOverview\nRepositories\n\nFOR ASSISTANTS\n\nAI Context\nKennel Club\n\nHow the repositories this fleet serves measure up against what affects CI and the fleet.\n"
+  },
+  {
+    "width": 375,
+    "route": "/migrate",
+    "heading": "Migrate repositories",
+    "scrollWidth": 375,
+    "bodyText": "Migrate repositories\n\nRewrite runs-on in your workflows and open a pull request on each repository. You see the exact diff before anything is opened.\n\n1\nInstallation\n2\nRepositories\n3\nLabels\n4\nExceptions\n5\nReview\nInstallation\n\nWhic"
+  },
+  {
+    "width": 375,
+    "route": "/audit",
+    "heading": "Audit",
+    "scrollWidth": 375,
+    "bodyText": "Audit\n\nEvery change made through Zoomies, and who made it.\n\nRefresh\nAny action\nhost.join\ninstallation.create\npool.create\npool.update\nrunner.drain\nAny kind of thing\nhost\ninstallation\npool\nrunner\nAnyone\nci-bot\nbob\nzoomies\nalice\nFrom"
+  },
+  {
+    "width": 375,
+    "route": "/settings/appearance",
+    "heading": "Appearance",
+    "scrollWidth": 375,
+    "bodyText": "Settings\nAppearance\n\nTheme, logo style and navigation stay in this browser. Table widths and column order follow your signed-in account.\n\nTheme\n\nFollow the operating system, or hold one palette whatever it says. Showing the dark p"
+  },
+  {
+    "type": "concept",
+    "view": "overview",
+    "width": 1440,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "pools",
+    "width": 1440,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "jobs",
+    "width": 1440,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "appearance",
+    "width": 1440,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "onboarding",
+    "width": 1440,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "overview",
+    "width": 375,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "pools",
+    "width": 375,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "jobs",
+    "width": 375,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "appearance",
+    "width": 375,
+    "overflow": false
+  },
+  {
+    "type": "concept",
+    "view": "onboarding",
+    "width": 375,
+    "overflow": false
+  }
+]
