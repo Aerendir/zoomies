@@ -29,11 +29,12 @@ type comparisonWorkflowAttempt struct {
 	RootSource         *comparisonRootSource `json:"root_source"`
 }
 type comparisonRootSource struct {
-	Basis         string `json:"basis"`
-	CommitSHA     string `json:"commit_sha"`
-	BlobSHA       string `json:"blob_sha"`
-	ContentSHA256 string `json:"content_sha256"`
-	Bytes         int    `json:"bytes"`
+	Dependencies  *analysis.RootDependencies `json:"dependencies"`
+	Basis         string                     `json:"basis"`
+	CommitSHA     string                     `json:"commit_sha"`
+	BlobSHA       string                     `json:"blob_sha"`
+	ContentSHA256 string                     `json:"content_sha256"`
+	Bytes         int                        `json:"bytes"`
 }
 
 func validateComparisonWorkflows(e *comparisonWorkflowEvidence, a, b analysis.ExperimentArm) bool {
@@ -61,6 +62,7 @@ func validateComparisonWorkflows(e *comparisonWorkflowEvidence, a, b analysis.Ex
 			revisions[strconv.FormatInt(v.RunID, 10)+":"+strconv.Itoa(v.Attempt)] = v.SourceRevision
 		}
 		shownRoots := 0
+		dependencyRows := 0
 		for _, row := range side.Attempts {
 			key := row.RunID + ":" + strconv.Itoa(row.Attempt)
 			revision, ok := revisions[key]
@@ -76,6 +78,15 @@ func validateComparisonWorkflows(e *comparisonWorkflowEvidence, a, b analysis.Ex
 			}
 			if s := row.RootSource; s != nil {
 				if row.Event == nil || *row.Event != "push" || row.WorkflowPathSHA256 == nil || s.Basis != "push_head_sha_root_file" || !comparisonWorkflowSHA(s.CommitSHA) || s.CommitSHA != revision || !comparisonWorkflowSHA(s.BlobSHA) || !comparisonHash(s.ContentSHA256) || s.Bytes < 1 || s.Bytes > 128*1024 {
+					return false
+				}
+				if !analysis.ValidRootDependencies(s.Dependencies, s.ContentSHA256) {
+					return false
+				}
+				if s.Dependencies != nil {
+					dependencyRows += len(s.Dependencies.References)
+				}
+				if dependencyRows > analysis.RootDependencyRows {
 					return false
 				}
 				shownRoots++

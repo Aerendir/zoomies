@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DependencyEvidence from './DependencyEvidence.svelte';
   import type { RetainedComparison } from '$lib/api/types';
   let { evidence }: { evidence: RetainedComparison['workflow_evidence'] } = $props();
 </script>
@@ -47,6 +48,10 @@
               <dd>Unknown</dd>
             {/if}
           </dl>
+          {#if attempt.root_source}<DependencyEvidence
+              evidence={attempt.root_source.dependencies}
+              label={`${side.name} run ${attempt.run_id} attempt ${attempt.attempt}`}
+            />{/if}
         </details>
       {/each}
     {/each}

@@ -173,3 +173,13 @@ zoomies mcp --describe
 
 This prints the tool, resource and prompt definitions. It does not start an
 assistant or make model requests.
+
+The historical-comparison milestone includes root dependency inspection. It shows
+root `uses` declaration counts and literal pin classifications, not a resolved or
+executed dependency graph. Raw names, references and source text stay private.
+Unsupported or absent inspection is unknown; enumerated zero stays zero. REST/UI
+and CLI share a fifty-reference-row budget per arm with full counts and omission
+flags. MCP/Eli validates references then returns summaries with details explicitly
+omitted within its existing budgets. Matching metadata does not establish workload
+or configuration equivalence, causal improvement or savings. Controlled-experiment
+proof, dispatch and live model evaluation remain deferred.

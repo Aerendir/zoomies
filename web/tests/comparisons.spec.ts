@@ -474,3 +474,114 @@ for (const version of ['absent', 'future']) {
     await expect(facts.getByText('c'.repeat(64), { exact: true })).toHaveCount(0);
   });
 }
+
+const dependencyEvidence = {
+  version: 'root-dependencies-v1',
+  basis: 'root_uses_declarations',
+  source_sha256: 'c'.repeat(64),
+  coverage: 'enumerated',
+  counts: {
+    declarations: 2,
+    commit_pins: 1,
+    digest_pins: 0,
+    floating: 1,
+    local: 0,
+    expressions: 0,
+    unknown: 0,
+  },
+  rows_omitted: true,
+  references: [
+    {
+      job_index: 0,
+      step_index: 0,
+      line: 6,
+      declaration: 'step_action',
+      kind: 'remote',
+      pin: 'commit',
+      reference_sha256: 'f'.repeat(64),
+      revision: 'a'.repeat(40),
+    },
+  ],
+};
+for (const state of ['observed', 'unsupported', 'zero', 'absent']) {
+  test(`E2 dependency inspection preserves ${state} coverage and mobile layout`, async ({
+    page,
+  }) => {
+    const source = workflowEvidence.baseline.attempts[0]!.root_source;
+    const dep =
+      state === 'absent'
+        ? undefined
+        : state === 'unsupported'
+          ? {
+              ...dependencyEvidence,
+              coverage: 'unsupported',
+              counts: null,
+              rows_omitted: false,
+              references: [],
+            }
+          : state === 'zero'
+            ? {
+                ...dependencyEvidence,
+                counts: {
+                  declarations: 0,
+                  commit_pins: 0,
+                  digest_pins: 0,
+                  floating: 0,
+                  local: 0,
+                  expressions: 0,
+                  unknown: 0,
+                },
+                rows_omitted: false,
+                references: [],
+              }
+            : dependencyEvidence;
+    const evidence = {
+      ...workflowEvidence,
+      baseline: {
+        ...workflowEvidence.baseline,
+        attempts: [
+          {
+            ...workflowEvidence.baseline.attempts[0],
+            root_source: { ...source, dependencies: dep },
+          },
+        ],
+      },
+    };
+    await page.route('**/api/v1/comparisons/*?*', (route) =>
+      route.fulfill({ json: { ...retained, workflow_evidence: evidence } }),
+    );
+    await goto(
+      page,
+      '/comparisons?id=cmp_fixture&installation_id=ins_fixture&repo=acme%2Frepo',
+      'Comparisons',
+    );
+    await page.getByText('Baseline run 9223372036854775807, attempt 1', { exact: true }).click();
+    const facts = page.getByRole('region', {
+      name: 'Baseline run 9223372036854775807 attempt 1 root dependency declarations',
+    });
+    await expect(
+      facts.getByText('Literal pins do not prove existence', { exact: false }),
+    ).toBeVisible();
+    if (state === 'observed') {
+      await expect(facts.getByText('2 root uses declarations', { exact: false })).toBeVisible();
+      await expect(
+        facts.getByText('Showing 1 declarations. Full counts include omitted rows.'),
+      ).toBeVisible();
+      await facts.getByText('Job index 0, step index 0, line 6', { exact: true }).click();
+      await expect(facts.getByText('f'.repeat(64), { exact: true })).toBeVisible();
+    } else if (state === 'zero')
+      await expect(facts.getByText('0 root uses declarations', { exact: false })).toBeVisible();
+    else
+      await expect(
+        facts.getByText(
+          state === 'absent'
+            ? 'No retained dependency inventory. Counts remain unknown.'
+            : 'Unsupported inspection. Dependency counts remain unknown.',
+        ),
+      ).toBeVisible();
+    await expect(page.getByText('Inconclusive', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  });
+}

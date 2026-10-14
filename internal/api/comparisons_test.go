@@ -13,6 +13,7 @@ import (
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/github"
+	"github.com/eyupio/zoomies/internal/kennel/workflow"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -53,6 +54,10 @@ func (f *comparisonAPIReader) ReadExperimentAttempt(_ context.Context, repo stri
 			out.Event = "push"
 			out.WorkflowPath = ".github/workflows/private-root.yml"
 			out.WorkflowSource = &github.ExperimentWorkflowSource{Version: "workflow-source-v1", Basis: "push_head_sha_root_file", CommitSHA: out.HeadSHA, Path: out.WorkflowPath, BlobSHA: strings.Repeat("b", 40), ContentSHA256: strings.Repeat("c", 64), Bytes: 100}
+			data := []byte("jobs: {private_job: {steps: [{uses: private_owner/private_repo@main}]}}")
+			out.WorkflowSource.Dependencies = workflow.InspectDependencies(data)
+			out.WorkflowSource.ContentSHA256 = out.WorkflowSource.Dependencies.SourceSHA256
+			out.WorkflowSource.Bytes = len(data)
 		}
 	}
 	return out, nil
@@ -282,6 +287,10 @@ func TestComparisonAPIProjectsRetainedWorkflowFactsWithoutReadingCurrentSource(t
 	if strings.Contains(string(capture.body), "private-root") || strings.Contains(string(capture.body), `"workflow_path":`) {
 		t.Fatal("private path leaked")
 	}
+	if v.Baseline.Attempts[0].RootSource.Dependencies == nil || *v.Baseline.Attempts[0].RootSource.Dependencies.Counts.Floating != 1 || strings.Contains(string(capture.body), "private_owner") {
+		t.Fatal("dependency inspection lost or raw names leaked")
+	}
+	assertShape(t, loadSpec(t), "RetainedExperimentComparison", capture.body)
 	reader.workflowSource = false
 	viewer := h.token("viewer", store.RoleViewer, "jobs:read")
 	replay := h.do(request{method: http.MethodGet, path: "/api/v1/comparisons/" + saved.ID + "?installation_id=" + inst + "&repo=acme%2Frepo", token: viewer})
