@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -207,6 +209,33 @@ func TestADryRunReplacesNothingAndRestartsNothing(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Would replace") {
 		t.Fatalf("the dry run did not say what it would do: %s", out.String())
+	}
+}
+
+// A dry run is the review it promises: the deployment half is printed where a
+// real run would print it, so the mounts and settings it would add are visible,
+// rather than a generic line promising they were checked.
+func TestADryRunPrintsTheDeploymentReview(t *testing.T) {
+	e, out, _ := newTestEnv(t)
+	candidateRelease(t)
+	old := runUpgradeInstall
+	t.Cleanup(func() { runUpgradeInstall = old })
+	reviewed := false
+	runUpgradeInstall = func(_ context.Context, opts installer.UpgradeOptions) error {
+		if opts.Check && opts.Out != nil && opts.Out != io.Discard {
+			reviewed = true
+			fmt.Fprint(opts.Out, "would add the shared folder\n")
+		}
+		return nil
+	}
+	if err := runUpgrade(context.Background(), e, []string{"--dry-run", "--version", "v9.9.9"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reviewed {
+		t.Fatal("the dry run never printed the deployment review")
+	}
+	if !strings.Contains(out.String(), "would add the shared folder") || !strings.Contains(out.String(), "Dry run complete") {
+		t.Fatalf("output = %q", out.String())
 	}
 }
 

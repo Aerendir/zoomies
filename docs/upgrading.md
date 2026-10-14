@@ -129,9 +129,11 @@ sudo zoomies upgrade
 
 Use `sudo zoomies upgrade --check` to inspect the deployment without changing
 it. `sudo zoomies upgrade --dry-run` goes further: it downloads and verifies
-the release it would install, runs that release's own check of this
-deployment, prints what the real run would do (replace the binary, keep the
-running one as `zoomies.previous`, restart the service) and changes nothing.
+the release it would install, prints the deployment review the real run shows
+(the shared folder, mounts, files and settings it would offer), then prints
+what the binary half would do (replace the binary and keep the running one as
+`zoomies.previous`). It changes nothing, and it stages its download away from
+the installed binary, so it needs no write access to `/usr/local/bin`.
 Use `--check` when you only want to know whether this deployment is sound;
 use `--dry-run` when you want to see the upgrade itself before agreeing to it.
 `--version vX.Y.Z` targets a specific release, and `--no-download` applies the

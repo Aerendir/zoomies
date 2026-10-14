@@ -259,12 +259,10 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 	}
 	if *dryRun {
 		// Validate the deployment first, exactly as a real run does, so an
-		// invalid record stops before a download. That preview is silent; the
-		// download, its verification and the release's own check of this
-		// deployment are what a dry run shows.
+		// invalid record stops before a download.
 		preview := opts
 		preview.Check, preview.Out, preview.Doctor = true, io.Discard, nil
-		if err := installer.Upgrade(ctx, preview); err != nil {
+		if err := runUpgradeInstall(ctx, preview); err != nil {
 			return err
 		}
 		ui.Rule(e.out, "1/4 Binary")
@@ -272,8 +270,15 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, true); err != nil {
 			return err
 		}
+		// The deployment half, as this release sees it: the mounts, files,
+		// folders and settings a real run would add, printed rather than
+		// discarded, so a preview is the review it promises to be.
 		ui.Rule(e.out, "2/4 Deployment")
-		ui.Hint(e.out, "Would review this deployment and add what the release needs, with your approval.")
+		review := opts
+		review.Check, review.Out, review.Doctor = true, e.out, nil
+		if err := runUpgradeInstall(ctx, review); err != nil {
+			return err
+		}
 		ui.Rule(e.out, "3/4 Verify")
 		ui.Hint(e.out, "Would restart the service and wait for it to answer.")
 		ui.Rule(e.out, "4/4 Host health")
@@ -287,7 +292,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		// record or service must leave the installed binary untouched.
 		preview := opts
 		preview.Check, preview.Out, preview.Doctor = true, io.Discard, nil
-		if err := installer.Upgrade(ctx, preview); err != nil {
+		if err := runUpgradeInstall(ctx, preview); err != nil {
 			return err
 		}
 		ui.Rule(e.out, "1/4 Binary")
@@ -299,7 +304,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		ui.Rule(e.out, "1/4 Binary")
 		ui.Done(e.out, "Using the installed binary")
 	}
-	return installer.Upgrade(ctx, opts)
+	return runUpgradeInstall(ctx, opts)
 }
 
 // deploymentSelector is the part of `zoomies upgrade`'s command line that says
@@ -389,6 +394,10 @@ func (t *tailBuffer) String() string {
 // runCandidate runs the downloaded release with an explicit environment and
 // returns an error that carries the end of what it printed. It is a variable so
 // a test can see what the candidate was asked without running it.
+// runUpgradeInstall is installer.Upgrade, a variable so a test can see what a
+// preview and a dry run asked it to do without a real deployment on the host.
+var runUpgradeInstall = installer.Upgrade
+
 var runCandidate = func(ctx context.Context, env []string, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env

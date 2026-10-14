@@ -186,7 +186,14 @@ func FetchRelease(ctx context.Context, opts SelfUpdateOptions) (*Candidate, Self
 	if opts.Check {
 		return nil, res, nil
 	}
+	// A preview installs nothing, so its download need not be on the same
+	// filesystem as the binary, and an operator previewing as a service
+	// account may not be able to write beside it. It goes to the temporary
+	// directory instead, which is why --dry-run never touches /usr/local/bin.
 	dir := filepath.Dir(opts.BinaryPath)
+	if opts.DryRun {
+		dir = ""
+	}
 	tmp, err := os.CreateTemp(dir, ".zoomies-update-*")
 	if err != nil {
 		return nil, res, fmt.Errorf("cannot write to %s: %w; run the upgrade as root (sudo zoomies upgrade), or use install.sh --upgrade --prefix for another directory", dir, err)

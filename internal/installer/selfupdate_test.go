@@ -138,6 +138,25 @@ func TestADryRunVerifiesTheReleaseWithoutInstallingIt(t *testing.T) {
 	}
 }
 
+// A preview installs nothing, so it must not need to write beside the binary:
+// an operator previewing as a service account may not be able to.
+func TestADryRunStagesItsDownloadAwayFromTheInstalledBinary(t *testing.T) {
+	srv := updateServer(t, "v1.4.0", "new build", sumOf("new build"))
+	opts, bin := updateFixture(t, srv, "v1.3.0")
+	opts.DryRun = true
+	cand, _, err := FetchRelease(context.Background(), opts)
+	if err != nil || cand == nil {
+		t.Fatalf("cand=%+v err=%v", cand, err)
+	}
+	defer cand.Discard()
+	if filepath.Dir(cand.Path) == filepath.Dir(bin) {
+		t.Fatalf("the candidate was staged beside the installed binary: %s", cand.Path)
+	}
+	if _, err := os.Stat(cand.Path); err != nil {
+		t.Fatalf("the candidate is not where it was staged: %v", err)
+	}
+}
+
 func TestALocalBuildHasNoChannelToFollow(t *testing.T) {
 	srv := updateServer(t, "v1.4.0", "new build", sumOf("new build"))
 	opts, _ := updateFixture(t, srv, "v0.9.0-12-gabc1234-dirty")
