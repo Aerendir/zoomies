@@ -73,6 +73,11 @@ const (
 	SourceScheduled    = "scheduled"
 	SourceUploaded     = "uploaded"
 	SourcePreMigration = "pre-migration"
+	// SourceUpgrade is the copy an upgrade takes before it changes anything.
+	// It is its own source so a list can tell an operator's own copies from
+	// the fleet's, and so retention treats it as one of the fleet's own
+	// copies rather than as a file somebody carried here.
+	SourceUpgrade = "upgrade"
 	// SourceFetched is a copy pulled back out of a remote. It is its own
 	// source rather than "uploaded" because the two are answers to different
 	// questions on the day they matter: an uploaded backup is one a person

@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/backend"
+	"github.com/eyupio/zoomies/internal/backup"
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/naming"
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 // UpgradeOptions selects an existing deployment. Upgrade never enrols a host,
@@ -32,6 +34,10 @@ type UpgradeOptions struct {
 	Image      string
 	Mode       Mode
 	Check      bool
+	// SkipBackup goes without the verified copy of the database an upgrade
+	// takes before it changes anything. It is --no-backup: an operator who
+	// keeps their own backups, or whose database is elsewhere, may say so.
+	SkipBackup bool
 	// Continuation keeps the binary-download half and service half under one heading.
 	Continuation bool
 	Out          io.Writer
@@ -145,6 +151,15 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 		ui.Rule(opts.Out, "2/4 Deployment")
 	}
 	ui.Hint(opts.Out, "Target: %s", p.describe())
+	// Before anything is changed, take and verify a copy of the database.
+	// Migrations are one way and a settings move writes rows, so this is the
+	// recovery point for an upgrade that goes wrong, taken while the running
+	// controller still holds the original.
+	if !opts.Check && !opts.SkipBackup {
+		if err := p.backupBeforeUpgrade(ctx); err != nil {
+			return fmt.Errorf("the backup before the upgrade failed, so nothing was changed: %w", err)
+		}
+	}
 	if err := p.settleLayout(ctx); err != nil {
 		return err
 	}
@@ -222,6 +237,74 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	fmt.Fprintln(opts.Out)
 	ui.Done(opts.Out, "%s", ui.Bold("Upgrade complete."))
 	return nil
+}
+
+// backupBeforeUpgrade takes and verifies a copy of the deployment's database,
+// through the same package the schedule and the command line use, so the copy
+// is listable and restorable by the command that restores any other. A
+// deployment with no database yet has nothing to lose and takes none.
+func (p *upgradePlan) backupBeforeUpgrade(ctx context.Context) error {
+	s := p.settings(ctx)
+	dbPath := s.dbPath
+	if dbPath == "" || !exists(dbPath) {
+		return nil
+	}
+	st, err := store.Open(ctx, store.Options{Path: dbPath, ReadOnly: true})
+	if err != nil {
+		return fmt.Errorf("opening %s: %w", dbPath, err)
+	}
+	defer func() { _ = st.Close() }()
+
+	// A database with nothing sealed needs no key to open, so a key file that
+	// is not where the configuration's default points (a deployment that keys
+	// by environment, or a path that has moved) is not a reason to abandon the
+	// copy. A database that is sealed still needs it, and a missing key is
+	// then a real failure the operator should see.
+	cfg := *s.cfg
+	if sealed, err := st.HasSealedSecrets(ctx); err == nil && !sealed {
+		cfg.Security.EncryptionKey = ""
+		cfg.Security.EncryptionKeyFile = ""
+	}
+
+	root := preUpgradeBackupDir(s.cfg, dbPath)
+	entry, err := backup.Take(ctx, st, backup.TakeOptions{
+		Config: &cfg, Dir: root, Source: backup.SourceUpgrade, TakenBy: "zoomies upgrade",
+	})
+	if err != nil {
+		return err
+	}
+	verified, err := backup.Verify(ctx, root, entry.ID)
+	if err != nil {
+		return fmt.Errorf("verifying the copy taken before the upgrade: %w", err)
+	}
+	if !verified.OK {
+		return fmt.Errorf("the copy taken before the upgrade is not sound: %s", strings.Join(verified.Problems, "; "))
+	}
+	ui := PaletteFor(p.opts.Out)
+	ui.Done(p.opts.Out, "Backed up the database as %s and verified it", entry.ID)
+	ui.Hint(p.opts.Out, "Restore it with: zoomies restore %s --replace", entry.Dir)
+	// The same ceiling the schedule keeps, so an upgrade per release does not
+	// grow the directory without bound.
+	if removed, err := backup.Prune(root, s.cfg.Backup.Keep); err != nil {
+		ui.Warn(p.opts.Out, "could not tidy old backups in %s: %v", root, err)
+	} else if len(removed) > 0 {
+		ui.Hint(p.opts.Out, "removed %d older backup(s), keeping %d", len(removed), s.cfg.Backup.Keep)
+	}
+	return nil
+}
+
+// preUpgradeBackupDir is where an upgrade's own copy goes: the configured
+// backup directory when one is set, and otherwise beside the database as this
+// host sees it, which for a container deployment is the volume's path rather
+// than the container's own.
+func preUpgradeBackupDir(cfg *config.Config, dbPath string) string {
+	if dir := strings.TrimSpace(cfg.Backup.Directory); dir != "" {
+		if filepath.IsAbs(dir) {
+			return dir
+		}
+		return filepath.Join(filepath.Dir(dbPath), dir)
+	}
+	return backup.DefaultDir(dbPath)
 }
 
 // A container's read-only reporter is a separate native process. Replacing its

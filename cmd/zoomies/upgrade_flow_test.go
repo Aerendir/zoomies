@@ -58,7 +58,7 @@ func TestEveryUpgradeSpellingAcceptsTheSameMaintenanceOptions(t *testing.T) {
 		if code := dispatch(context.Background(), e, args); code != 0 {
 			t.Fatalf("%v exited %d", args, code)
 		}
-		for _, flag := range []string{"--version", "--no-download", "--check", "--dry-run", "--yes", "--non-interactive", "--image"} {
+		for _, flag := range []string{"--version", "--no-download", "--check", "--dry-run", "--no-backup", "--yes", "--non-interactive", "--image"} {
 			if !strings.Contains(out.String(), flag) {
 				t.Fatalf("%v does not accept %s: %s", args, flag, out.String())
 			}

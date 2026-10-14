@@ -2809,6 +2809,7 @@ Flags:
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
   --runtime                  docker or podman; empty uses the saved deployment
@@ -2843,6 +2844,7 @@ Flags:
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
   --runtime                  docker or podman; empty uses the saved deployment
@@ -3007,6 +3009,7 @@ Flags:
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
   --runtime                  docker or podman; empty uses the saved deployment

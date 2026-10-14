@@ -137,7 +137,11 @@ the installed binary, so it needs no write access to `/usr/local/bin`.
 Use `--check` when you only want to know whether this deployment is sound;
 use `--dry-run` when you want to see the upgrade itself before agreeing to it.
 `--version vX.Y.Z` targets a specific release, and `--no-download` applies the
-executable already installed. A remote agent's card provides the command
+executable already installed. Before it changes anything, an upgrade takes and
+verifies a copy of the controller's database through the same backup package
+the schedule uses, and prints the copy's name and the command that restores it;
+`--no-backup` goes without it for an operator who keeps their own copies or
+whose database is elsewhere. A remote agent's card provides the command
 pinned to its controller's release.
 
 It checks the existing deployment, downloads and verifies the new binary,
