@@ -217,6 +217,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 	wantVersion := fs.String("version", "", "target a published tag such as v1.4.0, or dev")
 	noDownload := fs.Bool("no-download", false, "apply the binary that is already installed; do not look for a newer one")
 	yes := fs.Bool("yes", false, "approve deployment additions and settings migration; never OS tuning")
+	noBackup := fs.Bool("no-backup", false, "go without the verified copy of the database the upgrade takes before it changes anything")
 	updateHelper := fs.Bool("update-helper", false, "add the update helper without asking, so that the web UI can update this host; --yes never does")
 	nonInteractive := fs.Bool("non-interactive", false, "never prompt; optional deployment changes require --yes")
 	noAnimation := fs.Bool("no-animation", false, "skip the short branded terminal splash")
@@ -287,22 +288,35 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		ui.Done(e.out, "%s", ui.Bold("Dry run complete; nothing was changed."))
 		return nil
 	}
-	if !*check && !*noDownload && os.Getenv(installer.SelfUpdateEnv) == "" {
-		// Validate the deployment before replacing the executable. An invalid
-		// record or service must leave the installed binary untouched.
-		preview := opts
-		preview.Check, preview.Out, preview.Doctor = true, io.Discard, nil
-		if err := runUpgradeInstall(ctx, preview); err != nil {
-			return err
+	if !*check && os.Getenv("ZOOMIES_UPGRADE_STARTED") == "" {
+		// Validate the deployment before anything changes. An invalid record
+		// or service must leave the installed binary untouched.
+		if !*noDownload && os.Getenv(installer.SelfUpdateEnv) == "" {
+			preview := opts
+			preview.Check, preview.Out, preview.Doctor = true, io.Discard, nil
+			if err := runUpgradeInstall(ctx, preview); err != nil {
+				return err
+			}
+		}
+		// The copy before anything changes, taken before the binary is
+		// replaced: an upgrade that fails its backup must leave the host as it
+		// was, and a new binary already in place would migrate the database on
+		// the next restart. The re-executed run, with ZOOMIES_UPGRADE_STARTED
+		// set, has already taken it and must not take a second.
+		if !*noBackup {
+			if _, err := backupBeforeUpgradeInstall(ctx, opts); err != nil {
+				return fmt.Errorf("the backup before the upgrade failed, so nothing was changed: %w", err)
+			}
 		}
 		ui.Rule(e.out, "1/4 Binary")
-		selector := newDeploymentSelector(*configDir, *dockerHost, *runtime, *image, *mode, *yes)
-		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, false); err != nil {
-			return err
+		if *noDownload || os.Getenv(installer.SelfUpdateEnv) != "" {
+			ui.Done(e.out, "Using the installed binary")
+		} else {
+			selector := newDeploymentSelector(*configDir, *dockerHost, *runtime, *image, *mode, *yes)
+			if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, false); err != nil {
+				return err
+			}
 		}
-	} else if !*check && os.Getenv("ZOOMIES_UPGRADE_STARTED") == "" {
-		ui.Rule(e.out, "1/4 Binary")
-		ui.Done(e.out, "Using the installed binary")
 	}
 	return runUpgradeInstall(ctx, opts)
 }
@@ -397,6 +411,10 @@ func (t *tailBuffer) String() string {
 // runUpgradeInstall is installer.Upgrade, a variable so a test can see what a
 // preview and a dry run asked it to do without a real deployment on the host.
 var runUpgradeInstall = installer.Upgrade
+
+// backupBeforeUpgradeInstall is installer.BackupBeforeUpgrade, a variable for
+// the same reason and so a test can see that --no-backup skips it.
+var backupBeforeUpgradeInstall = installer.BackupBeforeUpgrade
 
 var runCandidate = func(ctx context.Context, env []string, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)

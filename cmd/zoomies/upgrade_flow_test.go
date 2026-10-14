@@ -58,7 +58,7 @@ func TestEveryUpgradeSpellingAcceptsTheSameMaintenanceOptions(t *testing.T) {
 		if code := dispatch(context.Background(), e, args); code != 0 {
 			t.Fatalf("%v exited %d", args, code)
 		}
-		for _, flag := range []string{"--version", "--no-download", "--check", "--dry-run", "--yes", "--non-interactive", "--image"} {
+		for _, flag := range []string{"--version", "--no-download", "--check", "--dry-run", "--no-backup", "--yes", "--non-interactive", "--image"} {
 			if !strings.Contains(out.String(), flag) {
 				t.Fatalf("%v does not accept %s: %s", args, flag, out.String())
 			}
@@ -209,6 +209,48 @@ func TestADryRunReplacesNothingAndRestartsNothing(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Would replace") {
 		t.Fatalf("the dry run did not say what it would do: %s", out.String())
+	}
+}
+
+// The copy before an upgrade must be taken before the binary is replaced: a
+// failure after the swap would leave a new binary to migrate a database nothing
+// protected. --no-download exercises the order without a real download.
+func TestTheBackupRunsBeforeTheDeployment(t *testing.T) {
+	e, _, _ := newTestEnv(t)
+	oldB, oldU := backupBeforeUpgradeInstall, runUpgradeInstall
+	t.Cleanup(func() { backupBeforeUpgradeInstall, runUpgradeInstall = oldB, oldU })
+	var order []string
+	backupBeforeUpgradeInstall = func(context.Context, installer.UpgradeOptions) (string, error) {
+		order = append(order, "backup")
+		return "zoomies-20260101-000000", nil
+	}
+	runUpgradeInstall = func(context.Context, installer.UpgradeOptions) error {
+		order = append(order, "deploy")
+		return nil
+	}
+	if err := runUpgrade(context.Background(), e, []string{"--no-download"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(order, []string{"backup", "deploy"}) {
+		t.Fatalf("order = %v, want the copy before the deployment", order)
+	}
+}
+
+func TestNoBackupSkipsTheCopyBeforeTheUpgrade(t *testing.T) {
+	e, _, _ := newTestEnv(t)
+	oldB, oldU := backupBeforeUpgradeInstall, runUpgradeInstall
+	t.Cleanup(func() { backupBeforeUpgradeInstall, runUpgradeInstall = oldB, oldU })
+	called := false
+	backupBeforeUpgradeInstall = func(context.Context, installer.UpgradeOptions) (string, error) {
+		called = true
+		return "", nil
+	}
+	runUpgradeInstall = func(context.Context, installer.UpgradeOptions) error { return nil }
+	if err := runUpgrade(context.Background(), e, []string{"--no-download", "--no-backup"}); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("--no-backup still took a copy")
 	}
 }
 
