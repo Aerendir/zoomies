@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -364,13 +365,19 @@ func preUpgradeBackupDir(cfg *config.Config, dbPath string, containerised bool) 
 	if dir == "" {
 		return backup.DefaultDir(dbPath), nil
 	}
-	if !filepath.IsAbs(dir) {
-		return filepath.Join(filepath.Dir(dbPath), dir), nil
-	}
 	if !containerised {
+		if !filepath.IsAbs(dir) {
+			return filepath.Join(filepath.Dir(dbPath), dir), nil
+		}
 		return dir, nil
 	}
+	// The container's configuration speaks in the container's paths, which are
+	// Linux paths whatever this host is. They are read with slash rules and only
+	// joined to the host's own volume with the host's own separator.
 	hostVolume := filepath.Dir(dbPath)
+	if !path.IsAbs(dir) {
+		return filepath.Join(hostVolume, strings.TrimPrefix(dir, "./")), nil
+	}
 	if dir == ContainerStateDir {
 		return hostVolume, nil
 	}
