@@ -67,6 +67,9 @@
   // knows not to show a year of empty squares under a fleet's first steps.
   let setupPending = $state(false);
   const operational = $derived(visualStyle.choice === 'mission-control');
+  const workPanels = $derived(
+    operational ? ['pools', 'jobs', 'events'] : ['pools', 'events', 'jobs'],
+  );
   const sections = $derived(
     operational
       ? ['problems', 'metrics', 'repairs', 'work', 'activity', 'capacity']
@@ -144,9 +147,11 @@
         <RepairOffers />
       {:else if section === 'work'}
         <div class="split">
-          <PoolUtilisation {loading} />
-          <div class="feed"><EventsFeed {loading} /></div>
-          <ActiveJobs />
+          {#each workPanels as panel (panel)}
+            {#if panel === 'pools'}<PoolUtilisation {loading} />
+            {:else if panel === 'jobs'}<ActiveJobs />
+            {:else}<div class="feed"><EventsFeed {loading} /></div>{/if}
+          {/each}
         </div>
       {:else if section === 'capacity' && fleet.loaded}
         <HostCapacityMap hosts={fleet.hosts} page="overview" onmanage={() => navigate('/hosts')} />

@@ -30,6 +30,12 @@ test('Mission Control shows current work before activity history and retains tim
   await timing.locator('summary').click();
   await expect(page.getByText('Runner startup p50', { exact: true })).toBeVisible();
   await expect(page.getByText('Registration p50', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 900 });
+  const active = page.getByRole('heading', { name: 'Active jobs', exact: true });
+  const events = page.getByRole('heading', { name: 'Recent events', exact: true });
+  expect(await active.evaluate((node) => node.getBoundingClientRect().top)).toBeLessThan(
+    await events.evaluate((node) => node.getBoundingClientRect().top),
+  );
 });
 
 test('a fresh Mission Control phone shows job identity and Inspect before supplementary analytics', async ({
@@ -178,4 +184,21 @@ test('Mission Control keeps first-run guidance first when this fleet has not run
   expect(await setup.evaluate((node) => node.getBoundingClientRect().top)).toBeLessThan(
     await metrics.evaluate((node) => node.getBoundingClientRect().top),
   );
+});
+
+test.describe('touch phone', () => {
+  test.use({ viewport: { width: 375, height: 900 }, hasTouch: true, isMobile: true });
+  test('the first Inspect action is visible with a full-size touch target', async ({ page }) => {
+    await mission(page);
+    await goto(page, '/jobs', 'Jobs');
+    const inspect = page
+      .locator('table[aria-label="Jobs"] tbody tr')
+      .first()
+      .getByRole('button', { name: /^Inspect/ });
+    await expect(inspect).toBeVisible();
+    const box = await inspect.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.y + box!.height).toBeLessThan(900);
+  });
 });

@@ -69,7 +69,7 @@ status page remains Classic.
   screenshot harness, covering Appearance (desktop and 375px phone), Overview
   and Runners in both modes. Appearance captures were visually inspected.
 
-Two additional test selectors initially expected an exact pool-label name and
+In the additive stage, two additional test selectors initially expected an exact pool-label name and
 full-logo asset on a page that uses the circular mark. Source inspection
 corrected those selectors; all affected tests then passed. The initial browser
 harness command also used the system's unrelated `go` executable; selecting the
@@ -101,10 +101,35 @@ migration is required.
 
 ## Operational-stage validation
 
-The final browser regression, current captures and public-tree audit results
-are recorded here before the review PR is raised. The implementation does not
-weaken guard lists: two unnecessary references in the earlier audit artefacts
-were removed, and the existing public-tree audit passes on this checkout.
+- Rebased onto current main, including the upstream public-audit corrections.
+  The existing public-tree audit passes; no guard list was weakened.
+- Full unit suite: 112 test files passed on the rebased checkout.
+- Browser regressions: 23 existing Jobs tests passed; all 11 operational-layout
+  tests and 9 visual-style tests passed. The final Overview ordering assertion
+  was rerun after the last keyed-panel adjustment and passed.
+- The style tests also cover 56 route/viewport/mode checks at 1440 and 375px,
+  with no page-level horizontal overflow.
+- Fresh phone job identity and Inspect are visible in the first 900px viewport.
+  Real coarse-pointer Inspect targets are at least 44×44px.
+- Global/per-grid views, column order/widths, first-run placement, active filter
+  chips, saved queries and unrelated appearance choices are covered.
+- Svelte check, UI lint, web build and Go binary build passed. Budgets remain
+  shell 142.4KB of 200KB and status document 19.1KB of 30KB.
+- Final real-app captures cover Overview, Jobs and Appearance in light/dark,
+  with 375px captures for all three. The screenshot helper keeps the existing
+  wider phone Overview capture distinct from `overview-phone-375`.
+
+### Current operational captures
+
+- [Overview, desktop](../../docs/screenshots/mission-control/overview-dark.webp)
+- [Overview, 375px](../../docs/screenshots/mission-control/overview-phone-375-dark.webp)
+- [Jobs, desktop](../../docs/screenshots/mission-control/jobs-dark.webp)
+- [Jobs, 375px](../../docs/screenshots/mission-control/jobs-mobile-dark.webp)
+
+```sh
+cd web
+ZOOMIES_SCREENSHOT_STYLE=mission-control node tests/support/screenshots.mjs ../docs/screenshots/mission-control overview,overview-phone-375,jobs,jobs-mobile,appearance,appearance-mobile
+```
 
 ## Next coding-agent actions
 

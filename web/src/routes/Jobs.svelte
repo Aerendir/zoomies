@@ -589,6 +589,16 @@
     overflow-wrap: anywhere;
   }
 
+  @media (pointer: coarse) {
+    .job-inspect {
+      min-width: var(--z-control-touch);
+      min-height: var(--z-control-touch);
+    }
+    .fleet-context > summary {
+      min-height: var(--z-control-touch);
+    }
+  }
+
   .fleet-context {
     display: contents;
   }

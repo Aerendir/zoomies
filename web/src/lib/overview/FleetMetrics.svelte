@@ -349,6 +349,11 @@
     }
   }
 
+  @media (pointer: coarse) {
+    .performance summary {
+      min-height: var(--z-control-touch);
+    }
+  }
   .tiles {
     display: grid;
     gap: var(--z-space-4);

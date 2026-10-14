@@ -431,6 +431,11 @@
     margin-top: var(--z-space-3);
   }
 
+  @media (pointer: coarse) {
+    summary {
+      min-height: var(--z-control-touch);
+    }
+  }
   .search {
     min-width: 260px;
     flex: 1 1 260px;
