@@ -231,6 +231,7 @@ class Prefs {
   #otherRunners = $state(false);
   #activityRange = $state<ActivityRangeKey>('1d');
   #gridView = $state<GridView>(DEFAULT_GRID_VIEW);
+  #gridViewChosen = $state(false);
   #feed = $state<Record<string, boolean>>({});
   #statusStyle = $state<StatusStyle>(DEFAULT_STATUS_STYLE);
   #eliStyle = $state<EliStyle>(DEFAULT_ELI_STYLE);
@@ -258,6 +259,7 @@ class Prefs {
       : '1d';
     // Validated for the same reason, and for one more: a grid told to lay
     // itself out in a way this build does not have would render nothing.
+    this.#gridViewChosen = (GRID_VIEWS as readonly string[]).includes(stored.gridView ?? '');
     this.#gridView = (GRID_VIEWS as readonly string[]).includes(stored.gridView ?? '')
       ? (stored.gridView as GridView)
       : DEFAULT_GRID_VIEW;
@@ -321,12 +323,17 @@ class Prefs {
    * The phone layout grids take unless one has been told otherwise. Set in
    * Settings; each grid's own toggle overrides it for that grid alone.
    */
+  get gridViewChosen(): boolean {
+    return this.#gridViewChosen;
+  }
+
   get gridView(): GridView {
     return this.#gridView;
   }
 
   set gridView(value: GridView) {
     this.#gridView = value;
+    this.#gridViewChosen = true;
     this.#persist();
   }
 
@@ -345,9 +352,9 @@ class Prefs {
     this.#persist();
   }
 
-  /** How this grid lays a row out on a phone: its own choice, or the default. */
-  gridViewFor(gridId: string): GridView {
-    return this.#grids[gridId]?.view ?? this.#gridView;
+  /** A saved table/global choice wins over the caller's style default. */
+  gridViewFor(gridId: string, fallback: GridView = DEFAULT_GRID_VIEW): GridView {
+    return this.#grids[gridId]?.view ?? (this.#gridViewChosen ? this.#gridView : fallback);
   }
 
   setGridView(gridId: string, view: GridView): void {
@@ -576,7 +583,8 @@ class Prefs {
         dismissed: this.#dismissed,
         otherRunners: this.#otherRunners,
         activityRange: this.#activityRange,
-        gridView: this.#gridView,
+        // Saving a logo or vocabulary must not freeze a previously unchosen grid default.
+        gridView: this.#gridViewChosen ? this.#gridView : undefined,
         feed: this.#feed,
         quirkyStatus: this.quirkyStatus,
         statusStyle: this.#statusStyle,

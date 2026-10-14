@@ -20,10 +20,11 @@
   interface Props {
     /** True until the first authoritative fetch has landed. */
     loading?: boolean;
+    operational?: boolean;
     class?: string;
   }
 
-  let { loading = false, class: className = '' }: Props = $props();
+  let { loading = false, operational = false, class: className = '' }: Props = $props();
 
   /**
    * One minute of fleet history, in the shape the tiles plot.
@@ -247,7 +248,7 @@
   });
 </script>
 
-<div class="tiles {className}">
+<div class="tiles {className}" class:operational>
   <MetricTile
     label="Queued jobs"
     value={formatNumber(queued)}
@@ -292,6 +293,10 @@
     hint={p95Wait === undefined ? undefined : `p95 ${formatDuration(p95Wait)}`}
     {loading}
   />
+  {#if !operational}{@render timingMetrics()}{/if}
+</div>
+
+{#snippet timingMetrics()}
   <MetricTile
     label="Runner startup p50"
     value={formatDuration(p50Startup)}
@@ -310,9 +315,45 @@
     goodWhen="down"
     {loading}
   />
-</div>
+{/snippet}
+{#if operational}
+  <details class="performance">
+    <summary>Startup and registration timing</summary>
+    <div class="tiles">{@render timingMetrics()}</div>
+  </details>
+{/if}
 
 <style>
+  .performance summary {
+    padding: var(--z-space-3);
+    cursor: pointer;
+    color: var(--z-accent);
+    background: var(--z-surface);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+  }
+  .performance[open] summary {
+    margin-bottom: var(--z-space-3);
+  }
+  .tiles.operational {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  @media (min-width: 1181px) {
+    .tiles.operational {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 360px) {
+    .tiles.operational {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (pointer: coarse) {
+    .performance summary {
+      min-height: var(--z-control-touch);
+    }
+  }
   .tiles {
     display: grid;
     gap: var(--z-space-4);
