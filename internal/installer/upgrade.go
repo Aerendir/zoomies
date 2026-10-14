@@ -34,10 +34,6 @@ type UpgradeOptions struct {
 	Image      string
 	Mode       Mode
 	Check      bool
-	// SkipBackup goes without the verified copy of the database an upgrade
-	// takes before it changes anything. It is --no-backup: an operator who
-	// keeps their own backups, or whose database is elsewhere, may say so.
-	SkipBackup bool
 	// Continuation keeps the binary-download half and service half under one heading.
 	Continuation bool
 	Out          io.Writer
@@ -103,28 +99,52 @@ type upgradePlan struct {
 	sharedMountComing, sharedMountApplied bool
 }
 
+// withDefaults fills the options a caller may leave out. A database copy taken
+// before an upgrade and the upgrade itself must read the same deployment, so
+// both begin here.
+func (o UpgradeOptions) withDefaults() UpgradeOptions {
+	if o.ConfigDir == "" {
+		o.ConfigDir = config.ConfigDir()
+	}
+	if o.Out == nil {
+		o.Out = io.Discard
+	}
+	if o.run == nil {
+		o.run = runCommand
+	}
+	if o.runInput == nil {
+		o.runInput = runCommandInput
+	}
+	if o.BinaryPath == "" {
+		o.BinaryPath, _ = os.Executable()
+	}
+	o.BinaryPath = upgradeBinaryPath(o.BinaryPath)
+	return o
+}
+
+// BackupBeforeUpgrade takes and verifies a copy of the deployment's database
+// before anything about the upgrade changes, and returns where it went.
+//
+// It is a step of its own, run before the installed binary is replaced: an
+// upgrade that fails its backup must leave the host exactly as it was, and a
+// failure after a new binary was in place would leave the next restart or
+// reboot free to migrate a database nothing protected.
+func BackupBeforeUpgrade(ctx context.Context, opts UpgradeOptions) (string, error) {
+	opts = opts.withDefaults()
+	p, err := prepareUpgrade(ctx, opts)
+	if err != nil {
+		return "", err
+	}
+	return p.backupBeforeUpgrade(ctx)
+}
+
 // Upgrade applies the binary already downloaded by install.sh to the running
 // deployment, and refreshes its stock runner images without removing workloads.
 func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	if opts.Runtime != "" && opts.Runtime != "docker" && opts.Runtime != "podman" {
 		return fmt.Errorf("installer: --runtime must be docker or podman")
 	}
-	if opts.ConfigDir == "" {
-		opts.ConfigDir = config.ConfigDir()
-	}
-	if opts.Out == nil {
-		opts.Out = io.Discard
-	}
-	if opts.run == nil {
-		opts.run = runCommand
-	}
-	if opts.runInput == nil {
-		opts.runInput = runCommandInput
-	}
-	if opts.BinaryPath == "" {
-		opts.BinaryPath, _ = os.Executable()
-	}
-	opts.BinaryPath = upgradeBinaryPath(opts.BinaryPath)
+	opts = opts.withDefaults()
 	if !opts.Check {
 		lockPath := filepath.Join(opts.ConfigDir, "upgrade.lock")
 		lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
@@ -151,15 +171,9 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 		ui.Rule(opts.Out, "2/4 Deployment")
 	}
 	ui.Hint(opts.Out, "Target: %s", p.describe())
-	// Before anything is changed, take and verify a copy of the database.
-	// Migrations are one way and a settings move writes rows, so this is the
-	// recovery point for an upgrade that goes wrong, taken while the running
-	// controller still holds the original.
-	if !opts.Check && !opts.SkipBackup {
-		if err := p.backupBeforeUpgrade(ctx); err != nil {
-			return fmt.Errorf("the backup before the upgrade failed, so nothing was changed: %w", err)
-		}
-	}
+	// The database copy is taken by BackupBeforeUpgrade, before this runs and
+	// before the binary is replaced: see its comment for why the two are one
+	// step in the caller and not here.
 	if err := p.settleLayout(ctx); err != nil {
 		return err
 	}
@@ -243,15 +257,24 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 // through the same package the schedule and the command line use, so the copy
 // is listable and restorable by the command that restores any other. A
 // deployment with no database yet has nothing to lose and takes none.
-func (p *upgradePlan) backupBeforeUpgrade(ctx context.Context) error {
+func (p *upgradePlan) backupBeforeUpgrade(ctx context.Context) (string, error) {
 	s := p.settings(ctx)
+	if !s.read {
+		// The database may exist and be unreadable, or its volume may be one
+		// this host cannot open. Either way there is no way to know there is
+		// nothing to lose, so the upgrade stops rather than restart into a
+		// migration nothing protected.
+		return "", fmt.Errorf("could not read this deployment's settings to find its database (%s), so the copy before the upgrade could not be taken; put that right, or run again with --no-backup", strings.TrimSpace(s.why))
+	}
 	dbPath := s.dbPath
 	if dbPath == "" || !exists(dbPath) {
-		return nil
+		// A known-absent database, which is a deployment that has never run:
+		// there is nothing to lose.
+		return "", nil
 	}
 	st, err := store.Open(ctx, store.Options{Path: dbPath, ReadOnly: true})
 	if err != nil {
-		return fmt.Errorf("opening %s: %w", dbPath, err)
+		return "", fmt.Errorf("opening %s: %w", dbPath, err)
 	}
 	defer func() { _ = st.Close() }()
 
@@ -266,19 +289,22 @@ func (p *upgradePlan) backupBeforeUpgrade(ctx context.Context) error {
 		cfg.Security.EncryptionKeyFile = ""
 	}
 
-	root := preUpgradeBackupDir(s.cfg, dbPath)
+	root, err := preUpgradeBackupDir(s.cfg, dbPath, p.record.Deployment.Containerised())
+	if err != nil {
+		return "", err
+	}
 	entry, err := backup.Take(ctx, st, backup.TakeOptions{
 		Config: &cfg, Dir: root, Source: backup.SourceUpgrade, TakenBy: "zoomies upgrade",
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	verified, err := backup.Verify(ctx, root, entry.ID)
 	if err != nil {
-		return fmt.Errorf("verifying the copy taken before the upgrade: %w", err)
+		return "", fmt.Errorf("verifying the copy taken before the upgrade: %w", err)
 	}
 	if !verified.OK {
-		return fmt.Errorf("the copy taken before the upgrade is not sound: %s", strings.Join(verified.Problems, "; "))
+		return "", fmt.Errorf("the copy taken before the upgrade is not sound: %s", strings.Join(verified.Problems, "; "))
 	}
 	ui := PaletteFor(p.opts.Out)
 	ui.Done(p.opts.Out, "Backed up the database as %s and verified it", entry.ID)
@@ -290,21 +316,37 @@ func (p *upgradePlan) backupBeforeUpgrade(ctx context.Context) error {
 	} else if len(removed) > 0 {
 		ui.Hint(p.opts.Out, "removed %d older backup(s), keeping %d", len(removed), s.cfg.Backup.Keep)
 	}
-	return nil
+	return entry.Dir, nil
 }
 
 // preUpgradeBackupDir is where an upgrade's own copy goes: the configured
 // backup directory when one is set, and otherwise beside the database as this
-// host sees it, which for a container deployment is the volume's path rather
-// than the container's own.
-func preUpgradeBackupDir(cfg *config.Config, dbPath string) string {
-	if dir := strings.TrimSpace(cfg.Backup.Directory); dir != "" {
-		if filepath.IsAbs(dir) {
-			return dir
-		}
-		return filepath.Join(filepath.Dir(dbPath), dir)
+// host sees it.
+//
+// A container's configuration speaks in the container's paths, so an absolute
+// directory under the container's state directory is the mounted volume, which
+// on this host is the directory holding the database. An absolute path
+// anywhere else inside the container has no host path, and is refused rather
+// than written to the host's own /var/lib by mistake.
+func preUpgradeBackupDir(cfg *config.Config, dbPath string, containerised bool) (string, error) {
+	dir := strings.TrimSpace(cfg.Backup.Directory)
+	if dir == "" {
+		return backup.DefaultDir(dbPath), nil
 	}
-	return backup.DefaultDir(dbPath)
+	if !filepath.IsAbs(dir) {
+		return filepath.Join(filepath.Dir(dbPath), dir), nil
+	}
+	if !containerised {
+		return dir, nil
+	}
+	hostVolume := filepath.Dir(dbPath)
+	if dir == ContainerStateDir {
+		return hostVolume, nil
+	}
+	if rest, ok := strings.CutPrefix(dir, ContainerStateDir+"/"); ok {
+		return filepath.Join(hostVolume, rest), nil
+	}
+	return "", fmt.Errorf("backup.directory is %s, which is inside the container and not under its state directory %s, so this host has nowhere to put the copy before the upgrade; set backup.directory under %s, or run again with --no-backup", dir, ContainerStateDir, ContainerStateDir)
 }
 
 // A container's read-only reporter is a separate native process. Replacing its

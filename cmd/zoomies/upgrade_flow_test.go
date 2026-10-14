@@ -212,6 +212,48 @@ func TestADryRunReplacesNothingAndRestartsNothing(t *testing.T) {
 	}
 }
 
+// The copy before an upgrade must be taken before the binary is replaced: a
+// failure after the swap would leave a new binary to migrate a database nothing
+// protected. --no-download exercises the order without a real download.
+func TestTheBackupRunsBeforeTheDeployment(t *testing.T) {
+	e, _, _ := newTestEnv(t)
+	oldB, oldU := backupBeforeUpgradeInstall, runUpgradeInstall
+	t.Cleanup(func() { backupBeforeUpgradeInstall, runUpgradeInstall = oldB, oldU })
+	var order []string
+	backupBeforeUpgradeInstall = func(context.Context, installer.UpgradeOptions) (string, error) {
+		order = append(order, "backup")
+		return "zoomies-20260101-000000", nil
+	}
+	runUpgradeInstall = func(context.Context, installer.UpgradeOptions) error {
+		order = append(order, "deploy")
+		return nil
+	}
+	if err := runUpgrade(context.Background(), e, []string{"--no-download"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(order, []string{"backup", "deploy"}) {
+		t.Fatalf("order = %v, want the copy before the deployment", order)
+	}
+}
+
+func TestNoBackupSkipsTheCopyBeforeTheUpgrade(t *testing.T) {
+	e, _, _ := newTestEnv(t)
+	oldB, oldU := backupBeforeUpgradeInstall, runUpgradeInstall
+	t.Cleanup(func() { backupBeforeUpgradeInstall, runUpgradeInstall = oldB, oldU })
+	called := false
+	backupBeforeUpgradeInstall = func(context.Context, installer.UpgradeOptions) (string, error) {
+		called = true
+		return "", nil
+	}
+	runUpgradeInstall = func(context.Context, installer.UpgradeOptions) error { return nil }
+	if err := runUpgrade(context.Background(), e, []string{"--no-download", "--no-backup"}); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("--no-backup still took a copy")
+	}
+}
+
 // A dry run is the review it promises: the deployment half is printed where a
 // real run would print it, so the mounts and settings it would add are visible,
 // rather than a generic line promising they were checked.
