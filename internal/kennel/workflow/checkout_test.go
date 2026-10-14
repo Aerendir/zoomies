@@ -42,3 +42,22 @@ func FuzzCheckoutDepthEditPreservesTheDocument(f *testing.F) {
 		}
 	})
 }
+
+func TestCheckoutNamesRefuseGeneratedMatrixDynamicAndDuplicateSourceNames(t *testing.T) {
+	base := "on: push\njobs:\n  test:\n    name: Build\n    runs-on: ubuntu-latest\n    steps:\n      - name: Checkout\n        uses: actions/checkout@" + strings.Repeat("a", 40) + "\n        with:\n          fetch-depth: 0\n      - name: Test\n        run: echo test\n"
+	if j, s, err := CheckoutNames([]byte(base), 0, 0); err != nil || j != "Build" || s != "Checkout" {
+		t.Fatal(j, s, err)
+	}
+	for _, data := range []string{
+		strings.Replace(base, "    name: Build\n", "", 1),
+		strings.Replace(base, "      - name: Checkout\n        uses:", "      - uses:", 1),
+		strings.Replace(base, "    name: Build", "    name: ${{ inputs.name }}", 1),
+		strings.Replace(base, "    name: Build", "    strategy: {matrix: {os: [linux]}}\n    name: Build", 1),
+		strings.Replace(base, "name: Test", "name: Checkout", 1),
+		base + "  other:\n    name: Build\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo other\n",
+	} {
+		if _, _, err := CheckoutNames([]byte(data), 0, 0); err == nil {
+			t.Fatal("ambiguous name association accepted")
+		}
+	}
+}

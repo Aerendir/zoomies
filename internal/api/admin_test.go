@@ -473,6 +473,25 @@ func TestHostCordonAndDelete(t *testing.T) {
 	forced.mustStatus(t, http.StatusNoContent, "forced delete")
 }
 
+func TestDeletingTheEmbeddedHostLeavesTheControllerAvailable(t *testing.T) {
+	h := newHarness(t)
+	host := h.host("controller")
+	host.Embedded = true
+	if err := h.st.UpdateHost(h.ctx, host); err != nil {
+		t.Fatalf("UpdateHost: %v", err)
+	}
+	admin, _ := h.user("root", store.RoleAdmin)
+
+	removed := h.do(request{method: http.MethodDelete, path: "/api/v1/hosts/" + host.ID, cookie: h.session(admin)})
+	removed.mustStatus(t, http.StatusNoContent, "delete embedded host")
+	if _, err := h.st.GetHost(h.ctx, host.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetHost after delete: %v, want ErrNotFound", err)
+	}
+
+	listed := h.do(request{method: http.MethodGet, path: "/api/v1/hosts", cookie: h.session(admin)})
+	listed.mustStatus(t, http.StatusOK, "list hosts after deleting embedded host")
+}
+
 // TestJobsListAndFacets covers the job history page.
 func TestJobsListAndFacets(t *testing.T) {
 	h := newHarness(t)
