@@ -191,6 +191,10 @@ test-e2e-required: ## The same run, but a missing prerequisite is a failure and 
 screenshots: build ## Recapture docs/screenshots from the real UI (needs Pillow: pip install pillow)
 	cd $(UI_DIR) && node tests/support/screenshots.mjs
 
+.PHONY: screenshots-gallery
+screenshots-gallery: | $(UI_DIR)/node_modules ## Recapture the component gallery in both styles and modes (needs Pillow)
+	cd $(UI_DIR) && node tests/support/gallery-screenshots.mjs
+
 # The UI's dependencies, as an order-only prerequisite of anything that checks
 # the UI.
 #

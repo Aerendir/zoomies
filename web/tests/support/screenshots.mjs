@@ -27,6 +27,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { controllerEnv } from './controller.mjs';
+import { encodeWebp } from './webp.mjs';
 import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -962,28 +963,6 @@ async function pingWebhook(baseURL) {
   }
 }
 
-/** Encode every PNG in `pngDir` as lossless WebP in `outDir`, with Pillow. */
-function encodeWebp(pngDir) {
-  const script = [
-    'import pathlib, sys',
-    'from PIL import Image',
-    'src, dst = map(pathlib.Path, sys.argv[1:3])',
-    'for png in sorted(src.glob("*.png")):',
-    '    out = dst / (png.stem + ".webp")',
-    // Lossless WebP's quality controls compression effort, not image quality.
-    // This keeps every pixel while making a full-gallery refresh practical.
-    '    Image.open(png).convert("RGB").save(out, lossless=True, quality=80, method=4)',
-    '    print(f"  {out.name}  {out.stat().st_size // 1024} KB")',
-  ].join('\n');
-  const run = spawnSync('python3', ['-u', '-c', script, pngDir, outDir], { stdio: 'inherit' });
-  if (run.error || run.status !== 0) {
-    throw new Error(
-      'encoding the screenshots needs Python 3 with Pillow: pip install pillow\n' +
-        `(python3 ${run.error ? `could not start: ${run.error.message}` : `exited ${run.status}`})`,
-    );
-  }
-}
-
 /** Wait for the page itself, never for the network: the event stream never idles. */
 async function settle(page, shot) {
   const heading = shot.heading
@@ -1158,7 +1137,7 @@ try {
     if (repairing.length > 0) await capture(browser, scheme, pngDir, repairing, { repairFixture });
   }
   console.log(`encoding into ${outDir}`);
-  encodeWebp(pngDir);
+  encodeWebp(pngDir, outDir);
 } finally {
   await browser.close();
   rmSync(pngDir, { recursive: true, force: true });
