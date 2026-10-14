@@ -49,6 +49,12 @@ type SelfUpdateOptions struct {
 	Client  *http.Client
 	// Check only says what would change.
 	Check bool
+	// DryRun says what a real run would do and installs nothing: the release
+	// is still fetched, verified and probed, and the pre-flight still runs, so
+	// a preview fails for the same reasons an update would. It takes no lock,
+	// replaces no binary and keeps no previous one, so nothing beside the
+	// installed binary is changed.
+	DryRun bool
 	// Preflight, when set, is asked about the downloaded file after it has been
 	// verified and before it replaces anything. An error stops the update with
 	// the installed binary untouched.
@@ -121,6 +127,12 @@ func SelfUpdate(ctx context.Context, opts SelfUpdateOptions) (SelfUpdateResult, 
 			return res, fmt.Errorf("the downloaded %s does not accept this deployment, so the installed binary was left in place: %w", cand.Tag, err)
 		}
 	}
+	// The preview has done everything a real run does up to the swap, and the
+	// caller reads res to say what would happen. res.Updated stays false: no
+	// binary was replaced.
+	if opts.DryRun {
+		return res, nil
+	}
 	if err := cand.Install(opts); err != nil {
 		return res, err
 	}
@@ -191,7 +203,14 @@ func FetchRelease(ctx context.Context, opts SelfUpdateOptions) (*Candidate, Self
 	if opts.Check {
 		return nil, res, nil
 	}
+	// A preview installs nothing, so its download need not be on the same
+	// filesystem as the binary, and an operator previewing as a service
+	// account may not be able to write beside it. It goes to the temporary
+	// directory instead, which is why --dry-run never touches /usr/local/bin.
 	dir := filepath.Dir(opts.BinaryPath)
+	if opts.DryRun {
+		dir = ""
+	}
 	tmp, err := os.CreateTemp(dir, ".zoomies-update-*")
 	if err != nil {
 		return nil, res, fmt.Errorf("cannot write to %s: %w; run the upgrade as root (sudo zoomies upgrade), or use install.sh --upgrade --prefix for another directory", dir, err)
@@ -261,6 +280,25 @@ func (c *Candidate) Install(opts SelfUpdateOptions) error {
 	}
 	if err := os.Rename(c.Path, opts.BinaryPath); err != nil {
 		return fmt.Errorf("replace %s: %w", opts.BinaryPath, err)
+	}
+	return nil
+}
+
+// restorePreviousBinary puts the binary kept beside the installed one back in
+// its place, through a staging file and a rename so the path is never half
+// written. It is what an upgrade rolls back to when the new release does not
+// answer and ran no migration.
+func restorePreviousBinary(binary string) error {
+	previous := binary + PreviousSuffix
+	staged := binary + ".rollback"
+	_ = os.Remove(staged)
+	if err := copyBinary(previous, staged); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("reading the previous binary %s: %w", previous, err)
+	}
+	if err := os.Rename(staged, binary); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("putting %s back: %w", binary, err)
 	}
 	return nil
 }

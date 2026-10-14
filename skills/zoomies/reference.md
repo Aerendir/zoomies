@@ -2804,10 +2804,12 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
   --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
@@ -2819,6 +2821,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```
@@ -2837,10 +2840,12 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
   --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
@@ -2852,6 +2857,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```
@@ -3000,10 +3006,12 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
   --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
@@ -3015,6 +3023,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```

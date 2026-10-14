@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -56,7 +58,7 @@ func TestEveryUpgradeSpellingAcceptsTheSameMaintenanceOptions(t *testing.T) {
 		if code := dispatch(context.Background(), e, args); code != 0 {
 			t.Fatalf("%v exited %d", args, code)
 		}
-		for _, flag := range []string{"--version", "--no-download", "--check", "--yes", "--non-interactive", "--image"} {
+		for _, flag := range []string{"--version", "--no-download", "--check", "--dry-run", "--no-backup", "--yes", "--non-interactive", "--image"} {
 			if !strings.Contains(out.String(), flag) {
 				t.Fatalf("%v does not accept %s: %s", args, flag, out.String())
 			}
@@ -124,7 +126,7 @@ func TestTheCandidateIsAskedToCheckTheDeploymentBeforeItReplacesTheBinary(t *tes
 	calls, reexecs := stubUpgradeSeams(t, binary, nil)
 
 	sel := deploymentSelector{ConfigDir: "/etc/zoomies", DockerHost: "unix:///run/docker.sock", Runtime: "podman", Image: "example.test/zoomies:custom", Mode: "agent"}
-	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, ""); err != nil {
+	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(*calls) != 1 {
@@ -168,12 +170,124 @@ func TestFlagsThatSelectNothingAreNotPassedToTheCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls, _ := stubUpgradeSeams(t, binary, nil)
-	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, ""); err != nil {
+	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"upgrade", "--check", "--non-interactive", "--no-download", "--installed-binary", binary}
 	if got := (*calls)[0].args; !reflect.DeepEqual(got, want) {
 		t.Fatalf("argv = %q, want %q", got, want)
+	}
+}
+
+// A dry run is the one update path an operator can try before deciding, so it
+// must leave the host exactly as it found it: no replaced binary, no kept
+// previous one, no restart, and nothing left beside the binary.
+func TestADryRunReplacesNothingAndRestartsNothing(t *testing.T) {
+	e, out, _ := newTestEnv(t)
+	candidateRelease(t)
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "zoomies")
+	if err := os.WriteFile(binary, []byte("existing binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	_, reexecs := stubUpgradeSeams(t, binary, nil)
+
+	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(binary); string(b) != "existing binary" {
+		t.Fatalf("the binary was replaced by a dry run: %q", b)
+	}
+	if _, err := os.Stat(binary + installer.PreviousSuffix); !os.IsNotExist(err) {
+		t.Fatalf("a dry run kept a previous binary: %v", err)
+	}
+	if len(*reexecs) != 0 {
+		t.Fatalf("a dry run re-executed into the release: %q", *reexecs)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Fatalf("a dry run left files beside the binary: %v", entries)
+	}
+	if !strings.Contains(out.String(), "Would replace") {
+		t.Fatalf("the dry run did not say what it would do: %s", out.String())
+	}
+}
+
+// The copy before an upgrade must be taken before the binary is replaced: a
+// failure after the swap would leave a new binary to migrate a database nothing
+// protected. --no-download exercises the order without a real download.
+func TestTheBackupRunsBeforeTheDeployment(t *testing.T) {
+	e, _, _ := newTestEnv(t)
+	oldB, oldU := backupBeforeUpgradeInstall, runUpgradeInstall
+	t.Cleanup(func() { backupBeforeUpgradeInstall, runUpgradeInstall = oldB, oldU })
+	var order []string
+	backupBeforeUpgradeInstall = func(context.Context, installer.UpgradeOptions) (string, error) {
+		order = append(order, "backup")
+		return "zoomies-20260101-000000", nil
+	}
+	runUpgradeInstall = func(context.Context, installer.UpgradeOptions) error {
+		order = append(order, "deploy")
+		return nil
+	}
+	if err := runUpgrade(context.Background(), e, []string{"--no-download"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(order, []string{"backup", "deploy"}) {
+		t.Fatalf("order = %v, want the copy before the deployment", order)
+	}
+}
+
+func TestNoBackupSkipsTheCopyBeforeTheUpgrade(t *testing.T) {
+	e, _, _ := newTestEnv(t)
+	oldB, oldU := backupBeforeUpgradeInstall, runUpgradeInstall
+	t.Cleanup(func() { backupBeforeUpgradeInstall, runUpgradeInstall = oldB, oldU })
+	called := false
+	backupBeforeUpgradeInstall = func(context.Context, installer.UpgradeOptions) (string, error) {
+		called = true
+		return "", nil
+	}
+	runUpgradeInstall = func(context.Context, installer.UpgradeOptions) error { return nil }
+	if err := runUpgrade(context.Background(), e, []string{"--no-download", "--no-backup"}); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("--no-backup still took a copy")
+	}
+}
+
+// A dry run is the review it promises: the deployment half is printed where a
+// real run would print it, so the mounts and settings it would add are visible,
+// rather than a generic line promising they were checked.
+func TestADryRunPrintsTheDeploymentReview(t *testing.T) {
+	e, out, _ := newTestEnv(t)
+	candidateRelease(t)
+	old := runUpgradeInstall
+	t.Cleanup(func() { runUpgradeInstall = old })
+	reviewed := false
+	runUpgradeInstall = func(_ context.Context, opts installer.UpgradeOptions) error {
+		if opts.Check && opts.Out != nil && opts.Out != io.Discard {
+			reviewed = true
+			fmt.Fprint(opts.Out, "would add the shared folder\n")
+		}
+		return nil
+	}
+	if err := runUpgrade(context.Background(), e, []string{"--dry-run", "--version", "v9.9.9"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reviewed {
+		t.Fatal("the dry run never printed the deployment review")
+	}
+	if !strings.Contains(out.String(), "would add the shared folder") || !strings.Contains(out.String(), "Dry run complete") {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+// A dry run must download to preview anything, so the flag that says "do not
+// download" is a contradiction rather than a combination.
+func TestADryRunRefusesToGoWithoutADownload(t *testing.T) {
+	e, _, _ := newTestEnv(t)
+	err := runUpgrade(context.Background(), e, []string{"--dry-run", "--no-download"})
+	if err == nil || !strings.Contains(err.Error(), "--dry-run") {
+		t.Fatalf("error: %v", err)
 	}
 }
 
@@ -189,7 +303,7 @@ func TestACandidateThatRefusesTheDeploymentReplacesNothing(t *testing.T) {
 	}
 	_, reexecs := stubUpgradeSeams(t, binary, errors.New("the deployment needs a shared folder"))
 
-	err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, "")
+	err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, false, "")
 	if err == nil || !strings.Contains(err.Error(), "needs a shared folder") || !strings.Contains(err.Error(), "left in place") {
 		t.Fatalf("error: %v", err)
 	}
@@ -225,7 +339,7 @@ func TestTheOperatorsYesReachesTheCandidatesCheckAndNothingElseDoes(t *testing.T
 			}
 			calls, _ := stubUpgradeSeams(t, binary, nil)
 			sel := deploymentSelector{AssumeYes: tc.yes}
-			if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, ""); err != nil {
+			if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, false, ""); err != nil {
 				t.Fatal(err)
 			}
 			args := (*calls)[0].args
@@ -380,7 +494,7 @@ func TestARefusalFromTheCandidateSaysWhatToDo(t *testing.T) {
 			t.Fatal(err)
 		}
 		stubUpgradeSeams(t, binary, &candidateRefusal{errors.New("exit status 1: the layout needs a shared folder")})
-		err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{AssumeYes: tc.yes}, "")
+		err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{AssumeYes: tc.yes}, false, "")
 		if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), tc.avoid) {
 			t.Fatalf("yes=%v: error: %v", tc.yes, err)
 		}

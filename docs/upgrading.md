@@ -128,8 +128,20 @@ sudo zoomies upgrade
 ```
 
 Use `sudo zoomies upgrade --check` to inspect the deployment without changing
-it. `--version vX.Y.Z` targets a specific release, and `--no-download` applies
-the executable already installed. A remote agent's card provides the command
+it. `sudo zoomies upgrade --dry-run` goes further: it downloads and verifies
+the release it would install, prints the deployment review the real run shows
+(the shared folder, mounts, files and settings it would offer), then prints
+what the binary half would do (replace the binary and keep the running one as
+`zoomies.previous`). It changes nothing, and it stages its download away from
+the installed binary, so it needs no write access to `/usr/local/bin`.
+Use `--check` when you only want to know whether this deployment is sound;
+use `--dry-run` when you want to see the upgrade itself before agreeing to it.
+`--version vX.Y.Z` targets a specific release, and `--no-download` applies the
+executable already installed. Before it changes anything, an upgrade takes and
+verifies a copy of the controller's database through the same backup package
+the schedule uses, and prints the copy's name and the command that restores it;
+`--no-backup` goes without it for an operator who keeps their own copies or
+whose database is elsewhere. A remote agent's card provides the command
 pinned to its controller's release.
 
 It checks the existing deployment, downloads and verifies the new binary,
@@ -237,9 +249,11 @@ is asked through its own health check, run in it straight away; a native
 service through `/healthz` on the listener its settings name. The wait lasts up
 to thirty minutes. If the controller stops during it, or is still starting at
 the end, the upgrade exits with an error that says which and points at its
-logs. It does **not** roll back then: the new release may already have migrated
-the database, which the old one cannot open. An agent serves nothing to ask, so
-an agent's upgrade does not wait.
+logs. A **native** controller that does not answer is then rolled back by
+itself, unless the upgrade migrated the database; [rolling
+back](#rolling-back-by-hand) has the rule. A container deployment's service is its
+image, which the upgrade does not keep the one before, so it is not rolled back
+by itself. An agent serves nothing to ask, so an agent's upgrade does not wait.
 
 A failed image pull stops before a restart. If a replacement container cannot
 start, the upgrade attempts to restore the previous container or Compose image.
@@ -306,7 +320,9 @@ the new image up with, so an unattended upgrade stops before it changes
 anything and says so. `--check` lists what the real run will offer and adds
 none of it.
 
-`zoomies upgrade --check` checks the existing deployment without modifying it.
+`zoomies upgrade --check` checks the existing deployment without modifying it,
+and `zoomies upgrade --dry-run` downloads the release it would take and previews
+the whole run without changing anything.
 `zoomies update` is a compatibility alias and accepts the same flags. Both commands
 fetch the newest release (or the rolling `dev` build, for a host running one),
 verify its checksum, replace the installed binary and carry on in the new one,
@@ -553,9 +569,16 @@ it.
 
 ### Rolling back by hand
 
-There is no automatic rollback, because migrations are one-way ([there is no
-downgrade](#there-is-no-downgrade)). What an update leaves makes one by hand
-possible:
+A **native controller** that does not answer after an upgrade is rolled back by
+itself: if the upgrade ran no migration, the previous release is put back over
+the installed binary, the service restarts on it, and the upgrade reports that
+it failed and the previous release is running again. A migration is the one
+thing that stops this, because migrations are one-way ([there is no
+downgrade](#there-is-no-downgrade)): a release that migrated the database is
+left in place, and the upgrade names the pre-migration copy to restore. A
+container deployment's service is its image, which an upgrade does not keep the
+one before, so it is not rolled back by itself. What an update leaves makes the
+rest possible by hand:
 
 * **The binary it replaced**, kept beside the installed one as
   `zoomies.previous` (`/usr/local/bin/zoomies.previous` on a default install).

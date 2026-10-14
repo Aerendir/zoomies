@@ -32,6 +32,11 @@ type deploymentSettings struct {
 	cfg  *config.Config
 	read bool
 	why  string
+	// dbPath is the database as this host sees it, which for a container
+	// deployment is the volume's path rather than the container's. It is what
+	// an upgrade backs up before it changes anything, and what tells it
+	// whether a restart migrated the database.
+	dbPath string
 	// cacheDirs are the host folders pools keep a size-limited cache in. The
 	// agent keeps that limit by measuring the folder itself, so a container
 	// deployment has to mount each one at its own path.
@@ -83,7 +88,7 @@ func (p *upgradePlan) settings(ctx context.Context) deploymentSettings {
 		if err != nil {
 			return p.unreadSettings("", env, err.Error())
 		}
-		return deploymentSettings{cfg: cfg, read: true}
+		return deploymentSettings{cfg: cfg, read: true, dbPath: dbPath}
 	}
 	st, err := store.Open(ctx, store.Options{Path: dbPath, ReadOnly: true})
 	if err != nil {
@@ -103,7 +108,7 @@ func (p *upgradePlan) settings(ctx context.Context) deploymentSettings {
 	// A pool that cannot be listed costs only the cache mounts: the settings
 	// above still decide everything else.
 	pools, _ := st.ListPools(ctx)
-	return deploymentSettings{cfg: cfg, read: true, cacheDirs: sizeLimitedCacheDirs(pools)}
+	return deploymentSettings{cfg: cfg, read: true, dbPath: dbPath, cacheDirs: sizeLimitedCacheDirs(pools)}
 }
 
 // sizeLimitedCacheDirs is every absolute host folder a pool keeps a
