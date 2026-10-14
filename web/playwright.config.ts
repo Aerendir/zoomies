@@ -58,6 +58,12 @@ const STATUS_PORT = 8095;
  * host that joins on an earlier one is behind it and can be asked to update.
  */
 const UPDATES_PORT = 8094;
+/**
+ * The component gallery's project runs against a Vite dev server rather than a
+ * controller: the gallery document is development-only and is not part of the
+ * built binary. See tests/gallery.spec.ts.
+ */
+const GALLERY_PORT = 8092;
 const FAKE_GITHUB_FILE = 'test-results/fakegithub.json';
 
 export default defineConfig({
@@ -79,14 +85,19 @@ export default defineConfig({
       name: 'chromium',
       use: { ...desktopChrome },
       testIgnore:
-        /(^|\/)(first-run|two-step|mcp-oauth|diagnostics|connect|ai-context|status-page|updates|host-update|transfer)\.spec\.ts/,
+        /(^|\/)(gallery|first-run|two-step|mcp-oauth|diagnostics|connect|ai-context|status-page|updates|host-update|transfer)\.spec\.ts/,
     },
     // Read-only monitoring on a phone is a stated requirement, so it is tested.
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
       testIgnore:
-        /(^|\/)(first-run|two-step|mcp-oauth|diagnostics|connect|ai-context|status-page|updates|host-update|transfer)\.spec\.ts/,
+        /(^|\/)(gallery|first-run|two-step|mcp-oauth|diagnostics|connect|ai-context|status-page|updates|host-update|transfer)\.spec\.ts/,
+    },
+    {
+      name: 'gallery',
+      testMatch: /(^|\/)gallery\.spec\.ts/,
+      use: { ...desktopChrome, baseURL: `http://127.0.0.1:${GALLERY_PORT}` },
     },
     {
       name: 'transfer',
@@ -192,6 +203,17 @@ export default defineConfig({
       // that a run which died in between left at the other value would answer
       // the first test with a number it did not start from.
       reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      command: `node tests/support/serve-gallery.mjs ${GALLERY_PORT}`,
+      url: `http://127.0.0.1:${GALLERY_PORT}/gallery.html`,
+      // Reused locally so a developer already running `npm run dev` does not
+      // meet a second Vite on the same port; never in CI, where a stale server
+      // would be the one from an earlier job.
+      reuseExistingServer: !process.env.CI,
       timeout: 60_000,
       stdout: 'pipe',
       stderr: 'pipe',

@@ -245,6 +245,11 @@ dev: build-nogui ## Run a controller with auth off, for local UI development
 	ZOOMIES_DISABLE_AUTH=true ZOOMIES_LOG_FORMAT=text ZOOMIES_LOG_LEVEL=debug \
 	ZOOMIES_DB_PATH=./zoomies.db ./$(BIN) controller
 
+.PHONY: gallery
+gallery: | $(UI_DIR)/node_modules ## Serve the development-only component gallery on :5173/gallery.html
+	@echo "component gallery: http://127.0.0.1:5173/gallery.html?style=mission-control&mode=dark"
+	cd $(UI_DIR) && $(NPM) run dev
+
 ##@ Images
 
 .PHONY: image
