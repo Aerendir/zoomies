@@ -19,7 +19,7 @@ style changes without clearing output.
 
 - Design: [PR #1027](https://github.com/eyupio/zoomies/pull/1027), merged.
 - Additive style (P1–P4): [PR #1030](https://github.com/eyupio/zoomies/pull/1030), merged.
-- Operational layout (P5), verification and captures: [PR #1038](https://github.com/eyupio/zoomies/pull/1038), awaiting review.
+- Operational layout (P5), verification and captures: [PR #1038](https://github.com/eyupio/zoomies/pull/1038), merged.
   Branch: `codex/mission-control-operational-layout`.
 
 ## Operational layout delivered
@@ -47,8 +47,67 @@ reduced-motion behaviour remain unchanged. Classic retains its original
 history-first Overview, full Jobs context and Rows fallback.
 
 No workflow dispatch, scheduler or provider behaviour changes are included.
-First-job repository assistance (P8) remains separately scoped. The public
-status page remains Classic.
+The public status page remains Classic.
+
+## First-job activation (P8, manual GitHub handoff)
+
+Implemented on `codex/first-job-activation`, following the merged UI stages.
+The Overview checklist now lets the operator choose a destination pool and
+enter a repository covered by that pool's installation target. Single-repository
+installations prefill their repository. Changing pool clears the previous
+repository choice and regenerates the workflow with that pool's labels.
+
+Read-only fleet checks explain a paused pool, a zero runner ceiling, an
+unavailable/unhealthy installation and the absence of an available matching
+host. Host matching reuses the pool editor's selector rules. These checks do
+not promise scheduler capacity or live repository access; rented capacity can
+still arrive. No new API contract, database migration or GitHub mutation is
+introduced.
+
+The handoff names the checks only GitHub can establish: App repository access,
+Actions enabled, the operator's workflow/run permissions and runner-group
+policy. It explains protected branches and merging into the default branch
+before Run workflow appears. A validated repository gets an Actions link using
+the installation's web origin, including GitHub Enterprise. Unknown/unsafe
+origins retain the manual Actions-tab instructions.
+
+The existing complete test workflow is copied, not committed or dispatched by
+Zoomies. Its token permissions are empty and its timeout is five minutes.
+Windows pools receive PowerShell commands; other pools keep the Unix probe.
+Copying YAML or opening GitHub does not complete setup: the existing managed-job
+counters and live events still announce running, successful and failed jobs
+with queue/run timings. Queue and delivery-health links help when work stalls.
+
+The original logo, Eli, quirks, appearance choices and existing prerequisite
+steps remain in place. Repository discovery and in-app dispatch remain future
+features requiring API and authorisation design.
+
+### Activation validation
+
+- Svelte check: no errors or warnings. UI lint and the web/Go builds passed.
+- Focused unit checks cover repository targeting, URL safety, enterprise origins,
+  pool labels and the bounded Windows/Unix test workflow.
+- 41 browser checks passed across activation, first-account, GitHub connection
+  and diagnostics fixtures. This includes the existing signed webhook/live-event
+  regression announcing the first managed job with its timings.
+- Activation is checked at 1440px and 375px in Classic and Mission Control:
+  changing pools changes the YAML, invalid repositories have no Actions link,
+  paused pools explain the prerequisite, and the page has no horizontal overflow.
+- Budgets remain shell 142.4KB of 200KB and status 19.1KB of 30KB.
+- The public-tree audit passes with the new files staged. No guard changes.
+- No real repository writes or workflow dispatches were performed.
+
+Review the real UI with deterministic activation fixtures:
+[desktop](../../docs/screenshots/activation/setup-mission-control-1440.png) and
+[375px phone](../../docs/screenshots/activation/setup-mission-control-375.png).
+Classic captures are beside them. The fixture supplies pools/installations and
+zero managed-job counters; it stops SSE updates so those prerequisites stay
+stable. These are UI checks, not proof that a real repository is ready.
+
+```sh
+cd web
+ZOOMIES_ACTIVATION_CAPTURES=1 npx playwright test tests/activation.spec.ts --project=chromium
+```
 
 ## Additive-style validation (PR #1030)
 
@@ -133,7 +192,7 @@ ZOOMIES_SCREENSHOT_STYLE=mission-control node tests/support/screenshots.mjs ../d
 
 ## Next coding-agent actions
 
-1. Review [PR #1038](https://github.com/eyupio/zoomies/pull/1038) and merge after its checks pass.
+1. The theme and operational layout are merged. Review the manual first-job activation stage on `codex/first-job-activation`.
 2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
    intended behaviour; use this file for current implementation status.
 3. Treat first-job repository assistance as a separate feature. Before adding

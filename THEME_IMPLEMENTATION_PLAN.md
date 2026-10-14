@@ -5,7 +5,7 @@
 ## Current implementation handoff
 
 The additive visual-style stage is merged in [PR #1030](https://github.com/eyupio/zoomies/pull/1030).
-The operational-layout stage is ready for review in [PR #1038](https://github.com/eyupio/zoomies/pull/1038),
+The operational-layout stage is merged in [PR #1038](https://github.com/eyupio/zoomies/pull/1038),
 with its final verification recorded in the
 [current handoff](roadmap/plans/2026-10-14-mission-control-style.md).
 That handoff is the source of current status; the design and phase descriptions below

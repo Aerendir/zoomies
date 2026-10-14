@@ -27,22 +27,27 @@ export const TEST_JOB_FILE = '.github/workflows/zoomies-test.yml';
  * product prints, so a pool labelled with several labels gets the list form and
  * the job reaches that pool and no other.
  */
-export function testJobWorkflow(labels: readonly string[]): string {
+export function testJobWorkflow(labels: readonly string[], windows = false): string {
   return [
     `name: ${TEST_JOB_NAME}`,
     'on: workflow_dispatch',
+    'permissions: {}',
     'jobs:',
     '  hello:',
     `    runs-on: ${runsOn(labels)}`,
+    '    timeout-minutes: 5',
     '    steps:',
     // The sleep is the point of the third line: a job that finishes in
     // milliseconds is over before an operator has looked from GitHub to this
     // page, and they would see a runner appear and vanish without ever having
     // seen it busy.
     '      - run: |',
-    '          echo "Hello from $(hostname)"',
-    '          uname -a',
-    '          sleep 5',
+    ...(windows
+      ? [
+          '          Write-Output "Hello from $env:COMPUTERNAME"',
+          '          Start-Sleep -Seconds 5',
+        ]
+      : ['          echo "Hello from $(hostname)"', '          uname -a', '          sleep 5']),
     '',
   ].join('\n');
 }
