@@ -434,6 +434,22 @@ func TestTheStatusSaysABuildWithNoReleaseKeyVerifiesNothing(t *testing.T) {
 	}
 }
 
+// Whether a controller that does not come back is put back is a fact about how
+// it runs: a native service runs the binary the upgrade keeps beside it, a
+// container's service is an image. The status says which, so the confirmation
+// can promise the rollback only where it applies.
+func TestTheStatusSaysWhetherAControllerThatFailsIsPutBack(t *testing.T) {
+	withHelperHost(t, updates.HelperHost{GOOS: "linux", Systemd: true})
+	h := newHarness(t)
+	if !h.status().Rollback {
+		t.Fatal("a native controller is put back and the status should say so")
+	}
+	withHelperHost(t, updates.HelperHost{GOOS: "linux", InContainer: true, RunsRunners: true})
+	if h.status().Rollback {
+		t.Fatal("a container controller is not put back and the status should not promise it")
+	}
+}
+
 // The document says every field is always present, so a client reads a missing
 // release as null and never has to ask whether the key is there.
 func TestTheStatusAlwaysCarriesEveryFieldAndIsNullWhereThereIsNothing(t *testing.T) {

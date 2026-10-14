@@ -351,6 +351,7 @@ export function confirmControllerUpdate(
   tag: string,
   running: string,
   release = true,
+  rollback = false,
 ): {
   title: string;
   description: string;
@@ -372,7 +373,12 @@ export function confirmControllerUpdate(
             ]),
       'The controller restarts. This page loses its connection for a short while and finds it again by itself.',
       'Jobs that are running keep running.',
-      'If the release changes the database, a copy of it is kept first beside the database, and the last two copies are kept. A release that changes nothing there takes none.',
+      'A verified copy of the database is taken before anything changes. If the update fails, this page names the copy and the command that restores it.',
+      ...(rollback
+        ? [
+            'If the controller does not come back, and the release changed nothing in the database, the previous release is put back automatically.',
+          ]
+        : []),
     ],
     confirmLabel: `Update to ${tag}`,
   };
