@@ -19,14 +19,15 @@
   interface Props {
     /** The pool's labels, so the file asks for this pool and no other. */
     labels?: readonly string[];
+    windows?: boolean;
     /** Open on arrival. */
     open?: boolean;
     class?: string;
   }
 
-  let { labels = [], open = false, class: className = '' }: Props = $props();
+  let { labels = [], windows = false, open = false, class: className = '' }: Props = $props();
 
-  const workflow = $derived(testJobWorkflow(labels));
+  const workflow = $derived(testJobWorkflow(labels, windows));
 </script>
 
 <details class="testjob {className}" {open}>

@@ -38,16 +38,14 @@
   import { untrack } from 'svelte';
   import { listInstallations, listJobs } from '$lib/api/client';
   import { events } from '$lib/api/sse';
-  import type { Job } from '$lib/api/types';
-  import { runsOn } from '$lib/brand';
+  import type { Installation, Job } from '$lib/api/types';
   import { formatDuration } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import { storage } from '$lib/state/prefs.svelte';
   import { session } from '$lib/state/session.svelte';
   import Button from '$lib/components/Button.svelte';
-  import CopyButton from '$lib/components/CopyButton.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
-  import TestJob from '$lib/pools/TestJob.svelte';
+  import FirstJobSetup from './FirstJobSetup.svelte';
 
   /**
    * Told whenever this panel appears or goes away, so the Overview can quieten
@@ -58,7 +56,7 @@
 
   const DISMISS_KEY = 'zoomies.firstrun.dismissed';
 
-  let installations = $state<number | null>(null);
+  let installations = $state<Installation[] | null>(null);
   let dismissed = $state(storage.get(DISMISS_KEY) === '1');
 
   const canAdmin = $derived(session.can('admin'));
@@ -69,7 +67,7 @@
   async function count(): Promise<void> {
     try {
       const result = await listInstallations();
-      installations = (result.items ?? []).length;
+      installations = result.items ?? [];
     } catch {
       // A failure here is not worth a message: every other panel on this page
       // is already saying that the controller is unreachable.
@@ -83,7 +81,7 @@
     events.subscribe(['installation.updated', 'installation.deleted'], () => void count()),
   );
 
-  const hasInstallation = $derived((installations ?? 0) > 0);
+  const hasInstallation = $derived((installations?.length ?? 0) > 0);
   const pools = $derived(fleet.pools);
   const hasPool = $derived(pools.length > 0);
   /**
@@ -112,17 +110,6 @@
     if (!own) return false;
     return (own.running_jobs ?? 0) + (own.completed ?? 0) > 0;
   });
-
-  /**
-   * The line a workflow writes, by the product's one rule.
-   *
-   * Deriving it by hand -- taking the last label, since the store sorts them --
-   * gave a different answer from every other surface: a pool labelled
-   * [cuda, zoomies, zoomies-gpu] needs `[cuda, zoomies-gpu]`, and the last
-   * label alone would send jobs to a different pool. `runsOn` is what the
-   * wizard, the pool page and the installer all print.
-   */
-  const runsOnValue = $derived(runsOn(pools[0]?.labels ?? []));
 
   /**
    * The step the operator is on: the first one not done, in the order they are
@@ -384,11 +371,9 @@
             runner for it, and it appears on this page.
           </p>
           {#if hasPool}
-            <p class="runs-on">
-              <code>runs-on: {runsOnValue}</code>
-              <CopyButton value={`runs-on: ${runsOnValue}`} label="Copy the runs-on line" />
-            </p>
-            <div class="test-job"><TestJob labels={pools[0]?.labels ?? []} open /></div>
+            <div class="test-job">
+              <FirstJobSetup {pools} installations={installations ?? []} />
+            </div>
           {/if}
         </div>
         <div class="action">
@@ -532,12 +517,6 @@
     line-height: var(--z-leading-xs);
     color: var(--z-text-muted);
     text-wrap: pretty;
-  }
-  .runs-on {
-    display: flex;
-    align-items: center;
-    gap: var(--z-space-2);
-    margin: var(--z-space-2) 0 0;
   }
   .test-job {
     margin-top: var(--z-space-3);

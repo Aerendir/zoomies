@@ -42,3 +42,12 @@ test('the test job asks for the pool the way every other surface does', () => {
 test('the test job stays busy long enough to be watched', () => {
   assert.match(testJobWorkflow(['zoomies']), /sleep \d+/);
 });
+
+test('a Windows activation probe uses PowerShell with bounded time and no token permissions', () => {
+  const yaml = testJobWorkflow(['zoomies-windows'], true);
+  assert.match(yaml, /Start-Sleep -Seconds 5/);
+  assert.match(yaml, /COMPUTERNAME/);
+  assert.doesNotMatch(yaml, /uname|\$\(hostname\)/);
+  assert.match(yaml, /timeout-minutes: 5/);
+  assert.match(yaml, /permissions: \{\}/);
+});
