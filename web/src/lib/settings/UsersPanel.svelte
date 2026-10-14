@@ -327,21 +327,44 @@
 
   function actionsFor(user: User): MenuItem[] {
     const self = user.id === session.identity?.id;
+    /*
+      The server's ManageWithin rule, shown before it is hit: nobody can change
+      an account that outranks their own. Without this an administrator was
+      offered the whole menu for the platform account -- delete included --
+      every one of them a 403 only after the fact. On a portal-hosted instance
+      the platform account is the hosting team's automation, so the customer
+      side of this is exactly who must not be offered the change.
+    */
+    const outranks = !session.can(user.role ?? 'viewer');
+    const outranksReason = `Only a ${roleLabel(user.role).toLowerCase()} account can change this one: nobody may grant or take over a role above their own.`;
     return [
-      { id: 'edit', label: 'Edit role and details', icon: Pencil, onSelect: () => openEdit(user) },
+      {
+        id: 'edit',
+        label: 'Edit role and details',
+        icon: Pencil,
+        disabled: outranks,
+        reason: outranksReason,
+        lock: true,
+        onSelect: () => openEdit(user),
+      },
       {
         id: 'password',
         label: 'Reset password',
         icon: KeyRound,
+        disabled: outranks,
+        reason: outranksReason,
+        lock: true,
         onSelect: () => openReset(user),
       },
       {
         id: 'two-step',
         label: 'Reset two-step verification',
         icon: ShieldOff,
-        disabled: !user.two_step_enabled,
-        reason:
-          'This account has not turned on two-step verification, so there is nothing to reset.',
+        disabled: outranks || !user.two_step_enabled,
+        reason: outranks
+          ? outranksReason
+          : 'This account has not turned on two-step verification, so there is nothing to reset.',
+        lock: outranks,
         onSelect: () => {
           twoStepFor = user;
           twoStepOpen = true;
@@ -351,8 +374,11 @@
         id: 'disabled',
         label: user.disabled ? 'Enable this account' : 'Disable this account',
         icon: UserX,
-        disabled: self && !user.disabled,
-        reason: 'You cannot disable the account you are signed in with. Ask another administrator.',
+        disabled: outranks || (self && !user.disabled),
+        reason: outranks
+          ? outranksReason
+          : 'You cannot disable the account you are signed in with. Ask another administrator.',
+        lock: outranks,
         onSelect: () => void setDisabled(user, !user.disabled),
       },
       {
@@ -361,8 +387,11 @@
         icon: Trash2,
         danger: true,
         separated: true,
-        disabled: self,
-        reason: 'You cannot delete the account you are signed in with. Ask another administrator.',
+        disabled: self || outranks,
+        reason: outranks
+          ? outranksReason
+          : 'You cannot delete the account you are signed in with. Ask another administrator.',
+        lock: outranks,
         onSelect: () => {
           deleting = user;
           deleteOpen = true;
