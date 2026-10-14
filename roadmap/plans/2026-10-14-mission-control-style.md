@@ -279,16 +279,24 @@ the documentation script share one Pillow invocation; a subset of
 `tests/support/screenshots.mjs` was re-run after the change and still encodes.
 
 `web/tests/gallery.spec.ts` is the automated half, against a Vite dev server
-rather than the binary (the gallery is not in the binary to drive): 15 checks
+rather than the binary (the gallery is not in the binary to drive): 16 checks
 pass. They cover all four combinations, the root attributes, the refusal
 descriptions, the focus ring, retry actions, live contrast of every status
 badge and state label against the surface it sits on, unknown values falling
 back to Classic and System, a system-mode change that keeps Mission Control,
-an in-place style switch that writes no preference, the drawer's focus trap and
-Escape order, the confirmation's typed-name gate, the grid's ready, empty,
-loading and failed states, the toast tones, and no page-level overflow at 1440
-or 375 pixels. The spec project is excluded from the `chromium` and `mobile`
-projects, which drive the real binary.
+an in-place style switch that writes no preference, the fresh phone grid's
+Cards/Rows fallback in each style, the drawer's focus trap and Escape order,
+the confirmation's typed-name gate, the grid's ready, empty, loading and
+failed states, the toast tones, and no page-level overflow at 1440 or 375
+pixels. The spec project is excluded from the `chromium` and `mobile`
+projects, which drive the real binary, and joins the Playwright matrix's
+`other` group in CI so it runs at all.
+
+One component reads the style store rather than the root attribute: a data
+grid's fresh phone fallback is Cards in Mission Control and Rows in Classic.
+Setting the attribute alone would have shown a Classic decision inside Mission
+Control tokens, so `visualStyle` gained `preview`, which makes the rune agree
+with an attribute the caller owns and writes no preference.
 
 Building the gallery found one real defect in its own layout before it found
 any in the components: a `minmax(22rem, 1fr)` form column has a 352px floor,

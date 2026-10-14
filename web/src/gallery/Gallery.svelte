@@ -17,6 +17,7 @@
   import { THEME_OPTIONS } from '$lib/state/theme.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import { resolveUIStyle, UI_STYLE_OPTIONS } from '$lib/state/ui-style';
+  import { visualStyle } from '$lib/state/ui-style.svelte';
   import ControlsSection from './sections/Controls.svelte';
   import DataSection from './sections/Data.svelte';
   import FeedbackSection from './sections/Feedback.svelte';
@@ -25,7 +26,11 @@
   import SurfacesSection from './sections/Surfaces.svelte';
   import { applyChoice, choiceQuery, readChoice, resolveMode, type GalleryChoice } from './style';
 
-  let choice = $state<GalleryChoice>(readChoice(location.search));
+  const initialChoice = readChoice(location.search);
+  let choice = $state<GalleryChoice>(initialChoice);
+  // The root attribute is what the tokens read, but a component that asks the
+  // style store (a fresh grid's phone fallback) must see the same combination.
+  visualStyle.preview(initialChoice.style);
 
   const styleOptions = UI_STYLE_OPTIONS.map((option) => ({
     value: option.value,
@@ -36,6 +41,7 @@
   function choose(next: Partial<GalleryChoice>): void {
     choice = { ...choice, ...next };
     applyChoice(choice);
+    visualStyle.preview(choice.style);
     // replaceState rather than pushState: flicking between combinations while
     // reviewing must not fill the history with one entry per flick.
     history.replaceState(null, '', `${location.pathname}${choiceQuery(choice)}`);

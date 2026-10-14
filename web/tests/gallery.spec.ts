@@ -184,6 +184,26 @@ test('an unknown style and mode fall back to Classic and System', async ({ page 
   expect(await root.getAttribute('data-theme')).toBeNull();
 });
 
+test('a fresh phone grid follows the style fallback: Cards in Mission Control, Rows in Classic', async ({
+  page,
+}) => {
+  // The gallery sets the root attribute without saving a preference, so this
+  // is also the check that the store the grid reads is hearing the same
+  // combination the tokens are.
+  for (const [style, view] of [
+    ['mission-control', 'Cards'],
+    ['classic', 'Rows'],
+  ] as const) {
+    await open(page, style, 'light');
+    await page.setViewportSize({ width: 375, height: 900 });
+    const region = page.getByRole('region', { name: 'Data grid' });
+    await expect(
+      region.getByRole('button', { name: new RegExp(`^${view}`) }),
+      `${style} starts a fresh phone grid as ${view}`,
+    ).toHaveAttribute('aria-pressed', 'true');
+  }
+});
+
 test('System follows the operating system without changing the chosen style', async ({ page }) => {
   await open(page, 'mission-control', 'system');
   const root = page.locator('html');
