@@ -15,6 +15,7 @@ import (
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/installer"
 	"github.com/eyupio/zoomies/internal/logging"
+	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/version"
 	"golang.org/x/term"
 )
@@ -215,6 +216,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 	check := fs.Bool("check", false, "check the deployment without changing or restarting anything")
 	dryRun := fs.Bool("dry-run", false, "download and verify the newest release and say what an upgrade would do, changing nothing")
 	wantVersion := fs.String("version", "", "target a published tag such as v1.4.0, or dev")
+	releaseKey := fs.String("release-key", "", "the release public key to trust, overriding the one built in (base64; docs/upgrading.md)")
 	noDownload := fs.Bool("no-download", false, "apply the binary that is already installed; do not look for a newer one")
 	yes := fs.Bool("yes", false, "approve deployment additions and settings migration; never OS tuning")
 	noBackup := fs.Bool("no-backup", false, "go without the verified copy of the database the upgrade takes before it changes anything")
@@ -239,6 +241,16 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		return err
 	}
 	interactive := canAsk(e, *nonInteractive)
+	// The release key the download is held to: the one typed, the environment's,
+	// or the set compiled into this binary. An empty set means downloads are
+	// not held to a signature, which the download says once.
+	trustedKey := strings.TrimSpace(*releaseKey)
+	if trustedKey == "" {
+		trustedKey = strings.TrimSpace(os.Getenv("ZOOMIES_RELEASE_KEY"))
+	}
+	if trustedKey == "" {
+		trustedKey = releasekey.Default
+	}
 	opts := installer.UpgradeOptions{
 		Doctor:    func(ctx context.Context, cfg *config.Config) { upgradeDoctor(ctx, e, cfg) },
 		ConfigDir: *configDir, BinaryPath: *binary, DockerHost: *dockerHost, Runtime: *runtime, Image: *image,
@@ -268,7 +280,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		}
 		ui.Rule(e.out, "1/4 Binary")
 		selector := newDeploymentSelector(*configDir, *dockerHost, *runtime, *image, *mode, *yes)
-		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, true); err != nil {
+		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, true, trustedKey); err != nil {
 			return err
 		}
 		// The deployment half, as this release sees it: the mounts, files,
@@ -313,7 +325,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 			ui.Done(e.out, "Using the installed binary")
 		} else {
 			selector := newDeploymentSelector(*configDir, *dockerHost, *runtime, *image, *mode, *yes)
-			if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, false); err != nil {
+			if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, false, trustedKey); err != nil {
 				return err
 			}
 		}
@@ -492,7 +504,7 @@ func candidatePreflight(installed string, sel deploymentSelector) func(context.C
 // do, then stops: nothing is replaced and this command is not restarted inside
 // it. The release's own check of this deployment still runs, so a preview
 // refuses for the same reasons a real run would.
-func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel deploymentSelector, dryRun bool) error {
+func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel deploymentSelector, dryRun bool, releaseKey string) error {
 	if binary == "" {
 		binary, _ = os.Executable()
 	}
@@ -503,7 +515,7 @@ func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel dep
 	ui.Doing(e.out, "Checking for a newer Zoomies")
 	res, err := installer.SelfUpdate(ctx, installer.SelfUpdateOptions{
 		BinaryPath: binary, Version: wantVersion, Current: version.Version, Out: e.out,
-		DryRun: dryRun, Preflight: candidatePreflight(binary, sel),
+		DryRun: dryRun, ReleaseKey: releaseKey, Preflight: candidatePreflight(binary, sel),
 	})
 	var refusal *candidateRefusal
 	switch {

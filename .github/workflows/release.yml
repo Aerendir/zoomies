@@ -133,6 +133,30 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: make dist VERSION=${{ needs.setup.outputs.version }}
 
+      # What the checksum file cannot say on its own. It travels with the
+      # binary, so an unsigned release is only as trustworthy as the transport;
+      # a detached signature over it, checked against the key compiled into the
+      # binary, is what says the release is this project's. Nothing ships
+      # unsigned: the secret is the owner's, and a release cut without it fails
+      # here rather than publishing.
+      - name: Sign the release
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -eu
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "::error::RELEASE_SIGNING_KEY is not set. Mint a key with 'zoomies release keygen --out DIR', commit its public half to internal/releasekey/default.go, store its private half as this secret, and run again (docs/upgrading.md, Signing releases)."
+            exit 1
+          fi
+          keyfile="$(mktemp)"
+          trap 'rm -f "$keyfile"' EXIT
+          (umask 077 && printf '%s\n' "$RELEASE_SIGNING_KEY" > "$keyfile")
+          go run ./cmd/zoomies release sign --key-file "$keyfile" dist/checksums.txt > dist/checksums.txt.ed25519
+          # The signature must be one this release's own binary trusts, which is
+          # the public key committed to internal/releasekey. A key the committed
+          # one does not match is a release nobody else can verify.
+          go run ./cmd/zoomies release verify dist/checksums.txt dist/checksums.txt.ed25519
+
       # What the checksum file cannot say. install.sh verifies that the bytes
       # it downloaded are the bytes this release names; an attestation says
       # those bytes were built by this workflow, from this commit, and nowhere
@@ -164,6 +188,7 @@ jobs:
           files: |
             dist/zoomies_*
             dist/checksums.txt
+            dist/checksums.txt.ed25519
             dist/zoomies-provenance.sigstore.json
             dist/zoomies-provenance.intoto.jsonl
           generate_release_notes: true

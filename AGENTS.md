@@ -182,12 +182,14 @@ internal/machine    which host this process runs on: distribution, release, capa
 internal/naming     the grammar for pool, host and runner names
 internal/prrepair   bounds what the model may edit when it proposes a pull request
 internal/redact     strips credentials and commit emails from text bound for a model
+internal/releasekey the release signing key: Ed25519 verification of a release's checksums
 internal/toolscan   reads workflows for the toolchains their jobs install
 internal/wsl        keeps an agent alive inside a WSL2 distro
 web/                the Svelte 5 UI
 test/e2e            the Docker end-to-end test, behind the `e2e` build tag
 api/openapi.yaml    the API contract both clients are generated from
 deploy/             the controller and runner images, and the runner entrypoint
+design/             the Mission Control style review: concept images and their validation
 docker-compose.yml  the compose deployment, at the root so it is the one people find
 docs/               the zoomies.sh site, built by mkdocs.yml
 overrides/          the site's theme overrides: sharing tags, structured data, sitemap,

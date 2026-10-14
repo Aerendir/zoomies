@@ -560,12 +560,14 @@ internal/installer  zoomies init / uninstall / agent join, and the unit,
 internal/backup     one copy of the database: taking, listing, verifying, archiving,
                     encrypting and restoring it, shared by the CLI, the scheduler and the API
 internal/cryptox    AES-256-GCM at rest, argon2id, token hashing
+internal/releasekey the release signing key: Ed25519 verification of a release's checksums
 internal/events     in-process pub/sub that the SSE endpoint fans out
 internal/migrate    rewriting workflows' runs-on lines
 web/                the Svelte 5 UI
 test/e2e            the Docker end-to-end test, behind the `e2e` build tag
 api/openapi.yaml    the contract both clients are generated from
 deploy/             the controller and runner images, and the runner entrypoint
+design/             the Mission Control style review: concept images and their validation
 docker-compose.yml  the compose deployment
 docs/               the zoomies.sh site: architecture, naming, security,
                     UI guidelines, configuration, brand

@@ -126,7 +126,7 @@ func TestTheCandidateIsAskedToCheckTheDeploymentBeforeItReplacesTheBinary(t *tes
 	calls, reexecs := stubUpgradeSeams(t, binary, nil)
 
 	sel := deploymentSelector{ConfigDir: "/etc/zoomies", DockerHost: "unix:///run/docker.sock", Runtime: "podman", Image: "example.test/zoomies:custom", Mode: "agent"}
-	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, false); err != nil {
+	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(*calls) != 1 {
@@ -170,7 +170,7 @@ func TestFlagsThatSelectNothingAreNotPassedToTheCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls, _ := stubUpgradeSeams(t, binary, nil)
-	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, false); err != nil {
+	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"upgrade", "--check", "--non-interactive", "--no-download", "--installed-binary", binary}
@@ -192,7 +192,7 @@ func TestADryRunReplacesNothingAndRestartsNothing(t *testing.T) {
 	}
 	_, reexecs := stubUpgradeSeams(t, binary, nil)
 
-	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, true); err != nil {
+	if err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(binary); string(b) != "existing binary" {
@@ -303,7 +303,7 @@ func TestACandidateThatRefusesTheDeploymentReplacesNothing(t *testing.T) {
 	}
 	_, reexecs := stubUpgradeSeams(t, binary, errors.New("the deployment needs a shared folder"))
 
-	err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, false)
+	err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{}, false, "")
 	if err == nil || !strings.Contains(err.Error(), "needs a shared folder") || !strings.Contains(err.Error(), "left in place") {
 		t.Fatalf("error: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestTheOperatorsYesReachesTheCandidatesCheckAndNothingElseDoes(t *testing.T
 			}
 			calls, _ := stubUpgradeSeams(t, binary, nil)
 			sel := deploymentSelector{AssumeYes: tc.yes}
-			if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, false); err != nil {
+			if err := selfUpdate(context.Background(), e, binary, "v9.9.9", sel, false, ""); err != nil {
 				t.Fatal(err)
 			}
 			args := (*calls)[0].args
@@ -494,7 +494,7 @@ func TestARefusalFromTheCandidateSaysWhatToDo(t *testing.T) {
 			t.Fatal(err)
 		}
 		stubUpgradeSeams(t, binary, &candidateRefusal{errors.New("exit status 1: the layout needs a shared folder")})
-		err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{AssumeYes: tc.yes}, false)
+		err := selfUpdate(context.Background(), e, binary, "v9.9.9", deploymentSelector{AssumeYes: tc.yes}, false, "")
 		if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), tc.avoid) {
 			t.Fatalf("yes=%v: error: %v", tc.yes, err)
 		}
