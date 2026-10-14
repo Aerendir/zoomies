@@ -19,8 +19,8 @@ style changes without clearing output.
 
 - Design: [PR #1027](https://github.com/eyupio/zoomies/pull/1027), merged.
 - Additive style (P1–P4): [PR #1030](https://github.com/eyupio/zoomies/pull/1030), merged.
-- Operational layout (P5): implemented on `codex/mission-control-operational-layout`;
-  review PR and final evidence are recorded below when raised.
+- Operational layout (P5), verification and captures: [PR #1038](https://github.com/eyupio/zoomies/pull/1038), awaiting review.
+  Branch: `codex/mission-control-operational-layout`.
 
 ## Operational layout delivered
 
@@ -133,7 +133,7 @@ ZOOMIES_SCREENSHOT_STYLE=mission-control node tests/support/screenshots.mjs ../d
 
 ## Next coding-agent actions
 
-1. Review and merge the operational-layout PR after its checks pass.
+1. Review [PR #1038](https://github.com/eyupio/zoomies/pull/1038) and merge after its checks pass.
 2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
    intended behaviour; use this file for current implementation status.
 3. Treat first-job repository assistance as a separate feature. Before adding
