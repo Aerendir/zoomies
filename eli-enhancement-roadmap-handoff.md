@@ -61,7 +61,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 descriptive-comparison milestone | Merged | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
 | E3 checkout preview foundation | Merged | ZF-244, [#1021](https://github.com/eyupio/zoomies/pull/1021), based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
 | E3 private preview retention | Merged | ZF-244, [#1022](https://github.com/eyupio/zoomies/pull/1022), based on main after #1021 | Bounded immutable private source/evidence/preview envelope and offline recomputation, scoped actor/audit and explicit unchecked currentness; admission and web flow remain outstanding |
-| E3 admitted checkout evidence | Implemented, PR preparation | ZF-244, PR pending, based on main after #1022 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
+| E3 admitted checkout evidence | Implemented, pending review/CI/merge | ZF-244, [#1024](https://github.com/eyupio/zoomies/pull/1024), updated onto main after #1023 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
 | E4 to E6 | Not started | Dependencies and sequence below | No new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -2160,7 +2160,9 @@ merge, dispatch, enrichment or E2 scope expansion.
 ### E3 admitted checkout evidence, 14 October 2026
 
 Retention #1022 merged. Branch codex/eli-e3-checkout-evidence starts from main
-after #1022. This adds the bounded optional GitHub reader and internal capture
+after #1022 and is updated onto main after #1023.
+Ready PR [#1024](https://github.com/eyupio/zoomies/pull/1024) awaits review/CI/merge.
+This adds the bounded optional GitHub reader and internal capture
 adapter; no HTTP route, source policy setting or web flow is exposed yet.
 
 ReadCheckoutEvidence selects one exact run/attempt/GitHub job and YAML job/step
