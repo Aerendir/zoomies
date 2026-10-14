@@ -1826,9 +1826,10 @@ Passing CI alone cannot establish improvement. Publication never merges.
 
 Depends on ZF-242 and ZF-243's descriptive milestone. Size M.
 [Preview foundation](roadmap/plans/2026-10-14-eli-e3-checkout-preview.md),
-[private retention/replay](roadmap/plans/2026-10-14-eli-e3-preview-retention.md).
-The preview foundation merged in #1021. Private retention precedes admission
-and the web surface; source-bearing history needs its own authorisation boundary.
+[private retention/replay](roadmap/plans/2026-10-14-eli-e3-preview-retention.md),
+[admitted checkout evidence](roadmap/plans/2026-10-14-eli-e3-checkout-evidence.md).
+The preview foundation merged in #1021 and private retention in #1022.
+Admitted evidence precedes the web surface; source-bearing history needs its own authorisation boundary.
 
 ## 9. Kept for the day somebody asks
 
