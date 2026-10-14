@@ -225,9 +225,27 @@ The plan's release-evidence list is still open: first-run, empty, failure and
 phone-keyboard captures for Mission Control, and the development-only state
 gallery in N-T4.
 
+## Release evidence (14 October 2026)
+
+First run, loading, a failed fleet fetch, an empty pool list and a filter that
+matches nothing are now captured from the real binary, in dark and light and in
+both styles. In Mission Control they are in `docs/screenshots/mission-control`;
+the Classic ones sit in `docs/screenshots` beside the existing captures, and
+`docs/ui-guidelines.md` links them.
+
+To reach states the seeded fleet is never in, the screenshot harness gained two
+fields: `stub`, which puts routes on the page before it loads (an empty list, a
+failed fetch, a first run), and `noRows`, which stops `settle` waiting for a row
+an intentionally empty grid will never have. Each stub covers only what the
+state needs, so the rest of the page is still the real product.
+
+A headless browser cannot raise a soft keyboard, so the phone-keyboard evidence
+is not a picture: the assistant sheet's visual-viewport sizing, focus
+containment and close order are covered by the browser suite.
+
 ## Next coding-agent actions
 
-1. The theme and operational layout are merged. Review [PR #1040](https://github.com/eyupio/zoomies/pull/1040) for manual first-job activation and merge after its checks pass.
+1. The theme, the operational layout and first-job activation are merged, and the release evidence is captured. The one evidence item that is not a capture is the assistant sheet's phone-keyboard behaviour, which the browser suite covers.
 2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
    intended behaviour; use this file for current implementation status.
 3. Treat first-job repository assistance as a separate feature. Before adding
