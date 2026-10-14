@@ -275,6 +275,12 @@ func (p *upgradePlan) restartNative(ctx context.Context) error {
 	return nil
 }
 
+// engineResultMarker begins a line the engine writes for the update helper
+// alone: the copy taken before the change, and whether the engine rolled back.
+// The helper reads it into its answer and keeps it out of the log an operator
+// reads, so the words a person sees stay prose.
+const engineResultMarker = "zoomies-upgrade-result: "
+
 // backupBeforeUpgrade takes and verifies a copy of the deployment's database,
 // through the same package the schedule and the command line use, so the copy
 // is listable and restorable by the command that restores any other. A
@@ -331,6 +337,9 @@ func (p *upgradePlan) backupBeforeUpgrade(ctx context.Context) (string, error) {
 	ui := PaletteFor(p.opts.Out)
 	ui.Done(p.opts.Out, "Backed up the database as %s and verified it", entry.ID)
 	ui.Hint(p.opts.Out, "Restore it with: zoomies restore %s --replace", entry.Dir)
+	// For the helper alone: the copy's directory, so an update that goes wrong
+	// can offer the restore. It is stripped from the log an operator reads.
+	fmt.Fprintf(p.opts.Out, "%sbackup=%s\n", engineResultMarker, entry.Dir)
 	// The same ceiling the schedule keeps, so an upgrade per release does not
 	// grow the directory without bound.
 	if removed, err := backup.Prune(root, s.cfg.Backup.Keep); err != nil {

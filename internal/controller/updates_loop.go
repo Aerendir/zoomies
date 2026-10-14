@@ -263,6 +263,15 @@ func (c *Controller) endAttempt(ctx context.Context, a store.UpdateAttempt, stat
 	if !c.finishUpdateAttempt(ctx, a, state, text) {
 		return false
 	}
+	// What the helper reported about the engine's run, for the page: the copy it
+	// took before it changed anything, and whether it rolled back. A result that
+	// is not there leaves both empty, which is what an attempt that timed out or
+	// was answered before this release happened to carry.
+	if res, ok := c.resultFor(a); ok {
+		if err := c.st.SetUpdateAttemptFacts(ctx, a.ID, res.Backup, res.RolledBack); err != nil {
+			c.log.Warn("could not record what the update helper reported", "attempt", a.ID, "error", err)
+		}
+	}
 	c.withdrawRequest(a)
 	return true
 }

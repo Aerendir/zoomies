@@ -62,6 +62,14 @@ type Result struct {
 	To   string `json:"to"`
 	// Error is the sentence an operator reads when OK is false.
 	Error string `json:"error"`
+	// Backup is the directory of the copy the engine took before it changed
+	// anything, empty when none was taken. It is what a page offers to restore
+	// from after a failed update.
+	Backup string `json:"backup"`
+	// RolledBack says the engine put the previous release back because the new
+	// one did not answer. The attempt is then a failure that was undone rather
+	// than one left in place, which is a different thing to tell an operator.
+	RolledBack bool `json:"rolled_back"`
 	// LogTail is the end of the engine's output, at most MaxLogTailBytes.
 	LogTail    string    `json:"log_tail"`
 	StartedAt  time.Time `json:"started_at"`

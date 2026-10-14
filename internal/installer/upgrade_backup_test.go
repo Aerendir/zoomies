@@ -31,6 +31,10 @@ func TestABackupIsTakenAndVerifiedBeforeTheUpgrade(t *testing.T) {
 	if !strings.Contains(out.String(), "Backed up the database as") {
 		t.Fatalf("the step did not say it backed up:\n%s", out.String())
 	}
+	// The helper reads the copy's directory from a marked line of its own.
+	if !strings.Contains(out.String(), engineResultMarker+"backup="+dir) {
+		t.Fatalf("the copy was not reported to the helper:\n%s", out.String())
+	}
 	root := filepath.Join(volume, backup.DefaultDirName)
 	entries, err := backup.List(root)
 	if err != nil || len(entries) != 1 {

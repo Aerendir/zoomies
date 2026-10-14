@@ -127,6 +127,22 @@ export function buildText(release: boolean): string {
 }
 
 /**
+ * Said when an update failed but the engine put the previous release back: the
+ * host is on what it ran, which is a different thing to tell an operator from a
+ * failure left in place.
+ */
+export function rollbackNote(rolledBack: boolean): string {
+  return rolledBack
+    ? 'The new release did not answer, so the previous release was put back and is running again.'
+    : '';
+}
+
+/** The restore command for the copy an upgrade took, or empty when none was. */
+export function restoreCommand(backup: string): string {
+  return backup ? `zoomies restore ${backup} --replace` : '';
+}
+
+/**
  * Whether this build holds a release's checksums to a signature, and by which
  * keys. No keys is a build from before a key was committed, which takes a
  * release's checksums on trust rather than holding them to a signature.
