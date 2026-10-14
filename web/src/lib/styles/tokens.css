@@ -579,3 +579,105 @@
     --z-motion-slow: 1ms;
   }
 }
+
+/* Style previews and Mission Control share values so the card never promises
+   a different palette from the one it selects. Status and artwork tokens keep
+   their existing meanings; Fast Cyan remains the running-work signal. */
+:root {
+  --z-classic-preview-bg: #f6f7f9;
+  --z-classic-preview-surface: #ffffff;
+  --z-classic-preview-text: #0b0c0e;
+  --z-classic-preview-accent: #1a63d8;
+  --z-mission-bg: #f4f7fb;
+  --z-mission-surface: #ffffff;
+  --z-mission-raised: #ffffff;
+  --z-mission-sunken: #eaf0f7;
+  --z-mission-hover: #e3ecf8;
+  --z-mission-border: #c3cede;
+  --z-mission-border-strong: #697d96;
+  --z-mission-text: #122235;
+  --z-mission-muted: #405570;
+  --z-mission-subtle: #536780;
+  --z-mission-accent: #1762bc;
+  --z-mission-accent-hover: #12509e;
+  --z-mission-accent-active: #0e4080;
+  --z-mission-accent-subtle: #e3edfc;
+  --z-mission-accent-border: #9ab8e2;
+  --z-mission-accent-contrast: #ffffff;
+  --z-style-preview-height: 6.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --z-classic-preview-bg: #0a0b0d;
+    --z-classic-preview-surface: #131519;
+    --z-classic-preview-text: #f4f5f7;
+    --z-classic-preview-accent: #78b4ff;
+    --z-mission-bg: #090e18;
+    --z-mission-surface: #111b2b;
+    --z-mission-raised: #19263b;
+    --z-mission-sunken: #0c1421;
+    --z-mission-hover: #1a2b43;
+    --z-mission-border: #2b3a50;
+    --z-mission-border-strong: #7389a5;
+    --z-mission-text: #eef4fc;
+    --z-mission-muted: #afbed2;
+    --z-mission-subtle: #9baec8;
+    --z-mission-accent: #8ac2ff;
+    --z-mission-accent-hover: #b0d7ff;
+    --z-mission-accent-active: #cce5ff;
+    --z-mission-accent-subtle: #142b47;
+    --z-mission-accent-border: #55769c;
+    --z-mission-accent-contrast: #07131d;
+  }
+}
+
+:root[data-theme='dark'] {
+  --z-classic-preview-bg: #0a0b0d;
+  --z-classic-preview-surface: #131519;
+  --z-classic-preview-text: #f4f5f7;
+  --z-classic-preview-accent: #78b4ff;
+  --z-mission-bg: #090e18;
+  --z-mission-surface: #111b2b;
+  --z-mission-raised: #19263b;
+  --z-mission-sunken: #0c1421;
+  --z-mission-hover: #1a2b43;
+  --z-mission-border: #2b3a50;
+  --z-mission-border-strong: #7389a5;
+  --z-mission-text: #eef4fc;
+  --z-mission-muted: #afbed2;
+  --z-mission-subtle: #9baec8;
+  --z-mission-accent: #8ac2ff;
+  --z-mission-accent-hover: #b0d7ff;
+  --z-mission-accent-active: #cce5ff;
+  --z-mission-accent-subtle: #142b47;
+  --z-mission-accent-border: #55769c;
+  --z-mission-accent-contrast: #07131d;
+}
+
+:root[data-ui-style='mission-control'] {
+  --z-bg: var(--z-mission-bg);
+  --z-surface: var(--z-mission-surface);
+  --z-surface-raised: var(--z-mission-raised);
+  --z-surface-sunken: var(--z-mission-sunken);
+  --z-surface-hover: var(--z-mission-hover);
+  --z-border: var(--z-mission-border);
+  --z-border-strong: var(--z-mission-border-strong);
+  --z-text: var(--z-mission-text);
+  --z-text-muted: var(--z-mission-muted);
+  --z-text-subtle: var(--z-mission-subtle);
+  --z-accent: var(--z-mission-accent);
+  --z-accent-hover: var(--z-mission-accent-hover);
+  --z-accent-active: var(--z-mission-accent-active);
+  --z-accent-subtle: var(--z-mission-accent-subtle);
+  --z-accent-border: var(--z-mission-accent-border);
+  --z-accent-contrast: var(--z-mission-accent-contrast);
+  --z-text-2xs: 0.75rem;
+  --z-text-xs: 0.8125rem;
+  --z-text-sm: 0.875rem;
+  --z-text-base: 0.9375rem;
+  --z-leading-2xs: 1.125rem;
+  --z-leading-xs: 1.25rem;
+  --z-leading-sm: 1.375rem;
+  --z-leading-base: 1.5rem;
+}

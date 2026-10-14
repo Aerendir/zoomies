@@ -73,3 +73,45 @@ test('subtle text reaches AA on every dark surface it sits on', () => {
     );
   }
 });
+
+const missionCSS = css.slice(css.indexOf('/* Style previews and Mission Control'));
+const missionLight = missionCSS.slice(0, missionCSS.indexOf('@media'));
+const missionDark = missionCSS.slice(missionCSS.indexOf(":root[data-theme='dark']"));
+
+for (const [mode, scope] of [
+  ['light', missionLight],
+  ['dark', missionDark],
+] as const) {
+  test(`Mission Control ${mode} text and controls are readable across its surfaces`, () => {
+    const surfaces = ['bg', 'surface', 'raised', 'sunken', 'hover'].map((name) =>
+      token(scope, `--z-mission-${name}`),
+    );
+    for (const text of ['text', 'muted', 'subtle', 'accent']) {
+      for (const surface of surfaces) {
+        const ink = token(scope, `--z-mission-${text}`);
+        assert.ok(
+          contrast(ink, surface) >= 4.5,
+          `${text} on ${surface}: ${contrast(ink, surface).toFixed(2)}:1`,
+        );
+      }
+    }
+    for (const fill of ['accent', 'accent-hover', 'accent-active']) {
+      assert.ok(
+        contrast(
+          token(scope, '--z-mission-accent-contrast'),
+          token(scope, `--z-mission-${fill}`),
+        ) >= 4.5,
+      );
+    }
+    for (const surface of surfaces) {
+      assert.ok(
+        contrast(token(scope, '--z-mission-border-strong'), surface) >= 3,
+        `control border on ${surface}`,
+      );
+    }
+    assert.ok(
+      contrast(token(scope, '--z-mission-accent'), token(scope, '--z-mission-accent-subtle')) >=
+        4.5,
+    );
+  });
+}

@@ -10,6 +10,9 @@
 //   node tests/support/screenshots.mjs DIR           writes them somewhere else
 //   node tests/support/screenshots.mjs DIR hosts,usage  only the shots named
 //
+// Set ZOOMIES_SCREENSHOT_STYLE=mission-control to capture the optional style.
+// Its default output folder is docs/screenshots/mission-control, leaving Classic intact.
+//
 // Each theme gets a controller of its own. The fixture is placed relative to
 // the moment it is seeded and the scheduler starts working on it at once --
 // idle runners drain, silent hosts turn unhealthy -- so every page is captured
@@ -33,7 +36,12 @@ import { chromium, devices } from '@playwright/test';
 const PORT = 8097;
 const root = resolve(import.meta.dirname, '..', '..', '..');
 const binary = join(root, 'zoomies');
-const outDir = resolve(process.argv[2] ?? join(root, 'docs', 'screenshots'));
+const screenshotStyle =
+  process.env.ZOOMIES_SCREENSHOT_STYLE === 'mission-control' ? 'mission-control' : 'classic';
+const outDir = resolve(
+  process.argv[2] ??
+    join(root, 'docs', 'screenshots', ...(screenshotStyle === 'classic' ? [] : [screenshotStyle])),
+);
 /** Shot names to capture, for a change to one page; empty means every shot. */
 const only = (process.argv[3] ?? '').split(',').filter(Boolean);
 
@@ -75,6 +83,18 @@ const FIXTURE = {
  * `updatesEnv`).
  */
 const SHOTS = [
+  { name: 'appearance', path: '/settings/appearance', heading: 'Appearance' },
+  {
+    name: 'appearance-mobile',
+    path: '/settings/appearance',
+    heading: 'Appearance',
+    device: {
+      viewport: { width: 375, height: 900 },
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: SCALE,
+    },
+  },
   { name: 'overview', path: '/', heading: 'Overview' },
   {
     name: 'activity',
@@ -911,6 +931,9 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
       viewport: DESKTOP,
       deviceScaleFactor: SCALE,
     });
+    await desktop.addInitScript((style) => {
+      if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', style);
+    }, screenshotStyle);
     // The first administrator, created the way the first-run form does it.
     // The 201 sets the session cookie on this context.
     const created = await desktop.request.post('/api/v1/auth/bootstrap', {
@@ -957,6 +980,9 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
       let context = desktop;
       if (shot.device) {
         context = await browser.newContext({ ...shot.device, ...common });
+        await context.addInitScript((style) => {
+          if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', style);
+        }, screenshotStyle);
         if (!shot.signedOut) await context.addCookies(cookies);
       }
       const address =
