@@ -1797,6 +1797,36 @@ dependency, model call, dispatch or publication is introduced. Historical worklo
 configuration/cache evidence and complete selection remain outstanding, so current
 observed reports stay inconclusive.
 
+### ZF-244: preview a reviewed checkout optimisation
+
+**Classification: new; M; started 14 October at the owner's request to continue E3.**
+
+**Why:** a healthy workflow can spend time fetching history it does not need.
+E2 descriptive measurements do not establish that a proposed change saves time.
+Keep optimisation proposals separate from failed-PR repair and require an exact
+reviewable edit before publication or experiment execution.
+
+**First slice:** a deterministic supplied-evidence checkout-depth preview. Reduce
+an explicit literal full-history fetch to one commit only for a pinned checkout
+step, with matching head/source/position timing evidence and explicitly reviewed
+repository/downstream history needs. Reuse the bounded workflow parser and repair
+preimage checks; preserve unrelated source bytes, comments, modes and line endings.
+Refuse unknown history needs, unsupported YAML, source overrides, stale evidence
+and disabled source/edit policy. Verification remains inconclusive.
+
+This pure foundation is not a runtime route or a complete E3 delivery. Next wire
+separately authorised bounded source/evidence admission, preview retention and web
+inspection, preserving the owner's web-first priority. Then implement explicit
+approval and reconciled draft publication with fresh head/policy checks. Keep
+experiment dispatch separate. No model or source call is introduced in the core.
+
+**Acceptance:** exact preview and currentness refusal for one supported change;
+subsequent scoped web preview, draft PR, linked explanation and honest E2 result.
+Passing CI alone cannot establish improvement. Publication never merges.
+
+Depends on ZF-242 and ZF-243's descriptive milestone. Size M.
+[First-slice plan](roadmap/plans/2026-10-14-eli-e3-checkout-preview.md).
+
 ## 9. Kept for the day somebody asks
 
 Nothing here is authorised by planning alone. Each starts when a fleet
@@ -1936,7 +1966,8 @@ every package in section 8 was re-read on 19 September against the code.
 | 19 | ZF-240 the fleet as it moves, over MCP, implemented, 12 October | One call answers what changed; a second with the cursor blocks until a seeded event; Eli's three scenarios hold and the three reads for whoever runs the fleet are left off its list |
 | 20 | ZF-241 the analyses | Each seeded cause is named as dominant at high confidence; a small sample is said to be small; the card and the tool show one answer |
 | 21 | ZF-242 PR required-check delay, starting with its independent pure core | Pinned heads and coverage survive every surface; missing/ambiguous checks stay visible; no merge-readiness claim |
-| 22 | ZF-243 selected historical comparison | Matched workloads and retained attempts; separate latency, consumption and reliability; incomplete evidence stays inconclusive |
+| 22 | ZF-243 selected historical comparison | Descriptive milestone merged; controlled-experiment proof deferred, incomplete evidence stays inconclusive |
+| 23 | ZF-244 reviewed checkout optimisation | Pure supplied-evidence preview first, then scoped web inspection and separately approved draft publication; no verified savings without measurements |
 | - | ZF-239 slices 3 to 5, the relay itself | After the owner's answers and a ruling on delivery rule 15 |
 | - | ZF-215, ZF-212, ZF-403's rotation, and section 9 | When a fleet asks |
 

@@ -58,8 +58,9 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
 | E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
 | E2 private root dependency inventory | Merged | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
-| E2 descriptive-comparison milestone | Implemented, pending review/CI/merge | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
-| E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
+| E2 descriptive-comparison milestone | Merged | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
+| E3 checkout preview foundation | Implemented, PR preparation | ZF-244, PR pending, based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
+| E4 to E6 | Not started | Dependencies and sequence below | No new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
 | E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; complete installer package race tests pass |
@@ -1985,7 +1986,7 @@ completed attempts per arm and ten-attempt capture limit.
 Owner agreed to finish E2 as the next milestone PR, rather than continue provenance
 expansion indefinitely. Branch codex/eli-e2-descriptive-comparison-milestone starts
 from main after #1018 merged and rebases onto main after #1019.
-Ready PR [#1020](https://github.com/eyupio/zoomies/pull/1020) awaits review/CI/merge.
+PR [#1020](https://github.com/eyupio/zoomies/pull/1020) merged.
 This is the closing descriptive milestone, not a
 claim that controlled experiments or the original broader E2 requirements are met.
 
@@ -2044,3 +2045,53 @@ validation and produce a concrete reviewable proposal; do not claim verified
 improvement from these historical snapshots or add dispatch/publication implicitly.
 E4–E6 remain unstarted, E7 validation continues. Do not resume E2 expansion merely
 because its deferred evidence list remains open.
+
+
+### E3 checkout preview foundation, 14 October 2026
+
+E2 descriptive milestone #1020 is merged. Owner continued into E3; ZF-244 is
+allocated in ROADMAP.md. Branch codex/eli-e3-checkout-preview starts from current
+main after #1020. This is a pure calculation foundation, not full E3 delivery.
+
+internal/optimisation accepts one complete regular root workflow file, a pinned
+head, caller-supplied successful checkout timing and explicit history review.
+Timing carries evidence ID, exact decimal run ID/attempt, job/step positions,
+source SHA-256 and head. History review binds the same source/head and must state
+that repository tooling and downstream consumers do not need full history.
+Unknown or required history refuses the proposal. These supplied records are not
+independently attested by the core and are not admitted from ordinary chat.
+
+The supported edit changes only a unique plain integer fetch-depth: 0 to 1 on a
+commit-pinned actions/checkout step. Floating actions, quoted/expression depths,
+flow-style inputs, duplicate/ambiguous YAML or preimages, checkout ref/repository
+overrides and explicit fetch-tags are refused. Source is at most 32 KiB, UTF-8,
+regular and complete, with credential checks. Shared bounded parser rules apply.
+Comments, unrelated bytes, line endings and mode persist. No YAML reserialisation.
+The public parser helper returns only the requested before/after line in memory;
+collection, persistence and public disclosure remain separate future contracts.
+
+ApplySuppliedEdits reuses repair preimage/overlap checks without a model or reader,
+with complete text/files/edit budgets and protected-path/credential refusal.
+CheckCurrent rechecks head/source/path, source/edit policy, the deterministic edit,
+result bytes/mode and digest. It is a local precondition, not remote currentness
+or publication authority. Preview verification is always inconclusive; no
+performance or causal savings claim. No database, source/model call, mutation,
+approval, draft publication or experiment dispatch.
+
+Validation completed: full optimisation/repair/workflow-parser race suites pass,
+including supplied-evidence purity, exact LF/CRLF edits and refusal/currentness
+fixtures. Removing timing-source binding makes its fixture fail; the guard is
+restored and tests pass. A fifteen-second two-worker fuzz run passed 183,362
+inputs without an ambiguous/repeatable edit or invalidated supported YAML.
+Changed-package vet, strict docs and whitespace pass. Strict docs use the
+repository-only fallback for optional GitHub metadata. No live source, model,
+fleet, experiment or publication operation.
+
+Next agent: wire a separately authorised bounded collector and retained preview
+contract before adding the web flow. Prefer web inspection before CLI/MCP. Bind
+source and timing to exact installation/repository/head/run/attempt/step, record
+history review actor/scope and who pays, recheck policy, and refuse unavailable
+evidence. Do not trust submitted Timing, HistoryReview or Policy as server proof.
+Keep previews immutable and escape repository text. Approval, reconciled draft
+publication and E2 verification integration follow as separate slices; changed
+head/policy stops publication. Do not mark E3 complete or resume E2 scope expansion.
