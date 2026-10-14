@@ -348,6 +348,10 @@ func (p *upgradePlan) rollbackBinary(ctx context.Context, check *serveCheck, bas
 		}
 		return fmt.Errorf("%s; the previous release was put back and did not answer either (%s). Restore the copy taken before the upgrade, if there is one, with: zoomies restore", base, why)
 	}
+	// For the helper alone: the previous release is running again, so the
+	// failure was undone and the version it reported is not the one asked for
+	// because of that, not because the engine did nothing.
+	fmt.Fprintf(p.opts.Out, "%srolled_back=true\n", engineResultMarker)
 	return fmt.Errorf("%s. The upgrade failed and the previous release is running again", base)
 }
 

@@ -121,13 +121,34 @@ func (pf *preflight) explainFailure(err error, attempt string) {
 			Fix:    fallback(remedy, "grant the token the privilege this call needs"),
 		})
 	default:
-		pf.add(config.Finding{
-			Code: "proxmox.unreachable", Severity: config.SeverityError, Setting: "endpoint",
+		finding := config.Finding{
+			Code: "proxmox.unreachable", Severity: config.SeverityError,
 			Title:  "could not " + attempt,
 			Detail: message,
-			Fix:    fallback(remedy, "check the endpoint, that the node is up, and that this controller can reach port "+DefaultPort),
-		})
+			Fix:    pf.unreachableFallback(remedy),
+		}
+		if pf.client.dialContext == nil {
+			finding.Setting = "endpoint"
+		}
+		pf.add(finding)
 	}
+}
+
+// unreachableFallback is the advice for a transport failure the specific
+// remedies did not claim, written for the way this client reaches the cluster.
+// The generic one tells an operator to test an address from this controller,
+// which for a private connection is the one thing nobody can do: the endpoint's
+// host is only the name on the certificate, and the route to it belongs to the
+// gateway's machine.
+func (pf *preflight) unreachableFallback(remedy string) string {
+	if strings.TrimSpace(remedy) != "" {
+		return remedy
+	}
+	if pf.client.dialContext != nil {
+		return "check that the gateway beside the provider is still running and its machine has outbound internet, " +
+			"and that the API it forwards to answers on that machine; the endpoint names only the certificate"
+	}
+	return "check the endpoint, that the node is up, and that this controller can reach port " + DefaultPort
 }
 
 func (pf *preflight) checkVMIDRange() {

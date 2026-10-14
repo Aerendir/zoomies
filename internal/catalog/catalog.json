@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "1d5db1f5",
+  "generated_from": "a4e8a005",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2830,7 +2830,7 @@
       "severity": "warning, or **error** with a machine mid-operation",
       "detection": "runtime",
       "detects": "The hypervisor could not be reached. This is never evidence about a resource: nothing is created, failed or deleted on the strength of it.",
-      "fix": "Check the endpoint, the network and the certificate. Machines already running are unaffected.",
+      "fix": "Check the endpoint, the network and the certificate. A provider reached through a private connection has no route to test; its message names the gateway machine, where the checks actually are, and says that both ends keep dialling. Machines already running are unaffected.",
       "verify": null,
       "status_sentence": "A machine provider cannot be reached, so no new machines can be added from it.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",

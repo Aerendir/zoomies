@@ -61,6 +61,11 @@ type UpdatesView struct {
 	// and the ids of the keys it trusts. No keys means it takes the checksums on
 	// trust, which is what a build from before a key was committed does.
 	Signing UpdatesSigning `json:"signing"`
+	// Rollback says a controller that does not come back is put back on the
+	// release it ran, which is a native service running the binary. A container's
+	// service is its image, which the upgrade does not keep the one before, so
+	// this is false there.
+	Rollback bool `json:"rollback"`
 	// Controller is this controller's latest update attempt, open or ended, and
 	// null when it has never had one.
 	Controller *UpdatesAttempt `json:"controller"`
@@ -131,6 +136,14 @@ type UpdatesAttempt struct {
 	// otherwise. Below the platform role it is a fixed sentence for the state (see
 	// For), because the text can name a folder on the controller's host.
 	Error string `json:"error"`
+	// Backup is the copy the engine took before it changed anything, for a page
+	// to offer a restore from after a failed update. It names a folder on the
+	// controller's host, so below the platform role it is empty (see For).
+	Backup string `json:"backup"`
+	// RolledBack says the engine put the previous release back because the new one
+	// did not answer, so the attempt is a failure that was undone rather than one
+	// left in place.
+	RolledBack bool `json:"rolled_back"`
 }
 
 // UpdatesRunning is the build being updated, as it reports itself: a release
@@ -180,6 +193,10 @@ func (v UpdatesView) For(platform bool) UpdatesView {
 	}
 	attempt := *v.Controller
 	attempt.Error = withheldAttemptError(attempt.State)
+	// The copy's directory is a path on the controller's host, so it is withheld
+	// with the error. RolledBack is a fact about what happened, not a path, and
+	// stays.
+	attempt.Backup = ""
 	v.Controller = &attempt
 	return v
 }
@@ -211,6 +228,10 @@ func (c *Controller) UpdatesView(ctx context.Context) (*UpdatesView, error) {
 		Running: UpdatesRunning{Version: version.Version, Release: fromRelease},
 		Helper:  probe.view,
 		Signing: UpdatesSigning{Keys: releasekey.IDs(releasekey.Default)},
+		// A native service runs the binary the upgrade keeps beside it, so the
+		// previous release can be put back; a container's service is an image,
+		// which the upgrade does not keep the one before.
+		Rollback: !c.helperHostFacts().InContainer,
 	}
 	pic, err := c.updatesSnapshot(ctx, cfg, probe)
 	if err != nil {
@@ -335,6 +356,7 @@ func attemptView(a store.UpdateAttempt) *UpdatesAttempt {
 	out := &UpdatesAttempt{
 		ID: a.ID, State: a.State, From: a.FromVersion, To: a.ToVersion, Trigger: a.Trigger,
 		RequestedAt: a.RequestedAt.UTC(), Error: withoutDirectionControls(a.Error),
+		Backup: withoutDirectionControls(a.Backup), RolledBack: a.RolledBack,
 	}
 	if a.FinishedAt != nil {
 		at := a.FinishedAt.UTC()

@@ -79,6 +79,28 @@ func TestOnlyOneUpdateAttemptIsOpenPerTarget(t *testing.T) {
 	}
 }
 
+// What the helper reported about the run, the copy it took and whether it
+// rolled back, is kept on the attempt, so a page can offer the restore and can
+// tell an undone failure from one left in place.
+func TestAnAttemptKeepsTheBackupAndRollbackTheHelperReported(t *testing.T) {
+	ctx := context.Background()
+	s, _ := updateAttemptStore(t)
+	a := mustCreateAttempt(t, s, controllerAttempt())
+	if ok, err := s.FinishUpdateAttempt(ctx, a.ID, UpdateFailed, "the controller did not answer"); err != nil || !ok {
+		t.Fatalf("FinishUpdateAttempt = %v, %v", ok, err)
+	}
+	if err := s.SetUpdateAttemptFacts(ctx, a.ID, "/var/lib/zoomies/backups/zoomies-20260101-000000", true); err != nil {
+		t.Fatalf("SetUpdateAttemptFacts: %v", err)
+	}
+	got, err := s.ListUpdateAttempts(ctx, UpdateScopeController, "", 1)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("ListUpdateAttempts = %+v, %v", got, err)
+	}
+	if got[0].Backup != "/var/lib/zoomies/backups/zoomies-20260101-000000" || !got[0].RolledBack {
+		t.Fatalf("attempt = %+v, want the backup and the rollback kept", got[0])
+	}
+}
+
 func TestAnAttemptMustNameItsTargetConsistently(t *testing.T) {
 	ctx := context.Background()
 	s, _ := updateAttemptStore(t)

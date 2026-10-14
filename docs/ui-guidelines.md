@@ -42,11 +42,45 @@ animations, Off/Cute/Standard vocabulary, reduced motion, navigation and saved
 phone-table layouts. Log viewers refresh their canvas palette and type without
 clearing output. No fleet setting or API call is needed to change style.
 
+Mission Control's Overview keeps first-run guidance first, then current issues
+and four live metrics before pools, active jobs and history. Startup and
+registration timings remain available in an expandable section. Classic retains
+its history-first layout. On a Mission Control phone, Jobs puts search, status
+and records before supplementary analytics; Filters and Fleet context expand
+without clearing the URL filters.
+
+A grid with no saved phone-layout choice starts as Cards in Mission Control
+and Rows in Classic. A saved per-grid view wins over a saved global view, and
+both win over the style default. Existing saved Rows values are preserved,
+including values older versions may have written automatically. Changing a
+logo or vocabulary does not record an unchosen global table default. Saved
+column order and widths take precedence over the new Jobs default order.
+
+
 Mission Control colour values live in the `--z-mission-*` tokens. Preview cards
 use those same tokens, so their light/dark previews agree with the selected
 style. Normal and secondary text, accent text and filled-button text meet
 4.5:1 across its surfaces; meaningful control edges meet 3:1. The contrast tests
 cover both palettes, including hovered surfaces and accent-subtle backgrounds.
+
+The style is checked in the states a healthy fleet never shows, not only the
+populated happy path. Each is a capture from the real binary with the seeded
+fleet's responses stubbed just enough to reach it, in Mission Control with
+Classic beside it:
+
+- [First run](screenshots/mission-control/overview-first-run-dark.webp) keeps the
+  setup checklist first.
+- [Loading](screenshots/mission-control/overview-loading-dark.webp) puts
+  skeletons where the figures have not arrived.
+- [A failed fetch](screenshots/mission-control/overview-error-dark.webp) says the
+  fleet could not be read and offers a retry, rather than showing a stale figure
+  as though it were current.
+- [An empty pool list](screenshots/mission-control/pools-empty-dark.webp) and
+  [a filter that matches nothing](screenshots/mission-control/jobs-no-results-dark.webp)
+  are separate states, each with its own next step.
+
+A headless browser cannot raise a soft keyboard, so the assistant sheet's
+keyboard behaviour is covered by the browser suite rather than photographed.
 
 
 Logo backdrops are chosen in Settings, Appearance and saved in this browser.

@@ -86,6 +86,96 @@ test('an account can be created, given a different role, and deleted by name', a
   await expect(row).toHaveCount(0);
 });
 
+test('an administrator is not offered changes to an account that outranks them', async ({
+  page,
+}) => {
+  // The platform role sits above administrator for the instances one team
+  // runs for another: on a hosted one it is the hosting team's automation,
+  // and the API answers 403 to an administrator who touches it. The menu has
+  // to say so up front rather than offer a click that can only fail.
+  //
+  // The shared fixture runs with authentication switched off, which the UI
+  // reads as holding the platform role itself, so the meta and session
+  // answers are what a customer administrator's browser would hear. And the
+  // platform account cannot be created -- an administrator minting one is the
+  // very thing the role refuses -- so the row is added to the list response.
+  await page.route(/\/api\/v1\/meta(\?.*)?$/, async (route) => {
+    const response = await route.fetch();
+    const meta = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({
+      response,
+      json: { ...meta, auth_disabled: false, bootstrap_required: false },
+    });
+  });
+  await page.route(/\/api\/v1\/auth\/session(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        kind: 'user',
+        id: 'usr_admin',
+        name: 'spec-admin',
+        role: 'admin',
+        scopes: [],
+        must_change_password: false,
+      }),
+    });
+  });
+  let deletes = 0;
+  await page.route(/\/api\/v1\/users(\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const list = (await response.json()) as { items: Record<string, unknown>[] };
+    list.items.push({
+      id: 'usr_platform',
+      username: 'platform',
+      role: 'platform',
+      disabled: false,
+      must_change_password: false,
+      created_at: new Date().toISOString(),
+    });
+    await route.fulfill({ response, json: list });
+  });
+  await page.route(/\/api\/v1\/users\/usr_platform$/, async (route) => {
+    if (route.request().method() === 'DELETE') deletes += 1;
+    await route.continue();
+  });
+  await goto(page, '/settings/users', 'Users');
+
+  // The row is found by its actions button: on a phone the rows are cards and
+  // the accessible name leads with the column label, not the username.
+  const row = page
+    .getByRole('row')
+    .filter({ has: page.getByRole('button', { name: 'Actions for platform' }) });
+  await row.getByRole('button', { name: 'Actions for platform' }).click();
+  for (const action of [
+    'Edit role and details',
+    'Reset password',
+    'Reset two-step verification',
+    'Disable this account',
+    'Delete this account',
+  ]) {
+    await expect(page.getByRole('menuitem', { name: action })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  }
+
+  // Refused rather than hidden: the reason is the point, and it is a permission.
+  const del = page.getByRole('menuitem', { name: 'Delete this account' });
+  await del.hover();
+  await expect(page.locator('.bubble:popover-open')).toContainText(
+    /only a platform account can change this one/i,
+  );
+
+  // A click is nothing at all: no confirm opens, and the API is never asked.
+  // Playwright itself refuses to click an aria-disabled control, so the click
+  // is forced -- the point is that the menu swallows even that.
+  await del.click({ force: true });
+  await expect(dialog(page, 'Delete account')).toHaveCount(0);
+  expect(deletes).toBe(0);
+});
+
 test('a duplicate username is refused inside the dialog, not as an administrator warning', async ({
   page,
 }) => {

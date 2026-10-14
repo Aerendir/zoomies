@@ -528,9 +528,18 @@ test('the confirmation names the release and says what the restart does to jobs 
   const lines = words.consequences.join('\n');
   assert.match(lines, /The controller restarts\./);
   assert.match(lines, /Jobs that are running keep running\./);
-  assert.match(lines, /If the release changes the database, a copy of it is kept first/);
-  assert.match(lines, /A release that changes nothing there takes none\./);
+  assert.match(lines, /A verified copy of the database is taken before anything changes\./);
   assert.doesNotMatch(`${words.description}\n${lines}`, /\u2014| -- /);
+});
+
+// A native controller is put back on the release it ran when the new one does not
+// answer, and the confirmation says so before the press; a container is not, and
+// nothing promises it is.
+test('the confirmation states the rollback only where it applies', () => {
+  const native = confirmControllerUpdate('v1.3.2', '1.3.0', true, true).consequences.join('\n');
+  assert.match(native, /the previous release is put back automatically/);
+  const container = confirmControllerUpdate('v1.3.2', '1.3.0', true, false).consequences.join('\n');
+  assert.doesNotMatch(container, /put back automatically/);
 });
 
 test('a build that is not from a release is warned that the update may take it back', () => {

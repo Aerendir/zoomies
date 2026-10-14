@@ -151,6 +151,37 @@ test('changing style from More preserves an unfinished pool form', async ({ page
   await expect(name).toHaveValue('zoomies-style-draft');
 });
 
+// The plan asks that a style switch not remount an editor or reset an open
+// conversation: only root tokens change. Eli's panel and its draft live in app
+// state, so both have to survive the change. The route is walked through the
+// app's own links, since a fresh page load is a reload and the conversation is
+// meant to be forgotten on reload.
+test('switching style leaves an open assistant conversation alone', async ({ page }) => {
+  // Wide enough that the sidebar shows its labels: a collapsed sidebar empties
+  // the accessible name of every entry.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await goto(page, '/', 'Overview');
+  await page.getByRole('button', { name: 'Ask Eli' }).click();
+  const message = page.getByRole('dialog', { name: 'Eli assistant' }).getByLabel('Message');
+  await message.fill('zoomies-style-draft');
+  await page
+    .getByRole('navigation', { name: 'Sections' })
+    .getByRole('link', { name: 'Settings' })
+    .click();
+  await page
+    .getByRole('navigation', { name: 'Settings' })
+    .getByRole('link', { name: 'Appearance' })
+    .click();
+  // Switched from the keyboard, because the open panel sits over the cards and
+  // would intercept a pointer click; the style change is the same either way.
+  await page.getByRole('radio', { name: /^Classic/ }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('radio', { name: /^Mission Control/ })).toBeChecked();
+  await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
+  await expect(page.getByRole('dialog', { name: 'Eli assistant' })).toBeVisible();
+  await expect(message).toHaveValue('zoomies-style-draft');
+});
+
 test('blocked browser storage still allows an in-page visual-style choice', async ({ page }) => {
   await page.addInitScript(() =>
     Object.defineProperty(window, 'localStorage', {
@@ -181,5 +212,96 @@ test('the first-account screen honours stored style and keeps the original Zoomi
       page.locator('img[src="/brand/mark-black-transparent.svg"]').first(),
     ).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  }
+});
+
+// The plan's width range: full desktop, the narrow-desktop edges either side of
+// its breakpoint, the phone breakpoint itself, and the two smallest phones the
+// UI has to survive. Local grid and code scrolling is deliberate, so only the
+// document is allowed to stay put; one pixel more is a sideways page.
+const PLAN_WIDTHS = [1440, 1180, 1179, 768, 375, 360];
+
+for (const style of ['classic', 'mission-control'] as const) {
+  test(`${style} has no page-level overflow across the plan's width range`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.addInitScript((style) => {
+      localStorage.setItem('zoomies.theme', 'dark');
+      if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', 'mission-control');
+    }, style);
+    const routes = [
+      ['/', 'Overview'],
+      ['/pools', 'Pools'],
+      ['/jobs', 'Jobs'],
+      ['/settings/appearance', 'Appearance'],
+    ] as const;
+    for (const width of PLAN_WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const [path, heading] of routes) {
+        await goto(page, path, heading);
+        await expect
+          .poll(
+            () => page.evaluate(() => document.documentElement.scrollWidth),
+            `${style} ${path} at ${width}px`,
+          )
+          .toBe(width);
+      }
+    }
+  });
+}
+
+// A 200% zoom lays the same page out in half the CSS pixels, so it is checked
+// by halving the plan's widths rather than by trusting a scale transform. The
+// enlarged-text case is separate on purpose: zoom changes the pixel the
+// viewport is measured in, while root text growth changes the type inside it.
+test('Mission Control reflows under a 200% zoom instead of pushing the page sideways', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => localStorage.setItem('zoomies.ui-style', 'mission-control'));
+  const routes = [
+    ['/', 'Overview'],
+    ['/jobs', 'Jobs'],
+    ['/settings/appearance', 'Appearance'],
+  ] as const;
+  for (const width of [720, 590, 384]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [path, heading] of routes) {
+      await goto(page, path, heading);
+      await expect
+        .poll(
+          () => page.evaluate(() => document.documentElement.scrollWidth),
+          `${path} at 200% of ${width * 2}px`,
+        )
+        .toBe(width);
+    }
+  }
+});
+
+// 200% text is asserted where a browser's 200% zoom leaves at least the 320
+// CSS pixels WCAG's reflow rule names as the floor. At 360 or 375 pixels the
+// same text size lays the page out in under 190 CSS pixels, and Classic scrolls
+// there too; the phone widths are covered at default size by the test above.
+test('Mission Control reflows enlarged text instead of clipping it', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => localStorage.setItem('zoomies.ui-style', 'mission-control'));
+  const routes = [
+    ['/', 'Overview'],
+    ['/jobs', 'Jobs'],
+    ['/settings/appearance', 'Appearance'],
+  ] as const;
+  for (const width of [1440, 1180, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [path, heading] of routes) {
+      await goto(page, path, heading);
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = '200%';
+      });
+      await expect
+        .poll(
+          () => page.evaluate(() => document.documentElement.scrollWidth),
+          `${path} at ${width}px with 200% text`,
+        )
+        .toBe(width);
+    }
   }
 });

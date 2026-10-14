@@ -147,7 +147,11 @@
   */
   @media (max-width: 1180px) {
     .rail {
-      position: static;
+      /* Relative, not static: the group labels below are absolutely positioned
+         to be hidden, and only a positioned rail is the containing block that
+         keeps them inside its own scroll area. Static lets them escape it and
+         widen the page. */
+      position: relative;
       display: flex;
       align-items: flex-start;
       gap: var(--z-space-2);

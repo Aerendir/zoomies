@@ -109,3 +109,45 @@ func TestAPrivateProviderIsRefusedWhenPrivateConnectionsAreOffOrTheAddressIsNotO
 		t.Fatalf("private connections off, got: %v", err)
 	}
 }
+
+// The last sentence a problems drawer owes for a provider it cannot reach
+// depends on how the row is reached: a direct one is asked about its address,
+// a private one has no address anyone can test and is sent to the machine its
+// gateway runs beside.
+func TestTheUnreachableFixFitsTheConnectionTheRowIsReachedBy(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+	trouble := providerTrouble{Kind: provider.FailureUnreachable, Detail: "the version call never answered", At: h.c.Now()}
+
+	var out []Problem
+	h.c.providerTroubleProblems(&out, row, trouble, nil, 0)
+	if len(out) != 1 {
+		t.Fatalf("got %d problems, want 1", len(out))
+	}
+	if !strings.Contains(out[0].Fix, "check the endpoint") {
+		t.Fatalf("a direct provider's fix does not say what to test: %q", out[0].Fix)
+	}
+
+	sealed, err := h.key.SealString(privateAddress(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.SetProviderTailcatAddress(h.ctx, row.ID, sealed); err != nil {
+		t.Fatal(err)
+	}
+	row, err = h.st.GetProvider(h.ctx, row.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = nil
+	h.c.providerTroubleProblems(&out, row, trouble, nil, 0)
+	if len(out) != 1 {
+		t.Fatalf("got %d problems, want 1", len(out))
+	}
+	if strings.Contains(out[0].Fix, "check the endpoint") {
+		t.Errorf("a private provider's fix points at an address no route reaches: %q", out[0].Fix)
+	}
+	if !strings.Contains(out[0].Fix, "gateway") || !strings.Contains(out[0].Fix, "clears on its own") {
+		t.Errorf("a private provider's fix does not say what to check or that it clears: %q", out[0].Fix)
+	}
+}

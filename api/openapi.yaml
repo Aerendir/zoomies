@@ -14968,7 +14968,7 @@ components:
             release's checksums are taken on trust rather than held to a signature.
     UpdatesAttempt:
       type: object
-      required: [id, state, from, to, trigger, requested_at, finished_at, error]
+      required: [id, state, from, to, trigger, requested_at, finished_at, error, backup, rolled_back]
       properties:
         id: { type: string, examples: [upd_k3fqz2mx7abcd] }
         state:
@@ -14996,6 +14996,17 @@ components:
             is still in flight. Only the `platform` role is given the text, which can name a
             folder on the controller's host; every other role is given a fixed sentence for the
             state in its place, and an empty string where there was nothing to say.
+        backup:
+          type: string
+          description: >-
+            The directory of the copy the engine took before it changed anything, so a page can
+            offer a restore after a failed update. Empty when none was taken. Only the `platform`
+            role is given it, because it names a folder on the controller's host.
+        rolled_back:
+          type: boolean
+          description: >-
+            Whether the engine put the previous release back because the new one did not answer.
+            The attempt is then a failure that was undone, not one left in place.
     UpdateControllerRequest:
       type: object
       additionalProperties: false
@@ -15067,6 +15078,12 @@ components:
             off, and until a list has been read.
         helper: { $ref: "#/components/schemas/UpdatesHelper" }
         signing: { $ref: "#/components/schemas/UpdatesSigning" }
+        rollback:
+          type: boolean
+          description: >-
+            Whether a controller that does not come back is put back on the release it ran. True
+            for a native service running the binary; false for a container, whose service is an
+            image the upgrade does not keep the one before.
         controller:
           description: >-
             The controller's latest update attempt, in flight or ended, in every mode: one that

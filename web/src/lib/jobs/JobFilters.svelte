@@ -101,6 +101,7 @@
 
   interface Props {
     queue?: boolean;
+    compact?: boolean;
     /**
      * Whether the status filters in force are worth a chip.
      *
@@ -125,6 +126,7 @@
 
   let {
     queue = false,
+    compact = false,
     statusChips = true,
     value,
     facets,
@@ -135,6 +137,7 @@
     onclear,
   }: Props = $props();
 
+  let expanded = $state(false);
   let searchElement = $state<HTMLInputElement | null>(null);
 
   // `/` focuses this page's search rather than opening the palette.
@@ -302,92 +305,137 @@
     />
   </div>
 
-  <FacetMenu
-    label="Repository"
-    options={repoOptions}
-    selected={value.repo}
-    emptyHint="No repository has run a job here yet."
-    onchange={(next) => onchange({ repo: next })}
-  />
-  <FacetMenu
-    label="Workflow"
-    options={workflowOptions}
-    selected={value.workflow}
-    emptyHint="No workflow has run a job here yet."
-    onchange={(next) => onchange({ workflow: next })}
-  />
-  <FacetMenu
-    label="Pool"
-    options={poolOptions}
-    selected={value.pool_id}
-    emptyHint="There are no pools yet."
-    onchange={(next) => onchange({ pool_id: next })}
-  />
-  {#if !queue}
-    <FacetMenu
-      label="Host"
-      options={hostOptions}
-      selected={value.host_id}
-      emptyHint="There are no hosts yet."
-      onchange={(next) => onchange({ host_id: next })}
-    />
-  {/if}
-  <FacetMenu
-    label="Label"
-    options={labelChoices}
-    selected={value.label}
-    emptyHint="Labels appear once a pool defines them or a job asks for them."
-    onchange={(next) => onchange({ label: next })}
-  />
-  {#if !queue}
-    <FacetMenu
-      label="Outcome"
-      options={conclusionOptions}
-      selected={value.conclusion}
-      emptyHint="No job has finished here yet."
-      onchange={(next) => onchange({ conclusion: next })}
-    />
-    <FacetMenu
-      label="State"
-      options={stateOptions}
-      selected={value.state}
-      onchange={(next) => onchange({ state: next as JobState[] })}
-    />
-  {/if}
+  <details
+    class="advanced"
+    class:compact
+    open={!compact || expanded}
+    ontoggle={(event) => {
+      if (compact) expanded = event.currentTarget.open;
+    }}
+  >
+    <summary hidden={!compact}>Filters ({chips.filter((chip) => chip.id !== 'q').length})</summary>
+    <div class="advanced-controls">
+      <FacetMenu
+        label="Repository"
+        options={repoOptions}
+        selected={value.repo}
+        emptyHint="No repository has run a job here yet."
+        onchange={(next) => onchange({ repo: next })}
+      />
+      <FacetMenu
+        label="Workflow"
+        options={workflowOptions}
+        selected={value.workflow}
+        emptyHint="No workflow has run a job here yet."
+        onchange={(next) => onchange({ workflow: next })}
+      />
+      <FacetMenu
+        label="Pool"
+        options={poolOptions}
+        selected={value.pool_id}
+        emptyHint="There are no pools yet."
+        onchange={(next) => onchange({ pool_id: next })}
+      />
+      {#if !queue}
+        <FacetMenu
+          label="Host"
+          options={hostOptions}
+          selected={value.host_id}
+          emptyHint="There are no hosts yet."
+          onchange={(next) => onchange({ host_id: next })}
+        />
+      {/if}
+      <FacetMenu
+        label="Label"
+        options={labelChoices}
+        selected={value.label}
+        emptyHint="Labels appear once a pool defines them or a job asks for them."
+        onchange={(next) => onchange({ label: next })}
+      />
+      {#if !queue}
+        <FacetMenu
+          label="Outcome"
+          options={conclusionOptions}
+          selected={value.conclusion}
+          emptyHint="No job has finished here yet."
+          onchange={(next) => onchange({ conclusion: next })}
+        />
+        <FacetMenu
+          label="State"
+          options={stateOptions}
+          selected={value.state}
+          onchange={(next) => onchange({ state: next as JobState[] })}
+        />
+      {/if}
 
-  <DateRange
-    since={value.since}
-    until={value.until}
-    {withTime}
-    label="Queued between"
-    onchange={(next) => onchange(next)}
-  />
+      <DateRange
+        since={value.since}
+        until={value.until}
+        {withTime}
+        label="Queued between"
+        onchange={(next) => onchange(next)}
+      />
 
-  <Switch
-    label="Unmatched only"
-    description="Queued jobs no enabled pool claims"
-    checked={value.unmatched}
-    onchange={(on) => onchange({ unmatched: on })}
-  />
+      <Switch
+        label="Unmatched only"
+        description="Queued jobs no enabled pool claims"
+        checked={value.unmatched}
+        onchange={(on) => onchange({ unmatched: on })}
+      />
 
-  {#if !queue}
-    <Switch
-      label="Failed only"
-      description="Failing conclusions, and runners that stopped under a job"
-      checked={value.failed}
-      onchange={(on) => onchange({ failed: on })}
-    />
+      {#if !queue}
+        <Switch
+          label="Failed only"
+          description="Failing conclusions, and runners that stopped under a job"
+          checked={value.failed}
+          onchange={(on) => onchange({ failed: on })}
+        />
 
-    <Switch
-      label="Include other runners"
-      description="Also show jobs GitHub ran without this fleet"
-      checked={value.all}
-      onchange={(on) => onchange({ all: on })}
-    />
-  {/if}
+        <Switch
+          label="Include other runners"
+          description="Also show jobs GitHub ran without this fleet"
+          checked={value.all}
+          onchange={(on) => onchange({ all: on })}
+        />
+      {/if}
+    </div>
+  </details>
 </FilterBar>
 
 <style>
+  .advanced {
+    display: contents;
+  }
+  .advanced.compact {
+    display: block;
+    width: 100%;
+  }
+  .advanced-controls {
+    display: contents;
+  }
+  .compact .advanced-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-2);
+  }
+  summary {
+    padding: var(--z-space-2) var(--z-space-3);
+    cursor: pointer;
+    color: var(--z-accent);
+    border: var(--z-border-width) solid var(--z-border-strong);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+  }
+  .compact[open] .advanced-controls {
+    margin-top: var(--z-space-3);
+  }
+
+  @media (pointer: coarse) {
+    summary {
+      min-height: var(--z-control-touch);
+    }
+  }
   .search {
     min-width: 260px;
     flex: 1 1 260px;

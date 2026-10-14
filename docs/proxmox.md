@@ -231,7 +231,15 @@ sealed in the controller database and never returned to the browser.
 
 An existing Zoomies runner agent keeps its binary, service, state and registration.
 The provider has its own service, `zoomies-proxmox-<controller-key>.service`, and
-state under `/var/lib/zoomies-proxmox/<controller-key>`. Running a new setup command
+state under `/var/lib/zoomies-proxmox/<controller-key>`. The service is installed
+with `Restart=always` and its start rate limit off, because it is the thing that
+reconnects: a boot that beats the machine's own internet, a relay interruption, a
+crash and a manual kill all end the process, and in every one of them the service
+manager brings the private connection back on its own within seconds. On the
+controller's side, the provider keeps dialling through its sealed gateway address;
+a gateway that has restarted is answered again on the next provider call, and
+`provider.unreachable` in the problems list clears by itself once the connection
+returns. Running a new setup command
 for the same controller reuses the saved token and gateway identity. It does not
 join the machine as another runner host. Interrupted setup can be retried; a lost
 controller response is acknowledged when the identical connection is sent again.

@@ -913,3 +913,28 @@ func TestReadingRootsPointerNeverMakesTheStateDirectory(t *testing.T) {
 		t.Errorf("reading the pointer made the state directory (%v)", err)
 	}
 }
+
+// The engine writes a line or two for the helper alone, under a marker: the
+// copy it took and whether it rolled back. The helper reads them out of the log
+// an operator reads, so the words a person sees stay prose.
+func TestTheHelperTakesTheBackupAndRollbackOutOfTheEngineOutput(t *testing.T) {
+	// A copy's directory can hold a space: the value is the whole rest of the
+	// line, not the next word.
+	input := "Backed up the database as zoomies-20260101-000000 and verified it\n" +
+		engineResultMarker + "backup=/var/lib/zoomies/my backups/zoomies-20260101-000000\n" +
+		"still starting\n" +
+		engineResultMarker + "rolled_back=true\n"
+	logTail, backup, rolledBack := parseEngineResult(input)
+	if backup != "/var/lib/zoomies/my backups/zoomies-20260101-000000" {
+		t.Fatalf("backup = %q", backup)
+	}
+	if !rolledBack {
+		t.Fatal("a rolled-back run was not read as one")
+	}
+	if strings.Contains(logTail, engineResultMarker) {
+		t.Fatalf("the marker is still in the log an operator reads: %q", logTail)
+	}
+	if !strings.Contains(logTail, "still starting") {
+		t.Fatalf("the prose was dropped: %q", logTail)
+	}
+}

@@ -75,6 +75,10 @@ func TestAControllerThatDoesNotAnswerIsPutBackWhenNothingMigrated(t *testing.T) 
 	if !strings.Contains(out.String(), "putting the previous release back") {
 		t.Fatalf("the rollback was not said:\n%s", out.String())
 	}
+	// The helper reads that this failure was undone from a marked line of its own.
+	if !strings.Contains(out.String(), engineResultMarker+"rolled_back=true") {
+		t.Fatalf("the rollback was not reported to the helper:\n%s", out.String())
+	}
 }
 
 // Migrations run one way: an older release cannot open a database a newer one

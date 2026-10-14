@@ -660,6 +660,8 @@ function attemptIn(
     requested_at: new Date(Date.now() - 4 * MINUTE).toISOString(),
     finished_at: state === 'requested' ? null : new Date(Date.now() - MINUTE).toISOString(),
     error,
+    backup: '',
+    rolled_back: false,
   };
 }
 
@@ -707,9 +709,8 @@ test('the platform role is offered the button, and the confirmation says what th
   await expect(dialog).toContainText('The controller restarts.');
   await expect(dialog).toContainText('Jobs that are running keep running.');
   await expect(dialog).toContainText(
-    'If the release changes the database, a copy of it is kept first beside the database',
+    'A verified copy of the database is taken before anything changes.',
   );
-  await expect(dialog).toContainText('A release that changes nothing there takes none.');
   await expect(dialog.getByRole('button', { name: 'Update to v1.3.2', exact: true })).toBeVisible();
 
   await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -1262,4 +1263,24 @@ test('the controller panel says a build with no release key takes the checksums 
   await quiet(page);
   await goto(page, PAGE, 'Updates');
   await expect(controller(page)).toContainText('taken on trust');
+});
+
+// A failed update that was rolled back is a different thing to tell an operator
+// from one left in place, and the copy taken before the change is named so they
+// can restore it.
+test('a rolled-back attempt says so and names the copy to restore from', async ({ page }) => {
+  await serve(page, () =>
+    updatable({
+      ...attemptIn('failed', 'the controller did not answer in 30m'),
+      backup: '/var/lib/zoomies/backups/zoomies-20260101-000000',
+      rolled_back: true,
+    }),
+  );
+  await quiet(page);
+  await goto(page, PAGE, 'Updates');
+  const panel = page.getByRole('region', { name: 'Update this controller', exact: true });
+  await expect(panel).toContainText('the previous release was put back');
+  await expect(panel).toContainText(
+    'zoomies restore /var/lib/zoomies/backups/zoomies-20260101-000000 --replace',
+  );
 });

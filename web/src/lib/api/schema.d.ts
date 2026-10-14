@@ -11326,6 +11326,10 @@ export interface components {
             finished_at: string | null;
             /** @description Why it did not succeed, often the helper's own sentence. Empty when it succeeded or is still in flight. Only the `platform` role is given the text, which can name a folder on the controller's host; every other role is given a fixed sentence for the state in its place, and an empty string where there was nothing to say. */
             error: string;
+            /** @description The directory of the copy the engine took before it changed anything, so a page can offer a restore after a failed update. Empty when none was taken. Only the `platform` role is given it, because it names a folder on the controller's host. */
+            backup: string;
+            /** @description Whether the engine put the previous release back because the new one did not answer. The attempt is then a failure that was undone, not one left in place. */
+            rolled_back: boolean;
         };
         UpdateControllerRequest: {
             /**
@@ -11365,6 +11369,8 @@ export interface components {
             checked_at: string | null;
             helper: components["schemas"]["UpdatesHelper"];
             signing?: components["schemas"]["UpdatesSigning"];
+            /** @description Whether a controller that does not come back is put back on the release it ran. True for a native service running the binary; false for a container, whose service is an image the upgrade does not keep the one before. */
+            rollback?: boolean;
             /** @description The controller's latest update attempt, in flight or ended, in every mode: one that was in flight when updating was switched off still ends, and says how. Null when it has never had one. */
             controller: components["schemas"]["UpdatesAttempt"] | null;
             /** @description The open rollout, or the last one that ended, so that a page can say how it went. Null when there has never been one. */

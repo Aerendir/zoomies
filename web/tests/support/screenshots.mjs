@@ -80,7 +80,10 @@ const FIXTURE = {
  * captured after it; `signedOut` keeps the session cookie out of that
  * context, for the one page that is only shown to nobody; `updates` takes the
  * shot from a controller that says it is a release behind two others (see
- * `updatesEnv`).
+ * `updatesEnv`); `stub` puts routes on the page before it loads, for a state
+ * the seeded fleet cannot be in (an empty list, a failed fetch, a first run);
+ * `noRows` says the grid in the shot is empty on purpose, so `settle` does not
+ * wait for a row that will never arrive.
  */
 const SHOTS = [
   { name: 'appearance', path: '/settings/appearance', heading: 'Appearance' },
@@ -96,6 +99,101 @@ const SHOTS = [
     },
   },
   { name: 'overview', path: '/', heading: 'Overview' },
+  {
+    name: 'overview-phone-375',
+    path: '/',
+    heading: 'Overview',
+    device: {
+      viewport: { width: 375, height: 900 },
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: SCALE,
+    },
+  },
+  // States the seeded fleet is never in, and the theme has to survive: a fleet
+  // that has run nothing, a fetch that has not answered, a fetch that failed,
+  // and lists with nothing in them. Each stubs only what the state needs, so
+  // the rest of the page is still the real product.
+  {
+    name: 'overview-first-run',
+    path: '/',
+    heading: 'Overview',
+    noRows: true,
+    // Zero managed jobs, and no stream: the checklist is what a fleet that has
+    // run nothing here shows, and cutting the stream keeps a live event from
+    // retiring it while the shot is taken.
+    stub: async (page) => {
+      await page.route('**/api/v1/events*', (route) => route.abort());
+      await page.route('**/api/v1/stats*', async (route) => {
+        const response = await route.fetch();
+        const stats = await response.json();
+        await route.fulfill({
+          response,
+          json: { ...stats, fleet: { ...stats.fleet, running_jobs: 0, completed: 0 } },
+        });
+      });
+    },
+  },
+  {
+    name: 'overview-loading',
+    path: '/',
+    heading: 'Overview',
+    noRows: true,
+    // The first fetch never answers, which is the loading state. Nothing is
+    // refused: this is what the page looks like before the fleet arrives.
+    stub: async (page) => {
+      await page.route('**/api/v1/events*', (route) => route.abort());
+      await page.route('**/api/v1/stats*', () => {});
+    },
+  },
+  {
+    name: 'overview-error',
+    path: '/',
+    heading: 'Overview',
+    noRows: true,
+    // The fleet fetch fails. This is a different state from a stream that has
+    // gone quiet: the page says it could not read the fleet rather than
+    // showing a stale figure as though it were current.
+    stub: async (page) => {
+      await page.route('**/api/v1/events*', (route) => route.abort());
+      await page.route('**/api/v1/stats*', (route) =>
+        route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'internal_error', message: 'the fleet could not be read' },
+          }),
+        }),
+      );
+    },
+  },
+  {
+    name: 'pools-empty',
+    path: '/pools',
+    heading: 'Pools',
+    noRows: true,
+    // No pools at all: the state a new fleet is in, and the one the empty
+    // state's own words are written for.
+    stub: async (page) => {
+      await page.route('**/api/v1/pools*', (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({ json: { items: [] } })
+          : route.continue(),
+      );
+    },
+  },
+  {
+    name: 'jobs-no-results',
+    path: '/jobs?repo=acme%2Fnothing-here',
+    heading: 'Jobs',
+    noRows: true,
+    // A filter that matches nothing is not an empty fleet, and says so. The
+    // page is taller than the fold, so the shot is taken where the empty
+    // result is rather than of the metrics above it.
+    async prepare(page) {
+      await page.getByText('No jobs match these filters', { exact: true }).scrollIntoViewIfNeeded();
+    },
+  },
   {
     name: 'activity',
     path: '/',
@@ -182,6 +280,17 @@ const SHOTS = [
   { name: 'queue', path: '/queue', heading: 'Queue' },
   { name: 'runner', path: `/runners/${FIXTURE.busyRunner}` },
   { name: 'jobs', path: '/jobs', heading: 'Jobs' },
+  {
+    name: 'jobs-mobile',
+    path: '/jobs',
+    heading: 'Jobs',
+    device: {
+      viewport: { width: 375, height: 900 },
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: SCALE,
+    },
+  },
   {
     name: 'job',
     path: '/jobs?failed=true',
@@ -884,8 +993,9 @@ async function settle(page, shot) {
   await page.evaluate(() => document.fonts.ready);
   // The table kind of grid, whose rows arrive after the page does. The
   // activity matrix is a grid too, and has no rows to wait for.
+  // A shot that is deliberately of an empty grid has no row to wait for.
   const grid = page.locator('table[role="grid"]').first();
-  if (await grid.count()) {
+  if (!shot.noRows && (await grid.count())) {
     await grid.locator('tbody tr[data-row]').first().waitFor();
   }
   await page.waitForTimeout(SETTLE_MS);
@@ -988,6 +1098,9 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
       const address =
         typeof shot.path === 'function' ? await shot.path(desktop.request) : shot.path;
       const page = await context.newPage();
+      // Routes and stubs go on before the document loads, so the first fetch
+      // is the one the shot is about rather than a race with it.
+      if (shot.stub) await shot.stub(page);
       await page.goto(address, { waitUntil: 'domcontentloaded' });
       await settle(page, shot);
       if (shot.prepare) {

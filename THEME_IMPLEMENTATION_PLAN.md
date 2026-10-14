@@ -1,6 +1,43 @@
 # Selectable Mission Control visual style: coding-agent handoff
 
-14 October 2026. Planning and design only. No application fixes are implemented by this review.
+14 October 2026. Design specification; see the current implementation handoff below for delivered stages.
+
+## Current implementation handoff
+
+Current position, 14 October 2026. Every implementation stage this plan names is
+merged, and an independent verification pass has re-run and extended the evidence.
+
+| Stage | State |
+| --- | --- |
+| P1-P4 additive visual style | Merged in [PR #1030](https://github.com/eyupio/zoomies/pull/1030). |
+| P5 operational layout | Merged in [PR #1038](https://github.com/eyupio/zoomies/pull/1038). |
+| P6 route coverage | Complete. The width and zoom checks this plan asks for were missing and are added in [PR #1045](https://github.com/eyupio/zoomies/pull/1045). |
+| P7 release evidence | Captured in [PR #1047](https://github.com/eyupio/zoomies/pull/1047). The four style and mode captures of representative screens exist, and first-run, loading, fetch failure, empty list and no-matching-jobs states are captured in Mission Control with Classic beside them. A headless browser cannot raise a soft keyboard, so the assistant sheet's keyboard behaviour is covered by the browser suite instead. |
+| P8 first-job activation | Merged in [PR #1040](https://github.com/eyupio/zoomies/pull/1040). Repository discovery and in-app dispatch are separate and unstarted, per the plan. |
+
+The verification pass in [PR #1045](https://github.com/eyupio/zoomies/pull/1045)
+(branch `theme/implementation-verification`) rebuilt the UI and binary, re-ran the
+style and operational-layout browser suites, and closed the width and zoom
+coverage:
+
+- No page-level overflow at 1440, 1180, 1179, 768, 375 and 360 pixels, in Classic
+  and Mission Control.
+- A 200% zoom (tested by halving those widths), and enlarged text at 1440, 1180
+  and 768 pixels.
+- An open assistant conversation and its unsent draft survive a style switch.
+
+It also found and fixed one real reflow defect: the Settings rail's hidden group
+labels escaped the rail's horizontal scroll area at 1180 pixels with enlarged
+text, widening the document to 2098 pixels. Classic was affected too.
+
+[roadmap/plans/2026-10-14-mission-control-style.md](roadmap/plans/2026-10-14-mission-control-style.md)
+is the source of current status and carries the validation detail. Classic
+remains the default, Mission Control is a browser-local choice, and the design and
+phase descriptions below remain the implementation specification.
+
+The development-only state gallery the plan asks for under N-T4 is not built, and
+no first-job dispatch or companion service work is included in these controller UI
+stages.
 
 ## Brand and personality requirements
 

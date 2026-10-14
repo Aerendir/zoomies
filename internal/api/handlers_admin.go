@@ -216,7 +216,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.auth.UpdateUser(r.Context(), u); err != nil {
-		if errors.Is(err, auth.ErrLastAdmin) || errors.Is(err, store.ErrConflict) {
+		if errors.Is(err, auth.ErrLastAdmin) || errors.Is(err, auth.ErrLastPlatform) || errors.Is(err, store.ErrConflict) {
 			conflict(w, err.Error())
 			return
 		}
@@ -227,7 +227,8 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.withTwoStep(r, newUserResponse(u)))
 }
 
-// handleDeleteUser removes an account, refusing to remove the last admin.
+// handleDeleteUser removes an account, refusing to remove the last admin or
+// the last platform account.
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chiURLParam(r, "id")
 	u, err := s.ctrl.Store().GetUser(r.Context(), id)
@@ -240,7 +241,11 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.auth.DeleteUser(r.Context(), id); err != nil {
-		if errors.Is(err, auth.ErrLastAdmin) {
+		// ErrLastPlatform joins the last-admin refusal: a platform account
+		// deleting the other platform account is exactly the change it
+		// guards, and a state the request cannot take the instance to is a
+		// 409, not a 500.
+		if errors.Is(err, auth.ErrLastAdmin) || errors.Is(err, auth.ErrLastPlatform) {
 			conflict(w, err.Error())
 			return
 		}
