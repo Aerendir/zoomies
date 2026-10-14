@@ -9,7 +9,7 @@
 - Desktop Overview and phone Jobs current captures, and desktop/phone concept Overview captures, visually inspected.
 - Standalone mock JavaScript parsed successfully; capture-index and plan Markdown links resolve locally.
 - Existing audits preserved and dated review sections appended in their respective repositories.
-- No actual email, Stripe payment, GitHub workflow dispatch, host enrolment, repository mutation or paid model request was performed.
+- No actual email, payment, GitHub workflow dispatch, host enrolment, repository mutation or model request was performed.
 - An additional first-run capture was rejected by automatic approval review because the approval service reached its usage limit. No bootstrap browser evidence or authenticated end-to-end completion is claimed.
 
 ## Proposed palette contrast spot checks
