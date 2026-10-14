@@ -11850,7 +11850,43 @@ export interface components {
             rows_omitted: boolean;
             jobs: components["schemas"]["ExperimentRunnerEvidenceJob"][];
         };
+        RootDependencies: {
+            /** @enum {string} */
+            version: "root-dependencies-v1";
+            /** @enum {string} */
+            basis: "root_uses_declarations";
+            source_sha256: string;
+            /** @enum {string} */
+            coverage: "enumerated" | "unsupported";
+            counts: components["schemas"]["RootDependencyCounts"] | null;
+            rows_omitted: boolean;
+            references: components["schemas"]["RootDependencyReference"][];
+        };
+        RootDependencyCounts: {
+            declarations: number;
+            commit_pins: number;
+            digest_pins: number;
+            floating: number;
+            local: number;
+            expressions: number;
+            unknown: number;
+        };
+        RootDependencyReference: {
+            job_index: number;
+            step_index: number;
+            line: number;
+            /** @enum {string} */
+            declaration: "job_workflow" | "step_action";
+            /** @enum {string} */
+            kind: "remote" | "docker" | "local" | "expression" | "unknown";
+            /** @enum {string} */
+            pin: "commit" | "digest" | "floating" | "unresolved";
+            reference_sha256: string;
+            revision: string | null;
+        };
         ExperimentRootSourceView: {
+            /** @description Root uses declarations only. At most 50 reference rows across each arm, with full counts and omission flags. Absent on older controllers; literal pins do not prove resolution or execution. */
+            dependencies?: components["schemas"]["RootDependencies"] | null;
             /** @enum {string} */
             basis: "push_head_sha_root_file";
             commit_sha: string;

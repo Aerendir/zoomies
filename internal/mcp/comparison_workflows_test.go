@@ -185,3 +185,51 @@ func TestWorkflowFactsKeepLegacyNullAndRefuseAnImpossibleBudget(t *testing.T) {
 		t.Fatal("impossible budget accepted")
 	}
 }
+
+func TestDependencyEvidenceReachesTheModelAsValidatedBoundedSummaries(t *testing.T) {
+	doc := comparisonWorkflowBody(t, 1, comparisonWorkflowFixture(1, false), false)
+	e := doc["workflow_evidence"].(map[string]any)
+	source := e["baseline"].(map[string]any)["attempts"].([]any)[0].(map[string]any)["root_source"].(map[string]any)
+	dependency := map[string]any{"version": "root-dependencies-v1", "basis": "root_uses_declarations", "source_sha256": strings.Repeat("c", 64), "coverage": "enumerated", "counts": map[string]any{"declarations": 1, "commit_pins": 1, "digest_pins": 0, "floating": 0, "local": 0, "expressions": 0, "unknown": 0}, "rows_omitted": false, "references": []any{map[string]any{"job_index": 0, "step_index": 0, "line": 6, "declaration": "step_action", "kind": "remote", "pin": "commit", "reference_sha256": strings.Repeat("e", 64), "revision": strings.Repeat("a", 40), "future_secret": "private-dependency"}}}
+	source["dependencies"] = dependency
+	ctx := context.WithValue(t.Context(), windowKey{}, windowLimits{block: 12 << 10})
+	content, value, err := runWorkflowDoc(t, ctx, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := value.(comparisonProjection)
+	d := p.WorkflowEvidence.Baseline.Attempts[0].RootSource.Dependencies
+	if d == nil || *d.Counts.Declarations != 1 || len(d.References) != 0 || !*d.RowsOmitted || !p.RowsOmitted || len(content[0].Text)+len(content[1].Text) > 12<<10 || strings.Contains(content[1].Text, "private-dependency") {
+		t.Fatal("dependency summary lost, leaked or unbounded")
+	}
+	dependency["source_sha256"] = strings.Repeat("f", 64)
+	if _, _, err := runWorkflowDoc(t, t.Context(), doc); err == nil {
+		t.Fatal("unbound dependency summary reached model")
+	}
+}
+
+func TestDependencySummariesFitBothBudgetsAlongsideFullWorkflowEvidence(t *testing.T) {
+	for _, limit := range []int{12 << 10, 64 << 10} {
+		doc := comparisonWorkflowBody(t, 100, comparisonWorkflowFixture(100, false), true)
+		view := doc["workflow_evidence"].(map[string]any)
+		for _, name := range []string{"baseline", "candidate"} {
+			for _, item := range view[name].(map[string]any)["attempts"].([]any) {
+				source := item.(map[string]any)["root_source"].(map[string]any)
+				source["dependencies"] = map[string]any{"version": "root-dependencies-v1", "basis": "root_uses_declarations", "source_sha256": strings.Repeat("c", 64), "coverage": "enumerated", "counts": map[string]any{"declarations": 101, "commit_pins": 0, "digest_pins": 0, "floating": 101, "local": 0, "expressions": 0, "unknown": 0}, "rows_omitted": true, "references": []any{}}
+			}
+		}
+		content, value, err := runWorkflowDoc(t, context.WithValue(t.Context(), windowKey{}, windowLimits{block: limit}), doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := value.(comparisonProjection)
+		if len(content[0].Text)+len(content[1].Text) > limit || !p.RowsOmitted {
+			t.Fatal("dependency summaries escaped model budget")
+		}
+		for _, arm := range []*comparisonWorkflowArm{p.WorkflowEvidence.Baseline, p.WorkflowEvidence.Candidate} {
+			if len(arm.Attempts) < 1 || *arm.Attempts[0].RootSource.Dependencies.Counts.Declarations != 101 {
+				t.Fatal("summary counts or available arm lost")
+			}
+		}
+	}
+}

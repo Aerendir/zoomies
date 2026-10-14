@@ -3,6 +3,8 @@ package controller
 import (
 	"crypto/sha256"
 	"encoding/hex"
+
+	"github.com/eyupio/zoomies/internal/analysis"
 )
 
 // Workflow evidence is a response-only whitelist over validated retained inputs.
@@ -26,17 +28,19 @@ type ExperimentWorkflowEvidenceAttempt struct {
 	RootSource         *ExperimentRootSourceView `json:"root_source"`
 }
 type ExperimentRootSourceView struct {
-	Basis         string `json:"basis"`
-	CommitSHA     string `json:"commit_sha"`
-	BlobSHA       string `json:"blob_sha"`
-	ContentSHA256 string `json:"content_sha256"`
-	Bytes         int    `json:"bytes"`
+	Dependencies  *analysis.RootDependencies `json:"dependencies"`
+	Basis         string                     `json:"basis"`
+	CommitSHA     string                     `json:"commit_sha"`
+	BlobSHA       string                     `json:"blob_sha"`
+	ContentSHA256 string                     `json:"content_sha256"`
+	Bytes         int                        `json:"bytes"`
 }
 
 func experimentWorkflowView(a, b *ExperimentJoinedEvidence) *ExperimentWorkflowEvidence {
 	return &ExperimentWorkflowEvidence{Version: "workflow-evidence-v1", Baseline: experimentWorkflowArmView(a), Candidate: experimentWorkflowArmView(b)}
 }
 func experimentWorkflowArmView(e *ExperimentJoinedEvidence) ExperimentWorkflowEvidenceArm {
+	remaining := analysis.RootDependencyRows
 	out := ExperimentWorkflowEvidenceArm{SelectedAttempts: len(e.Attempts), Attempts: []ExperimentWorkflowEvidenceAttempt{}}
 	for _, joined := range e.Attempts {
 		r := joined.Remote
@@ -58,7 +62,7 @@ func experimentWorkflowArmView(e *ExperimentJoinedEvidence) ExperimentWorkflowEv
 			row.WorkflowPathSHA256 = &v
 		}
 		if s := r.WorkflowSource; s != nil {
-			row.RootSource = &ExperimentRootSourceView{Basis: s.Basis, CommitSHA: s.CommitSHA, BlobSHA: s.BlobSHA, ContentSHA256: s.ContentSHA256, Bytes: s.Bytes}
+			row.RootSource = &ExperimentRootSourceView{Dependencies: experimentDependencyView(s.Dependencies, &remaining), Basis: s.Basis, CommitSHA: s.CommitSHA, BlobSHA: s.BlobSHA, ContentSHA256: s.ContentSHA256, Bytes: s.Bytes}
 		}
 		out.Attempts = append(out.Attempts, row)
 	}

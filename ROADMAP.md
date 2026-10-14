@@ -1739,7 +1739,18 @@ request to continue the Eli enhancement stack. Track E2 in the live handoff.
 **Why:** a period correlation does not establish matched workloads for a
 configuration experiment. Keep ZF-241's period/release finding separate.
 
-**Do:** begin with a pure, bounded eligibility snapshot of operator-selected
+**Milestone scope, owner agreed 14 October 2026:** close E2 at descriptive historical
+comparison after dependency inspection reaches REST/UI, CLI and bounded MCP/Eli
+summaries. This milestone includes explicit capture, immutable replay, separate
+measurements, coverage/unknowns and runner/root-workflow/declaration provenance.
+Controlled experiment eligibility, transitive dependency resolution, inputs/test
+scope, configuration equivalence, cache/host attestation, fair complete cohorts,
+workflow dispatch, allocated cost attribution and live model evaluation remain
+deferred. Do not keep extending E2 automatically; next implement an E3 optimisation
+preview with honest inconclusive verification where evidence is incomplete.
+
+**Original broader scope (deferred beyond this milestone):** begin with a pure,
+bounded eligibility snapshot of operator-selected
 existing attempts. Retain the hypothesis, initiating user, repository, evidence
 identifier, revisions, exact intended delta, inputs, test scope, image/resource
 identity, cache/host observations, window and fixed rule version. Keep failed
@@ -1778,7 +1789,8 @@ Dispatch and publication are later, separately authorised work.
 [web workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-web.md),
 [bounded MCP/Eli workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-mcp.md),
 [CLI workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-cli.md),
-[private root dependency inventory](roadmap/plans/2026-10-13-eli-comparison-workflow-dependencies.md).
+[private root dependency inventory](roadmap/plans/2026-10-13-eli-comparison-workflow-dependencies.md),
+[descriptive comparison milestone](roadmap/plans/2026-10-14-eli-e2-descriptive-comparison-milestone.md).
 The owner prioritised the web UI before CLI capture on 13 October 2026.
 These slices include bounded local retention and capture/replay routes. No new
 dependency, model call, dispatch or publication is introduced. Historical workload/

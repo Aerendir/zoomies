@@ -31,11 +31,12 @@ type cliWorkflowAttempt struct {
 	RootSource         *cliRootSource `json:"root_source"`
 }
 type cliRootSource struct {
-	Basis         string `json:"basis"`
-	CommitSHA     string `json:"commit_sha"`
-	BlobSHA       string `json:"blob_sha"`
-	ContentSHA256 string `json:"content_sha256"`
-	Bytes         int    `json:"bytes"`
+	Dependencies  *analysis.RootDependencies `json:"dependencies"`
+	Basis         string                     `json:"basis"`
+	CommitSHA     string                     `json:"commit_sha"`
+	BlobSHA       string                     `json:"blob_sha"`
+	ContentSHA256 string                     `json:"content_sha256"`
+	Bytes         int                        `json:"bytes"`
 }
 
 func validCLIWorkflows(e *cliWorkflowEvidence, a, b analysis.ExperimentArm) bool {
@@ -63,6 +64,7 @@ func validCLIWorkflows(e *cliWorkflowEvidence, a, b analysis.ExperimentArm) bool
 			revisions[strconv.FormatInt(v.RunID, 10)+":"+strconv.Itoa(v.Attempt)] = v.SourceRevision
 		}
 		shownRoots := 0
+		dependencyRows := 0
 		for _, row := range side.Attempts {
 			key := row.RunID + ":" + strconv.Itoa(row.Attempt)
 			revision, ok := revisions[key]
@@ -78,6 +80,15 @@ func validCLIWorkflows(e *cliWorkflowEvidence, a, b analysis.ExperimentArm) bool
 			}
 			if s := row.RootSource; s != nil {
 				if row.Event == nil || *row.Event != "push" || row.WorkflowPathSHA256 == nil || s.Basis != "push_head_sha_root_file" || !cliWorkflowSHA(s.CommitSHA) || s.CommitSHA != revision || !cliWorkflowSHA(s.BlobSHA) || !cliRunnerHash(s.ContentSHA256) || s.Bytes < 1 || s.Bytes > 128*1024 {
+					return false
+				}
+				if !analysis.ValidRootDependencies(s.Dependencies, s.ContentSHA256) {
+					return false
+				}
+				if s.Dependencies != nil {
+					dependencyRows += len(s.Dependencies.References)
+				}
+				if dependencyRows > analysis.RootDependencyRows {
 					return false
 				}
 				shownRoots++
@@ -158,6 +169,25 @@ func printCLIWorkflowEvidence(p *printer, e *cliWorkflowEvidence) {
 				fields = append(fields, [2]string{"root content SHA-256", "unknown"})
 			}
 			p.keyValues(fields)
+			if r.RootSource != nil {
+				printCLIDependencies(p, r.RootSource.Dependencies)
+			}
 		}
+	}
+}
+
+func printCLIDependencies(p *printer, d *analysis.RootDependencies) {
+	p.note("Dependency coverage: root uses declarations only; literal pins do not prove existence, execution or a resolved graph. Scripts, containers/services and transitive dependencies are outside this inventory.")
+	if d == nil || d.Counts == nil {
+		p.note("Dependency counts: unknown (absent or unsupported inspection).")
+		return
+	}
+	c := d.Counts
+	p.keyValues([][2]string{{"root declarations", strconv.Itoa(*c.Declarations)}, {"literal commit pins", strconv.Itoa(*c.CommitPins)}, {"literal image pins", strconv.Itoa(*c.DigestPins)}, {"floating references", strconv.Itoa(*c.Floating)}, {"unresolved local references", strconv.Itoa(*c.Local)}, {"expressions", strconv.Itoa(*c.Expressions)}, {"unrecognised references", strconv.Itoa(*c.Unknown)}})
+	if *d.RowsOmitted {
+		p.note("Showing %d dependency declarations; full counts include omitted rows.", len(d.References))
+	}
+	for _, r := range d.References {
+		p.keyValues([][2]string{{"declaration", r.Declaration}, {"job index", strconv.Itoa(*r.JobIndex)}, {"step index", strconv.Itoa(*r.StepIndex)}, {"line", strconv.Itoa(*r.Line)}, {"reference kind", r.Kind}, {"pin kind", r.Pin}, {"reference fingerprint", r.ReferenceSHA256}, {"literal revision", cliWorkflowNullable(r.Revision)}})
 	}
 }

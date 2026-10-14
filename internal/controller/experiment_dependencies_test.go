@@ -59,7 +59,7 @@ func TestDependencyInventoryRetainsPrivatelyAndReplaysWithoutPromotingWorkflowId
 	}
 	oldView, _ := json.Marshal(saved)
 	newView, _ := json.Marshal(replay)
-	if string(oldView) != string(newView) || strings.Contains(string(newView), "dependencies") || strings.Contains(string(newView), "reference_sha256") {
+	if string(oldView) != string(newView) || strings.Contains(string(newView), "private_owner") || saved.WorkflowEvidence.Baseline.Attempts[0].RootSource.Dependencies == nil {
 		t.Fatal("private inventory leaked or changed immutable replay")
 	}
 }

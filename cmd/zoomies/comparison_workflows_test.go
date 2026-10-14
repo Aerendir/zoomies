@@ -162,3 +162,26 @@ func TestComparisonWorkflowLegacyViewsRemainExplicitlyUnknown(t *testing.T) {
 		t.Fatal("invented legacy facts")
 	}
 }
+
+func TestCLIInspectsDependencyCountsAndRejectsMissingFactsBeforePrinting(t *testing.T) {
+	var doc map[string]any
+	decoder := json.NewDecoder(strings.NewReader(cliWorkflowBody(t, cliWorkflowFixture())))
+	decoder.UseNumber()
+	if err := decoder.Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	source := doc["workflow_evidence"].(map[string]any)["baseline"].(map[string]any)["attempts"].([]any)[0].(map[string]any)["root_source"].(map[string]any)
+	counters := map[string]any{"declarations": 0, "commit_pins": 0, "digest_pins": 0, "floating": 0, "local": 0, "expressions": 0, "unknown": 0}
+	source["dependencies"] = map[string]any{"version": "root-dependencies-v1", "basis": "root_uses_declarations", "source_sha256": strings.Repeat("c", 64), "coverage": "enumerated", "counts": counters, "rows_omitted": false, "references": []any{}}
+	raw, _ := json.Marshal(doc)
+	code, out, calls := cliWorkflowRequest(t, string(raw), false, false)
+	if code != 0 || calls != 1 || !strings.Contains(out, "root declarations") || !strings.Contains(out, "Literal pins") && !strings.Contains(out, "literal pins") {
+		t.Fatal("known zero dependency inventory not shown")
+	}
+	delete(counters, "local")
+	raw, _ = json.Marshal(doc)
+	code, out, calls = cliWorkflowRequest(t, string(raw), false, false)
+	if code == 0 || out != "" || calls != 1 {
+		t.Fatal("missing dependency counter became zero")
+	}
+}

@@ -15698,10 +15698,59 @@ components:
       - runner_observations
       - rows_omitted
       - jobs
+    RootDependencies:
+      type: object
+      additionalProperties: false
+      properties:
+        version: {type: string, enum: [root-dependencies-v1]}
+        basis: {type: string, enum: [root_uses_declarations]}
+        source_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        coverage: {type: string, enum: [enumerated, unsupported]}
+        counts:
+          allOf:
+          - $ref: '#/components/schemas/RootDependencyCounts'
+          nullable: true
+        rows_omitted: {type: boolean}
+        references:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/RootDependencyReference'
+      required: [version, basis, source_sha256, coverage, counts, rows_omitted, references]
+    RootDependencyCounts:
+      type: object
+      additionalProperties: false
+      properties:
+        declarations: {type: integer, minimum: 0, maximum: 10000}
+        commit_pins: {type: integer, minimum: 0, maximum: 10000}
+        digest_pins: {type: integer, minimum: 0, maximum: 10000}
+        floating: {type: integer, minimum: 0, maximum: 10000}
+        local: {type: integer, minimum: 0, maximum: 10000}
+        expressions: {type: integer, minimum: 0, maximum: 10000}
+        unknown: {type: integer, minimum: 0, maximum: 10000}
+      required: [declarations, commit_pins, digest_pins, floating, local, expressions, unknown]
+    RootDependencyReference:
+      type: object
+      additionalProperties: false
+      properties:
+        job_index: {type: integer, minimum: 0, maximum: 20000}
+        step_index: {type: integer, minimum: -1, maximum: 20000}
+        line: {type: integer, minimum: 1, maximum: 262144}
+        declaration: {type: string, enum: [job_workflow, step_action]}
+        kind: {type: string, enum: [remote, docker, local, expression, unknown]}
+        pin: {type: string, enum: [commit, digest, floating, unresolved]}
+        reference_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        revision: {type: string, nullable: true}
+      required: [job_index, step_index, line, declaration, kind, pin, reference_sha256, revision]
     ExperimentRootSourceView:
       type: object
       additionalProperties: false
       properties:
+        dependencies:
+          allOf:
+          - $ref: '#/components/schemas/RootDependencies'
+          nullable: true
+          description: Root uses declarations only. At most 50 reference rows across each arm, with full counts and omission flags. Absent on older controllers; literal pins do not prove resolution or execution.
         basis:
           type: string
           enum: [push_head_sha_root_file]

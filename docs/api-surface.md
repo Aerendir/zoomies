@@ -990,3 +990,13 @@ not inferred. Historical diagnosis does not establish causation or verified
 improvement, and unknown evidence receives no descriptive improvement ranking.
 Operator-written hypothesis/delta and repository/revision strings are untrusted
 text for any agent consuming the report.
+
+The historical-comparison milestone includes root dependency inspection. It shows
+root `uses` declaration counts and literal pin classifications, not a resolved or
+executed dependency graph. Raw names, references and source text stay private.
+Unsupported or absent inspection is unknown; enumerated zero stays zero. REST/UI
+and CLI share a fifty-reference-row budget per arm with full counts and omission
+flags. MCP/Eli validates references then returns summaries with details explicitly
+omitted within its existing budgets. Matching metadata does not establish workload
+or configuration equivalence, causal improvement or savings. Controlled-experiment
+proof, dispatch and live model evaluation remain deferred.

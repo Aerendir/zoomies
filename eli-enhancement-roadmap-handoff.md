@@ -57,7 +57,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 web workflow evidence | Merged | ZF-243, [#1014](https://github.com/eyupio/zoomies/pull/1014), based on main after #1012 | Separate bounded REST/UI projection with exact run IDs, unknowns and root-only coverage; fingerprints exclude raw paths. Controller/API race, 20 desktop/mobile checks, 109 UI unit tests, type/lint/build, vet and strict docs pass |
 | E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
 | E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
-| E2 private root dependency inventory | Ready for review | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
+| E2 private root dependency inventory | Merged | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
+| E2 descriptive-comparison milestone | Implemented, pending review/CI/merge | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -1911,7 +1912,7 @@ remains outstanding; fixture passing does not demonstrate unscripted reasoning.
 
 ### E2 slice 25: private root dependency inventory, 13 October 2026
 
-Ready for review [#1018](https://github.com/eyupio/zoomies/pull/1018), branch codex/eli-comparison-workflow-dependencies, based on main after #1016
+Merged [#1018](https://github.com/eyupio/zoomies/pull/1018), branch codex/eli-comparison-workflow-dependencies, based on main after #1016
 merged. The existing push-only immutable root-file read now inspects its already
 validated bytes before discarding them. No additional source, blob, action, image,
 local path or reusable workflow is fetched or executed. Eight-request reservation,
@@ -1978,3 +1979,68 @@ and literal pins alone cannot promote WorkflowRevision or workload equivalence.
 Non-push revisions, inputs/test scope, caches/host conditions, fair complete
 selections and live model evaluation remain outstanding; keep the current thirty
 completed attempts per arm and ten-attempt capture limit.
+
+### E2 descriptive-comparison milestone, 14 October 2026
+
+Owner agreed to finish E2 as the next milestone PR, rather than continue provenance
+expansion indefinitely. Branch codex/eli-e2-descriptive-comparison-milestone starts
+from main after #1018 merged and rebases onto main after #1019.
+Ready PR [#1020](https://github.com/eyupio/zoomies/pull/1020) awaits review/CI/merge.
+This is the closing descriptive milestone, not a
+claim that controlled experiments or the original broader E2 requirements are met.
+
+Delivered scope: explicit bounded historical capture, scoped immutable replay,
+separate measurements and failure/exclusion counts; descriptive runner/root-workflow
+facts and root dependency declarations; REST/UI, CLI and bounded MCP/Eli presenters;
+unknowns, coverage/omissions, privacy and quoted untrusted evidence. Current API
+capture selects at most ten attempts total, while eligibility requires thirty
+completed attempts per arm. Those rules remain unchanged: ordinary captures are
+descriptive and cannot meet controlled eligibility by themselves. No automatic
+batching or relaxed sample rule is introduced.
+
+RootSource.dependencies is an optional nullable root-dependencies-v1 whitelist,
+separate from private parser/store types. It binds to the root content digest and
+copies nullable coverage/counts, exact positional references, fingerprints and
+literal revisions without raw names, paths, refs, source or inputs. At most fifty
+reference rows are shared across each arm's root sources in stable retained order.
+Full class/declaration counts persist, and rows_omitted includes private and display
+omissions. Unsupported inspection has null counts; an enumerated zero is known
+zero. Older absent inventories stay unknown. Current report/envelope bytes, original
+digests, measurements, eligibility and scope/admission limits are preserved.
+
+A shared pure analysis whitelist validates public metadata for CLI and MCP without
+store/controller imports: required counters/flags/positions, versions/basis/source
+binding, count totals and omission consistency, unique positions, reference/pin
+classes, fingerprints and nullable literal revisions. CLI validates before any
+human output, shows bounded detail and preserves raw future JSON in structured
+output. MCP validates detail before discarding references into explicit summaries;
+full counts and omission flags persist, global rows_omitted covers the loss, and
+text/structured outputs agree within existing 64 KiB/12 KiB budgets. No extra GET,
+source read or model/provider call. UI shows native details with mobile wrapping.
+
+Deferred, not silently marked done: transitive workflow/action/image resolution,
+non-push revision selection, actual dispatch inputs/test scope, configuration/image/
+applied-resource equivalence, cache/host conditions, fair complete selections,
+controlled dispatch, cost attribution and live model evaluation. Literal pins are
+syntax evidence, not proof that an object exists or executed. Root uses excludes
+scripts and container/service declarations. Any later evidence programme requires
+its own scoped plan, budgets and authorisation checks; offline replay never enriches.
+
+Validation completed: focused analysis/controller/API/CLI race fixtures and the
+full MCP race suite pass for replay/scope/schema, copied full counts and fifty-row
+arm budget, exact IDs, null/zero/future versions, privacy, missing-field refusal
+and model summaries inside both answer budgets. The scripted retained-comparison
+Eli scenario passes without a live model call. All 28 desktop/mobile comparisons
+and 110 UI unit checks pass, alongside UI type/lint/build budgets, changed-package
+vet, strict docs and whitespace. Removing the public source-binding guard makes
+its fixture fail; the guard is restored. Generated references/contracts are
+refreshed and their command/MCP/catalogue drift checks pass. Docs used the
+repository-only header fallback for optional GitHub metadata. No live source,
+model, provider or fleet operation.
+
+Next agent: check this milestone PR and its CI, update merge state when appropriate,
+then proceed to E3's first supported optimisation preview. Reuse bounded source/edit
+validation and produce a concrete reviewable proposal; do not claim verified
+improvement from these historical snapshots or add dispatch/publication implicitly.
+E4–E6 remain unstarted, E7 validation continues. Do not resume E2 expansion merely
+because its deferred evidence list remains open.
