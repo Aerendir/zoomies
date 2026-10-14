@@ -145,17 +145,24 @@
       // window. Its top-layer bubble must not float over unrelated rows.
       for (let parent = target.parentElement; parent; parent = parent.parentElement) {
         const style = getComputedStyle(parent);
-        if (style.display === 'contents') continue;
-        const clip = parent.getBoundingClientRect();
-        const clipsX = CLIPS.test(style.overflowX);
-        const clipsY = CLIPS.test(style.overflowY);
-        if (
-          (clipsX && (box.right <= clip.left || box.left >= clip.right)) ||
-          (clipsY && (box.bottom <= clip.top || box.top >= clip.bottom))
-        ) {
-          onclose?.();
-          return;
+        if (style.display !== 'contents') {
+          const clip = parent.getBoundingClientRect();
+          const clipsX = CLIPS.test(style.overflowX);
+          const clipsY = CLIPS.test(style.overflowY);
+          if (
+            (clipsX && (box.right <= clip.left || box.left >= clip.right)) ||
+            (clipsY && (box.bottom <= clip.top || box.top >= clip.bottom))
+          ) {
+            onclose?.();
+            return;
+          }
         }
+        // A trigger inside an open popover is in the top layer with it:
+        // nothing above the popover in the DOM clips what it shows, whatever
+        // overflow is set there. Walking on closes the bubble of every menu
+        // item whose menu lies across a clipping ancestor, which is every
+        // menu in a table cell.
+        if (parent.hasAttribute('popover')) break;
       }
       const bounds = tip.getBoundingClientRect();
       const railBox = rail ? boxOf(rail) : undefined;
