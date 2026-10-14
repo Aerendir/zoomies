@@ -247,9 +247,10 @@ containment and close order are covered by the browser suite.
 
 ## Component gallery (N-T4, 14 October 2026)
 
-Branch `theme/state-gallery`. N-T4 asked for the states a healthy screenshot
-never shows to be reviewable in one place, in both styles and modes. That is
-now `web/gallery.html` plus `web/src/gallery/`: a development-only Vite entry
+In [PR #1050](https://github.com/eyupio/zoomies/pull/1050), branch
+`theme/state-gallery`. N-T4 asked for the states a healthy screenshot never
+shows to be reviewable in one place, in both styles and modes. That is now
+`web/gallery.html` plus `web/src/gallery/`: a development-only Vite entry
 that renders the real components from `web/src/lib/components`, never a copy
 of them, in the states the audit named and a few it did not.
 
@@ -302,8 +303,8 @@ fresh mount, and says so where the key is.
 
 ## Next coding-agent actions
 
-1. The theme, the operational layout, first-job activation and the release
-evidence are merged, and the development-only component gallery (N-T4) is
+1. The theme, the operational layout, first-job activation, the release
+evidence and the development-only component gallery (N-T4, PR #1050) are
 done. The one evidence item that is not a capture is the assistant sheet's
 phone-keyboard behaviour, which the browser suite covers.
 2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
