@@ -566,6 +566,7 @@ web/                the Svelte 5 UI
 test/e2e            the Docker end-to-end test, behind the `e2e` build tag
 api/openapi.yaml    the contract both clients are generated from
 deploy/             the controller and runner images, and the runner entrypoint
+design/             the Mission Control style review: concept images and their validation
 docker-compose.yml  the compose deployment
 docs/               the zoomies.sh site: architecture, naming, security,
                     UI guidelines, configuration, brand
