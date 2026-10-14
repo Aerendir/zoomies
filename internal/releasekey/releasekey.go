@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -130,6 +131,23 @@ func Verify(set string, msg, envelope []byte) error {
 		return fmt.Errorf("the signature does not match the checksums under key %s", id)
 	}
 	return nil
+}
+
+// IDs returns the ids of the keys in a set, one base64 public key per line, in
+// a stable order. An empty set is no keys, which means downloads are not held
+// to a signature. It is what a page shows to say which keys this build trusts,
+// and it never returns the keys themselves.
+func IDs(set string) []string {
+	keys, err := parseSet(set)
+	if err != nil {
+		return nil
+	}
+	ids := make([]string, 0, len(keys))
+	for id := range keys {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // keyID names a public key by the first eight bytes of its SHA-256, short

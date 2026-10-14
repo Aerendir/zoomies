@@ -14899,6 +14899,17 @@ components:
           type: string
           description: The command that updates the controller by hand on its host, for a person to copy. Set only when the state is `unsupported`, where it is the way, and empty on Windows, which has no service `zoomies upgrade` can update, where `reason` says what to do by hand instead.
           examples: [sudo zoomies upgrade]
+    UpdatesSigning:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { type: string }
+          description: >-
+            One id per release signing key this build trusts, empty when none is compiled in.
+            The keys themselves are not exposed; an id names one. An empty array means a
+            release's checksums are taken on trust rather than held to a signature.
     UpdatesAttempt:
       type: object
       required: [id, state, from, to, trigger, requested_at, finished_at, error]
@@ -14999,6 +15010,7 @@ components:
             When the list of releases `latest` was chosen from was read. Null while updating is
             off, and until a list has been read.
         helper: { $ref: "#/components/schemas/UpdatesHelper" }
+        signing: { $ref: "#/components/schemas/UpdatesSigning" }
         controller:
           description: >-
             The controller's latest update attempt, in flight or ended, in every mode: one that

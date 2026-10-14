@@ -42,6 +42,7 @@
     modeSettingHref,
     releaseHref,
     rolloutIsOpen,
+    signingLine,
     soakNote,
     soakText,
     targetLine,
@@ -372,6 +373,8 @@
           <dd class="mono">{status.running.version}</dd>
           <dt>Build</dt>
           <dd>{buildText(status.running.release)}</dd>
+          <dt>Releases</dt>
+          <dd>{signingLine(status.signing?.keys ?? [])}</dd>
         </dl>
       </Panel>
     </div>

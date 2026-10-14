@@ -127,6 +127,21 @@ export function buildText(release: boolean): string {
 }
 
 /**
+ * Whether this build holds a release's checksums to a signature, and by which
+ * keys. No keys is a build from before a key was committed, which takes a
+ * release's checksums on trust rather than holding them to a signature.
+ */
+export function signingLine(keys: string[]): string {
+  if (keys.length === 0) {
+    return "No release key is built in, so a release's checksums are taken on trust.";
+  }
+  if (keys.length === 1) {
+    return `Releases are verified with key ${keys[0]}.`;
+  }
+  return `Releases are verified with ${keys.length} keys: ${keys.join(', ')}.`;
+}
+
+/**
  * The address to link a release to, or null to show its tag as plain text.
  *
  * The address is GitHub's `html_url`, which is text that came off the network

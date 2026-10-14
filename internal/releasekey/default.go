@@ -9,4 +9,6 @@ package releasekey
 // to a signature, which the download says once. Set it to the line
 // `zoomies release keygen --out DIR` wrote to release.pub; keep more than one
 // line only for the releases of a rotation.
-const Default = ""
+// It is a variable rather than a constant so a test can set it and put it
+// back; nothing else writes it.
+var Default = ""

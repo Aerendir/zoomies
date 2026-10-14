@@ -12,6 +12,7 @@ import (
 
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/events"
+	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates"
 )
@@ -394,6 +395,42 @@ func TestTheSoakIsWrittenAsTheSettingsPageWritesIt(t *testing.T) {
 				t.Errorf("soak = %q, want %q", got.Soak, tc.want)
 			}
 		})
+	}
+}
+
+// The status says whether this build holds a release's checksums to a
+// signature, and by which key ids, so a page can show it without the key
+// itself ever leaving the binary.
+func TestTheStatusNamesTheReleaseKeysThisBuildTrusts(t *testing.T) {
+	public, _, err := releasekey.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := releasekey.Default
+	releasekey.Default = public
+	t.Cleanup(func() { releasekey.Default = old })
+
+	h := newHarness(t)
+	withVersion(t, "1.3.0")
+	keys := h.status().Signing.Keys
+	parsed, err := releasekey.ParsePublic(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 1 || keys[0] != parsed.ID {
+		t.Fatalf("keys = %v, want [%s]", keys, parsed.ID)
+	}
+}
+
+func TestTheStatusSaysABuildWithNoReleaseKeyVerifiesNothing(t *testing.T) {
+	old := releasekey.Default
+	releasekey.Default = ""
+	t.Cleanup(func() { releasekey.Default = old })
+
+	h := newHarness(t)
+	withVersion(t, "1.3.0")
+	if keys := h.status().Signing.Keys; len(keys) != 0 {
+		t.Fatalf("keys = %v, want none", keys)
 	}
 }
 

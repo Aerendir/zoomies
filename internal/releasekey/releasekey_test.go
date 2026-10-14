@@ -2,6 +2,7 @@ package releasekey
 
 import (
 	"encoding/base64"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -82,6 +83,23 @@ func TestMalformedKeysAndSignaturesAreRefused(t *testing.T) {
 	}
 	if err := Verify("", []byte("m"), Encode("", []byte("sig"))); err == nil {
 		t.Fatal("an envelope naming no key was accepted")
+	}
+}
+
+func TestIDsNamesTheKeysInASet(t *testing.T) {
+	if got := IDs(""); len(got) != 0 {
+		t.Fatalf("an empty set gave %v, want none", got)
+	}
+	a, _, _ := Generate()
+	b, _, _ := Generate()
+	ids := IDs(a + "\n# a comment\n" + b)
+	if len(ids) != 2 {
+		t.Fatalf("ids = %v, want two", ids)
+	}
+	pa, _ := ParsePublic(a)
+	pb, _ := ParsePublic(b)
+	if !slices.Contains(ids, pa.ID) || !slices.Contains(ids, pb.ID) {
+		t.Fatalf("ids = %v, want %s and %s", ids, pa.ID, pb.ID)
 	}
 }
 
