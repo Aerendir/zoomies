@@ -191,6 +191,35 @@ func (s *Store) backupBeforeMigrate(ctx context.Context, pending []string) (stri
 	return dest, nil
 }
 
+// NewestPreMigrationName is the name of the newest copy this package took
+// before a migration, or "" when there is none. The names carry the instant,
+// so the greatest name is the newest without trusting a modification time.
+//
+// It reads the directory and nothing else, so an upgrade can ask whether a
+// restart migrated the database without opening it. A copy that appears where
+// there was none is a migration, and an older binary must not be put back over
+// it.
+func NewestPreMigrationName(dbPath string) string {
+	if strings.TrimSpace(dbPath) == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(dbPath)
+	if err != nil {
+		return ""
+	}
+	entries, err := os.ReadDir(filepath.Join(filepath.Dir(abs), PreMigrationDir))
+	if err != nil {
+		return ""
+	}
+	newest := ""
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), BackupDirPrefix) && e.Name() > newest {
+			newest = e.Name()
+		}
+	}
+	return newest
+}
+
 // pruneDirs keeps the newest keep directories under root and removes the rest.
 //
 // It only considers directories this package names, and sorts by that name:

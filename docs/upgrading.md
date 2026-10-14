@@ -249,9 +249,11 @@ is asked through its own health check, run in it straight away; a native
 service through `/healthz` on the listener its settings name. The wait lasts up
 to thirty minutes. If the controller stops during it, or is still starting at
 the end, the upgrade exits with an error that says which and points at its
-logs. It does **not** roll back then: the new release may already have migrated
-the database, which the old one cannot open. An agent serves nothing to ask, so
-an agent's upgrade does not wait.
+logs. A **native** controller that does not answer is then rolled back by
+itself, unless the upgrade migrated the database; [rolling
+back](#rolling-back-by-hand) has the rule. A container deployment's service is its
+image, which the upgrade does not keep the one before, so it is not rolled back
+by itself. An agent serves nothing to ask, so an agent's upgrade does not wait.
 
 A failed image pull stops before a restart. If a replacement container cannot
 start, the upgrade attempts to restore the previous container or Compose image.
@@ -567,9 +569,16 @@ it.
 
 ### Rolling back by hand
 
-There is no automatic rollback, because migrations are one-way ([there is no
-downgrade](#there-is-no-downgrade)). What an update leaves makes one by hand
-possible:
+A **native controller** that does not answer after an upgrade is rolled back by
+itself: if the upgrade ran no migration, the previous release is put back over
+the installed binary, the service restarts on it, and the upgrade reports that
+it failed and the previous release is running again. A migration is the one
+thing that stops this, because migrations are one-way ([there is no
+downgrade](#there-is-no-downgrade)): a release that migrated the database is
+left in place, and the upgrade names the pre-migration copy to restore. A
+container deployment's service is its image, which an upgrade does not keep the
+one before, so it is not rolled back by itself. What an update leaves makes the
+rest possible by hand:
 
 * **The binary it replaced**, kept beside the installed one as
   `zoomies.previous` (`/usr/local/bin/zoomies.previous` on a default install).
