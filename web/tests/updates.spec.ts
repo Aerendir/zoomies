@@ -1245,3 +1245,21 @@ test('nothing scrolls sideways at 360px with a halted rollout', async ({ page })
   await expect(hostsRollout(page)).toContainText('Halted');
   await expectNoSidewaysScroll(page, 'the Updates page with a halted rollout');
 });
+
+// Whether a download is held to a signature tells an operator whether their
+// build verifies releases at all, so the page says it and names the key.
+test('the controller panel names the release key this build trusts', async ({ page }) => {
+  await serve(page, () => ({ ...updatable(), signing: { keys: ['0123456789abcdef'] } }));
+  await quiet(page);
+  await goto(page, PAGE, 'Updates');
+  await expect(controller(page)).toContainText('Releases are verified with key 0123456789abcdef.');
+});
+
+test('the controller panel says a build with no release key takes the checksums on trust', async ({
+  page,
+}) => {
+  await serve(page, () => ({ ...updatable(), signing: { keys: [] } }));
+  await quiet(page);
+  await goto(page, PAGE, 'Updates');
+  await expect(controller(page)).toContainText('taken on trust');
+});

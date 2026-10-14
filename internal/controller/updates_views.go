@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/eyupio/zoomies/internal/config"
+	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates"
 	"github.com/eyupio/zoomies/internal/version"
@@ -56,6 +57,10 @@ type UpdatesView struct {
 	// Helper says whether this controller can update itself, and if not, how a
 	// person with root on its host makes it able to, or why nobody can.
 	Helper UpdatesHelper `json:"helper"`
+	// Signing says whether this build holds a release's checksums to a signature,
+	// and the ids of the keys it trusts. No keys means it takes the checksums on
+	// trust, which is what a build from before a key was committed does.
+	Signing UpdatesSigning `json:"signing"`
 	// Controller is this controller's latest update attempt, open or ended, and
 	// null when it has never had one.
 	Controller *UpdatesAttempt `json:"controller"`
@@ -97,6 +102,15 @@ type UpdatesHelper struct {
 	// person to copy, and empty unless the helper cannot be installed: anywhere
 	// else the helper is the way, and the command would be a second answer.
 	UpgradeCommand string `json:"upgrade_command"`
+}
+
+// UpdatesSigning is the release signing key state of the running build, so a
+// page can say whether a download is held to a signature and by which keys.
+type UpdatesSigning struct {
+	// Keys is one id per trusted release key, empty when none is compiled in.
+	// The keys themselves are not exposed here: an id names one, which is all a
+	// page needs to say what this build trusts.
+	Keys []string `json:"keys"`
 }
 
 // UpdatesAttempt is one request to update, and how it ended.
@@ -196,6 +210,7 @@ func (c *Controller) UpdatesView(ctx context.Context) (*UpdatesView, error) {
 		Soak:    config.TidyDuration(cfg.Soak),
 		Running: UpdatesRunning{Version: version.Version, Release: fromRelease},
 		Helper:  probe.view,
+		Signing: UpdatesSigning{Keys: releasekey.IDs(releasekey.Default)},
 	}
 	pic, err := c.updatesSnapshot(ctx, cfg, probe)
 	if err != nil {

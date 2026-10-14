@@ -11244,6 +11244,10 @@ export interface components {
              */
             upgrade_command: string;
         };
+        UpdatesSigning: {
+            /** @description One id per release signing key this build trusts, empty when none is compiled in. The keys themselves are not exposed; an id names one. An empty array means a release's checksums are taken on trust rather than held to a signature. */
+            keys: string[];
+        };
         UpdatesAttempt: {
             /** @example upd_k3fqz2mx7abcd */
             id: string;
@@ -11314,6 +11318,7 @@ export interface components {
              */
             checked_at: string | null;
             helper: components["schemas"]["UpdatesHelper"];
+            signing?: components["schemas"]["UpdatesSigning"];
             /** @description The controller's latest update attempt, in flight or ended, in every mode: one that was in flight when updating was switched off still ends, and says how. Null when it has never had one. */
             controller: components["schemas"]["UpdatesAttempt"] | null;
             /** @description The open rollout, or the last one that ended, so that a page can say how it went. Null when there has never been one. */

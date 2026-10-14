@@ -1145,7 +1145,10 @@ The key is minted once, by the owner:
 3. Store the private half, `release.key`, as the repository secret
    `RELEASE_SIGNING_KEY`, and delete it from the machine.
 
-`release.yml` signs `checksums.txt` after it builds, verifies the signature
+Settings, Updates says which keys the running build trusts, or that it holds
+none and takes the checksums on trust, so an operator can tell at a glance
+whether a download was held to a signature. `release.yml` signs
+`checksums.txt` after it builds, verifies the signature
 against the committed key, and attaches `checksums.txt.ed25519` to the release.
 A release cut without the secret fails rather than publishing unsigned, and a
 tag cut before the public key is committed fails too. A `dev` build, which is
