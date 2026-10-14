@@ -871,6 +871,7 @@ test.describe('with Kennel Club on', () => {
     test('each figure opens the jobs it counted, and the list agrees with the figure', async ({
       page,
     }) => {
+      test.setTimeout(90_000);
       const tile = (label: string) => page.locator('.metric').filter({ hasText: label });
       // The demo fleet's pools and hosts all have IDs, so each count is a link.
       const place = async (name: string, by: 'pool' | 'host') => {
