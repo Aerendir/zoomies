@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 // An upgrade used to call itself complete the moment the new container was
@@ -184,15 +187,50 @@ func probeHealth(ctx context.Context, client *http.Client, target string) error 
 	return nil
 }
 
-// waitServing waits until the controller answers. It never rolls the upgrade
-// back: by the time the controller is slow to answer it may have migrated its
-// database, which an older release cannot open.
+// upgradeRollbackTimeout is how long the previous release is given to answer
+// after it is put back. It has run here before, so it does not need the
+// migration wait the new release is given.
+const upgradeRollbackTimeout = 5 * time.Minute
+
+// waitServing waits until the controller answers. When it does not, it decides
+// what can be done: putting the previous release back is only safe when this
+// upgrade did not migrate the database, because migrations run one way and an
+// older binary cannot open a schema that has moved on.
 func (p *upgradePlan) waitServing(ctx context.Context, check *serveCheck) error {
 	if check == nil {
 		return nil
 	}
-	out := p.opts.Out
-	timeout, poll, every := p.opts.serveTimeout, p.opts.servePoll, p.opts.progressEvery
+	timeout, poll, every := p.serveTimings()
+	stop := p.answerWait(ctx, check, timeout, poll, every)
+	if stop == nil {
+		return nil
+	}
+	logs := p.logsHint()
+	// The two ways the wait ends, without advice: what to do about it is the
+	// decision below, and a message that named one path here would contradict
+	// the path actually taken.
+	var base string
+	if stop.stoppedWhy != "" {
+		base = fmt.Sprintf("the controller stopped after the upgrade: %s. See why with: %s", stop.stoppedWhy, logs)
+	} else {
+		base = fmt.Sprintf("the controller has not answered in %s (%v)", timeout, stop.lastErr)
+	}
+	if !p.canRollback() {
+		if stop.stoppedWhy != "" {
+			return errors.New(base + ". The upgrade was not rolled back: the new release may already have migrated the database, which an older one cannot open")
+		}
+		return fmt.Errorf("%s. It is still running, so it may still be migrating its database: follow it with %s, and do not stop it part way", base, logs)
+	}
+	if copy := p.migratedCopy(); copy != "" {
+		return fmt.Errorf("%s. The previous release was not put back: this upgrade migrated the database, which an older release cannot open. The copy taken before the migration is %s; stop the service and restore it with: zoomies restore %s --replace", base, copy, copy)
+	}
+	return p.rollbackBinary(ctx, check, base)
+}
+
+// serveTimings is how long to wait for the controller, and how often to ask
+// and to echo progress, with the defaults an unattended run leaves.
+func (p *upgradePlan) serveTimings() (timeout, poll, every time.Duration) {
+	timeout, poll, every = p.opts.serveTimeout, p.opts.servePoll, p.opts.progressEvery
 	if timeout == 0 {
 		timeout = upgradeServeTimeout
 	}
@@ -202,6 +240,23 @@ func (p *upgradePlan) waitServing(ctx context.Context, check *serveCheck) error 
 	if every == 0 {
 		every = upgradeProgressEvery
 	}
+	return timeout, poll, every
+}
+
+// waitStop is why a wait ended: the service was found stopped, or the deadline
+// passed with the controller still not answering.
+type waitStop struct {
+	// stoppedWhy is why the service is not running, and "" while it is.
+	stoppedWhy string
+	// lastErr is the last probe's error, for the message a timeout writes.
+	lastErr error
+}
+
+// answerWait polls until the controller answers, and returns nil when it does.
+// A container with no health check is not waited on: nil is returned with a
+// warning, because there is nothing to ask.
+func (p *upgradePlan) answerWait(ctx context.Context, check *serveCheck, timeout, poll, every time.Duration) *waitStop {
+	out := p.opts.Out
 	logs := p.logsHint()
 	start := time.Now()
 	lastSaid := start
@@ -220,7 +275,7 @@ func (p *upgradePlan) waitServing(ctx context.Context, check *serveCheck) error 
 			return nil
 		}
 		if why := check.stopped(ctx); why != "" {
-			return fmt.Errorf("the controller stopped after the upgrade: %s. See why with: %s. The upgrade was not rolled back: the new release may already have migrated the database, which an older one cannot open", why, logs)
+			return &waitStop{stoppedWhy: why}
 		}
 		if !announced {
 			PaletteFor(out).Doing(out, "Waiting for the controller to answer")
@@ -228,7 +283,7 @@ func (p *upgradePlan) waitServing(ctx context.Context, check *serveCheck) error 
 			announced = true
 		}
 		if time.Since(start) >= timeout {
-			return fmt.Errorf("the controller has not answered in %s (%v). It is still running, so it may still be migrating its database: follow it with %s, and do not stop it part way", timeout, err, logs)
+			return &waitStop{lastErr: err}
 		}
 		if time.Since(lastSaid) >= every {
 			lastSaid = time.Now()
@@ -240,10 +295,60 @@ func (p *upgradePlan) waitServing(ctx context.Context, check *serveCheck) error 
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return &waitStop{lastErr: ctx.Err()}
 		case <-time.After(poll):
 		}
 	}
+}
+
+// canRollback says whether the previous release can be put back: a native
+// service that runs the binary selfUpdate replaced, and only when that binary
+// was actually kept beside it. A container's service is its image, which this
+// upgrade does not keep the one before.
+func (p *upgradePlan) canRollback() bool {
+	if p.record.Deployment.Containerised() || p.opts.BinaryPath == "" {
+		return false
+	}
+	_, err := os.Stat(p.opts.BinaryPath + PreviousSuffix)
+	return err == nil
+}
+
+// migratedCopy is the pre-migration copy this upgrade made, or "" when it
+// migrated nothing: the newest copy beside the database, when it is newer than
+// the one that was there before the restart.
+func (p *upgradePlan) migratedCopy() string {
+	if p.dbPath == "" {
+		return ""
+	}
+	newest := store.NewestPreMigrationName(p.dbPath)
+	if newest == "" || newest <= p.beforeMigrate {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(p.dbPath), store.PreMigrationDir, newest)
+}
+
+// rollbackBinary puts the previous release back, restarts the service and waits
+// for it to answer. It returns an error either way: the upgrade failed, and
+// this says whether the host was put back to what it ran.
+func (p *upgradePlan) rollbackBinary(ctx context.Context, check *serveCheck, base string) error {
+	PaletteFor(p.opts.Out).Warn(p.opts.Out, "The controller did not answer; putting the previous release back")
+	if err := restorePreviousBinary(p.opts.BinaryPath); err != nil {
+		return fmt.Errorf("%s; and the previous release could not be put back: %v", base, err)
+	}
+	if err := p.restartNative(ctx); err != nil {
+		return fmt.Errorf("%s; the previous release was put back but the service would not restart: %v", base, err)
+	}
+	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upgradeRollbackTimeout)
+	defer cancel()
+	_, poll, every := p.serveTimings()
+	if stop := p.answerWait(tctx, check, upgradeRollbackTimeout, poll, every); stop != nil {
+		why := stop.stoppedWhy
+		if why == "" {
+			why = stop.lastErr.Error()
+		}
+		return fmt.Errorf("%s; the previous release was put back and did not answer either (%s). Restore the copy taken before the upgrade, if there is one, with: zoomies restore", base, why)
+	}
+	return fmt.Errorf("%s. The upgrade failed and the previous release is running again", base)
 }
 
 // logsHint is the command that shows this deployment's logs.

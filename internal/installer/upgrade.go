@@ -97,6 +97,12 @@ type upgradePlan struct {
 	// review's additions were made, so the next restart gives it the mount.
 	// The update helper cannot be installed until it has the mount.
 	sharedMountComing, sharedMountApplied bool
+	// dbPath is the deployment's database as this host sees it, and
+	// beforeMigrate is the newest pre-migration copy beside it before the
+	// restart. A copy that appears after the restart means the release
+	// migrated the database, so a rollback would leave a binary an older
+	// schema cannot open.
+	dbPath, beforeMigrate string
 }
 
 // withDefaults fills the options a caller may leave out. A database copy taken
@@ -197,6 +203,12 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	// on an upgrade that moved the service and migrated its database.
 	beforeRunning := p.runningImageID(ctx)
 	serving := p.serveCheck(ctx)
+	// Snapshot the database and the newest pre-migration copy before the
+	// restart, so a failure to answer can tell whether this release migrated
+	// it: a copy that appears after the restart means the older binary cannot
+	// open the database, and then a rollback is a restore rather than a swap.
+	snapshot := p.settings(ctx)
+	p.dbPath, p.beforeMigrate = snapshot.dbPath, store.NewestPreMigrationName(snapshot.dbPath)
 	if err := p.pullRunnerImages(ctx); err != nil {
 		return err
 	}
@@ -206,20 +218,7 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	case DeploymentDocker:
 		err = p.upgradeDocker(ctx)
 	default:
-		for _, unit := range p.nativeUnits {
-			ui.Doing(opts.Out, "Restarting %s", shortUnit(unit))
-			if p.launchd {
-				_, err = opts.run(ctx, "launchctl", "kickstart", "-k", unit)
-			} else {
-				_, err = opts.run(ctx, "systemctl", "restart", unit)
-				if err == nil {
-					_, err = opts.run(ctx, "systemctl", "is-active", "--quiet", unit)
-				}
-			}
-			if err != nil {
-				break
-			}
-		}
+		err = p.restartNative(ctx)
 	}
 	if err != nil {
 		return fmt.Errorf("installer: the upgrade did not finish: %w", err)
@@ -250,6 +249,29 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	offerWSLSelfManagement(ctx, opts.wslOffer(false))
 	fmt.Fprintln(opts.Out)
 	ui.Done(opts.Out, "%s", ui.Bold("Upgrade complete."))
+	return nil
+}
+
+// restartNative restarts the native units this deployment runs, one service at
+// a time. The upgrade and a rollback share it, so a rollback brings the
+// service back exactly as the upgrade brought it up.
+func (p *upgradePlan) restartNative(ctx context.Context) error {
+	ui := PaletteFor(p.opts.Out)
+	for _, unit := range p.nativeUnits {
+		ui.Doing(p.opts.Out, "Restarting %s", shortUnit(unit))
+		var err error
+		if p.launchd {
+			_, err = p.opts.run(ctx, "launchctl", "kickstart", "-k", unit)
+		} else {
+			_, err = p.opts.run(ctx, "systemctl", "restart", unit)
+			if err == nil {
+				_, err = p.opts.run(ctx, "systemctl", "is-active", "--quiet", unit)
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

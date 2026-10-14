@@ -267,6 +267,25 @@ func (c *Candidate) Install(opts SelfUpdateOptions) error {
 	return nil
 }
 
+// restorePreviousBinary puts the binary kept beside the installed one back in
+// its place, through a staging file and a rename so the path is never half
+// written. It is what an upgrade rolls back to when the new release does not
+// answer and ran no migration.
+func restorePreviousBinary(binary string) error {
+	previous := binary + PreviousSuffix
+	staged := binary + ".rollback"
+	_ = os.Remove(staged)
+	if err := copyBinary(previous, staged); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("reading the previous binary %s: %w", previous, err)
+	}
+	if err := os.Rename(staged, binary); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("putting %s back: %w", binary, err)
+	}
+	return nil
+}
+
 // copyBinary copies src to dst with src's mode. It is only the fallback for a
 // filesystem that cannot hard-link, so it does not try to be atomic: dst is a
 // staging name that Install renames or removes.
