@@ -59,7 +59,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
 | E2 private root dependency inventory | Merged | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
 | E2 descriptive-comparison milestone | Merged | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
-| E3 checkout preview foundation | Implemented, PR preparation | ZF-244, PR pending, based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
+| E3 checkout preview foundation | Implemented, pending review/CI/merge | ZF-244, [#1021](https://github.com/eyupio/zoomies/pull/1021), based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
 | E4 to E6 | Not started | Dependencies and sequence below | No new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -2051,7 +2051,8 @@ because its deferred evidence list remains open.
 
 E2 descriptive milestone #1020 is merged. Owner continued into E3; ZF-244 is
 allocated in ROADMAP.md. Branch codex/eli-e3-checkout-preview starts from current
-main after #1020. This is a pure calculation foundation, not full E3 delivery.
+main after #1020. Ready PR [#1021](https://github.com/eyupio/zoomies/pull/1021)
+awaits review/CI/merge. This is a pure calculation foundation, not full E3 delivery.
 
 internal/optimisation accepts one complete regular root workflow file, a pinned
 head, caller-supplied successful checkout timing and explicit history review.

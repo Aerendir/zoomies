@@ -1,7 +1,8 @@
 # ZF-244: supplied-evidence checkout preview foundation
 
 14 October 2026. E2 descriptive milestone #1020 merged; owner requested continuation
-into E3. Main baseline 9f161c9c. PR pending.
+into E3. Main baseline 9f161c9c. Ready PR [#1021](https://github.com/eyupio/zoomies/pull/1021),
+pending review/CI/merge.
 
 ## Scope
 
