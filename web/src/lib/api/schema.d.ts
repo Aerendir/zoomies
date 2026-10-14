@@ -11323,6 +11323,8 @@ export interface components {
             checked_at: string | null;
             helper: components["schemas"]["UpdatesHelper"];
             signing?: components["schemas"]["UpdatesSigning"];
+            /** @description Whether a controller that does not come back is put back on the release it ran. True for a native service running the binary; false for a container, whose service is an image the upgrade does not keep the one before. */
+            rollback?: boolean;
             /** @description The controller's latest update attempt, in flight or ended, in every mode: one that was in flight when updating was switched off still ends, and says how. Null when it has never had one. */
             controller: components["schemas"]["UpdatesAttempt"] | null;
             /** @description The open rollout, or the last one that ended, so that a page can say how it went. Null when there has never been one. */

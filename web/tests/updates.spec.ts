@@ -709,9 +709,8 @@ test('the platform role is offered the button, and the confirmation says what th
   await expect(dialog).toContainText('The controller restarts.');
   await expect(dialog).toContainText('Jobs that are running keep running.');
   await expect(dialog).toContainText(
-    'If the release changes the database, a copy of it is kept first beside the database',
+    'A verified copy of the database is taken before anything changes.',
   );
-  await expect(dialog).toContainText('A release that changes nothing there takes none.');
   await expect(dialog.getByRole('button', { name: 'Update to v1.3.2', exact: true })).toBeVisible();
 
   await dialog.getByRole('button', { name: 'Cancel' }).click();

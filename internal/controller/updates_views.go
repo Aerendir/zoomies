@@ -61,6 +61,11 @@ type UpdatesView struct {
 	// and the ids of the keys it trusts. No keys means it takes the checksums on
 	// trust, which is what a build from before a key was committed does.
 	Signing UpdatesSigning `json:"signing"`
+	// Rollback says a controller that does not come back is put back on the
+	// release it ran, which is a native service running the binary. A container's
+	// service is its image, which the upgrade does not keep the one before, so
+	// this is false there.
+	Rollback bool `json:"rollback"`
 	// Controller is this controller's latest update attempt, open or ended, and
 	// null when it has never had one.
 	Controller *UpdatesAttempt `json:"controller"`
@@ -223,6 +228,10 @@ func (c *Controller) UpdatesView(ctx context.Context) (*UpdatesView, error) {
 		Running: UpdatesRunning{Version: version.Version, Release: fromRelease},
 		Helper:  probe.view,
 		Signing: UpdatesSigning{Keys: releasekey.IDs(releasekey.Default)},
+		// A native service runs the binary the upgrade keeps beside it, so the
+		// previous release can be put back; a container's service is an image,
+		// which the upgrade does not keep the one before.
+		Rollback: !c.helperHostFacts().InContainer,
 	}
 	pic, err := c.updatesSnapshot(ctx, cfg, probe)
 	if err != nil {

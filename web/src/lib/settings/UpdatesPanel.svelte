@@ -398,6 +398,7 @@
     tag={asked}
     running={status.running.version}
     release={status.running.release}
+    rollback={status.rollback ?? false}
     onconfirm={() => start(asked)}
   />
 {/if}

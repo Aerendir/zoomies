@@ -15022,6 +15022,12 @@ components:
             off, and until a list has been read.
         helper: { $ref: "#/components/schemas/UpdatesHelper" }
         signing: { $ref: "#/components/schemas/UpdatesSigning" }
+        rollback:
+          type: boolean
+          description: >-
+            Whether a controller that does not come back is put back on the release it ran. True
+            for a native service running the binary; false for a container, whose service is an
+            image the upgrade does not keep the one before.
         controller:
           description: >-
             The controller's latest update attempt, in flight or ended, in every mode: one that

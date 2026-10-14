@@ -19,13 +19,22 @@
     running: string;
     /** Whether that build came from a release; one that did not may be taken back by the update. */
     release?: boolean;
+    /** Whether a controller that does not come back is put back automatically. */
+    rollback?: boolean;
     /** Return false to keep the dialog open for another try. */
     onconfirm: () => boolean | Promise<boolean>;
   }
 
-  let { open = $bindable(false), tag, running, release = true, onconfirm }: Props = $props();
+  let {
+    open = $bindable(false),
+    tag,
+    running,
+    release = true,
+    rollback = false,
+    onconfirm,
+  }: Props = $props();
 
-  const words = $derived(confirmControllerUpdate(tag, running, release));
+  const words = $derived(confirmControllerUpdate(tag, running, release, rollback));
 </script>
 
 <ConfirmDialog
