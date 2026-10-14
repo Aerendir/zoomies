@@ -371,9 +371,12 @@ func (h *updateHelper) act(ctx context.Context, r updates.Request, started time.
 
 	h.logf("running %s %s", h.opts.BinaryPath, strings.Join(upgradeArgs(r.Tag, h.configDir()), " "))
 	output, err := h.opts.upgrade(ctx, r.Tag)
-	result.LogTail = output
+	// The engine writes a line or two for the helper alone, under a marker; the
+	// rest is the log an operator reads on the host.
+	logTail, backup, rolledBack := parseEngineResult(output)
+	result.LogTail, result.Backup, result.RolledBack = logTail, backup, rolledBack
 	if err != nil {
-		result.Error = engineSentence(ctx, output, err, r.Tag)
+		result.Error = engineSentence(ctx, logTail, err, r.Tag)
 		return result
 	}
 	// The engine's word is checked against the binary's: a run that exited 0
@@ -490,6 +493,33 @@ func engineSentence(ctx context.Context, output string, err error, tag string) s
 		return line
 	}
 	return fmt.Sprintf("\"zoomies upgrade --version %s\" failed (%v) and printed nothing; run it by hand on the host to see why", tag, err)
+}
+
+// parseEngineResult takes the engine's result lines out of its output. Each
+// marked line is one `key=value`, and the value is the whole rest of the line,
+// so a copy's directory keeps any spaces in it. The helper reads the copy the
+// engine took and whether it rolled back, and keeps the lines out of the log an
+// operator reads, so those stay the engine's prose.
+func parseEngineResult(output string) (logTail, backup string, rolledBack bool) {
+	var kept []string
+	for _, line := range strings.Split(output, "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), engineResultMarker)
+		if !ok {
+			kept = append(kept, line)
+			continue
+		}
+		key, value, ok := strings.Cut(rest, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "backup":
+			backup = value
+		case "rolled_back":
+			rolledBack = value == "true"
+		}
+	}
+	return strings.Join(kept, "\n"), backup, rolledBack
 }
 
 // answer writes the result and logs what it says.

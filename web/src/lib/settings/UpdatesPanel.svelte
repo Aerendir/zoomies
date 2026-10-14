@@ -41,6 +41,8 @@
     modeLabel,
     modeSettingHref,
     releaseHref,
+    restoreCommand,
+    rollbackNote,
     rolloutIsOpen,
     signingLine,
     soakNote,
@@ -260,6 +262,15 @@
               {#if attempt.error && !attemptText.open && attempt.state !== 'timed_out' && attempt.state !== 'succeeded'}
                 <!-- Text from the update helper or the controller: shown as it came, never as markup. -->
                 <p class="helper-says">{attempt.error}</p>
+              {/if}
+              {#if attempt.rolled_back}
+                <p class="detail">{rollbackNote(attempt.rolled_back)}</p>
+              {/if}
+              {#if attempt.backup}
+                <p class="detail">
+                  The database was copied before the change; restore it with
+                  <code>{restoreCommand(attempt.backup)}</code>.
+                </p>
               {/if}
               {#if attemptText.lookAt}<p class="detail">{attemptText.lookAt}</p>{/if}
               <dl class="facts">

@@ -131,6 +131,14 @@ type UpdatesAttempt struct {
 	// otherwise. Below the platform role it is a fixed sentence for the state (see
 	// For), because the text can name a folder on the controller's host.
 	Error string `json:"error"`
+	// Backup is the copy the engine took before it changed anything, for a page
+	// to offer a restore from after a failed update. It names a folder on the
+	// controller's host, so below the platform role it is empty (see For).
+	Backup string `json:"backup"`
+	// RolledBack says the engine put the previous release back because the new one
+	// did not answer, so the attempt is a failure that was undone rather than one
+	// left in place.
+	RolledBack bool `json:"rolled_back"`
 }
 
 // UpdatesRunning is the build being updated, as it reports itself: a release
@@ -180,6 +188,10 @@ func (v UpdatesView) For(platform bool) UpdatesView {
 	}
 	attempt := *v.Controller
 	attempt.Error = withheldAttemptError(attempt.State)
+	// The copy's directory is a path on the controller's host, so it is withheld
+	// with the error. RolledBack is a fact about what happened, not a path, and
+	// stays.
+	attempt.Backup = ""
 	v.Controller = &attempt
 	return v
 }
@@ -335,6 +347,7 @@ func attemptView(a store.UpdateAttempt) *UpdatesAttempt {
 	out := &UpdatesAttempt{
 		ID: a.ID, State: a.State, From: a.FromVersion, To: a.ToVersion, Trigger: a.Trigger,
 		RequestedAt: a.RequestedAt.UTC(), Error: withoutDirectionControls(a.Error),
+		Backup: withoutDirectionControls(a.Backup), RolledBack: a.RolledBack,
 	}
 	if a.FinishedAt != nil {
 		at := a.FinishedAt.UTC()

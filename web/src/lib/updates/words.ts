@@ -14,6 +14,7 @@
  */
 import type { Host, Role, UpdatesStatus } from '../api/types';
 import { describeWindow, parseGoDuration, pluralise, toMillis } from '../format';
+import { shellQuote } from '../hosts/terminal';
 import type { RestartCopy } from '../settings/restart-copy';
 
 export type UpdateMode = UpdatesStatus['mode'];
@@ -124,6 +125,28 @@ export function buildText(release: boolean): string {
   return release
     ? 'From a release'
     : 'Not from a release, so an update moves it onto the newest release';
+}
+
+/**
+ * Said when an update failed but the engine put the previous release back: the
+ * host is on what it ran, which is a different thing to tell an operator from a
+ * failure left in place.
+ */
+export function rollbackNote(rolledBack: boolean): string {
+  return rolledBack
+    ? 'The new release did not answer, so the previous release was put back and is running again.'
+    : '';
+}
+
+/**
+ * The restore command for the copy an upgrade took, or empty when none was.
+ *
+ * The directory is a path an operator configured, so it is quoted for a shell:
+ * this is text a person is told to run, and a path with a space or a shell
+ * character would otherwise be read as more than one argument.
+ */
+export function restoreCommand(backup: string): string {
+  return backup ? `zoomies restore ${shellQuote(backup)} --replace` : '';
 }
 
 /**

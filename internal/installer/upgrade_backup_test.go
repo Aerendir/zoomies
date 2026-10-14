@@ -31,6 +31,10 @@ func TestABackupIsTakenAndVerifiedBeforeTheUpgrade(t *testing.T) {
 	if !strings.Contains(out.String(), "Backed up the database as") {
 		t.Fatalf("the step did not say it backed up:\n%s", out.String())
 	}
+	// The helper reads the copy's directory from a marked line of its own.
+	if !strings.Contains(out.String(), engineResultMarker+"backup="+dir) {
+		t.Fatalf("the copy was not reported to the helper:\n%s", out.String())
+	}
 	root := filepath.Join(volume, backup.DefaultDirName)
 	entries, err := backup.List(root)
 	if err != nil || len(entries) != 1 {
@@ -98,7 +102,11 @@ func TestPreUpgradeBackupDirTranslatesAContainerPath(t *testing.T) {
 	if _, err := preUpgradeBackupDir(cfg, "/host/volume/zoomies.db", true); err == nil {
 		t.Fatal("an absolute container path outside the state directory was accepted")
 	}
-	if got, err := preUpgradeBackupDir(cfg, filepath.Join(ContainerStateDir, "zoomies.db"), false); err != nil || got != "/etc/zoomies/backups" {
+	// A native path is the host's own, so an absolute one is absolute on
+	// whichever host this is, and comes back unchanged.
+	native := filepath.Join(t.TempDir(), "backups")
+	cfg.Backup.Directory = native
+	if got, err := preUpgradeBackupDir(cfg, filepath.Join(ContainerStateDir, "zoomies.db"), false); err != nil || got != native {
 		t.Fatalf("a native absolute path = %q, err = %v", got, err)
 	}
 }
