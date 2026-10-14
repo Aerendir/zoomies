@@ -60,7 +60,8 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 private root dependency inventory | Merged | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
 | E2 descriptive-comparison milestone | Merged | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
 | E3 checkout preview foundation | Merged | ZF-244, [#1021](https://github.com/eyupio/zoomies/pull/1021), based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
-| E3 private preview retention | Implemented, pending review/CI/merge | ZF-244, [#1022](https://github.com/eyupio/zoomies/pull/1022), based on main after #1021 | Bounded immutable private source/evidence/preview envelope and offline recomputation, scoped actor/audit and explicit unchecked currentness; admission and web flow remain outstanding |
+| E3 private preview retention | Merged | ZF-244, [#1022](https://github.com/eyupio/zoomies/pull/1022), based on main after #1021 | Bounded immutable private source/evidence/preview envelope and offline recomputation, scoped actor/audit and explicit unchecked currentness; admission and web flow remain outstanding |
+| E3 admitted checkout evidence | Implemented, PR preparation | ZF-244, PR pending, based on main after #1022 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
 | E4 to E6 | Not started | Dependencies and sequence below | No new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -2102,8 +2103,8 @@ head/policy stops publication. Do not mark E3 complete or resume E2 scope expans
 ### E3 private preview retention, 14 October 2026
 
 Preview foundation #1021 merged. Branch codex/eli-e3-preview-retention starts from
-main after #1021. Ready PR [#1022](https://github.com/eyupio/zoomies/pull/1022)
-awaits review/CI/merge. This slice retains an already admitted internal preview; it does
+main after #1021. PR [#1022](https://github.com/eyupio/zoomies/pull/1022)
+merged. This slice retains an already admitted internal preview; it does
 not implement source/timing admission or expose a runtime route. ZF-244 stays in
 progress. Do not accept client timing/history/policy booleans as server proof.
 
@@ -2154,3 +2155,65 @@ a reviewed bounded source-bearing view for authorised web users, with escaping,
 unknowns and explicit historical/currentness labels. Then separately approved and
 reconciled draft publication and E2 verification. CLI/MCP follow web; no automatic
 merge, dispatch, enrichment or E2 scope expansion.
+
+
+### E3 admitted checkout evidence, 14 October 2026
+
+Retention #1022 merged. Branch codex/eli-e3-checkout-evidence starts from main
+after #1022. This adds the bounded optional GitHub reader and internal capture
+adapter; no HTTP route, source policy setting or web flow is exposed yet.
+
+ReadCheckoutEvidence selects one exact run/attempt/GitHub job and YAML job/step
+index. At most seven data GETs under a twenty-second deadline and isolated 4 MiB
+response cap: initial run/job, push-commit contents, exact commit/tree mode, final
+run/job. No conditional cache, logs, redirects, response URLs, branch lookup, pagination or batching.
+Source is at most 32 KiB, base64/size/UTF-8/Git-blob checked. Commit SHA, tree SHA,
+path/blob identity and regular 100644/100755 mode are checked; missing/truncated
+or over-ten-thousand-entry trees refuse. Contents mode is never guessed.
+
+Root workflow association requires unique literal job names (explicit on the
+selected job), explicit unique names on all selected-job steps, no dynamic/matrix/
+reusable job names and a supported pinned full-history checkout. API job name must
+match; selected API step name must appear exactly once. API step numbers are
+positive distinct identities, never translated into YAML ordinals. Successful
+run/job/step timing is required, bounded within enclosing run/job times. Final
+reads refuse changed head/path/workflow/event/timestamps or job/step identity.
+Push source and name association are descriptive, not executed-byte attestation.
+
+Capture requires an authorised server actor and policy callback, explicit bound
+history review, valid selection and installation/repository join. The callback
+reads current server source/edit authorisation before any source read and again
+before saving. Request booleans cannot implement it. Shared diagnostic twenty-per-
+hour/one-flight admission, installation holds and half-core-quota reserve apply;
+one quota check precedes seven data reads. Failures release the flight and rate
+limits retain existing holds. Independently validate alternate reader shapes
+before private retention. Client timing/policy flags are not server evidence;
+history review remains an attributed operator declaration, not independent proof.
+
+An optional private collection stamp retains version/basis, exact selection/API
+step number, Git blob and literal-name fingerprints, and installation_github_read
+source funding. Replay revalidates those facts against stored source/timing; actor
+and model funding remain server-owned. Older absent collection stamps stay
+unknown without enrichment; older strict decoders cannot read the new optional
+field. Full source remains private, verification inconclusive and currentness
+not_checked. No current publication authority or performance claim.
+
+Validation completed: full GitHub/parser/optimisation/repair race suites and
+focused controller capture/retention fixtures pass for fixed bounds, redirects,
+foreign/moving/ambiguous evidence, exact non-ordinal steps, mode, quota, policy
+withdrawal and offline provenance replay. Removing the final server policy refresh
+makes its withdrawal fixture fail; it passes after restoration. Changed-package
+vet, strict docs, repository prose and whitespace checks pass. Docs used the
+repository-only fallback for optional GitHub metadata. No live source, model,
+fleet or performance experiment, and no full repository race run.
+
+Next agent: scoped source/history policy and web preview flow before CLI/MCP.
+Provide explicit enablement and permission checks, make OptimisationPolicyCheck
+read actual current server auth/settings, and do not expose the private envelope.
+Use decimal-string external run/job identities and a bounded reviewed source view.
+Explain required literal names, unsupported matrix/default names, source/history
+review and historical currentness. Escape repository text and preserve manual
+rate-limit retry. Bind the review to the displayed source digest/head and actor,
+then call CaptureOptimisationPreview. No model provider/key is needed for this
+deterministic preview. Approval, reconciled draft publication and experiment
+execution remain distinct later slices. Do not claim E3 complete.

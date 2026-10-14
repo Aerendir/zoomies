@@ -1,7 +1,7 @@
 # ZF-244: private preview retention and replay
 
 14 October 2026. Preview foundation #1021 merged. Main baseline cb7fa3e1.
-Ready PR [#1022](https://github.com/eyupio/zoomies/pull/1022) awaits review/CI/merge;
+PR [#1022](https://github.com/eyupio/zoomies/pull/1022) merged;
 E3 remains in progress.
 
 ## Scope and boundary
