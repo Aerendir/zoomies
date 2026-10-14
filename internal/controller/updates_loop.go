@@ -234,6 +234,11 @@ func (c *Controller) ReconcileUpdates(ctx context.Context) error {
 			closed = true
 		}
 	}
+	// An update's own process can start before the helper writes its answer, so
+	// an attempt closed on the running version alone can miss the copy the engine
+	// took and whether it rolled back. The answer is read again here until it
+	// lands, so the page's copy arrives even when the attempt closed first.
+	c.recordLateHelperFacts(ctx)
 	for _, h := range closedHosts {
 		c.publishHost(h)
 	}
@@ -413,6 +418,27 @@ func runsAtLeast(running, tag string) bool {
 		return true
 	}
 	return false
+}
+
+// recordLateHelperFacts records what the helper reported about the controller's
+// latest attempt when its answer arrived after the attempt had already closed.
+// A successful upgrade starts the new controller before the helper writes
+// result.json, so the attempt is closed on the running version and would never
+// see the copy the engine took. It is skipped when the attempt already carries
+// what the answer says, so a pass that finds nothing new writes nothing.
+func (c *Controller) recordLateHelperFacts(ctx context.Context) {
+	latest, err := c.st.ListUpdateAttempts(ctx, store.UpdateScopeController, "", 1)
+	if err != nil || len(latest) == 0 {
+		return
+	}
+	a := latest[0]
+	res, ok := c.resultFor(a)
+	if !ok || (res.Backup == a.Backup && res.RolledBack == a.RolledBack) {
+		return
+	}
+	if err := c.st.SetUpdateAttemptFacts(ctx, a.ID, res.Backup, res.RolledBack); err != nil {
+		c.log.Warn("could not record what the update helper reported", "attempt", a.ID, "error", err)
+	}
 }
 
 // resultFor is the helper's answer to attempt a, if the folder holds one.

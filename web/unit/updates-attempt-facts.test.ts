@@ -16,3 +16,12 @@ test('a backup gives the command that restores it, and none gives nothing', () =
   );
   assert.equal(restoreCommand(''), '');
 });
+
+// The directory is an operator's, so it can hold a space or a shell character;
+// the command is text a person runs, so the path is one quoted word.
+test('a backup path a shell would split is quoted as one word', () => {
+  assert.equal(
+    restoreCommand('/var/lib/my backups/zoomies-1'),
+    "zoomies restore '/var/lib/my backups/zoomies-1' --replace",
+  );
+});

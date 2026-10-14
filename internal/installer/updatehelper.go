@@ -495,9 +495,11 @@ func engineSentence(ctx context.Context, output string, err error, tag string) s
 	return fmt.Sprintf("\"zoomies upgrade --version %s\" failed (%v) and printed nothing; run it by hand on the host to see why", tag, err)
 }
 
-// parseEngineResult takes the engine's result lines out of its output. The
-// helper reads the copy the engine took and whether it rolled back, and keeps
-// the lines out of the log an operator reads, so those stay the engine's prose.
+// parseEngineResult takes the engine's result lines out of its output. Each
+// marked line is one `key=value`, and the value is the whole rest of the line,
+// so a copy's directory keeps any spaces in it. The helper reads the copy the
+// engine took and whether it rolled back, and keeps the lines out of the log an
+// operator reads, so those stay the engine's prose.
 func parseEngineResult(output string) (logTail, backup string, rolledBack bool) {
 	var kept []string
 	for _, line := range strings.Split(output, "\n") {
@@ -506,14 +508,15 @@ func parseEngineResult(output string) (logTail, backup string, rolledBack bool) 
 			kept = append(kept, line)
 			continue
 		}
-		for _, pair := range strings.Fields(rest) {
-			key, value, _ := strings.Cut(pair, "=")
-			switch key {
-			case "backup":
-				backup = value
-			case "rolled_back":
-				rolledBack = value == "true"
-			}
+		key, value, ok := strings.Cut(rest, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "backup":
+			backup = value
+		case "rolled_back":
+			rolledBack = value == "true"
 		}
 	}
 	return strings.Join(kept, "\n"), backup, rolledBack

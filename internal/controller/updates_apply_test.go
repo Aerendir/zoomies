@@ -789,6 +789,38 @@ func TestTheNewProcessClosesTheAttemptAsSucceededEvenWithoutAResultFile(t *testi
 	}
 }
 
+// The helper writes its answer after the upgraded controller answers its health
+// check, so a successful update closes its attempt before the answer exists. The
+// copy the engine took must still reach the attempt when the answer lands, or a
+// page could never offer the restore.
+func TestALateHelperAnswerRecordsTheCopyAfterASuccessfulUpdate(t *testing.T) {
+	h := newHarness(t)
+	h.readyToUpdate()
+	a := h.request()
+	h.takeRequest()
+
+	// The new process closes the attempt on arrival, before the helper answers.
+	withVersion(t, "1.3.5")
+	h.pass(h.c)
+	if got := h.attempt(a.ID); got.State != store.UpdateSucceeded {
+		t.Fatalf("attempt = %s %q, want succeeded before the answer", got.State, got.Error)
+	}
+
+	// The helper answers afterwards, naming the copy the engine took.
+	h.helperAnswers(updates.Result{
+		ID: a.ID, OK: true, To: "1.3.5",
+		Backup:     "/var/lib/zoomies/backups/zoomies-20260101-000000",
+		RolledBack: true,
+		FinishedAt: time.Now(),
+	})
+	h.pass(h.c)
+
+	got := h.attempt(a.ID)
+	if got.Backup != "/var/lib/zoomies/backups/zoomies-20260101-000000" || !got.RolledBack {
+		t.Fatalf("attempt = %+v, want the late answer's copy recorded", got)
+	}
+}
+
 func TestAnAttemptTimesOutAfterNinetyMinutes(t *testing.T) {
 	h := newHarness(t)
 	h.readyToUpdate()

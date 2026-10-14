@@ -918,12 +918,14 @@ func TestReadingRootsPointerNeverMakesTheStateDirectory(t *testing.T) {
 // copy it took and whether it rolled back. The helper reads them out of the log
 // an operator reads, so the words a person sees stay prose.
 func TestTheHelperTakesTheBackupAndRollbackOutOfTheEngineOutput(t *testing.T) {
+	// A copy's directory can hold a space: the value is the whole rest of the
+	// line, not the next word.
 	input := "Backed up the database as zoomies-20260101-000000 and verified it\n" +
-		engineResultMarker + "backup=/var/lib/zoomies/backups/zoomies-20260101-000000\n" +
+		engineResultMarker + "backup=/var/lib/zoomies/my backups/zoomies-20260101-000000\n" +
 		"still starting\n" +
 		engineResultMarker + "rolled_back=true\n"
 	logTail, backup, rolledBack := parseEngineResult(input)
-	if backup != "/var/lib/zoomies/backups/zoomies-20260101-000000" {
+	if backup != "/var/lib/zoomies/my backups/zoomies-20260101-000000" {
 		t.Fatalf("backup = %q", backup)
 	}
 	if !rolledBack {
