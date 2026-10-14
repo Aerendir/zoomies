@@ -15,6 +15,7 @@ import (
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/installer"
 	"github.com/eyupio/zoomies/internal/logging"
+	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/version"
 	"golang.org/x/term"
 )
@@ -214,6 +215,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 	mode := fs.String("mode", "", "select agent, controller or single; empty detects installed services")
 	check := fs.Bool("check", false, "check the deployment without changing or restarting anything")
 	wantVersion := fs.String("version", "", "target a published tag such as v1.4.0, or dev")
+	releaseKey := fs.String("release-key", "", "the release public key to trust, overriding the one built in (base64; docs/upgrading.md)")
 	noDownload := fs.Bool("no-download", false, "apply the binary that is already installed; do not look for a newer one")
 	yes := fs.Bool("yes", false, "approve deployment additions and settings migration; never OS tuning")
 	updateHelper := fs.Bool("update-helper", false, "add the update helper without asking, so that the web UI can update this host; --yes never does")
@@ -234,6 +236,16 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		return err
 	}
 	interactive := canAsk(e, *nonInteractive)
+	// The release key the download is held to: the one typed, the environment's,
+	// or the set compiled into this binary. An empty set means downloads are
+	// not held to a signature, which the download says once.
+	trustedKey := strings.TrimSpace(*releaseKey)
+	if trustedKey == "" {
+		trustedKey = strings.TrimSpace(os.Getenv("ZOOMIES_RELEASE_KEY"))
+	}
+	if trustedKey == "" {
+		trustedKey = releasekey.Default
+	}
 	opts := installer.UpgradeOptions{
 		Doctor:    func(ctx context.Context, cfg *config.Config) { upgradeDoctor(ctx, e, cfg) },
 		ConfigDir: *configDir, BinaryPath: *binary, DockerHost: *dockerHost, Runtime: *runtime, Image: *image,
@@ -263,7 +275,7 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 		}
 		ui.Rule(e.out, "1/4 Binary")
 		selector := newDeploymentSelector(*configDir, *dockerHost, *runtime, *image, *mode, *yes)
-		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector); err != nil {
+		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, trustedKey); err != nil {
 			return err
 		}
 	} else if !*check && os.Getenv("ZOOMIES_UPGRADE_STARTED") == "" {
@@ -431,7 +443,7 @@ func candidatePreflight(installed string, sel deploymentSelector) func(context.C
 //
 // A failed download stops the upgrade; an offline host can explicitly use
 // --no-download rather than report a partial upgrade as successful.
-func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel deploymentSelector) error {
+func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel deploymentSelector, releaseKey string) error {
 	if binary == "" {
 		binary, _ = os.Executable()
 	}
@@ -442,7 +454,7 @@ func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel dep
 	ui.Doing(e.out, "Checking for a newer Zoomies")
 	res, err := installer.SelfUpdate(ctx, installer.SelfUpdateOptions{
 		BinaryPath: binary, Version: wantVersion, Current: version.Version, Out: e.out,
-		Preflight: candidatePreflight(binary, sel),
+		ReleaseKey: releaseKey, Preflight: candidatePreflight(binary, sel),
 	})
 	var refusal *candidateRefusal
 	switch {

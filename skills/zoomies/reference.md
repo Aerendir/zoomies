@@ -2810,6 +2810,7 @@ Flags:
   --no-animation             skip the short branded terminal splash
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
+  --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
   --runtime                  docker or podman; empty uses the saved deployment
   --update-helper            add the update helper without asking, so that the web UI can update this host; --yes never does
   --version                  target a published tag such as v1.4.0, or dev
@@ -2842,6 +2843,7 @@ Flags:
   --no-animation             skip the short branded terminal splash
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
+  --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
   --runtime                  docker or podman; empty uses the saved deployment
   --update-helper            add the update helper without asking, so that the web UI can update this host; --yes never does
   --version                  target a published tag such as v1.4.0, or dev
@@ -3004,6 +3006,7 @@ Flags:
   --no-animation             skip the short branded terminal splash
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
+  --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
   --runtime                  docker or podman; empty uses the saved deployment
   --update-helper            add the update helper without asking, so that the web UI can update this host; --yes never does
   --version                  target a published tag such as v1.4.0, or dev
@@ -3377,6 +3380,77 @@ Flags:
 Examples:
   zoomies config import-env /opt/zoomies/.env
   zoomies config import-env < .env
+```
+
+### zoomies release
+
+Mint, sign and verify the release signing key
+
+```text
+The release signing key a download is held to (docs/upgrading.md).
+
+Usage:
+  zoomies release <subcommand> [flags]
+
+Subcommands:
+  keygen --out DIR                   Mint the release signing key pair
+  sign [checksums]                   Write the detached signature for a release's checksums
+  verify checksums sig               Check a release's signature against a key
+
+Run "zoomies release <subcommand> --help" for the flags each one takes.
+```
+
+#### zoomies release keygen
+
+Mint the release signing key pair
+
+```text
+Mint the release signing key pair.
+
+Usage:
+  zoomies release keygen --out DIR
+
+Flags:
+  --out                      directory to write release.pub and release.key into
+
+Examples:
+  zoomies release keygen --out ./release-key
+```
+
+#### zoomies release sign
+
+Write the detached signature for a release's checksums
+
+```text
+Write the detached signature for a release's checksums.
+
+Usage:
+  zoomies release sign --key-file FILE [checksums]
+
+Flags:
+  --key                      the base64 private key itself; prefer --key-file, since a flag's value is in the process list
+  --key-file                 a file holding the base64 private key; - reads it from standard input
+
+Examples:
+  zoomies release sign --key-file release.key dist/checksums.txt > dist/checksums.txt.ed25519
+```
+
+#### zoomies release verify
+
+Check a release's signature against a key
+
+```text
+Check a release's signature against a key.
+
+Usage:
+  zoomies release verify [--key KEY | --key-file FILE] checksums sig
+
+Flags:
+  --key                      the base64 public key to check against; empty uses the key compiled into this binary
+  --key-file                 a file holding the base64 public key to check against
+
+Examples:
+  zoomies release verify --key-file release.pub dist/checksums.txt dist/checksums.txt.ed25519
 ```
 
 ### zoomies tune

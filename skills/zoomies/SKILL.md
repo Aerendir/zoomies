@@ -106,6 +106,7 @@ These change nothing. Run them as the question needs.
 * `zoomies doctor`, `zoomies healthcheck`, `zoomies logs`
 * `zoomies deployment status`, `zoomies deployment logs`
 * `zoomies kennel overview`, `zoomies kennel repositories`, `zoomies kennel repository`, `zoomies kennel checks`, `zoomies kennel check` (it reads a checkout on this machine and sends nothing unless `--controller` names a repository to read from the controller)
+* `zoomies release verify` (it checks a downloaded release's signature against the key compiled into this binary, and changes nothing)
 
 ### Changes: show the command, wait for a yes
 
@@ -136,6 +137,7 @@ minutes.
 * `zoomies mcp-clients create`, `zoomies mcp-clients rotate-secret`, `zoomies mcp-clients revoke`
 * `zoomies config set`, `zoomies config unset`, `zoomies config import-env`
 * `zoomies transfer prepare`, `zoomies transfer cancel`, `zoomies transfer export`
+* `zoomies release keygen`, `zoomies release sign` (the first mints a key pair and writes both halves to files, one of them a credential; the second signs a checksums file with a private key)
 * `zoomies tune`
 
 Some MCP tools are not offered until the controller has been told to offer

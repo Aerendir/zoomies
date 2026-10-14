@@ -1095,6 +1095,47 @@ the DSSE envelope that SLSA tooling and the OpenSSF Scorecard recognise as
 provenance. Both describe every binary in the release; neither is needed to
 install, and `install.sh` checks neither.
 
+### Signing releases
+
+The checksums file travels with the binary, so on its own it says only that a
+download was not corrupted on the way, not who made it. A **detached
+signature** over `checksums.txt`, checked against a public key compiled into
+the running binary, says the release is this project's. `zoomies upgrade`
+refuses a release whose `checksums.txt.ed25519` is missing or does not verify,
+and `zoomies release verify` checks one by hand:
+
+```sh
+zoomies release verify dist/checksums.txt dist/checksums.txt.ed25519
+```
+
+The key is minted once, by the owner:
+
+1. Mint a pair. The private half is a credential and is written to a file,
+   never printed:
+
+   ```sh
+   zoomies release keygen --out ./release-key
+   ```
+
+2. Commit the public half, the line in `release.pub`, into `internal/releasekey/default.go`
+   as `Default`, so every binary built from then on trusts the key.
+3. Store the private half, `release.key`, as the repository secret
+   `RELEASE_SIGNING_KEY`, and delete it from the machine.
+
+`release.yml` signs `checksums.txt` after it builds, verifies the signature
+against the committed key, and attaches `checksums.txt.ed25519` to the release.
+A release cut without the secret fails rather than publishing unsigned, and a
+tag cut before the public key is committed fails too. A `dev` build, which is
+whatever `main` built last, has no release to sign and is not held to a
+signature.
+
+To rotate, `Default` carries more than one key, one per line, for one release:
+that transition release is signed with the old key (still the secret) and its
+binary trusts both, so an instance running an older binary still accepts it and
+one running the transition binary accepts the next release, signed with the new
+key. `zoomies release verify` says which key a signature names. Ed25519 is the
+standard library's; nothing new is depended on.
+
 Every image says what it is without being started, in the standard OCI labels,
 `org.opencontainers.image.version`, `.revision` and `.created`. That includes
 the runner images, which until recently carried no version at all.
