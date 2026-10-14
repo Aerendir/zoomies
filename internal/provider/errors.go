@@ -75,6 +75,18 @@ var (
 	ErrNotFound    = errors.New("provider: resource not found")
 	ErrRefused     = errors.New("provider: refused")
 	ErrAmbiguous   = errors.New("provider: the outcome of that operation is unknown")
+	// ErrPrivateConnection is a provider call whose tunnel did not answer: a
+	// dial opened by a configuration's DialContext could not reach the gateway
+	// beside the provider, so the hypervisor was never asked anything. It
+	// unwraps to ErrUnreachable, because for every decision it is one --
+	// nothing may be created or failed on the strength of it -- but reachability
+	// advice must treat it apart: there is no address to check and no route to
+	// test, what is down is a service on another machine, and both ends keep
+	// retrying, so the sentence an operator needs says where to look and that
+	// it clears on its own. It is its own type rather than fmt.Errorf so the
+	// wrapped sentinel's "provider: could not be reached" stays out of a
+	// message already written to be read.
+	ErrPrivateConnection = errPrivateConnection{}
 	// ErrUnsupported is a build and a provider that cannot work together: no
 	// factory for a kind, or a contract range that does not contain this
 	// build's version.
@@ -172,6 +184,18 @@ func (e *Error) sentinel() error {
 // with "we could not classify this" beyond what KindOf already tells it, and an
 // exported sentinel for it would invite code to branch on the unclassifiable.
 var errInternal = errors.New("provider: unclassified provider failure")
+
+// errPrivateConnection is ErrPrivateConnection's value: a message and a
+// classification, and nothing else to hold.
+type errPrivateConnection struct{}
+
+func (errPrivateConnection) Error() string {
+	return "private connection: cannot reach the gateway; check that `zoomies gateway` is running beside the provider " +
+		"and that both sides have outbound internet access"
+}
+
+// Unwrap names the category every branch on this takes it for.
+func (errPrivateConnection) Unwrap() error { return ErrUnreachable }
 
 // KindOf reports a failure's category, answering FailureInternal for anything it
 // does not recognise -- the safe direction, because internal retries nothing and

@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -471,4 +472,48 @@ func TestPreflightReportsTheSizeTheTemplateBuilds(t *testing.T) {
 	if report.BuildsCPUs != 2 || report.BuildsMemoryMB != 4096 {
 		t.Fatalf("builds %d CPUs and %d MB, want the template's 2 cores and 4096 MB", report.BuildsCPUs, report.BuildsMemoryMB)
 	}
+}
+
+// What the two ways of reaching a cluster owe an operator who got nothing
+// back: a direct one is asked to check its address and its routing, a private
+// one has no address to check and is told where its gateway actually lives.
+func TestAnUnreachableFindingNamesTheConnectionTheClientReachesThrough(t *testing.T) {
+	t.Run("direct", func(t *testing.T) {
+		c, err := New(Options{Endpoint: "https://" + deadAddress(t), TokenID: tokenID, Secret: tokenSecret, Insecure: true})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		got := finding(t, Preflight(context.Background(), c, healthyPrereqs()), "proxmox.unreachable")
+		if got.Setting != "endpoint" {
+			t.Errorf("setting = %q, want endpoint: a direct cluster is asked about its address", got.Setting)
+		}
+		if !strings.Contains(got.Fix, "port "+DefaultPort) {
+			t.Errorf("fix does not say what to test: %q", got.Fix)
+		}
+	})
+
+	t.Run("private", func(t *testing.T) {
+		c, err := New(Options{
+			Endpoint: "https://elitedesk-node1:8006", TokenID: tokenID, Secret: tokenSecret, Insecure: true,
+			DialContext: func(context.Context, string, string) (net.Conn, error) {
+				return nil, provider.ErrPrivateConnection
+			},
+		})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		got := finding(t, Preflight(context.Background(), c, healthyPrereqs()), "proxmox.unreachable")
+		if got.Setting != "" {
+			t.Errorf("setting = %q, want none: the endpoint is only the name on the certificate, and there is no such setting to change", got.Setting)
+		}
+		if !strings.Contains(got.Detail, "private connection") {
+			t.Errorf("detail does not name the connection: %q", got.Detail)
+		}
+		if strings.Contains(got.Fix, "reach port") || strings.Contains(got.Fix, "check the endpoint") {
+			t.Errorf("fix sends the operator to an address no route reaches: %q", got.Fix)
+		}
+		if !strings.Contains(got.Fix, "check the gateway is still running") {
+			t.Errorf("fix does not say where the gateway lives: %q", got.Fix)
+		}
+	})
 }
