@@ -447,12 +447,9 @@
       icon: Trash2,
       danger: true,
       separated: true,
-      disabled: !canAdmin || host.embedded === true,
-      reason:
-        host.embedded === true
-          ? 'This agent runs inside the controller process, so it cannot be removed.'
-          : 'Only administrators can remove hosts. Ask an administrator.',
-      lock: host.embedded !== true,
+      disabled: !canAdmin,
+      reason: 'Only administrators can remove hosts. Ask an administrator.',
+      lock: true,
       onSelect: () => {
         if (machine?.id) navigate(`/machines/${machine.id}`);
         else ondelete(host);
@@ -497,7 +494,7 @@
             label="Embedded"
             size="sm"
             dot={false}
-            help="This agent runs inside the controller process, so it cannot be removed."
+            help="This agent runs inside the controller process. Removing this host stops that agent while keeping the controller running."
           />
         {/if}
         {#if host.incompatible}
