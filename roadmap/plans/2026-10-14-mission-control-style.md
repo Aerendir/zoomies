@@ -191,6 +191,40 @@ cd web
 ZOOMIES_SCREENSHOT_STYLE=mission-control node tests/support/screenshots.mjs ../docs/screenshots/mission-control overview,overview-phone-375,jobs,jobs-mobile,appearance,appearance-mobile
 ```
 
+## Independent verification and reflow fix (14 October 2026)
+
+In [PR #1045](https://github.com/eyupio/zoomies/pull/1045), branch
+`theme/implementation-verification`. Re-ran the style and layout suites against a locally built binary, based on main
+at `19326f5b`: 25 browser checks passed, covering the existing style and
+operational-layout specs plus four added here.
+
+The added coverage closes the plan's width and zoom checks:
+
+- No page-level overflow at 1440, 1180, 1179, 768, 375 and 360 pixels, in Classic
+  and Mission Control, on Overview, Pools, Jobs and Appearance.
+- A 200% zoom, tested by halving those widths to 720, 590 and 384 pixels, the
+  same arithmetic the existing `a11y.spec.ts` reflow check uses.
+- Enlarged text, a 200% root font size, at 1440, 1180 and 768 pixels.
+- An open assistant conversation and its unsent draft survive a style switch
+  reached through the app's own links, so the panel is not remounted.
+
+The enlarged-text pass found one real defect. The Settings rail hides its group
+labels with absolute positioning, but before 1180 pixels the rail was `static`,
+so it was not the labels' containing block. With enlarged text the labels
+escaped the rail's own horizontal scroll area and widened the document to
+2098 pixels at a 1180-pixel viewport. `.rail` is now `position: relative` in
+that breakpoint, which keeps the labels inside it. Classic was affected too.
+
+**Known limit.** At 360 or 375 pixels with 200% text, both styles scroll
+sideways (Classic as well as Mission Control). That combination lays the page
+out in under 190 CSS pixels, below WCAG's 320-pixel reflow floor at default
+text, and reflowing the dense phone layouts at that size is a general
+follow-up rather than specific to the new style.
+
+The plan's release-evidence list is still open: first-run, empty, failure and
+phone-keyboard captures for Mission Control, and the development-only state
+gallery in N-T4.
+
 ## Next coding-agent actions
 
 1. The theme and operational layout are merged. Review [PR #1040](https://github.com/eyupio/zoomies/pull/1040) for manual first-job activation and merge after its checks pass.
