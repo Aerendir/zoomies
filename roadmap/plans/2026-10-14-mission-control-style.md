@@ -227,6 +227,7 @@ gallery in N-T4.
 
 ## Release evidence (14 October 2026)
 
+In [PR #1047](https://github.com/eyupio/zoomies/pull/1047).
 First run, loading, a failed fleet fetch, an empty pool list and a filter that
 matches nothing are now captured from the real binary, in dark and light and in
 both styles. In Mission Control they are in `docs/screenshots/mission-control`;
