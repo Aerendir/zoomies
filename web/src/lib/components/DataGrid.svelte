@@ -128,6 +128,7 @@
   } from '@tanstack/svelte-table';
   import { layers } from '../keys';
   import { startColumnDrag, startColumnResize } from '../actions/columnGesture';
+  import { visualStyle } from '../state/ui-style.svelte';
   import { prefs, type GridView } from '../state/prefs.svelte';
   import { viewport } from '../state/viewport.svelte';
   import { router } from '../router';
@@ -536,7 +537,9 @@
     only asked below the phone threshold, because above it there is room for
     the table and the cards never appear.
   */
-  const view = $derived<GridView>(prefs.gridViewFor(gridId));
+  const view = $derived<GridView>(
+    prefs.gridViewFor(gridId, visualStyle.choice === 'mission-control' ? 'cards' : 'rows'),
+  );
   const cards = $derived(viewport.phone && view === 'cards');
   /*
     The table on a phone, which is what a grid does unless it has been told

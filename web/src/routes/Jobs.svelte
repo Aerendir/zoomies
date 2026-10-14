@@ -43,6 +43,8 @@
 <script lang="ts">
   import Tooltip from '$lib/components/Tooltip.svelte';
   import { readableJobText } from '$lib/jobs/name';
+  import { visualStyle } from '$lib/state/ui-style.svelte';
+  import { viewport } from '$lib/state/viewport.svelte';
   import JobsInsights from '$lib/insights/JobsInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
   import { getJobFacets, listJobs } from '$lib/api/client';
@@ -86,6 +88,10 @@
    * lib/jobs/filter-state.svelte.ts.
    * --------------------------------------------------------------------- */
 
+  const operational = $derived(visualStyle.choice === 'mission-control');
+  const compact = $derived(operational && viewport.phone);
+  let contextExpanded = $state(false);
+  const layoutSections = $derived(compact ? ['records', 'context'] : ['context', 'records']);
   const filterState = jobFilterState();
   const filters = $derived(filterState.filters);
   const view = $derived(filterState.view);
@@ -264,7 +270,7 @@
 
   // The sortable ids are the column names the store understands: queued_at,
   // started_at, completed_at, repo, workflow, state, duration and queue_wait.
-  const columns = $derived<GridColumn<Job>[]>([
+  const baseColumns = $derived<GridColumn<Job>[]>([
     {
       id: 'state',
       header: 'State',
@@ -281,7 +287,12 @@
     { id: 'failed_at', header: 'Failed at', priority: 'wide', value: failedAt, cell: failedAtCell },
     { id: 'repo', header: 'Repository', sortable: true, value: (job) => job.repo ?? '' },
     { id: 'workflow', header: 'Workflow', sortable: true, value: (job) => job.workflow ?? '' },
-    { id: 'job_name', header: 'Job', value: (job) => readableJobText(job.job_name) },
+    {
+      id: 'job_name',
+      header: 'Job',
+      value: (job) => readableJobText(job.job_name),
+      cell: jobNameCell,
+    },
     {
       id: 'labels',
       header: 'Labels',
@@ -350,7 +361,31 @@
     },
     { id: 'link', header: 'Run', priority: 'wide', width: '5.5rem', align: 'end', cell: linkCell },
   ]);
+  const preferred = ['job_name', 'repo', 'state', 'queue_wait', 'duration'];
+  const columns = $derived(
+    operational
+      ? [...baseColumns].sort(
+          (a, b) =>
+            (preferred.includes(a.id) ? preferred.indexOf(a.id) : preferred.length) -
+            (preferred.includes(b.id) ? preferred.indexOf(b.id) : preferred.length),
+        )
+      : baseColumns,
+  );
 </script>
+
+{#snippet jobNameCell(job: Job)}
+  {#if operational}
+    <button
+      class="job-inspect"
+      type="button"
+      aria-label="Inspect {readableJobText(job.job_name) || 'job'}"
+      onclick={(event) => {
+        event.stopPropagation();
+        open(job);
+      }}>{readableJobText(job.job_name)}</button
+    >
+  {:else}{readableJobText(job.job_name)}{/if}
+{/snippet}
 
 {#snippet stateCell(job: Job)}
   <span class="state">
@@ -452,82 +487,127 @@
   ><Button href="/comparisons" variant="secondary">Compare runs</Button></PageHeader
 >
 
-<JobsInsights others={filters.all} />
-<details class="activity-history">
-  <summary>Explore fleet activity over the last 24 hours</summary><FleetHistory
-    others={filters.all}
-  />
-</details>
-<SizeAdvice refresh={adviceKey} />
-<div class="content">
-  <div class="toolbar">
-    <JobViewFilter value={view} onchange={setView} />
-    <LevelSwitch level="jobs" />
-  </div>
+{#each layoutSections as section (section)}
+  {#if section === 'context'}
+    <details
+      class="fleet-context"
+      class:compact
+      open={!compact || contextExpanded}
+      ontoggle={(event) => {
+        if (compact) contextExpanded = event.currentTarget.open;
+      }}
+    >
+      <summary hidden={!compact}>Fleet context and activity</summary>
+      {@render fleetContext()}
+    </details>
+  {:else}
+    <div class="content">
+      <div class="toolbar">
+        <JobViewFilter value={view} onchange={setView} />
+        <LevelSwitch level="jobs" />
+      </div>
 
-  <JobFilters
-    statusChips={view === ''}
-    value={filters}
-    {facets}
-    pools={fleet.pools}
-    hosts={fleet.hosts}
-    {labelOptions}
-    onchange={patch}
-    onclear={clearFilters}
-  />
+      <JobFilters
+        {compact}
+        statusChips={view === ''}
+        value={filters}
+        {facets}
+        pools={fleet.pools}
+        hosts={fleet.hosts}
+        {labelOptions}
+        onchange={patch}
+        onclear={clearFilters}
+      />
 
-  {#if filters.unmatched && unmatchedOnPage > 0}
-    <UnmatchedNote count={unmatchedOnPage} />
-  {/if}
+      {#if filters.unmatched && unmatchedOnPage > 0}
+        <UnmatchedNote count={unmatchedOnPage} />
+      {/if}
 
-  <DataGrid
-    gridId="jobs"
-    label="Jobs"
-    {columns}
-    fetcher={fetchJobs}
-    {rowId}
-    {filters}
-    defaultSort="queued_at"
-    defaultOrder="desc"
-    noun="jobs"
-    {liveKey}
-    onopen={open}
-    onrows={takePage}
-    {emptyTitle}
-    {emptyDescription}
-  >
-    {#snippet emptyAction()}
-      {#if narrowed}
-        <Button variant="secondary" onclick={clearFilters}>Clear filters</Button>
-      {:else if view !== '' && view !== 'all'}
-        <!--
+      <DataGrid
+        gridId="jobs"
+        label="Jobs"
+        {columns}
+        fetcher={fetchJobs}
+        {rowId}
+        {filters}
+        defaultSort="queued_at"
+        defaultOrder="desc"
+        noun="jobs"
+        {liveKey}
+        onopen={open}
+        onrows={takePage}
+        {emptyTitle}
+        {emptyDescription}
+      >
+        {#snippet emptyAction()}
+          {#if narrowed}
+            <Button variant="secondary" onclick={clearFilters}>Clear filters</Button>
+          {:else if view !== '' && view !== 'all'}
+            <!--
           A narrowed status view that came back empty is the one case where the
           way out is not another filter but the same page without this one, so
           it is offered as a button rather than left to be found in the row.
         -->
-        <Button variant="secondary" onclick={() => setView('all')}>Show every status</Button>
-      {:else if !filters.unmatched}
-        {#if filters.all}
-          <Button variant="secondary" href="/installations">Check webhook delivery</Button>
-        {:else}
-          <Button variant="secondary" onclick={() => patch({ all: true })}>
-            Include other runners
-          </Button>
-        {/if}
-      {/if}
-    {/snippet}
-  </DataGrid>
+            <Button variant="secondary" onclick={() => setView('all')}>Show every status</Button>
+          {:else if !filters.unmatched}
+            {#if filters.all}
+              <Button variant="secondary" href="/installations">Check webhook delivery</Button>
+            {:else}
+              <Button variant="secondary" onclick={() => patch({ all: true })}>
+                Include other runners
+              </Button>
+            {/if}
+          {/if}
+        {/snippet}
+      </DataGrid>
 
-  <p class="footnote">
-    Sort by queue wait to find work that waited, or by duration to find work that took its time.
-    Both are sorted by the server, so the slowest job in the fleet is one click away rather than one
-    page away.
-  </p>
-</div>
+      <p class="footnote">
+        Sort by queue wait to find work that waited, or by duration to find work that took its time.
+        Both are sorted by the server, so the slowest job in the fleet is one click away rather than
+        one page away.
+      </p>
+    </div>
+  {/if}
+{/each}
 
+{#snippet fleetContext()}
+  <JobsInsights others={filters.all} />
+  <details class="activity-history">
+    <summary>Explore fleet activity over the last 24 hours</summary><FleetHistory
+      others={filters.all}
+    />
+  </details>
+  <SizeAdvice refresh={adviceKey} />
+{/snippet}
 <JobDrawer bind:open={drawerOpen} job={selected} onclose={() => (selected = null)} />
 
 <style>
+  .job-inspect {
+    text-align: left;
+    color: var(--z-accent);
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  .fleet-context {
+    display: contents;
+  }
+  .fleet-context.compact {
+    display: block;
+    margin-block: var(--z-space-4);
+  }
+  .fleet-context > summary {
+    padding: var(--z-space-3);
+    color: var(--z-accent);
+    cursor: pointer;
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+  }
+  .fleet-context[open] > summary {
+    margin-bottom: var(--z-space-3);
+  }
+
   .activity-history {
     margin: var(--z-space-4) 0 var(--z-space-5);
   }

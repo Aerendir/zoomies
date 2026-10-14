@@ -97,6 +97,17 @@ const SHOTS = [
   },
   { name: 'overview', path: '/', heading: 'Overview' },
   {
+    name: 'overview-phone-375',
+    path: '/',
+    heading: 'Overview',
+    device: {
+      viewport: { width: 375, height: 900 },
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: SCALE,
+    },
+  },
+  {
     name: 'activity',
     path: '/',
     heading: 'Overview',
@@ -182,6 +193,17 @@ const SHOTS = [
   { name: 'queue', path: '/queue', heading: 'Queue' },
   { name: 'runner', path: `/runners/${FIXTURE.busyRunner}` },
   { name: 'jobs', path: '/jobs', heading: 'Jobs' },
+  {
+    name: 'jobs-mobile',
+    path: '/jobs',
+    heading: 'Jobs',
+    device: {
+      viewport: { width: 375, height: 900 },
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: SCALE,
+    },
+  },
   {
     name: 'job',
     path: '/jobs?failed=true',

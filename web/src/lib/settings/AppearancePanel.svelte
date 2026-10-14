@@ -24,6 +24,7 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Switch from '$lib/components/Switch.svelte';
+  import { visualStyle } from '$lib/state/ui-style.svelte';
   import VisualStylePicker from './VisualStylePicker.svelte';
 
   /*
@@ -129,13 +130,18 @@
       <p class="label">Tables on a phone</p>
       <p class="description">
         Rows keeps the table a desktop shows, scrolling sideways to the columns that do not fit.
-        Cards give every value a line of its own. Each grid carries the same choice above its rows,
-        and a grid told there keeps it whatever this says.
+        Cards give every value a line of its own. With no saved choice, Mission Control grids start
+        as Cards and Classic as Rows. Each grid carries the same choice above its rows, and a grid
+        told there keeps it whatever this says.
       </p>
     </div>
     <Segmented
       options={GRID_VIEWS}
-      value={prefs.gridView}
+      value={prefs.gridViewChosen
+        ? prefs.gridView
+        : visualStyle.choice === 'mission-control'
+          ? 'cards'
+          : 'rows'}
       label="Tables on a phone"
       onchange={(value) => (prefs.gridView = value as GridView)}
     />

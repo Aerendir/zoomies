@@ -1,4 +1,4 @@
-# Mission Control visual style: first implementation stage
+# Mission Control UI implementation handoff
 
 14 October 2026. Design reference: [PR #1027](https://github.com/eyupio/zoomies/pull/1027).
 
@@ -15,13 +15,42 @@ reduced motion, navigation and saved grid choices remain intact. Busy work keeps
 cyan; interaction stays in the Runner Blue family. Canvas log viewers follow
 style changes without clearing output.
 
-The implementation is the additive style stage (P1–P4 of the design handoff),
-with baseline and verification evidence. Operational reading-order changes,
-phone Jobs filter/context disclosure and style-aware fresh-grid defaults (P5)
-remain a separate layout package. No billing, workflow dispatch, scheduler or
-provider behaviour changes are included.
+## Current status
 
-## Validation
+- Design: [PR #1027](https://github.com/eyupio/zoomies/pull/1027), merged.
+- Additive style (P1–P4): [PR #1030](https://github.com/eyupio/zoomies/pull/1030), merged.
+- Operational layout (P5): implemented on `codex/mission-control-operational-layout`;
+  review PR and final evidence are recorded below when raised.
+
+## Operational layout delivered
+
+Mission Control's Overview now places current issues and four live metrics
+before pool utilisation, active jobs and history. Startup/registration timings
+remain available through a disclosure. First-run guidance stays first. Keyed
+sections move without remounting panels when style changes.
+
+On a Mission Control phone, Jobs puts search, status and records before the
+collapsed Fleet context section. Advanced Filters disclose without clearing
+selections or their URL. Job identity, repository, status and timings lead the
+new default column order, with an explicit Inspect action. Saved column order
+and widths still win. The same records and context components move through
+keyed sections, retaining their state during style/viewport changes.
+
+Fresh Mission Control grids start as Cards; Classic starts as Rows. A saved
+per-grid view wins over an explicit global view; both win over the style
+fallback. Legacy saved Rows values remain authoritative. Saving a logo or
+vocabulary does not freeze an unchosen global table default. No preference
+migration or new API is required.
+
+The original Zoomies logo, Eli, quirky vocabulary, dog/paw animations and
+reduced-motion behaviour remain unchanged. Classic retains its original
+history-first Overview, full Jobs context and Rows fallback.
+
+No workflow dispatch, scheduler or provider behaviour changes are included.
+First-job repository assistance (P8) remains separately scoped. The public
+status page remains Classic.
+
+## Additive-style validation (PR #1030)
 
 - Svelte check: no errors or warnings.
 - UI lint and the full unit suite passed. Focused bootstrap checks also verify
@@ -69,3 +98,21 @@ The screenshot helper keeps optional-style captures in a separate directory
 from Classic. The public status document retains Classic and its separate
 budget. Switching back to Classic is the appearance rollback; no fleet
 migration is required.
+
+## Operational-stage validation
+
+The final browser regression, current captures and public-tree audit results
+are recorded here before the review PR is raised. The implementation does not
+weaken guard lists: two unnecessary references in the earlier audit artefacts
+were removed, and the existing public-tree audit passes on this checkout.
+
+## Next coding-agent actions
+
+1. Review and merge the operational-layout PR after its checks pass.
+2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
+   intended behaviour; use this file for current implementation status.
+3. Treat first-job repository assistance as a separate feature. Before adding
+   discovery/dispatch, scope API contracts, permissions, protected branches
+   and the manual workflow path. Do not add a dummy dispatch button.
+4. Keep Classic opt-out, browser-local style and every explicit saved choice
+   intact in any later changes. Preserve the original artwork and quirks.

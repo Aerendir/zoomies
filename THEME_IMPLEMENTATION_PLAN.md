@@ -1,6 +1,16 @@
 # Selectable Mission Control visual style: coding-agent handoff
 
-14 October 2026. Planning and design only. No application fixes are implemented by this review.
+14 October 2026. Design specification; see the current implementation handoff below for delivered stages.
+
+## Current implementation handoff
+
+The additive visual-style stage is merged in [PR #1030](https://github.com/eyupio/zoomies/pull/1030).
+The operational-layout stage is implemented on `codex/mission-control-operational-layout`,
+with its review PR and final verification recorded in the
+[current handoff](roadmap/plans/2026-10-14-mission-control-style.md).
+That handoff is the source of current status; the design and phase descriptions below
+remain the implementation specification. No first-job dispatch or companion service work
+is included in these controller UI stages.
 
 ## Brand and personality requirements
 

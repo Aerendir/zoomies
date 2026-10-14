@@ -1,7 +1,9 @@
 <!--
   The Overview: the one page that has to earn a place on a second monitor.
 
-  Reading order is deliberate. The activity matrix comes first: a year of the
+  Classic keeps its familiar history-first order. Mission Control moves problems,
+  live metrics and current work ahead of history without remounting those panels.
+  First-run guidance stays first in either style. In Classic the activity matrix comes first: a year of the
   fleet's days as one band of squares, the shape an operator recognises from a
   contribution graph, which says at a glance whether this week looks like last
   week. The four numbers under it say what the fleet is doing right now;
@@ -42,6 +44,7 @@
   only how an operator settles the question of whether they have.
 -->
 <script lang="ts">
+  import { visualStyle } from '$lib/state/ui-style.svelte';
   import RepairOffers from '$lib/repairs/RepairOffers.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -63,6 +66,12 @@
   // knows not to also claim that nothing needs attention, and the matrix
   // knows not to show a year of empty squares under a fleet's first steps.
   let setupPending = $state(false);
+  const operational = $derived(visualStyle.choice === 'mission-control');
+  const sections = $derived(
+    operational
+      ? ['problems', 'metrics', 'repairs', 'work', 'activity', 'capacity']
+      : ['activity', 'metrics', 'problems', 'repairs', 'work', 'capacity'],
+  );
 
   // The matrix fetches its own year of history, so the page's refresh reaches
   // it by hand: the fleet cache's reconcile does not know it exists.
@@ -124,26 +133,25 @@
          step, not confirmation that nothing is happening. It removes itself
          for good once a job has run here. -->
     <FirstRun onpending={(pending) => (setupPending = pending)} />
-    {#if !setupPending}<FleetActivity bind:this={activity} />{/if}
-    <FleetMetrics {loading} />
-    <ProblemsSummary {loading} {setupPending} />
-    <RepairOffers />
-    <div class="split">
-      <PoolUtilisation {loading} />
-      <div class="feed">
-        <EventsFeed {loading} />
-      </div>
-      <ActiveJobs />
-    </div>
-    <!-- The same chart the Hosts page draws, not a summary of it: an operator
-         who has learnt to read one should not meet a different picture of the
-         same machines here. A host's controls live on the Hosts page, so
-         "Manage" goes there. -->
-    {#if fleet.loaded}<HostCapacityMap
-        hosts={fleet.hosts}
-        page="overview"
-        onmanage={() => navigate('/hosts')}
-      />{/if}
+    {#each sections as section (section)}
+      {#if section === 'activity'}
+        {#if !setupPending}<FleetActivity bind:this={activity} />{/if}
+      {:else if section === 'metrics'}
+        <FleetMetrics {loading} {operational} />
+      {:else if section === 'problems'}
+        <ProblemsSummary {loading} {setupPending} />
+      {:else if section === 'repairs'}
+        <RepairOffers />
+      {:else if section === 'work'}
+        <div class="split">
+          <PoolUtilisation {loading} />
+          <div class="feed"><EventsFeed {loading} /></div>
+          <ActiveJobs />
+        </div>
+      {:else if section === 'capacity' && fleet.loaded}
+        <HostCapacityMap hosts={fleet.hosts} page="overview" onmanage={() => navigate('/hosts')} />
+      {/if}
+    {/each}
   </div>
 {/if}
 
