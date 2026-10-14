@@ -1431,7 +1431,9 @@ func (hs *hostSet) pickReduced(p *store.Pool, avoid map[string]bool) (*store.Hos
 		if avoid[h.ID] {
 			slot = &bestAvoided
 		}
-		if *slot == nil || o.worth > (*slot).worth || (o.worth == (*slot).worth && h.ID < (*slot).h.ID) {
+		if *slot == nil || o.worth > (*slot).worth ||
+			(o.worth == (*slot).worth && HostPriority(h).Score > HostPriority((*slot).h).Score) ||
+			(o.worth == (*slot).worth && HostPriority(h).Score == HostPriority((*slot).h).Score && h.ID < (*slot).h.ID) {
 			*slot = o
 		}
 	}

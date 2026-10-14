@@ -13,8 +13,10 @@
   import { cardLine, diskIsLow, diskLink } from './health-card';
   import { slotsOf } from './slots';
   import {
+    ArrowUpNarrowWide,
     ChevronRight,
     CircleDashed,
+    RefreshCw,
     ExternalLink,
     Gauge,
     Pencil,
@@ -28,6 +30,7 @@
   import { hostStatus, throttled } from '$lib/status';
   import { cpuLabel, memoryLabel } from '$lib/pools/sizing';
   import { autoPoolLine, classWord, hostTagRows, overrideNote, pendingMove } from './tags';
+  import { isPinned, prioritySourceWords } from './priority';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import CopyButton from '$lib/components/CopyButton.svelte';
@@ -58,6 +61,10 @@
     oncapacity: (host: Host) => void;
     /** Set how big a runner is on this host. */
     onsizes: (host: Host) => void;
+    /** Pin, clear or re-check where this host stands in placement. */
+    onpriority: (host: Host) => void;
+    /** Re-read the specs score now, without opening anything. */
+    onrecheck?: (host: Host) => void;
     onedit: (host: Host) => void;
     onrename: (host: Host) => void;
     ondelete: (host: Host) => void;
@@ -75,6 +82,8 @@
     onthrottle,
     oncapacity,
     onsizes,
+    onpriority,
+    onrecheck,
     onedit,
     onrename,
     ondelete,
@@ -254,6 +263,11 @@
   // Absent while both size switches are off, which is when the card is the card
   // it has always been.
   const sizeClass = $derived(host.size_class);
+  // Where this host stands in placement: what the specs score, or where the
+  // operator pinned it. The source decides the words and, with the pin, which
+  // action the block offers.
+  const hasOverride = $derived(isPinned(host));
+  const sourceWords = $derived(prioritySourceWords(host));
   const classOverride = $derived(overrideNote(sizeClass));
   const classMove = $derived(pendingMove(sizeClass));
   const poolLine = $derived(autoPoolLine(host.auto_pool));
@@ -419,6 +433,15 @@
       reason: OPERATOR_ONLY,
       lock: true,
       onSelect: () => onsizes(host),
+    },
+    {
+      id: 'priority',
+      label: 'Set placement priority',
+      icon: ArrowUpNarrowWide,
+      disabled: !canOperate,
+      reason: OPERATOR_ONLY,
+      lock: true,
+      onSelect: () => onpriority(host),
     },
     {
       id: 'rename',
@@ -763,6 +786,31 @@
     </section>
   {/if}
 
+  <section class="block" aria-label="Placement priority of {host.name || host.id}">
+    <div class="block-head">
+      <h4>Priority</h4>
+      {#if canOperate}
+        <div class="head-actions">
+          <Button size="sm" variant="ghost" icon={Pencil} onclick={() => onpriority(host)}
+            >{hasOverride ? 'Change pin' : 'Pin'}</Button
+          >
+          {#if !hasOverride}
+            <Button size="sm" variant="ghost" icon={RefreshCw} onclick={() => onrecheck?.(host)}
+              >Re-check</Button
+            >
+          {/if}
+        </div>
+      {/if}
+    </div>
+    <p class="priority-line" data-testid="host-priority">
+      <strong data-testid="host-priority-score">{formatNumber(host.priority ?? 0)}</strong>
+      <span class="muted">of 100 · {sourceWords}</span>
+    </p>
+    {#if host.priority_reason}
+      <p class="note" data-testid="host-priority-reason">{host.priority_reason}</p>
+    {/if}
+  </section>
+
   {#if sizeClass}
     <section class="block" aria-label="Size class of {host.name || host.id}">
       <h4>Size class</h4>
@@ -1095,6 +1143,11 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--z-space-3);
+  }
+  .head-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--z-space-2);
   }
   .block {
     display: flex;

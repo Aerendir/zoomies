@@ -621,12 +621,12 @@ func (s *Store) CountRunnersByPool(ctx context.Context) (map[string]PoolCounts, 
 // ---------------------------------------------------------------------------
 
 const hostCols = `id, name, address, embedded, capacity, backends, backend_info, labels,
-	os, distro, os_version, arch, cpus, memory_mb, version, cordoned, token_hash,
-	last_heartbeat, created_at, agent_session_id, agent_session_prev,
+	os, distro, os_version, arch, cpus, memory_mb, cpu_mhz, memory_mts, disk_kind, version,
+	cordoned, token_hash, last_heartbeat, created_at, agent_session_id, agent_session_prev,
 	agent_session_alternations, agent_session_alt_at,
 	disk_total_mb, disk_free_mb, reserve_cpus, reserve_memory_mb, reserve_disk_mb,
 	protocol_version, incompatible, connection, usage, throttle, features, incidents, doctor,
-	runner_profile, size_class, doctor_checked_at`
+	runner_profile, priority_override, size_class, doctor_checked_at`
 
 const hostReadCols = hostCols + `, EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND (completed_at IS NULL OR retired_at IS NOT NULL)), EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL)`
 
@@ -635,14 +635,19 @@ func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 	var embedded, cordoned, incompatible int
 	var heartbeat, created, doctorAt int64
 	var altAt sql.NullInt64
+	var override sql.NullInt64
 	err := sc.Scan(&h.ID, &h.Name, &h.Address, &embedded, &h.Capacity, &h.Backends,
 		&h.BackendInfo, &h.Labels, &h.OS, &h.Distro, &h.OSVersion, &h.Arch, &h.CPUs,
-		&h.MemoryMB, &h.Version, &cordoned, &h.TokenHash, &heartbeat, &created,
+		&h.MemoryMB, &h.CPUMHz, &h.MemoryMTs, &h.DiskKind, &h.Version, &cordoned, &h.TokenHash, &heartbeat, &created,
 		&h.AgentSessionID, &h.AgentSessionPrev, &h.AgentSessionAlternations, &altAt,
 		&h.DiskTotalMB, &h.DiskFreeMB, &h.ReserveCPUs, &h.ReserveMemoryMB, &h.ReserveDiskMB,
-		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &h.SizeClass, &doctorAt, &h.RecoveryRequired, &h.Retired)
+		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &override, &h.SizeClass, &doctorAt, &h.RecoveryRequired, &h.Retired)
 	if err != nil {
 		return nil, err
+	}
+	if override.Valid {
+		v := int(override.Int64)
+		h.PriorityOverride = &v
 	}
 	if h.Doctor.Report != nil {
 		// The report is freshly unmarshalled for this scan, so it is ours to
@@ -671,14 +676,19 @@ func (s *Store) CreateHost(ctx context.Context, h *Host) error {
 	if h.LastHeartbeat.IsZero() {
 		h.LastHeartbeat = h.CreatedAt
 	}
+	var override any
+	if h.PriorityOverride != nil {
+		override = *h.PriorityOverride
+	}
 	_, err := s.exec(ctx, `INSERT INTO hosts (`+hostCols+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		h.ID, h.Name, h.Address, boolInt(h.Embedded), h.Capacity, h.Backends, h.BackendInfo,
-		h.Labels, h.OS, h.Distro, h.OSVersion, h.Arch, h.CPUs, h.MemoryMB, h.Version,
+		h.Labels, h.OS, h.Distro, h.OSVersion, h.Arch, h.CPUs, h.MemoryMB, h.CPUMHz, h.MemoryMTs,
+		h.DiskKind, h.Version,
 		boolInt(h.Cordoned), h.TokenHash, ms(h.LastHeartbeat), ms(h.CreatedAt),
 		h.AgentSessionID, h.AgentSessionPrev, h.AgentSessionAlternations, msp(h.AgentSessionAltAt),
 		h.DiskTotalMB, h.DiskFreeMB, h.ReserveCPUs, h.ReserveMemoryMB, h.ReserveDiskMB,
-		h.ProtocolVersion, boolInt(h.Incompatible), h.Connection, h.Usage, h.Throttle, h.Features, h.Incidents, h.Doctor, h.RunnerProfile, h.SizeClass, int64(0))
+		h.ProtocolVersion, boolInt(h.Incompatible), h.Connection, h.Usage, h.Throttle, h.Features, h.Incidents, h.Doctor, h.RunnerProfile, override, h.SizeClass, int64(0))
 	return wrapWrite(err)
 }
 
@@ -791,10 +801,12 @@ func (s *Store) UpdateHost(ctx context.Context, h *Host) error {
 	// be able to talk its way out of the room its operator held back for it.
 	res, err := s.exec(ctx, `UPDATE hosts SET name=?, address=?, capacity=?, backends=?,
 		backend_info=?, labels=?, os=?, distro=?, os_version=?, arch=?, cpus=?, memory_mb=?,
+		cpu_mhz=?, memory_mts=?, disk_kind=?,
 		version=?, cordoned=?, last_heartbeat=?, disk_total_mb=?, disk_free_mb=?,
 		protocol_version=?, incompatible=? WHERE id=?`,
 		h.Name, h.Address, h.Capacity, h.Backends, h.BackendInfo, h.Labels, h.OS, h.Distro,
-		h.OSVersion, h.Arch, h.CPUs, h.MemoryMB, h.Version, boolInt(h.Cordoned),
+		h.OSVersion, h.Arch, h.CPUs, h.MemoryMB, h.CPUMHz, h.MemoryMTs, h.DiskKind, h.Version,
+		boolInt(h.Cordoned),
 		ms(h.LastHeartbeat), h.DiskTotalMB, h.DiskFreeMB,
 		h.ProtocolVersion, boolInt(h.Incompatible), h.ID)
 	if err != nil {
@@ -818,11 +830,17 @@ type HostChanges struct {
 	// how an operator clears it, which is why the pointer, rather than the
 	// value, is what says "leave it alone".
 	RunnerProfile *RunnerProfile
+	// PriorityOverride writes the operator's placement priority; a nil pointer
+	// with ClearPriorityOverride true is how it is cleared, letting the spec
+	// score stand again. A plain nil changes nothing, the way every other
+	// field here says it.
+	PriorityOverride      *int
+	ClearPriorityOverride bool
 }
 
 // PatchHost writes one edit without overwriting a concurrent cordon or
-// heartbeat. Name, capacity, labels, reserves and the runner profile succeed or fail
-// together.
+// heartbeat. Name, capacity, labels, reserves, the runner profile and the
+// priority override succeed or fail together.
 func (s *Store) PatchHost(ctx context.Context, id string, changes HostChanges) error {
 	var labels, profile any
 	if changes.Labels != nil {
@@ -831,12 +849,28 @@ func (s *Store) PatchHost(ctx context.Context, id string, changes HostChanges) e
 	if changes.RunnerProfile != nil {
 		profile = *changes.RunnerProfile
 	}
-	res, err := s.exec(ctx, `UPDATE hosts SET name=COALESCE(?,name), capacity=COALESCE(?,capacity),
+	statement := `UPDATE hosts SET name=COALESCE(?,name), capacity=COALESCE(?,capacity),
 		labels=COALESCE(?,labels), reserve_cpus=COALESCE(?,reserve_cpus),
 		reserve_memory_mb=COALESCE(?,reserve_memory_mb), reserve_disk_mb=COALESCE(?,reserve_disk_mb),
-		runner_profile=COALESCE(?,runner_profile)
-		WHERE id=?`, changes.Name, changes.Capacity, labels, changes.ReserveCPUs,
-		changes.ReserveMemoryMB, changes.ReserveDiskMB, profile, id)
+		runner_profile=COALESCE(?,runner_profile),
+		priority_override=COALESCE(?,priority_override) WHERE id=?`
+	args := []any{changes.Name, changes.Capacity, labels, changes.ReserveCPUs,
+		changes.ReserveMemoryMB, changes.ReserveDiskMB, profile}
+	switch {
+	case changes.ClearPriorityOverride:
+		// An unconditional NULL, because a bound placeholder would be ignored
+		// by COALESCE and clearing is "let the spec score stand"; and one
+		// argument fewer, or everything after it would land one placeholder
+		// short and the id would get NULL.
+		statement = strings.Replace(statement,
+			"priority_override=COALESCE(?,priority_override) WHERE id=?", "priority_override=NULL WHERE id=?", 1)
+		args = append(args, id)
+	case changes.PriorityOverride != nil:
+		args = append(args, *changes.PriorityOverride, id)
+	default:
+		args = append(args, nil, id)
+	}
+	res, err := s.exec(ctx, statement, args...)
 	if err != nil {
 		return wrapWrite(err)
 	}
@@ -861,9 +895,9 @@ func (s *Store) PatchHost(ctx context.Context, id string, changes HostChanges) e
 // on a host is the operator's.
 func (s *Store) SetHostReported(ctx context.Context, h *Host) error {
 	res, err := s.exec(ctx, `UPDATE hosts SET backends=?, backend_info=?, version=?, features=?,
-		cpus=?, memory_mb=?, disk_total_mb=?, disk_free_mb=?, last_heartbeat=? WHERE id=?`,
+		cpus=?, memory_mb=?, cpu_mhz=?, memory_mts=?, disk_kind=?, disk_total_mb=?, disk_free_mb=?, last_heartbeat=? WHERE id=?`,
 		h.Backends, h.BackendInfo, h.Version, h.Features, h.CPUs, h.MemoryMB,
-		h.DiskTotalMB, h.DiskFreeMB, ms(h.LastHeartbeat), h.ID)
+		h.CPUMHz, h.MemoryMTs, h.DiskKind, h.DiskTotalMB, h.DiskFreeMB, ms(h.LastHeartbeat), h.ID)
 	if err != nil {
 		return wrapWrite(err)
 	}

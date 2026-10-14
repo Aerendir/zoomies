@@ -90,6 +90,15 @@ type JoinRequest struct {
 	// runner is a child inside the cgroup, and there the two are the same.
 	CPUs     int   `json:"cpus,omitempty"`
 	MemoryMB int64 `json:"memory_mb,omitempty"`
+	// CPUMHz, MemoryMTs and DiskKind are the speed figures beside the size
+	// ones: the fastest processor clock, the memory modules' rated rate and
+	// whether the storage says it spins. They ride the same "what this agent
+	// may stably offer" bargain CPUs and MemoryMB do -- the controller scores
+	// a host's placement priority from them, and a zero or empty kind only
+	// means the machine would not say.
+	CPUMHz    int    `json:"cpu_mhz,omitempty"`
+	MemoryMTs int    `json:"memory_mts,omitempty"`
+	DiskKind  string `json:"disk_kind,omitempty"`
 	// DiskTotalMB and DiskFreeMB measure the filesystem holding the work
 	// directory, which is where a runner's checkout and its caches land. Free
 	// is what is available to a runner rather than what is unused: the two
@@ -152,6 +161,15 @@ type HeartbeatRequest struct {
 	// resized in place must stop describing itself as the machine it used to be.
 	CPUs     int   `json:"cpus,omitempty"`
 	MemoryMB int64 `json:"memory_mb,omitempty"`
+	// CPUMHz, MemoryMTs and DiskKind are the speed figures beside the size
+	// ones, re-measured with Detect on every beat the way the size figures
+	// are, so a hardware upgrade stops describing itself as the machine it
+	// was. A heartbeat from an agent too old to send them carries none; the
+	// controller reads that as "the figures stand", which is all an older
+	// agent ever knew.
+	CPUMHz    int    `json:"cpu_mhz,omitempty"`
+	MemoryMTs int    `json:"memory_mts,omitempty"`
+	DiskKind  string `json:"disk_kind,omitempty"`
 	// DiskTotalMB and DiskFreeMB are the work directory's filesystem, sent on
 	// every beat because free space is the one of these that moves on its own.
 	// The controller writes them under a tolerance rather than on every

@@ -130,6 +130,13 @@ type HostView struct {
 	// it lets an operator edit.
 	RunnerProfile    *store.RunnerProfile `json:"runner_profile,omitempty"`
 	EffectiveProfile EffectiveProfileView `json:"effective_profile"`
+	// Priority is where this host stands in placement, and PrioritySource
+	// whether the operators' own number or the score the specs earn (see
+	// scheduler.HostPriority, which the scheduler's placement reads the same
+	// way). PriorityReason is the sentence the card shows beside it.
+	Priority       int    `json:"priority"`
+	PrioritySource string `json:"priority_source"`
+	PriorityReason string `json:"priority_reason"`
 	// Tags are what can be said about this host in the terms a pool's host
 	// selector asks in: the labels stored on it, and the automatic ones no label
 	// has taken the place of, each marked as which it is. SizeClass is the class
@@ -271,6 +278,7 @@ type HostView struct {
 // rendered as the bare list they are, and nothing is invented about the
 // backends it never reported on.
 func (c *Controller) HostView(h *store.Host) HostView {
+	priority := scheduler.HostPriority(h)
 	out := HostView{
 		RecoveryState: h.RecoveryState(c.Now()),
 		Retired:       h.Retired,
@@ -288,6 +296,9 @@ func (c *Controller) HostView(h *store.Host) HostView {
 		Free:               h.Free(),
 		EffectiveCapacity:  h.EffectiveCapacity(),
 		EffectiveProfile:   EffectiveProfile(h, c.cfg().Runners),
+		Priority:           priority.Score,
+		PrioritySource:     string(priority.Source),
+		PriorityReason:     scheduler.HostPriorityReason(h),
 		Tags:               emptySlice(scheduler.HostTags(h, c.tracksClasses())),
 		SizeClass:          c.hostSizeClassView(h),
 		AutoPool:           c.hostAutoPoolView(h),

@@ -2557,6 +2557,29 @@ export interface paths {
         patch: operations["updateHost"];
         trace?: never;
     };
+    "/hosts/{id}/priority-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-read what a host's specs rank it at
+         * @description Recomputes the host's placement priority from the specs its last report carried and pushes the event frame, so a card settles at once. The specs themselves are re-measured by every heartbeat, so an upgrade the host has had reaches here on its own after its next report; this is for settling the ranking and the card now.
+         */
+        post: operations["checkHostPriority"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hosts/{id}/cordon": {
         parameters: {
             query?: never;
@@ -9980,6 +10003,18 @@ export interface components {
             runner_profile?: components["schemas"]["RunnerProfile"];
             /** @description What a runner on this host is held to, with the fleet's settings standing in for every field the host leaves out, and where each figure came from. */
             effective_profile?: components["schemas"]["EffectiveProfile"];
+            /** @description Where this host stands in placement, on a 0..100 scale: placement prefers hosts with a higher one, whatever placement order would otherwise decide between them, and a pool's minimum of warm runners stands up through the same ranking. The number is the score the host's reported specs earn unless `priority_source` is `overridden`, in which case the operator has pinned it. */
+            priority?: number;
+            /**
+             * @description What set `priority`.
+             * @enum {string}
+             */
+            priority_source?: "computed" | "overridden";
+            /**
+             * @description The sentence the host card shows beside the priority: what the score came from, and what an override replaced.
+             * @example scored from 32 CPUs, 4.3 GHz of clock, 256 GB of memory, 6400 MT/s of memory speed, 1024 GB of disk, a ssd work directory, ahead of the 43 that would stand without it
+             */
+            priority_reason?: string;
             /** @description What can be said about this host in the terms a pool's `host_selector` asks in: the labels stored on it, and the automatic ones no label has taken the place of. Always present, and empty for a host with none. The `size` tag is listed only while `scheduler.size_routing` or `scheduler.auto_pools` is not `off`. */
             tags?: components["schemas"]["HostTag"][];
             /** @description The size class this host is in, and why. Absent until the controller has worked one out, which is never while both `scheduler.size_routing` and `scheduler.auto_pools` are `off`. */
@@ -10024,6 +10059,17 @@ export interface components {
             cpus?: number;
             /** Format: int64 */
             memory_mb?: number;
+            /** @description The fastest clock a processor reaches */
+            cpu_mhz?: number;
+            /** @description The memory modules' rated speed in MT/s as the machine's DMI table says it */
+            memory_mts?: number;
+            /**
+             * @description Whether the storage backing the work directory says it spins
+             * @enum {string}
+             */
+            disk_kind?: "ssd" | "hdd";
+            /** @description The operator's pin on placement */
+            priority_override?: number | null;
             /**
              * Format: int64
              * @description The filesystem holding the agent's work directory
@@ -16281,6 +16327,10 @@ export interface operations {
                     reserve_memory_mb?: number;
                     /** Format: int64 */
                     reserve_disk_mb?: number;
+                    /** @description Where this host stands in placement. Leave the whole field out to change nothing; send `{ "override": null }` to hand the ranking back to the score the reported specs earn; send a number on the 0..100 scale to pin the host above every host with a lower one while its specs stay out of the decision. */
+                    priority?: {
+                        override: number | null;
+                    };
                     /** @description How big a runner is on this host. It replaces the whole profile: leave it out to change nothing, send `{}` to clear it so the host follows the fleet's settings again, and a field left out of a profile that is sent follows the fleet too. A size below a quarter of a core or 512 MB, a minimum above the standard, a ceiling below it, or a size the machine could never give once its reserve is held back is refused with the field named; a host that has reported nothing about itself has nothing to compare against, so its profile is saved and used once it does. */
                     runner_profile?: components["schemas"]["RunnerProfile"];
                 };
@@ -16298,6 +16348,30 @@ export interface operations {
             };
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    checkHostPriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Host"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     cordonHost: {

@@ -4125,6 +4125,20 @@ paths:
                 reserve_cpus: { type: integer, minimum: 0 }
                 reserve_memory_mb: { type: integer, format: int64, minimum: 0 }
                 reserve_disk_mb: { type: integer, format: int64, minimum: 0 }
+                priority:
+                  type: object
+                  description: >-
+                    Where this host stands in placement. Leave the whole field out to change
+                    nothing; send `{ "override": null }` to hand the ranking back to the score
+                    the reported specs earn; send a number on the 0..100 scale to pin the host
+                    above every host with a lower one while its specs stay out of the decision.
+                  required: [override]
+                  properties:
+                    override:
+                      type: integer
+                      minimum: 0
+                      maximum: 100
+                      nullable: true
                 runner_profile:
                   allOf: [{ $ref: "#/components/schemas/RunnerProfile" }]
                   description: >-
@@ -4155,6 +4169,27 @@ paths:
       responses:
         "204": { description: Removed }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /hosts/{id}/priority-check:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      operationId: checkHostPriority
+      tags: [hosts]
+      summary: Re-read what a host's specs rank it at
+      description: >-
+        Recomputes the host's placement priority from the specs its last report
+        carried and pushes the event frame, so a card settles at once. The specs
+        themselves are re-measured by every heartbeat, so an upgrade the host has
+        had reaches here on its own after its next report; this is for settling
+        the ranking and the card now.
+      x-zoomies-role: operator
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Host" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /hosts/{id}/cordon:
     parameters: [{ $ref: "#/components/parameters/PathID" }]
@@ -13371,6 +13406,23 @@ components:
         effective_profile:
           allOf: [{ $ref: "#/components/schemas/EffectiveProfile" }]
           description: What a runner on this host is held to, with the fleet's settings standing in for every field the host leaves out, and where each figure came from.
+        priority:
+          type: integer
+          description: >-
+            Where this host stands in placement, on a 0..100 scale: placement prefers hosts
+            with a higher one, whatever placement order would otherwise decide between them,
+            and a pool's minimum of warm runners stands up through the same ranking. The
+            number is the score the host's reported specs earn unless `priority_source` is
+            `overridden`, in which case the operator has pinned it.
+        priority_source:
+          type: string
+          enum: [computed, overridden]
+          description: What set `priority`.
+        priority_reason:
+          type: string
+          description: "The sentence the host card shows beside the priority: what the score came from, and what an override replaced."
+          examples:
+            - "scored from 32 CPUs, 4.3 GHz of clock, 256 GB of memory, 6400 MT/s of memory speed, 1024 GB of disk, a ssd work directory, ahead of the 43 that would stand without it"
         tags:
           type: array
           items: { $ref: "#/components/schemas/HostTag" }
@@ -13434,6 +13486,10 @@ components:
         arch: { type: string }
         cpus: { type: integer, description: How much machine this host is. An agent in a container sees its cgroup's share, but a container runner runs beside it rather than inside that cgroup, so the daemon's larger view of the machine is the one reported. }
         memory_mb: { type: integer, format: int64 }
+        cpu_mhz: { type: integer, description: The fastest clock a processor reaches, in megahertz, measured by the agent. Zero is not measured, which drops the axis from the priority score rather than ranking the host lowest. }
+        memory_mts: { type: integer, description: The memory modules' rated speed in MT/s as the machine's DMI table says it, read where the agent can. Zero is not measured. }
+        disk_kind: { type: string, enum: [ssd, hdd], description: Whether the storage backing the work directory says it spins, as the kernel says it. Absent when nothing could answer. }
+        priority_override: { type: integer, nullable: true, minimum: 0, description: The operator's pin on placement, if any; null while the spec score stands. Set through PATCH /hosts; a heartbeat never writes it. }
         disk_total_mb: { type: integer, format: int64, description: The filesystem holding the agent's work directory, where a runner's checkout and caches land. Zero means the agent did not measure it, which is not a full disk. }
         disk_free_mb: { type: integer, format: int64, description: What a runner may write to, which is less than what is unused by the reserve the filesystem keeps for root. }
         reserve_cpus: { type: integer, description: What the operator holds back from placement for the machine's own sake. Set through PATCH /hosts; a heartbeat never writes it. }
