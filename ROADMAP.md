@@ -1825,7 +1825,10 @@ subsequent scoped web preview, draft PR, linked explanation and honest E2 result
 Passing CI alone cannot establish improvement. Publication never merges.
 
 Depends on ZF-242 and ZF-243's descriptive milestone. Size M.
-[First-slice plan](roadmap/plans/2026-10-14-eli-e3-checkout-preview.md).
+[Preview foundation](roadmap/plans/2026-10-14-eli-e3-checkout-preview.md),
+[private retention/replay](roadmap/plans/2026-10-14-eli-e3-preview-retention.md).
+The preview foundation merged in #1021. Private retention precedes admission
+and the web surface; source-bearing history needs its own authorisation boundary.
 
 ## 9. Kept for the day somebody asks
 
