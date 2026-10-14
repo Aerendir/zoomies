@@ -144,9 +144,6 @@ func TestRecoveryWaitsForAnInflightTaskPollBeforeRetiring(t *testing.T) {
 	if err := h.st.SetRecoveryFence(h.ctx, true, "transfer"); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.c.LoadFence(h.ctx); err != nil {
-		t.Fatal(err)
-	}
 	h.c.queues.get(joined.HostID).enqueue(agent.Task{Kind: agent.TaskStopRunner, RunnerID: "run_previous"})
 	block.Store(true)
 	pollDone := make(chan struct {
@@ -161,6 +158,16 @@ func TestRecoveryWaitsForAnInflightTaskPollBeforeRetiring(t *testing.T) {
 		}{batch, err}
 	}()
 	<-entered
+	// The fence rides into the controller only now, with the poll already
+	// admitted: the recovery row is written before the block goes on, and
+	// this is the read that activates it, so nothing in it answers the
+	// clock. A poll admitted before the fence is the ordering the
+	// serialisation is for; with the fence in memory before the poll began,
+	// PollTasks would return at mayAct before it reached the clock and the
+	// hook above would never fire.
+	if err := h.c.LoadFence(h.ctx); err != nil {
+		t.Fatal(err)
+	}
 	retireDone := make(chan error, 1)
 	go func() {
 		retireDone <- h.c.RetireRecoveryHost(h.ctx, joined.HostID, joined.HostID, "administrator")
