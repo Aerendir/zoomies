@@ -213,13 +213,14 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 	image := fs.String("image", "", "replacement image for a custom container deployment")
 	mode := fs.String("mode", "", "select agent, controller or single; empty detects installed services")
 	check := fs.Bool("check", false, "check the deployment without changing or restarting anything")
+	dryRun := fs.Bool("dry-run", false, "download and verify the newest release and say what an upgrade would do, changing nothing")
 	wantVersion := fs.String("version", "", "target a published tag such as v1.4.0, or dev")
 	noDownload := fs.Bool("no-download", false, "apply the binary that is already installed; do not look for a newer one")
 	yes := fs.Bool("yes", false, "approve deployment additions and settings migration; never OS tuning")
 	updateHelper := fs.Bool("update-helper", false, "add the update helper without asking, so that the web UI can update this host; --yes never does")
 	nonInteractive := fs.Bool("non-interactive", false, "never prompt; optional deployment changes require --yes")
 	noAnimation := fs.Bool("no-animation", false, "skip the short branded terminal splash")
-	fs.example("sudo zoomies upgrade", "zoomies upgrade --check", "sudo zoomies upgrade --yes", "sudo zoomies upgrade --mode agent --version v1.4.0")
+	fs.example("sudo zoomies upgrade", "zoomies upgrade --check", "zoomies upgrade --dry-run", "sudo zoomies upgrade --yes", "sudo zoomies upgrade --mode agent --version v1.4.0")
 	if err := fs.parse(args); err != nil {
 		return err
 	}
@@ -228,6 +229,9 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 	}
 	if *wantVersion != "" && *noDownload {
 		return usagef(name, "--version requires downloading; remove --no-download")
+	}
+	if *dryRun && *noDownload {
+		return usagef(name, "--dry-run downloads the release to preview it; remove --no-download")
 	}
 	parsed, err := installer.ParseMode(*mode)
 	if err != nil {
@@ -242,35 +246,65 @@ func runUpgradeNamed(ctx context.Context, e *env, args []string, name string) er
 	}
 	ui := installer.PaletteFor(e.out)
 	if os.Getenv("ZOOMIES_UPGRADE_STARTED") == "" {
-		if !*noAnimation && !*nonInteractive && !*check {
+		if !*noAnimation && !*nonInteractive && !*check && !*dryRun {
 			if err := installer.Splash(ctx, e.out, "Upgrade"); err != nil {
 				return err
 			}
 		}
 		title := "Zoomies upgrade"
-		if *check {
+		if *check || *dryRun {
 			title = "Zoomies upgrade preview"
 		}
 		ui.Title(e.out, title, "this host")
+	}
+	if *dryRun {
+		// Validate the deployment first, exactly as a real run does, so an
+		// invalid record stops before a download.
+		preview := opts
+		preview.Check, preview.Out, preview.Doctor = true, io.Discard, nil
+		if err := runUpgradeInstall(ctx, preview); err != nil {
+			return err
+		}
+		ui.Rule(e.out, "1/4 Binary")
+		selector := newDeploymentSelector(*configDir, *dockerHost, *runtime, *image, *mode, *yes)
+		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, true); err != nil {
+			return err
+		}
+		// The deployment half, as this release sees it: the mounts, files,
+		// folders and settings a real run would add, printed rather than
+		// discarded, so a preview is the review it promises to be.
+		ui.Rule(e.out, "2/4 Deployment")
+		review := opts
+		review.Check, review.Out, review.Doctor = true, e.out, nil
+		if err := runUpgradeInstall(ctx, review); err != nil {
+			return err
+		}
+		ui.Rule(e.out, "3/4 Verify")
+		ui.Hint(e.out, "Would restart the service and wait for it to answer.")
+		ui.Rule(e.out, "4/4 Host health")
+		ui.Hint(e.out, "Review host health with: zoomies doctor")
+		fmt.Fprintln(e.out)
+		ui.Done(e.out, "%s", ui.Bold("Dry run complete; nothing was changed."))
+		return nil
 	}
 	if !*check && !*noDownload && os.Getenv(installer.SelfUpdateEnv) == "" {
 		// Validate the deployment before replacing the executable. An invalid
 		// record or service must leave the installed binary untouched.
 		preview := opts
 		preview.Check, preview.Out, preview.Doctor = true, io.Discard, nil
-		if err := installer.Upgrade(ctx, preview); err != nil {
+		if err := runUpgradeInstall(ctx, preview); err != nil {
 			return err
 		}
 		ui.Rule(e.out, "1/4 Binary")
 		selector := newDeploymentSelector(*configDir, *dockerHost, *runtime, *image, *mode, *yes)
-		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector); err != nil {
+		if err := selfUpdate(ctx, e, *binary, *wantVersion, selector, false); err != nil {
 			return err
 		}
 	} else if !*check && os.Getenv("ZOOMIES_UPGRADE_STARTED") == "" {
 		ui.Rule(e.out, "1/4 Binary")
 		ui.Done(e.out, "Using the installed binary")
 	}
-	return installer.Upgrade(ctx, opts)
+	return runUpgradeInstall(ctx, opts)
 }
 
 // deploymentSelector is the part of `zoomies upgrade`'s command line that says
@@ -360,6 +394,10 @@ func (t *tailBuffer) String() string {
 // runCandidate runs the downloaded release with an explicit environment and
 // returns an error that carries the end of what it printed. It is a variable so
 // a test can see what the candidate was asked without running it.
+// runUpgradeInstall is installer.Upgrade, a variable so a test can see what a
+// preview and a dry run asked it to do without a real deployment on the host.
+var runUpgradeInstall = installer.Upgrade
+
 var runCandidate = func(ctx context.Context, env []string, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env
@@ -431,7 +469,12 @@ func candidatePreflight(installed string, sel deploymentSelector) func(context.C
 //
 // A failed download stops the upgrade; an offline host can explicitly use
 // --no-download rather than report a partial upgrade as successful.
-func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel deploymentSelector) error {
+//
+// dryRun fetches, verifies and pre-flights the release and says what it would
+// do, then stops: nothing is replaced and this command is not restarted inside
+// it. The release's own check of this deployment still runs, so a preview
+// refuses for the same reasons a real run would.
+func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel deploymentSelector, dryRun bool) error {
 	if binary == "" {
 		binary, _ = os.Executable()
 	}
@@ -442,7 +485,7 @@ func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel dep
 	ui.Doing(e.out, "Checking for a newer Zoomies")
 	res, err := installer.SelfUpdate(ctx, installer.SelfUpdateOptions{
 		BinaryPath: binary, Version: wantVersion, Current: version.Version, Out: e.out,
-		Preflight: candidatePreflight(binary, sel),
+		DryRun: dryRun, Preflight: candidatePreflight(binary, sel),
 	})
 	var refusal *candidateRefusal
 	switch {
@@ -452,6 +495,19 @@ func selfUpdate(ctx context.Context, e *env, binary, wantVersion string, sel dep
 		return fmt.Errorf("binary update stopped: %w; the new release needs a change this version could not see. Run `zoomies upgrade --yes` to approve it, or follow the advice quoted above", err)
 	case err != nil:
 		return fmt.Errorf("binary update failed: %w; retry, or use --no-download to apply the installed binary", err)
+	}
+	if dryRun {
+		if !res.Newer {
+			if res.Tag != "" {
+				ui.Done(e.out, "Already on the latest build %s", ui.Dim("("+res.Tag+")"))
+			} else {
+				ui.Done(e.out, "This build has no published release to follow")
+			}
+			return nil
+		}
+		ui.Done(e.out, "Would replace %s with %s, checksum verified", binary, res.Tag)
+		ui.Hint(e.out, "The running binary would be kept as %s", binary+installer.PreviousSuffix)
+		return nil
 	}
 	if !res.Updated {
 		if res.Tag != "" {
