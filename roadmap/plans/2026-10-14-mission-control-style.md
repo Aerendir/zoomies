@@ -51,7 +51,8 @@ The public status page remains Classic.
 
 ## First-job activation (P8, manual GitHub handoff)
 
-Implemented on `codex/first-job-activation`, following the merged UI stages.
+Implemented in [PR #1040](https://github.com/eyupio/zoomies/pull/1040), awaiting review,
+on `codex/first-job-activation`, following the merged UI stages.
 The Overview checklist now lets the operator choose a destination pool and
 enter a repository covered by that pool's installation target. Single-repository
 installations prefill their repository. Changing pool clears the previous
@@ -192,7 +193,7 @@ ZOOMIES_SCREENSHOT_STYLE=mission-control node tests/support/screenshots.mjs ../d
 
 ## Next coding-agent actions
 
-1. The theme and operational layout are merged. Review the manual first-job activation stage on `codex/first-job-activation`.
+1. The theme and operational layout are merged. Review [PR #1040](https://github.com/eyupio/zoomies/pull/1040) for manual first-job activation and merge after its checks pass.
 2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
    intended behaviour; use this file for current implementation status.
 3. Treat first-job repository assistance as a separate feature. Before adding
