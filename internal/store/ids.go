@@ -31,6 +31,7 @@ const (
 	PrefixAssistantConversation = "asc"
 	PrefixEliRepair             = "erf"
 	PrefixEliOpportunity        = "eop"
+	PrefixOptimisationPreview   = "opv"
 	// PrefixProviderSetup names a short-lived Proxmox connection enrolment.
 	PrefixProviderSetup = "pvs"
 	// PrefixBackupRemote names an offsite backup destination kept in the

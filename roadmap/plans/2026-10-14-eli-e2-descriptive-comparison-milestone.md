@@ -3,7 +3,7 @@
 14 October 2026. Owner agreed E2 closure at descriptive historical comparison,
 with broader controlled-experiment proof deferred. Implementation based on main
 after #1018 merged and rebased onto main after #1019.
-Ready PR [#1020](https://github.com/eyupio/zoomies/pull/1020) awaits review/CI/merge.
+PR [#1020](https://github.com/eyupio/zoomies/pull/1020) merged.
 
 ## Closing scope
 
