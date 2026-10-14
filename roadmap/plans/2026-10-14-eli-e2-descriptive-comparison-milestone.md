@@ -42,6 +42,6 @@ comparison scenario passes without a live model. The source-binding fixture fail
 when its guard is removed, then passes with it restored. All 28 desktop/mobile
 comparison checks and 110 UI unit checks pass. UI type/lint/build budgets, generated
 OpenAPI clients, changed-package vet, strict docs and whitespace pass. Reference
-generation is refreshed; drift checks finish before publication. Strict docs use
+generation is refreshed; command/MCP/catalogue drift checks pass. Strict docs use
 the repository-only fallback for optional GitHub header metadata. No full-repository
 race run, live model evaluation or real controlled experiment is claimed.

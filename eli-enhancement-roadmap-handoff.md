@@ -58,7 +58,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
 | E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
 | E2 private root dependency inventory | Merged | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
-| E2 descriptive-comparison milestone | Implemented, PR preparation | ZF-243, PR pending, based on main after #1018 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
+| E2 descriptive-comparison milestone | Implemented, pending review/CI/merge | ZF-243, PR pending, based on main after #1018 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
 | E3 to E6 | Not started | Dependencies and sequence below | No optimisation publication, new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
@@ -2032,7 +2032,7 @@ Eli scenario passes without a live model call. All 28 desktop/mobile comparisons
 and 110 UI unit checks pass, alongside UI type/lint/build budgets, changed-package
 vet, strict docs and whitespace. Removing the public source-binding guard makes
 its fixture fail; the guard is restored. Generated references/contracts are
-refreshed, with their drift checks finishing before publication. Docs used the
+refreshed and their command/MCP/catalogue drift checks pass. Docs used the
 repository-only header fallback for optional GitHub metadata. No live source,
 model, provider or fleet operation.
 
