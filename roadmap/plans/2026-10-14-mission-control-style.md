@@ -194,8 +194,8 @@ ZOOMIES_SCREENSHOT_STYLE=mission-control node tests/support/screenshots.mjs ../d
 ## Independent verification and reflow fix (14 October 2026)
 
 In [PR #1045](https://github.com/eyupio/zoomies/pull/1045), branch
-`theme/implementation-verification`. Re-ran the style and layout suites against a locally built binary, based on main
-at `19326f5b`: 25 browser checks passed, covering the existing style and
+`theme/implementation-verification`. Re-ran the style and layout suites against a locally built binary on that
+branch's base, main at `891737a0`: 25 browser checks passed, covering the existing style and
 operational-layout specs plus four added here.
 
 The added coverage closes the plan's width and zoom checks:
