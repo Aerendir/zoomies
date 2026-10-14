@@ -709,6 +709,23 @@ func (c *Controller) rentingProblems(ctx context.Context, out *[]Problem) error 
 	return nil
 }
 
+// unreachableFix is the advice that fits the connection a provider row is
+// reached by, for a failure whose own error carried no remedy. A private
+// provider has no address this controller could test and no route to it, so
+// the direct advice sends an operator looking for a route that cannot exist
+// and away from the machine whose gateway is actually down.
+func unreachableFix(p *store.Provider) string {
+	if providerConnection(p) == "tailcat" {
+		return "both ends keep dialling, so this clears on its own once the private connection is back. " +
+			"On the machine beside the provider: check the gateway is still running (the setup command installs it as " +
+			"a systemd unit, so `systemctl status 'zoomies-proxmox-*'` and `journalctl -u 'zoomies-proxmox-*'` report on it), " +
+			"and that the machine has outbound internet. If the provider's machine was reinstalled, generate a fresh " +
+			"setup command in the wizard and run it there."
+	}
+	return "check the endpoint on the provider's page, and that this controller can reach it: nothing is created " +
+		"or deleted while it cannot be."
+}
+
 // providerTroubleProblems turns the last failure a provider gave us into the
 // entry an operator can act on.
 func (c *Controller) providerTroubleProblems(out *[]Problem, p *store.Provider, t providerTrouble, machines []*store.Machine, queued int) {
@@ -736,8 +753,9 @@ func (c *Controller) providerTroubleProblems(out *[]Problem, p *store.Provider, 
 		}
 		*out = append(*out, Problem{
 			Code: "provider.unreachable", Severity: severity, Title: title, Detail: t.Detail,
-			Fix: firstNonEmpty(t.Remedy, "check the endpoint on the provider's page, and that this controller can "+
-				"reach it: nothing is created or deleted while it cannot be."),
+			Fix: firstNonEmpty(t.Remedy, unreachableFix(p),
+				"check the endpoint on the provider's page, and that this controller can "+
+					"reach it: nothing is created or deleted while it cannot be."),
 			TargetKind: "provider", TargetID: p.ID, Since: &since,
 		})
 	case provider.FailureAuth, provider.FailurePermission:

@@ -124,8 +124,12 @@ type Client struct {
 	// the secret, so it is never logged and never put in an error.
 	auth     string
 	insecure bool
-	http     *http.Client
-	log      *slog.Logger
+	// dialContext, when set, is the private connection every request is dialled
+	// through. Reachability advice consults it: what is down is then a service
+	// on another machine rather than an address here.
+	dialContext func(ctx context.Context, network, address string) (net.Conn, error)
+	http        *http.Client
+	log         *slog.Logger
 }
 
 // New builds a client for one cluster.
@@ -163,6 +167,7 @@ func New(opts Options) (*Client, error) {
 		c.http = opts.HTTPClient
 		return c, nil
 	}
+	c.dialContext = opts.DialContext
 	tlsCfg, err := buildTLSConfig(opts, u, log)
 	if err != nil {
 		return nil, err
@@ -537,6 +542,12 @@ func unreachable(endpoint string, err error) string {
 	var unknown x509.UnknownAuthorityError
 	var hostname x509.HostnameError
 	switch {
+	case errors.Is(err, provider.ErrPrivateConnection):
+		// The tunnel failed before the cluster saw anything, so the endpoint URL
+		// in the wrapped error is only the name the certificate is checked
+		// against, and quoting it reads as if an address to dial had failed. The
+		// sentinel's own sentence is the message.
+		return provider.ErrPrivateConnection.Error()
 	case isLoopback(endpoint) && (errors.As(err, &unknown) || errors.As(err, &hostname)):
 		// The commonest way to land here is a controller on the Proxmox host
 		// itself, pointed at localhost. Proxmox issues its certificate for the
@@ -585,6 +596,20 @@ func unreachableRemedy(endpoint string, err error) string {
 	const accept = "or, to accept the risk, set insecure_skip_verify: the API token is then sent to whatever answers at the endpoint, " +
 		"so anything able to intercept the connection can use it to create and destroy virtual machines"
 	switch {
+	case errors.Is(err, provider.ErrPrivateConnection):
+		// Both ends are dialling already: the controller dials through the
+		// tunnel on every call, the gateway keeps its relay connection alive
+		// and is restarted by its host's service manager when it dies, so
+		// telling anybody to reconnect or restart Zoomies delays the recovery
+		// that is already under way. What is wanted is a check on the one
+		// machine that must be able to reach a relay and its own API.
+		return "both ends keep dialling, so this clears on its own once the connection is back; there is nothing to reconnect. " +
+			"On the machine beside the provider: check the gateway is still running (the setup command installs it as " +
+			"a systemd unit, so `systemctl status 'zoomies-proxmox-*'` and `journalctl -u 'zoomies-proxmox-*'` report on it " +
+			"and say why it stopped); check that machine has outbound HTTPS to the relays (a firewall, proxy or DNS change " +
+			"is the usual cause); and check the API it forwards to answers on that machine, usually 127.0.0.1:8006. " +
+			"If the provider's machine was reinstalled, generate a fresh setup command in the wizard and run it there; " +
+			"the stored credential and template answers are reused"
 	case isLoopback(endpoint) && (errors.As(err, &unknown) || errors.As(err, &hostname)):
 		return "set endpoint to the node's real name or IP address (the one on its certificate) and paste the cluster's CA certificate from " +
 			"/etc/pve/pve-root-ca.pem into ca_pem; " + accept

@@ -163,7 +163,17 @@ func providersConnectProxmox(ctx context.Context, e *env, args []string) error {
 	if err := os.Rename(binaryPath+".new", binaryPath); err != nil {
 		return err
 	}
-	unit := "[Unit]\nDescription=Zoomies Proxmox private API connection\nWants=network-online.target\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=" + binaryPath + " gateway --target 127.0.0.1:8006 --state-dir " + dir + " --quiet\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n"
+	// Restart=always with the start rate limit off, because this unit is how
+	// a provider machine reconnects: a boot that beats its own internet, a
+	// relay outage, a crash and a manual kill all end the process, and in
+	// none of them does anything but the service manager bring the private
+	// connection back. on-failure would leave a clean exit alone, and the
+	// default limit of five restarts would give up on a network that stays
+	// down for a minute; either leaves every row pointing at a gateway
+	// nothing keeps running.
+	unit := "[Unit]\nDescription=Zoomies Proxmox private API connection\nWants=network-online.target\nAfter=network-online.target\nStartLimitIntervalSec=0\n\n" +
+		"[Service]\nType=simple\nExecStart=" + binaryPath + " gateway --target 127.0.0.1:8006 --state-dir " + dir + " --quiet\n" +
+		"Restart=always\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n"
 	if err := os.WriteFile(filepath.Join("/etc/systemd/system", unitName), []byte(unit), 0644); err != nil {
 		return err
 	}
