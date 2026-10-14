@@ -12,7 +12,7 @@ merged, and an independent verification pass has re-run and extended the evidenc
 | P1-P4 additive visual style | Merged in [PR #1030](https://github.com/eyupio/zoomies/pull/1030). |
 | P5 operational layout | Merged in [PR #1038](https://github.com/eyupio/zoomies/pull/1038). |
 | P6 route coverage | Complete. The width and zoom checks this plan asks for were missing and are added in [PR #1045](https://github.com/eyupio/zoomies/pull/1045). |
-| P7 release evidence | Partly open. The four style and mode captures of representative screens exist. The first-run, empty, failure and phone-keyboard evidence does not. |
+| P7 release evidence | Captured in [PR #1047](https://github.com/eyupio/zoomies/pull/1047). The four style and mode captures of representative screens exist, and first-run, loading, fetch failure, empty list and no-matching-jobs states are captured in Mission Control with Classic beside them. A headless browser cannot raise a soft keyboard, so the assistant sheet's keyboard behaviour is covered by the browser suite instead. |
 | P8 first-job activation | Merged in [PR #1040](https://github.com/eyupio/zoomies/pull/1040). Repository discovery and in-app dispatch are separate and unstarted, per the plan. |
 
 The verification pass in [PR #1045](https://github.com/eyupio/zoomies/pull/1045)
