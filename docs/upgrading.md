@@ -128,8 +128,14 @@ sudo zoomies upgrade
 ```
 
 Use `sudo zoomies upgrade --check` to inspect the deployment without changing
-it. `--version vX.Y.Z` targets a specific release, and `--no-download` applies
-the executable already installed. A remote agent's card provides the command
+it. `sudo zoomies upgrade --dry-run` goes further: it downloads and verifies
+the release it would install, runs that release's own check of this
+deployment, prints what the real run would do (replace the binary, keep the
+running one as `zoomies.previous`, restart the service) and changes nothing.
+Use `--check` when you only want to know whether this deployment is sound;
+use `--dry-run` when you want to see the upgrade itself before agreeing to it.
+`--version vX.Y.Z` targets a specific release, and `--no-download` applies the
+executable already installed. A remote agent's card provides the command
 pinned to its controller's release.
 
 It checks the existing deployment, downloads and verifies the new binary,
@@ -306,7 +312,9 @@ the new image up with, so an unattended upgrade stops before it changes
 anything and says so. `--check` lists what the real run will offer and adds
 none of it.
 
-`zoomies upgrade --check` checks the existing deployment without modifying it.
+`zoomies upgrade --check` checks the existing deployment without modifying it,
+and `zoomies upgrade --dry-run` downloads the release it would take and previews
+the whole run without changing anything.
 `zoomies update` is a compatibility alias and accepts the same flags. Both commands
 fetch the newest release (or the rolling `dev` build, for a host running one),
 verify its checksum, replace the installed binary and carry on in the new one,

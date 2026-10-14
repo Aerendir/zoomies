@@ -41,6 +41,12 @@ type SelfUpdateOptions struct {
 	Client  *http.Client
 	// Check only says what would change.
 	Check bool
+	// DryRun says what a real run would do and installs nothing: the release
+	// is still fetched, verified and probed, and the pre-flight still runs, so
+	// a preview fails for the same reasons an update would. It takes no lock,
+	// replaces no binary and keeps no previous one, so nothing beside the
+	// installed binary is changed.
+	DryRun bool
 	// Preflight, when set, is asked about the downloaded file after it has been
 	// verified and before it replaces anything. An error stops the update with
 	// the installed binary untouched.
@@ -106,6 +112,12 @@ func SelfUpdate(ctx context.Context, opts SelfUpdateOptions) (SelfUpdateResult, 
 		if err := opts.Preflight(ctx, cand.Path); err != nil {
 			return res, fmt.Errorf("the downloaded %s does not accept this deployment, so the installed binary was left in place: %w", cand.Tag, err)
 		}
+	}
+	// The preview has done everything a real run does up to the swap, and the
+	// caller reads res to say what would happen. res.Updated stays false: no
+	// binary was replaced.
+	if opts.DryRun {
+		return res, nil
 	}
 	if err := cand.Install(opts); err != nil {
 		return res, err

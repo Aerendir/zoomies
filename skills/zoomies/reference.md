@@ -2804,6 +2804,7 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
@@ -2818,6 +2819,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```
@@ -2836,6 +2838,7 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
@@ -2850,6 +2853,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```
@@ -2998,6 +3002,7 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
@@ -3012,6 +3017,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```

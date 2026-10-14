@@ -111,6 +111,33 @@ func TestACheckSaysANewerBuildExistsWithoutChangingAnything(t *testing.T) {
 	}
 }
 
+// A preview is only useful if it fails for the same reasons a real run would,
+// so it fetches, verifies, probes and pre-flights the release, and then leaves
+// the installed binary and its folder exactly as they were.
+func TestADryRunVerifiesTheReleaseWithoutInstallingIt(t *testing.T) {
+	srv := updateServer(t, "v1.4.0", "new build", sumOf("new build"))
+	opts, bin := updateFixture(t, srv, "v1.3.0")
+	preflighted := false
+	opts.Preflight = func(context.Context, string) error { preflighted = true; return nil }
+	opts.DryRun = true
+	res, err := SelfUpdate(context.Background(), opts)
+	if err != nil || !res.Newer || res.Updated || res.Tag != "v1.4.0" {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if !preflighted {
+		t.Fatal("the pre-flight did not run, so a preview could pass a release a real run would refuse")
+	}
+	if b, _ := os.ReadFile(bin); string(b) != "old" {
+		t.Fatalf("the installed binary was replaced: %q", b)
+	}
+	if _, err := os.Stat(bin + PreviousSuffix); !os.IsNotExist(err) {
+		t.Fatalf("a preview kept a previous binary: %v", err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(bin), ".zoomies-update-*")); len(left) != 0 {
+		t.Fatalf("a preview left its download behind: %v", left)
+	}
+}
+
 func TestALocalBuildHasNoChannelToFollow(t *testing.T) {
 	srv := updateServer(t, "v1.4.0", "new build", sumOf("new build"))
 	opts, _ := updateFixture(t, srv, "v0.9.0-12-gabc1234-dirty")
