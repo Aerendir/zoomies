@@ -48,6 +48,12 @@ VERSION_GIVEN=0
 REPO="${ZOOMIES_REPO:-eyupio/zoomies}"
 PREFIX="${ZOOMIES_PREFIX:-/usr/local/bin}"
 BASE_URL="${ZOOMIES_BASE_URL:-https://github.com/${REPO}/releases}"
+# The release signing key, base64, exactly the line `zoomies release keygen`
+# writes to release.pub. When it is set and openssl is here, a download is held
+# to the signature over checksums.txt before the checksum is believed. Empty
+# until the owner mints a key (docs/upgrading.md, Signing releases); a test
+# keeps it equal to the key compiled into the binary.
+RELEASE_KEY=""
 # A tag is visible at /releases/latest the moment it is published, but the
 # release workflow attaches the binaries a few minutes later. Installing inside
 # that window is the one download failure worth waiting out rather than failing.
@@ -1076,6 +1082,47 @@ resolve_version() {
     ok "latest is $VERSION"
 }
 
+# Holds a release's checksums file to the release key, when one is built into
+# this script and openssl is here to check with. A signature that does not
+# match refuses the install, like a checksum does; without a key, without
+# openssl, or without a signature, it says so and leaves the checksum to do
+# what it always did. Best effort is deliberate: this is the one-line installer,
+# and a host that cannot check a signature must still be able to install.
+verify_signature() {
+    _tag="$1" _sums="$2" _dir="$3"
+    [ -n "$RELEASE_KEY" ] || return 0
+    if ! have openssl; then
+        warn "a release key is built into this installer, but there is no openssl here to check a signature with; this download is checked by its checksum alone."
+        return 0
+    fi
+    if ! fetch_stdout "$BASE_URL/download/$_tag/checksums.txt.ed25519" 2>/dev/null > "$_dir/sigs"; then
+        warn "$_tag carries no checksums.txt.ed25519, so the release key cannot check it; this download is checked by its checksum alone."
+        return 0
+    fi
+    # The envelope is the key id, then the base64 signature.
+    _sig=$(sed -n '2p' "$_dir/sigs")
+    if ! printf '%s' "$_sig" | openssl base64 -d -A > "$_dir/sig.raw" 2>/dev/null || [ ! -s "$_dir/sig.raw" ]; then
+        warn "the release signature could not be read; this download is checked by its checksum alone."
+        return 0
+    fi
+    # openssl wants the DER public key. The key is kept as the base64 the
+    # release publishes, and the fixed Ed25519 SubjectPublicKeyInfo prefix is
+    # put in front of its 32 bytes.
+    printf '\060\052\060\005\006\003\053\145\160\003\041\000' > "$_dir/key.prefix"
+    if ! printf '%s' "$RELEASE_KEY" | openssl base64 -d -A > "$_dir/key.raw" 2>/dev/null || [ ! -s "$_dir/key.raw" ]; then
+        warn "the release key built into this installer cannot be read; this download is checked by its checksum alone."
+        return 0
+    fi
+    cat "$_dir/key.prefix" "$_dir/key.raw" > "$_dir/release.der"
+    if openssl pkeyutl -verify -pubin -keyform DER -inkey "$_dir/release.der" \
+        -rawin -in "$_sums" -sigfile "$_dir/sig.raw" >/dev/null 2>&1; then
+        ok "the release signature matches the release key"
+    else
+        die "the release signature does not match the release key." \
+            "Do not run this binary. Try again, and if it happens twice, report it."
+    fi
+}
+
 # Downloads the release binary for this host into a fresh temporary directory
 # and checks it against the release's checksums. It leaves the directory in
 # $tmp and the verified, executable binary at $tmp/zoomies, with a trap that
@@ -1139,6 +1186,9 @@ download_binary() {
     load_stop
     unverified=""
     if [ -n "$sums" ]; then
+        # The signature, when it can be checked, is what says the checksums are
+        # the project's rather than whatever the transport carried.
+        verify_signature "$tag" "$tmp/sums" "$tmp"
         want=$(printf '%s\n' "$sums" | awk -v a="$asset" '$2 == a || $2 == "*"a {print $1; exit}')
         got=$(sha256_of "$tmp/zoomies")
         if [ -z "$want" ]; then

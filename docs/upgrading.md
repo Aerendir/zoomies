@@ -1141,13 +1141,21 @@ The key is minted once, by the owner:
    ```
 
 2. Commit the public half, the line in `release.pub`, into `internal/releasekey/default.go`
-   as `Default`, so every binary built from then on trusts the key.
+   as `Default` and into `RELEASE_KEY` in `install.sh`, so every binary and the
+   installer trust the same key; a test fails when the two differ.
 3. Store the private half, `release.key`, as the repository secret
    `RELEASE_SIGNING_KEY`, and delete it from the machine.
 
 Settings, Updates says which keys the running build trusts, or that it holds
 none and takes the checksums on trust, so an operator can tell at a glance
-whether a download was held to a signature. `release.yml` signs
+whether a download was held to a signature. `install.sh` checks the signature
+too, as far as it can: with a key built in and `openssl` on the host, a
+download whose signature does not match the key is refused, and without either
+it installs on the checksum alone and says so. It is the one-line installer, so
+that is best effort rather than a hard requirement; `zoomies upgrade` holds a
+running fleet to the signature in full.
+
+`release.yml` signs
 `checksums.txt` after it builds, verifies the signature
 against the committed key, and attaches `checksums.txt.ed25519` to the release.
 A release cut without the secret fails rather than publishing unsigned, and a
