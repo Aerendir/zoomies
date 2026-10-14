@@ -485,6 +485,78 @@ test('forgetting a machine needs its name typed, and nothing is forgotten withou
   expect(released[0]).toContain('/machines/mach_ghost02/release');
 });
 
+/**
+ * A quarantined machine can never be deleted, forced or not: nothing has proved
+ * the resource is ours, so destroying it could destroy somebody else's. The
+ * controller's own sentence sends the operator to release the row, so the
+ * button that does it has to be on the page the sentence is read on, and it has
+ * to ask for the name before it forgets anything.
+ *
+ * The quarantined row is delivered in the response. The demo provider is an
+ * address that answers nothing, so no machine in the fixture can reach this
+ * state for real.
+ */
+test('a quarantined machine offers release where it cannot be deleted, and needs its name typed', async ({
+  page,
+}) => {
+  const complaint =
+    "this machine's delete was issued 15m 10s ago and demo-pve has not confirmed the resource is gone. " +
+    "Nothing further has been attempted: check the provider's console, then either release this row, " +
+    'which forgets the resource without touching it, or delete the resource by hand.';
+  await page.route(new RegExp(`/api/v1/machines/${FIXTURE.readyMachineId}$`), async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      json: {
+        ...body,
+        state: 'quarantined',
+        ownership_error: complaint,
+        safe_to_delete: false,
+        safe_to_delete_why: complaint,
+      },
+    });
+  });
+  const released: string[] = [];
+  await page.route(
+    new RegExp(`/api/v1/machines/${FIXTURE.readyMachineId}/release$`),
+    async (route) => {
+      released.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 204 });
+    },
+  );
+
+  await goto(page, `/machines/${FIXTURE.readyMachineId}`, FIXTURE.readyMachine);
+
+  // The sentence and the button are on the same page, and the button is the one
+  // that does what the sentence says: a quarantine is never deleted from here.
+  await expect(page.getByRole('region', { name: 'Where it is' })).toContainText(
+    'either release this row',
+  );
+  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Release', exact: true }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Release this machine' });
+  await expect(dialog).toContainText('Nothing at the provider is touched.');
+  const confirm = dialog.getByRole('button', { name: 'Release it' });
+  await expect(confirm).toBeDisabled();
+
+  // A near miss is still a miss: the name is the one guard on forgetting a row
+  // whose resource may belong to somebody else.
+  const typed = dialog.getByRole('textbox', {
+    name: `Type ${FIXTURE.readyMachine} to confirm`,
+  });
+  await typed.fill('zoomies-mach-demo');
+  await expect(confirm).toBeDisabled();
+  await confirm.click({ force: true });
+  expect(released, 'nothing was released without the name').toHaveLength(0);
+
+  await typed.fill(FIXTURE.readyMachine);
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect.poll(() => released).toHaveLength(1);
+  expect(released[0]).toContain(FIXTURE.readyMachine);
+});
+
 test('a machine says where it is and how long each phase of getting there took', async ({
   page,
 }) => {
