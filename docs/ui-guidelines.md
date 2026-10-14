@@ -19,6 +19,36 @@ from here rather than inventing values.
 
 ## 1. Design tokens
 
+### Visual style and colour mode
+
+![Mission Control visual-style selection](screenshots/mission-control/appearance-dark.webp)
+
+
+Settings, Appearance offers **Classic** (the default) and **Mission Control**.
+Classic retains the compact neutral palette. Mission Control uses navy surfaces
+in dark mode, cool light surfaces in light mode, and slightly larger type.
+Runner Blue remains the interactive accent; cyan still means running work.
+Both styles follow the independent System, Light or Dark colour-mode choice.
+The phone's More menu offers the same two style choices.
+
+Visual style stays in this browser under `zoomies.ui-style` and is applied before
+first paint, including sign-in and the first-account form. Missing or unknown
+values retain Classic. Reset visual style to Classic clears only that choice.
+The separate public `/status` document retains Classic.
+
+Selecting a style updates root tokens without replacing the route or its state.
+It preserves the original Zoomies artwork and logo treatment, Eli, dog/paw
+animations, Off/Cute/Standard vocabulary, reduced motion, navigation and saved
+phone-table layouts. Log viewers refresh their canvas palette and type without
+clearing output. No fleet setting or API call is needed to change style.
+
+Mission Control colour values live in the `--z-mission-*` tokens. Preview cards
+use those same tokens, so their light/dark previews agree with the selected
+style. Normal and secondary text, accent text and filled-button text meet
+4.5:1 across its surfaces; meaningful control edges meet 3:1. The contrast tests
+cover both palettes, including hovered surfaces and accent-subtle backgrounds.
+
+
 Logo backdrops are chosen in Settings, Appearance and saved in this browser.
 Orbital haze is the default for new, missing or unrecognised preferences.
 Starlight, Pearl veil, White square and White circle are the other choices. Every

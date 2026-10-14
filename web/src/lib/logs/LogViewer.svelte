@@ -42,6 +42,7 @@
   import { formatNumber, pluralise } from '$lib/format';
   import { registerSearch } from '$lib/keys';
   import { theme } from '$lib/state/theme.svelte';
+  import { visualStyle } from '$lib/state/ui-style.svelte';
   import Button from '$lib/components/Button.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import Input from '$lib/components/Input.svelte';
@@ -597,12 +598,22 @@
     event.preventDefault();
   }
 
-  // Re-read the palette whenever the theme changes, including a system change
-  // with no click behind it. Reading `theme.resolved` is the subscription.
+  // xterm draws outside CSS, so a style change must update it without losing output.
   $effect(() => {
     void theme.resolved;
+    void visualStyle.choice;
     if (!ready || !term) return;
     term.options.theme = palette();
+    if (host) {
+      const style = getComputedStyle(host);
+      const size = Number.parseFloat(style.fontSize);
+      const leading = Number.parseFloat(style.lineHeight);
+      if (Number.isFinite(size) && size > 0) {
+        term.options.fontSize = size;
+        term.options.lineHeight = Number.isFinite(leading) ? leading / size : 1.5;
+      }
+      scheduleFit();
+    }
   });
 
   // `/` focuses the log search on this page.
