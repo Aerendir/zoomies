@@ -209,6 +209,47 @@ Zoomies never installs an operating system, applies updates, or reboots a
 machine it rents. If the image needs patching, rebuild the template: machines
 are disposable, which is what makes that cheap.
 
+### Keeping the runner's agent current
+
+The agent inside a machine is the one the template carried when the machine was
+cloned. Zoomies installs nothing of its own in a rented machine, so that image is
+the whole of what a machine runs, and a controller that has moved on to a newer
+release leaves every machine it has rented behind. There is no command to run
+inside one to catch it up either: nobody logs into a clone, and a machine is
+destroyed once it has been idle. Preparing the template again is what changes
+what the machines built next will run.
+
+* **A template Zoomies prepared** records the release it was prepared from, in
+  the guest's description beside the marker Zoomies wrote when it made it.
+  **Prepare the template again** on the provider's page gives the command to run
+  on the Proxmox node: it prepares an image from the release this controller
+  runs and puts it in place of the template's disk, at the same VMID and the same
+  name, so the provider row that points at it needs no change and no machine is
+  touched. Run it on the node the template lives on: a template on another node
+  is left alone, and the command says which node to run it on instead.
+
+  The disk it replaced is left unattached rather than deleted. The command names
+  the slot it moved to, and it is yours to remove once the machines built from
+  the new image have proved it:
+
+  ```sh
+  qm set 9100 --delete unused0
+  ```
+
+  A machine being built at that moment may fail and be retried; nothing else is
+  affected, because a clone has its own copy of the disk.
+* **A template you prepared by hand** is left exactly as it is found. It carries
+  no marker, so nothing Zoomies has can tell what is in it or prepare it again:
+  rebuild the image as [above](#preparing-the-template) when its release moves
+  on.
+
+Either way, the machines running now keep the release they were cloned with and
+are replaced as they go idle, so a fleet catches up over the next while rather
+than at the moment the template changes. A controller built from main is the
+awkward case on both sides: two builds from main cannot be ordered against each
+other, so Zoomies cannot tell a machine's build from the controller's and says so
+instead of guessing which is newer.
+
 ## The provider
 
 **Providers → Add provider → Proxmox VE → Generate setup command**.

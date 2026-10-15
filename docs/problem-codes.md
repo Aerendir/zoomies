@@ -363,7 +363,9 @@ being held back by that very switch.
 
 Raised only when a [provider](providers.md) is configured, and silent while
 `provider.enabled` is false, except for `provider.renting_off`, which is raised
-because it is false. The three that name a
+because it is false, and `provider.machines_behind`, which is about machines
+already rented: they are not destroyed while renting is off, so their release is
+still worth knowing. The three that name a
 machine link to it, because the machine's own page carries the failure in the
 words of whatever refused it, Proxmox's task error for a clone, the guest's own
 standard error for a bootstrap.
@@ -380,6 +382,7 @@ standard error for a bootstrap.
 | `provider.delete_pending` | warning | A delete was issued and the resource has not been confirmed gone. Something is still costing money. | Check the provider. A delete is only complete when an inspection cannot find the resource; a 200 from the delete call is not that. |
 | `provider.unservable` | warning | No pool could ever place a runner on this provider's machines, so anything it rents is money for nothing. | Match the provider's machine shape, labels and platform to a pool, or disable it. |
 | `provider.template_unverified` | warning | The provider's settings changed and its prerequisites have not been checked since. | Run the check. It creates nothing. |
+| `provider.machines_behind` | warning | The machines this provider rents are not on the controller's release. A machine is cloned from the template this provider builds from, and Zoomies installs nothing of its own inside a rented machine, so the release a machine runs is the release that image carried when it was cloned. A whole provider's machines are behind together for that reason, which is why this is one entry for the provider rather than one per machine. A fleet whose controller is built from main lands every one of them here too, because two builds from main cannot be ordered against each other. Nothing is wrong meanwhile: they place work as normal. | Prepare the template this provider clones from again, from the controller's release, on the Proxmox node: **Providers → your provider → Prepare the template again** gives the command, and running it puts an image built from that release where the old one was, at the same template. The machines running now keep their release and are replaced as they go idle, so the machines built afterwards run the newer one. A template you prepared by hand is left alone by that command, so rebuild its image as [Keeping the runner's agent current](proxmox.md#keeping-the-runners-agent-current) describes. |
 | `provider.machine_ca_same_as_cluster` | warning | The certificate for machines is the same one the controller uses to reach the hypervisor. A machine trusts the file it is given for the controller and nothing else, so unless the cluster's authority also signed the controller, its agent refuses the controller, never joins, and logs `certificate signed by unknown authority`. Found by the provider's check. | Clear the certificate for machines if the controller is on a public certificate, or paste the authority that signed the controller's certificate. |
 | `provider.renting_off` | info, or **warning** with a pool waiting on it or machines still rented | A provider is configured and enabled, but `provider.enabled` is false, so this controller is not allowed to rent machines. A pool that runs out of room waits for the hosts it has, and machines already rented are not drained, deleted or checked. A provider that is disabled on its own page, or the demo fixture, does not raise it. | Turn on Rent machines in Settings, and set Machines the fleet may rent to the most you are willing to pay for. |
 | `provider.provisioning_paused` | info | The kill switch is on. Draining, deleting, recovery and ownership checks all continue; only creation is held. | Nothing, unless you did not mean it. |
@@ -531,6 +534,7 @@ against it in both directions, word for word.
 | `provider.renting_off` | Machines are not being rented, so jobs wait for the machines the fleet already has. |
 | `provider.template_unverified` | A machine template has not been checked yet. |
 | `provider.machine_ca_same_as_cluster` | Machines may refuse this controller's certificate and never join. |
+| `provider.machines_behind` | Some machines the fleet rents are running a release other than its controller's. |
 | `provider.unreachable` | A machine provider cannot be reached, so no new machines can be added from it. |
 | `provider.unservable` | Some jobs need machines no provider can supply. |
 | `provider.zone_missing` | A machine provider is missing a location the fleet is set to use. |

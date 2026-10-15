@@ -35,9 +35,13 @@ is the source of current status and carries the validation detail. Classic
 remains the default, Mission Control is a browser-local choice, and the design and
 phase descriptions below remain the implementation specification.
 
-The development-only state gallery the plan asks for under N-T4 is not built, and
-no first-job dispatch or companion service work is included in these controller UI
-stages.
+The development-only state gallery the plan asks for under N-T4 is built in
+[PR #1050](https://github.com/eyupio/zoomies/pull/1050):
+`web/gallery.html` plus `web/src/gallery/` renders the real primitives in every
+state in both styles and both colour modes, with captures in
+`design/theme-review/gallery/` and browser checks in
+`web/tests/gallery.spec.ts`. No first-job dispatch or companion service work is
+included in these controller UI stages.
 
 ## Brand and personality requirements
 

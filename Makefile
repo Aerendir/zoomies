@@ -191,6 +191,10 @@ test-e2e-required: ## The same run, but a missing prerequisite is a failure and 
 screenshots: build ## Recapture docs/screenshots from the real UI (needs Pillow: pip install pillow)
 	cd $(UI_DIR) && node tests/support/screenshots.mjs
 
+.PHONY: screenshots-gallery
+screenshots-gallery: | $(UI_DIR)/node_modules ## Recapture the component gallery in both styles and modes (needs Pillow)
+	cd $(UI_DIR) && node tests/support/gallery-screenshots.mjs
+
 # The UI's dependencies, as an order-only prerequisite of anything that checks
 # the UI.
 #
@@ -244,6 +248,11 @@ run: build-nogui ## Run a controller against a local database
 dev: build-nogui ## Run a controller with auth off, for local UI development
 	ZOOMIES_DISABLE_AUTH=true ZOOMIES_LOG_FORMAT=text ZOOMIES_LOG_LEVEL=debug \
 	ZOOMIES_DB_PATH=./zoomies.db ./$(BIN) controller
+
+.PHONY: gallery
+gallery: | $(UI_DIR)/node_modules ## Serve the development-only component gallery on :5173/gallery.html
+	@echo "component gallery: http://127.0.0.1:5173/gallery.html?style=mission-control&mode=dark"
+	cd $(UI_DIR) && $(NPM) run dev
 
 ##@ Images
 

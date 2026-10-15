@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- A development tool, not a page of the product: it is never part of a
+         `vite build`, never embedded in the binary and never linked from the
+         app. Do not add it to `sections.ts` or the router. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Zoomies component gallery</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+  </head>
+  <body>
+    <!--
+      Deliberately not `index.html` with a query parameter.
+
+      The app shell boots the session, opens the event stream and routes to a
+      page; none of that is needed, or wanted, to look at a Button. This entry
+      pulls in the tokens and the real primitives and nothing else, the same
+      way status.html does, so what the gallery shows is the component an
+      operator gets and not a copy of it.
+
+      `style` and `mode` choose the combination under review:
+
+        /gallery.html?style=mission-control&mode=dark
+
+      Both are validated in src/gallery/main.ts before anything is applied.
+    -->
+    <div id="gallery"></div>
+    <noscript>
+      <p>This page needs JavaScript. It is a development tool, not part of the product.</p>
+    </noscript>
+    <script type="module" src="/src/gallery/main.ts"></script>
+  </body>
+</html>

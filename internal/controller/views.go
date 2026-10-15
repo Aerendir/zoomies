@@ -227,6 +227,14 @@ type HostView struct {
 	CanonicalName  string `json:"canonical_name,omitempty"`
 	Version        string `json:"version,omitempty"`
 	VersionChannel string `json:"version_channel,omitempty"`
+	// MachineID is the machine this host is, when Zoomies rented it, and empty
+	// for a host somebody installed. It is the one fact a card needs to tell a
+	// rented machine from a host with an owner: a machine holds no shell
+	// anybody can reach, it is destroyed once it has been idle, and the
+	// machine that replaces it is cloned from the template its provider builds
+	// from, so "upgrade the agent" and "run this on the host" are advice nobody
+	// can carry out for one. The provider's own problem names that template.
+	MachineID string `json:"machine_id,omitempty"`
 	// Features is what the agent advertises it can do, and ElasticCPU the one
 	// answer a pool cares about: whether a runner placed here can be lent CPU
 	// at all. Rendered as a flag rather than left for the browser to find in
@@ -337,7 +345,9 @@ func (c *Controller) HostView(h *store.Host) HostView {
 		LastHeartbeat:      h.LastHeartbeat,
 		CreatedAt:          h.CreatedAt,
 	}
-	out.UpgradeCommand, out.UpgradeVersion, out.UpgradeNote = hostUpgrade(h, version.Version)
+	rented := c.rentedHost(h.ID)
+	out.MachineID = rented.MachineID
+	out.UpgradeCommand, out.UpgradeVersion, out.UpgradeNote = hostUpgrade(h, version.Version, rented)
 	out.Update = c.hostUpdateView(h)
 	if !h.Usage.SampledAt.IsZero() {
 		usage := h.Usage

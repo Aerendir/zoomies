@@ -37,6 +37,15 @@ type Template struct {
 	VMID int    `json:"vmid"`
 	Name string `json:"name"`
 	Node string `json:"node"`
+	// Agent is the release this setup found the template prepared from, or the
+	// one it has just prepared it from. Empty on a template this setup did not
+	// make, and on one prepared by a release that did not record what it was
+	// carrying.
+	//
+	// It is read on the Proxmox host and printed there, and never sent to the
+	// controller: the controller is told what a machine runs by the machine,
+	// and a fact about an image is not one to keep a second copy of.
+	Agent string `json:"-"`
 }
 
 type Connection struct {
@@ -289,13 +298,7 @@ func DiscoverTemplates(ctx context.Context, h Host) ([]Template, error) {
 	if err != nil {
 		return nil, errors.New("proxmox setup: cannot list VM templates")
 	}
-	var rows []struct {
-		VMID     int    `json:"vmid"`
-		Name     string `json:"name"`
-		Node     string `json:"node"`
-		Type     string `json:"type"`
-		Template int    `json:"template"`
-	}
+	var rows []guest
 	if err := json.Unmarshal(raw, &rows); err != nil {
 		return nil, errors.New("proxmox setup: invalid VM inventory")
 	}

@@ -100,6 +100,45 @@ type machineRuntime struct {
 	noteMu  sync.Mutex
 	trouble map[string]providerTrouble
 	orphans map[string][]string
+
+	// hostMu guards which hosts are machines this fleet rents, by host id, as
+	// the last pass read the machines table. It is memory for the same reason:
+	// the table is the authority and this is a reading of it, re-learnt whole
+	// by every pass, so a host whose machine has gone stops being one at the
+	// next pass rather than never.
+	//
+	// Two readers need it and neither may query per host. The hosts page is
+	// rendered a hundred times a day and asks once per card, and the skew
+	// problem asks once per host per pass; the alternative is a query per host
+	// in both.
+	hostMu sync.RWMutex
+	hosts  map[string]rentedHost
+}
+
+// rentedHost is one host Zoomies rents: the machine it is, and the provider
+// that bought it. A host nobody rented is the zero value, and rented says
+// which of the two a host is.
+//
+// It exists because a rented machine is not a host somebody can log into. Its
+// agent is the one the template in front of its provider carried, it is
+// destroyed once it has been idle, and the machine that replaces it is cloned
+// from that same template -- so "run this on the host" and "upgrade the agent"
+// are not advice anybody can act on for one.
+type rentedHost struct {
+	MachineID    string
+	ProviderID   string
+	ProviderName string
+}
+
+// rented reports whether this host is one this fleet rents as a machine.
+func (r rentedHost) rented() bool { return r.MachineID != "" }
+
+// Provider is which provider rents this machine, as a sentence names it.
+func (r rentedHost) Provider() string {
+	if r.ProviderName != "" {
+		return r.ProviderName
+	}
+	return "the provider"
 }
 
 // providerTrouble is the last failure a provider gave us, kept for the
@@ -231,6 +270,7 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	}
 	if len(providers) == 0 {
 		c.forgetRenting()
+		c.noteRentedHosts(nil)
 		return nil
 	}
 
@@ -238,6 +278,10 @@ func (c *Controller) ReconcileMachines(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Kept whether or not this pass may act: it is a reading of the rows, not
+	// an action on them, and the hosts page and the problems list read it
+	// while a fenced or switched-off controller is still serving pages.
+	c.noteRentedHosts(env)
 	if c.mayAct() {
 		c.noteMachineSizes(ctx, env)
 	}
@@ -303,6 +347,39 @@ func (c *Controller) noteMachineSizes(ctx context.Context, env *machineEnv) {
 			row.SeenCPUs, row.SeenMemoryMB, row.SeenFrom, row.SeenAt = h.CPUs, h.MemoryMB, store.MachineSizeFromMachine, &at
 		}
 	}
+}
+
+// noteRentedHosts keeps which hosts are machines this fleet rents, from the
+// machines one pass read. A nil env clears it, which is what a fleet with no
+// providers left to rent from needs: the map is rebuilt whole every pass, so a
+// host whose machine has gone stops being a machine without anybody having to
+// notice that it did.
+func (c *Controller) noteRentedHosts(env *machineEnv) {
+	hosts := map[string]rentedHost{}
+	if env != nil {
+		for _, m := range env.list {
+			if m.HostID == "" {
+				continue
+			}
+			name := ""
+			if p := env.byID[m.ProviderID]; p != nil {
+				name = p.Name
+			}
+			hosts[m.HostID] = rentedHost{MachineID: m.ID, ProviderID: m.ProviderID, ProviderName: name}
+		}
+	}
+	c.machines.hostMu.Lock()
+	c.machines.hosts = hosts
+	c.machines.hostMu.Unlock()
+}
+
+// rentedHost is the machine a host is, or the zero value for a host nobody
+// rented. See the field for why this is memory rather than a query: it is
+// asked once per host on the Hosts page.
+func (c *Controller) rentedHost(hostID string) rentedHost {
+	c.machines.hostMu.RLock()
+	defer c.machines.hostMu.RUnlock()
+	return c.machines.hosts[hostID]
 }
 
 // machineEnv is one pass's view of the world, gathered once.

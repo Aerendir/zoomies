@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -268,6 +269,7 @@ var problemAudience = map[string]Audience{
 	"provider.renting_off":                          AudienceFleet,
 	"provider.template_unverified":                  AudienceFleet,
 	"provider.machine_ca_same_as_cluster":           AudienceFleet,
+	"provider.machines_behind":                      AudienceFleet,
 	"provider.unreachable":                          AudienceFleet,
 	"provider.unservable":                           AudienceFleet,
 	"provider.zone_missing":                         AudienceFleet,
@@ -366,14 +368,20 @@ func sharedFolderProblem(h *store.Host, info store.HostBackend, pools []*store.P
 // controller's version -- which both of these problems used to do -- sent the
 // operator to a download that does not exist. The command is in backticks
 // because RemedyText hangs a copy button on each one.
-func agentUpgradeFix(then string) string {
+func agentUpgradeFix(then string, rented bool) string {
 	tag, ok := version.Release(version.Version)
 	if !ok {
 		return "this controller is " + version.Version + ", a build from main rather than a release, " +
 			"so there is no matching agent to install. Run a released controller and this clears."
 	}
-	return "on each host: `curl -fsSL https://zoomies.sh/install.sh | sh -s -- --no-init --version v" + tag + "` " +
-		"then `sudo systemctl restart zoomies-agent`. " + then
+	fix := "on each host: `curl -fsSL https://zoomies.sh/install.sh | sh -s -- --no-init --version v" + tag + "` " +
+		"then `sudo systemctl restart zoomies-agent`. "
+	if rented {
+		fix += "A machine Zoomies rents is not upgraded that way and has no shell to run it in: it is cloned from " +
+			"the template its provider builds from, so prepare that template again from v" + tag +
+			" and the machines built afterwards carry it. "
+	}
+	return fix + then
 }
 
 func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
@@ -438,7 +446,7 @@ func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
 	gather("hosts", c.hostProblems)
 	gather("installations", c.installationProblems)
 	gather("the encryption key", c.keyProblems)
-	gather("host versions", c.hostSkewProblems)
+	gather("host and machine versions", c.hostSkewProblems)
 	gather("host resources", c.hostResourceProblems)
 	gather("in-memory folders", c.tmpfsAdviceProblems)
 	gather("in-memory folders by host", c.tmpfsHostProblems)
@@ -1026,6 +1034,7 @@ func (c *Controller) hostSkewProblems(ctx context.Context, out *[]Problem) error
 		return fmt.Errorf("listing hosts: %w", err)
 	}
 	var behind, ahead, differs []string
+	rented := map[string]*rentedMachines{}
 	for _, h := range hosts {
 		// An incompatible host has a louder problem of its own, and saying
 		// both would be two entries about one machine.
@@ -1033,14 +1042,40 @@ func (c *Controller) hostSkewProblems(ctx context.Context, out *[]Problem) error
 			continue
 		}
 		switch version.CompareBuilds(h.Version, version.Version) {
-		case version.SkewBehind:
-			behind = append(behind, naming.ForSentence(h.Name))
 		case version.SkewAhead:
+			// An agent ahead of its controller is the direction nothing is
+			// tested in, and the fix is the other machine: upgrade this
+			// controller. A machine this fleet rents is counted here too, when
+			// it is ahead, because that is what its template being newer than
+			// the controller means.
 			ahead = append(ahead, naming.ForSentence(h.Name))
-		case version.SkewDiffers:
+		case version.SkewBehind, version.SkewDiffers:
+			// A machine this fleet rents is not a host somebody forgot to
+			// upgrade. Its agent is the one its provider's template carried
+			// when it was cloned, every machine from that provider is cloned
+			// the same way, and the fix this problem gives -- run an upgrade on
+			// the host -- has nobody to run it. Those machines are grouped by
+			// provider and answered once, below, where the answer is the
+			// template; a fleet whose controller is built from main lands
+			// every one of them in `differs`, which is why both are here.
+			if r := c.rentedHost(h.ID); r.rented() {
+				g := rented[r.ProviderID]
+				if g == nil {
+					g = &rentedMachines{provider: r.Provider(), id: r.ProviderID}
+					rented[r.ProviderID] = g
+				}
+				g.count++
+				g.versions = append(g.versions, h.Version)
+				continue
+			}
+			if version.CompareBuilds(h.Version, version.Version) == version.SkewBehind {
+				behind = append(behind, naming.ForSentence(h.Name))
+				continue
+			}
 			differs = append(differs, naming.ForSentence(h.Name))
 		}
 	}
+	c.rentedMachinesOffRelease(out, rented)
 	if len(behind)+len(ahead)+len(differs) == 0 {
 		return nil
 	}
@@ -1070,7 +1105,7 @@ func (c *Controller) hostSkewProblems(ctx context.Context, out *[]Problem) error
 	// The command is in backticks because RemedyText hangs a copy button on
 	// each one, which is the difference between advice and something an
 	// operator can act on at 3am.
-	fix := agentUpgradeFix("The protocol still matches, so they are placing work as normal in the meantime.")
+	fix := agentUpgradeFix("The protocol still matches, so they are placing work as normal in the meantime.", false)
 	if len(ahead) > 0 {
 		fix = "upgrade this controller to the newest release in the fleet, then the agents: an agent ahead of its controller is the direction nothing is tested in. " + fix
 	}
@@ -1083,6 +1118,104 @@ func (c *Controller) hostSkewProblems(ctx context.Context, out *[]Problem) error
 		Fix: fix,
 	})
 	return nil
+}
+
+// rentedMachines is the machines one provider rents that are not on this
+// controller's release, gathered so that one provider is one problem rather
+// than one problem per machine.
+type rentedMachines struct {
+	provider string
+	id       string
+	count    int
+	versions []string
+}
+
+// rentedMachinesOffRelease raises one problem per provider whose rented
+// machines are not on this controller's release.
+//
+// It is said about the provider rather than about each host because the answer
+// is the provider's template. A machine is cloned from that image and Zoomies
+// installs nothing of its own inside one, so the release a machine runs is the
+// release the image carried, and preparing the template again is the only
+// thing that changes what the machines built next will run. Said per host, a
+// fleet with twenty rented machines would carry twenty entries with one
+// answer, which is how a list stops being read.
+//
+// It is a warning and not an error, for the same reason host.version_behind
+// is: the machines place work as normal on the release they have, and a fleet
+// whose controller moved on this morning is supposed to look like this for a
+// while.
+//
+// "Not on this controller's release" rather than "older": a machine cloned from
+// a template prepared by a build from main reports a main build, and two of
+// those cannot be ordered against each other. What is true of every one of them
+// is that the release they run is the release their template carried.
+func (c *Controller) rentedMachinesOffRelease(out *[]Problem, groups map[string]*rentedMachines) {
+	if len(groups) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(groups))
+	for id := range groups {
+		ids = append(ids, id)
+	}
+	// Sorted, because the list is re-sent whenever its JSON differs, and a map
+	// walked in its own order would differ on every pass.
+	sort.Slice(ids, func(i, j int) bool {
+		if groups[ids[i]].provider != groups[ids[j]].provider {
+			return groups[ids[i]].provider < groups[ids[j]].provider
+		}
+		return ids[i] < ids[j]
+	})
+	target := hostTarget()
+	for _, id := range ids {
+		g := groups[id]
+		*out = append(*out, Problem{
+			Code:     "provider.machines_behind",
+			Severity: config.SeverityWarning,
+			Title:    fmt.Sprintf("the machines %s rents are running a different release from this controller", g.provider),
+			Detail: fmt.Sprintf("%s run %s and this controller runs %s. A machine is cloned from the template its provider builds from, "+
+				"and Zoomies installs nothing of its own inside a rented machine, so the release a machine runs is the release that image carried. "+
+				"Nothing is wrong meanwhile: they place work as normal.",
+				plural(g.count, "machine"), strings.Join(reportedVersions(g.versions), ", "), version.Version),
+			Fix:        agentTemplateFix(g.provider, target),
+			TargetKind: "provider", TargetID: g.id,
+		})
+	}
+}
+
+// reportedVersions is the releases a group of machines reported, each made fit
+// to keep and in one order however the rows were read: distinct, sorted, and
+// with nothing of an agent's own words beyond a name.
+func reportedVersions(versions []string) []string {
+	out := make([]string, 0, len(versions))
+	for _, v := range versions {
+		out = append(out, reportedVersion(v))
+	}
+	sort.Strings(out)
+	return slices.Compact(out)
+}
+
+// agentTemplateFix is how an operator changes the release a provider's rented
+// machines run: the template those machines are cloned from.
+//
+// It names the provider's page because that is where the command to prepare
+// the template again is, and it says what happens to the machines running now,
+// because that is the part an operator cannot see from anywhere: a machine is
+// replaced when it goes idle, so a fleet catches up over the next while rather
+// than at the press.
+//
+// target is the release the template would be prepared from, empty when this
+// controller is a build no release carries, which is the one case where there
+// is nothing published to prepare one from.
+func agentTemplateFix(provider, target string) string {
+	if target == "" {
+		return "prepare the template " + provider + " clones from again, from a release: press Prepare the template again on the provider's " +
+			"page and run the command it gives you on the Proxmox node. This controller is " + version.Version + ", a build no release carries, " +
+			"so a template prepared from it would carry the same. The machines running now keep their release and are replaced as they go idle."
+	}
+	return "prepare the template " + provider + " clones from again: press Prepare the template again on the provider's page and run the " +
+		"command it gives you on the Proxmox node. That puts an image built from " + target + " where the old one was, at the same template, " +
+		"so the machines built afterwards run it. The machines running now keep their release and are replaced as they go idle."
 }
 
 // hostResourceProblems is everything the resource model has to say about the
@@ -1120,6 +1253,13 @@ func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) e
 	defaults := c.cfg().Scheduler.DefaultRunnerLimits
 	var unknown, unverified, throttled []string
 	var throttledID string
+	// Whether either list holds a machine this fleet rents, which changes what
+	// "upgrade the agent" means: there is no command to run inside one, so the
+	// fix names the template its provider builds from as well. A machine on
+	// this controller's release reports everything a current agent reports, so
+	// one appearing here is a machine that is behind, which is the provider's
+	// own entry as well.
+	var unknownRented, unverifiedRented bool
 	for _, h := range hosts {
 		// An incompatible host is already excluded from placement and already
 		// says so; a second entry about the same machine helps nobody.
@@ -1127,9 +1267,11 @@ func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) e
 			continue
 		}
 		label := naming.ForSentence(h.Name)
+		rented := c.rentedHost(h.ID).rented()
 		a := h.Allocatable()
 		if !a.CPUsKnown && !a.MemoryKnown && !a.DiskKnown {
 			unknown = append(unknown, label)
+			unknownRented = unknownRented || rented
 		}
 		// A cordoned host is one an operator is already dealing with, and
 		// nothing below places onto it until they are done.
@@ -1160,6 +1302,7 @@ func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) e
 			if !info.Limits.Known {
 				if defaults && (a.CPUsKnown || a.MemoryKnown) && !slices.Contains(unverified, label) {
 					unverified = append(unverified, label)
+					unverifiedRented = unverifiedRented || rented
 				}
 				continue
 			}
@@ -1181,7 +1324,7 @@ func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) e
 			// heartbeat with no re-join -- the agent measures on every beat --
 			// so the only thing standing between this host and its size is a
 			// build that has the code, and before v0.2-beta-plus none did.
-			Fix: agentUpgradeFix("the figures appear on the next heartbeat, with no re-join."),
+			Fix: agentUpgradeFix("the figures appear on the next heartbeat, with no re-join.", unknownRented),
 		}
 		if defaults {
 			p.Severity = config.SeverityWarning
@@ -1197,7 +1340,7 @@ func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) e
 			Title:    "some hosts have not said whether their daemon can apply limits",
 			Detail: fmt.Sprintf("%s whose agent predates the limits probe: %s. A runner there is given no default CPU or memory limit, because a limit sent to a daemon that cannot apply it fails the create, and the agent has not said whether its daemon can. Pools that set their own limits are unaffected.",
 				plural(len(unverified), "host"), strings.Join(unverified, ", ")),
-			Fix: agentUpgradeFix("the probe arrives with the next heartbeat, with no re-join, and defaults start on the next runner."),
+			Fix: agentUpgradeFix("the probe arrives with the next heartbeat, with no re-join, and defaults start on the next runner.", unverifiedRented),
 		})
 	}
 	if len(throttled) > 0 {
@@ -2967,7 +3110,7 @@ func (c *Controller) hostUpdateProblems(ctx context.Context, out *[]Problem) err
 		// helper can never serve. An incompatible host has a louder problem of
 		// its own.
 		cause := c.hostHelperUnsupported(h)
-		_, _, gap := hostCanSelfUpdate(h, target, cause, mode)
+		_, _, gap := hostCanSelfUpdate(h, target, cause, mode, c.rentedHost(h.ID))
 		if gap == hostGapNone || mode == updates.ModeOff || h.Incompatible {
 			continue
 		}

@@ -22,6 +22,7 @@ import (
 	"github.com/eyupio/zoomies/internal/gateway"
 	"github.com/eyupio/zoomies/internal/provider/proxmox"
 	"github.com/eyupio/zoomies/internal/proxmoxsetup"
+	"github.com/eyupio/zoomies/internal/version"
 	"github.com/tailscale/tailcat"
 )
 
@@ -182,13 +183,17 @@ func providersConnectProxmox(ctx context.Context, e *env, args []string) error {
 			return fmt.Errorf("proxmox setup: cannot start the private provider connection; check systemctl status %s and retry", unitName)
 		}
 	}
-	fmt.Fprintln(e.out, "Preparing the Zoomies runner template if it is missing; the first image build can take several minutes...")
+	fmt.Fprintln(e.out, "Preparing the Zoomies runner template; an image built from nothing can take several minutes...")
 	nodeName, err := os.ReadFile("/etc/hostname")
 	if err != nil {
 		return err
 	}
 	node := strings.Split(strings.TrimSpace(string(nodeName)), ".")[0]
-	conn.Templates, err = proxmoxsetup.EnsureTemplate(ctx, h, dir, binaryPath, node, key)
+	// The build the image carries is this binary's, which is the release the
+	// setup command just downloaded and the one the machines cloned from the
+	// template will run. It is also what the template records, so that a setup
+	// command run here after the controller has moved on prepares it again.
+	conn.Templates, err = proxmoxsetup.EnsureTemplate(ctx, h, dir, binaryPath, node, key, version.Version, e.out)
 	if err != nil {
 		return err
 	}
@@ -248,7 +253,11 @@ func providersConnectProxmox(ctx context.Context, e *env, args []string) error {
 	}
 	fmt.Fprintln(e.out, "Proxmox connected. Return to Zoomies to choose the VM template and capacity.")
 	for _, template := range conn.Templates {
-		fmt.Fprintf(e.out, "Template VMID %d: %s (node %s)\n", template.VMID, template.Name, template.Node)
+		if template.Agent == "" {
+			fmt.Fprintf(e.out, "Template VMID %d: %s (node %s)\n", template.VMID, template.Name, template.Node)
+			continue
+		}
+		fmt.Fprintf(e.out, "Template VMID %d: %s (node %s) carries %s\n", template.VMID, template.Name, template.Node, template.Agent)
 	}
 	return nil
 }

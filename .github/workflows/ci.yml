@@ -803,7 +803,11 @@ jobs:
           set -eu
           case "$PROJECTS" in
             chromium|mobile) flags="--project=$PROJECTS" ;;
-            other) flags="--project=first-run --project=diagnostics --project=status --project=connect --project=updates --project=updates-mobile" ;;
+            # The gallery has no controller to share: it is a development-only
+            # page, so its project drives a Vite dev server (see
+            # web/tests/gallery.spec.ts). It rides with the group that already
+            # waits on the least, rather than taking a runner slot of its own.
+            other) flags="--project=first-run --project=diagnostics --project=status --project=connect --project=updates --project=updates-mobile --project=gallery" ;;
             *) echo "::error::unknown Playwright group $PROJECTS"; exit 1 ;;
           esac
           npm run test:e2e -- $flags

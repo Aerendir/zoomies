@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "a4e8a005",
+  "generated_from": "ba0c4267",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2665,6 +2665,20 @@
       "fix": "Read the machine's page, then delete the machine. One that never got a VM costs nothing to delete. For one that did, its VM may still be running and billed: check the provider's console first if you would rather look, and press Delete to destroy it; the delete asks the provider again before it destroys anything. Several can be ticked and deleted together on the Providers page. Three machines failing in a row stand the provider down, so a bad template costs a few machines rather than fifty.",
       "verify": null,
       "status_sentence": "A machine the fleet asked for did not arrive, so jobs may wait for room.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
+    },
+    {
+      "id": "provider.machines_behind",
+      "kind": "problem",
+      "title": "provider.machines_behind",
+      "category": "reliability",
+      "severity": "warning",
+      "detection": "runtime",
+      "detects": "The machines this provider rents are not on the controller's release. A machine is cloned from the template this provider builds from, and Zoomies installs nothing of its own inside a rented machine, so the release a machine runs is the release that image carried when it was cloned. A whole provider's machines are behind together for that reason, which is why this is one entry for the provider rather than one per machine. A fleet whose controller is built from main lands every one of them here too, because two builds from main cannot be ordered against each other. Nothing is wrong meanwhile: they place work as normal.",
+      "fix": "Prepare the template this provider clones from again, from the controller's release, on the Proxmox node: **Providers → your provider → Prepare the template again** gives the command, and running it puts an image built from that release where the old one was, at the same template. The machines running now keep their release and are replaced as they go idle, so the machines built afterwards run the newer one. A template you prepared by hand is left alone by that command, so rebuild its image as [Keeping the runner's agent current](proxmox.md#keeping-the-runners-agent-current) describes.",
+      "verify": null,
+      "status_sentence": "Some machines the fleet rents are running a release other than its controller's.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
     },
