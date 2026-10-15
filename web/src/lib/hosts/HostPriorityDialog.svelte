@@ -150,20 +150,29 @@
     {#if serverError}
       <p class="error" role="alert">{serverError}</p>
     {/if}
-    <div class="actions">
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={saving || unchanged || pinInvalidMessage !== ''}
-      >
-        Save
-      </Button>
-      <Button variant="secondary" onclick={close}>Cancel</Button>
-    </div>
   </form>
+
+  {#snippet footer()}
+    <Button variant="ghost" onclick={close}>Cancel</Button>
+    <Button
+      variant="primary"
+      type="submit"
+      form="host-priority-form"
+      loading={saving}
+      disabled={unchanged || pinInvalidMessage !== ''}
+    >
+      Save priority
+    </Button>
+  {/snippet}
 </Dialog>
 
 <style>
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--z-space-4);
+    padding-bottom: var(--z-space-2);
+  }
   .note {
     margin: 0;
     color: var(--z-text-muted);
@@ -173,10 +182,5 @@
     margin: 0;
     color: var(--z-danger);
     font-size: var(--z-text-sm);
-  }
-  .actions {
-    display: flex;
-    gap: var(--z-space-2);
-    margin-top: var(--z-space-4);
   }
 </style>
