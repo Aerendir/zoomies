@@ -53,8 +53,14 @@ trap 'rm -rf "${work}"' EXIT
 # Retry-After, and Maven Central answers a burst of downloads from one address
 # with 429s that a five-second retry only repeats. Left to itself curl doubles
 # its wait and does what the server asks, within the time cap.
+#
+# --retry-all-errors because --retry alone treats a failed connect (curl exit
+# 7, "No route to host") as final: one network blip on a build host threw away
+# a runner-full build that had already fetched every other toolchain. The cost
+# is that a genuine 404 is retried too, about a minute of backoff before the
+# same failure.
 fetch() {
-  curl -fsSL --retry 6 --retry-max-time 600 -o "$3" "$1"
+  curl -fsSL --retry 6 --retry-all-errors --retry-max-time 600 -o "$3" "$1"
   algo="${2%%:*}"
   sum="${2#*:}"
   case "${algo}" in
