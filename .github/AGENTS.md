@@ -53,3 +53,8 @@ has a CI job that diffs them:
   and that the header names a release: `hooks/source.py` resolves the latest
   release, stars and forks from the GitHub API at build time, and an offline
   build is allowed to go without them where the published site is not.
+* Every job in every workflow has a `timeout-minutes` at about two to three
+  times the longest successful run, and a workflow file is named in lower-case
+  words joined by hyphens. Both are tested in `internal/docs`: a hung job holds
+  a fleet slot for GitHub's six-hour default, and a space in a name makes the
+  file the one everything has to quote.

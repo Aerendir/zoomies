@@ -74,6 +74,7 @@ jobs:
     name: What changed
     if: github.event.action != 'closed'
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 15 # the longest successful run seen was 3 minutes
     outputs:
       go: ${{ steps.filter.outputs.go }}
       shards: ${{ steps.filter.outputs.shards }}
@@ -185,18 +186,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "go=$go web=$web deploy=$deploy installer=$installer shards=$shards publish=$publish"
 
-  # The Go suite, split by package across runners. Three packages are most of
-  # it -- on the fleet the controller has taken 45 minutes, the API 29 and the
-  # store 22, single-threaded under the race detector -- so each is a shard of
-  # its own and everything else shares the fourth, along with the checks that
-  # read the whole tree. The wall-clock is now the slowest shard, and a shard
-  # can be tuned on its own.
-  #
-  # Coverage is measured on main and on a manual dispatch, not on a pull
-  # request: -coverpkg=./... with atomic counters is the most expensive
-  # instrumentation Go offers, and the number it produces is the one Codecov
-  # tracks on main. A pull request still runs every test under the race
-  # detector.
+      # These last two steps belong to the `changes` job, which every other job
+      # waits for: a pull request whose commit messages fail the check stops the
+      # run before anything takes a fleet slot, and Go is installed here for this
+      # one test only.
+      #
       # Commit messages carry no third-party names: the clean-room rule in
       # roadmap/agent-readiness.md section 2. The tree itself is checked by a
       # test in internal/docs on every run; the messages need the pull
@@ -217,6 +211,18 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/commits" --paginate --jq '.[].commit.message' > "$RUNNER_TEMP/commit-messages.txt"
           PROVENANCE_MESSAGES_FILE="$RUNNER_TEMP/commit-messages.txt" go test ./internal/provenance -run TestTheCommitRangeIsClean
 
+  # The Go suite, split by package across runners. Three packages are most of
+  # it (on the fleet the controller has taken 45 minutes, the API 29 and the
+  # store 22, single-threaded under the race detector), so the controller and
+  # the API are two shards each, the store is one, and everything else shares
+  # the last, `rest`, along with the checks that read the whole tree. The
+  # wall-clock is now the slowest shard, and a shard can be tuned on its own.
+  #
+  # Coverage is measured on main and on a manual dispatch, not on a pull
+  # request: -coverpkg=./... with atomic counters is the most expensive
+  # instrumentation Go offers, and the number it produces is the one Codecov
+  # tracks on main. A pull request still runs every test under the race
+  # detector.
   go:
     name: Go (${{ matrix.shard }})
     needs: [changes]
@@ -386,6 +392,7 @@ jobs:
       contents: read
       id-token: write # Codecov authenticates uploads without a stored secret.
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 20 # the longest successful run seen was 2 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -592,6 +599,7 @@ jobs:
     needs: [changes]
     if: github.event.action != 'closed' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.installer == 'true')
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 45 # the longest successful run seen was 16 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -651,6 +659,7 @@ jobs:
     needs: [changes]
     if: github.event.action != 'closed' && needs.changes.outputs.go == 'true'
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 25 # the longest successful run seen was 9 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # staticcheck reads the compiler's export data, and 1.27.2 writes a
@@ -676,6 +685,7 @@ jobs:
     needs: [changes]
     if: github.event.action != 'closed' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true')
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 20 # the longest successful run seen was 3 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -728,6 +738,7 @@ jobs:
     # below unpacks them into a private prefix instead of installing them
     # system-wide when sudo is not available.
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 90 # the longest successful run seen was 46 minutes
     # The suite drives the real binary, so a Go change can break it as
     # surely as a web one.
     needs: [changes, ui]
@@ -822,6 +833,7 @@ jobs:
   build-matrix:
     name: Cross-compile
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 25 # the longest successful run seen was 8 minutes
     needs: [changes, ui]
     if: github.event.action != 'closed' && needs.changes.outputs.go == 'true'
     strategy:
@@ -873,6 +885,7 @@ jobs:
     if: ${{ !cancelled() && github.event.action != 'closed' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && needs.changes.outputs.publish == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     needs: [changes, go, ui, installer]
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 60 # the longest successful run seen was 21 minutes
     permissions:
       contents: write
       id-token: write
@@ -997,6 +1010,7 @@ jobs:
     # the sudoers file or not. Both tools below are fetched without root
     # instead, which also works unchanged on a GitHub-hosted runner.
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 20 # the longest successful run seen was under a minute
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: POSIX shell syntax
@@ -1066,6 +1080,7 @@ jobs:
   images:
     name: Images
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 90 # the longest successful run seen was 37 minutes
     needs: [changes, dev-binaries]
     # Main pushes and manual recovery publish matching binaries before images.
     # Pull requests and checks on other branches do not publish dev binaries,
@@ -1298,6 +1313,7 @@ jobs:
   runner-images:
     name: Runner image (${{ matrix.tag }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || (((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64') }}
+    timeout-minutes: 30 # the longest successful run seen was 8 minutes
     needs: [images]
     if: github.event.action != 'closed' && needs.images.outputs.runner == 'true'
     permissions:
@@ -1643,6 +1659,7 @@ jobs:
   runner-manifests:
     name: Runner image manifests
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 15 # the longest successful run seen was 1 minute
     needs: [images, runner-images]
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.images.outputs.publish == 'true' && needs.images.outputs.runner == 'true' && needs.runner-images.result != 'skipped' }}
     permissions:

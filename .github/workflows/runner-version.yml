@@ -24,6 +24,7 @@ jobs:
       contents: write
       pull-requests: write
     runs-on: ${{ inputs.runner == 'github' && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 15 # the longest successful run seen was 2 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
