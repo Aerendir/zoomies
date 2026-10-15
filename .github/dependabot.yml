@@ -7,7 +7,12 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # Dependabot reads the workflows from "/", but not the composite actions the
+    # workflows call: the pinned setup-go inside .github/actions/setup-go would
+    # never move without the second entry.
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: weekly
       day: monday
@@ -56,6 +61,14 @@ updates:
     groups:
       images:
         patterns: ["*"]
+    ignore:
+      # The UI is built and tested on one Node major: NODE_VERSION in ci.yml and
+      # release.yml, and .nvmrc, with this Dockerfile's build stage made to match
+      # by a test in internal/docs. An automatic bump of the image alone left it
+      # on 26 while everything that tests it ran 22. Minor and patch updates, and
+      # the digest, still arrive; a new major is a deliberate change of all of them.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
     directory: /docs
