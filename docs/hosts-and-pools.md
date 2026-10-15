@@ -289,6 +289,34 @@ controller, from **Settings → Updates**. The copyable command stays beneath th
 button on every card, for an operator to run on the host, whatever the button
 does.
 
+## Priority among hosts
+
+When the fleet has a runner to start and several hosts that could take it,
+placement prefers the bigger, faster machine. Every host is scored out of 100
+from what its agent reports: more CPUs score higher, a faster CPU clock (the
+figure cpufreq carries), more and faster memory (the rate the machine's DMI
+table gives), and more disk that does not spin (`ssd` rather than `hdd`). An
+axis a host cannot measure is left out rather than scored last, so an agent too
+old to report a clock does not lose to one that can; a host that reports no size
+at all scores 0 and is placed by headroom exactly as it always was.
+
+The score is the number on the host's card (**Priority**), and the reason
+beneath it says what it was computed from. A pool that keeps warm runners also
+stands them up through this ranking, so the fleet's fastest machine fills before
+a slower one is touched. Among hosts that score the same, `scheduler.host_order`
+still decides: `headroom` spreads work, `largest_standard` goes where the big
+runners are, `best_fit` packs.
+
+An operator can pin a host to their own number on the same scale (0 keeps it for
+last, 100 asks for it first) from the card's **Priority** control or a `PATCH`
+to `/api/v1/hosts/{id}`; the pin outranks the specs and survives a re-join,
+like the labels. Clearing it hands the ranking back to the machine.
+
+After an upgrade the host re-measures itself: the agent runs its detection on
+every heartbeat, so the new figures (and the new score) arrive on their own, and
+the card's **Re-check** button forces the frame and the scheduling pass to
+settle now.
+
 ## Living with more than one host
 
 ```sh

@@ -364,6 +364,13 @@ func TestTheHostOrderChoosesBetweenHostsThatAllFit(t *testing.T) {
 	p := profilePool("ci", 0, 0)
 	pick := func(order string, loadBig int) string {
 		big, small := bigHost("a-big"), smallHost("b-small")
+		// The two hosts' specs are not the same, and the spec score would
+		// rank the big one ahead before any order looked; the placement
+		// preference's own tests cover that. This one pins what the order
+		// decides between hosts of the same rung, so an operator has pinned
+		// both to 50 and the machines' own numbers are out of the picture.
+		both := 50
+		big.PriorityOverride, small.PriorityOverride = &both, &both
 		big.ActiveRunners = loadBig
 		var runners []*store.Runner
 		for i := range loadBig {

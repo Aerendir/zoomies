@@ -932,6 +932,7 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "POST", path: "/api/v1/hosts/" + ids.host + "/health-check", role: store.RoleOperator, action: auth.ActionHostsCheck},
 		{method: "POST", path: "/api/v1/hosts/" + ids.host + "/update", role: store.RoleAdmin, action: auth.ActionHostsUpdate},
 		{method: "POST", path: "/api/v1/hosts/" + ids.host + "/throttle/clear", role: store.RoleOperator, action: auth.ActionHostsWrite},
+		{method: "POST", path: "/api/v1/hosts/" + ids.host + "/priority-check", role: store.RoleOperator, action: auth.ActionHostsWrite},
 		{method: "PUT", path: "/api/v1/hosts/" + ids.host + "/check-acceptances", role: store.RoleOperator, body: map[string]any{}, action: auth.ActionHostsAccept},
 		{method: "DELETE", path: "/api/v1/hosts/" + ids.host + "/check-acceptances/files.service", role: store.RoleOperator, action: auth.ActionHostsAccept},
 		{method: "DELETE", path: "/api/v1/hosts/missing", role: store.RoleAdmin, action: auth.ActionHostsDelete},

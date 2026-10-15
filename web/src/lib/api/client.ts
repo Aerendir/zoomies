@@ -524,6 +524,12 @@ export const cordonHost = (id: string, body: Body<'cordonHost'>) =>
 export const checkHostHealth = (id: string) =>
   api.post<Result<'checkHostHealth'>>(`/hosts/${enc(id)}/health-check`);
 /**
+ * Re-read what the host's specs rank it at, republishing the card. Answers 200
+ * with the host, whose `priority` holds the recomputed figure.
+ */
+export const checkHostPriority = (id: string) =>
+  api.post<Result<'checkHostPriority'>>(`/hosts/${enc(id)}/priority-check`);
+/**
  * Ask the host's agent to have its update helper take it to the controller's release (admin).
  * Takes no body. Answers 202 with the host, whose `update` holds the attempt just opened.
  */

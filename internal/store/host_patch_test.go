@@ -43,6 +43,68 @@ func TestHostEditsKeepConcurrentCordonAndReportedFacts(t *testing.T) {
 	}
 }
 
+// The priority is the operator's pin on placement: a patch sets it, another
+// clears it back to the spec score, and one that says nothing about it
+// changes nothing. A rebuilt machine's re-join keeps the pin, the way it
+// keeps its labels: the operator set it on the row, not on the agent.
+func TestAPriorityPinIsSetClearedAndQuietlyLeftAlone(t *testing.T) {
+	s := newTestStore(t)
+	_, _, host := seedPool(t, s)
+	ctx := t.Context()
+
+	pin := 90
+	if err := s.PatchHost(ctx, host.ID, HostChanges{PriorityOverride: &pin}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetHost(ctx, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PriorityOverride == nil || *got.PriorityOverride != 90 {
+		t.Fatalf("PriorityOverride = %+v, want 90", got.PriorityOverride)
+	}
+
+	if err := s.PatchHost(ctx, host.ID, HostChanges{}); err != nil {
+		t.Fatalf("a patch that names nothing: %v", err)
+	}
+	got, err = s.GetHost(ctx, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PriorityOverride == nil || *got.PriorityOverride != 90 {
+		t.Fatalf("a quiet patch moved the pin: %+v", got.PriorityOverride)
+	}
+
+	if err := s.PatchHost(ctx, host.ID, HostChanges{ClearPriorityOverride: true}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetHost(ctx, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PriorityOverride != nil {
+		t.Fatalf("ClearPriorityOverride left the pin: %+v", got.PriorityOverride)
+	}
+
+	// The report never carries the pin: an agent cannot take a place its
+	// operator pinned, and GetHostReported has nothing to say here either.
+	host.PriorityOverride = nil
+	if err := s.SetHostReported(ctx, host); err != nil {
+		t.Fatal(err)
+	}
+	host.PriorityOverride = &pin
+	if err := s.SetHostReported(ctx, host); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetHost(ctx, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PriorityOverride != nil {
+		t.Fatalf("a heartbeat wrote the pin: %+v", got.PriorityOverride)
+	}
+}
+
 func TestHostFeaturesFollowWhatTheAgentReports(t *testing.T) {
 	// A feature is the agent's claim about itself, re-read from every
 	// heartbeat: an agent rolled back to a release that cannot move a live
