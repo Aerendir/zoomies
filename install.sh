@@ -53,7 +53,7 @@ BASE_URL="${ZOOMIES_BASE_URL:-https://github.com/${REPO}/releases}"
 # to the signature over checksums.txt before the checksum is believed. Empty
 # until the owner mints a key (docs/upgrading.md, Signing releases); a test
 # keeps it equal to the key compiled into the binary.
-RELEASE_KEY=""
+RELEASE_KEY="6dK2/jDPHR8wAjsIayrxGxL8ednKVKdEMHdRcmNU67U="
 # A tag is visible at /releases/latest the moment it is published, but the
 # release workflow attaches the binaries a few minutes later. Installing inside
 # that window is the one download failure worth waiting out rather than failing.
