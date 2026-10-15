@@ -11,4 +11,4 @@ package releasekey
 // line only for the releases of a rotation.
 // It is a variable rather than a constant so a test can set it and put it
 // back; nothing else writes it.
-var Default = ""
+var Default = "6dK2/jDPHR8wAjsIayrxGxL8ednKVKdEMHdRcmNU67U="
