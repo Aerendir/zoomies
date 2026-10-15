@@ -1,0 +1,22 @@
+name: Question
+description: Ask how to do something. Discussions are not enabled on this repository, so questions come here.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Try the [troubleshooting page](https://zoomies.sh/troubleshooting/) and
+        your own UI's problems panel first; both name the setting rather than
+        the symptom.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you are trying to do, what you tried, and what happened.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `zoomies version`.

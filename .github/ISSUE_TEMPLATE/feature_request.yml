@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a change or a new capability.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a substantial feature, an architectural change, a new dependency or
+        a breaking configuration change, opening an issue first is the right
+        move: the approach can be agreed before anyone does a lot of work.
+        CONTRIBUTING.md says more.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do and what stops you. Describe the situation, not only the change you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would change
+      description: The behaviour you would like, and what you considered instead.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Who it affects
+      description: Anything that changes for people already running Zoomies, such as a setting, an API field or a default.

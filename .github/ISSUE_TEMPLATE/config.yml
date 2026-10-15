@@ -1,0 +1,10 @@
+# Blank issues stay allowed: a question or an odd report does not always fit a
+# form. The links are for what must not be an issue, or does not need one.
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/eyupio/zoomies/security/advisories/new
+    about: Privately, to the maintainers. Do not open a public issue for a vulnerability; SECURITY.md says what to include.
+  - name: Troubleshooting
+    url: https://zoomies.sh/troubleshooting/
+    about: The problems panel in your own UI names the setting to change. The problem code it shows has a row explaining it.
