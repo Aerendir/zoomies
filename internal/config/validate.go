@@ -305,19 +305,54 @@ func (c *Config) Validate() Findings {
 	var fs Findings
 	add := func(f Finding) { fs = append(fs, f) }
 
-	if mode := c.Scheduler.HistorySizing; mode != "" && mode != "off" && mode != "shadow" && mode != "on" {
-		add(Finding{Code: "scheduler.history_sizing", Severity: SeverityError, Setting: "scheduler.history_sizing", Title: "unknown history sizing mode", Fix: "choose off, shadow or on."})
+	// Each part of the configuration has a method of its own. They run in this
+	// order, which is the order findings are reported in.
+	c.validateChoicesAndBounds(add)
+	c.validateListener(add)
+	c.validateExternalURL(add)
+	c.validateStorage(add)
+	c.validateAuthentication(add)
+	c.validateAgent(add)
+	c.validateRunners(add)
+	c.validateScheduler(add)
+	c.validateRunnerImages(add)
+	c.validateRetention(add)
+	c.validateUpdateCheck(add)
+	c.validateUpdates(add)
+	c.validateCapacityProvisioner(add)
+	// Checked whether or not it is on. These are refused when they are saved,
+	// and a value that is wrong while the feature is off is still wrong on the
+	// day somebody switches it on.
+	c.validateKennel(add)
+	c.validateOutbound(add)
+	c.validateBackupRemotes(add)
+	c.validateLimits(add)
+	c.validateProviders(add)
+
+	// Stamp the layer on every finding that names a setting, rather than
+	// asking eighty-odd constructions above to remember. Which layer set a
+	// value is a property of the assembled configuration, not of the rule that
+	// judged it, and nothing above here has any business knowing it.
+	for i := range fs {
+		if fs[i].Setting != "" {
+			fs[i].Source = c.Source(fs[i].Setting)
+			fs[i].Undo = undoFor(fs[i].Source, fs[i].Setting)
+		}
 	}
-	if mode := strings.ToLower(strings.TrimSpace(c.Security.AutoApplyRemedies)); mode != "" && mode != "off" && mode != "shadow" && mode != "on" && mode != "true" && mode != "false" {
-		add(Finding{Code: "security.auto_apply_remedies", Severity: SeverityError, Setting: "security.auto_apply_remedies", Title: "unknown automatic-apply mode", Fix: "choose off, shadow or on."})
-	}
+	return fs
+}
+
+// validateChoicesAndBounds checks the modes and numeric bounds that no single
+// section owns: the sizing and placement choices, and the registration and
+// prewarm limits.
+func (c *Config) validateChoicesAndBounds(add func(Finding)) {
+	c.refuseUnknownChoice(add, Finding{Code: "scheduler.history_sizing", Severity: SeverityError, Setting: "scheduler.history_sizing", Title: "unknown history sizing mode"}, c.Scheduler.HistorySizing)
+	// Read as the runtime reads it, trimmed and in lower case (Security.AutoApplyMode).
+	c.refuseUnknownChoice(add, Finding{Code: "security.auto_apply_remedies", Severity: SeverityError, Setting: "security.auto_apply_remedies", Title: "unknown automatic-apply mode"},
+		strings.ToLower(strings.TrimSpace(c.Security.AutoApplyRemedies)))
 	c.validateSizeRouting(add)
-	if order := c.Scheduler.HostOrder; order != "" && order != "headroom" && order != "largest_standard" && order != "best_fit" {
-		add(Finding{Code: "scheduler.host_order", Severity: SeverityError, Setting: "scheduler.host_order", Title: "unknown host placement order", Fix: "choose headroom, largest_standard or best_fit."})
-	}
-	if mode := c.Scheduler.PlacementMode; mode != "" && mode != "headroom" && mode != "shadow" && mode != "readiness" {
-		add(Finding{Code: "scheduler.placement_mode", Severity: SeverityError, Setting: "scheduler.placement_mode", Title: "unknown host placement policy", Fix: "choose headroom, shadow or readiness."})
-	}
+	c.refuseUnknownChoice(add, Finding{Code: "scheduler.host_order", Severity: SeverityError, Setting: "scheduler.host_order", Title: "unknown host placement order"}, c.Scheduler.HostOrder)
+	c.refuseUnknownChoice(add, Finding{Code: "scheduler.placement_mode", Severity: SeverityError, Setting: "scheduler.placement_mode", Title: "unknown host placement policy"}, c.Scheduler.PlacementMode)
 	if c.Scheduler.RegistrationConcurrency < 1 || c.Scheduler.RegistrationConcurrency > 16 {
 		add(Finding{Code: "scheduler.registration_concurrency", Severity: SeverityError, Setting: "scheduler.registration_concurrency", Title: "registration concurrency is outside its supported range", Detail: "Unbounded credential requests amplify GitHub outages and rate limits.", Fix: "set scheduler.registration_concurrency between 1 and 16; the default is 1."})
 	}
@@ -328,7 +363,10 @@ func (c *Config) Validate() Findings {
 	if c.Agent.PrewarmJitter < 0 || c.Agent.PrewarmJitter > 5*time.Minute {
 		add(Finding{Code: "agent.prewarm_jitter", Severity: SeverityError, Setting: "agent.prewarm_jitter", Title: "background preparation stagger is outside its supported range", Detail: "Background refresh delays must remain bounded.", Fix: "set agent.prewarm_jitter between 0s and 5m; the default is 30s."})
 	}
-	// --- Listener ---------------------------------------------------------
+}
+
+// validateListener checks the listen address, TLS, trusted proxies and what a public bind needs to be safe.
+func (c *Config) validateListener(add func(Finding)) {
 	if c.Server.Bind == "" {
 		add(Finding{
 			Code: "bind.empty", Severity: SeverityError, Setting: "server.bind",
@@ -491,8 +529,10 @@ func (c *Config) Validate() Findings {
 			Fix:    "for webhooks to work, terminate TLS with a certificate GitHub trusts, or run in polling mode.",
 		})
 	}
+}
 
-	// --- External URL and webhooks ---------------------------------------
+// validateExternalURL checks the external URL and what hangs from it: webhooks, the GitHub App and polling.
+func (c *Config) validateExternalURL(add func(Finding)) {
 	if c.Server.ExternalURL == "" {
 		add(Finding{
 			Code: "external_url.missing", Severity: SeverityWarning, Setting: "server.external_url",
@@ -548,8 +588,10 @@ func (c *Config) Validate() Findings {
 			Fix:   "use https://api.github.com, or https://your-ghes-host/api/v3 for Enterprise Server.",
 		})
 	}
+}
 
-	// --- Storage and secrets ---------------------------------------------
+// validateStorage checks the database and the encryption key everything secret is sealed with.
+func (c *Config) validateStorage(add func(Finding)) {
 	if c.Database.Path == "" {
 		add(Finding{
 			Code: "db.path_missing", Severity: SeverityError, Setting: "database.path",
@@ -589,8 +631,11 @@ func (c *Config) Validate() Findings {
 			Fix:    "move it to security.encryption_key_file (mode 0600) or the ZOOMIES_ENCRYPTION_KEY environment variable.",
 		})
 	}
+}
 
-	// --- Authentication ---------------------------------------------------
+// validateAuthentication checks whether authentication is on, how people sign in, the first account and single sign-on.
+func (c *Config) validateAuthentication(add func(Finding)) {
+	public := c.BindsPublicly()
 	if c.Security.DisableAuth {
 		// The bind address alone is not the question. The deployment this
 		// project recommends is a loopback bind behind a reverse proxy, and in
@@ -740,8 +785,10 @@ func (c *Config) Validate() Findings {
 			Fix: "turn oidc.hide_password_login off, or configure oidc and check that its button signs people in before relying on it.",
 		})
 	}
+}
 
-	// --- Agent and backends ----------------------------------------------
+// validateAgent checks the agent and its backends.
+func (c *Config) validateAgent(add func(Finding)) {
 	if c.runsAgent() {
 		switch c.Agent.Backend {
 		case "docker", "podman", "process":
@@ -880,7 +927,10 @@ func (c *Config) Validate() Findings {
 			Fix:    fmt.Sprintf("keep agent.heartbeat_interval at %s or less.", MaxQuietHeartbeatInterval),
 		})
 	}
-	// --- Runners ----------------------------------------------------------
+}
+
+// validateRunners checks the runners' own settings, and the warning for running them as root.
+func (c *Config) validateRunners(add func(Finding)) {
 	if c.Runners.DockerWait < 0 || c.Runners.DockerWait > MaxDockerWait {
 		// The runner image refuses anything outside 1..3600 seconds with a
 		// configuration exit, so a value it would refuse is a fleet whose
@@ -921,8 +971,10 @@ func (c *Config) Validate() Findings {
 			Fix:    "run as a dedicated user in the docker group, or use a rootless Docker/Podman socket.",
 		})
 	}
+}
 
-	// --- Scheduler --------------------------------------------------------
+// validateScheduler checks the scheduler's timers and limits.
+func (c *Config) validateScheduler(add func(Finding)) {
 	if c.Scheduler.Interval <= 0 {
 		add(Finding{
 			Code: "scheduler.interval", Severity: SeverityError, Setting: "scheduler.interval",
@@ -1013,8 +1065,10 @@ func (c *Config) Validate() Findings {
 			Fix:    "keep scheduler.max_runner_lifetime to hours, or clear it for no limit.",
 		})
 	}
+}
 
-	// --- Runner images ----------------------------------------------------
+// validateRunnerImages checks the runner images pools may be given.
+func (c *Config) validateRunnerImages(add func(Finding)) {
 	if c.GitHub.ToolchainScanInterval < 0 {
 		add(Finding{
 			Code: "github.toolchain_scan_negative", Severity: SeverityError, Setting: "github.toolchain_scan_interval",
@@ -1053,8 +1107,10 @@ func (c *Config) Validate() Findings {
 			Fix:    `set images.refresh_interval to "1h" unless this fleet is air-gapped or pins every pool to a digest.`,
 		})
 	}
+}
 
-	// --- Retention --------------------------------------------------------
+// validateRetention checks how long history is kept.
+func (c *Config) validateRetention(add func(Finding)) {
 	if c.Retention.Audit != 0 {
 		add(Finding{
 			Code: "retention.audit_renamed", Severity: SeverityInfo, Setting: "retention.audit",
@@ -1072,8 +1128,10 @@ func (c *Config) Validate() Findings {
 			Fix:    "keep job history for at least a week (retention.jobs, ZOOMIES_RETENTION_JOBS), or leave the advice off.",
 		})
 	}
+}
 
-	// --- Update check -----------------------------------------------------
+// validateUpdateCheck checks how often the controller asks GitHub for the current release.
+func (c *Config) validateUpdateCheck(add func(Finding)) {
 	if c.Updates.CheckInterval < 0 {
 		add(Finding{
 			Code: "updates.interval_negative", Severity: SeverityError, Setting: "updates.check_interval",
@@ -1089,11 +1147,10 @@ func (c *Config) Validate() Findings {
 			Fix:    `use "24h", which still notices a release within a working day.`,
 		})
 	}
+}
 
-	// --- Update mode ------------------------------------------------------
-	c.validateUpdates(add)
-
-	// --- External capacity provisioner -----------------------------------
+// validateCapacityProvisioner checks the external capacity provisioner's destination, signing secret and timers.
+func (c *Config) validateCapacityProvisioner(add func(Finding)) {
 	if c.CapacityDemand.DestinationURL != "" {
 		u, err := url.Parse(c.CapacityDemand.DestinationURL)
 		if err != nil || u.Scheme == "" || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
@@ -1109,14 +1166,10 @@ func (c *Config) Validate() Findings {
 			add(Finding{Code: "capacity_demand.timeout", Severity: SeverityError, Setting: "capacity_demand.timeout", Title: "capacity-demand timeout must be positive", Fix: `use a duration like "10s", which is the default.`})
 		}
 	}
+}
 
-	// --- Kennel Club -----------------------------------------------------
-	// Checked whether or not it is on. These are refused when they are saved,
-	// and a value that is wrong while the feature is off is still wrong on the
-	// day somebody switches it on.
-	c.validateKennel(add)
-
-	// --- Outbound addresses ----------------------------------------------
+// validateOutbound checks the addresses Zoomies is willing to call out to, and the switches that widen them.
+func (c *Config) validateOutbound(add func(Finding)) {
 	// A warning here, never an error. The value in front of the validator
 	// came from whoever runs the process -- the file, the environment, or a
 	// row an earlier write already passed -- and an upgrade must not stop an
@@ -1161,12 +1214,11 @@ func (c *Config) Validate() Findings {
 			add(*f)
 		}
 	}
+}
 
-	// --- Backups ----------------------------------------------------------
-	c.validateBackupRemotes(add)
-
-	// --- Metrics and logging ---------------------------------------------
-	// --- Limits -------------------------------------------------------------
+// validateLimits checks request ceilings, the public metrics and status endpoints, and the UI's layouts.
+func (c *Config) validateLimits(add func(Finding)) {
+	public := c.BindsPublicly()
 	// A ceiling guards an instance many people reach against one caller spending what
 	// every other caller needs. On a controller only this machine can reach
 	// there is no other caller, so a ceiling protects nothing and can only
@@ -1302,8 +1354,10 @@ func (c *Config) Validate() Findings {
 			Detail: "request paths and GitHub API interactions are logged in full. Secrets are redacted, but repository and workflow names are not.",
 		})
 	}
+}
 
-	// --- Infrastructure providers ---
+// validateProviders checks the infrastructure providers, which only matters once provider.enabled is on.
+func (c *Config) validateProviders(add func(Finding)) {
 	//
 	// Every finding below is silent while provider.enabled is false, which is
 	// the default. A deployment that has not asked to rent machines should not
@@ -1416,18 +1470,6 @@ func (c *Config) Validate() Findings {
 			})
 		}
 	}
-
-	// Stamp the layer on every finding that names a setting, rather than
-	// asking eighty-odd constructions above to remember. Which layer set a
-	// value is a property of the assembled configuration, not of the rule that
-	// judged it, and nothing above here has any business knowing it.
-	for i := range fs {
-		if fs[i].Setting != "" {
-			fs[i].Source = c.Source(fs[i].Setting)
-			fs[i].Undo = undoFor(fs[i].Source, fs[i].Setting)
-		}
-	}
-	return fs
 }
 
 // ValidateStrict is Validate plus the error check, for callers that only want
@@ -1767,6 +1809,50 @@ func (c *Config) mcpOAuthFindings(add func(Finding)) {
 	})
 }
 
+// refuseUnknownChoice adds finding, with its Fix filled in, when value is not
+// one of the choices the settings registry lists for finding.Setting, or an
+// older spelling of one. An empty value is the default and is not refused.
+//
+// The registry is the one list of what an enum setting accepts. The settings
+// page offers it, SetValue checks it and the environment is parsed through it,
+// so the validator asks the same list. It used to carry a copy of each, and the
+// copies could not stay equal to what the rest of the product reads:
+// security.auto_apply_remedies accepted yes and no from the settings page and
+// the runtime, and Validate refused them as an error, which stops startup for a
+// value written in a file. Matching is exact: a caller that reads a value more
+// loosely passes it already normalised.
+//
+// The caller passes the whole finding, not just a code, so that the code stays a
+// literal at the call site: the problem-code reference is checked against the
+// `Code:` literals in this package, in both directions.
+func (c *Config) refuseUnknownChoice(add func(Finding), finding Finding, value string) {
+	s, ok := LookupSetting(finding.Setting)
+	if !ok || s.Kind != KindEnum {
+		// A mistake in this package, not in the configuration; a test fails on
+		// it, and there is nothing useful to tell an operator.
+		return
+	}
+	if value == "" || slices.Contains(s.Choices, value) {
+		return
+	}
+	if _, alias := s.Aliases[value]; alias {
+		return
+	}
+	finding.Fix = "choose " + joinChoices(s.Choices) + "."
+	add(finding)
+}
+
+// joinChoices reads a list aloud: "off, shadow or on", "none or dind".
+func joinChoices(choices []string) string {
+	switch len(choices) {
+	case 0:
+		return ""
+	case 1:
+		return choices[0]
+	}
+	return strings.Join(choices[:len(choices)-1], ", ") + " or " + choices[len(choices)-1]
+}
+
 // validateSizeRouting checks the settings of size routing and automatic pools.
 //
 // Every figure here is read by pure functions that cannot say what is wrong
@@ -1776,21 +1862,12 @@ func (c *Config) mcpOAuthFindings(add func(Finding)) {
 // is refused with the setting that has to change.
 func (c *Config) validateSizeRouting(add func(Finding)) {
 	s := c.Scheduler
-	invalid := func(mode string) bool { return mode != "" && mode != "off" && mode != "shadow" && mode != "on" }
-	if invalid(s.SizeRouting) {
-		add(Finding{Code: "scheduler.size_routing", Severity: SeverityError, Setting: "scheduler.size_routing", Title: "unknown size routing mode", Fix: "choose off, shadow or on."})
-	}
-	if invalid(s.AutoPools) {
-		add(Finding{Code: "scheduler.auto_pools", Severity: SeverityError, Setting: "scheduler.auto_pools", Title: "unknown automatic pools mode", Fix: "choose off, shadow or on."})
-	}
-	if m := s.AutoPoolsDockerMode; m != "" && m != "none" && m != "dind" {
-		add(Finding{Code: "scheduler.auto_pools_docker_mode", Severity: SeverityError, Setting: "scheduler.auto_pools_docker_mode",
-			Title: "unknown docker mode for automatic pools", Detail: "A pool the controller makes is not one anybody reviewed the exposure of, so the host's own Docker socket is not offered to it.",
-			Fix: "choose none or dind."})
-	}
-	if k := s.SizeDefaultClass; k != "" && k != "small" && k != "medium" && k != "large" {
-		add(Finding{Code: "scheduler.size_default_class", Severity: SeverityError, Setting: "scheduler.size_default_class", Title: "unknown size class", Fix: "choose small, medium or large."})
-	}
+	c.refuseUnknownChoice(add, Finding{Code: "scheduler.size_routing", Severity: SeverityError, Setting: "scheduler.size_routing", Title: "unknown size routing mode"}, s.SizeRouting)
+	c.refuseUnknownChoice(add, Finding{Code: "scheduler.auto_pools", Severity: SeverityError, Setting: "scheduler.auto_pools", Title: "unknown automatic pools mode"}, s.AutoPools)
+	c.refuseUnknownChoice(add, Finding{Code: "scheduler.auto_pools_docker_mode", Severity: SeverityError, Setting: "scheduler.auto_pools_docker_mode",
+		Title:  "unknown docker mode for automatic pools",
+		Detail: "A pool the controller makes is not one anybody reviewed the exposure of, so the host's own Docker socket is not offered to it."}, s.AutoPoolsDockerMode)
+	c.refuseUnknownChoice(add, Finding{Code: "scheduler.size_default_class", Severity: SeverityError, Setting: "scheduler.size_default_class", Title: "unknown size class"}, s.SizeDefaultClass)
 	if s.SizeSmallMaxCPUs <= 0 || s.SizeSmallMaxMemoryMB <= 0 ||
 		s.SizeMediumMaxCPUs < s.SizeSmallMaxCPUs || s.SizeMediumMaxMemoryMB < s.SizeSmallMaxMemoryMB {
 		add(Finding{Code: "scheduler.size_class_limits", Severity: SeverityError, Setting: "scheduler.size_small_max_cpus",
