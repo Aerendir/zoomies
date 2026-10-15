@@ -30,14 +30,6 @@
     root: 'Jobs run as root inside the runner.',
   };
 
-  /** True when this pool has a setting worth warning about. */
-  export function poolHasRisk(pool: Pool): boolean {
-    if ((pool.warnings ?? []).some((w) => RISK_CODES.has(w.code ?? ''))) return true;
-    if ((pool.docker_mode ?? 'none') !== 'none') return true;
-    if (pool.ephemeral === false) return true;
-    return pool.run_as_root === true;
-  }
-
   /** Every risk this pool carries, one sentence each, most severe first. */
   export function poolRisks(pool: Pool): string[] {
     const fromServer = (pool.warnings ?? [])

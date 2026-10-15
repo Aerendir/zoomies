@@ -69,9 +69,6 @@ export function floorSentence(overview: Pick<KennelOverview, 'states' | 'unavail
   return parts.length > 0 ? `These counts are a minimum: ${joinWords(parts)}.` : '';
 }
 
-/** Where an administrator turns Kennel Club on, and what the 409 says to do. */
-export const KENNEL_SETTING_HREF = '/settings/configuration?setting=kennel.enabled';
-
 /**
  * How the repositories stand for one source of facts, as a sentence: "3 read,
  * 1 not granted". The order is the order of the worst news first, because a

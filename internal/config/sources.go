@@ -2,7 +2,6 @@ package config
 
 import (
 	"sort"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -125,21 +124,6 @@ func keysIn(doc []byte) []string {
 	}
 	walkTree("", tree)
 	sort.Strings(out)
-	return out
-}
-
-// SectionsOf groups keys under their section heading, in reading order.
-func SectionsOf(keys []string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, k := range keys {
-		head, _, _ := strings.Cut(k, ".")
-		if !seen[head] {
-			seen[head] = true
-			out = append(out, head)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return CompareKeys(out[i], out[j]) < 0 })
 	return out
 }
 
