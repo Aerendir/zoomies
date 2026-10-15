@@ -84,6 +84,14 @@ a newer release chosen independently of the controller.
 [Host update details](#updating-hosts-and-rollouts)
 cover ordering, retries and version confirmation.
 
+A **machine Zoomies rents** is not updated here, and its card says so rather than
+offering a command nobody can run. Its agent is the one the provider's template
+carried when the machine was cloned, so the way to a newer one is that template:
+the provider's page has **Prepare the template again**, and the entry the provider
+raises in the problems list names the machines it affects.
+[Proxmox VE](proxmox.md#keeping-the-runners-agent-current) describes what that
+command does and what happens to the machines already running.
+
 ![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-dark.webp#only-dark){ .zoomies-shot }
 ![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-light.webp#only-light){ .zoomies-shot }
 

@@ -205,7 +205,10 @@ pveum user token add zoomies@pve ci --privsep 1`,
 				"been qualified: import it as a VM, boot it once, install what a runner needs inside, and convert " +
 				"it. Inside the guest: the Docker engine, qemu-guest-agent, and `zoomies agent install`, which " +
 				"leaves the agent's service disabled for this controller to enable in each clone. Never leave an " +
-				"enrolled agent (/var/lib/zoomies/work/agent.json) in the template. On the node, as root:",
+				"enrolled agent (/var/lib/zoomies/work/agent.json) in the template. The agent this image carries is " +
+				"the one every machine cloned from it runs, so the template is also how a fleet's machines come to " +
+				"a newer release: automatic setup prepares it, and the provider's page can prepare it again. On the " +
+				"node, as root:",
 			Command: `wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
 qm create 9000 --name zoomies-template --memory 4096 --cores 2 --cpu host --ostype l26 \
   --net0 virtio,bridge=vmbr0 --scsihw virtio-scsi-pci --agent enabled=1 --serial0 socket --vga serial0

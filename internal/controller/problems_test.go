@@ -13,6 +13,7 @@ import (
 
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/cryptox"
+	"github.com/eyupio/zoomies/internal/naming"
 	"github.com/eyupio/zoomies/internal/scheduler"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates"
@@ -142,6 +143,109 @@ func TestProblemsReportsEachCategory(t *testing.T) {
 			t.Fatalf("problems = %v, want the failed-runner warning", h.problemCodes())
 		}
 	})
+}
+
+// A provider's machines are behind together, because they are all cloned from
+// one template. One problem names the provider and the way to change what its
+// machines run; the host list does not carry an entry per machine, and nothing
+// tells an operator to upgrade an agent inside a machine nobody can log into.
+func TestRentedMachinesBehindAreAnsweredOnceWithTheirProvidersTemplate(t *testing.T) {
+	h := newHarness(t)
+	withVersion(t, "1.3.5")
+	h.enableProviders(t)
+	row := h.providerRow(t, "lab")
+	first, _ := h.rentedMachine(t, row, "1.3.3")
+	second, _ := h.rentedMachine(t, row, "1.3.3")
+	h.markRented(first, second)
+	// A host somebody owns, behind for the ordinary reason, which is still the
+	// host list's own business.
+	other := h.host("vm-2")
+	other.Version, other.LastHeartbeat = "1.3.3", h.c.Now()
+	if err := h.st.SetHostReported(h.ctx, other); err != nil {
+		t.Fatalf("SetHostReported: %v", err)
+	}
+
+	problems, err := h.c.Problems(h.ctx)
+	if err != nil {
+		t.Fatalf("Problems: %v", err)
+	}
+	var behind *Problem
+	skew := ""
+	for i := range problems {
+		switch problems[i].Code {
+		case "provider.machines_behind":
+			if behind != nil {
+				t.Fatalf("a provider's machines were reported more than once: %+v", problems)
+			}
+			behind = &problems[i]
+		case "host.version_behind":
+			skew = problems[i].Detail
+		}
+	}
+	if behind == nil {
+		t.Fatalf("no entry names the template the machines come from: %+v", problems)
+	}
+	if behind.Severity != config.SeverityWarning {
+		t.Errorf("severity = %q, want a warning: the machines place work as normal", behind.Severity)
+	}
+	if behind.TargetKind != "provider" || behind.TargetID != row.ID {
+		t.Errorf("the entry points at %s %s, want the provider whose template it names", behind.TargetKind, behind.TargetID)
+	}
+	for _, want := range []string{"lab", "2 machines", "1.3.3", "1.3.5", "template", "cloned"} {
+		if !strings.Contains(behind.Title+" "+behind.Detail, want) {
+			t.Errorf("the entry does not say %q:\n%s\n%s", want, behind.Title, behind.Detail)
+		}
+	}
+	for _, want := range []string{"Prepare the template again", "Proxmox node", "v1.3.5", "replaced as they go idle"} {
+		if !strings.Contains(behind.Fix, want) {
+			t.Errorf("the fix does not say %q: %s", want, behind.Fix)
+		}
+	}
+	if strings.Contains(behind.Fix, "sudo") || strings.Contains(behind.Fix, "zoomies upgrade") {
+		t.Errorf("the fix offers a command nobody can run inside a clone: %s", behind.Fix)
+	}
+	if !strings.Contains(skew, naming.ForSentence(other.Name)) {
+		t.Errorf("the host list does not name the host somebody owns: %s", skew)
+	}
+	if strings.Contains(skew, naming.ForSentence(first.Name)) {
+		t.Errorf("the host list names a rented machine as a host somebody forgot: %s", skew)
+	}
+}
+
+// Two providers are two entries, in one order however the rows were read: the
+// list is re-sent whenever its JSON differs, so a map walked in its own order
+// would be a frame a second.
+func TestRentedMachinesBehindAreOneEntryPerProviderInAStableOrder(t *testing.T) {
+	h := newHarness(t)
+	withVersion(t, "1.3.5")
+	h.enableProviders(t)
+	second := h.providerRow(t, "beta")
+	first := h.providerRow(t, "alpha")
+	a1, _ := h.rentedMachine(t, first, "1.3.2")
+	b1, _ := h.rentedMachine(t, second, "1.3.4")
+	h.markRented(a1, b1)
+
+	codes := func() []string {
+		t.Helper()
+		problems, err := h.c.Problems(h.ctx)
+		if err != nil {
+			t.Fatalf("Problems: %v", err)
+		}
+		var out []string
+		for _, p := range problems {
+			if p.Code == "provider.machines_behind" {
+				out = append(out, p.Title)
+			}
+		}
+		return out
+	}
+	got := codes()
+	if len(got) != 2 || !strings.Contains(got[0], "alpha") || !strings.Contains(got[1], "beta") {
+		t.Fatalf("entries = %q, want alpha then beta", got)
+	}
+	if again := codes(); !slices.Equal(got, again) {
+		t.Fatalf("the same fleet produced %q and then %q", got, again)
+	}
 }
 
 // A job whose labels no pool here advertises is not going to run here, and
@@ -942,7 +1046,7 @@ func TestAgentUpgradeAdviceIsSomethingAnOperatorCanDo(t *testing.T) {
 
 	t.Run("a released controller names the command", func(t *testing.T) {
 		version.Version = "1.0.0"
-		fix := agentUpgradeFix("Then the figures appear.")
+		fix := agentUpgradeFix("Then the figures appear.", false)
 		if !strings.Contains(fix, "--version v1.0.0") {
 			t.Errorf("the advice does not name the version to install: %q", fix)
 		}
@@ -954,10 +1058,23 @@ func TestAgentUpgradeAdviceIsSomethingAnOperatorCanDo(t *testing.T) {
 		}
 	})
 
+	t.Run("a rented machine is told about its provider's template", func(t *testing.T) {
+		version.Version = "1.0.0"
+		fix := agentUpgradeFix("Then the figures appear.", true)
+		for _, want := range []string{"--version v1.0.0", "A machine Zoomies rents is not upgraded that way", "template", "Then the figures appear."} {
+			if !strings.Contains(fix, want) {
+				t.Errorf("the advice does not say %q: %q", want, fix)
+			}
+		}
+		if !strings.Contains(agentUpgradeFix("Then.", false), "Then.") || strings.Contains(agentUpgradeFix("Then.", false), "rents") {
+			t.Error("a fleet with no rented machines is told about one")
+		}
+	})
+
 	for _, stamped := range []string{"main-sha-117bc18", "dev"} {
 		t.Run("an unreleased controller says there is nothing to install: "+stamped, func(t *testing.T) {
 			version.Version = stamped
-			fix := agentUpgradeFix("Then the figures appear.")
+			fix := agentUpgradeFix("Then the figures appear.", false)
 			if strings.Contains(fix, "--version") {
 				t.Errorf("a controller stamped %q told the operator to install a version that does not exist: %q",
 					stamped, fix)

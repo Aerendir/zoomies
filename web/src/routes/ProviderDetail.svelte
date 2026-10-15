@@ -53,6 +53,7 @@
   import RentingNotice from '$lib/providers/RentingNotice.svelte';
   import CheckFindings from '$lib/providers/CheckFindings.svelte';
   import PrivateConnection from '$lib/providers/PrivateConnection.svelte';
+  import TemplateAgent from '$lib/providers/TemplateAgent.svelte';
   import ProviderForm from '$lib/providers/ProviderForm.svelte';
 
   const id = $derived(router.params.id ?? '');
@@ -379,6 +380,8 @@
     {/if}
 
     <PrivateConnection provider={p} check={shownCheck} />
+
+    <TemplateAgent provider={p} {canAdmin} />
 
     <RentingNotice {renting} {canAdmin} onchanged={refreshRenting} />
 

@@ -106,6 +106,54 @@ func (h *harness) onlyMachine(t *testing.T) *store.Machine {
 	return ms[0]
 }
 
+// rentedMachine enrols one machine of a provider's as a host running ver, which
+// is the state every machine cloned from a template the controller has moved
+// past is in: the agent the image carried, and no way to change it from inside
+// the machine. It returns the machine and the host it became.
+func (h *harness) rentedMachine(t *testing.T, row *store.Provider, ver string) (*store.Machine, *store.Host) {
+	t.Helper()
+	m := &store.Machine{ProviderID: row.ID, State: store.MachineReady, Capacity: 2}
+	if err := h.st.CreateMachine(h.ctx, m); err != nil {
+		t.Fatalf("CreateMachine: %v", err)
+	}
+	// The machine's name is pinned into the agent's environment by the
+	// enrolment payload, which is why the host wears it.
+	host := h.host(m.Name)
+	host.Version, host.LastHeartbeat = ver, h.c.Now()
+	if err := h.st.SetHostReported(h.ctx, host); err != nil {
+		t.Fatalf("SetHostReported: %v", err)
+	}
+	if err := h.st.LinkMachineHost(h.ctx, m.ID, host.ID, "", h.c.Now()); err != nil {
+		t.Fatalf("LinkMachineHost: %v", err)
+	}
+	return h.machineByID(t, m.ID), host
+}
+
+// markRented learns which hosts are machines the way a machine pass does, for a
+// test that is about what a reader does with the answer rather than about how
+// the answer is gathered. noteRentedHosts is what every pass runs, and
+// TestAMachinePassIsWhatLearnsWhichHostsAreMachines is where the two are held
+// together: it drives a real pass over a real machine.
+//
+// One call is one pass, which is why a test that has machines of two providers
+// passes both here together: the map is rebuilt whole, exactly as it is by a
+// pass, so a second call would forget the first.
+func (h *harness) markRented(machines ...*store.Machine) {
+	h.t.Helper()
+	byID := map[string]*store.Provider{}
+	for _, m := range machines {
+		if _, ok := byID[m.ProviderID]; ok {
+			continue
+		}
+		p, err := h.st.GetProvider(h.ctx, m.ProviderID)
+		if err != nil {
+			h.t.Fatalf("GetProvider %s: %v", m.ProviderID, err)
+		}
+		byID[p.ID] = p
+	}
+	h.c.noteRentedHosts(&machineEnv{list: machines, byID: byID})
+}
+
 // machineByID re-reads one machine, for a test that has to see a column move.
 func (h *harness) machineByID(t *testing.T, id string) *store.Machine {
 	t.Helper()

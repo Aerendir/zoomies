@@ -344,7 +344,7 @@ func (c *Controller) rolloutView(pic *updatesPicture) *UpdatesRollout {
 		if done[h.ID] || (len(r.HostIDs) > 0 && !slices.Contains(r.HostIDs, h.ID)) {
 			continue
 		}
-		if can, _, _ := hostCanSelfUpdate(h, r.Target, c.hostHelperUnsupported(h), pic.snap.Mode); can {
+		if can, _, _ := hostCanSelfUpdate(h, r.Target, c.hostHelperUnsupported(h), pic.snap.Mode, c.rentedHost(h.ID)); can {
 			out.Total++
 		}
 	}

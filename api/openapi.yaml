@@ -13531,6 +13531,16 @@ components:
           examples: [zoomies-16vcpu-32gb-ubuntu-2404-build01]
         version: { type: string }
         version_channel: { type: string, examples: ["v1.0.0", "dev"], description: The published image and binary tag carrying this agent build. }
+        machine_id:
+          type: string
+          description: >-
+            The machine this host is, when Zoomies rented it, and absent for a host somebody
+            installed. A rented machine is a clone of the template its provider builds from: it
+            holds the agent that image carried, nothing can be run inside it by hand, and it is
+            destroyed once it has been idle. It is therefore behind from the moment it joins, and
+            `upgrade_command` is absent for it too; `upgrade_note` gives the way that does exist,
+            which is preparing its provider's template again.
+          examples: [mach_k3f9qz2mx7ab]
         cordoned: { type: boolean }
         protocol_version:
           type: integer
@@ -13563,9 +13573,10 @@ components:
             An operator runs it on the host. The controller asks the host's agent to update itself
             instead, with `POST /hosts/{id}/update`, only when `update.can_update` is true; for every
             other host this command is how it is upgraded. Absent for embedded, matching or newer
-            agents, for unpublished controller builds, and for a Windows agent, which has no sudo
-            and runs a service `zoomies upgrade` does not know; `upgrade_note` gives its steps by
-            hand instead. Contains no credentials.
+            agents, for unpublished controller builds, for a machine Zoomies rents (see
+            `machine_id`: no command can be run inside one), and for a Windows agent, which has no
+            sudo and runs a service `zoomies upgrade` does not know; `upgrade_note` gives its steps
+            by hand instead. Contains no credentials.
         upgrade_version:
           type: string
           description: Controller build the upgrade is intended to match.

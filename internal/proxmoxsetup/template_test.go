@@ -9,6 +9,19 @@ import (
 	"testing"
 )
 
+// templateBuild is the release every test prepares a template from, so that a
+// test asserting "it records what it carries" reads as the setup's own answer.
+const testBuild = "v1.4.0"
+
+// prepareTemplate is EnsureTemplate with a test's own build and a throwaway
+// output, for the tests that ask about the guests rather than about the words.
+func prepareTemplate(t *testing.T, h Host, inventory, config, build string) ([]Template, string, error) {
+	t.Helper()
+	var out strings.Builder
+	templates, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc", build, &out)
+	return templates, out.String(), err
+}
+
 func templateHost(t *testing.T, inventory, config string) (Host, *[]string) {
 	t.Helper()
 	var commands []string
@@ -47,11 +60,11 @@ func templateHost(t *testing.T, inventory, config string) (Host, *[]string) {
 
 func TestSetupCreatesTheRunnerTemplateAlongsideUnrelatedTemplates(t *testing.T) {
 	h, commands := templateHost(t, `[{"vmid":200,"name":"other-template","node":"pve","type":"qemu","template":1}]`, "")
-	templates, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc")
+	templates, _, err := prepareTemplate(t, h, `[{"vmid":200,"name":"other-template","node":"pve","type":"qemu","template":1}]`, "", testBuild)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(templates) != 2 || templates[0].VMID != 9101 || templates[0].Name != TemplateName || templates[0].Node != "pve" {
+	if len(templates) != 2 || templates[0].VMID != 9101 || templates[0].Name != TemplateName || templates[0].Node != "pve" || templates[0].Agent != testBuild {
 		t.Fatalf("wrong template inventory: %+v", templates)
 	}
 	joined := strings.Join(*commands, "\n")
@@ -60,30 +73,185 @@ func TestSetupCreatesTheRunnerTemplateAlongsideUnrelatedTemplates(t *testing.T) 
 			t.Errorf("missing %q", want)
 		}
 	}
+	// The image records the release it carries, so that a setup command run
+	// after the controller has moved on can tell whether the machines cloned
+	// from this template are current.
+	if !strings.Contains(joined, "agent: "+testBuild) {
+		t.Errorf("the template does not record the release it was prepared from: %v", *commands)
+	}
 	if strings.Contains(joined, "backup:0") || strings.Contains(joined, "qm create 200") {
 		t.Fatal("used backup storage or changed an unrelated template")
 	}
 }
 
-func TestSetupReusesAnExistingZoomiesTemplateWithoutChangingGuests(t *testing.T) {
-	h, commands := templateHost(t, `[{"vmid":200,"name":"other-template","node":"pve","type":"qemu","template":1},{"vmid":9105,"name":"zoomies-template","node":"pve-2","type":"qemu","template":1}]`, "")
-	templates, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc")
-	if err != nil || len(templates) != 2 || templates[0].VMID != 9105 || templates[0].Node != "pve-2" || len(*commands) != 1 {
-		t.Fatalf("did not reuse the template: %+v %v %v", templates, err, *commands)
+func TestSetupLeavesATemplateItDidNotMakeExactlyAsItIsFound(t *testing.T) {
+	// The runbook's recipe has an operator build this image by hand and name it
+	// zoomies-template, and the wizard offers it. It is not ours to change: it
+	// carries no marker, so nothing here can know what is in it.
+	h, commands := templateHost(t, `[{"vmid":200,"name":"other-template","node":"pve","type":"qemu","template":1},{"vmid":9105,"name":"zoomies-template","node":"pve-2","type":"qemu","template":1}]`,
+		`{"description":"ubuntu 24.04 runner image","scsi0":"local-lvm:vm-9105-disk-0,size=32G"}`)
+	templates, out, err := prepareTemplate(t, h, `[{"vmid":200,"name":"other-template","node":"pve","type":"qemu","template":1},{"vmid":9105,"name":"zoomies-template","node":"pve-2","type":"qemu","template":1}]`,
+		`{"description":"ubuntu 24.04 runner image","scsi0":"local-lvm:vm-9105-disk-0,size=32G"}`, testBuild)
+	if err != nil || len(templates) != 2 || templates[0].VMID != 9105 || templates[0].Node != "pve-2" || templates[0].Agent != "" {
+		t.Fatalf("did not reuse the template: %+v %v", templates, err)
+	}
+	joined := strings.Join(*commands, "\n")
+	if strings.Contains(joined, "qm set") || strings.Contains(joined, "bash ") {
+		t.Fatalf("changed a guest this setup did not make: %v", *commands)
+	}
+	if !strings.Contains(out, "not prepared by Zoomies") {
+		t.Errorf("the operator is not told the template is used as found: %q", out)
 	}
 }
 
-func TestSetupResumesItsImportedDiskAndFinishesCloudInit(t *testing.T) {
-	h, commands := templateHost(t, `[{"vmid":9101,"name":"zoomies-template","node":"pve","type":"qemu"}]`, `{"description":"Zoomies template setup abc","scsi0":"local:vm-9101-disk-0,size=32G"}`)
-	if _, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc"); err != nil {
+func TestSetupPreparesATemplateItMadeAgainWhenItCarriesAnOlderRelease(t *testing.T) {
+	inventory := `[{"vmid":200,"name":"other-template","node":"pve","type":"qemu","template":1},{"vmid":9100,"name":"zoomies-template","node":"pve","type":"qemu","template":1}]`
+	before := `{"description":"Zoomies template setup abc\nagent: v1.3.1","scsi0":"local-lvm:vm-9100-disk-0,size=64G","ide2":"local-lvm:vm-9100-cloudinit,media=cdrom"}`
+	after := `{"description":"Zoomies template setup abc\nagent: v1.4.0","scsi0":"local-lvm:vm-9100-disk-1,size=32G","unused0":"local-lvm:vm-9100-disk-0","ide2":"local-lvm:vm-9100-cloudinit,media=cdrom"}`
+	h, commands, out := refreshHost(t, inventory, before, after)
+	templates, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc", testBuild, out)
+	if err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(*commands, "\n")
-	if strings.Contains(joined, "bash ") || strings.Contains(joined, "qm create") || !strings.Contains(joined, "--ide2 local:cloudinit") || !strings.Contains(joined, "qm template 9101") {
-		t.Fatalf("unsafe or incomplete retry: %v", *commands)
+	if len(templates) != 2 || templates[0].VMID != 9100 || templates[0].Agent != testBuild {
+		t.Fatalf("the prepared template is not what the callback is told: %+v", templates)
 	}
-	if strings.Contains(joined, "qm resize") {
-		t.Fatal("retried an equal-size disk resize")
+	joined := strings.Join(*commands, "\n")
+	for _, want := range []string{
+		// The image is made again from the release this setup runs.
+		"bash -c",
+		// It goes into the same guest, at the same VMID and name, so the
+		// provider row that points at it needs no change.
+		"qm set 9100 --scsi0 local-lvm:0,import-from=/provider/template.img",
+		// The disk the operator had sized by hand is kept at its size, not
+		// reset to the stock one.
+		"qm resize 9100 scsi0 64G",
+		"qm set 9100 --description",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "qm create") {
+		t.Fatalf("made a second guest rather than preparing the template again: %v", *commands)
+	}
+	if strings.Contains(joined, "--delete") {
+		t.Fatalf("deleted a disk without the operator asking: %v", *commands)
+	}
+	// The old disk is named, with the command that removes it, because leaving
+	// it is a decision the operator has to know about.
+	if !strings.Contains(out.String(), "prepared again from "+testBuild) || !strings.Contains(out.String(), "--delete unused0") {
+		t.Errorf("the operator is not told what happened:\n%s", out.String())
+	}
+}
+
+func TestSetupLeavesATemplateOnAnotherNodeAndSaysWhereToPrepareIt(t *testing.T) {
+	inventory := `[{"vmid":9105,"name":"zoomies-template","node":"pve-2","type":"qemu","template":1}]`
+	config := `{"description":"Zoomies template setup abc\nagent: v1.3.1","scsi0":"local-lvm:vm-9105-disk-0,size=32G"}`
+	h, commands, out := refreshHost(t, inventory, config, config)
+	templates, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc", testBuild, out)
+	if err != nil || len(templates) != 1 || templates[0].VMID != 9105 {
+		t.Fatalf("EnsureTemplate = %+v, %v", templates, err)
+	}
+	// The image is imported into a guest from the node that guest is on, and it
+	// is prepared beside this setup's own state: a command run on the wrong node
+	// must not leave a guest holding half an image.
+	if strings.Contains(strings.Join(*commands, "\n"), "qm set") || strings.Contains(strings.Join(*commands, "\n"), "bash ") {
+		t.Fatalf("prepared a template from the wrong node: %v", *commands)
+	}
+	if !strings.Contains(out.String(), "run the setup command on that node") {
+		t.Errorf("the operator is not told where to run it: %q", out.String())
+	}
+}
+
+func TestSetupLeavesATemplateThatAlreadyCarriesThisReleaseAlone(t *testing.T) {
+	inventory := `[{"vmid":9100,"name":"zoomies-template","node":"pve","type":"qemu","template":1}]`
+	config := `{"description":"Zoomies template setup abc\nagent: v1.4.0","scsi0":"local-lvm:vm-9100-disk-0,size=32G"}`
+	h, commands, out := refreshHost(t, inventory, config, config)
+	if _, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc", testBuild, out); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(*commands, "\n"), "bash ") {
+		t.Fatalf("rebuilt an image that was already current: %v", *commands)
+	}
+	if !strings.Contains(out.String(), "already carries "+testBuild) {
+		t.Errorf("the operator is not told it was left alone: %q", out.String())
+	}
+}
+
+// refreshHost is a node with one template, answering the second read of its
+// configuration with what a replaced disk looks like: a new volume on scsi0 and
+// the old one moved to the first unused slot.
+func refreshHost(t *testing.T, inventory, before, after string) (Host, *[]string, *strings.Builder) {
+	t.Helper()
+	var commands []string
+	reads := 0
+	out := &strings.Builder{}
+	h := Host{
+		WriteFile: func(string, []byte, os.FileMode) error { return nil },
+		Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			line := name + " " + strings.Join(args, " ")
+			commands = append(commands, line)
+			switch {
+			case strings.Contains(line, "/cluster/resources"):
+				return []byte(inventory), nil
+			case strings.Contains(line, "/config"):
+				reads++
+				if reads > 1 {
+					return []byte(after), nil
+				}
+				return []byte(before), nil
+			}
+			return nil, nil
+		},
+	}
+	return h, &commands, out
+}
+
+func TestTemplateBuildOutlivesTheSetupThatWroteIt(t *testing.T) {
+	// A template built by an older release carries the marker and nothing else,
+	// and has to stay recognisable as ours: it is exactly the fleet whose
+	// machines are behind that a stranger's-guest refusal would strand.
+	if build, ours := templateBuild(templateMarker("abc"), "abc"); !ours || build != "" {
+		t.Fatalf("marker only = %q, %v; want ours with no release", build, ours)
+	}
+	if build, ours := templateBuild(templateDescription("abc", testBuild), "abc"); !ours || build != testBuild {
+		t.Fatalf("round trip = %q, %v", build, ours)
+	}
+	if build, ours := templateBuild(templateDescription("abc", testBuild), "other"); ours || build != "" {
+		t.Fatalf("another setup's template = %q, %v; want not ours", build, ours)
+	}
+	if _, ours := templateBuild("ubuntu 24.04 runner image", "abc"); ours {
+		t.Fatal("a guest with no marker was read as ours")
+	}
+	if _, ours := templateBuild("", "abc"); ours {
+		t.Fatal("a guest with no description was read as ours")
+	}
+	if build, _ := templateBuild("Zoomies template setup abc\r\nagent: v1.4.0\r\n", "abc"); build != testBuild {
+		t.Fatalf("a description with carriage returns = %q", build)
+	}
+}
+
+func TestTemplateBehindNeverTakesAFleetBackwards(t *testing.T) {
+	for name, tc := range map[string]struct {
+		recorded, build string
+		want            bool
+	}{
+		"the release this setup runs":        {testBuild, testBuild, false},
+		"an earlier release":                 {"v1.3.1", testBuild, true},
+		"a later release":                    {"v1.5.0", testBuild, false},
+		"a pre-release of this one":          {"v1.4.0-rc1", testBuild, true},
+		"the same release written two ways":  {"1.4", testBuild, false},
+		"nothing recorded":                   {"", testBuild, true},
+		"a build that cannot name itself":    {"", "", false},
+		"a release against nothing recorded": {testBuild, "", false},
+		"a build from main":                  {"main-sha-abc1234", "v1.4.0", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := templateBehind(tc.recorded, tc.build); got != tc.want {
+				t.Errorf("templateBehind(%q, %q) = %v, want %v", tc.recorded, tc.build, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -98,8 +266,10 @@ func TestTemplateCallbackOrderSurvivesAnInventoryReorder(t *testing.T) {
 }
 
 func TestSetupRefusesAnUnrelatedGuestWithTheTemplateName(t *testing.T) {
-	h, commands := templateHost(t, `[{"vmid":101,"name":"zoomies-template","node":"pve","type":"qemu"}]`, `{"description":"somebody else's VM","scsi0":"local:disk"}`)
-	if _, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc"); err == nil {
+	inventory := `[{"vmid":101,"name":"zoomies-template","node":"pve","type":"qemu"}]`
+	config := `{"description":"somebody else's VM","scsi0":"local:disk"}`
+	h, commands := templateHost(t, inventory, config)
+	if _, _, err := prepareTemplate(t, h, inventory, config, testBuild); err == nil {
 		t.Fatal("accepted an unrelated guest")
 	}
 	if len(*commands) != 2 {
@@ -118,7 +288,7 @@ func TestTemplatePreparationFailureNeverCreatesAVMOrReportsReady(t *testing.T) {
 				}
 				return run(ctx, name, args...)
 			}
-			templates, err := EnsureTemplate(context.Background(), h, "/provider", "/provider/zoomies", "pve", "abc")
+			templates, _, err := prepareTemplate(t, h, `[]`, "", testBuild)
 			if err == nil || templates != nil {
 				t.Fatalf("failed template reported ready: %v %v", templates, err)
 			}

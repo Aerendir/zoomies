@@ -10115,6 +10115,11 @@ export interface components {
              * @example dev
              */
             version_channel?: string;
+            /**
+             * @description The machine this host is, when Zoomies rented it, and absent for a host somebody installed. A rented machine is a clone of the template its provider builds from: it holds the agent that image carried, nothing can be run inside it by hand, and it is destroyed once it has been idle. It is therefore behind from the moment it joins, and `upgrade_command` is absent for it too; `upgrade_note` gives the way that does exist, which is preparing its provider's template again.
+             * @example mach_k3f9qz2mx7ab
+             */
+            machine_id?: string;
             cordoned?: boolean;
             /** @description The agent protocol this host reported speaking. Absent from an agent old enough not to send one, which is not the same as incompatible -- it is the one case the controller cannot judge. */
             protocol_version?: number;
@@ -10127,7 +10132,7 @@ export interface components {
              * @enum {string}
              */
             version_skew?: "behind" | "ahead" | "differs";
-            /** @description Copyable `sudo zoomies upgrade --mode agent --version <tag>` command for an older or different remote agent, targeting the controller's published release or dev channel. An operator runs it on the host. The controller asks the host's agent to update itself instead, with `POST /hosts/{id}/update`, only when `update.can_update` is true; for every other host this command is how it is upgraded. Absent for embedded, matching or newer agents, for unpublished controller builds, and for a Windows agent, which has no sudo and runs a service `zoomies upgrade` does not know; `upgrade_note` gives its steps by hand instead. Contains no credentials. */
+            /** @description Copyable `sudo zoomies upgrade --mode agent --version <tag>` command for an older or different remote agent, targeting the controller's published release or dev channel. An operator runs it on the host. The controller asks the host's agent to update itself instead, with `POST /hosts/{id}/update`, only when `update.can_update` is true; for every other host this command is how it is upgraded. Absent for embedded, matching or newer agents, for unpublished controller builds, for a machine Zoomies rents (see `machine_id`: no command can be run inside one), and for a Windows agent, which has no sudo and runs a service `zoomies upgrade` does not know; `upgrade_note` gives its steps by hand instead. Contains no credentials. */
             upgrade_command?: string;
             /** @description Controller build the upgrade is intended to match. */
             upgrade_version?: string;

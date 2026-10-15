@@ -689,6 +689,45 @@ test('the Providers page leads to the wizard, and a machine leads back to its pr
   await expect(pageHeading(page, FIXTURE.provider)).toBeVisible();
 });
 
+test('preparing a template again is one command for the node, and says what it leaves alone', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/provider-setups', (route) =>
+    route.fulfill({
+      status: 201,
+      json: {
+        id: 'pvs_refresh',
+        expires_at: new Date(Date.now() + 3600000).toISOString(),
+        ready: false,
+        command: 'sudo zoomies providers connect-proxmox --token test-capability',
+        short_command:
+          'curl -fsSL https://zoomies.sh/connect-proxmox.sh | sudo sh -s -- --token test-capability',
+      },
+    }),
+  );
+  await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+  // The panel leads with what a machine's agent actually is, because that is
+  // the fact the action follows from: an image, not a host anybody can log into.
+  await expect(page.getByText(/cloned from one template/)).toBeVisible();
+  await expect(page.getByText(/installs nothing of its own inside a machine/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Prepare the template again' }).click();
+  // The two-line command the wizard shows leads; the whole script is one
+  // disclosure away, as it is there.
+  await expect(page.getByText('connect-proxmox.sh | sudo sh', { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Copy the prepare-template command' }),
+  ).toBeVisible();
+  // And what it does, in the order an operator needs it: the same template, the
+  // machines already running left alone, the disk that was replaced, and not
+  // following the wizard it invites.
+  await expect(page.getByText(/same VMID and the same name/)).toBeVisible();
+  await expect(page.getByText(/replaced as they go idle/)).toBeVisible();
+  await expect(page.getByText(/--delete unused0/)).toBeVisible();
+  await expect(page.getByText(/Do not add a provider afterwards/)).toBeVisible();
+});
+
 test('a private connection is offered only where the controller can make one, and asks for the gateway address', async ({
   page,
 }) => {
