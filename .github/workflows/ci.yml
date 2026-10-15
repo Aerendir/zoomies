@@ -697,6 +697,12 @@ jobs:
         working-directory: web
       - run: npm run check
         working-directory: web
+      # Node's own test runner, no browser: about ten seconds. These were
+      # written, documented (CONTRIBUTING.md tells a contributor to run them) and
+      # cited as guards (AGENTS.md names one for the absent-value marker), and no
+      # job ran them, so a change could break every one and merge green.
+      - run: npm run test:unit
+        working-directory: web
       # The build fails on its own if the gzipped shell exceeds the 200 KB
       # budget documented in docs/ui-guidelines.md.
       - run: npm run build
