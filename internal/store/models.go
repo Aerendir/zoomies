@@ -1129,9 +1129,19 @@ type Host struct {
 	Arch      string `json:"arch"`
 	// CPUs and MemoryMB are the machine's size, reported by the agent. They
 	// are what the host's canonical name and the Hosts page say out loud.
-	CPUs     int       `json:"cpus,omitempty"`
-	MemoryMB int64     `json:"memory_mb,omitempty"`
-	Usage    HostUsage `json:"usage,omitempty"`
+	CPUs     int   `json:"cpus,omitempty"`
+	MemoryMB int64 `json:"memory_mb,omitempty"`
+	// CPUMHz, MemoryMTs and DiskKind are the speed figures beside the size
+	// ones, measured the same agent-reported way: the fastest processor
+	// clock, the memory modules' rated rate, and whether the storage backing
+	// the work directory says it spins. Every one is best-effort, so a zero
+	// or an empty kind is "not measured", which is what constrains nothing:
+	// the priority scoring drops an unmeasured axis rather than ranking a
+	// quiet machine slowest in it.
+	CPUMHz    int       `json:"cpu_mhz,omitempty"`
+	MemoryMTs int       `json:"memory_mts,omitempty"`
+	DiskKind  string    `json:"disk_kind,omitempty"`
+	Usage     HostUsage `json:"usage,omitempty"`
 	// Throttle is the controller's answer to a host that its measurements say
 	// is overwhelmed: how far it has stepped the host's admission and its
 	// runners' CPU quotas down, and why. It is the controller's alone -- a
@@ -1167,6 +1177,13 @@ type Host struct {
 	// -- every host until somebody sets one -- changes nothing about how the
 	// host is sized.
 	RunnerProfile RunnerProfile `json:"runner_profile,omitzero"`
+	// PriorityOverride is the operator's answer to where this host stands in
+	// placement, on the 0..100 scale the scheduler's spec score uses.
+	// It is theirs alone, written through PatchHost and by no heartbeat, and
+	// nil -- every host until somebody sets one -- leaves the spec score in
+	// force: an override of 100 puts the host ahead of everything and a nil
+	// back to the score the machine itself earns.
+	PriorityOverride *int `json:"priority_override,omitempty"`
 	// SizeClass is the class the controller holds this host in, worked out
 	// from its allocatable CPU and memory while size routing or automatic
 	// pools are on, and empty otherwise. It is the controller's alone, written
@@ -1262,6 +1279,20 @@ func (h *Host) Spec() naming.Spec {
 // join` today, which is what the UI offers when a host is called something
 // that says nothing.
 func (h *Host) CanonicalName() string { return h.Spec().String() }
+
+// SpecDiskSpeed turns the storage kind into the 0..1 the priority scoring
+// ranks a host by: a spinning disk is measurably slower than what replaces
+// it. An empty kind is unmeasured, and the scoring drops an unmeasured axis
+// rather than ranking a quiet machine half way.
+func (h *Host) SpecDiskSpeed() float64 {
+	switch h.DiskKind {
+	case "ssd":
+		return 1
+	case "hdd":
+		return 0
+	}
+	return 0
+}
 
 // HeartbeatTimeout is how long a host may go silent before it is considered
 // unhealthy. It is three times the agent's default heartbeat interval.

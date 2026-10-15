@@ -349,6 +349,10 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionHostsWrite)).Patch("/{id}", s.handleUpdateHost)
 			r.With(s.require(auth.ActionHostsCordon)).Post("/{id}/cordon", s.handleCordonHost)
 			r.With(s.require(auth.ActionHostsWrite)).Post("/{id}/throttle/clear", s.handleClearHostThrottle)
+			// Re-read what the host's last report ranked it at, forcing the
+			// frame so the page settles at once. The specs themselves are
+			// remeasured by every heartbeat.
+			r.With(s.require(auth.ActionHostsWrite)).Post("/{id}/priority-check", s.handleRecheckPriority)
 			// Named for the decision and not for the report, so a route that serves
 			// the report itself has the name /doctor to itself.
 			r.With(s.require(auth.ActionHostsCheck)).Post("/{id}/health-check", s.handleCheckHost)

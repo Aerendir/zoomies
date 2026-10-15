@@ -705,6 +705,9 @@ func (c *Controller) join(ctx context.Context, req agent.JoinRequest, ip string,
 		Arch:          req.Arch,
 		CPUs:          req.CPUs,
 		MemoryMB:      req.MemoryMB,
+		CPUMHz:        req.CPUMHz,
+		MemoryMTs:     req.MemoryMTs,
+		DiskKind:      req.DiskKind,
 		DiskTotalMB:   req.DiskTotalMB,
 		DiskFreeMB:    req.DiskFreeMB,
 		Version:       req.Version,
@@ -763,6 +766,12 @@ func (c *Controller) join(ctx context.Context, req agent.JoinRequest, ip string,
 		// more slots than its operator chose, and every pool that takes its
 		// size from the host would change size with nothing to say why.
 		h.RunnerProfile = existing.RunnerProfile
+		// The priority override is the operator's in the same way: a rebuilt
+		// machine reclaiming its row did not lose its place in placement, and
+		// the spec score is rebuilt from what this report carries. Without
+		// this, a host whose operator has pinned it drops out of the rung it
+		// was given every time an installer re-runs a join.
+		h.PriorityOverride = existing.PriorityOverride
 		// The labels an operator added are theirs as well, and the comment above
 		// has been saying so while the row lost every one: the join builds a host
 		// from what the agent declares and what the token pins, and neither knows
@@ -947,6 +956,13 @@ func (c *Controller) Heartbeat(ctx context.Context, hostID string, req agent.Hea
 	kinds := probed.Kinds()
 	versionMoved := req.Version != "" && req.Version != h.Version
 	backendsChanged := len(probed) > 0 && !slices.Equal(kinds, h.Backends)
+	specMoved := (req.CPUs > 0 && req.CPUs != h.CPUs) ||
+		(req.CPUMHz > 0 && req.CPUMHz != h.CPUMHz) ||
+		(req.MemoryMB > 0 && req.MemoryMB != h.MemoryMB) ||
+		(req.MemoryMTs > 0 && req.MemoryMTs != h.MemoryMTs) ||
+		(req.DiskKind != "" && req.DiskKind != h.DiskKind) ||
+		(req.DiskTotalMB > 0 && req.DiskTotalMB != h.DiskTotalMB) ||
+		diskFreeMoved(h.DiskFreeMB, req.DiskFreeMB, req.DiskTotalMB > 0)
 	changed := backendsChanged ||
 		(len(probed) > 0 && !slices.Equal(probed, h.BackendInfo)) ||
 		versionMoved ||
@@ -958,12 +974,10 @@ func (c *Controller) Heartbeat(ctx context.Context, hostID string, req agent.Hea
 		// A host resized in place -- a VM given more cores, a container's
 		// cgroup limit raised -- has to stop describing itself as the machine
 		// it used to be, or its name and every pool sized from it go stale.
-		// This is a fact about the machine, not the operator's capacity
-		// setting, which stays theirs.
-		(req.CPUs > 0 && req.CPUs != h.CPUs) ||
-		(req.MemoryMB > 0 && req.MemoryMB != h.MemoryMB) ||
-		(req.DiskTotalMB > 0 && req.DiskTotalMB != h.DiskTotalMB) ||
-		diskFreeMoved(h.DiskFreeMB, req.DiskFreeMB, req.DiskTotalMB > 0)
+		// The speed figures move with the specs, and the spec score with
+		// them, which the card ranks on. This is a fact about the machine,
+		// not the operator's capacity setting, which stays theirs.
+		specMoved
 	if changed {
 		was := h.Backends
 		if len(probed) > 0 {
@@ -975,8 +989,21 @@ func (c *Controller) Heartbeat(ctx context.Context, hostID string, req agent.Hea
 		if req.CPUs > 0 {
 			h.CPUs = req.CPUs
 		}
+		if req.CPUMHz > 0 {
+			h.CPUMHz = req.CPUMHz
+		}
 		if req.MemoryMB > 0 {
 			h.MemoryMB = req.MemoryMB
+		}
+		if req.MemoryMTs > 0 {
+			h.MemoryMTs = req.MemoryMTs
+		}
+		if req.DiskKind != "" {
+			// Note the shape of the truth here: the storage kind arriving
+			// never means the disk has changed species on its own -- it
+			// means the probe this beat ran measured one. An answer every
+			// beat repeats is still the same answer.
+			h.DiskKind = req.DiskKind
 		}
 		if req.DiskTotalMB > 0 {
 			h.DiskTotalMB = req.DiskTotalMB
@@ -996,9 +1023,14 @@ func (c *Controller) Heartbeat(ctx context.Context, hostID string, req agent.Hea
 			c.log.Info("a host's backends changed", "host", hostID, "name", h.Name,
 				"was", strings.Join(was, ","), "now", strings.Join(h.Backends, ","),
 				"detail", unavailableDetail(probed))
-			c.publishHost(h)
 			// A host that has just gained a backend may be the one a stalled
 			// pool has been waiting for.
+		}
+		if backendsChanged || specMoved {
+			// Either kind of change repaints on the card; a spec move is
+			// also a priority move, and a scheduling pass that follows
+			// should place against the new machine, not the old one.
+			c.publishHost(h)
 			c.Nudge()
 		}
 		if versionMoved {

@@ -34,6 +34,7 @@
   import type { Host, JoinToken, Machine, Provider } from '$lib/api/types';
   import { NO_VALUE, onClockTick, pluralise } from '$lib/format';
   import { href, router } from '$lib/router';
+  import { checkHostPriority } from '$lib/api/client';
   import { fleet } from '$lib/state/fleet.svelte';
   import { remember, remembered } from '$lib/state/prefs.svelte';
   import { session } from '$lib/state/session.svelte';
@@ -63,6 +64,7 @@
   } from '$lib/hosts/health-filter';
   import { slotsOf } from '$lib/hosts/slots';
   import HostDeleteDialog from '$lib/hosts/HostDeleteDialog.svelte';
+  import HostPriorityDialog from '$lib/hosts/HostPriorityDialog.svelte';
   import HostRenameDialog from '$lib/hosts/HostRenameDialog.svelte';
   import HostLabelsDialog from '$lib/hosts/HostLabelsDialog.svelte';
   import HostUpdateDialog from '$lib/hosts/HostUpdateDialog.svelte';
@@ -365,7 +367,8 @@
   let deleteOpen = $state(false);
   let updating = $state<Host | null>(null);
   let updateOpen = $state(false);
-
+  let prio = $state<Host | null>(null);
+  let prioOpen = $state(false);
   /**
    * Fetch both halves of this page again: the fleet, and the tokens beside it.
    * The token list reports its own progress in place, so the button follows the
@@ -428,6 +431,32 @@
   function update(host: Host): void {
     updating = host;
     updateOpen = true;
+  }
+
+  function priority(host: Host): void {
+    prio = host;
+    prioOpen = true;
+  }
+
+  /**
+   * Re-read what the specs rank this host at, without opening anything. Used
+   * after an upgrade the host has had: the machine re-reports its figures on
+   * its next heartbeat anyway, and this settles the card and the next pass
+   * now. The name remembered is what the toast says while it runs.
+   */
+  async function recheck(host: Host): Promise<void> {
+    if (!host.id) return;
+    try {
+      const fresh = await checkHostPriority(host.id);
+      fleet.reconcile();
+      const name = fresh.name || host.id;
+      toasts.success(
+        `Re-checked ${name}`,
+        `Its priority stands at ${fresh.priority} of 100, ${fresh.priority_source === 'overridden' ? 'still where the operator pinned it' : 'scored from its specs as they were last reported'}. The next pass places against it.`,
+      );
+    } catch (cause) {
+      toasts.fromError(cause, 'The priority could not be re-checked');
+    }
   }
 </script>
 
@@ -666,6 +695,8 @@
             onthrottle={(target) => void liftThrottle(target)}
             oncapacity={size}
             onsizes={sizes}
+            onpriority={priority}
+            onrecheck={(target) => void recheck(target)}
             onedit={edit}
             onrename={rename}
             ondelete={remove}
@@ -715,6 +746,7 @@
   onclose={() => (profiling = null)}
 />
 
+<HostPriorityDialog bind:open={prioOpen} host={prio} onclose={() => (prio = null)} />
 <HostRenameDialog bind:open={renameOpen} host={renaming} onclose={() => (renaming = null)} />
 <HostLabelsDialog bind:open={editOpen} host={editing} onclose={() => (editing = null)} />
 <HostDeleteDialog bind:open={deleteOpen} host={deleting} onclose={() => (deleting = null)} />

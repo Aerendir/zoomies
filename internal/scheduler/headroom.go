@@ -91,6 +91,14 @@ func (hs *hostSet) prefer(h, best *store.Host, p *store.Pool) bool {
 			return false
 		}
 	}
+	// Spec priority decides first: it is what ranks a bigger, faster machine
+	// ahead of a smaller, slower one, whichever placement order is in force.
+	// Hosts that score the same fall through to the order, and hosts that
+	// measure nothing all score 0, which is what keeps an old fleet placed
+	// exactly as before the score existed.
+	if a, b := HostPriority(h), HostPriority(best); a.Score != b.Score {
+		return a.Score > b.Score
+	}
 	a, b := hs.alloc[h.ID], hs.alloc[best.ID]
 	measured := (a.CPUsKnown || a.MemoryKnown) && (b.CPUsKnown || b.MemoryKnown)
 	switch hs.order {
