@@ -82,6 +82,15 @@ Classic beside it:
 A headless browser cannot raise a soft keyboard, so the assistant sheet's
 keyboard behaviour is covered by the browser suite rather than photographed.
 
+Primitives are reviewed in the development-only component gallery
+(`web/gallery.html`, served by `make gallery`), which renders the real
+components in every state above, in four style and mode combinations. That is
+not a product page: it is never built into the binary and never linked from
+the navigation. Its captures live under `design/theme-review/gallery` and are
+refreshed with `make screenshots-gallery`; `web/tests/gallery.spec.ts` checks
+all four combinations, the refusal reasons, focus rings, live status contrast
+and the phone width.
+
 
 Logo backdrops are chosen in Settings, Appearance and saved in this browser.
 Orbital haze is the default for new, missing or unrecognised preferences.
@@ -1408,6 +1417,10 @@ the old one is worse than one that is uniformly a release behind. If a shot
 needs the fixture to show something new, change the fixture in
 `internal/controller/seed.go` rather than the image; that is the fleet the
 Playwright suite asserts on, so the picture and the tests stay honest together.
+
+The component gallery is a separate capture set: it is not a product page, so
+it never goes in this folder or in the docs gallery. `make screenshots-gallery`
+refreshes `design/theme-review/gallery/`; see the README beside those files.
 
 ### Eli's contextual assistant
 

@@ -31,6 +31,16 @@ Current-app captures are from the locally built real controller using its tempor
 
 [viewport-review.json](viewport-review.json) records the 14 controller route checks at both widths and the concept overflow checks. It is a smoke inspection, not a full accessibility or end-to-end test report. External billing, email, GitHub actions and real host operations were not executed. An additional first-run browser capture was blocked by automatic approval service usage limits; no bootstrap screenshot is claimed.
 
+## Component gallery
+
+The states a healthy fleet never shows (disabled and refused controls,
+loading, empty, failed and retry states, focus rings, every status shape and
+all four data-grid states) are reviewed in the development-only component
+gallery rather than in a concept or a product page. Its captures in both
+styles and both colour modes, at 1440px and 375px, are in
+[the gallery folder](gallery/README.md); the live page, the refresh command and
+the browser checks are described there.
+
 ## Required Zoomies identity
 
 Retain the real Zoomies logo, existing logo treatments, dog/paw artwork, Eli identity, animations and quirky vocabulary choices in production. The mock symbols are layout placeholders, not proposed replacement branding. Preserve saved Off/Cute/Standard choices and reduced motion when changing visual style.

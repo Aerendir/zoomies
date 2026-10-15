@@ -221,9 +221,10 @@ out in under 190 CSS pixels, below WCAG's 320-pixel reflow floor at default
 text, and reflowing the dense phone layouts at that size is a general
 follow-up rather than specific to the new style.
 
-The plan's release-evidence list is still open: first-run, empty, failure and
-phone-keyboard captures for Mission Control, and the development-only state
-gallery in N-T4.
+The plan's release-evidence list is complete: the component gallery is
+built and described below. The phone-keyboard evidence is not a capture: the
+assistant sheet's visual-viewport sizing, focus containment and close order
+are covered by the browser suite.
 
 ## Release evidence (14 October 2026)
 
@@ -244,9 +245,76 @@ A headless browser cannot raise a soft keyboard, so the phone-keyboard evidence
 is not a picture: the assistant sheet's visual-viewport sizing, focus
 containment and close order are covered by the browser suite.
 
+## Component gallery (N-T4, 14 October 2026)
+
+In [PR #1050](https://github.com/eyupio/zoomies/pull/1050), branch
+`theme/state-gallery`. N-T4 asked for the states a healthy screenshot never
+shows to be reviewable in one place, in both styles and modes. That is now
+`web/gallery.html` plus `web/src/gallery/`: a development-only Vite entry
+that renders the real components from `web/src/lib/components`, never a copy
+of them, in the states the audit named and a few it did not.
+
+It is not part of the product. `vite build` has one input and does not build
+it, `internal/api/webdist` does not contain it, the router does not know it and
+no page links to it. The shell budget is unchanged at 142.4 KB of 200 KB and the
+status document at 19.1 KB of 30 KB; a `gallery.html` in the embedded output is
+a mistake, not a feature.
+
+The gallery covers buttons, icon buttons, segmented controls, form fields,
+choice controls, sliders and the quantity field, the status vocabulary, the
+surface and text tokens, skeletons, empty and error states, the loading
+boundary, toasts, a drawer, a destructive confirmation, a rich tooltip, notices
+and all four data-grid states. Refused controls keep their reason in the
+accessible description and stay focusable; a plain disabled control is shown
+beside them so the two read differently. The style and mode come from the query
+string (`?style=mission-control&mode=dark`), so a combination is something a
+capture or a test can name, and opening the gallery writes no browser
+preference.
+
+`make gallery` serves it on `:5173/gallery.html`. `make screenshots-gallery`
+refreshes the eight committed captures, four combinations at 1440px and four at
+375px, in `design/theme-review/gallery/` with a README that says what they are.
+The encoder was extracted to `tests/support/webp.mjs` so the gallery script and
+the documentation script share one Pillow invocation; a subset of
+`tests/support/screenshots.mjs` was re-run after the change and still encodes.
+
+`web/tests/gallery.spec.ts` is the automated half, against a Vite dev server
+rather than the binary (the gallery is not in the binary to drive): 16 checks
+pass. They cover all four combinations, the root attributes, the refusal
+descriptions, the focus ring, retry actions, live contrast of every status
+badge and state label against the surface it sits on, unknown values falling
+back to Classic and System, a system-mode change that keeps Mission Control,
+an in-place style switch that writes no preference, the fresh phone grid's
+Cards/Rows fallback in each style, the drawer's focus trap and Escape order,
+the confirmation's typed-name gate, the grid's ready, empty, loading and
+failed states, the toast tones, and no page-level overflow at 1440 or 375
+pixels. The spec project is excluded from the `chromium` and `mobile`
+projects, which drive the real binary, and joins the Playwright matrix's
+`other` group in CI so it runs at all.
+
+One component reads the style store rather than the root attribute: a data
+grid's fresh phone fallback is Cards in Mission Control and Rows in Classic.
+Setting the attribute alone would have shown a Classic decision inside Mission
+Control tokens, so `visualStyle` gained `preview`, which makes the rune agree
+with an attribute the caller owns and writes no preference.
+
+Building the gallery found one real defect in its own layout before it found
+any in the components: a `minmax(22rem, 1fr)` form column has a 352px floor,
+which is wider than a 375px phone once the page and panel padding are taken
+out, and pushed the document to 389px. Both gallery grids now use
+`minmax(min(22rem, 100%), 1fr)`.
+
+There is one honest limit in the spec: a data grid keeps last-known rows on
+screen while a later fetch is in flight, by design, so a filter change cannot
+reach the loading state. The gallery keys the grid by its state to force a
+fresh mount, and says so where the key is.
+
 ## Next coding-agent actions
 
-1. The theme, the operational layout and first-job activation are merged, and the release evidence is captured. The one evidence item that is not a capture is the assistant sheet's phone-keyboard behaviour, which the browser suite covers.
+1. The theme, the operational layout, first-job activation, the release
+evidence and the development-only component gallery (N-T4, PR #1050) are
+done. The one evidence item that is not a capture is the assistant sheet's
+phone-keyboard behaviour, which the browser suite covers.
 2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
    intended behaviour; use this file for current implementation status.
 3. Treat first-job repository assistance as a separate feature. Before adding
