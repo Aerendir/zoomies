@@ -49,7 +49,7 @@ Conventions:
   `unprocessable`, `too_large`, `rate_limited`, `limit_reached`, the `update.*`
   refusals and `update.check_failed` listed under [Updates](#updates),
   the `analysis.*` refusals listed under [Analyses](#analyses),
-  `assistant.provider_failed` (a 502, listed under the assistant's routes), `assistant.provider_not_yours` (a 403: the provider is somebody else's own subscription), and `internal`.
+  `assistant.provider_failed` (a 502, listed under the assistant's routes), `assistant.provider_not_yours` (a 403: the provider is somebody else's own subscription), `assistant.identity_held` (a 409: the GitHub account is already linked to another Zoomies user, the holder named in the message and its id in `detail`, moved by resending with `relink`), and `internal`.
 * Timestamps are RFC 3339 with a `Z` offset. Durations are Go duration strings
   (`"5m"`, `"1h30s"`).
 * Mutating requests require `Content-Type: application/json` and, for cookie
@@ -407,7 +407,7 @@ running beside it, and the gateway's Tailcat address is handled the same way:
 | GET | `/api/v1/assistant/repairs/settings` | viewer | Own GitHub account link; administrators also see all links and repository policies. |
 | PUT | `/api/v1/assistant/repairs/consent` | viewer | Confirms or revokes use of the caller’s personal provider by their linked GitHub account. Body carries `github_user_id` and `enabled`; another user or a stale numeric ID cannot be confirmed. Returns 204. |
 | PUT | `/api/v1/assistant/repairs/policy` | admin | Sets repository, installation, optional installation provider (required for automatic mode), enabled, automatic, ask_first, workflow-edit opt-in and daily attempt budget (1 to 50). |
-| PUT | `/api/v1/assistant/repairs/identity` | admin | Verifies repository write permission and stores the GitHub numeric identity for a Zoomies user. An empty `github_login` removes the link (204). Verify account ownership before linking. |
+| PUT | `/api/v1/assistant/repairs/identity` | admin | Verifies repository write permission and stores the GitHub numeric identity for a Zoomies user. An empty `github_login` removes the link (204). Verify account ownership before linking. One GitHub account may serve one Zoomies user: a link another user already holds is a 409 `assistant.identity_held` naming the holder, and `relink` moves it, unconfirmed, with a `moved_from` in the `assistant.github_link` audit row. |
 | GET | `/api/v1/machines` | viewer | Paged, filtered by `?provider=`, `?pool=`, `?host=`, `?state=`, `?q=` and `?include_deleted=`. |
 | GET | `/api/v1/machines/{id}` | viewer | Includes the phase timeline the detail page reads as a life rather than a row of timestamps. |
 | POST | `/api/v1/machines/{id}/drain` | operator | Cordons its host and lets its runners finish. Reversible until the delete starts: demand coming back takes a draining machine back to ready rather than paying for a new one. |

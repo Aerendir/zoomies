@@ -29,16 +29,17 @@ import (
 // the UI switches on them, so they are part of the contract rather than free
 // text.
 const (
-	codeBadRequest    = "bad_request"
-	codeUnauthorized  = "unauthorized"
-	codeForbidden     = "forbidden"
-	codeNotFound      = "not_found"
-	codeConflict      = "conflict"
-	codeUnprocessable = "unprocessable"
-	codeTooLarge      = "too_large"
-	codeRateLimited   = "rate_limited"
-	codeLimitReached  = "limit_reached"
-	codeInternal      = "internal"
+	codeBadRequest      = "bad_request"
+	codeUnauthorized    = "unauthorized"
+	codeForbidden       = "forbidden"
+	codeNotFound        = "not_found"
+	codeConflict        = "conflict"
+	codeUnprocessable   = "unprocessable"
+	codeTooLarge        = "too_large"
+	codeRateLimited     = "rate_limited"
+	codeLimitReached    = "limit_reached"
+	codeInternal        = "internal"
+	codeEliIdentityHeld = "assistant.identity_held"
 )
 
 // The refusals of an update. Each is a 409 with a code of its own because a
@@ -193,6 +194,19 @@ func notFound(w http.ResponseWriter, message string) {
 
 func conflict(w http.ResponseWriter, message string) {
 	writeError(w, http.StatusConflict, errorEnvelope{Error: errorBody{Code: codeConflict, Message: message}})
+}
+
+// codeEliIdentityHeld is a verification of a GitHub account's link to a user
+// that another Zoomies user already holds. It is a 409 with a code of its own
+// rather than a plain conflict because the client offers something different
+// about it: move the link to the account being verified, with the person
+// reading who holds it before they press. The holder travels in detail, the
+// account's name in the field since the link form's own field is at fault
+// because it asked for an account somebody else has.
+func conflictHeld(w http.ResponseWriter, message, holder string) {
+	writeError(w, http.StatusConflict, errorEnvelope{Error: errorBody{
+		Code: codeEliIdentityHeld, Message: message, Field: "github_login", Detail: holder,
+	}})
 }
 
 // limitReached is the refusal from one of the limits.* ceilings. It is a 409

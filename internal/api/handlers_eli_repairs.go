@@ -231,6 +231,12 @@ func (s *Server) handleSetEliIdentity(w http.ResponseWriter, r *http.Request) {
 		GitHubLogin    string `json:"github_login"`
 		InstallationID string `json:"installation_id"`
 		Repo           string `json:"repo"`
+		// Relink is the confirmation the held-link refusal asks for: move the
+		// GitHub account's link from the Zoomies account that holds it to the
+		// one being verified. An instance move or a re-created account is how a
+		// link ends up held by the account that is being replaced, and without
+		// the flag the refusal cannot be turned into a new link by accident.
+		Relink bool `json:"relink"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -265,13 +271,74 @@ func (s *Server) handleSetEliIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := store.EliIdentity{UserID: user.ID, GitHubUserID: actor.ID, GitHubLogin: actor.Login}
+	if in.Relink {
+		holder, err := s.ctrl.Store().RelinkEliIdentity(r.Context(), id)
+		if err != nil {
+			s.fail(w, r, "moving the GitHub account link", err)
+			return
+		}
+		after := map[string]any{"github_user_id": id.GitHubUserID, "github_login": id.GitHubLogin}
+		if holder != "" {
+			after["moved_from"] = holder
+		}
+		s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "assistant.github_link", "user", user.ID, after)
+		writeJSON(w, http.StatusOK, id)
+		return
+	}
 	if err := s.ctrl.Store().SetEliIdentity(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrEliIdentityHeld) {
+			conflictHeld(w, s.eliHeldMessage(r.Context(), actor.ID), s.eliHolderID(r.Context(), actor.ID))
+			return
+		}
 		s.fail(w, r, "linking the GitHub account", err)
 		return
 	}
 	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "assistant.github_link", "user", user.ID, id)
 	writeJSON(w, http.StatusOK, id)
 }
+
+// eliHeldMessage and eliHolderID say whose link the verification found, for
+// the person to act on: hold or move. The holder's name is the sentence;
+// "another Zoomies user" would send the administrator looking through every
+// account for the row. The holder travels in the refusal's detail, which is
+// what the moved link's audit row and the page's own answer have in common.
+func (s *Server) eliHeldMessage(ctx context.Context, githubUserID int64) string {
+	name := s.eliHolderName(ctx, githubUserID)
+	if name == "" {
+		return "This GitHub account is already linked to another Zoomies user. Moving the link removes their confirmed link, and they would have to allow it again."
+	}
+	return fmt.Sprintf("This GitHub account is already linked to %s. Moving the link removes that account's confirmed link, and they would have to allow it again.", name)
+}
+
+// eliHolderID is the Zoomies user the GitHub account's link sits on now, or
+// "" when the links could not be read: the page falls back to the message
+// and the user does the looking.
+func (s *Server) eliHolderID(ctx context.Context, githubUserID int64) string {
+	identities, err := s.ctrl.Store().EliIdentities(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, id := range identities {
+		if id.GitHubUserID == githubUserID {
+			return id.UserID
+		}
+	}
+	return ""
+}
+
+// eliHolderName is the holding account's username, resolved for the message.
+func (s *Server) eliHolderName(ctx context.Context, githubUserID int64) string {
+	holder := s.eliHolderID(ctx, githubUserID)
+	if holder == "" {
+		return ""
+	}
+	user, err := s.ctrl.Store().GetUser(ctx, holder)
+	if err != nil {
+		return ""
+	}
+	return user.Username
+}
+
 func (s *Server) handleSetEliPolicy(w http.ResponseWriter, r *http.Request) {
 	var p store.EliRepairPolicy
 	if !decode(w, r, &p) {
