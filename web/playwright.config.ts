@@ -214,12 +214,7 @@ export default defineConfig({
       // meet a second Vite on the same port; never in CI, where a stale server
       // would be the one from an earlier job.
       reuseExistingServer: !process.env.CI,
-      // Longer than the controllers get, deliberately. A cold checkout has no
-      // Vite dependency cache, so the first start pre-bundles the whole
-      // application's dependencies before it answers anything; on the CI pool
-      // that outlasted the minute the controllers are given. Once the cache
-      // exists the server answers in about a second.
-      timeout: 300_000,
+      timeout: 60_000,
       stdout: 'pipe',
       stderr: 'pipe',
     },

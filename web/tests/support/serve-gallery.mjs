@@ -25,7 +25,12 @@ if (!existsSync(vite)) {
   process.exit(1);
 }
 
-const child = spawn(vite, ['--port', port, '--strictPort'], {
+// Vite's default host is `localhost`, and on a machine whose resolver prefers
+// IPv6 that binds `::1` alone: the port answers for localhost and refuses
+// every connection to 127.0.0.1, which is the address Playwright checks and
+// the specs use. CI spent five minutes waiting for a server that was already
+// up. Bind IPv4 by name so the listener and the caller cannot disagree.
+const child = spawn(vite, ['--host', '127.0.0.1', '--port', port, '--strictPort'], {
   cwd: root,
   stdio: 'inherit',
 });
