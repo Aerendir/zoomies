@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/eyupio/zoomies/internal/installer"
+	"github.com/eyupio/zoomies/internal/releasekey"
 )
 
 func TestAnInvalidDeploymentStopsBeforeTheBinaryDownload(t *testing.T) {
@@ -67,7 +68,10 @@ func TestEveryUpgradeSpellingAcceptsTheSameMaintenanceOptions(t *testing.T) {
 }
 
 // candidateRelease publishes v9.9.9 with an asset that really runs, because the
-// fetch starts the download once (`version --short`) before it is trusted.
+// fetch starts the download once (`version --short`) before it is trusted. Its
+// checksums are signed by a key minted here and trusted through the
+// environment, as a real release is signed by the key the binary carries: an
+// unsigned fake would be refused by any build that carries one.
 func candidateRelease(t *testing.T) (asset string) {
 	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
@@ -78,12 +82,21 @@ func candidateRelease(t *testing.T) (asset string) {
 	name := "zoomies_" + runtime.GOOS + "_" + runtime.GOARCH
 	mux := http.NewServeMux()
 	mux.HandleFunc("/download/v9.9.9/"+name, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(asset)) })
-	mux.HandleFunc("/download/v9.9.9/checksums.txt", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(hex.EncodeToString(sum[:]) + "  " + name + "\n"))
-	})
+	sums := []byte(hex.EncodeToString(sum[:]) + "  " + name + "\n")
+	public, private, err := releasekey.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := releasekey.Sign(private, sums)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux.HandleFunc("/download/v9.9.9/checksums.txt", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(sums) })
+	mux.HandleFunc("/download/v9.9.9/checksums.txt.ed25519", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(sig) })
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	t.Setenv("ZOOMIES_BASE_URL", server.URL)
+	t.Setenv("ZOOMIES_RELEASE_KEY", public)
 	t.Setenv(installer.SelfUpdateEnv, "")
 	return asset
 }
