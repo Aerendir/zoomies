@@ -25,6 +25,12 @@ on:
   schedule:
     - cron: "31 5 * * 2"
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Where to fuzz. github is the recovery path."
+        type: choice
+        default: zoomies
+        options: [zoomies, github]
 
 permissions:
   contents: read
@@ -40,7 +46,11 @@ concurrency:
 jobs:
   fuzz:
     if: github.event.action != 'closed'
-    runs-on: zoomies-linux-x64
+    # The Zoomies pool, except for a fork's pull request, whose code must not
+    # run on the fleet, and a manual dispatch that asks for GitHub's runners.
+    # ci.yml and govulncheck.yml choose the same way, and a test in internal/docs
+    # holds all three to it.
+    runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -48,8 +58,12 @@ jobs:
         include:
           - { target: FuzzParseKey, package: ./internal/cryptox }
           - { target: FuzzSealOpen, package: ./internal/cryptox }
-          # The workflow parser reads what a pull request author wrote.
+          # The workflow parser reads what a pull request author wrote. Every
+          # fuzz target in the repository has a row here: a test in
+          # internal/docs fails on one that does not.
           - { target: FuzzInspect, package: ./internal/kennel/workflow }
+          - { target: FuzzCheckoutDepthEditPreservesTheDocument, package: ./internal/kennel/workflow }
+          - { target: FuzzDependencyInventoriesPreserveTheirRetainedInvariants, package: ./internal/kennel/workflow }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
