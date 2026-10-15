@@ -1178,6 +1178,13 @@ one running the transition binary accepts the next release, signed with the new
 key. `zoomies release verify` says which key a signature names. Ed25519 is the
 standard library's; nothing new is depended on.
 
+To hold one download to a different key, for a mirror or a test that builds its
+own, pass the base64 public key to `zoomies upgrade --release-key`, or set
+`ZOOMIES_RELEASE_KEY`. The flag wins over the environment
+variable, and the environment variable wins over the keys compiled into the
+binary. With none of the three, nothing is held to a signature, and the download
+says so once.
+
 Every image says what it is without being started, in the standard OCI labels,
 `org.opencontainers.image.version`, `.revision` and `.created`. That includes
 the runner images, which until recently carried no version at all.

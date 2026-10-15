@@ -83,7 +83,7 @@ beneath show every figure at that moment, and "Back to now" lets it go; the
 slider is the same inspection for a keyboard. History reloads on reconnect and
 aborts on unmount. Provisioning
 counts use a throttled event-driven refresh and ignore late results after a
-scope change. No scheduler behavior is changed by these views.
+scope change. No scheduler behaviour is changed by these views.
 
 ## Reusable presentation
 
