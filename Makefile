@@ -215,19 +215,24 @@ $(UI_DIR)/node_modules:
 .PHONY: lint
 lint: | $(UI_DIR)/node_modules ## Vet, format check, and staticcheck when available
 	$(GO) vet ./...
-# The tagged suites too. An ordinary `go vet ./...` never compiles them, which
-# is how test/e2e sat with a non-test file referring to a symbol only its
-# _test.go half defined: every gate was green and the package did not build
-# under its own tag. Vet rather than build, because vet compiles the tests as
-# well and it is the test halves that carry most of this code.
-	$(GO) vet -tags e2e ./...
-	$(GO) vet -tags drill ./...
-	$(GO) vet -tags load ./...
+	@$(MAKE) --no-print-directory vet-tags
 	@out=$$(gofmt -l $$(git ls-files '*.go')); \
 	 if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 	@if command -v staticcheck >/dev/null 2>&1; then staticcheck ./...; \
 	 else echo "  staticcheck not installed, skipping"; fi
 	cd $(UI_DIR) && $(NPM) run lint
+
+# The tagged suites. An ordinary `go vet ./...` never compiles them, which is how
+# test/e2e sat with a non-test file referring to a symbol only its _test.go half
+# defined: every gate was green and the package did not build under its own
+# tag. Vet rather than build, because vet compiles the tests as well and it is
+# the test halves that carry most of this code. CI runs this target too, and a
+# test in internal/docs fails when a build tag is used that it does not cover.
+.PHONY: vet-tags
+vet-tags: | $(UI_OUT)/.placeholder ## Vet the suites behind a build tag (e2e, drill, load), which a plain go vet never compiles
+	$(GO) vet -tags e2e ./...
+	$(GO) vet -tags drill ./...
+	$(GO) vet -tags load ./...
 
 .PHONY: fmt
 fmt: | $(UI_DIR)/node_modules ## Format Go and UI sources
