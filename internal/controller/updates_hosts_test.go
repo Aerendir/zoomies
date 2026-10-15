@@ -100,6 +100,98 @@ func (h *harness) hostAttempts() []store.UpdateAttempt {
 	return all
 }
 
+// A machine this fleet rents is behind from the moment it joins, and that is
+// not a fault in the machine: its agent is the one the template its provider
+// builds from carried, and Zoomies installs nothing of its own inside a rented
+// machine. Nothing offers it an update, and what its card says instead is the
+// way that does exist.
+func TestARentedMachineIsOfferedNoUpdateAndItsProvidersTemplate(t *testing.T) {
+	h := newHarness(t)
+	h.hostsCanUpdate()
+	h.enableProviders(t)
+	row := h.providerRow(t, "lab")
+	m, host := h.rentedMachine(t, row, "1.3.4")
+	h.markRented(m)
+
+	view := h.view(host.ID)
+	if view.MachineID != m.ID {
+		t.Errorf("machine_id = %q, want %q: the card cannot tell a rented machine from a host with an owner", view.MachineID, m.ID)
+	}
+	if view.UpgradeCommand != "" {
+		t.Errorf("a rented machine was given a command to run somewhere: %q", view.UpgradeCommand)
+	}
+	if view.Update == nil {
+		t.Fatal("a rented machine that is behind says nothing about updating it")
+	}
+	if view.Update.CanUpdate {
+		t.Error("an update was offered for a machine no update can reach")
+	}
+	for _, want := range []string{"lab", "template", "cloned"} {
+		if !strings.Contains(view.Update.Reason, want) {
+			t.Errorf("the card's sentence does not say %q: %s", want, view.Update.Reason)
+		}
+	}
+	if !strings.Contains(view.UpgradeNote, "template") {
+		t.Errorf("the guidance under the card does not name the template: %s", view.UpgradeNote)
+	}
+	if strings.Contains(view.UpgradeNote, "sudo") {
+		t.Errorf("the guidance offers a command nobody can run on a clone: %s", view.UpgradeNote)
+	}
+}
+
+// The button is refused for the same reason the card does not draw one, and the
+// refusal is the card's own sentence rather than a second opinion about it.
+func TestRequestingAnUpdateForARentedMachineIsRefusedWithItsCardsSentence(t *testing.T) {
+	h := newHarness(t)
+	h.hostsCanUpdate()
+	h.enableProviders(t)
+	row := h.providerRow(t, "lab")
+	m, host := h.rentedMachine(t, row, "1.3.4")
+	h.markRented(m)
+
+	_, err := h.c.RequestHostUpdate(h.ctx, alice, host.ID)
+	if !errors.Is(err, ErrUpdateHostCannotUpdate) {
+		t.Fatalf("RequestHostUpdate = %v, want %v", err, ErrUpdateHostCannotUpdate)
+	}
+	if reason := h.view(host.ID).Update.Reason; !strings.Contains(err.Error(), reason) {
+		t.Errorf("the refusal %q is not the card's sentence %q", err, reason)
+	}
+	if tasks := h.tasksFor(host.ID); len(tasks) != 0 {
+		t.Errorf("%d tasks were queued for a machine whose agent cannot carry the update out", len(tasks))
+	}
+}
+
+// A machine pass is what learns which hosts are machines, so a controller that
+// has just restarted is right again by its next pass rather than by a query per
+// host per page.
+func TestAMachinePassIsWhatLearnsWhichHostsAreMachines(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+	h.machinePass(t)
+	m := h.onlyMachine(t)
+	host := h.host(m.Name)
+	if got := h.c.rentedHost(host.ID); got.rented() {
+		t.Fatalf("a host with no machine was read as one: %+v", got)
+	}
+	if err := h.st.LinkMachineHost(h.ctx, m.ID, host.ID, "", h.c.Now()); err != nil {
+		t.Fatalf("LinkMachineHost: %v", err)
+	}
+	h.machinePass(t)
+	got := h.c.rentedHost(host.ID)
+	if got.MachineID != m.ID || got.ProviderID != row.ID || got.ProviderName != row.Name {
+		t.Fatalf("the pass learned %+v, want machine %s of provider %s", got, m.ID, row.Name)
+	}
+	// And a machine that is gone takes its host with it, so a host left behind
+	// is not treated as a machine for ever.
+	if err := h.st.ForgetMachine(h.ctx, m.ID); err != nil {
+		t.Fatalf("ForgetMachine: %v", err)
+	}
+	h.machinePass(t)
+	if h.c.rentedHost(host.ID).rented() {
+		t.Fatal("a host whose machine has gone is still read as a machine")
+	}
+}
+
 func TestAHostBehindTheControllerGetsAnUpdateTask(t *testing.T) {
 	h := newHarness(t)
 	h.hostsCanUpdate()
@@ -360,7 +452,7 @@ func TestAHostCannotBeUpdatedWhenTheControllerIsNotARelease(t *testing.T) {
 	h.inMode("manual")
 	withVersion(t, "1.3.5-3-gabcdef1")
 	host := h.updatableHost("vm-1")
-	command, _, _ := hostUpgrade(host, version.Version)
+	command, _, _ := hostUpgrade(host, version.Version, rentedHost{})
 
 	_, err := h.c.RequestHostUpdate(h.ctx, alice, host.ID)
 	assertNothingSent(t, h, host, err, ErrUpdateNotARelease)

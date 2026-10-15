@@ -25,6 +25,7 @@ type HostFields = Pick<
   | 'upgrade_version'
   | 'upgrade_command'
   | 'embedded'
+  | 'machine_id'
   | 'update'
 >;
 
@@ -64,18 +65,33 @@ export interface SkewFact {
  * Neutral on purpose. The status palette is a fixed mapping that operators have
  * learned, and a host that is behind is not idle, busy, pending, draining or
  * failing; reusing one of those colours would teach it a second meaning.
+ *
+ * `rented` is whether Zoomies rents this host as a machine, which is the one
+ * thing that changes what "behind" means. A machine is cloned from its
+ * provider's template and holds the agent that image carried, so it is behind
+ * because the template is, and it is replaced rather than upgraded: telling its
+ * operator to upgrade it would be telling them to do something nobody can do.
  */
-export function skewFact(skew: Host['version_skew'] | '' | undefined): SkewFact | null {
+export function skewFact(
+  skew: Host['version_skew'] | '' | undefined,
+  rented = false,
+): SkewFact | null {
   switch (skew) {
     case undefined:
     case '':
       return null;
     case 'behind':
-      return {
-        label: 'Behind',
-        tone: 'neutral',
-        hint: 'This agent is an earlier release than the controller. It is placing work as normal; upgrade it when convenient.',
-      };
+      return rented
+        ? {
+            label: 'Behind',
+            tone: 'neutral',
+            hint: "This machine runs the agent its provider's template carried when it was cloned, so it is behind because that image is. Prepare the template again to change what the machines built next run; this one is replaced as it goes idle.",
+          }
+        : {
+            label: 'Behind',
+            tone: 'neutral',
+            hint: 'This agent is an earlier release than the controller. It is placing work as normal; upgrade it when convenient.',
+          };
     case 'ahead':
       return {
         label: 'Ahead',
@@ -141,6 +157,14 @@ export function targetTag(host: Pick<Host, 'upgrade_version'>): string {
 export function hostUpdateWords(host: HostFields): HostUpdateWords | null {
   const update = host.update;
   if (!update || host.embedded) return null;
+  // A machine Zoomies rents is offered nothing here, and not because it is
+  // current: it is behind from the moment it joins, and every machine its
+  // provider builds is. There is nowhere to run a command inside one -- nobody
+  // logs into a clone, and it is destroyed once it has been idle -- so the only
+  // way to change what it runs is the template its provider builds from. Its
+  // card's own guidance, and the provider's page, say that; a button nothing
+  // could ever keep would say the opposite.
+  if (host.machine_id) return null;
   const name = host.name || host.id || 'this host';
   const reached =
     update.state === 'requested' && (!host.version_skew || host.version_skew === 'ahead');

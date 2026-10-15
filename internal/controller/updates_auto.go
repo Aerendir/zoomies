@@ -110,7 +110,7 @@ func (c *Controller) updatesSnapshot(ctx context.Context, cfg config.Updates, he
 	byHost := make(map[string]*updates.HostFacts, len(pic.hosts))
 	target := hostTarget()
 	for _, h := range pic.hosts {
-		can, why, _ := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), s.Mode)
+		can, why, _ := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), s.Mode, c.rentedHost(h.ID))
 		s.Hosts = append(s.Hosts, updates.HostFacts{
 			ID: h.ID, Name: h.Name, Version: h.Version, GOOS: h.OS, GOARCH: h.Arch,
 			Embedded: h.Embedded, Healthy: h.Healthy(s.Now), CanSelfUpdate: can, WhyNot: why,
@@ -464,7 +464,7 @@ func (c *Controller) StartHostRollout(ctx context.Context, by UpdateActor, hostI
 			continue
 		}
 		behind++
-		if can, _, _ := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), mode); can {
+		if can, _, _ := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), mode, c.rentedHost(h.ID)); can {
 			able++
 		}
 	}

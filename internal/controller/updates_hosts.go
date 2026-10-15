@@ -117,10 +117,23 @@ const modeOffForHosts = "Updating is off, so hosts are not updated from here. So
 // change, so a host the helper can never serve keeps saying the command is the
 // way, and before the helper is: while updating is off nothing is offered, and
 // a card asking for a root unit to be installed would be offering something.
-func hostCanSelfUpdate(h *store.Host, target string, unsupported updates.HelperUnsupported, mode updates.Mode) (can bool, why string, gap hostUpdateGap) {
+//
+// A machine this fleet rents is asked about before any of it. It is behind, it
+// can never have the helper and no mode makes a difference: its agent is the
+// one its provider's template carried, and the template is what an operator
+// changes. Its card and the provider's problem both read that answer from
+// here and rentedMachineAdvice.
+func hostCanSelfUpdate(h *store.Host, target string, unsupported updates.HelperUnsupported, mode updates.Mode, rented rentedHost) (can bool, why string, gap hostUpdateGap) {
 	switch {
 	case h.Embedded:
 		return false, "This is the agent inside the controller, so it is updated with the controller, from Settings → Updates.", hostGapNone
+	case rented.rented():
+		// Nothing about the helper, the mode or a command has anything to do
+		// with a machine Zoomies rents, so none of it is asked. The answer is
+		// the template its provider clones from, and the gap stays none: the
+		// problem list names that template once for the provider, and an entry
+		// per rented machine would say the same thing a hundred times.
+		return false, rentedMachineAdvice(rented, target), hostGapNone
 	case target == "":
 		return false, "This controller is not running a release or a build from main, so there is nothing to take its hosts to. Install a release on the controller with zoomies upgrade first.", hostGapNone
 	case strings.TrimSpace(h.Version) == "":
@@ -266,7 +279,7 @@ func (c *Controller) requestHostUpdate(ctx context.Context, by UpdateActor, host
 	if target == "" {
 		return nil, nil, ErrUpdateNotARelease
 	}
-	if can, why, _ := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), mode); !can {
+	if can, why, _ := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), mode, c.rentedHost(h.ID)); !can {
 		return nil, nil, &hostCannotUpdateError{sentence: why}
 	}
 
@@ -678,7 +691,7 @@ func (c *Controller) forgetHostUpdates(hostID string) {
 // hostUpdateView renders a host's part in updating from what the loop last saw.
 func (c *Controller) hostUpdateView(h *store.Host) *HostUpdateView {
 	target := hostTarget()
-	can, why, gap := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), c.updateMode())
+	can, why, gap := hostCanSelfUpdate(h, target, c.hostHelperUnsupported(h), c.updateMode(), c.rentedHost(h.ID))
 	out := &HostUpdateView{State: HostUpdateNone, Reason: why, CanUpdate: can}
 	if gap == hostGapHelperImpossible {
 		out.State = HostUpdateUnsupported

@@ -118,7 +118,10 @@
   // itself.
   const health = $derived(healthSummary(host.doctor, now, host.healthy));
   const line = $derived(cardLine(host, health));
-  const skew = $derived(skewFact(host.version_skew));
+  // What "behind" means depends on whether this host is a machine Zoomies
+  // rents: a machine is cloned from its provider's template and is replaced,
+  // not upgraded.
+  const skew = $derived(skewFact(host.version_skew, Boolean(host.machine_id)));
   // The one-press update is an administrator's; the command beneath it is an
   // operator's, and stays for everyone who had it.
   const showUpdate = $derived(canAdmin && hostUpdateWords(host) !== null);

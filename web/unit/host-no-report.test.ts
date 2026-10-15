@@ -53,6 +53,24 @@ test('a behind or different agent may be too old, and an operator gets the contr
   // Ahead is the card's business ("upgrade the controller first"), not a cause here.
   assert.notEqual(run(host({ version_skew: 'ahead' })).kind, 'release');
 });
+test('a machine Zoomies rents and cannot be asked is told about its provider’s template', () => {
+  const r = run(host({ version_skew: 'behind', machine_id: 'mach_1' }), false);
+  assert.equal(r.kind, 'release');
+  assert.equal(r.command, null);
+  assert.match(r.detail, /machine Zoomies rents/);
+  assert.match(r.detail, /template/);
+  assert.doesNotMatch(r.detail, /update helper|upgrade command/);
+  // An operator is given the controller's note, which names the template too.
+  const withNote = run(
+    host({
+      version_skew: 'behind',
+      machine_id: 'mach_1',
+      upgrade_note: 'Prepare that template again.',
+    }),
+  );
+  assert.equal(withNote.kind, 'release');
+  assert.equal(withNote.detail, 'Prepare that template again.');
+});
 
 test('the upgrade command is never built from a host field and never reaches a viewer', () => {
   const evil = host({
