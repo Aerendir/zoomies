@@ -47,6 +47,13 @@ type FakeGitHub struct {
 	nextRunnerID int64
 	runners      []*Runner
 
+	// repairActors is what the repair flow's collaborators-permission read
+	// finds per login. GitHub serves that read for any collaborator, and
+	// answers 404 for a name it does not know; a login nobody registered here
+	// gets the same. A test that wants an actor whose identity is known says
+	// so with SetRepairActor.
+	repairActors map[string]repairActor
+
 	// jobReruns counts job-level re-run requests, kept apart from reruns so a
 	// test can say which endpoint the controller chose.
 	jobReruns int
@@ -141,6 +148,7 @@ func NewFake() *FakeGitHub {
 			"workflows":                        "write",
 		},
 		events:        []string{"workflow_job"},
+		repairActors:  map[string]repairActor{},
 		nextRunnerID:  1,
 		nextJobID:     1000,
 		nextRunID:     5000,
@@ -455,6 +463,10 @@ func (f *FakeGitHub) handler() http.Handler {
 	mux.HandleFunc("POST /app/installations/{id}/access_tokens", f.createInstallationToken)
 	mux.HandleFunc("GET /installation/repositories", f.listInstallationRepos)
 	mux.HandleFunc("GET /rate_limit", f.getRateLimit)
+	// The repair flow's identity read. Served like the rest of the fake: a
+	// login nobody registered is not a collaborator GitHub would tell us
+	// about either.
+	mux.HandleFunc("GET /repos/{owner}/{repo}/collaborators/{user}/permission", f.collaboratorPermission)
 
 	mux.HandleFunc("POST /orgs/{org}/actions/runners/generate-jitconfig", f.generateJITConfig)
 	mux.HandleFunc("POST /repos/{owner}/{repo}/actions/runners/generate-jitconfig", f.generateJITConfig)
@@ -604,6 +616,22 @@ func (f *FakeGitHub) middleware(next http.Handler) http.Handler {
 	})
 }
 
+// repairActor is the identity a collaborator's permission read resolves to:
+// the numeric id the link stores, and whether they may write.
+type repairActor struct {
+	id       int64
+	canWrite bool
+}
+
+// SetRepairActor registers the collaborators-permission answer for a login,
+// so a repair-flow test decides who GitHub says the account is, and what
+// they may do.
+func (f *FakeGitHub) SetRepairActor(login string, id int64, canWrite bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.repairActors[login] = repairActor{id: id, canWrite: canWrite}
+}
+
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
@@ -626,6 +654,25 @@ func target(r *http.Request) (full string, kind store.TargetType) {
 		return org, store.TargetOrg
 	}
 	return r.PathValue("owner") + "/" + r.PathValue("repo"), store.TargetRepo
+}
+
+// collaboratorPermission answers the read the repair flow makes after a
+// comment or a link form names a GitHub login: the numeric identity behind it
+// and what they may do to the repository. Serving it here keeps RepairActor's
+// tests on the real code path.
+func (f *FakeGitHub) collaboratorPermission(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	actor, ok := f.repairActors[r.PathValue("user")]
+	if !ok {
+		writeError(w, http.StatusNotFound, "Not Found")
+		return
+	}
+	login := r.PathValue("user")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"permission": map[bool]string{true: "write", false: "read"}[actor.canWrite],
+		"user":       map[string]any{"id": actor.id, "login": login},
+	})
 }
 
 func (f *FakeGitHub) getApp(w http.ResponseWriter, _ *http.Request) {

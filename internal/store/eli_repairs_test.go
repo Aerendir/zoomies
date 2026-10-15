@@ -305,3 +305,107 @@ func TestARefusedRepairNamesTheLimitThatRefusedIt(t *testing.T) {
 		t.Fatalf("one person's limit was reported as %v", err)
 	}
 }
+
+// A GitHub account may serve one Zoomies user. The refusal that names the
+// holding row, and the move that answers it, are what make the days after an
+// instance move workable: the same person verifying their link against the
+// account the migration re-created must be offered the press, not a driver
+// error, and the moved row must not inherit a confirmation nobody re-made.
+func TestALinkAnotherUserHoldsIsRefusedAndRelinkedByName(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	makeUser := func(name string) string {
+		u := &User{Username: name, Role: RoleAdmin}
+		if e := s.CreateUser(ctx, u); e != nil {
+			t.Fatal(e)
+		}
+		return u.ID
+	}
+	oldUser := makeUser("previous")
+	newUser := makeUser("moved")
+	// The migration's legacy: the old account holds the link the new account
+	// is being given.
+	if e := s.SetEliIdentity(ctx, EliIdentity{UserID: oldUser, GitHubUserID: 42, GitHubLogin: "octo"}); e != nil {
+		t.Fatal(e)
+	}
+	link := EliIdentity{UserID: newUser, GitHubUserID: 42, GitHubLogin: "octo"}
+	if e := s.SetEliIdentity(ctx, link); !errors.Is(e, ErrEliIdentityHeld) {
+		t.Fatalf("held link: %v", e)
+	}
+	rows, _ := s.EliIdentities(ctx)
+	if len(rows) != 1 || rows[0].UserID != oldUser || rows[0].GitHubUserID != 42 {
+		t.Fatalf("a refused link wrote something: %+v", rows)
+	}
+	// The holding account's own link is an update: the login may have changed
+	// case on GitHub, and the row is theirs to replace.
+	if e := s.SetEliIdentity(ctx, EliIdentity{UserID: oldUser, GitHubUserID: 42, GitHubLogin: "Octo"}); e != nil {
+		t.Fatalf("holder relink: %v", e)
+	}
+	rows, _ = s.EliIdentities(ctx)
+	if rows[0].GitHubLogin != "Octo" || rows[0].Confirmed {
+		t.Fatalf("holder update: %+v", rows)
+	}
+	// The move answers exactly the refusal above, and answers it changing the
+	// confirmation: nobody's allow survives being dragged across accounts.
+	holder, e := s.RelinkEliIdentity(ctx, link)
+	if e != nil || holder != oldUser {
+		t.Fatalf("relink: holder %q %v", holder, e)
+	}
+	rows, _ = s.EliIdentities(ctx)
+	if len(rows) != 1 || rows[0].UserID != newUser || rows[0].Confirmed {
+		t.Fatalf("moved link: %+v", rows)
+	}
+	// ConfirmEliIdentity is pinned to the numeric identity, so the moved row's
+	// stale screen approves nothing: the user allows it again themselves.
+	if e := s.ConfirmEliIdentity(ctx, newUser, 42, true); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := s.RelinkEliIdentity(ctx, EliIdentity{UserID: oldUser, GitHubUserID: 42, GitHubLogin: "octo"}); e != nil {
+		t.Fatal(e)
+	}
+	rows, _ = s.EliIdentities(ctx)
+	if len(rows) != 1 || rows[0].UserID != oldUser || rows[0].Confirmed {
+		t.Fatalf("second move: %+v", rows)
+	}
+	// A link nobody holds goes straight onto the new user.
+	if e := s.SetEliIdentity(ctx, EliIdentity{UserID: newUser, GitHubUserID: 99, GitHubLogin: "other"}); e != nil {
+		t.Fatal(e)
+	}
+	rows, _ = s.EliIdentities(ctx)
+	if len(rows) != 2 {
+		t.Fatalf("unheld row: %+v", rows)
+	}
+	// And moving a link when nobody else holds it is a first link.
+	held, e := s.RelinkEliIdentity(ctx, EliIdentity{UserID: newUser, GitHubUserID: 99, GitHubLogin: "other"})
+	if e != nil || held != "" {
+		t.Fatalf("unheld move: %q %v", held, e)
+	}
+}
+
+// Deleting the holding account releases the link, which is the third way a
+// post-migration tie clears: the operator removes the duplicate account and
+// the verification succeeds without a move.
+func TestADeletedUserReleasesItsLink(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	oldUser := &User{Username: "previous", Role: RoleAdmin}
+	if e := s.CreateUser(ctx, oldUser); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.SetEliIdentity(ctx, EliIdentity{UserID: oldUser.ID, GitHubUserID: 42, GitHubLogin: "octo"}); e != nil {
+		t.Fatal(e)
+	}
+	newUser := &User{Username: "fresh", Role: RoleAdmin}
+	if e := s.CreateUser(ctx, newUser); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.SetEliIdentity(ctx, EliIdentity{UserID: newUser.ID, GitHubUserID: 42, GitHubLogin: "octo"}); !errors.Is(e, ErrEliIdentityHeld) {
+		t.Fatalf("held link: %v", e)
+	}
+	if e := s.DeleteUser(ctx, oldUser.ID); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.SetEliIdentity(ctx, EliIdentity{UserID: newUser.ID, GitHubUserID: 42, GitHubLogin: "octo"}); e != nil {
+		t.Fatal(e)
+	}
+}

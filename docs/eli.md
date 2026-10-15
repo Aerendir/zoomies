@@ -361,6 +361,11 @@ verdict to break the build on.
 
 * **No answer.** Add an enabled personal provider in **Settings, Eli AI Assistant**, and tick the one you want as your default when you have several.
 * **"Eli cannot see this fleet through ..."** The provider's fleet switch is off.
+* **"already linked to" on Verify and link.** The same GitHub account is linked
+  to another Zoomies user, the usual state after an instance move or a
+  re-created account. The page names the holder; **Move the link** transfers it
+  and resets the confirmation, so whoever the link moved to allows provider use
+  again. The holding account can also be unlinked from the list under the form.
 * **A provider error.** The text says what the provider answered; **Test** on its
   card sends one short prompt and says which part failed. A model that does not
   support tools answers without them, and says it could not look.
@@ -458,6 +463,15 @@ you spend another attempt, while a passed repair still needs normal PR review.
    request repairs using my provider** and adds an enabled personal provider.
    Administrators cannot give that consent on their behalf. Changing the link
    clears consent; repository selection does not create another identity link.
+
+   One GitHub account may serve only one Zoomies user. After an instance move
+   or when the account was re-created, the same GitHub account can still be
+   linked to the old user, and the refused verification says so by name. The
+   **Move the link** press answers it: the holding account loses the link, the
+   moved link lands unconfirmed so the person it was moved to allows provider
+   use again, and the move is written to the audit log with the account it was
+   taken from. History the old account asked for stays with that account; a
+   move is a link, not a takeover of its record.
 6. Return to the original PR and check readiness again. Review the payer, model,
    workflow permission and remaining allowance before choosing **Repair with Eli**.
 

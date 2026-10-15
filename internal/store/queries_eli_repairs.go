@@ -68,7 +68,46 @@ type EliRepair struct {
 func (s *Store) SetEliIdentity(ctx context.Context, in EliIdentity) error {
 	_, err := s.exec(ctx, `INSERT INTO eli_github_identities(user_id,github_user_id,github_login,updated_at) VALUES(?,?,?,?)
  ON CONFLICT(user_id) DO UPDATE SET github_user_id=excluded.github_user_id,github_login=excluded.github_login,confirmed=0,updated_at=excluded.updated_at`, in.UserID, in.GitHubUserID, in.GitHubLogin, ms(s.Now()))
+	if isUnique(err) {
+		// The user_id conflict is the upsert; only another user's row can trip
+		// the github_user_id unique index, so this is the held case and not a
+		// constraint detail for the caller to decode.
+		return ErrEliIdentityHeld
+	}
 	return wrapWrite(err)
+}
+
+// RelinkEliIdentity moves a link ErrEliIdentityHeld refused, or co-locates the
+// caller's row with one it already holds. The previous holder's row is removed
+// and its membership in the link is returned, so the audit row can say whose
+// Zoomies account lost the link; "" means nobody else held it (including the
+// caller moving their own row). The new row lands unconfirmed: only the person
+// using it can allow provider use again, so a moved link never inherits the
+// consent it is dragged past.
+func (s *Store) RelinkEliIdentity(ctx context.Context, in EliIdentity) (string, error) {
+	holder := ""
+	err := s.tx(ctx, func(tx *sql.Tx) error {
+		holder = ""
+		var held string
+		err := tx.QueryRowContext(ctx, `SELECT user_id FROM eli_github_identities WHERE github_user_id=?`, in.GitHubUserID).Scan(&held)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+		case err != nil:
+			return err
+		case held != in.UserID:
+			if _, err := tx.ExecContext(ctx, `DELETE FROM eli_github_identities WHERE user_id=?`, held); err != nil {
+				return err
+			}
+			holder = held
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO eli_github_identities(user_id,github_user_id,github_login,updated_at) VALUES(?,?,?,?)
+ ON CONFLICT(user_id) DO UPDATE SET github_user_id=excluded.github_user_id,github_login=excluded.github_login,confirmed=0,updated_at=excluded.updated_at`, in.UserID, in.GitHubUserID, in.GitHubLogin, ms(s.Now()))
+		return wrapWrite(err)
+	})
+	if err != nil {
+		return "", err
+	}
+	return holder, nil
 }
 func (s *Store) EliIdentities(ctx context.Context) ([]EliIdentity, error) {
 	rows, err := s.read.QueryContext(ctx, `SELECT user_id,github_user_id,github_login,confirmed FROM eli_github_identities ORDER BY github_login`)

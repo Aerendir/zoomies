@@ -47,6 +47,14 @@ var ErrConflict = errors.New("already exists")
 var (
 	ErrEliRepoBudget   = fmt.Errorf("this repository has used its repair attempts for the last 24 hours: %w", ErrConflict)
 	ErrEliPersonBudget = fmt.Errorf("this person has used their repair attempts for the last 24 hours: %w", ErrConflict)
+
+	// ErrEliIdentityHeld says the GitHub account being linked is already linked
+	// to another Zoomies user, a row the old link's owner still holds after an
+	// instance move or a re-created account. It is an ErrConflict, so a caller
+	// that cares only that the write was refused still matches; it exists so
+	// the API can offer moving the link (RelinkEliIdentity) instead of letting
+	// the driver's constraint sentence reach the page.
+	ErrEliIdentityHeld = fmt.Errorf("this GitHub account is already linked to another Zoomies user: %w", ErrConflict)
 )
 
 // EliPersonDailyLimit is how many repairs one person may ask for in a rolling 24

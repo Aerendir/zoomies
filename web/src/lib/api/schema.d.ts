@@ -3959,7 +3959,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Verify and link a user’s GitHub numeric identity */
+        /**
+         * Verify and link a user’s GitHub numeric identity
+         * @description The GitHub account is checked before anything is written: it must exist, own the numeric identity, and have write permission on the verification repository. An empty `github_login` removes the link instead of adding one. A link one GitHub account cannot serve two Zoomies users, so a link another user already holds comes back as 409 `assistant.identity_held`, with the holding account's name in the message and its user id in `detail`. Resending with `relink` moves the link: the holder loses it and the moved row lands unconfirmed, so the person it was moved to must allow provider use again before Eli repairs anything for them. History already on record stays with the account that asked for it. Moving a link is audited as `assistant.github_link` with `moved_from` naming the account that held it.
+         */
         put: operations["setEliIdentity"];
         post?: never;
         delete?: never;
@@ -5753,7 +5756,7 @@ export interface components {
         ErrorEnvelope: {
             error: {
                 /** @enum {string} */
-                code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "analysis.same_release" | "analysis.too_few_releases" | "analysis.whole_days_only" | "internal";
+                code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "assistant.identity_held" | "analysis.same_release" | "analysis.too_few_releases" | "analysis.whole_days_only" | "internal";
                 /** @description Written for a person to read */
                 message: string;
                 /** @description The form field at fault, or on a `limit_reached` refusal the `limits.*` setting that refused. */
@@ -10588,6 +10591,8 @@ export interface components {
             github_login: string;
             installation_id: string;
             repo: string;
+            /** @description Move this GitHub account's link to this user when another user already holds it: the confirmation the `assistant.identity_held` refusal asks for. Removing the holding row resets the moved link's confirmation, so the person using it must allow provider use again; what never moves is a repair already made, which is history under the account that asked for it. */
+            relink?: boolean;
         };
         EliRepairPolicy: {
             repo: string;
