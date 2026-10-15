@@ -57,11 +57,36 @@ jobs:
           # workflow is dispatched by hand.
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
           RUNNER: ${{ inputs.runner || 'blacksmith' }}
+        # bash, not the runner's default, for the regular expression below.
+        shell: bash
         run: |
           set -eu
           case "$TAG" in
             v*) ;;
             *) echo "::error::$TAG is not a release tag; they begin with a lower-case v" && exit 1 ;;
+          esac
+          # A full release is what `zoomies upgrade` can offer, and it offers a
+          # tag of exactly three numbers: this pattern is internal/updates's
+          # ValidTag, and a test in internal/docs keeps the two equal. A fourth
+          # number used to pass the check above, build, publish as "Latest" and
+          # then sit where no controller could be updated to it, so it is
+          # refused here, before anything is built. The match is on the whole
+          # string, so a tag with a second line cannot pass for one and write
+          # an output of its own. A hyphen still means "prerelease", which the
+          # updater never offers, so a pre-release keeps its freedom of shape.
+          FULL_RELEASE_TAG='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          PRERELEASE_TAG='^v[0-9]+(\.[0-9]+)*-[0-9A-Za-z.-]+$'
+          case "$TAG" in
+            *-*)
+              if ! [[ "$TAG" =~ $PRERELEASE_TAG ]]; then
+                echo "::error::$TAG is not a pre-release tag. A pre-release is v, numbers and a hyphen with letters, digits, dots or hyphens after it, such as v1.3.7-rc1."
+                exit 1
+              fi ;;
+            *)
+              if ! [[ "$TAG" =~ $FULL_RELEASE_TAG ]]; then
+                echo "::error::$TAG is not a tag zoomies upgrade can offer. A full release is v and three numbers, such as v1.3.7; a fourth number is refused by the updater. Name a pre-release with a hyphen (v1.3.7-rc1), or cut the next patch version. See RELEASING.md."
+                exit 1
+              fi ;;
           esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           # The tag is v1.2.3 and the version a binary reports is 1.2.3.

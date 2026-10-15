@@ -28,6 +28,10 @@ has a CI job that diffs them:
   enforces it, the number is documented in `docs/ui-guidelines.md`). Route chunks
   are excluded, so move weight to a lazily loaded route rather than raising the
   budget.
+* The full-release tag pattern in `release.yml` (`FULL_RELEASE_TAG`) must equal
+  `updates.ValidTag`, which is the only tag shape `zoomies upgrade` offers. A
+  test in `internal/docs` compares them, so changing one alone fails it; see
+  [RELEASING.md](../RELEASING.md).
 * `go mod tidy` must leave `go.mod`/`go.sum` unchanged, and `gofmt -l` must be
   empty.
 * `govulncheck ./...` must find nothing reachable. It runs in its own workflow,

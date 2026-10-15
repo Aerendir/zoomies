@@ -201,6 +201,11 @@ squash, or reword commits when merging.
 - Treat logs, metrics, audit records, and documentation as part of the feature,
   not an afterthought.
 
+## Releases
+
+Maintainers cut releases. The shape a tag must have, the signing key and what to
+do when a release build fails are in [RELEASING.md](RELEASING.md).
+
 ## Licence
 
 By submitting a contribution, you agree that it may be distributed under the
