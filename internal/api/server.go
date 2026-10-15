@@ -136,7 +136,7 @@ func New(opts Options) (*Server, error) {
 	s.formTargets = manifestFormTargets(cfg.GitHub.APIBaseURL)
 	s.csp = contentSecurityPolicy(spa.inlineScriptHashes(), s.formTargets)
 
-	s.key, s.keyErr = loadKey(cfg)
+	s.key, s.keyErr = cfg.ResolveEncryptionKey()
 	if s.keyErr != nil {
 		// Not fatal: a controller with no installations yet is perfectly
 		// usable, and refusing to serve the UI would hide the message that
@@ -177,18 +177,6 @@ func New(opts Options) (*Server, error) {
 // to serve from a listener of the caller's own, which is what the tests and the
 // installer's health check do.
 func (s *Server) Handler() http.Handler { return s.handler }
-
-// loadKey resolves the instance encryption key from the same configuration the
-// controller was built with.
-func loadKey(cfg *config.Config) (*cryptox.Key, error) {
-	if raw := strings.TrimSpace(cfg.Security.EncryptionKey); raw != "" {
-		return cryptox.ParseKey(raw)
-	}
-	if path := strings.TrimSpace(cfg.Security.EncryptionKeyFile); path != "" {
-		return cryptox.LoadKeyFile(path)
-	}
-	return nil, cryptox.ErrNoKey
-}
 
 // parseTrustedProxies turns the configured CIDRs into networks, accepting a
 // bare address as a single host so an operator does not have to write /32.

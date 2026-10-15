@@ -38,7 +38,7 @@ func transferConfig(ctx context.Context, path string) (*config.Config, func(), e
 		return nil, nil, fmt.Errorf("stop the controller before transferring its database: %w", err)
 	}
 	cleanup := func() { _ = unlock() }
-	key, err := backup.ConfiguredKey(cfg)
+	key, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		cleanup()
 		return nil, nil, err

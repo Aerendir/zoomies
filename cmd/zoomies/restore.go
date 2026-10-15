@@ -27,7 +27,7 @@ func remoteNamed(ctx context.Context, cfg *config.Config, name string) (*backup.
 		defer func() { _ = st.Close() }()
 		rows = st
 	}
-	key, err := backup.ConfiguredKey(cfg)
+	key, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		key = nil
 	}
