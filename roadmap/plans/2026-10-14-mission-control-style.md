@@ -315,7 +315,7 @@ fresh mount, and says so where the key is.
 evidence and the development-only component gallery (N-T4, PR #1050) are
 done. The one evidence item that is not a capture is the assistant sheet's
 phone-keyboard behaviour, which the browser suite covers.
-2. Keep the design specification in `THEME_IMPLEMENTATION_PLAN.md` as the
+2. Keep the design specification in `roadmap/archive/theme-implementation-plan.md` as the
    intended behaviour; use this file for current implementation status.
 3. Treat first-job repository assistance as a separate feature. Before adding
    discovery/dispatch, scope API contracts, permissions, protected branches

@@ -1,5 +1,22 @@
 # Hardening the upgrade engine: a handoff
 
+**Status as of 16 October 2026: mostly delivered, archived for its reasoning.**
+Merged since this was written: U1, signed releases
+([#1034](https://github.com/eyupio/zoomies/pull/1034),
+[#1044](https://github.com/eyupio/zoomies/pull/1044),
+[#1059](https://github.com/eyupio/zoomies/pull/1059)); U2, `--dry-run`
+([#1029](https://github.com/eyupio/zoomies/pull/1029)); U3, automatic rollback
+([#1033](https://github.com/eyupio/zoomies/pull/1033)); U4, a verified backup
+before the swap ([#1031](https://github.com/eyupio/zoomies/pull/1031)); and the
+signing state, attempt facts and review step of U6
+([#1036](https://github.com/eyupio/zoomies/pull/1036),
+[#1037](https://github.com/eyupio/zoomies/pull/1037),
+[#1042](https://github.com/eyupio/zoomies/pull/1042)). No pull request for U5,
+the qualification step for `auto`, has merged, and the owner questions at the
+end are not recorded as answered. The text below still says "proposed"; only
+its links were changed when it moved here.
+[progress.md](../progress.md) is where delivery state lives.
+
 Prepared 14 October 2026. Planning baseline: local checkout at `dc228cc9`
 (`origin/main`).
 
@@ -9,7 +26,7 @@ dependencies, contracts, acceptance criteria and evidence requirements.
 Creating this handoff does not mark anything as implemented, approve a new
 release key or start the work.
 
-[ROADMAP.md](ROADMAP.md) remains the sole delivery-order source of truth, and
+[ROADMAP.md](../../ROADMAP.md) remains the sole delivery-order source of truth, and
 `roadmap/progress.md` records package status. This file supports them rather
 than replacing them. Before implementation, reconcile the tracks with current
 code and record new or changed work in ROADMAP.md against the existing packages

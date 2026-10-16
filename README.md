@@ -584,8 +584,9 @@ overrides/          the site's theme overrides: sharing tags, structured data,
 hooks/              the site's build-time metadata: git dates, llms.txt, and the
                     latest release and star count the header shows
 ROADMAP.md          the sole active roadmap: scope, order and owner decisions
-roadmap/            supporting status/evidence, decision records, model guidance
-                    and historical source material; it does not compete with ROADMAP.md
+roadmap/            supporting status/evidence, decision records, model guidance,
+                    dated plans, an archive and historical source material; its
+                    README is the index, and it does not compete with ROADMAP.md
 skills/             what a coding agent installs: the zoomies skill, with a command
                     reference generated from the binary
 install.sh          the one-line installer, served from the site root
