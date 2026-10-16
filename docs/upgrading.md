@@ -1187,7 +1187,10 @@ that transition release is signed with the old key (still the secret) and its
 binary trusts both, so an instance running an older binary still accepts it and
 one running the transition binary accepts the next release, signed with the new
 key. `zoomies release verify` says which key a signature names. Ed25519 is the
-standard library's; nothing new is depended on.
+standard library's; nothing new is depended on. `install.sh`, `connect-proxmox.sh`
+and `deploy/instapods/fetch.sh` carry the same set in their `RELEASE_KEY`, one key
+per line, and accept a signature from any key in it; a test in `internal/docs`
+keeps each of them equal to `Default`, so a rotation edits all four together.
 
 To hold one download to a different key, for a mirror or a test that builds its
 own, pass the base64 public key to `zoomies upgrade --release-key`, or set

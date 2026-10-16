@@ -193,6 +193,55 @@ func TestASignatureThatDoesNotMatchAlwaysRefuses(t *testing.T) {
 	}
 }
 
+// While a key is rotated releasekey.Default carries more than one key, one per
+// line, and a release signed by either must be accepted. The scripts used to
+// decode the whole set as though it were one key and so refused a correctly
+// signed release for exactly as long as a rotation lasted, which is when it
+// matters most.
+func TestAKeySetCarriedForARotationAcceptsASignatureFromAnyKeyInIt(t *testing.T) {
+	needOpenSSLForEd25519(t)
+	for name, arrange := range map[string]func(signer, a, b string) string{
+		"the signer alone":                  func(signer, a, b string) string { return signer },
+		"the signer first":                  func(signer, a, b string) string { return signer + "\n" + a },
+		"the signer last":                   func(signer, a, b string) string { return a + "\n" + signer },
+		"the signer in the middle of three": func(signer, a, b string) string { return a + "\n" + signer + "\n" + b },
+		"a trailing newline":                func(signer, a, b string) string { return a + "\n" + signer + "\n" },
+		"blank lines and stray spaces":      func(signer, a, b string) string { return "\n  " + a + " \n\n" + signer + "\r\n\n" },
+	} {
+		r := newRelease(t)
+		a, b := newRelease(t), newRelease(t)
+		r.key = arrange(r.key, a.key, b.key)
+		for _, tag := range []string{"v1.3.7", "v1.3.5"} {
+			if stderr, exit := r.verify(t, tag); exit != 0 || !strings.Contains(stderr, "matches the release key") {
+				t.Errorf("%s, %s: exit %d, stderr %q; a key set holding the signer must accept", name, tag, exit, stderr)
+			}
+		}
+	}
+}
+
+func TestAKeySetThatDoesNotHoldTheSignerRefuses(t *testing.T) {
+	needOpenSSLForEd25519(t)
+	r := newRelease(t)
+	a, b := newRelease(t), newRelease(t)
+	r.key = a.key + "\n" + b.key
+	for _, tag := range []string{"v1.3.7", "v1.3.5"} {
+		if stderr, exit := r.verify(t, tag); exit == 0 || !strings.Contains(stderr, "does not match") {
+			t.Errorf("%s signed by a key outside a two-key set: exit %d, stderr %q; it must refuse", tag, exit, stderr)
+		}
+	}
+}
+
+// A set with a line that is not a key is a script that was edited badly, and it
+// is better to stop than to skip the line and trust what is left of it.
+func TestAKeySetWithAnUnreadableLineRefusesInsteadOfSkippingIt(t *testing.T) {
+	needOpenSSLForEd25519(t)
+	r := newRelease(t)
+	r.key = "!!! not a key !!!\n" + r.key
+	if stderr, exit := r.verify(t, "v1.3.7"); exit == 0 || !strings.Contains(stderr, "cannot be read") {
+		t.Errorf("a key set with a garbage line: exit %d, stderr %q; it must refuse", exit, stderr)
+	}
+}
+
 func TestAMissingOrUnreadableSignatureRefusesANewReleaseAndWarnsForAnOldOne(t *testing.T) {
 	needOpenSSLForEd25519(t)
 	for name, break_ := range map[string]func(r signedRelease){
@@ -261,5 +310,74 @@ func TestTheScriptsVerifyTheSignatureBeforeTheyBelieveTheChecksums(t *testing.T)
 		if verify > use {
 			t.Errorf("%s believes its checksums (%q) before it verifies their signature", rel, believes)
 		}
+	}
+}
+
+// install.sh carries its own verifier, because it is the one script that does
+// not share the block above: it is best effort, so a host that cannot check a
+// signature still installs. Its handling of a rotation's key set is the same as
+// the downloaders' and is held to the same cases, with its own rule for what an
+// unreadable key means.
+func installVerify(t *testing.T, r signedRelease) (stderr string, exit int) {
+	t.Helper()
+	text := scriptText(t, "install.sh")
+	start := strings.Index(text, "\nverify_signature() {")
+	if start < 0 {
+		t.Fatal("install.sh has no verify_signature function")
+	}
+	end := strings.Index(text[start+1:], "\n}\n")
+	if end < 0 {
+		t.Fatal("could not find the end of install.sh's verify_signature")
+	}
+	fn := text[start : start+1+end+3]
+	full := "set -eu\n" +
+		"have() { command -v \"$1\" >/dev/null 2>&1; }\n" +
+		"die() { printf 'install: %s\\n' \"$*\" >&2; exit 1; }\n" +
+		"ok() { printf 'install: %s\\n' \"$*\" >&2; }\n" +
+		"warn() { printf 'install: warning: %s\\n' \"$*\" >&2; }\n" +
+		"fetch_stdout() { cat \"$SIG\"; }\n" +
+		fn + "\n" +
+		"RELEASE_KEY=\"$KEY\"; BASE_URL=unused; verify_signature v1.3.7 \"$SUMS\" \"$SCRATCH\"\n"
+	cmd := exec.Command("sh", "-c", full)
+	cmd.Env = append(os.Environ(), "KEY="+r.key, "SUMS="+r.sums, "SIG="+r.sig, "SCRATCH="+t.TempDir())
+	var errb bytes.Buffer
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); ok {
+		exit = ee.ExitCode()
+	} else if err != nil {
+		t.Fatalf("running sh: %v", err)
+	}
+	return errb.String(), exit
+}
+
+func TestInstallShAcceptsASignatureFromAnyKeyInARotationSet(t *testing.T) {
+	needOpenSSLForEd25519(t)
+	for name, arrange := range map[string]func(signer, a, b string) string{
+		"the signer alone":                  func(signer, a, b string) string { return signer },
+		"the signer first":                  func(signer, a, b string) string { return signer + "\n" + a },
+		"the signer last":                   func(signer, a, b string) string { return a + "\n" + signer },
+		"the signer in the middle of three": func(signer, a, b string) string { return a + "\n" + signer + "\n" + b },
+		"blank lines and stray spaces":      func(signer, a, b string) string { return "\n  " + a + " \n\n" + signer + "\r\n\n" },
+	} {
+		r := newRelease(t)
+		a, b := newRelease(t), newRelease(t)
+		r.key = arrange(r.key, a.key, b.key)
+		if stderr, exit := installVerify(t, r); exit != 0 || !strings.Contains(stderr, "matches the release key") {
+			t.Errorf("install.sh, %s: exit %d, stderr %q; a key set holding the signer must accept", name, exit, stderr)
+		}
+	}
+
+	outside := newRelease(t)
+	x, y := newRelease(t), newRelease(t)
+	outside.key = x.key + "\n" + y.key
+	if stderr, exit := installVerify(t, outside); exit == 0 || !strings.Contains(stderr, "does not match") {
+		t.Errorf("install.sh, signed by a key outside the set: exit %d, stderr %q; it must refuse", exit, stderr)
+	}
+
+	garbled := newRelease(t)
+	garbled.key = "!!! not a key !!!\n" + garbled.key
+	if stderr, exit := installVerify(t, garbled); exit != 0 || !strings.Contains(stderr, "cannot be read") {
+		t.Errorf("install.sh, an unreadable key: exit %d, stderr %q; being best effort it warns and carries on", exit, stderr)
 	}
 }

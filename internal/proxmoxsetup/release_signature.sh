@@ -58,14 +58,28 @@ verify_signature() {
         return 0
     fi
     # openssl wants the DER public key: the fixed Ed25519 SubjectPublicKeyInfo
-    # prefix, then the key's 32 bytes.
+    # prefix, then the key's 32 bytes. While a key is rotated RELEASE_KEY holds
+    # more than one, one per line, exactly as the binary's key set does, and the
+    # signature has to verify under one of them.
     printf '\060\052\060\005\006\003\053\145\160\003\041\000' > "$_dir/key.prefix"
-    if ! printf '%s' "$RELEASE_KEY" | openssl base64 -d -A > "$_dir/key.raw" 2>/dev/null || [ ! -s "$_dir/key.raw" ]; then
-        die "the release key built into this script cannot be read; copy the script again from https://zoomies.sh."
-    fi
-    cat "$_dir/key.prefix" "$_dir/key.raw" > "$_dir/release.der"
-    if openssl pkeyutl -verify -pubin -keyform DER -inkey "$_dir/release.der" \
-        -rawin -in "$_sums" -sigfile "$_dir/sig.raw" >/dev/null 2>&1; then
+    printf '%s\n' "$RELEASE_KEY" > "$_dir/keys.txt"
+    _keys=0 _matched=0
+    while IFS= read -r _key; do
+        _key=$(printf '%s' "$_key" | tr -d '[:space:]')
+        [ -n "$_key" ] || continue
+        _keys=$((_keys + 1))
+        if ! printf '%s' "$_key" | openssl base64 -d -A > "$_dir/key.raw" 2>/dev/null || [ ! -s "$_dir/key.raw" ]; then
+            die "the release key built into this script cannot be read; copy the script again from https://zoomies.sh."
+        fi
+        cat "$_dir/key.prefix" "$_dir/key.raw" > "$_dir/release.der"
+        if openssl pkeyutl -verify -pubin -keyform DER -inkey "$_dir/release.der" \
+            -rawin -in "$_sums" -sigfile "$_dir/sig.raw" >/dev/null 2>&1; then
+            _matched=1
+            break
+        fi
+    done < "$_dir/keys.txt"
+    [ "$_keys" -gt 0 ] || die "the release key built into this script cannot be read; copy the script again from https://zoomies.sh."
+    if [ "$_matched" -eq 1 ]; then
         say "the release signature matches the release key"
     else
         die "the release signature on $_tag does not match the release key. Do not run this download."
