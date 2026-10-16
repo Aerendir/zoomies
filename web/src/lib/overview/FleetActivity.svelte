@@ -325,7 +325,8 @@
     gap: var(--z-space-2);
     font-size: var(--z-text-xs);
     color: var(--z-text-muted);
-    white-space: nowrap;
+    flex-wrap: wrap;
+    min-width: 0;
   }
   .placeholder {
     display: flex;

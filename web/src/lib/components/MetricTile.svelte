@@ -153,7 +153,11 @@
   .hint {
     font-size: var(--z-text-xs);
     color: var(--z-text-subtle);
-    white-space: nowrap;
+    /* Wraps only once it has a line to itself and still does not fit, which is
+       a phone's width; nowrap here ran the text out of the tile. */
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
   .spark {
     margin-left: auto;
