@@ -1,6 +1,6 @@
 # Theme review artefacts
 
-14 October 2026. Start with [the interactive mock](mockups.html) and [the implementation plan](../../THEME_IMPLEMENTATION_PLAN.md).
+14 October 2026. Start with [the interactive mock](mockups.html) and [the implementation plan](../../roadmap/archive/theme-implementation-plan.md).
 
 The mock is a standalone HTML design artefact, not a replacement app. It uses illustrative data. Screen selection, visual-style choice, light/dark preview, Jobs search, Problems drawer, assistant placeholder and first-job success preview are interactive. It sends no API requests. The System button previews the current OS mode once; the production implementation must use the existing live system listener. Choice persistence, permissions, SSE and actual mutation flows belong to production, not this mock. No production fixes have been implemented.
 

@@ -1,7 +1,7 @@
 # Component gallery captures
 
 14 October 2026. These are captures of the development-only component gallery
-that [THEME_IMPLEMENTATION_PLAN.md](../../../THEME_IMPLEMENTATION_PLAN.md) asks
+that [roadmap/archive/theme-implementation-plan.md](../../../roadmap/archive/theme-implementation-plan.md) asks
 for under N-T4, not captures of a product page.
 
 They are not part of the product and not the docs screenshot gallery: the

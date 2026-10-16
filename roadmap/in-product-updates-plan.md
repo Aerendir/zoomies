@@ -1,7 +1,9 @@
 # ZF-232: updating from the web UI: Implementation Plan
 
-**Status**: proposed. The design is approved; this plan is waiting for the
-owner's review and their choice of how to execute it. Nothing is built.
+**Status**: executed as ZF-232, `done` in [progress.md](progress.md). The
+checkboxes below were never ticked as the work went in; the pull requests the
+row names are the record of what was built, and
+[upgrading.md](../docs/upgrading.md) is the behaviour that shipped.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

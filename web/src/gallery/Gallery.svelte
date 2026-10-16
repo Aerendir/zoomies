@@ -1,7 +1,7 @@
 <!--
   The development-only component gallery.
 
-  N-T4 in UI_AUDIT.md asks for the states the supplied screenshots never show
+  N-T4 in roadmap/archive/ui-audit-2026-10-01.md asks for the states the supplied screenshots never show
   (disabled permissions, a failed fetch, a disconnected stream, an empty
   filtered list, keyboard focus) to be reviewable in one place, in both styles
   and both colour modes. This is that place. It renders the real components
