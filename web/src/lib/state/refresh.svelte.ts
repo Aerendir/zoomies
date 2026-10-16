@@ -19,6 +19,7 @@
  * rather than starting another; a page that fans out to five requests must not
  * be able to send fifteen because somebody pressed the button three times.
  */
+import { sleep } from '../sleep';
 import { toasts } from './toasts.svelte';
 
 /** What a page does when it is asked to refresh. May be async; may throw. */
@@ -33,10 +34,6 @@ export type RefreshHandler = () => void | Promise<void>;
  * delay is the feedback, not the work.
  */
 const MIN_SPIN_MS = 420;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 class Refresh {
   #handler = $state.raw<RefreshHandler | null>(null);

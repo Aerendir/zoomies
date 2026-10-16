@@ -20,6 +20,8 @@
  * browser's offline page, so the caller's error state is the better answer.
  */
 
+import { sleep } from './sleep';
+
 /** How long to wait before each retry, in milliseconds. */
 const RETRY_DELAYS = [200, 700] as const;
 
@@ -38,8 +40,6 @@ const RELOAD_VERSION_KEY = 'zoomies.chunk-reload-version';
 
 /** A second failure this soon after a reload is not one a reload fixes. */
 const RELOAD_COOLDOWN = 30_000;
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Load a route chunk, retrying a failure that looks transient.
