@@ -201,9 +201,25 @@ jobs:
           cmp connect-proxmox.sh site/connect-proxmox.sh
           dash -n site/connect-proxmox.sh
 
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      # upload-pages-artifact leaves out hidden files and directories, so
+      # /.well-known/security.txt was built, passed the check above and never
+      # reached the site (and neither did .nojekyll). It is the same tarball the
+      # action makes, packed by hand so the dotfiles are in it, and uploaded
+      # under the name deploy-pages looks for.
+      - name: Pack the site, hidden files included
+        run: |
+          set -eu
+          tar --dereference --hard-dereference --directory site \
+            -cf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
+          tar -tf "$RUNNER_TEMP/artifact.tar" | grep -q '^\./\.well-known/security\.txt$'
+          tar -tf "$RUNNER_TEMP/artifact.tar" | grep -q '^\./\.nojekyll$'
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: site
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     name: Deploy
