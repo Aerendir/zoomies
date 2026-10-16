@@ -434,21 +434,23 @@ func watchSIGHUP(ctx context.Context, cfgPath string, apply func(level string) (
 // inside its first GitHub call with a decryption error. Asking whether anything
 // is sealed turns that into a refusal at startup that names the missing file.
 func loadOrCreateKey(ctx context.Context, st *store.Store, cfg *config.Config, log *slog.Logger) (*cryptox.Key, error) {
-	if raw := strings.TrimSpace(cfg.Security.EncryptionKey); raw != "" {
-		key, err := cryptox.ParseKey(raw)
+	// Which key is in force is decided in one place (config.EncryptionKeyOrigin);
+	// what stays here is the part only a controller does: generating a key on a
+	// first run.
+	origin, path := cfg.EncryptionKeyOrigin()
+	switch origin {
+	case config.KeyFromValue:
+		key, err := cfg.ResolveEncryptionKey()
 		if err != nil {
 			return nil, fmt.Errorf("security.encryption_key (or ZOOMIES_ENCRYPTION_KEY) is not usable: %w", err)
 		}
 		return key, nil
-	}
-
-	path := strings.TrimSpace(cfg.Security.EncryptionKeyFile)
-	if path == "" {
+	case config.KeyNone:
 		return nil, errors.New("no encryption key: GitHub App private keys and webhook secrets are sealed with one, " +
 			"so set security.encryption_key_file to a path this process may write, or pass the key itself in ZOOMIES_ENCRYPTION_KEY")
 	}
 
-	key, err := cryptox.LoadKeyFile(path)
+	key, err := cfg.ResolveEncryptionKey()
 	switch {
 	case err == nil:
 		return key, nil
