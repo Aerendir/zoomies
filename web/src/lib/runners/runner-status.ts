@@ -98,6 +98,7 @@ export function runnerDisplayStatus(runner: StatusRunner, quirky = true) {
     active: Boolean(active),
     canBoost,
     icon,
+    tone: active?.tone ?? lifecycle.tone,
     ...toneTokens(active?.tone ?? lifecycle.tone),
   };
 }

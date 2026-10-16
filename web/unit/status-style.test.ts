@@ -59,12 +59,17 @@ test('every state has a distinct persistent cue even when motion is disabled', (
   assert.equal(standardMotion('failed', 'runner').cue, 'error');
 });
 
-test('terminal and unrecognised states never play a happy animation', () => {
-  for (const state of ['failed', 'removed', 'unknown', 'future-state'])
-    assert.equal(standardMotion(state, 'runner').still, true);
+test('terminal and unrecognised states move slowly and sadly, never happily', () => {
+  // A frozen pose reads as a broken image, so the terminal three keep one
+  // gentle loop each; what they must never do is bounce like a working dog.
+  const slow = new Set(
+    ['failed', 'removed', 'unknown'].map((state) => standardMotion(state, 'runner').duration),
+  );
+  assert.ok([...slow].every((duration) => duration >= 5));
   assert.deepEqual(standardMotion('future-state', 'runner'), standardMotion('unknown', 'runner'));
-  assert.equal(standardMotion('failed', 'runner').motion, 'sad');
-  assert.equal(standardMotion('removed', 'runner').motion, 'sleep');
+  assert.equal(standardMotion('failed', 'runner').motion, 'low');
+  assert.equal(standardMotion('removed', 'runner').motion, 'ghost');
+  assert.equal(standardMotion('unknown', 'runner').motion, 'scan');
 });
 
 test('a runner starts its lap partway through, never ahead of it', () => {
