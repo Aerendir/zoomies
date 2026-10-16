@@ -230,6 +230,11 @@ nav:
 not_in_nav: |
   brand/BRANDING_GUIDE.md
 
+# docs/agents/ is guidance for coding agents working in the repository, not a
+# page for the people reading the site.
+exclude_docs: |
+  agents/
+
 # A link in the docs that points nowhere is a broken promise, so a broken one
 # fails the build rather than shipping.
 strict: true

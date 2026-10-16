@@ -226,3 +226,13 @@ use injected filesystems and commands. Preserve reversal records on uninstall.
 Before using prepared repository context, read `.zoomies/AI_CONTEXT.md`. It explains available access routes, revision checks and selective retrieval.
 
 <!-- zoomies-ai-context:end -->
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for eyupio/zoomies, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
