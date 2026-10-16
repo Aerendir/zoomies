@@ -7,9 +7,7 @@
  * a run of successes -- which is exactly what a bad afternoon looks like.
  */
 import { expect, test, type APIRequestContext, type Page, type Route } from '@playwright/test';
-import { browserOverride, dataRows, FIXTURE, goto, grid } from './support/fixtures';
-
-test.use(browserOverride);
+import { dataRows, FIXTURE, goto, grid } from './support/fixtures';
 
 // Five round trips through the grid, and the queue's own dismissal timers in
 // between. Comfortable on a laptop and not on a shared CI runner, where the

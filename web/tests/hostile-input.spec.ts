@@ -14,9 +14,7 @@
  * that it did before asserting what it did not do.
  */
 import { expect, test, type Dialog, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto } from './support/fixtures';
 
 /** Collected rather than dismissed quietly: a dialog here is the bug. */
 function watchForDialogs(page: Page): Dialog[] {

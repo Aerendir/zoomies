@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 for (const [width, style] of [
   [1440, 'classic'],

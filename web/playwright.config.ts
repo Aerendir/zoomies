@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { SETUP_TOKEN_FILE } from './tests/support/fixtures';
+import { browserOverride, SETUP_TOKEN_FILE } from './tests/support/fixtures';
 
 /**
  * Playwright drives the real binary, not a mock server: the tests boot
@@ -79,6 +79,7 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    ...browserOverride,
   },
   projects: [
     {

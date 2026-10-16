@@ -10,7 +10,6 @@
  */
 import { expect, test } from '@playwright/test';
 import {
-  browserOverride,
   chooseTheme,
   clearStoredPreferences,
   expectCurrentSection,
@@ -25,8 +24,6 @@ import {
   sectionHeading,
   sectionLanding,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 // These run in both projects: the phone's navigation is a bar at the bottom
 // rather than a column at the side, but every one of these is a question about

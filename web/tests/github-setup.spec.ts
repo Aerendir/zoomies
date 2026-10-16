@@ -8,9 +8,7 @@
  * on GitHub was "Page not found" with the single-use code in the address bar.
  */
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto, pageHeading } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, pageHeading } from './support/fixtures';
 
 test('the App creation callback lands on Installations with the code in hand', async ({ page }) => {
   await goto(page, '/settings/github/setup?code=abc123&state=xyz789', 'Installations');

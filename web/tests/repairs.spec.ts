@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 test('repair setup discovers repositories and saves a manual policy without a shared payer', async ({
   page,

@@ -1,13 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   documentWidth,
   expectNoReload,
   goto,
   plantMarker,
   reload,
+  signedInAs,
 } from './support/fixtures';
-test.use(browserOverride);
 
 type Credentials = { host_id: string; agent_token: string };
 type Check = {
@@ -657,34 +656,6 @@ async function withReportingHost(
   } finally {
     await page.request.delete(`/api/v1/hosts/${credentials.host_id}`);
   }
-}
-
-/**
- * The page is told who it is talking to. The fixture controller has
- * authentication off, so everybody there is an administrator and a token has no
- * account to belong to; the page asks the controller nothing different.
- */
-async function signedInAs(
-  page: Page,
-  role: 'viewer' | 'operator' | 'admin',
-  externalURL?: string,
-): Promise<void> {
-  await page.route('**/api/v1/meta', async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as Record<string, unknown>;
-    return route.fulfill({
-      response,
-      json: {
-        ...body,
-        auth_disabled: false,
-        bootstrap_required: false,
-        ...(externalURL ? { external_url: externalURL } : {}),
-      },
-    });
-  });
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: { kind: 'token', id: 'tok_pretend', name: 'a token', role } }),
-  );
 }
 
 /** What the page's token request is answered with: what the controller would send, for a token. */

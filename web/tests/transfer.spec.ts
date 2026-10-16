@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 test('one click prepares an instance and its encrypted archive verifies before cutover', async ({
   page,

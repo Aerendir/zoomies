@@ -26,16 +26,14 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import type { UpdatesStatus } from '../src/lib/api/types';
 import {
-  browserOverride,
-  documentWidth,
   expectNoReload,
   goto,
   pageHeading,
   plantMarker,
   reload,
+  expectNoSidewaysScroll,
+  signedInAs,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 const PAGE = '/settings/updates';
 const HOUR = 3_600_000;
@@ -50,15 +48,6 @@ const take = (page: Page) =>
 const mode = (page: Page) => page.getByRole('region', { name: 'Update mode', exact: true });
 const controller = (page: Page) =>
   page.getByRole('region', { name: 'This controller', exact: true });
-
-/** How far the page can be scrolled sideways, which must be nowhere. */
-async function expectNoSidewaysScroll(page: Page, where: string): Promise<void> {
-  const { scrollWidth, clientWidth } = await documentWidth(page);
-  expect(
-    scrollWidth,
-    `${where} is ${scrollWidth}px wide in a ${clientWidth}px window, so the page scrolls sideways`,
-  ).toBeLessThanOrEqual(clientWidth);
-}
 
 /**
  * Answer the page's request for the status with a document of the test's own.
@@ -663,21 +652,6 @@ function attemptIn(
     backup: '',
     rolled_back: false,
   };
-}
-
-/** Sign in as a role below the platform one: the server here has authentication off, the page is told otherwise. */
-async function signedInAs(page: Page, role: 'viewer' | 'operator' | 'admin'): Promise<void> {
-  await page.route('**/api/v1/meta', async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as Record<string, unknown>;
-    return route.fulfill({
-      response,
-      json: { ...body, auth_disabled: false, bootstrap_required: false },
-    });
-  });
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: { kind: 'token', id: 'tok_pretend', name: 'a token', role } }),
-  );
 }
 
 /** Count what the page sends to start an update. */

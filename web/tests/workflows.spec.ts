@@ -8,17 +8,7 @@
  * then finds what this fleet did with it, without leaving the page.
  */
 import { expect, test, type Page } from '@playwright/test';
-import {
-  browserOverride,
-  dataRows,
-  FIXTURE,
-  goto,
-  grid,
-  pageHeading,
-  rowCount,
-} from './support/fixtures';
-
-test.use(browserOverride);
+import { dataRows, FIXTURE, goto, grid, pageHeading, rowCount } from './support/fixtures';
 
 const runs = (page: Page) => grid(page, 'Workflow runs');
 

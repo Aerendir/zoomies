@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 /** A job's name is not a pattern: it carries slashes and dots of its own. */
 function escapeRegExp(value: string): string {

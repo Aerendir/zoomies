@@ -10,9 +10,7 @@
  * runner, and a runner with nothing to say is not given a pill to say it with.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { browserOverride, goto, grid, waitForRows } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, grid, waitForRows } from './support/fixtures';
 
 const lent = {
   state: 'lent',

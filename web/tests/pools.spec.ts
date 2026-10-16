@@ -12,9 +12,7 @@
  * form that does not lose what was typed when a section is shut.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { browserOverride, dataRows, FIXTURE, goto, grid, pageHeading } from './support/fixtures';
-
-test.use(browserOverride);
+import { dataRows, FIXTURE, goto, grid, pageHeading } from './support/fixtures';
 
 type SectionId = 'basics' | 'hosts' | 'providers' | 'runner' | 'size' | 'scaling' | 'speed';
 const SECTIONS: readonly SectionId[] = [

@@ -21,9 +21,8 @@
  * every test that turns one on puts it back.
  */
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { browserOverride, dataRows, documentWidth, goto, grid } from './support/fixtures';
+import { dataRows, documentWidth, goto, grid } from './support/fixtures';
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 type Switch = 'scheduler.size_routing' | 'scheduler.auto_pools';

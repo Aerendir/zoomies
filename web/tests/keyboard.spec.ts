@@ -12,9 +12,7 @@
  * typed into a search box is a letter, not a shortcut.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto, isFocused, pageHeading } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto, isFocused, pageHeading } from './support/fixtures';
 
 /** `g` then a letter, with the pause an operator actually leaves between them. */
 async function chord(page: Page, letter: string): Promise<void> {

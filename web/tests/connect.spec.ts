@@ -17,9 +17,8 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto, reload } from './support/fixtures';
+import { goto, reload } from './support/fixtures';
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 interface Fake {

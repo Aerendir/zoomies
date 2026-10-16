@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { browserOverride, chooseTheme, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { chooseTheme, goto } from './support/fixtures';
 
 test('Kennel Club previews guidance and opens a draft without installing AI Context', async ({
   page,

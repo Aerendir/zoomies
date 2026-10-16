@@ -10,7 +10,6 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
-  browserOverride,
   dataRows,
   documentWidth,
   FIXTURE,
@@ -26,20 +25,10 @@ import {
   PRIMARY_SECTIONS,
   SECTIONS,
   sectionHeading,
+  expectNoSidewaysScroll,
 } from './support/fixtures';
 
-test.use(browserOverride);
-
 test.skip(({ isMobile }) => !isMobile, 'the phone layout, in the Pixel 7 project');
-
-/** How far the page can be scrolled sideways, which must be nowhere. */
-async function expectNoSidewaysScroll(page: Page, where: string): Promise<void> {
-  const { scrollWidth, clientWidth } = await documentWidth(page);
-  expect(
-    scrollWidth,
-    `${where} is ${scrollWidth}px wide in a ${clientWidth}px window, so the page scrolls sideways`,
-  ).toBeLessThanOrEqual(clientWidth);
-}
 
 test('the Overview is readable without scrolling sideways', async ({ page }) => {
   // This caught two real bugs: `.app` kept `align-items: flex-start` where the

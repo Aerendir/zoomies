@@ -1,7 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto, reload } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, reload } from './support/fixtures';
 
 /*
   The history is paged and filtered by the server, so these tests stand in for

@@ -15,9 +15,7 @@
  * controller's own rules are the Go tests', which run the real route.
  */
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto } from './support/fixtures';
 
 interface Row {
   id: string;

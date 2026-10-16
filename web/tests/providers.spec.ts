@@ -14,7 +14,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   expectNoReload,
   FIXTURE,
   goto,
@@ -24,8 +23,6 @@ import {
   reload,
   waitForRows,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 /** The seeded provider's card, by the name its heading gives it. */
 function providerCard(page: Page) {

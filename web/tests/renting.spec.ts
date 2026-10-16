@@ -9,9 +9,7 @@
  * is shown in the server's words rather than swallowed.
  */
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto, signedInAs } from './support/fixtures';
 
 const OFF_SUMMARY =
   'Renting is switched off: this controller is not allowed to rent machines, so work with nowhere to run waits for the hosts it has.';
@@ -72,21 +70,6 @@ const linuxOff: PoolVerdict = {
 async function serveRenting(page: Page, view: () => unknown): Promise<void> {
   await page.route('**/api/v1/providers/renting', (route: Route) =>
     route.fulfill({ json: view() }),
-  );
-}
-
-/** The same pretence check-now.spec.ts uses: authentication on, and a session of one role. */
-async function signedInAs(page: Page, role: 'viewer' | 'operator'): Promise<void> {
-  await page.route('**/api/v1/meta', async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as Record<string, unknown>;
-    return route.fulfill({
-      response,
-      json: { ...body, auth_disabled: false, bootstrap_required: false },
-    });
-  });
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: { kind: 'token', id: 'tok_pretend', name: 'a token', role } }),
   );
 }
 

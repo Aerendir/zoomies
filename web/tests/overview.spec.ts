@@ -10,9 +10,7 @@
  * and pressing it changes nothing about what the page says.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto } from './support/fixtures';
 
 test.beforeEach(async ({ page }) => {
   await goto(page, '/', 'Overview');

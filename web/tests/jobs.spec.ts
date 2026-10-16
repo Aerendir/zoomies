@@ -15,7 +15,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   cellUnder,
   columnTexts,
   dataRows,
@@ -25,8 +24,6 @@ import {
   grid,
   rowCount,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 /**
  * What formatDuration produces: "820ms", "9.4s", "35m 00s", "2h 05m". Not

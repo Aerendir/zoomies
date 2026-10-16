@@ -18,9 +18,7 @@
  * hit-testing, the styles that say a column is in the air.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { browserOverride, goto, grid, waitForRows } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, grid, waitForRows } from './support/fixtures';
 
 /** The grid every test here uses: enough columns to have a middle. */
 const GRID = { path: '/runners', heading: 'Runners', label: 'Runners' } as const;
