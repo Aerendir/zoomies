@@ -33,8 +33,8 @@ concurrency:
   # newest one always gets a chance to publish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# The Go version is in .github/actions/setup-go, which every job uses.
 env:
-  GO_VERSION: "1.27.2"
   NODE_VERSION: "22"
 
 # CI defaults to the Zoomies pool. Forks use GitHub-hosted runners, and a
@@ -196,11 +196,8 @@ jobs:
       # test in internal/docs on every run; the messages need the pull
       # request's commits, which the shallow checkout does not have, so they
       # come from the API.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: ./.github/actions/setup-go
         if: github.event_name == 'pull_request'
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
       - name: Commit messages carry no third-party names
         if: github.event_name == 'pull_request'
         env:
@@ -241,10 +238,7 @@ jobs:
         shard: ${{ fromJSON(needs.changes.outputs.shards) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       # go:embed needs the directory to exist even when the UI is not built.
       # Every shard needs the stub, the docs shard too: its tests ask the binary
@@ -374,9 +368,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.2'
+      - uses: ./.github/actions/setup-go
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -404,10 +396,7 @@ jobs:
     timeout-minutes: 20 # the longest successful run seen was 2 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       - name: Download coverage shards
         id: download-covdata
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -452,10 +441,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       # The runtime tier runs the built binary as two real processes. It needs
       # no Docker daemon and no GitHub credentials: the backend is `process`
@@ -516,10 +502,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       # The drill needs the real binary, so this one builds; the bound turns
       # a stalled module fetch into a failure that names this step.
       - name: Build the binary
@@ -561,10 +544,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       # go:embed needs the directory to exist even when the UI is not built,
       # and the stock Windows runner has no make.
       - name: Stub the embedded UI
@@ -611,10 +591,7 @@ jobs:
     timeout-minutes: 45 # the longest successful run seen was 16 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       # This is the one job that runs two builds of Zoomies: the last published
       # release, installed the way an operator installs it, and the build under
@@ -671,22 +648,20 @@ jobs:
     timeout-minutes: 25 # the longest successful run seen was 9 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # staticcheck reads the compiler's export data, and 1.27.2 writes a
-      # version of it (5) that no staticcheck release can read yet: every
-      # import fails and the job reports nothing about our code. The linter
-      # looks at our source, not the standard library, so it runs on the
-      # module's floor until a staticcheck release catches up; the rest of
-      # the pipeline builds, tests and ships on GO_VERSION.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: true
+      # The same Go as every other job. This job once ran on the module's floor
+      # (1.27.1) because staticcheck reads the compiler's export data and could
+      # not read the version (5) 1.27.2 writes; release 2026.2.2 reads it, and
+      # runs clean over the whole module on 1.27.2, so the workaround is gone.
+      - uses: ./.github/actions/setup-go
       - name: Stub the embedded UI
         timeout-minutes: 1
         run: make ui-stub
+      # Pinned, so that a staticcheck release cannot fail CI with no change in the
+      # repository, and so that `make lint` and this job can be the same release.
+      # Moving it is a deliberate edit: run `make lint` with the new release first.
       - uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1.4.1
         with:
-          version: latest
+          version: "2026.2.2"
           install-go: false
 
   ui:
@@ -760,10 +735,7 @@ jobs:
     if: github.event.action != 'closed' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -868,10 +840,7 @@ jobs:
           - { goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       - name: Download webdist artifact
         id: download-webdist
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -914,8 +883,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
+      - uses: ./.github/actions/setup-go
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}

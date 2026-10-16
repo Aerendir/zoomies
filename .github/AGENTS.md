@@ -38,6 +38,11 @@ has a CI job that diffs them:
 * `govulncheck ./...` must find nothing reachable. It runs in its own workflow,
   on every change and weekly against `main`, so a module found vulnerable after
   it merged still gets reported.
+* The Go CI and releases use is written once, in `.github/actions/setup-go`, and
+  every job calls that action; `go.mod` holds the lower floor a contributor
+  needs and gets no `toolchain` line. The UI's Node major is `NODE_VERSION` in
+  `ci.yml` and `release.yml`, `.nvmrc` and the `ui` stage of `deploy/Dockerfile`,
+  changed together. `internal/docs` tests all of it, so one cannot move alone.
 * Every `uses:` in `.github/workflows` is pinned to a commit with its release
   in a comment, and a workflow with more than one job grants no `write`
   permission at the top. Both are tested in `internal/docs`; Dependabot moves a

@@ -5,7 +5,14 @@
 
 # ---- UI ---------------------------------------------------------------------
 # UI assets are architecture-independent; build them once on the builder's CPU.
-FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS ui
+#
+# Node 22, the major CI tests the UI on and the release workflow builds the
+# binaries' UI with (NODE_VERSION in ci.yml and release.yml, and .nvmrc; a test in
+# internal/docs holds them equal). This line was once moved to 26 by an automatic
+# base-image bump that nothing else moved with it, so the image shipped a build
+# on a Node that no check ran. Changing the major is a deliberate change of all
+# of them together, which is why dependabot.yml leaves node's majors alone.
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS ui
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
 # No `|| npm install` fallback: that turns a lockfile CI would reject into an
@@ -16,7 +23,12 @@ RUN npm run build
 
 # ---- Go ---------------------------------------------------------------------
 # Go cross-compiles on the builder's CPU instead of running the compiler in QEMU.
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS build
+#
+# The minor release go.mod names. The digest is what pins the patch release, and
+# it should be the one CI and the release binaries are built with (the version in
+# .github/actions/setup-go): it was left on 1.27.1 while they moved to 1.27.2, so
+# the images were built with a different compiler from the binaries.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS build
 WORKDIR /src
 RUN apk add --no-cache git ca-certificates
 COPY go.mod go.sum ./
