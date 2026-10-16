@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/eyupio/zoomies/internal/mcp"
 )
 
 // runAudit is `zoomies audit ...`.
@@ -51,7 +53,7 @@ func auditList(ctx context.Context, e *env, args []string) error {
 		if raw == "" {
 			continue
 		}
-		when, err := parseWhen(raw)
+		when, err := mcp.ParseWhen(raw)
 		if err != nil {
 			return usagef("audit list", "--%s %q: %v", name, raw, err)
 		}
