@@ -32,6 +32,14 @@ const MOTIONS = new Map<LucideIcon, OffMotion>([
   [TrendingDown, 'sag'],
 ]);
 
-export function offMotion(icon: LucideIcon): OffMotion {
-  return MOTIONS.get(icon) ?? 'none';
+/**
+ * A glyph missing from the map holds still by default, which is right for
+ * waiting and finished states but wrong for work in progress: a new busy
+ * glyph that nobody mapped yet would look finished. Busy-toned glyphs
+ * therefore fall back to the quiet breathe rather than to stillness.
+ */
+export function offMotion(icon: LucideIcon, tone?: string): OffMotion {
+  const mapped = MOTIONS.get(icon);
+  if (mapped) return mapped;
+  return tone === 'busy' ? 'breathe' : 'none';
 }

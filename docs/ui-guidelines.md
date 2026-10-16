@@ -132,7 +132,10 @@ went: extra CPU gives its trend line two quick hops, maximum CPU shakes its
 bolt harder as it fills with charge and then flashes, and CPU being held back
 tugs its line down and drags it slowly back up. Everything waiting or finished
 holds still, so a page of idle runners is a calm one and a failure never draws
-the eye by moving, and reduced motion stops all of it. **An icon names a state, never an action**: the
+the eye by moving, and reduced motion stops all of it. A glyph the motion map
+does not know holds still too, unless the state's tone is the busy one, in
+which case it falls back to the quiet breathe: a new in-progress glyph nobody
+mapped yet must not look finished. **An icon names a state, never an action**: the
 Queue's Run now, Pause, Resume and Delete carry Zap, Pause, Play and the bin,
 Re-run a turning arrow, and the Runners page's Drain the slashed circle, so a
 status drawn with one of them beside those buttons reads as something to press.
@@ -155,25 +158,35 @@ One glyph also means one thing wherever it appears:
 | `IterationCcw` | another attempt asked for | a re-run requested on a job's timeline |
 | `Zap`, `TrendingUp`, `TrendingDown` | CPU lent at maximum, lent, taken back | elastic CPU on a busy or idle runner |
 
-Standard is the same `Dog` icon as Eli's avatar with two `PawPrint` marks
-under it, in one SVG per runner, moved by CSS alone: each state's gesture is a
-set of keyframes for those marks, so there is no drawing to keep. Busy runners
-trot on alternating paws, extra zoomies scoot from side to side, and maximum
-zoomies chase a faster circle, both leaving paw prints. Idle dogs look patiently
-around, provisioning dogs sniff along a trail, registering dogs wave a paw,
-throttled dogs wait, and draining dogs settle down. Failed dogs hang their
-heads, removed dogs lie low and unknown dogs tilt their heads; these three
-states stay still. The glyph in the corner is the cue, and it is the icon Off
-draws for the same state (`Activity`, `CircleDot`, `Hourglass`, `CircleX` and
-so on, with `TrendingUp` and `Zap` for the two boost levels), so one glyph
+Standard is the Lucide dog face, two `PawPrint` marks under it and the state's
+cue glyph in the corner, in one SVG per runner, moved by CSS alone: each
+state's gesture is a set of keyframes for those marks, so there is no drawing
+to keep beyond the face's own eye and mouth variants. Busy runners trot while
+the paw prints step underneath them, extra zoomies dash from side to side with
+speed lines and dust, and maximum zoomies dash faster with dashed streaks and a
+charge flash, both leaving trail prints. Idle dogs sit, blink and tap a paw,
+provisioning dogs dip down to sniff the paw prints as a scent rises,
+registering dogs wave a paw print under a ripple ring, throttled dogs strain
+against a taut leash, and draining dogs sink and settle as their paws fade.
+Failed dogs hold their heads low with downcast eyes and one slow sigh, removed
+dogs fade as dashed ghosts, and unknown dogs rock with glancing eyes; these
+three move slowly and sadly rather than freezing, so a stalled runner never
+reads as a broken image. The glyph in the corner is the cue, and it is the icon
+Off draws for the same state (`Activity`, `CircleDot`, `Hourglass`, `CircleX`
+and so on, with `TrendingUp` and `Zap` for the two boost levels), so one glyph
 keeps one meaning across the styles; throttled, which Off has no glyph for,
 wears a `Turtle` rather than a pause, since pause is a button on the Queue.
-Labels, colours and tooltips keep their existing status meaning.
+Labels, colours and tooltips keep their existing status meaning. Below 28px the
+accents and mouths step aside and pose, eyes and the state's colour carry the
+state.
 
 Each runner ID seeds its timing so rows and workflow packs do not move together.
 Reduced motion disables every animation while retaining the expression and cue.
 The existing reserved avatar size and workflow pack widths are preserved.
-Cute keeps its existing illustrations and palette; Off keeps plain status icons.
+Cute keeps its palette and gains a pose per state: posture, ears, eyes, mouth
+and brows are chosen per state, the collar tag and props borrow the status
+tone, and below 32px the props and fine detail step aside so posture, ears and
+tone carry the state. Off keeps plain status icons.
 
 All tokens live in exactly one place: `web/src/lib/styles/tokens.css`, declared
 as CSS custom properties on `:root` and overridden under `[data-theme="dark"]`.
