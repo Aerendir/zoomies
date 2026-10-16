@@ -46,14 +46,13 @@ func TestWriteTimeoutStaysZero(t *testing.T) {
 
 // TestListenAndServeStartsAndStops covers the lifecycle a service manager sees.
 func TestListenAndServeStartsAndStops(t *testing.T) {
-	addr := freeAddr(t)
-	h := newHarness(t, func(c *config.Config) { c.Server.Bind = addr })
+	h := newHarness(t, func(c *config.Config) { c.Server.Bind = "127.0.0.1:0" })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- h.api.ListenAndServe(ctx) }()
 
-	base := "http://" + addr
+	base := "http://" + waitForAddr(t, h.api, done)
 	waitForServer(t, base+"/healthz")
 
 	resp, err := http.Get(base + "/healthz")
@@ -85,12 +84,11 @@ func TestListenAndServeStartsAndStops(t *testing.T) {
 // persistence, and that the listener actually serves TLS with it.
 func TestListenAndServeWithSelfSignedTLS(t *testing.T) {
 	dir := t.TempDir()
-	addr := freeAddr(t)
 	certFile := filepath.Join(dir, "cert.pem")
 	keyFile := filepath.Join(dir, "key.pem")
 
 	h := newHarness(t, func(c *config.Config) {
-		c.Server.Bind = addr
+		c.Server.Bind = "127.0.0.1:0"
 		c.Server.TLS = config.TLS{
 			Mode: config.TLSSelfSigned, CertFile: certFile, KeyFile: keyFile,
 			Hosts: []string{"zoomies.test"},
@@ -101,6 +99,7 @@ func TestListenAndServeWithSelfSignedTLS(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- h.api.ListenAndServe(ctx) }()
+	addr := waitForAddr(t, h.api, done)
 
 	// The key is written after the certificate, so wait for the key: its
 	// presence means the certificate is complete too. Waiting on the certificate
@@ -244,18 +243,29 @@ func TestTrustedProxyCloudflareTokenExpandsToThePublishedRanges(t *testing.T) {
 	}
 }
 
-// freeAddr returns a loopback address nothing is listening on.
-func freeAddr(t *testing.T) string {
+// waitForAddr returns the address a server has bound. The tests ask for port 0,
+// so the kernel picks the port at the moment of binding. They used to find a free
+// port, close it and bind it again, and on a runner shared with other jobs'
+// tests another process took the port in that gap.
+//
+// failed carries ListenAndServe's result, so a server that could not start says
+// why instead of leaving the test to time out.
+func waitForAddr(t *testing.T, s *Server, failed <-chan error) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("finding a free port: %v", err)
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if addr := s.Addr(); addr != "" {
+			return addr
+		}
+		select {
+		case err := <-failed:
+			t.Fatalf("ListenAndServe returned before it was listening: %v", err)
+		default:
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
-	addr := ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		t.Fatalf("closing the probe listener: %v", err)
-	}
-	return addr
+	t.Fatal("the server never reported the address it bound")
+	return ""
 }
 
 func waitForServer(t *testing.T, url string) {
