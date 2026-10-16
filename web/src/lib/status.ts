@@ -68,7 +68,6 @@ import type {
   MachineState,
   ProvisioningStatus,
   Pool,
-  Runner,
   RunnerState,
   Severity,
 } from './api/types';
@@ -208,11 +207,6 @@ export function runnerStatus(state: RunnerState | undefined, quirky = true): Sta
   if (!state) return UNKNOWN;
   const status = RUNNER[state] ?? UNKNOWN;
   return quirky ? status : { ...status, label: RUNNER_STANDARD_LABEL[state] };
-}
-
-/** Convenience for a row that has the whole runner to hand. */
-export function runnerRowStatus(runner: Pick<Runner, 'state'>, quirky = true): StatusMeta {
-  return runnerStatus(runner.state, quirky);
 }
 
 /** Every runner state with its label, for filter menus. */

@@ -65,12 +65,6 @@ export function toMillis(value: TimeInput): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
-/** The ISO 8601 form, which is what a timestamp's tooltip shows. */
-export function toIso(value: TimeInput): string {
-  const ms = toMillis(value);
-  return ms === null ? '' : new Date(ms).toISOString();
-}
-
 const ABSOLUTE = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'medium',
@@ -142,12 +136,6 @@ export function formatDuration(ms: number | null | undefined): string {
   if (hours < 24) return `${hours}h ${pad(minutes % 60)}m`;
   const days = Math.floor(hours / 24);
   return `${days}d ${pad(hours % 24)}h`;
-}
-
-/** How long ago something started, as a duration rather than a relative time. */
-export function elapsedSince(value: TimeInput, now: number = Date.now()): string {
-  const ms = toMillis(value);
-  return ms === null ? NO_VALUE : formatDuration(now - ms);
 }
 
 const GO_UNITS: Record<string, number> = {
@@ -258,14 +246,6 @@ export function formatNumber(value: number | null | undefined): string {
   return NUMBER.format(value);
 }
 
-/** Compact digits for tiles: 12.4k, 3.1M. */
-export function formatCompact(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return NO_VALUE;
-  if (Math.abs(value) < 10_000) return NUMBER.format(value);
-  if (Math.abs(value) < 1_000_000) return `${(value / 1000).toFixed(1)}k`;
-  return `${(value / 1_000_000).toFixed(1)}M`;
-}
-
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] as const;
 
 /** Binary-scaled bytes: 1536 becomes "1.5 KB". */
@@ -324,10 +304,4 @@ export function shortId(id: string | null | undefined, keep = 8): string {
     return `${id.slice(0, underscore + 1)}${id.slice(underscore + 1, underscore + 1 + keep)}…`;
   }
   return id.length > keep * 2 ? `${id.slice(0, keep * 2)}…` : id;
-}
-
-/** `owner/repo` split for two-line rendering in a cell. */
-export function splitRepo(repo: string | null | undefined): { owner: string; name: string } {
-  const [owner = '', name = ''] = (repo ?? '').split('/');
-  return { owner, name };
 }

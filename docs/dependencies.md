@@ -44,7 +44,7 @@ Runtime (shipped to the browser):
 | Package | Why |
 | --- | --- |
 | `svelte` | The framework. Runes, no virtual DOM, and a compiled output small enough to hit the 200 KB shell budget. |
-| `@tanstack/svelte-table` / `@tanstack/table-core` | Headless data-grid logic (sorting, filtering, column visibility, row selection) with our own markup. Reimplementing this correctly, including keyboard navigation over a virtualised body, is weeks. |
+| `@tanstack/svelte-table` | Headless data-grid logic (sorting, filtering, column visibility, row selection) with our own markup. Reimplementing this correctly, including keyboard navigation over a virtualised body, is weeks. |
 | `@xterm/xterm` + `addon-fit`, `addon-search`, `addon-webgl` | The log viewer. 100k lines without jank is a hard requirement, and xterm's WebGL renderer is the reason it is achievable. |
 | `@lucide/svelte` | Icons. Imported individually so tree-shaking keeps only what is used. |
 | `@fontsource-variable/inter`, `@fontsource/jetbrains-mono` | Self-hosted fonts. An air-gapped install must not make a third-party font request, and neither should anyone else's browser. |

@@ -1598,10 +1598,6 @@ func (c *Config) readFile(path string) error {
 	return nil
 }
 
-// LoadOrDefault is Load, but a config file that fails to parse is fatal while a
-// missing one is not. It is what the daemon entry points call.
-func LoadOrDefault(path string) (*Config, error) { return Load(path) }
-
 // Save writes the configuration to path with 0640 permissions.
 //
 // It writes what an operator actually chose, not the whole struct. The two
