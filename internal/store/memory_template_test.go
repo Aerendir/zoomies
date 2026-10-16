@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 )
 
@@ -88,4 +89,56 @@ func dumpForComparison(t *testing.T, s *Store) map[string][]string {
 		data.Close()
 	}
 	return out
+}
+
+// Tests open stores in parallel, all copied from one template, and a copy that
+// shared a page with the template or with another store would show one test's
+// rows to another: the worst kind of failure, because it is intermittent and
+// names nobody. Each store reads what only it wrote through the reader pool,
+// which is a second connection to the same in-memory database and has to see
+// the copied schema as well as the writer does.
+func TestStoresCopiedFromTheTemplateDoNotShareRows(t *testing.T) {
+	newTestStore(t) // makes sure a template exists
+	const stores = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, stores)
+	for i := 0; i < stores; i++ {
+		wg.Add(1)
+		go func(withPool bool) {
+			defer wg.Done()
+			ctx := context.Background()
+			s, err := Open(ctx, Options{Path: ":memory:"})
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer s.Close()
+			if withPool {
+				inst := &Installation{AppID: 1, InstallationID: 2, Target: "acme", TargetType: TargetOrg}
+				if err := s.CreateInstallation(ctx, inst); err != nil {
+					errs <- err
+					return
+				}
+				pool := &Pool{Name: "linux-x64", InstallationID: inst.ID, Labels: StringSlice{"linux-x64"},
+					Backend: BackendDocker, MaxRunners: 1, DockerMode: DockerNone, Enabled: true}
+				if err := s.CreatePool(ctx, pool); err != nil {
+					errs <- err
+					return
+				}
+			}
+			pools, err := s.ListPools(ctx)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if want := map[bool]int{true: 1, false: 0}[withPool]; len(pools) != want {
+				errs <- fmt.Errorf("a store with%s a pool listed %d", map[bool]string{true: "", false: "out"}[withPool], len(pools))
+			}
+		}(i%2 == 0)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
 }
