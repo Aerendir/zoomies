@@ -10,11 +10,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
-
-const dialog = (page: Page, name: string | RegExp) => page.getByRole('dialog', { name });
+import { FIXTURE, goto, dialog } from './support/fixtures';
 
 /** Put the fixture back through the same route, so the next spec sees it. */
 async function restore(page: Page, document: string): Promise<void> {

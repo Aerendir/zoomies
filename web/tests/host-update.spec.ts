@@ -16,16 +16,14 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { shapeDiffers } from '../src/lib/state/fleet-shape';
 import {
-  browserOverride,
-  documentWidth,
   expectNoReload,
   goto,
   plantMarker,
   reload,
+  expectNoSidewaysScroll,
+  signedInAs,
 } from './support/fixtures';
 import { enrolAgent, type Credentials } from './support/fake-agent';
-
-test.use(browserOverride);
 
 const TARGET = 'v1.3.0';
 const BEHIND = '1.2.0';
@@ -101,21 +99,6 @@ const tryAgainButton = (page: Page, name: string) =>
 const confirmation = (page: Page, name: string) =>
   page.getByRole('dialog', { name: `Update the agent on ${name}`, exact: true });
 
-/** Sign in as a role below the platform one: the server here has authentication off, the page is told otherwise. */
-async function signedInAs(page: Page, role: 'viewer' | 'operator' | 'admin'): Promise<void> {
-  await page.route('**/api/v1/meta', async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as Record<string, unknown>;
-    return route.fulfill({
-      response,
-      json: { ...body, auth_disabled: false, bootstrap_required: false },
-    });
-  });
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: { kind: 'token', id: 'tok_pretend', name: 'a token', role } }),
-  );
-}
-
 /** Count the requests the page sends to update a host. */
 function countStarts(page: Page): () => number {
   let posted = 0;
@@ -125,14 +108,6 @@ function countStarts(page: Page): () => number {
     }
   });
   return () => posted;
-}
-
-async function expectNoSidewaysScroll(page: Page, where: string): Promise<void> {
-  const { scrollWidth, clientWidth } = await documentWidth(page);
-  expect(
-    scrollWidth,
-    `${where} is ${scrollWidth}px wide in a ${clientWidth}px window, so the page scrolls sideways`,
-  ).toBeLessThanOrEqual(clientWidth);
 }
 
 test('a host behind the controller is offered Update, and the command stays beneath it', async ({

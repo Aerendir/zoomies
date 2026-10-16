@@ -7,9 +7,7 @@
  * request needs -- so the last step must refuse rather than get halfway.
  */
 import { expect, test } from '@playwright/test';
-import { FIXTURE, browserOverride, goto, navEntry, pageHeading } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto, navEntry, pageHeading } from './support/fixtures';
 
 test.skip(({ isMobile }) => isMobile, 'the wizard interactions are covered by the mobile suite');
 

@@ -9,7 +9,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   clearStoredPreferences,
   expectNoReload,
   FIXTURE,
@@ -19,8 +18,6 @@ import {
   plantMarker,
   reload,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 /**
  * What one runner in this fleet asks for, by the rule the Adjust dialog uses:

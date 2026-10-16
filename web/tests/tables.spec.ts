@@ -22,7 +22,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   dataRows,
   goto,
   grid,
@@ -31,8 +30,6 @@ import {
   sectionHeading,
   waitForRows,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 /** Every page whose main content is a grid, with the name its table carries. */
 const GRIDS = [

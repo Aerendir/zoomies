@@ -15,11 +15,10 @@ import { test, expect } from '@playwright/test';
 // The bootstrap route asks for the token the controller printed at startup, so
 // a test creating the first account fetches it the way an operator reads
 // `docker compose logs`. The fixture captures the line into a file.
-import { browserOverride, setupToken } from './support/fixtures';
+import { setupToken } from './support/fixtures';
 
 const ADMIN = { username: 'ada', password: 'correct horse battery staple' };
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 /** Each test gets its own context, so anything after the bootstrap signs in. */

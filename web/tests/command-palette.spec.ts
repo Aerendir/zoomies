@@ -9,16 +9,7 @@
  * technology rather than being a colour.
  */
 import { expect, test } from '@playwright/test';
-import {
-  browserOverride,
-  FIXTURE,
-  goto,
-  isFocused,
-  pageHeading,
-  paletteOpener,
-} from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto, isFocused, pageHeading, paletteOpener } from './support/fixtures';
 
 const palette = (page: import('@playwright/test').Page) =>
   page.getByRole('dialog', { name: 'Command palette' });

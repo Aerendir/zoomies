@@ -15,7 +15,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   dataRows,
   documentWidth,
   expectCurrentSection,
@@ -30,7 +29,6 @@ import {
   rowCount,
 } from './support/fixtures';
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 const PUBLIC_REPO = 'acme/site';

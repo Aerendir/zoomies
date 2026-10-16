@@ -10,12 +10,11 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { test, expect, type Page } from '@playwright/test';
-import { browserOverride, setupToken } from './support/fixtures';
+import { setupToken } from './support/fixtures';
 
 const ADMIN = { username: 'ada', password: 'correct horse battery staple' };
 const CALLBACK = 'https://claude.ai/api/mcp/auth_callback';
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 async function signIn(page: Page): Promise<void> {

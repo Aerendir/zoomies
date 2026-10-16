@@ -1,7 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import { browserOverride, goto, grid, waitForRows } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, grid, waitForRows } from './support/fixtures';
 
 /*
  * The words each style draws the same two moments with. Off is what a browser

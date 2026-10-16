@@ -12,11 +12,7 @@
  * process exit the Go tests cover.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
-
-const dialog = (page: Page, name: string | RegExp) => page.getByRole('dialog', { name });
+import { goto, dialog } from './support/fixtures';
 
 async function openBackups(page: Page): Promise<void> {
   await goto(page, '/settings/backups', 'Backups');

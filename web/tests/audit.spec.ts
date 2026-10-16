@@ -11,9 +11,7 @@
  * The whole page was untested until this file.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, dataRows, goto, grid } from './support/fixtures';
-
-test.use(browserOverride);
+import { dataRows, goto, grid } from './support/fixtures';
 
 const log = (page: Page) => grid(page, 'Audit log');
 const rows = (page: Page) => dataRows(log(page));

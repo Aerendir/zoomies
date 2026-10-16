@@ -16,9 +16,7 @@
  * passes against the mock proves nothing about the relay.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto } from './support/fixtures';
 
 const follow = (page: Page) => page.getByRole('switch', { name: 'Follow' });
 const wrap = (page: Page) => page.getByRole('switch', { name: 'Wrap' });

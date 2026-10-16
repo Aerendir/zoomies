@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   SECTIONS,
-  browserOverride,
   goto,
   nav,
   navEntry,
@@ -9,8 +8,6 @@ import {
   openAccountMenu,
   openSection,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 for (const theme of ['light', 'dark'] as const) {
   test(`tooltips escape clipped table cells and overlapping elements in ${theme} theme`, async ({

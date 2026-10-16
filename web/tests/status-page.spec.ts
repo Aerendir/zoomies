@@ -9,10 +9,6 @@
  * because this fixture has authentication on and the test is signed out.
  */
 import { devices, expect, test, type Page } from '@playwright/test';
-import { browserOverride } from './support/fixtures';
-
-test.use(browserOverride);
-
 /** The diagnostics fixture's address: STUCK_PORT in playwright.config.ts. */
 const SAME_FLEET = 'http://127.0.0.1:8097';
 

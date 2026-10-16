@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
+import { goto } from './support/fixtures';
 
-test.use(browserOverride);
 const distribution = (zero = false) => ({
   samples: zero ? 1 : 0,
   missing: zero ? 0 : 1,

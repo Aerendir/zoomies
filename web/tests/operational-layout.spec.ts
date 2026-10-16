@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 async function mission(page: import('@playwright/test').Page, prefs?: Record<string, unknown>) {
   await page.setViewportSize({ width: 375, height: 900 });

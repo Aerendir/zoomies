@@ -17,14 +17,6 @@ import { readFileSync } from 'node:fs';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
- * A browser override for sandboxes where Playwright's own Chromium download is
- * absent and a compatible build sits somewhere else.
- *
- * CI installs the browser normally (`npx playwright install --with-deps
- * chromium`), leaves `PLAYWRIGHT_CHROMIUM` unset, and therefore gets `{}` --
- * no override at all. Every spec applies it with `test.use(browserOverride)`.
- */
-/**
  * Where the first-run fixture leaves the setup token it saw the controller
  * print.
  *
@@ -41,6 +33,15 @@ export function setupToken(): string {
   return readFileSync(SETUP_TOKEN_FILE, 'utf8').trim();
 }
 
+/**
+ * A browser override for sandboxes where Playwright's own Chromium download is
+ * absent and a compatible build sits somewhere else.
+ *
+ * CI installs the browser normally (`npx playwright install --with-deps
+ * chromium`), leaves `PLAYWRIGHT_CHROMIUM` unset, and therefore gets `{}` --
+ * no override at all. playwright.config.ts applies it to every project, so a
+ * spec does not repeat it.
+ */
 export const browserOverride = process.env.PLAYWRIGHT_CHROMIUM
   ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM } }
   : {};
@@ -500,3 +501,49 @@ export async function shiftTabTo(page: Page, target: Locator, limit = 40): Promi
   }
   return -1;
 }
+
+/**
+ * Pretend the page was opened by a signed-in user holding `role`.
+ *
+ * The suite's controller runs with authentication off, so every request is an
+ * administrator and a viewer's page cannot be reached honestly. The two routes
+ * a page asks first, the instance's meta and the session, are answered as though
+ * authentication were on, and everything after them is the real binary. Pass
+ * `externalURL` when the page under test shows the address the controller says
+ * it is served at.
+ */
+export async function signedInAs(
+  page: Page,
+  role: 'viewer' | 'operator' | 'admin',
+  externalURL?: string,
+): Promise<void> {
+  await page.route('**/api/v1/meta', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as Record<string, unknown>;
+    return route.fulfill({
+      response,
+      json: {
+        ...body,
+        auth_disabled: false,
+        bootstrap_required: false,
+        ...(externalURL ? { external_url: externalURL } : {}),
+      },
+    });
+  });
+  await page.route('**/api/v1/auth/session', (route) =>
+    route.fulfill({ json: { kind: 'token', id: 'tok_pretend', name: 'a token', role } }),
+  );
+}
+
+/** The page is no wider than its window, so nothing makes it scroll sideways. */
+export async function expectNoSidewaysScroll(page: Page, where: string): Promise<void> {
+  const { scrollWidth, clientWidth } = await documentWidth(page);
+  expect(
+    scrollWidth,
+    `${where} is ${scrollWidth}px wide in a ${clientWidth}px window, so the page scrolls sideways`,
+  ).toBeLessThanOrEqual(clientWidth);
+}
+
+/** A dialog by its accessible name. */
+export const dialog = (page: Page, name: string | RegExp): Locator =>
+  page.getByRole('dialog', { name });

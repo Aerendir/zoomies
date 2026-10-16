@@ -12,9 +12,7 @@
  * with nothing streaming.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto } from './support/fixtures';
 
 const RUNNER = `/runners/${FIXTURE.busyRunnerId}`;
 

@@ -12,11 +12,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto, openAccountMenu, pageHeading } from './support/fixtures';
-
-test.use(browserOverride);
-
-const dialog = (page: Page, name: string | RegExp) => page.getByRole('dialog', { name });
+import { goto, openAccountMenu, pageHeading, dialog } from './support/fixtures';
 
 /**
  * A name nothing else in the suite will collide with. Random bytes rather than

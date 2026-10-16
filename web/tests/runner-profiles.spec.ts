@@ -10,9 +10,8 @@
  * enrolled once and the tests run in order on it.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
+import { goto } from './support/fixtures';
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 const NAME = `profile-host-${Date.now()}`;

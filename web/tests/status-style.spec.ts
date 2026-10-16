@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, clearStoredPreferences, goto, reload } from './support/fixtures';
-
-test.use(browserOverride);
+import { clearStoredPreferences, goto, reload } from './support/fixtures';
 
 const pages = [
   ['/runners', 'Runners'],

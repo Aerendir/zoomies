@@ -5,11 +5,7 @@
  * again once saved, and removing a provider takes its name typed out.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
-
-const dialog = (page: Page, name: string | RegExp) => page.getByRole('dialog', { name });
+import { goto, dialog } from './support/fixtures';
 
 /** Open Eli from the corner of whatever page this is. */
 async function openEli(page: Page): Promise<void> {

@@ -12,17 +12,7 @@
  * reloading itself would pass a weaker test and still be the bug.
  */
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import {
-  browserOverride,
-  dataRows,
-  expectNoReload,
-  FIXTURE,
-  goto,
-  grid,
-  plantMarker,
-} from './support/fixtures';
-
-test.use(browserOverride);
+import { dataRows, expectNoReload, FIXTURE, goto, grid, plantMarker } from './support/fixtures';
 
 interface Named {
   id: string;

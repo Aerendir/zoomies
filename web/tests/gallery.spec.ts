@@ -12,10 +12,6 @@
  * reasons, live contrast, and the phone width with no page-level overflow.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride } from './support/fixtures';
-
-test.use(browserOverride);
-
 const COMBINATIONS = [
   { style: 'classic', mode: 'light' },
   { style: 'classic', mode: 'dark' },
