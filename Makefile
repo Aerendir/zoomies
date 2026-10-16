@@ -61,8 +61,11 @@ ui-stub: $(UI_OUT)/.placeholder ## Write the placeholder UI that go:embed needs,
 $(UI_OUT)/.placeholder:
 	@mkdir -p $(UI_OUT)
 	@# go:embed fails on an empty directory, so keep a placeholder for builds
-	@# that skip the UI. `make ui` overwrites the directory wholesale.
-	@printf '<!doctype html><title>Zoomies</title><p>The UI was not built. Run <code>make ui</code>.' > $(UI_OUT)/index.html
+	@# that skip the UI. `make ui` overwrites the directory wholesale, and with
+	@# it this marker, so the marker's absence does not mean the UI is absent:
+	@# write the page only when there is none, or a test run after a real build
+	@# would replace the built UI with the placeholder.
+	@test -e $(UI_OUT)/index.html || printf '<!doctype html><title>Zoomies</title><p>The UI was not built. Run <code>make ui</code>.' > $(UI_OUT)/index.html
 	@touch $@
 
 .PHONY: ui
@@ -71,7 +74,7 @@ ui: ## Build the Svelte UI into the embed directory
 	cd $(UI_DIR) && $(NPM) run build
 
 .PHONY: ui-dev
-ui-dev: ## Run the Vite dev server against a controller on :8080
+ui-dev: | $(UI_DIR)/node_modules ## Run the Vite dev server against a controller on :8080
 	cd $(UI_DIR) && $(NPM) run dev
 
 .PHONY: dist
@@ -90,15 +93,15 @@ dist: ui ## Cross-compile release binaries into dist/
 ##@ Test
 
 .PHONY: test
-test: ## Run Go unit and integration tests
+test: | $(UI_OUT)/.placeholder ## Run Go unit and integration tests
 	$(GO) test -race -count=1 -timeout $(GO_TEST_TIMEOUT) $(if $(TEST_RUN),-run '$(TEST_RUN)') $(TEST_PKGS)
 
 .PHONY: test-short
-test-short: ## Run only fast tests
+test-short: | $(UI_OUT)/.placeholder ## Run only fast tests
 	$(GO) test -short -count=1 ./...
 
 .PHONY: cover
-cover: ## Run tests with a coverage report
+cover: | $(UI_OUT)/.placeholder ## Run tests with a coverage report
 	# -coverpkg is what makes the number honest. Without it a package is only
 	# credited for the lines its own _test.go files run, so code exercised
 	# through the layer above it -- the controller's migration service, driven
@@ -114,7 +117,7 @@ cover: ## Run tests with a coverage report
 # COVERDIR and `cover-merge` turns the set into the one coverage.out that
 # `make cover` writes directly.
 .PHONY: cover-shard
-cover-shard: ## Run one shard of the coverage run into COVERDIR (see cover-merge)
+cover-shard: | $(UI_OUT)/.placeholder ## Run one shard of the coverage run into COVERDIR (see cover-merge)
 	@test -n "$(COVERDIR)" || { echo "cover-shard needs COVERDIR=<directory>"; exit 2; }
 	@mkdir -p $(COVERDIR)
 	$(GO) test -race -count=1 -timeout $(GO_TEST_TIMEOUT) -cover -coverpkg=./... -covermode=atomic $(if $(TEST_RUN),-run '$(TEST_RUN)') $(TEST_PKGS) -args -test.gocoverdir=$(abspath $(COVERDIR))
@@ -124,6 +127,10 @@ cover-merge: ## Merge every cover-shard directory under COVERDIRS into coverage.
 	@test -n "$(COVERDIRS)" || { echo "cover-merge needs COVERDIRS=<dir>,<dir>,..."; exit 2; }
 	$(GO) tool covdata textfmt -i=$(COVERDIRS) -o coverage.out
 	$(GO) tool cover -func=coverage.out | tail -1
+
+.PHONY: test-unit
+test-unit: | $(UI_DIR)/node_modules ## Run the UI's unit tests (Node's own runner, no browser, a few seconds)
+	cd $(UI_DIR) && $(NPM) run test:unit
 
 .PHONY: test-ui
 test-ui: ## Run the Playwright suite (builds the binary first)
@@ -138,11 +145,11 @@ test-ui: ## Run the Playwright suite (builds the binary first)
 	cd $(UI_DIR) && $(NPM) run test:e2e
 
 .PHONY: test-e2e
-test-e2e: ## Docker-based end-to-end test; needs GitHub credentials, skipped without
+test-e2e: | $(UI_OUT)/.placeholder ## Docker-based end-to-end test; needs GitHub credentials, skipped without
 	$(GO) test -count=1 -tags e2e -timeout 40m ./test/e2e/...
 
 .PHONY: test-eli-eval
-test-eli-eval: ## Play Eli's evaluation scenarios against a real provider; needs ELI_EVAL_URL, ELI_EVAL_KEY and ELI_EVAL_MODEL, skipped without
+test-eli-eval: | $(UI_OUT)/.placeholder ## Play Eli's evaluation scenarios against a real provider; needs ELI_EVAL_URL, ELI_EVAL_KEY and ELI_EVAL_MODEL, skipped without
 	$(GO) test -count=1 -v -run 'TestEliScenariosAgainstARealProvider' ./internal/api/
 
 .PHONY: test-e2e-proxmox
@@ -213,7 +220,7 @@ $(UI_DIR)/node_modules:
 ##@ Quality
 
 .PHONY: lint
-lint: | $(UI_DIR)/node_modules ## Vet, format check, and staticcheck when available
+lint: | $(UI_DIR)/node_modules $(UI_OUT)/.placeholder ## Vet, format check, and staticcheck when available
 	$(GO) vet ./...
 # The tagged suites too. An ordinary `go vet ./...` never compiles them, which
 # is how test/e2e sat with a non-test file referring to a symbol only its
@@ -257,7 +264,7 @@ gallery: | $(UI_DIR)/node_modules ## Serve the development-only component galler
 ##@ Images
 
 .PHONY: image
-image: ## Build the controller/agent image
+image: ## Build the controller image (deploy/Dockerfile, target controller)
 	docker build -f deploy/Dockerfile --target controller \
 		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) \
 		-t ghcr.io/eyupio/zoomies:$(VERSION) -t ghcr.io/eyupio/zoomies:latest .
@@ -344,19 +351,24 @@ images-multiarch: ## Build the controller and every runner variant for amd64 and
 ##@ Housekeeping
 
 .PHONY: openapi
-openapi: ## Regenerate the TypeScript client from api/openapi.yaml
+openapi: | $(UI_DIR)/node_modules ## Regenerate both copies of the contract: the embedded Go source and the TypeScript client
+	@# Two files are generated from api/openapi.yaml and a test fails on either
+	@# when it is stale (the embedded copy in internal/api, the client in CI),
+	@# so one command does both. The Go half reads the spec with the standard
+	@# library only and does not need the UI.
+	$(GO) run internal/api/gen_openapi.go
 	cd $(UI_DIR) && $(NPM) run generate:api
 
 .PHONY: generate
-generate: ## Rewrite everything generated from a table in Go: the image catalogue, the problem and check catalog, the command and MCP references
-	go run internal/naming/gen_catalogue.go
-	go run internal/catalog/gen_catalog.go
-	mkdir -p skills/zoomies && go run ./cmd/zoomies commands --output markdown > skills/zoomies/reference.md
-	go run ./cmd/zoomies mcp --describe --output markdown > skills/zoomies/mcp-reference.md
+generate: | $(UI_OUT)/.placeholder ## Rewrite everything generated from a table in Go: the image catalogue, the problem and check catalog, the command and MCP references
+	$(GO) run internal/naming/gen_catalogue.go
+	$(GO) run internal/catalog/gen_catalog.go
+	mkdir -p skills/zoomies && $(GO) run ./cmd/zoomies commands --output markdown > skills/zoomies/reference.md
+	$(GO) run ./cmd/zoomies mcp --describe --output markdown > skills/zoomies/mcp-reference.md
 
 .PHONY: marketplace-lock
 marketplace-lock: ## Re-resolve deploy/marketplace/images.lock against the registry (needs network)
-	go run deploy/marketplace/gen_lock.go
+	$(GO) run deploy/marketplace/gen_lock.go
 
 .PHONY: clean
 clean: ## Remove build output

@@ -111,8 +111,10 @@ only. Do not expose it to a network.
 
 Generated files have a single source of truth:
 
-- After changing `api/openapi.yaml`, run `make openapi` and commit the
-  generated TypeScript client.
+- After changing `api/openapi.yaml`, run `make openapi` and commit both files it
+  writes: the Go copy the API serves (`internal/api/openapi_spec.go`) and the
+  TypeScript client (`web/src/lib/api/schema.d.ts`). A test fails on either one
+  when it is stale.
 - After changing the runner image catalogue in `internal/naming`, run
   `make generate` and commit everything it updates. Do not hand-edit generated
   catalogue sections.

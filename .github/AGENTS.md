@@ -7,10 +7,11 @@ Scoped guidance for CI and generated files, read in addition to the root [AGENTS
 Beyond tests and lint, several files must stay in sync with their sources. Each
 has a CI job that diffs them:
 
-* `internal/api/openapi_spec.go` is generated from `api/openapi.yaml`. After
-  editing the spec, run `go run internal/api/gen_openapi.go` from the repo root.
-* `web/src/lib/api/schema.d.ts` is generated from the same spec. Run
-  `make openapi` and commit the result.
+* `internal/api/openapi_spec.go` is generated from `api/openapi.yaml`, and
+  `web/src/lib/api/schema.d.ts` from the same spec. After editing the spec, run
+  `make openapi`, which writes both, and commit the result. (`go run
+  internal/api/gen_openapi.go` alone writes only the first, and a stale second
+  fails the `ui` job.)
 * `internal/catalog/catalog.json` and the check list on `docs/kennel-club.md`
   are generated from `docs/problem-codes.md` and the Kennel registry by
   `make generate`; `TestTheCatalogIsCurrent` fails on a stale copy.

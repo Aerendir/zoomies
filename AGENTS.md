@@ -27,15 +27,18 @@ make lint          # go vet, gofmt check, staticcheck if present, UI lint
 make fmt           # gofmt + prettier
 make dev           # controller with auth off, on :8080, for UI work
 make ui-dev        # Vite dev server proxying /api to that controller
+make test-unit     # the UI's unit tests: no browser, a few seconds
 make test-ui       # Playwright against a real built binary
-make openapi       # regenerate the UI's TypeScript client from api/openapi.yaml
+make openapi       # regenerate both copies of api/openapi.yaml: the embedded Go source and the UI's TypeScript client
 make screenshots   # recapture docs/screenshots from the real UI, both themes (needs Pillow)
 ```
 
 `go build ./...` fails on a clean checkout: `internal/api` embeds
 `internal/api/webdist`, which is a build product. Run `make build-nogui` once,
-it writes a placeholder, before any Go command that compiles that package. CI
-does the same thing as its first step.
+it writes a placeholder, before any plain Go command (`go build`, `go vet`,
+`go test`) that compiles that package. The `make` targets that run Go (`test`,
+`test-short`, `cover`, `lint`, `generate`) write the placeholder themselves, and
+never over a real UI build. CI does the same thing as its first step.
 
 Go 1.27.1 or later (`go.mod` sets the floor; CI builds with 1.27.2), Node 22 or
 later. Node is a build-time dependency only; the shipped binary is

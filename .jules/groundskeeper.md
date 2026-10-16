@@ -23,6 +23,11 @@ something Groundskeeper does unilaterally. Left untouched this run. Fold
 `.Jules/scribe.md` into `.jules/` (or vice versa) in a dedicated, human-reviewed
 change, the way sub12 already did.
 
+**Resolved 2026-10-15:** `.Jules/scribe.md` and `.Jules/testsmith.md` were moved
+into `.jules/` with `git mv`, and `.Jules/` no longer exists. Nothing in the
+repository referred to the `.Jules` spelling (a search for it found only this
+entry), so no path needed updating.
+
 ## 2026-09-23 - Orphaned Playwright probe scripts at `web/` root
 
 **Finding:** `web/probe-usage.mjs`, `web/probe2.mjs` and `web/shot.mjs` were
