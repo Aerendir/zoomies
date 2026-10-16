@@ -143,9 +143,14 @@ has a consistent voice, and matching it is part of a change looking finished.
 * **No em dashes.** Do not write `—` anywhere in this repository: prose,
   docs, comments, error messages, UI strings, commit messages or pull request
   text. Use a comma, a colon, a semicolon or parentheses, or split the sentence.
-  Do not use `--` as a stand-in either. The one exception is a lone `—` as the
-  UI's placeholder for an absent value, which `web/unit/absent-value.test.ts`
-  guards. `internal/docs/no_em_dash_test.go` fails the build on a spaced one.
+  Do not use `--` as a stand-in either. `internal/docs/no_em_dash_test.go`
+  fails the build on a spaced em dash, and `internal/docs/double_hyphen_test.go`
+  on a file that gains a spaced `--`. Older code comments still carry about six
+  thousand of the latter, and they go as their lines are rewritten, not in one
+  sweep that would bury every file's history. The one exception is the UI's
+  placeholder for an absent value, which is two hyphens: write it as `NO_VALUE`
+  from `web/src/lib/format.ts`, never as a dash of your own;
+  `web/unit/absent-value.test.ts` guards it.
 * **Diagrams are Mermaid**, in a `mermaid` fenced block beside the prose they
   explain, never ASCII art. The site renders them (`mkdocs.yml` registers the
   fence) and so does GitHub, so a diagram lives in the Markdown it belongs to and

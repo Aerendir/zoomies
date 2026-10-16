@@ -21,6 +21,7 @@
   default back.
 -->
 <script lang="ts">
+  import { NO_VALUE } from '$lib/format';
   import { untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { EyeOff, Search, Trophy } from '@lucide/svelte';
@@ -425,7 +426,7 @@
       header: 'Visibility',
       priority: 'wide',
       width: '8rem',
-      value: (row) => capitalise(row.visibility) || '--',
+      value: (row) => capitalise(row.visibility) || NO_VALUE,
     },
     {
       id: 'evaluated_at',

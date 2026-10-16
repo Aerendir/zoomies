@@ -26,7 +26,7 @@
     getJoinToken,
   } from '$lib/api/client';
   import type { JoinToken, Pool } from '$lib/api/types';
-  import { joinWords, pluralise } from '$lib/format';
+  import { NO_VALUE, joinWords, pluralise } from '$lib/format';
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
   import { session } from '$lib/state/session.svelte';
@@ -603,7 +603,7 @@
           <dl class="version-match" aria-label="Version selected for this host">
             <div>
               <dt>Controller build</dt>
-              <dd class="mono">{minted.controller_version || '--'}</dd>
+              <dd class="mono">{minted.controller_version || NO_VALUE}</dd>
             </div>
             <div>
               <dt>Host install channel</dt>
@@ -716,16 +716,16 @@
           </div>
           <div>
             <dt>Platform</dt>
-            <dd class="mono">{joinedPlatform || '--'}</dd>
+            <dd class="mono">{joinedPlatform || NO_VALUE}</dd>
           </div>
           <div>
             <dt>Agent</dt>
-            <dd>{joinedHost.version || '--'}</dd>
+            <dd>{joinedHost.version || NO_VALUE}</dd>
           </div>
           <div>
             <dt>Channel</dt>
             <dd class="mono">
-              {joinedHost.version_channel ? `:${joinedHost.version_channel}` : '--'}
+              {joinedHost.version_channel ? `:${joinedHost.version_channel}` : NO_VALUE}
             </dd>
           </div>
           <div>

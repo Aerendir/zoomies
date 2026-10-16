@@ -56,7 +56,7 @@
   technology, never in the tooltip alone.
 -->
 <script lang="ts">
-  import { pluralise } from '$lib/format';
+  import { NO_VALUE, pluralise } from '$lib/format';
   import { severityStatus } from '$lib/status';
   import Badge from '$lib/components/Badge.svelte';
   import Tooltip from '$lib/components/Tooltip.svelte';
@@ -78,7 +78,7 @@
     <Badge {status} size="sm" label={pluralise(risks.length, 'risk')} />
   </Tooltip>
 {:else}
-  <span class="none {className}" aria-hidden="true">--</span>
+  <span class="none {className}" aria-hidden="true">{NO_VALUE}</span>
 {/if}
 
 <style>

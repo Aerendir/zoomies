@@ -72,7 +72,7 @@
   import { tick, untrack, type Snippet } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { X } from '@lucide/svelte';
-  import { formatNumber, formatPercent } from '$lib/format';
+  import { NO_VALUE, formatNumber, formatPercent } from '$lib/format';
   import { router } from '$lib/router';
   import { tooltips, type Bubble } from '$lib/tooltip';
   import IconButton from '$lib/components/IconButton.svelte';
@@ -722,7 +722,7 @@
       ['Queued', formatNumber(b.queued)],
       ['Started', formatNumber(b.started)],
       ['Finished', formatNumber(completedIn(b))],
-      ['Executing', b.execution_seconds > 0 ? hours(b.execution_seconds) : '--'],
+      ['Executing', b.execution_seconds > 0 ? hours(b.execution_seconds) : NO_VALUE],
     ];
     if (b.allocated_seconds > 0) {
       rows.push(['Runner-hours', hours(b.allocated_seconds)]);

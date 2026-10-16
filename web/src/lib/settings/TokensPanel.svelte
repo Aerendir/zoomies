@@ -12,6 +12,7 @@
   and offers the roles the caller may actually give.
 -->
 <script lang="ts">
+  import { NO_VALUE } from '$lib/format';
   import { KeyRound, Plus, Trash2 } from '@lucide/svelte';
   import {
     ApiError,
@@ -267,7 +268,7 @@
             {@const state = apiTokenStatus(token)}
             <tr role="row" class:revoked={token.revoked}>
               <td role="cell" data-label="Name" class="name">{token.name}</td>
-              <td role="cell" data-label="Prefix" class="mono">{token.prefix ?? '--'}</td>
+              <td role="cell" data-label="Prefix" class="mono">{token.prefix ?? NO_VALUE}</td>
               <td role="cell" data-label="Role">{roleLabel(token.role)}</td>
               <td role="cell" data-label="Scopes" class="scopes mono">
                 {#if (token.scopes ?? []).length === 0}

@@ -9,7 +9,7 @@
   import { Trash2 } from '@lucide/svelte';
   import { deleteJoinToken } from '$lib/api/client';
   import type { JoinToken } from '$lib/api/types';
-  import { formatNumber } from '$lib/format';
+  import { NO_VALUE, formatNumber } from '$lib/format';
   import { toasts } from '$lib/state/toasts.svelte';
   import { joinTokenStatus } from '$lib/status';
   import Badge from '$lib/components/Badge.svelte';
@@ -110,7 +110,7 @@
         {#each shown as token (token.id)}
           <!-- svelte-ignore a11y_no_redundant_roles -->
           <tr role="row">
-            <td role="cell" data-label="Prefix" class="mono">{token.prefix ?? '--'}</td>
+            <td role="cell" data-label="Prefix" class="mono">{token.prefix ?? NO_VALUE}</td>
             <td role="cell" data-label="State">
               <Badge status={joinTokenStatus(token)} size="sm" />
             </td>
@@ -118,9 +118,9 @@
               >{formatNumber(token.capacity ?? 0)}</td
             >
             <td role="cell" data-label="Labels" class="mono labels"
-              >{labelText(token.labels) || '--'}</td
+              >{labelText(token.labels) || NO_VALUE}</td
             >
-            <td role="cell" data-label="Created by">{token.created_by || '--'}</td>
+            <td role="cell" data-label="Created by">{token.created_by || NO_VALUE}</td>
             <td role="cell" data-label="Expires">
               {#if token.used_at}
                 <span class="muted">Used <RelativeTime value={token.used_at} plain /></span>
