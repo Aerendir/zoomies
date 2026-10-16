@@ -52,6 +52,32 @@ that running Zoomies costs you operator time a service would absorb.
 Private hardware is not exclusive to Zoomies; Cirun does it too. The
 difference is who runs the controller.
 
+## Questions to put to any managed service
+
+The honest comparison with a service is mostly about what you hand over, so it
+is worth asking Cirun, or any service of this kind, the same few questions:
+
+- **Where do the credentials live?** A service that provisions machines in your
+  cloud holds a credential for that cloud, and one that registers runners holds
+  GitHub access. Find out what each can do and how to revoke it.
+- **What happens to queued jobs when the service is unavailable?** With a
+  controller you run, that is your uptime to manage and to see. With a service it
+  is theirs.
+- **What does the fee scale with?** At review it was per private repository, with
+  infrastructure extra, so a large estate of small repositories and a small estate
+  of busy ones cost very different amounts.
+
+None of this is a mark against a service. It is what the fee buys, set against
+what it asks you to trust.
+
+## Moving between them
+
+The two use different labels, so they run side by side. Add a Zoomies pool with
+its own label, move one repository's `runs-on` with the
+[migration wizard](../migration.md), compare it for a week, then move the rest.
+Remove the repositories from Cirun once nothing targets its labels, and the
+software fee stops with them.
+
 ## Where to go next
 
 - [Quick start](../quickstart.md)
