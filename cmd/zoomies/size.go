@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eyupio/zoomies/internal/mcp"
 )
 
 // tagValue collects repeatable --tag flags: key=value, or a bare key, which is
@@ -334,7 +336,7 @@ func jobsAdvice(ctx context.Context, e *env, args []string) error {
 	// is a usage error rather than a round trip that ends in one. parseAgo
 	// forgives a leading minus, because "how long ago" has no direction; a
 	// window does, and the server refuses a negative one.
-	if d, ok := parseAgo(*window); !ok || d <= 0 || strings.HasPrefix(strings.TrimSpace(*window), "-") {
+	if d, ok := mcp.ParseAgo(*window); !ok || d <= 0 || strings.HasPrefix(strings.TrimSpace(*window), "-") {
 		return usagef(fs.Name(), "--window must be a span such as 14d, 2w or 36h, not %q", *window)
 	}
 	client, err := cf.client()

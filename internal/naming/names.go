@@ -11,17 +11,6 @@ import (
 // workflow's runs-on, which is the name's main job.
 func PoolName(spec Spec) string { return spec.WithSuffix("").String() }
 
-// HostName is the canonical name for a machine: its shape, plus enough of the
-// machine's own name to tell two identical machines apart.
-//
-// The machine name goes last because it is the part an operator scans for --
-// the eye stops at the end of the line -- and because it is the part most
-// likely to be truncated on a host whose hostname is a cloud provider's idea
-// of a name.
-func HostName(spec Spec, machine string) string {
-	return spec.WithSuffix(shortMachine(machine)).String()
-}
-
 // Labels are the labels a pool of this shape advertises.
 //
 // The canonical name comes first: it is the one a workflow author writes, and
@@ -42,17 +31,6 @@ func Labels(spec Spec) []string {
 		out = append(out, a)
 	}
 	return out
-}
-
-// shortMachine reduces a hostname to the part that identifies the machine.
-//
-// A fully qualified name repeats the same domain on every host in the fleet,
-// which is precisely the information a name should not spend characters on.
-func shortMachine(machine string) string {
-	if host, _, ok := strings.Cut(strings.TrimSpace(machine), "."); ok {
-		machine = host
-	}
-	return Slug(machine)
 }
 
 // Base is the branded form of a name that other names are built from: lowercase,

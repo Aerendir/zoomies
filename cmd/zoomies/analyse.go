@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/analysis"
+	"github.com/eyupio/zoomies/internal/mcp"
 )
 
 // errAnalyseShape is an answer this CLI cannot lay out as the analysis it
@@ -61,7 +62,7 @@ func (w analyseWindow) set(cmd string, q url.Values) error {
 		if raw == "" {
 			continue
 		}
-		when, err := parseWhen(raw)
+		when, err := mcp.ParseWhen(raw)
 		if err != nil {
 			return usagef(cmd, "--%s %q: %v", name, raw, err)
 		}
@@ -301,7 +302,7 @@ func analyseCompare(ctx context.Context, e *env, args []string) error {
 			if c.Ratio != nil {
 				ratio = strconv.FormatFloat(*c.Ratio, 'f', 2, 64)
 			}
-			changes = append(changes, []string{plain(c.Measure), plain(c.Direction), changeFigure(c.From, c.Unit), changeFigure(c.To, c.Unit), ratio})
+			changes = append(changes, []string{plain(c.Measure), plain(c.Direction), mcp.ChangeFigure(c.From, c.Unit), mcp.ChangeFigure(c.To, c.Unit), ratio})
 		}
 		p.table([]string{"measure", "change", "a", "b", "ratio"}, changes)
 	}
@@ -577,17 +578,4 @@ func causeShares(shares []analysis.CauseShare) string {
 		return "none"
 	}
 	return strings.Join(parts, ", ")
-}
-
-// changeFigure is one side of a change, in its unit.
-func changeFigure(v *float64, unit string) string {
-	switch {
-	case v == nil:
-		return "unknown"
-	case unit == "ms":
-		return analysis.Words(time.Duration(*v) * time.Millisecond)
-	case unit == "rate":
-		return strconv.FormatFloat(*v*100, 'f', 1, 64) + "%"
-	}
-	return strconv.FormatFloat(*v, 'f', -1, 64)
 }
