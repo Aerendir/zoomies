@@ -27,6 +27,9 @@
     onsnooze?: (problem: Problem, ms: number) => void;
     /** Put every problem of this one's kind away for a fixed while. */
     onsnoozetype?: (problem: Problem, ms: number) => void;
+    /** Eli is being asked about this one, so whatever holds the list can get
+     * out of the way of the conversation. */
+    onask?: () => void;
     /** Bring a dismissed or snoozed one back. */
     onrestore?: (problem: Problem) => void;
     /** When it was dismissed, so a decision can be dated before it is undone. */
@@ -45,6 +48,7 @@
     ondismiss,
     onsnooze,
     onsnoozetype,
+    onask,
     onrestore,
     dismissedAt,
     snoozedUntil,
@@ -205,6 +209,7 @@
       </p>
     {/if}
     <AskEli
+      {onask}
       context={{
         kind: 'problem',
         title: problem.title,

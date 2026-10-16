@@ -68,6 +68,7 @@
       {#each group.items as problem (problem.code + (problem.target_id ?? '') + problem.title)}
         <ProblemItem
           {problem}
+          onask={() => (notifications.open = false)}
           ondismiss={(p) => notifications.dismiss(p)}
           onsnooze={(p, ms) => notifications.snooze(p, ms)}
           onsnoozetype={(p, ms) => notifications.snoozeType(p, ms)}
@@ -113,6 +114,7 @@
             {#each group.items as problem (problem.code + (problem.target_id ?? '') + problem.title)}
               <ProblemItem
                 {problem}
+                onask={() => (notifications.open = false)}
                 onrestore={(p) => notifications.restore(p)}
                 dismissedAt={notifications.dismissedAt(problem)}
                 snoozedUntil={notifications.snoozedUntil(problem)}
