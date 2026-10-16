@@ -205,6 +205,7 @@ nav:
       - Dependencies: dependencies.md
       - UI guidelines: ui-guidelines.md
   - Choosing Zoomies:
+      - What are self-hosted runners?: what-are-self-hosted-runners.md
       - Should you self-host?: should-i-self-host.md
       - What it costs: costs.md
       - FAQ: faq.md
