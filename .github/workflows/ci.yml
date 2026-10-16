@@ -275,6 +275,15 @@ jobs:
         if: matrix.shard == 'rest'
         run: go vet ./...
 
+      # `go vet ./...` does not compile a suite behind a build tag, and the e2e
+      # and load suites are built by no other job (the drill suite is, by its
+      # own). A symbol one half of a package defines and the other half uses
+      # went unnoticed that way, with every gate green. `make lint` runs the
+      # same target.
+      - name: go vet the tagged suites
+        if: matrix.shard == 'rest'
+        run: make vet-tags
+
       - name: go mod tidy is clean
         if: matrix.shard == 'rest'
         run: |
@@ -813,7 +822,13 @@ jobs:
             # page, so its project drives a Vite dev server (see
             # web/tests/gallery.spec.ts). It rides with the group that already
             # waits on the least, rather than taking a runner slot of its own.
-            other) flags="--project=first-run --project=diagnostics --project=status --project=connect --project=updates --project=updates-mobile --project=gallery" ;;
+            #
+            # Every project in web/playwright.config.ts has to be named here or
+            # be one of the two groups above: the transfer projects were left
+            # out of this list, excluded from the two groups above by their own
+            # config, and so ran in no job at all. A test in internal/docs
+            # compares the config with this list.
+            other) flags="--project=first-run --project=diagnostics --project=status --project=connect --project=updates --project=updates-mobile --project=gallery --project=transfer --project=transfer-mobile" ;;
             *) echo "::error::unknown Playwright group $PROJECTS"; exit 1 ;;
           esac
           npm run test:e2e -- $flags
