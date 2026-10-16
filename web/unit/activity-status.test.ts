@@ -31,12 +31,23 @@ registerHooks({
 });
 
 const { queuedActivity, workflowActivity } = await import('../src/lib/jobs/activity-status.ts');
+
+// The four words the Jobs page filters provisioning by, as the fields a job
+// carries. A job's own provisioning is "", "paused" or "deleted"; "ready" is the
+// first of those and "expedited" is provision_now, so a fixture that wrote the
+// filter's words into the field was handing the code a value no job has.
+const PROVISIONING = {
+  ready: {},
+  expedited: { provision_now: true },
+  paused: { provisioning: 'paused' },
+  deleted: { provisioning: 'deleted' },
+} as const;
 const { jobEventStatus } = await import('../src/lib/status.ts');
 
 test('queue cancellation overrides priority and pause without claiming work is running', () => {
-  for (const provisioning of ['ready', 'paused', 'expedited', 'deleted'] as const) {
+  for (const demand of Object.values(PROVISIONING)) {
     assert.equal(
-      queuedActivity({ provisioning, cancel_requested_at: '2026-09-20T12:00:00Z' }).status.key,
+      queuedActivity({ ...demand, cancel_requested_at: '2026-09-20T12:00:00Z' }).status.key,
       'cancelling',
     );
   }
@@ -46,7 +57,7 @@ test('queue cancellation overrides priority and pause without claiming work is r
     queuedActivity({ provisioning: 'paused', provision_now: true }).status.label,
     'Paused',
   );
-  assert.notEqual(queuedActivity({ provisioning: 'expedited' }).motion, 'busy');
+  assert.notEqual(queuedActivity(PROVISIONING.expedited).motion, 'busy');
 });
 
 test('workflow pack preserves outcomes and cancellation precedence', () => {
@@ -137,9 +148,7 @@ const ACTION_ICONS = ['Zap', 'Pause', 'Play', 'Trash2', 'RotateCcw'];
 
 test('with the vocabulary off, no queue or workflow status is drawn with an action icon', () => {
   const drawn = [
-    ...(['ready', 'paused', 'deleted', 'expedited'] as const).map(
-      (provisioning) => queuedActivity({ provisioning }, false).status,
-    ),
+    ...Object.values(PROVISIONING).map((demand) => queuedActivity(demand, false).status),
     queuedActivity({ cancel_requested_at: '2026-09-20T12:00:00Z' }, false).status,
     ...(['queued', 'waiting', 'in_progress'] as const).map(
       (state) => workflowActivity({ state }, false).status,
@@ -156,9 +165,9 @@ test('with the vocabulary off, no queue or workflow status is drawn with an acti
 
 test('a job somebody pressed Run now on is not drawn like the ready rows around it', () => {
   assert.notEqual(
-    queuedActivity({ provisioning: 'expedited' }, false).status.icon,
+    queuedActivity(PROVISIONING.expedited, false).status.icon,
     queuedActivity({}, false).status.icon,
   );
   // Still queued, though: the tone says nothing is running yet.
-  assert.equal(queuedActivity({ provisioning: 'expedited' }, false).status.tone, 'pending');
+  assert.equal(queuedActivity(PROVISIONING.expedited, false).status.tone, 'pending');
 });

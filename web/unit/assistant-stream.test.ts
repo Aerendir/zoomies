@@ -68,8 +68,6 @@ test('a frame cut anywhere by the network is read once it is whole', () => {
           cut: false,
           providerId: '',
           outputLimit: 0,
-          providerId: '',
-          outputLimit: 0,
         },
       ],
       `cut at ${cut}`,

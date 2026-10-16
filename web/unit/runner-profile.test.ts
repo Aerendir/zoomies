@@ -192,7 +192,14 @@ test('the controller counts slots, and the capacity stands in only where it has 
 
 test('a profile is held to the same floors as a pool', () => {
   const errors = profileErrors(
-    { minCpus: 0.1, minMemoryMb: 100, standardCpus: 0.1, standardMemoryMb: 100, burstMaxCpus: 0.1 },
+    {
+      ...NO_FIGURES,
+      minCpus: 0.1,
+      minMemoryMb: 100,
+      standardCpus: 0.1,
+      standardMemoryMb: 100,
+      burstMaxCpus: 0.1,
+    },
     machineOf({}),
   );
   assert.deepEqual(Object.keys(errors).sort(), [
@@ -213,7 +220,14 @@ test('a profile is held to the same floors as a pool', () => {
 
 test('a minimum above the standard, and a ceiling below it, are refused where they are typed', () => {
   const errors = profileErrors(
-    { minCpus: 4, minMemoryMb: 8192, standardCpus: 2, standardMemoryMb: 4096, burstMaxCpus: 1 },
+    {
+      ...NO_FIGURES,
+      minCpus: 4,
+      minMemoryMb: 8192,
+      standardCpus: 2,
+      standardMemoryMb: 4096,
+      burstMaxCpus: 1,
+    },
     machineOf({}),
   );
   assert.match(errors['runner_profile.minimum.cpus'] ?? '', /above the standard, 2 cores/);

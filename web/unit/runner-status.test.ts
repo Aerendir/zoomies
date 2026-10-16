@@ -106,10 +106,10 @@ const BUTTON_ICONS = ['Play', 'Pause', 'CircleSlash', 'Trash2'];
 
 test('with the vocabulary off, no runner state is drawn with an icon a button uses', () => {
   const drawn = [
-    ...runnerStatuses(false).map((status) => [status.key, status.icon.name]),
+    ...runnerStatuses(false).map((status) => [status.key, status.icon.name] as [string, string]),
     ...(['maximum_zoomies', 'zoomies', 'throttled'] as const).map((cpu) => {
       const status = runnerDisplayStatus({ state: 'busy', cpu_resource: { state: cpu } }, false);
-      return [status.key, status.icon.name];
+      return [status.key, status.icon.name] as [string, string];
     }),
   ];
   for (const [key, icon] of drawn) {
@@ -128,7 +128,7 @@ test('every runner state has an icon of its own', () => {
 test('the two boosts and the throttle are told apart by label and by icon', () => {
   // Both boosts said "Boost active" in the grid with the vocabulary off, and
   // the icon alone did not tell an operator which was extra and which maximum.
-  const shown = (cpu: string) =>
+  const shown = (cpu: 'maximum_zoomies' | 'zoomies' | 'throttled') =>
     runnerDisplayStatus({ state: 'busy', cpu_resource: { state: cpu } }, false);
   const states = [shown('maximum_zoomies'), shown('zoomies'), shown('throttled')];
   const labels = states.map((status) => status.label);

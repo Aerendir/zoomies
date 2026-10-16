@@ -28,9 +28,9 @@ test('a fresh read after a frame is not the read that began before it', async ()
   const second = reads.fresh();
   assert.equal(pending.length, 2, 'the fresh read is a request of its own');
 
-  pending[0]('older than the frame');
+  pending[0]!('older than the frame');
   await first;
-  pending[1]('newer than the frame');
+  pending[1]!('newer than the frame');
   await second;
   assert.deepEqual(taken, ['newer than the frame']);
 });
@@ -44,7 +44,7 @@ test('a refresh while a read is in flight joins it', async () => {
   const one = reads.refresh();
   const two = reads.refresh();
   assert.equal(pending.length, 1);
-  pending[0]('the answer');
+  pending[0]!('the answer');
   await Promise.all([one, two]);
   assert.deepEqual(taken, ['the answer']);
 });
@@ -74,10 +74,10 @@ test('loading lasts until every read has answered', async () => {
   const first = reads.refresh();
   reads.took();
   const second = reads.fresh();
-  pending[0]('a');
+  pending[0]!('a');
   await first;
   assert.equal(reads.loading, true);
-  pending[1]('b');
+  pending[1]!('b');
   await second;
   assert.equal(reads.loading, false);
 });

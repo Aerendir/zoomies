@@ -11,7 +11,7 @@ import {
 test('only a provider whose template Zoomies prepares is offered the action', () => {
   assert.equal(preparesTemplates({ kind: 'proxmox' }), true);
   assert.equal(preparesTemplates({ kind: 'fake' }), false);
-  assert.equal(preparesTemplates({}), false);
+  assert.equal(preparesTemplates({} as Parameters<typeof preparesTemplates>[0]), false);
 });
 
 test('what a machine runs, and what changes it, is told once', () => {

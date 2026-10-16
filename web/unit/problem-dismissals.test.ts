@@ -19,6 +19,7 @@ const problem = (over: Partial<Problem> = {}): Problem => ({
   title: 'pool zoomies-linux-x64 has 6 jobs waiting for a host with room',
   target_kind: 'pool',
   target_id: 'pool_x64',
+  audience: 'fleet',
   ...over,
 });
 
@@ -79,7 +80,7 @@ test('what the server returns is adopted, and a snooze the clock says is over is
     NOW,
   );
   assert.deepEqual(Object.keys(got).sort(), ['live', 'plain']);
-  assert.equal(got.plain.until, undefined);
+  assert.equal(got.plain?.until, undefined);
 });
 
 // A decision already on the account was made on purpose and more recently than
