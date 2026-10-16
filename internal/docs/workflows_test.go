@@ -648,7 +648,7 @@ func TestCIDogfoodsZoomiesWithRecoveryForEveryJob(t *testing.T) {
 	files := workflowFiles(t)
 	selector := `((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64'`
 	runsOn := regexp.MustCompile(`(?m)^    runs-on: (.+)$`)
-	for _, name := range []string{"ci.yml", "govulncheck.yml"} {
+	for _, name := range []string{"ci.yml", "govulncheck.yml", "fuzz.yml"} {
 		body := files[name]
 		for _, want := range []string{"default: zoomies", "options: [zoomies, github]"} {
 			if !strings.Contains(body, want) {
