@@ -31,7 +31,16 @@ to the `.env` template or the controller's `environment:` block --
 Every setting is a row in the registry in `internal/config/settings.go`, which
 gives it its `zoomies.yaml` key, its `ZOOMIES_*` override and its place on the
 Settings page. Adding a setting means adding the row, plus a row in
-`docs/configuration.md`.
+`docs/configuration.md`. A setting that is one choice from a fixed set lists
+them in the row's `Choices` (and any older spelling in `Aliases`), and
+`Validate` checks it with `refuseUnknownChoice`, which asks that row: never write
+the list a second time in the validator, because a copy cannot stay equal to what
+the settings page and the runtime read (`yes` was refused here for a setting that
+accepted it everywhere else).
+
+`Validate` is one method per part of the configuration (`validateListener`,
+`validateScheduler`, and so on), called in the order findings are reported in;
+add a check to the part it belongs to, not to the orchestrator.
 
 `config.Validate` returns `Finding`s in three severities, and the distinctions
 matter: **errors** stop startup with a message saying what to change;
