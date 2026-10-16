@@ -68,6 +68,14 @@ review.
 | `internal/agent` | The runner-executing half and its outbound transport. |
 | `internal/mcp` | The MCP tools and both transports (stdio for `zoomies mcp`, Streamable HTTP for `/mcp`). A tool calls the REST API through the `mcp.API` interface and nothing else (no store, no controller), so it can never do what the caller's token could not. |
 
+The rules that can be stated as an import are held by a test, not by review
+alone: `internal/scheduler`, `internal/updates` and `internal/provider` each have
+a purity or boundary test, `internal/mcp` may import only what its test lists,
+and a test in `internal/store` fails if any other package's shipped code imports
+`database/sql` or the SQLite driver. A test that fails on one of these names the
+rule; when the import is a pure helper that belongs, add it to that test's
+allowlist with a reason rather than loosening the rule.
+
 Other invariants worth knowing before you edit:
 
 * **The controller never dials an agent.** Agents connect outbound only (long-poll
