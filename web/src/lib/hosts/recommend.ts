@@ -47,7 +47,9 @@ export interface RunnerAsk {
 export const DEFAULT_ASK: RunnerAsk = { cpus: 2, memoryMb: 4096, source: 'default', pair: false };
 
 export function runnerAsk(
-  pools: readonly Pool[],
+  // Only what the ask is made of, so a caller (and a test) hands over those
+  // four fields and not a whole pool it would have to invent a priority for.
+  pools: readonly Pick<Pool, 'name' | 'enabled' | 'docker_mode' | 'resources'>[],
   fleetDefault?: { cpus?: number; memory_mb?: number } | null,
 ): RunnerAsk {
   const fallbackCPUs =

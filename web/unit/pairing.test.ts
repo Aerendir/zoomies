@@ -1,12 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { Pool, Provider } from '../src/lib/api/types.ts';
 import { poolMatchesSelector, providerMatchesSelector } from '../src/lib/providers/pairing.ts';
 
 // The same table as TestAProviderAndAPoolAgreeOnlyWhenBothSelectorsAllowIt in
 // internal/scheduler/providers_test.go: the editor's preview must say what the
 // controller will do, or an operator is shown a provider that then buys nothing.
-const pool = { name: 'linux-large', backend: 'docker', labels: ['linux', 'x64', 'tier=large'] };
-const provider = { name: 'proxmox-lab', kind: 'proxmox', machine_labels: { site: 'garage' } };
+const pool: Pick<Pool, 'name' | 'backend' | 'labels'> = {
+  name: 'linux-large',
+  backend: 'docker',
+  labels: ['linux', 'x64', 'tier=large'],
+};
+const provider: Pick<Provider, 'name' | 'kind' | 'machine_labels'> = {
+  name: 'proxmox-lab',
+  kind: 'proxmox',
+  machine_labels: { site: 'garage' },
+};
 
 test('a provider selector asks for a label the pool carries, bare or as key=value', () => {
   assert.equal(poolMatchesSelector(pool, {}), true);

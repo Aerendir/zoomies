@@ -130,7 +130,15 @@ function reporting(
       container: false,
       reboot_pending: false,
       results: [],
-      summary: { counted: 12, warnings: 0, errors: 0, skipped: 0, suggestions: 0, ...count },
+      summary: {
+        counted: 12,
+        warnings: 0,
+        errors: 0,
+        skipped: 0,
+        suggestions: 0,
+        accepted: 0,
+        ...count,
+      },
       ...doctor,
     },
   } as Partial<Host>;

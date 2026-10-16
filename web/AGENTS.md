@@ -26,6 +26,10 @@ Scoped guidance for the UI, read in addition to the root [AGENTS.md](../AGENTS.m
   [docs/api-surface.md](../docs/api-surface.md).
 - Playwright specs in `web/tests/` run against the real binary, including
   accessibility and mobile passes.
+- `npm run check` type-checks `web/unit/` as well (`tsconfig.unit.json`). The unit
+  tests run on Node with types stripped, so a fixture that has fallen behind the
+  API's shape would otherwise go on passing; build a fixture to the generated
+  type and do not cast it.
 
 ### The component gallery
 

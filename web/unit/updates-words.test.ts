@@ -313,6 +313,8 @@ function attempt(state: ControllerAttempt['state'], error = ''): ControllerAttem
     requested_at: '2026-10-08T11:00:00Z',
     finished_at: state === 'requested' ? null : '2026-10-08T11:05:00Z',
     error,
+    backup: '',
+    rolled_back: false,
   };
 }
 

@@ -61,7 +61,7 @@ test('a refusal with nothing to name keeps its move button and loses its at-sign
 
 test('the sentence names the holder by username, then id', () => {
   assert.match(
-    heldLinkMessage({ holderId: 'usr_old', user: users.find((u) => u.id === 'usr_old') }),
+    heldLinkMessage({ holderId: 'usr_old', user: users.find((u) => u.id === 'usr_old') ?? null }),
     /@previous-owner already holds/,
   );
   assert.match(heldLinkMessage({ holderId: 'usr_gone', user: null }), /@usr_gone already holds/);

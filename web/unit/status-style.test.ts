@@ -54,7 +54,7 @@ test('every state has a distinct persistent cue even when motion is disabled', (
   ];
   const cues = states.map((state) => standardMotion(state, 'runner').cue);
   assert.equal(new Set(cues).size, states.length);
-  assert.ok(!cues.includes('none'));
+  assert.ok(!(cues as string[]).includes('none'));
   assert.equal(standardMotion('throttled', 'runner').cue, 'pause');
   assert.equal(standardMotion('failed', 'runner').cue, 'error');
 });

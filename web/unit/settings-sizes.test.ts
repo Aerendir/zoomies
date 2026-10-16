@@ -37,7 +37,7 @@ test('a duration setting is shown in the largest units that say it exactly', () 
 // does it. The Go side carries the one sentence saying so; this one stays in
 // the conditional so it is true before and after the installing arrives.
 test('the Updates group describes what the mode would do and promises nothing', () => {
-  const blurb = SECTION_BLURB.updates;
+  const blurb = SECTION_BLURB.updates ?? '';
   assert.match(blurb, /what it would do about a newer one/);
   assert.match(blurb, /offer an Update button/);
   assert.doesNotMatch(blurb, /what it does about/);

@@ -31,6 +31,7 @@ function report(results: DoctorResult[], over: Partial<DoctorReport> = {}): Doct
     container: false,
     reboot_pending: false,
     results,
+    summary: { counted: 0, warnings: 0, errors: 0, skipped: 0, suggestions: 0, accepted: 0 },
     ...over,
   };
 }

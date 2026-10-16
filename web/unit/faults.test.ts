@@ -51,7 +51,10 @@ test("the domain is the server's answer, and the fallback never blames a workflo
   );
   assert.equal(faultDomain({ fault_kind: 'out_of_memory' }), 'fleet');
   assert.equal(fleetFailed({ runner_fault: 'runner zoomies-a stopped' }), true);
-  assert.equal(fleetFailed({ conclusion: 'failure' }), false);
+  // A job GitHub says failed, with nothing in it that blames the fleet. Passed by
+  // name because `conclusion` is what GitHub sent, not a field the check reads.
+  const plainFailure = { fault_kind: null, conclusion: 'failure' };
+  assert.equal(fleetFailed(plainFailure), false);
 });
 
 test('a domain the server sends that this build does not know falls back rather than being trusted', () => {

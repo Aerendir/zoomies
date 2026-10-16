@@ -20,7 +20,7 @@ function reporting(warnings: number, errors: number, checkedAt = '2020-01-01T00:
       container: false,
       reboot_pending: false,
       results: [],
-      summary: { counted: 12, warnings, errors, skipped: 0, suggestions: 0 },
+      summary: { counted: 12, warnings, errors, skipped: 0, suggestions: 0, accepted: 0 },
     },
   } as Partial<Host>);
 }

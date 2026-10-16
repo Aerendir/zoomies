@@ -284,6 +284,11 @@ export function ratio(value: number | null | undefined): number {
 
 /* -- words ---------------------------------------------------------------- */
 
+/** A word with its first letter in capitals, for a status or a count read aloud mid-sentence. */
+export function capitalise(word: string): string {
+  return word ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+}
+
 /** "1 runner", "3 runners". Pass the plural when it is irregular. */
 export function pluralise(count: number, one: string, many = `${one}s`): string {
   return `${formatNumber(count)} ${count === 1 ? one : many}`;

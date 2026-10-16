@@ -1,0 +1,13 @@
+{
+  // The unit tests run on Node with types stripped, so nothing else compiles
+  // them, and a fixture that falls behind the API's shape would go on passing
+  // with fields the controller no longer sends. This is the check that says so.
+  // The .mjs helpers beside them are plain scripts and are not part of it.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["unit/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

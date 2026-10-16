@@ -62,7 +62,7 @@ test('no host status label says healthy, and the OS health pill never says Conne
     container: false,
     reboot_pending: false,
     results: [],
-    summary: { counted: 1, warnings: 0, errors: 0, skipped: 0, suggestions: 0 },
+    summary: { counted: 1, warnings: 0, errors: 0, skipped: 0, suggestions: 0, accepted: 0 },
   };
   for (const report of [undefined, fine, { ...fine, reboot_pending: true }]) {
     for (const reachable of [true, false]) {

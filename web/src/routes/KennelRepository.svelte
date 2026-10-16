@@ -43,7 +43,7 @@
     waiverRole,
     worstSeverity,
   } from '$lib/kennel/words';
-  import { formatAbsolute } from '$lib/format';
+  import { capitalise, formatAbsolute } from '$lib/format';
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
@@ -220,10 +220,6 @@
         : kennelTrackingStatus()
       : null,
   );
-
-  function capitalise(word: string): string {
-    return word ? word.charAt(0).toUpperCase() + word.slice(1) : word;
-  }
 
   /** Whether there is a reason this is not a clean read, to be said in place of "nothing wrong". */
   const incomplete = $derived(repo ? !repo.complete || repo.state === 'partial' : false);

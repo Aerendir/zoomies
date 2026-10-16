@@ -11,8 +11,8 @@ test('every starting point visits all quotes without repetition and all six rout
     assert.deepEqual(new Set(beats.map((beat) => beat.motion)), new Set(THINKING_MOTIONS));
     assert.deepEqual(thinkingBeat(THINKING_QUOTES.length, offset), thinkingBeat(0, offset));
     for (let step = 0; step < beats.length; step += 2) {
-      assert.equal(beats[step].motion, beats[step + 1].motion);
-      assert.notEqual(beats[step].quote, beats[step + 1].quote);
+      assert.equal(beats[step]!.motion, beats[step + 1]!.motion);
+      assert.notEqual(beats[step]!.quote, beats[step + 1]!.quote);
     }
   }
 });
