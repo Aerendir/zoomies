@@ -13,6 +13,7 @@
 .gitignore	1
 .jules/bolt.md	2
 .jules/inspector.md	2
+.jules/testsmith.md	3
 Makefile	10
 README.md	2
 api/openapi.yaml	118
