@@ -1163,6 +1163,17 @@ it installs on the checksum alone and says so. It is the one-line installer, so
 that is best effort rather than a hard requirement; `zoomies upgrade` holds a
 running fleet to the signature in full.
 
+The Proxmox connector (`connect-proxmox.sh`, and the full command the provider
+wizard shows for a host that cannot reach zoomies.sh) and the InstaPods build
+script hold their downloads to the same key, and run what they download, the
+first as root. They add one rule. Releases before v1.3.6.1 were never signed, so
+there is nothing to check on those and they are taken on their checksum with a
+warning; but a release from v1.3.6 up is refused when its signature is missing,
+cannot be read, or cannot be checked because the host has no `openssl` of 3.0 or
+later, because a script that only warned would run whatever was left after
+somebody deleted the signature. A signature that is there and does not match
+refuses in every case. `install.sh` keeps its best-effort rule for now.
+
 `release.yml` signs
 `checksums.txt` after it builds, verifies the signature
 against the committed key, and attaches `checksums.txt.ed25519` to the release.
