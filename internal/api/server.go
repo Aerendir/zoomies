@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/auth"
@@ -53,6 +54,9 @@ type Server struct {
 
 	// autopilot is what the loop that applies suggested changes remembers.
 	autopilot autopilotState
+
+	// bound is the address ListenAndServe's listener has, once it has one.
+	bound atomic.Pointer[string]
 
 	// key seals the GitHub App private keys and webhook secrets that arrive on
 	// the installations endpoints. It is loaded from the same configuration the
@@ -249,6 +253,19 @@ func checkMountPaths(cfg *config.Config) error {
 // ordinary requests only.
 const shutdownGrace = 15 * time.Second
 
+// Addr is the address ListenAndServe is listening on, or "" until it has bound
+// one. It exists so that a caller can ask for port 0 and learn which port the
+// kernel chose, which is the only way to start a server on a free port without a
+// gap between finding the port and binding it: a test that found a free port,
+// closed it and bound it again lost that gap to another job's test on a busy
+// runner, and failed with "address already in use".
+func (s *Server) Addr() string {
+	if a := s.bound.Load(); a != nil {
+		return *a
+	}
+	return ""
+}
+
 // ListenAndServe serves until ctx is cancelled, then shuts down gracefully.
 //
 // It returns nil on a clean shutdown; anything else is a failure worth exiting
@@ -280,6 +297,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("api: cannot listen on %s: %w (another process may already be using that address; change server.bind)", s.cfg().Server.Bind, err)
 	}
+	bound := ln.Addr().String()
+	s.bound.Store(&bound)
 	scheme := "http"
 	if tlsCfg != nil {
 		ln = tls.NewListener(ln, tlsCfg)
