@@ -1,0 +1,25 @@
+# What the repository already does, written down so an editor does it too.
+# gofmt and prettier are what CI enforces; this keeps the files they would
+# reformat from being saved the wrong way first.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.go]
+indent_style = tab
+
+[Makefile]
+indent_style = tab
+
+[*.py]
+indent_size = 4
+
+# A trailing double space is a line break in Markdown.
+[*.md]
+trim_trailing_whitespace = false
