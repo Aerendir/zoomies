@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       runner:
-        description: "Where to build. github is the escape hatch from a single vendor."
+        description: "Where to build. github is the escape hatch from a single vendor, and from the fleet: nothing in the run waits on either."
         type: choice
         default: blacksmith
         options: [blacksmith, github]
@@ -44,7 +44,11 @@ jobs:
     # `V1.1.0` matched nothing, built nothing, and was published as a full
     # release with no assets while every job showed as skipped.
     if: github.event_name == 'workflow_dispatch' || github.event.release.tag_name != 'dev'
-    runs-on: zoomies-linux-x64
+    # The fleet, unless a manual run asks for GitHub's machines. This job picks
+    # where everything else builds, so with runner=github it cannot be the one
+    # thing in the run that still waits on the fleet.
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner == 'github') && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 10 # the longest successful run seen was under a minute
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
@@ -139,6 +143,7 @@ jobs:
   binaries:
     needs: setup
     runs-on: ${{ needs.setup.outputs.runs-on }}
+    timeout-minutes: 30 # the longest successful run seen was 6 minutes
     permissions:
       contents: write
       # What signs the provenance: an attestation says these bytes came from
@@ -232,6 +237,7 @@ jobs:
   images:
     needs: setup
     runs-on: ${{ needs.setup.outputs.runs-on }}
+    timeout-minutes: 45 # the longest successful run seen was 8 minutes
     permissions:
       contents: read
       packages: write
@@ -411,6 +417,7 @@ jobs:
     name: Runner image (${{ matrix.tag }}, ${{ matrix.arch }})
     needs: setup
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || needs.setup.outputs.runs-on }}
+    timeout-minutes: 60 # the longest successful run seen was 22 minutes
     permissions:
       contents: read
       packages: write
@@ -681,6 +688,7 @@ jobs:
     needs: [setup, runner-images]
     if: ${{ !cancelled() && needs.setup.result == 'success' }}
     runs-on: ${{ needs.setup.outputs.runs-on }}
+    timeout-minutes: 15 # the longest successful run seen was 1 minute
     permissions:
       contents: read
       packages: write
