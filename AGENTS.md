@@ -177,13 +177,21 @@ internal/analysis   evidence-backed findings computed from explicit snapshots
 internal/assistant  the model-provider contract behind the assistant, and its adapters
 internal/catalog    the one machine-readable list of problem codes and Kennel Club checks
 internal/cliconfig  ~/.config/zoomies/cli.yaml: where the CLI finds its controller
+internal/docs       tests that hold the documentation to the code it describes; no source of its own
+internal/hosttune   host health and tuning: detection that never writes, and approved changes
 internal/kennel     pure evaluation of what is wrong with a repository's workflows
+internal/logging    the process-wide structured logger
 internal/machine    which host this process runs on: distribution, release, capacity
 internal/naming     the grammar for pool, host and runner names
+internal/optimisation  reviewable proposals computed from evidence handed in; reads no source and calls no model
+internal/provenance keeps third-party names out of the tree
+internal/proxmoxsetup  connecting a Proxmox host: its own principal, binary, service and state
 internal/prrepair   bounds what the model may edit when it proposes a pull request
+internal/qr         the smallest QR encoder that serves the two-step verification picture
 internal/redact     strips credentials and commit emails from text bound for a model
 internal/releasekey the release signing key: Ed25519 verification of a release's checksums
 internal/toolscan   reads workflows for the toolchains their jobs install
+internal/version    build metadata stamped in at link time
 internal/wsl        keeps an agent alive inside a WSL2 distro
 web/                the Svelte 5 UI
 test/e2e            the Docker end-to-end test, behind the `e2e` build tag

@@ -28,7 +28,11 @@ The core binary is written in Go. The web UI is built with Svelte and embedded
 in that binary.
 
 - Go 1.27.1 or later (the floor in `go.mod`; CI builds and releases with 1.27.2)
-- Node.js 22 or later and npm, when changing or rebuilding the UI
+- A C compiler (`gcc` or `clang`), because `make test` runs under the race
+  detector and Go refuses `-race` without cgo
+- Node.js 22 or later and npm, when changing or rebuilding the UI. `make lint`
+  also runs `npm ci` in `web/`, so it needs them too
+- Python 3.12 (`python3`), only for building the documentation site
 - Git
 - Docker or Podman for backend and image work
 - A GitHub App only for tests or development flows that actually talk to GitHub
@@ -38,8 +42,12 @@ Start by forking the repository, then clone your fork:
 ```sh
 git clone https://github.com/YOUR-USERNAME/zoomies.git
 cd zoomies
-git remote add upstream https://github.com/eyupio/zoomies.git
+git remote add -t main upstream https://github.com/eyupio/zoomies.git
 ```
+
+`-t main` keeps `git fetch upstream` to the one branch you need. The repository
+also carries a generated `zoomies-ai-context` branch whose history is large, and
+a plain fetch would download all of it.
 
 Create a branch from the latest `main`:
 
@@ -55,12 +63,26 @@ Use a short, descriptive branch name such as `fix/agent-reconnect`,
 
 Run `make help` for the maintained list of targets.
 
+A fresh checkout does not compile on its own. `internal/api` embeds the built
+UI, which is a build product that is not committed, so a plain `go vet` or
+`go test` fails with `pattern all:webdist: no matching files found` until it
+exists. Run this once first:
+
+```sh
+make build-nogui    # Go-only build; writes a placeholder UI, needs no Node
+```
+
+`make build` does the same with the real UI (it needs Node), and either is
+enough for every Go command afterwards.
+
 ```sh
 make build          # build the Go binary with the web UI embedded
 make build-nogui    # fast Go-only inner loop
 make dev            # local controller with debug logging and auth disabled
 make ui-dev         # Vite UI against a controller on localhost:8080
 ```
+
+`make ui-dev` needs the UI's dependencies, so run `npm ci` in `web/` first.
 
 The development mode disables authentication and is for a local workstation
 only. Do not expose it to a network.
@@ -70,7 +92,15 @@ only. Do not expose it to a network.
 - Keep pull requests small enough to review and explain the reason for the
   change, not only the implementation.
 - Follow the surrounding code and UI patterns. Go code must be formatted with
-  `gofmt`; web code is formatted with Prettier.
+  `gofmt`; web code is formatted with Prettier. `make fmt` does both.
+- Read [AGENTS.md](AGENTS.md) before changing anything structural. Written for
+  coding agents, it is also the contributor's map: which package owns what, the
+  boundaries between packages that review is meant to catch, and the house
+  voice (British spelling, comments that explain why, no em dashes). The
+  reasoning behind the shape is in [docs/architecture.md](docs/architecture.md).
+- A new documentation page goes under `docs/` and into the `nav` in
+  `mkdocs.yml`; a page that is in neither is easy to miss and is checked by
+  `mkdocs build --strict`.
 - Add or update tests for changed behaviour.
 - Update user documentation, configuration examples, API definitions, and
   screenshots when the public behaviour changes.
@@ -93,16 +123,22 @@ Run the narrowest relevant tests while developing, then the standard checks
 before opening a pull request:
 
 ```sh
-make test-short
-make lint
-make test
+make test-short     # the quick Go tests, a few minutes
+make fmt            # gofmt and Prettier; make lint fails on what this would change
+make lint           # vet, gofmt, staticcheck and the UI lint
+make test           # every Go test with the race detector
 ```
+
+`make test` can take an hour with few CPUs (CI splits it across six runners), so
+`make test-short` is the loop to work in. `make lint` runs staticcheck only if it is installed and says
+so when it is not; CI always runs it, so installing it
+(`go install honnef.co/go/tools/cmd/staticcheck@latest`) saves a round trip.
 
 For documentation changes, install the pinned dependencies and run the same
 strict build as the site workflow:
 
 ```sh
-python -m pip install --require-hashes -r docs/requirements.txt
+python3 -m pip install --require-hashes -r docs/requirements.txt
 mkdocs build --strict
 ```
 
@@ -119,6 +155,7 @@ cd web
 npm ci --no-audit --no-fund
 npm run check
 npm run test:unit
+npx playwright install chromium   # once, for make test-ui
 cd ..
 make test-ui
 ```
@@ -145,8 +182,9 @@ top of `.github/workflows/ci.yml`, on a pull request and on `main` alike:
 | Go, or anything not listed | the whole set |
 | `ci.yml`, the `Makefile`, `go.mod` | everything |
 
-The Go suite is split by package across four runners; `make test
-TEST_PKGS=./internal/store/` runs one shard the way CI does. Coverage is
+The Go suite is split by package across six runners (the controller and API
+packages are two shards each, the store is one, and everything else shares the
+last); `make test TEST_PKGS=./internal/store/` runs one the way CI does. Coverage is
 measured on `main`, when the whole Go suite ran. `main` publishes the dev
 channel's binaries and images only from a commit that changes what ships (Go,
 the UI or `deploy/`) so a documentation merge leaves `--version dev` where it

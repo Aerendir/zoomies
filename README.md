@@ -36,7 +36,6 @@ anything precious on this.*
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14604/badge)](https://www.bestpractices.dev/projects/14604)
 [![Website](https://github.com/eyupio/zoomies/actions/workflows/docs.yml/badge.svg)](https://zoomies.sh)
 [![CI has the Zoomies](https://zoomies.sh/badge.svg)](https://zoomies.sh)
-[![Zoomies AI Context](https://github.com/eyupio/zoomies/actions/workflows/zoomies-ai-context.yml/badge.svg)](https://github.com/eyupio/zoomies/actions/workflows/zoomies-ai-context.yml)
 
 
 ```sh
@@ -205,6 +204,7 @@ git clone https://github.com/eyupio/zoomies && cd zoomies
 cp .env.example .env
 $EDITOR .env          # ZOOMIES_EXTERNAL_URL, ZOOMIES_ENCRYPTION_KEY, DOCKER_GID
 mkdir -p data && sudo chown 65532:65532 data   # the container runs as 65532
+sudo mkdir -p /var/lib/zoomies/shared && sudo chown 65532:65532 /var/lib/zoomies/shared
 docker compose up -d
 docker compose logs zoomies | grep 'setup token'
 ```
@@ -510,23 +510,34 @@ The same list appears in the UI's problems panel. See
 ## Building from source
 
 ```sh
-git clone https://github.com/eyupio/zoomies && cd zoomies
+git clone --single-branch https://github.com/eyupio/zoomies && cd zoomies
 make build        # builds the UI and embeds it
 ./zoomies version
 ```
 
-Go 1.25 or later, and Node 22 or later. `go.mod` sets the language version at
-1.25 and that is the floor a contributor needs; CI builds and releases with
-1.26. Node is a build-time dependency only; the binary is
-self-contained.
+Go 1.27.1 or later, and Node 22 or later. `go.mod` sets the floor a
+contributor needs; CI builds and releases with Go 1.27.2. Node is a build-time
+dependency only; the binary is self-contained. `--single-branch` keeps the
+generated `zoomies-ai-context` branch out of the clone: it is large and a
+contributor does not need it.
+
+A fresh checkout does not compile on its own: `internal/api` embeds the built
+UI, which is a build product. `make build` produces it, and `make build-nogui`
+writes a placeholder instead, which is all the Go tests and the Go-only inner
+loop need (no Node).
 
 ```sh
-make test         # Go tests
-make lint         # vet, gofmt, staticcheck, UI lint
+make build-nogui  # Go-only build, with a placeholder UI
+make test-short   # the quick Go tests
+make test         # all Go tests with the race detector; about an hour, needs a C compiler
+make lint         # vet, gofmt, staticcheck, UI lint (installs the UI's dependencies)
 make test-ui      # Playwright
 make dev          # controller with auth off, for UI work
 make ui-dev       # Vite dev server against it
 ```
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the full setup, including what a change
+to the UI needs.
 
 ## How it compares
 
@@ -608,10 +619,16 @@ mkdocs build --strict # a link that points nowhere fails the build
 
 ## Contributing
 
-Read [docs/architecture.md](docs/architecture.md) first, then
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), which covers setup, the checks to
+run and what a pull request should say. Then read
+[docs/architecture.md](docs/architecture.md) and
 [docs/dependencies.md](docs/dependencies.md); every dependency needs a
 one-line justification, and that is enforced by review. UI changes should keep
 [docs/ui-guidelines.md](docs/ui-guidelines.md) true.
+
+Questions go through [SUPPORT.md](SUPPORT.md), a vulnerability goes through
+[SECURITY.md](SECURITY.md) and never an issue, and everyone taking part follows
+the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Licence
 

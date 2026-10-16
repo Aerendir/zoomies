@@ -49,9 +49,15 @@ git clone https://github.com/eyupio/zoomies && cd zoomies
 cp .env.example .env
 $EDITOR .env          # ZOOMIES_EXTERNAL_URL, ZOOMIES_ENCRYPTION_KEY, DOCKER_GID
 mkdir -p data && sudo chown 65532:65532 data   # the container runs as 65532
+sudo mkdir -p /var/lib/zoomies/shared && sudo chown 65532:65532 /var/lib/zoomies/shared
 docker compose up -d
 docker compose logs zoomies | grep 'setup token'
 ```
+
+The second `mkdir` is the [shared folder](configuration.md#the-shared-folder),
+the one place the embedded agent and the host's Docker daemon both see at the
+same path. The Compose file declares it with `create_host_path: false`, so
+Compose will not create it for you and `up` stops on the missing mount.
 
 Three values are required, and compose refuses to start with any of them
 missing, because each one left to a default produces a container that is
