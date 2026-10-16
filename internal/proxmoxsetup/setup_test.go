@@ -281,3 +281,54 @@ func TestEndpointHostNeverChoosesALoopbackName(t *testing.T) {
 		})
 	}
 }
+
+// The full command is the same download done inline, for a host that cannot
+// reach zoomies.sh, and it runs as root. It has to hold the download to the
+// release signing key exactly as the hosted script does, so it carries the same
+// check, and the signature has to be verified before the checksums are used.
+func TestFullCommandVerifiesTheReleaseSignatureBeforeTheChecksums(t *testing.T) {
+	command := Command("https://zoomies.example", "pvs_abc", "secret", "v1.3.6.1")
+	cmd := exec.Command("bash", "-n")
+	cmd.Stdin = strings.NewReader(command)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("invalid shell: %v %s", err, out)
+	}
+	if !strings.Contains(command, releaseSignatureCode) {
+		t.Error("the full command does not carry the release signature check")
+	}
+	verify := strings.Index(command, `verify_signature "$tag"`)
+	believe := strings.Index(command, "sha256sum -c selected")
+	if verify < 0 || believe < 0 || verify > believe {
+		t.Errorf("the signature is verified at %d and the checksums used at %d; it has to be first", verify, believe)
+	}
+	for _, want := range []string{"tag='v1.3.6.1'", "checksums.txt.ed25519"} {
+		if !strings.Contains(command, want) {
+			t.Errorf("the full command lacks %q", want)
+		}
+	}
+	if strings.Contains(command, "# ---") {
+		t.Error("the full command carries the check's comments; it is pasted by a person and should not")
+	}
+}
+
+// connect-proxmox.sh carries the same check as the full command, with its
+// comments; they must be the same code, or the two ways of running the setup
+// would hold a download to different rules.
+func TestHostedScriptCarriesTheSameCheckAsTheFullCommand(t *testing.T) {
+	script, err := os.ReadFile("../../connect-proxmox.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const start, end = "# --- release signature check:", "# --- end of the release signature check.\n"
+	text := string(script)
+	i, j := strings.Index(text, start), strings.Index(text, end)
+	if i < 0 || j < i {
+		t.Fatal("connect-proxmox.sh has no release signature check between its markers")
+	}
+	if got := text[i : j+len(end)]; got != releaseSignatureCheck {
+		t.Error("connect-proxmox.sh carries a different release signature check from the canonical release_signature.sh; copy one into the other")
+	}
+	if withoutComments(text[i:j+len(end)]) != releaseSignatureCode {
+		t.Error("the full command's check is not the script's check without its comments")
+	}
+}

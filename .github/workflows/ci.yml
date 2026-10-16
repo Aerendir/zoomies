@@ -146,6 +146,8 @@ jobs:
               deploy/*|docker-compose.yml|.dockerignore) deploy=true; rest=true ;;
               # The check each built runner image is run through.
               test/runner-image/*) deploy=true; installer=true ;;
+              # Shell the binary embeds, and the installer job lints.
+              internal/proxmoxsetup/release_signature.sh) go=true; installer=true ;;
               # The script people curl is checked by the install.sh job and
               # exercised by the upgrade test. No Go test reads it, and no
               # binary or image carries it: the site serves it, and the site's
@@ -1023,6 +1025,11 @@ jobs:
           shellcheck -s sh install.sh
           dash -n connect-proxmox.sh
           shellcheck -s sh connect-proxmox.sh
+          # The signature check the Proxmox wizard's pasted command carries; the
+          # copies in connect-proxmox.sh and fetch.sh are held equal to it by a
+          # test in internal/docs.
+          dash -n internal/proxmoxsetup/release_signature.sh
+          shellcheck -s sh internal/proxmoxsetup/release_signature.sh
           dash -n test/install/install-check.sh
           shellcheck -s sh test/install/install-check.sh
           shellcheck deploy/runner-entrypoint.sh

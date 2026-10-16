@@ -6,11 +6,12 @@
 #       --version <tag> --key <key> --controller <url> --setup-id <id> --token <token>
 #
 # The wizard prints the whole line with the values filled in. Reading this file
-# first is safe, and recommended: it downloads one release binary, checks its
-# SHA-256 against the release's checksums.txt, keeps a private copy under
-# /var/lib/zoomies-proxmox and runs `zoomies providers connect-proxmox` with the
-# values it was given. It never touches an installed runner host: no
-# /usr/local/bin, no zoomies-agent unit, no join token.
+# first is safe, and recommended: it downloads one release binary, checks the
+# release's checksums.txt against the release signing key and the binary's SHA-256
+# against those checksums, keeps a private copy under /var/lib/zoomies-proxmox and
+# runs `zoomies providers connect-proxmox` with the values it was given. It never
+# touches an installed runner host: no /usr/local/bin, no zoomies-agent unit, no
+# join token.
 #
 # This is the same work the wizard's "Show the full command" text does, in a
 # file that is checked in CI instead of pasted from a browser.
@@ -21,6 +22,83 @@ set -eu
 umask 077
 
 die() { printf 'zoomies: %s\n' "$*" >&2; exit 1; }
+say() { printf 'zoomies: %s\n' "$*" >&2; }
+warn() { printf 'zoomies: warning: %s\n' "$*" >&2; }
+
+# --- release signature check: identical in connect-proxmox.sh and
+# --- deploy/instapods/fetch.sh, and a test in internal/docs holds the copies equal.
+# The release signing key, base64: the line `zoomies release keygen` writes to
+# release.pub. A test keeps it equal to the key compiled into the binary and to
+# the one in install.sh, and keeps the two functions below identical in every
+# script that carries them.
+RELEASE_KEY="6dK2/jDPHR8wAjsIayrxGxL8ednKVKdEMHdRcmNU67U="
+
+# signature_required says whether a release has to carry a signature. The first
+# signed release was v1.3.6.1: everything before it, and the moving dev
+# prerelease, has none, so there is nothing to check and refusing them would
+# refuse every version published before signing began. From v1.3.6 up a release
+# that is not signed is refused, because otherwise whoever could replace the
+# binary could also delete its signature, and a script that only warns would run
+# what is left.
+signature_required() {
+    case "$1" in v[0-9]*.[0-9]*.[0-9]*) ;; *) return 1 ;; esac
+    _rest=${1#v}
+    _major=${_rest%%.*}
+    _rest=${_rest#*.}
+    _minor=${_rest%%.*}
+    _rest=${_rest#*.}
+    _patch=${_rest%%[!0-9]*}
+    case "$_major$_minor$_patch" in '' | *[!0-9]*) return 1 ;; esac
+    [ "$_major" -gt 1 ] || { [ "$_major" -eq 1 ] && { [ "$_minor" -gt 3 ] || { [ "$_minor" -eq 3 ] && [ "$_patch" -gt 5 ]; }; }; }
+}
+
+# verify_signature <tag> <checksums.txt> <checksums.txt.ed25519> <scratch dir>
+# holds a release's checksums to the release key, before the checksums are
+# believed. A signature that does not match always refuses. A signature that
+# cannot be checked (no openssl that does Ed25519, no signature, one that cannot
+# be read) refuses a release that must be signed and is a warning for one that
+# cannot be, which is every release before v1.3.6.
+verify_signature() {
+    _tag=$1 _sums=$2 _sigfile=$3 _dir=$4
+    [ -n "$RELEASE_KEY" ] || return 0
+    if ! command -v openssl >/dev/null 2>&1 || ! openssl pkeyutl -help 2>&1 | grep -q rawin; then
+        if signature_required "$_tag"; then
+            die "$_tag is signed, and this host has no openssl (3.0 or later) to check the signature with, so the download cannot be trusted. Install openssl and run this again."
+        fi
+        warn "there is no openssl here that can check a signature; this download is checked by its checksum alone."
+        return 0
+    fi
+    if [ ! -s "$_sigfile" ]; then
+        if signature_required "$_tag"; then
+            die "$_tag carries no checksums.txt.ed25519, and a release this new must be signed. Do not run this download."
+        fi
+        warn "$_tag carries no checksums.txt.ed25519, so the release key cannot check it; this download is checked by its checksum alone."
+        return 0
+    fi
+    # The envelope is the key id, then the base64 signature.
+    _sig=$(sed -n '2p' "$_sigfile")
+    if ! printf '%s' "$_sig" | openssl base64 -d -A > "$_dir/sig.raw" 2>/dev/null || [ ! -s "$_dir/sig.raw" ]; then
+        if signature_required "$_tag"; then
+            die "the signature on $_tag could not be read. Do not run this download."
+        fi
+        warn "the release signature could not be read; this download is checked by its checksum alone."
+        return 0
+    fi
+    # openssl wants the DER public key: the fixed Ed25519 SubjectPublicKeyInfo
+    # prefix, then the key's 32 bytes.
+    printf '\060\052\060\005\006\003\053\145\160\003\041\000' > "$_dir/key.prefix"
+    if ! printf '%s' "$RELEASE_KEY" | openssl base64 -d -A > "$_dir/key.raw" 2>/dev/null || [ ! -s "$_dir/key.raw" ]; then
+        die "the release key built into this script cannot be read; copy the script again from https://zoomies.sh."
+    fi
+    cat "$_dir/key.prefix" "$_dir/key.raw" > "$_dir/release.der"
+    if openssl pkeyutl -verify -pubin -keyform DER -inkey "$_dir/release.der" \
+        -rawin -in "$_sums" -sigfile "$_dir/sig.raw" >/dev/null 2>&1; then
+        say "the release signature matches the release key"
+    else
+        die "the release signature on $_tag does not match the release key. Do not run this download."
+    fi
+}
+# --- end of the release signature check.
 
 # Everything runs inside main, called on the last line, so a transfer cut short
 # is a syntax error rather than half a setup.
@@ -73,6 +151,12 @@ main() {
     trap 'rm -rf "$tmp"' EXIT
     curl --proto '=https' --proto-redir '=https' -fsSL "$base/$asset" -o "$tmp/$asset"
     curl --proto '=https' --proto-redir '=https' -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
+    # A release before v1.3.6 has no signature; the file is simply absent then.
+    curl --proto '=https' --proto-redir '=https' -fsSL "$base/checksums.txt.ed25519" -o "$tmp/checksums.txt.ed25519" 2>/dev/null ||
+        rm -f "$tmp/checksums.txt.ed25519"
+    # Before the checksums are believed: a checksum from the same place as the
+    # binary says only that the download was not corrupted on the way.
+    verify_signature "$version" "$tmp/checksums.txt" "$tmp/checksums.txt.ed25519" "$tmp"
     (
         cd "$tmp"
         awk -v asset="$asset" '$2 == asset || $2 == "*" asset { print; found=1 } END { if (!found) exit 1 }' checksums.txt > selected ||
