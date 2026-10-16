@@ -15,7 +15,7 @@ description: >-
   the alternative is a page a person reads and a machine cannot.
 
   If you edit an answer, edit both. Keep the structured copy to one plain
-  paragraph -- it is read aloud, not rendered.
+  paragraph, because it is read aloud, not rendered.
 -->
 
 ## What is Zoomies?
@@ -29,7 +29,7 @@ a web UI built in.
 ## Do I need Kubernetes?
 
 No. Zoomies is a process on a machine. There is no cluster, no operator, no
-custom resources and no database server -- a VM with a container runtime is the
+custom resources and no database server. A VM with a container runtime is the
 whole requirement. See the [architecture](architecture.md).
 
 ## How is this different from actions-runner-controller?
@@ -45,7 +45,7 @@ the long one.
 ## What does "ephemeral by default" actually buy me?
 
 Each runner takes exactly one job and is then destroyed. Nothing survives from
-one workflow run to the next -- not a clone, not a cache, not a credential a
+one workflow run to the next: not a clone, not a cache, not a credential a
 previous job left on disk. It is the single most useful property a self-hosted
 runner can have, and it is why it is the default rather than an option.
 
@@ -70,7 +70,7 @@ AES-256-GCM.
 
 Yes, and that is the default: a pool with `min_runners: 0` runs nothing at all
 while its queue is empty. Set `min_runners` above zero only when you want warm
-capacity waiting, and always set `max_runners` -- it is the backstop against a
+capacity waiting, and always set `max_runners`, which is the backstop against a
 runaway workflow. See [configuration](configuration.md).
 
 ## Is it safe to run self-hosted runners on public repositories?
@@ -95,8 +95,8 @@ lifecycle.
 ## Can runners run on more than one machine?
 
 Yes. One controller and any number of agents, on any number of hosts. Agents
-only ever connect outbound -- they long-poll the controller for tasks and post
-results and logs back on connections they opened -- so a runner host behind NAT
+only ever connect outbound (they long-poll the controller for tasks and post
+results and logs back on connections they opened), so a runner host behind NAT
 needs no inbound firewall rule at all.
 
 ## Which container runtimes work?
@@ -179,7 +179,7 @@ the same size everywhere can type a fixed one instead.
 
 ## Can I see what the scheduler is doing, and why?
 
-Yes -- every scaling decision carries a reason string written for a person
+Yes: every scaling decision carries a reason string written for a person
 ("1 job queued", or "3 jobs queued > 30s" once a scale-up delay is set), and it is shown in the UI next to the pool it applies
 to. Scheduling is a pure function of a snapshot, which is what makes those
 reasons reliable enough to print.
@@ -299,7 +299,7 @@ modified or not, asks nothing of you. The full text is in
       "name": "Does Zoomies need Kubernetes?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. Zoomies is a process on a machine. There is no cluster, no operator, no custom resources and no database server -- a VM with a container runtime is the whole requirement."
+        "text": "No. Zoomies is a process on a machine. There is no cluster, no operator, no custom resources and no database server. A VM with a container runtime is the whole requirement."
       }
     },
     {
@@ -315,7 +315,7 @@ modified or not, asks nothing of you. The full text is in
       "name": "What does an ephemeral runner buy me?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Each runner takes exactly one job and is then destroyed, so nothing survives from one workflow run to the next -- not a clone, not a cache, not a credential a previous job left on disk. In Zoomies it is the default rather than an option."
+        "text": "Each runner takes exactly one job and is then destroyed, so nothing survives from one workflow run to the next: not a clone, not a cache, not a credential a previous job left on disk. In Zoomies it is the default rather than an option."
       }
     },
     {
@@ -339,7 +339,7 @@ modified or not, asks nothing of you. The full text is in
       "name": "Is it safe to use self-hosted runners on public repositories?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No, and Zoomies does not change that: a self-hosted runner executes code from your repositories, which on a public repository means code from anyone who can open a pull request. Zoomies makes each execution's blast radius as small as it can -- one job per runner, no reusable registration credential on the host, no Docker daemon inside the job unless you ask for one, a non-root user with dropped capabilities."
+        "text": "No, and Zoomies does not change that: a self-hosted runner executes code from your repositories, which on a public repository means code from anyone who can open a pull request. Zoomies makes each execution's blast radius as small as it can: one job per runner, no reusable registration credential on the host, no Docker daemon inside the job unless you ask for one, a non-root user with dropped capabilities."
       }
     },
     {

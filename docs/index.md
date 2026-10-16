@@ -4,8 +4,7 @@ title: Zoomies
 social_title: "Zoomies: open-source self-hosted GitHub Actions runners"
 description: >-
   Run GitHub Actions on your own machines with fresh ephemeral runners, a live
-  web UI, Eli AI assistance and MCP tools for job diagnosis and optimisation.
-  Explore the live demo or follow the first-job tutorial.
+  web UI and autoscaling. One Go binary, SQLite, no Kubernetes.
 hide:
   - navigation
   - toc
@@ -18,10 +17,11 @@ hide:
 # GitHub Actions runners <br><span class="quiet">on machines you own.</span>
 
 <p class="lede">
-Put your cloud VMs, office servers or home lab to work. Zoomies starts a fresh
-runner for each job, scales across your hosts and shows you what is happening
-in one live web UI. Ask Eli about your builds, or connect your own AI assistant
-through MCP. One binary, SQLite, no Kubernetes.
+Zoomies is a self-hosted GitHub Actions runner controller: one binary, SQLite,
+no Kubernetes. Put your cloud VMs, office servers or home lab to work. It starts
+a fresh runner for each job, scales across your hosts and shows you what is
+happening in one live web UI. Ask Eli about your builds, or connect your own AI
+assistant through MCP.
 </p>
 
 <p class="actions" markdown>
