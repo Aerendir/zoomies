@@ -9,7 +9,7 @@
 # against the next release without needing this repository to make sense.
 set -eu
 
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 inputs=${1:-}
 
 if [ -z "$inputs" ] || [ "$inputs" = "-h" ] || [ "$inputs" = "--help" ]; then

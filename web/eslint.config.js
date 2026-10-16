@@ -16,8 +16,9 @@ export default ts.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
-      // Explicit any is a code smell here; the API client is generated and typed.
-      '@typescript-eslint/no-explicit-any': 'warn',
+      // The API client is generated and typed, and the source has no explicit any
+      // today, so a new one is a mistake to fix and not a warning to scroll past.
+      '@typescript-eslint/no-explicit-any': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
     },
   },
