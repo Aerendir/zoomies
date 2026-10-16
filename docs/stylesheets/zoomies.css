@@ -1263,7 +1263,7 @@ input,
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: url('../brand/backdrops/orbital.webp') center / contain no-repeat;
+  background: url('../brand/backdrops/orbital-640.webp') center / contain no-repeat;
   -webkit-mask-image:
     linear-gradient(to right, transparent, #000 28%, #000 72%, transparent),
     linear-gradient(to bottom, transparent, #000 28%, #000 72%, transparent);
