@@ -16,8 +16,10 @@ import (
 // finished thinking about, and once a few are in the repository the next
 // contributor copies them. The house style is a comma, a colon, a semicolon or
 // parentheses, so this fails on the character wherever it is set apart from the
-// words around it. A lone one is not caught on purpose: the UI uses it as the
-// placeholder for an absent value, and web/unit/absent-value.test.ts guards that.
+// words around it. A lone one is not caught on purpose: a table cell that means
+// "none" (docs/api-surface.md writes one for a route that needs no role) is a
+// value, not punctuation. The UI's own placeholder for an absent value is two
+// hyphens, and web/unit/absent-value.test.ts guards that.
 //
 // The pattern spells the character as an escape, so this file is not its own
 // first offender.
