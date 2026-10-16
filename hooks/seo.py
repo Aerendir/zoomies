@@ -13,6 +13,12 @@ from the repository rather than written by hand, so neither can go stale:
   about a project instead of crawling it. It is generated from the navigation,
   so a page added to ``mkdocs.yml`` appears in it without anyone remembering.
 
+* **``/.well-known/security.txt``** (RFC 9116), where a researcher looks for how
+  to report a vulnerability. It says what SECURITY.md says and points at it.
+  ``Expires`` is required and must be under a year away, so a tracked file
+  would quietly lapse; it is written at build, and the site is built on every
+  push to main.
+
 * **A Markdown copy of every page**, at the page's own address plus
   ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
   HTML is server-rendered and complete, but an assistant asked about a page
@@ -40,7 +46,7 @@ import posixpath
 import re
 import shutil
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger("mkdocs.hooks.seo")
 
@@ -265,6 +271,7 @@ def on_post_build(config):
         fh.write("\n".join(lines))
 
     _write_markdown(config, site_url)
+    _write_security_txt(config, site_url)
 
     # The catalog is generated into the Go package that embeds it, so the
     # binary and the site serve the same bytes; the site copies it rather than
@@ -304,3 +311,22 @@ def _write_markdown(config, site_url: str) -> None:
 
     with open(os.path.join(config["site_dir"], "llms-full.txt"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(full))
+
+
+def _write_security_txt(config, site_url: str) -> None:
+    """Write /.well-known/security.txt, which says where to report a vulnerability."""
+    repo = str(config["repo_url"]).rstrip("/")
+    expires = (datetime.now(timezone.utc) + timedelta(days=330)).strftime("%Y-%m-%dT00:00:00.000Z")
+    lines = [
+        "# Report a vulnerability as a private security advisory, not a public issue.",
+        f"Contact: {repo}/security/advisories/new",
+        f"Expires: {expires}",
+        "Preferred-Languages: en",
+        f"Policy: {repo}/blob/main/SECURITY.md",
+        f"Canonical: {site_url}/.well-known/security.txt",
+        "",
+    ]
+    target = os.path.join(config["site_dir"], ".well-known")
+    os.makedirs(target, exist_ok=True)
+    with open(os.path.join(target, "security.txt"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))

@@ -127,13 +127,14 @@ jobs:
       # The two files a crawler and an assistant look for first. Both are
       # generated, so a build that quietly stopped producing one would
       # otherwise ship a site nothing can index.
-      - name: The sitemap, llms.txt and the Markdown copies were produced
+      - name: The sitemap, llms.txt, the Markdown copies and security.txt were produced
         run: |
           set -eu
           grep -q "https://zoomies.sh/quickstart/" site/sitemap.xml
           grep -q "https://zoomies.sh/faq/" site/llms.txt
           grep -q "https://zoomies.sh/quickstart/" site/llms-full.txt
           grep -q "^# " site/quickstart/index.md
+          grep -q "^Contact: " site/.well-known/security.txt
 
       # The header's release, stars and forks are resolved at build time, and a
       # build that cannot reach the API still succeeds -- for a developer
