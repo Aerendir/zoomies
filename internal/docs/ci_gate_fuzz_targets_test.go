@@ -36,7 +36,13 @@ func TestEveryFuzzTargetIsRunByTheFuzzWorkflow(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		pkg := "./" + filepath.ToSlash(strings.TrimPrefix(filepath.Dir(path), "../../"))
+		// Relative first, slash-separated second: on Windows the walk's paths use
+		// backslashes, and trimming "../../" from them matched nothing.
+		dir, err := filepath.Rel("../..", filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		pkg := "./" + filepath.ToSlash(dir)
 		for _, m := range regexp.MustCompile(`(?m)^func (Fuzz[A-Za-z0-9_]+)\(\w+ \*testing\.F\)`).FindAllStringSubmatch(string(body), -1) {
 			found[m[1]] = pkg
 		}

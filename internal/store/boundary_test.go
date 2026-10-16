@@ -31,7 +31,7 @@ func TestNoPackageButTheStoreImportsDatabaseSQL(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		rel := filepath.ToSlash(strings.TrimPrefix(path, "../../"))
+		rel := repoRelative(t, path)
 		if d.IsDir() {
 			switch d.Name() {
 			case ".git", "node_modules", "webdist", "dist", "site":
@@ -69,4 +69,17 @@ func TestNoPackageButTheStoreImportsDatabaseSQL(t *testing.T) {
 	if len(offenders) > 0 {
 		t.Errorf("only internal/store may touch the database; move the query into the store and call it:\n  %s", strings.Join(offenders, "\n  "))
 	}
+}
+
+// repoRelative is a path under the repository root as a slash-separated name.
+// The path is made relative with filepath.Rel and only then slash-separated:
+// on Windows the walk's paths use backslashes, so trimming a "../../" prefix
+// from them matched nothing, and the package that holds the rule was scanned.
+func repoRelative(t *testing.T, path string) string {
+	t.Helper()
+	rel, err := filepath.Rel("../..", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.ToSlash(rel)
 }
