@@ -104,7 +104,10 @@ test('capacity is what fits after the reserve, on the tighter of CPU and memory'
   // 15 cores / 2 = 7; 29.7 GB / 4 GB = 7.
   assert.equal(recommendedCapacity(host, 1, 3072, DEFAULT_ASK), 7);
   // Memory is the tighter one here.
-  assert.equal(recommendedCapacity(host, 1, 3072, { cpus: 1, memoryMb: 8192, source: 'pools' }), 3);
+  assert.equal(
+    recommendedCapacity(host, 1, 3072, { cpus: 1, memoryMb: 8192, source: 'pools', pair: false }),
+    3,
+  );
   // A host that has said nothing about itself gets no recommendation.
   assert.equal(recommendedCapacity({ cpus: 0, memoryMb: 0 }, 0, 0, DEFAULT_ASK), 0);
   // Never zero on a machine, however small: one runner is what a host is for.

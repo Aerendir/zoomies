@@ -6,6 +6,7 @@
   is a plain anchor rather than the Button component, which has no target.
 -->
 <script lang="ts">
+  import { NO_VALUE } from '$lib/format';
   import Tooltip from '$lib/components/Tooltip.svelte';
   import { ExternalLink } from '@lucide/svelte';
 
@@ -64,7 +65,7 @@
   </Tooltip>
 {:else}
   <Tooltip bare text="Zoomies did not record a run URL for this job">
-    <span class="absent">--</span>
+    <span class="absent">{NO_VALUE}</span>
   </Tooltip>
 {/if}
 

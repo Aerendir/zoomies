@@ -256,19 +256,25 @@ func GrantToken(ctx context.Context, h Host, tokenID, role string) error {
 }
 
 // Command installs only a private copy of the matching binary; the general
-// installer may replace an agent executable or re-enrol a running host.
+// installer may replace an agent executable or re-enrol a running host. The
+// binary is held to the release's checksums, and those to the release signing
+// key, before anything runs as root.
 func Command(controller, id, token, tag string) string {
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 	dir := "/var/lib/zoomies-proxmox/" + InstanceKey(controller)
 	return "if [ \"$(id -u)\" -eq 0 ]; then zoomies_proxmox_sudo=''; else zoomies_proxmox_sudo='sudo'; fi\n" +
 		"$zoomies_proxmox_sudo bash <<'ZOOMIES_PROXMOX_SETUP'\nset -eu\numask 077\n" +
+		"die() { printf 'zoomies: %s\\n' \"$*\" >&2; exit 1; }\nsay() { printf 'zoomies: %s\\n' \"$*\" >&2; }\nwarn() { printf 'zoomies: warning: %s\\n' \"$*\" >&2; }\n" +
+		releaseSignatureCode +
 		"dir=" + quote(dir) + "\nmkdir -p \"$dir\"\n" +
 		"if [ -f \"$dir/completed-" + InstanceKey(id+token) + "\" ] && [ -x \"$dir/zoomies\" ]; then\n  \"$dir/zoomies\" providers connect-proxmox --controller " + quote(controller) + " --setup-id " + quote(id) + " --token " + quote(token) + "\n  exit 0\nfi\n" +
 		"case $(uname -m) in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; *) echo 'Unsupported host architecture'; exit 1;; esac\n" +
-		"asset=zoomies_linux_$arch\nbase=" + quote("https://github.com/eyupio/zoomies/releases/download/"+tag) + "\n" +
+		"asset=zoomies_linux_$arch\ntag=" + quote(tag) + "\nbase=" + quote("https://github.com/eyupio/zoomies/releases/download/"+tag) + "\n" +
 		"tmp=$(mktemp -d \"$dir/download.XXXXXX\")\ntrap 'rm -rf \"$tmp\"' EXIT\n" +
 		"curl --proto '=https' --proto-redir '=https' -fsSL \"$base/$asset\" -o \"$tmp/$asset\"\n" +
 		"curl --proto '=https' --proto-redir '=https' -fsSL \"$base/checksums.txt\" -o \"$tmp/checksums.txt\"\n" +
+		"curl --proto '=https' --proto-redir '=https' -fsSL \"$base/checksums.txt.ed25519\" -o \"$tmp/checksums.txt.ed25519\" 2>/dev/null || rm -f \"$tmp/checksums.txt.ed25519\"\n" +
+		"verify_signature \"$tag\" \"$tmp/checksums.txt\" \"$tmp/checksums.txt.ed25519\" \"$tmp\"\n" +
 		"(cd \"$tmp\"; awk -v asset=\"$asset\" '$2 == asset || $2 == \"*\" asset { print; found=1 } END { if (!found) exit 1 }' checksums.txt > selected; sha256sum -c selected)\n" +
 		"chmod 700 \"$tmp/$asset\"\n" +
 		"\"$tmp/$asset\" providers connect-proxmox --controller " + quote(controller) + " --setup-id " + quote(id) + " --token " + quote(token) + "\n" +

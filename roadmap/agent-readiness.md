@@ -658,7 +658,8 @@ progress row, per the roadmap's delivery rules.
 
 ## 12. Found on the way, not part of this plan
 
-`.github/workflows/open code.yml` runs an agent action with `contents: write`,
+`.github/workflows/opencode.yml` (named `open code.yml`, with a space, when this
+was written) runs an agent action with `contents: write`,
 `pull-requests: write` and `id-token: write` on any issue or review comment
 containing `/oc` or `/opencode`, with no check of the commenter's association.
 Anyone who could comment could trigger it. That is this repository's own

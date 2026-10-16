@@ -585,11 +585,6 @@ func runtimeLine(r RuntimeInfo) string {
 	}
 }
 
-// CanUseSocket reports whether this user can talk to a runtime's socket, and
-// why not when it cannot. The installer uses it to decide whether the service
-// user needs to be added to a group.
-func CanUseSocket(endpoint string) error { return backend.CanUseDockerSocket(endpoint) }
-
 // dockerGroupGID returns the numeric gid of the docker group, or 0 when the
 // host has no such group. A root Docker socket is usually reachable only for
 // members of that group, and the systemd unit has to name it.

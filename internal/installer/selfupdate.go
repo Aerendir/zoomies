@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/backup"
 	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/version"
 )
@@ -192,7 +193,7 @@ func FetchRelease(ctx context.Context, opts SelfUpdateOptions) (*Candidate, Self
 	if want == "" {
 		return nil, res, fmt.Errorf("the checksums for %s have no entry for %s, so no binary was downloaded", tag, asset)
 	}
-	have, err := fileSHA256(opts.BinaryPath)
+	have, err := backup.FileSHA256(opts.BinaryPath)
 	if err != nil {
 		return nil, res, fmt.Errorf("read the installed binary: %w", err)
 	}
@@ -477,19 +478,6 @@ func redact(u string) string {
 		return p.String()
 	}
 	return u
-}
-
-func fileSHA256(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // checksumFor finds an asset's hash in a `sha256sum` style file.

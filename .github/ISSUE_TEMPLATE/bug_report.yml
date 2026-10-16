@@ -1,0 +1,58 @@
+name: Bug report
+description: Something does not behave the way the documentation or the UI says it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most of what a maintainer needs, Zoomies prints for you. A report with
+        these answered usually skips a round of questions. A vulnerability is
+        not a bug report: use a [private advisory](https://github.com/eyupio/zoomies/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `zoomies version`, on the controller and on the agent too if they differ.
+      placeholder: zoomies 1.3.5 (0123abc) linux/amd64 go1.27.2
+    validations:
+      required: true
+  - type: input
+    id: problem-code
+    attributes:
+      label: Problem code
+      description: The code from the problems panel or the log, such as `bind.public_no_tls`. Every code has a row at https://zoomies.sh/problem-codes/. Leave it empty if there was none.
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: The output of `zoomies config print`, which is already blanked of secrets. Check it before you paste it.
+      render: yaml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Please read them before pasting. A job's output is yours, and a controller's log can name repositories.
+      render: text
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How Zoomies is deployed
+      options:
+        - Native service (systemd)
+        - Docker Compose
+        - Docker or Podman, run by hand
+        - A PaaS or a provider's marketplace image
+        - Windows agent
+        - Other

@@ -2,6 +2,10 @@ module github.com/eyupio/zoomies
 
 go 1.27.1
 
+// `npm ci` unpacks a package that ships Go source, and `./...` would take it
+// into go vet, staticcheck and go test as if it were ours.
+ignore ./web/node_modules
+
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/charmbracelet/huh v1.0.0

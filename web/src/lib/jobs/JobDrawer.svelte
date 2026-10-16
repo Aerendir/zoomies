@@ -13,7 +13,7 @@
   import { readableJobText, unresolvedJobName } from '$lib/jobs/name';
   import { CircleX } from '@lucide/svelte';
   import { cancelJobWorkflow, rerunJobWorkflow } from '$lib/api/client';
-  import { formatDuration, formatMegabytes, formatNumber, shortId } from '$lib/format';
+  import { NO_VALUE, formatDuration, formatMegabytes, formatNumber, shortId } from '$lib/format';
   import {
     HOSTED,
     jobFailed,
@@ -177,11 +177,11 @@
 
       <dl class="facts">
         <dt>Repository</dt>
-        <dd>{job.repo || '--'}</dd>
+        <dd>{job.repo || NO_VALUE}</dd>
 
         <dt>Workflow</dt>
         <dd>
-          {job.workflow || '--'}
+          {job.workflow || NO_VALUE}
           {#if job.run_number}<span class="muted">#{job.run_number}</span>{/if}
         </dd>
 
@@ -351,7 +351,7 @@
               job.peak_memory_mb ? formatMegabytes(job.peak_memory_mb) : '',
             ]
               .filter(Boolean)
-              .join(' · ') || '--'}
+              .join(' · ') || NO_VALUE}
             {#if job.oom_killed}
               <Badge status={OOM_KILLED} />
             {/if}

@@ -8,7 +8,7 @@ description: >-
 
 # Zoomies brand
 
-<img class="zoomies-brand-original" src="../brand/logo-black-transparent.svg" alt="The Zoomies logo: a black-and-white cocker spaniel running inside a circular swish, above the Zoomies wordmark" width="360">
+![The Zoomies logo: a black-and-white cocker spaniel running inside a circular swish, above the Zoomies wordmark](brand/logo-black-transparent.svg){ .zoomies-brand-original width="360" }
 
 The identity is a fast-moving black-and-white cocker spaniel running inside a
 circular swish, paired with the Zoomies wordmark. A dog doing zoomies in

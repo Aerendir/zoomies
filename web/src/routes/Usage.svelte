@@ -24,7 +24,13 @@
   import type { Usage, UsageGrouping } from '$lib/api/types';
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
-  import { formatAbsolute, formatDuration, formatNumber, formatPercent } from '$lib/format';
+  import {
+    NO_VALUE,
+    formatAbsolute,
+    formatDuration,
+    formatNumber,
+    formatPercent,
+  } from '$lib/format';
   import Button from '$lib/components/Button.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import LoadingBoundary from '$lib/components/LoadingBoundary.svelte';
@@ -253,7 +259,7 @@
    * page is usually opened to settle.
    */
   function utilisation(executed: number, allocated: number | null): string {
-    if (allocated === null || allocated <= 0) return '--';
+    if (allocated === null || allocated <= 0) return NO_VALUE;
     return formatPercent(executed / allocated);
   }
 

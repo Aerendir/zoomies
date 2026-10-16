@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
-	"github.com/eyupio/zoomies/internal/cryptox"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/version"
 )
@@ -140,7 +139,7 @@ func checkKey(cfg *config.Config, m *Manifest) error {
 	if m.Key.Fingerprint == "" {
 		return nil
 	}
-	key, err := ConfiguredKey(cfg)
+	key, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		return fmt.Errorf("this backup needs the encryption key whose fingerprint is %s, and this host has none: %w "+
 			"(put it where security.encryption_key_file points, or pass it in ZOOMIES_ENCRYPTION_KEY)", m.Key.Fingerprint, err)
@@ -151,18 +150,6 @@ func checkKey(cfg *config.Config, m *Manifest) error {
 			"put the right key in place first", got, m.Key.Fingerprint)
 	}
 	return nil
-}
-
-// ConfiguredKey resolves the key this host is configured with, without
-// generating one: a restore is never a first run.
-func ConfiguredKey(cfg *config.Config) (*cryptox.Key, error) {
-	if raw := strings.TrimSpace(cfg.Security.EncryptionKey); raw != "" {
-		return cryptox.ParseKey(raw)
-	}
-	if path := strings.TrimSpace(cfg.Security.EncryptionKeyFile); path != "" {
-		return cryptox.LoadKeyFile(path)
-	}
-	return nil, cryptox.ErrNoKey
 }
 
 // Restore puts the backup at dir in place at cfg.Database.Path.

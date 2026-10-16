@@ -24,7 +24,7 @@
   import type { Job, WorkflowRun } from '$lib/api/types';
   import { events } from '$lib/api/sse';
   import { faultLabel, fleetFailed } from '$lib/faults';
-  import { formatDuration } from '$lib/format';
+  import { NO_VALUE, formatDuration } from '$lib/format';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import {
@@ -334,7 +334,7 @@
               {#if job.runner_id}
                 <a href="/runners/{job.runner_id}">{job.runner_name || job.runner_id}</a>
               {:else}
-                <span class="quiet">--</span>
+                <span class="quiet">{NO_VALUE}</span>
               {/if}
             </td>
             <td data-label="Failed at" class:empty={!fleetFailed(job) && !job.failed_step}>
@@ -347,7 +347,7 @@
                   <span class="failed-at">{job.failed_step.name}</span>
                 </Tooltip>
               {:else}
-                <span class="quiet">--</span>
+                <span class="quiet">{NO_VALUE}</span>
               {/if}
             </td>
             <td data-label="Queue wait" class="end">
@@ -363,7 +363,7 @@
               {:else if job.duration_ms}
                 {formatDuration(job.duration_ms)}
               {:else}
-                <span class="quiet">--</span>
+                <span class="quiet">{NO_VALUE}</span>
               {/if}
             </td>
             <td data-label="On GitHub" class="end">

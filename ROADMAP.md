@@ -24,7 +24,7 @@ competing plan. New or changed delivery work belongs in this file first.
 
 Zoomies is stable in real use. Three full releases shipped in a week
 (`v1.0.0` on 13 September, `V1.1.0` on 15 September and `v1.2.0` on 18
-September, which is what `:latest` resolves to now) and since 18 September
+September, the last of the three) and since 18 September
 this repository's own CI, CodeQL, fuzzing and release set-up jobs run on a
 Zoomies fleet (`zoomies-linux-x64`) through the build under test, with only
 the arm64 and Windows legs left on GitHub's runners, and, since 19 September,

@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       runner:
-        description: "Where to build. github is the escape hatch from a single vendor."
+        description: "Where to build. github is the escape hatch from a single vendor, and from the fleet: nothing in the run waits on either."
         type: choice
         default: blacksmith
         options: [blacksmith, github]
@@ -28,8 +28,8 @@ on:
 permissions:
   contents: read
 
+# The Go version is in .github/actions/setup-go, which every job uses.
 env:
-  GO_VERSION: "1.27.2"
   NODE_VERSION: "22"
 
 jobs:
@@ -44,7 +44,11 @@ jobs:
     # `V1.1.0` matched nothing, built nothing, and was published as a full
     # release with no assets while every job showed as skipped.
     if: github.event_name == 'workflow_dispatch' || github.event.release.tag_name != 'dev'
-    runs-on: zoomies-linux-x64
+    # The fleet, unless a manual run asks for GitHub's machines. This job picks
+    # where everything else builds, so with runner=github it cannot be the one
+    # thing in the run that still waits on the fleet.
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner == 'github') && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 10 # the longest successful run seen was under a minute
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
@@ -57,11 +61,36 @@ jobs:
           # workflow is dispatched by hand.
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
           RUNNER: ${{ inputs.runner || 'blacksmith' }}
+        # bash, not the runner's default, for the regular expression below.
+        shell: bash
         run: |
           set -eu
           case "$TAG" in
             v*) ;;
             *) echo "::error::$TAG is not a release tag; they begin with a lower-case v" && exit 1 ;;
+          esac
+          # A full release is what `zoomies upgrade` can offer, and it offers a
+          # tag of exactly three numbers: this pattern is internal/updates's
+          # ValidTag, and a test in internal/docs keeps the two equal. A fourth
+          # number used to pass the check above, build, publish as "Latest" and
+          # then sit where no controller could be updated to it, so it is
+          # refused here, before anything is built. The match is on the whole
+          # string, so a tag with a second line cannot pass for one and write
+          # an output of its own. A hyphen still means "prerelease", which the
+          # updater never offers, so a pre-release keeps its freedom of shape.
+          FULL_RELEASE_TAG='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          PRERELEASE_TAG='^v[0-9]+(\.[0-9]+)*-[0-9A-Za-z.-]+$'
+          case "$TAG" in
+            *-*)
+              if ! [[ "$TAG" =~ $PRERELEASE_TAG ]]; then
+                echo "::error::$TAG is not a pre-release tag. A pre-release is v, numbers and a hyphen with letters, digits, dots or hyphens after it, such as v1.3.7-rc1."
+                exit 1
+              fi ;;
+            *)
+              if ! [[ "$TAG" =~ $FULL_RELEASE_TAG ]]; then
+                echo "::error::$TAG is not a tag zoomies upgrade can offer. A full release is v and three numbers, such as v1.3.7; a fourth number is refused by the updater. Name a pre-release with a hyphen (v1.3.7-rc1), or cut the next patch version. See RELEASING.md."
+                exit 1
+              fi ;;
           esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           # The tag is v1.2.3 and the version a binary reports is 1.2.3.
@@ -114,6 +143,7 @@ jobs:
   binaries:
     needs: setup
     runs-on: ${{ needs.setup.outputs.runs-on }}
+    timeout-minutes: 30 # the longest successful run seen was 6 minutes
     permissions:
       contents: write
       # What signs the provenance: an attestation says these bytes came from
@@ -124,8 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ needs.setup.outputs.tag }}" }
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
+      - uses: ./.github/actions/setup-go
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -207,6 +236,7 @@ jobs:
   images:
     needs: setup
     runs-on: ${{ needs.setup.outputs.runs-on }}
+    timeout-minutes: 45 # the longest successful run seen was 8 minutes
     permissions:
       contents: read
       packages: write
@@ -386,6 +416,7 @@ jobs:
     name: Runner image (${{ matrix.tag }}, ${{ matrix.arch }})
     needs: setup
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || needs.setup.outputs.runs-on }}
+    timeout-minutes: 60 # the longest successful run seen was 22 minutes
     permissions:
       contents: read
       packages: write
@@ -656,6 +687,7 @@ jobs:
     needs: [setup, runner-images]
     if: ${{ !cancelled() && needs.setup.result == 'success' }}
     runs-on: ${{ needs.setup.outputs.runs-on }}
+    timeout-minutes: 15 # the longest successful run seen was 1 minute
     permissions:
       contents: read
       packages: write

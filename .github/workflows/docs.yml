@@ -69,6 +69,7 @@ jobs:
     # ref really is main. workflow_dispatch can be triggered by GITHUB_TOKEN.
     if: github.event.action != 'closed' && github.event_name == 'release' && github.event.repository.has_pages
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # the longest successful run seen was under a minute
     permissions:
       actions: write
     steps:
@@ -96,6 +97,7 @@ jobs:
     # escape hatch here is one expression: publishing documentation must not be
     # impossible because a runner vendor is having a bad day.
     runs-on: ${{ inputs.runner == 'github' && 'ubuntu-latest' || 'blacksmith-4vcpu-ubuntu-2404' }}
+    timeout-minutes: 15 # the longest successful run seen was 1 minute
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -207,6 +209,7 @@ jobs:
     if: github.event.action != 'closed' && github.event.repository.has_pages && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ${{ inputs.runner == 'github' && 'ubuntu-latest' || 'blacksmith-4vcpu-ubuntu-2404' }}
+    timeout-minutes: 15 # the longest successful run seen was 1 minute
     # Pages takes one deployment at a time, so deployments queue behind one
     # another here and are never cancelled. This used to be the whole
     # workflow's group, which also held every pull request's build: one could

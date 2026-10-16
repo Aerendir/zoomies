@@ -450,7 +450,11 @@ test('a provider round-trips through a draft and back, without ever carrying its
     idle_timeout_ms: 900_000,
     cost_per_machine_hour: 0.08,
     enabled: true,
-  } as Provider;
+    credentials_configured: true,
+    paused: false,
+    machines: {},
+    owned: 0,
+  };
 
   const draft = draftFromProvider(provider);
   assert.equal(draft.credential, '', 'never populated from a provider that already exists');

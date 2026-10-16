@@ -36,10 +36,10 @@ test('an Update answer overtaken by a frame is followed by a read of its own', a
   const { reads, asked, taken, actions, frame } = harness();
   const pressed = actions.updateController('v1.3.5');
   frame('the frame of the pass the press started');
-  asked[0].resolve('the answer, older than the frame');
+  asked[0]!.resolve('the answer, older than the frame');
   await pressed;
   assert.equal(reads.length, 1, 'the document is read again');
-  reads[0]('the document as it is now');
+  reads[0]!('the document as it is now');
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(taken.at(-1), 'the document as it is now');
 });
@@ -49,7 +49,7 @@ test('an Update answer overtaken by a frame is followed by a read of its own', a
 test('an Update answer with no frame meanwhile is taken and nothing is read again', async () => {
   const { reads, asked, taken, actions } = harness();
   const pressed = actions.updateController('v1.3.5');
-  asked[0].resolve('the answer');
+  asked[0]!.resolve('the answer');
   await pressed;
   assert.deepEqual(taken, ['the answer']);
   assert.equal(reads.length, 0);
@@ -62,12 +62,12 @@ test('the read after an overtaken Update answer is not one already in flight', a
   const earlier = frames.refresh();
   const pressed = actions.updateController('v1.3.5');
   frame('a frame');
-  asked[0].resolve('the answer');
+  asked[0]!.resolve('the answer');
   await pressed;
   assert.equal(reads.length, 2, 'the read after the answer is a request of its own');
-  reads[0]('older than the frame');
+  reads[0]!('older than the frame');
   await earlier;
-  reads[1]('the newest');
+  reads[1]!('the newest');
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(taken, ['a frame', 'the answer', 'the newest']);
 });
@@ -77,7 +77,7 @@ test('the read after an overtaken Update answer is not one already in flight', a
 test('a refused Update takes nothing, reads nothing and throws the refusal', async () => {
   const { reads, asked, taken, actions } = harness();
   const pressed = actions.updateController('v1.3.5');
-  asked[0].reject(new Error('Updating is off.'));
+  asked[0]!.reject(new Error('Updating is off.'));
   await assert.rejects(pressed, /Updating is off/);
   assert.deepEqual(taken, []);
   assert.equal(reads.length, 0);
@@ -89,7 +89,7 @@ test('the rollout buttons follow an overtaken answer with a read of their own', 
     const { reads, asked, actions, frame } = harness();
     const pressed = actions[press]();
     frame('a frame');
-    asked[0].resolve('the answer');
+    asked[0]!.resolve('the answer');
     await pressed;
     assert.equal(reads.length, 1, press);
   }

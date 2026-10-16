@@ -23,7 +23,7 @@
   import type { Job, JobExplanation } from '$lib/api/types';
   import { getJobExplanation } from '$lib/api/client';
   import { faultDetail, faultLabel, fleetFailed } from '$lib/faults';
-  import { formatDuration, toMillis } from '$lib/format';
+  import { NO_VALUE, formatDuration, toMillis } from '$lib/format';
   import { jobStatus } from '$lib/status';
   import { fleet } from '$lib/state/fleet.svelte';
   import Duration from '$lib/components/Duration.svelte';
@@ -208,7 +208,7 @@
         </div>
         <div>
           <dt>Ceiling</dt>
-          <dd class="tabular">{pool?.max_runners ?? '--'}</dd>
+          <dd class="tabular">{pool?.max_runners ?? NO_VALUE}</dd>
         </div>
       </dl>
     {/if}

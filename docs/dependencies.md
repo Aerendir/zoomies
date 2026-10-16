@@ -17,7 +17,7 @@ Two things are deliberately **not** here, and both were close calls, see
 
 | Module | Why |
 | --- | --- |
-| `github.com/tailscale/tailcat` | Built-in encrypted private transport for agents and, through `zoomies gateway`, for providers on a home network; NAT traversal and relay fallback without installing and supervising a separate tunnel process. Pinned to v0.6.0; requires Go 1.27.1. |
+| `github.com/tailscale/tailcat` | Built-in encrypted private transport for agents and, through `zoomies gateway`, for providers on a home network; NAT traversal and relay fallback without installing and supervising a separate tunnel process. Pinned in `go.mod`, which is the one place its version is written; requires Go 1.27.1. |
 | `tailscale.com` | Tailcat’s network and key types, plus a local DERP test relay to verify real tunnel behaviour without hosted infrastructure. |
 | `modernc.org/sqlite` | Pure-Go SQLite. No cgo means the binary is static, cross-compiles to five platforms from one machine, and runs on distroless. |
 | `github.com/go-chi/chi/v5` | Router. `net/http`'s 1.22 mux nearly suffices, but chi's middleware chaining and sub-router mounting keep the API's role and audit middleware readable. Small, stable, no reflection. |
@@ -27,6 +27,7 @@ Two things are deliberately **not** here, and both were close calls, see
 | `golang.org/x/oauth2` | OIDC's authorisation-code flow. |
 | `github.com/coreos/go-oidc/v3` | OIDC discovery and ID-token verification, including JWKS rotation: single sign-on, and the GitHub Actions tokens Zoomies-only AI Context uploads carry. Optional features, well-maintained library. |
 | `github.com/prometheus/client_golang` | The metrics endpoint. The exposition format has enough edge cases that hand-writing it is a false economy. |
+| `github.com/prometheus/client_model` | The metric type a test reads a value back out of (`dto.Metric`), so a timing can be asserted on without parsing the text format. Only a test imports it, and `client_golang` already requires it, so it adds nothing to the build. |
 | `gopkg.in/yaml.v3` | `zoomies.yaml`. Strict decoding turns a misspelled key into an error naming the line. |
 | `github.com/charmbracelet/huh` | The installer's prompts, select, input, confirm, with validation. It is what makes `zoomies init` feel like a product rather than a script. It brings `bubbletea` with it as its runtime, which is why that appears in `go.mod` as indirect and has no row of its own. |
 | `github.com/charmbracelet/lipgloss` | Styling for the installer and the CLI's table output. |
@@ -43,7 +44,7 @@ Runtime (shipped to the browser):
 | Package | Why |
 | --- | --- |
 | `svelte` | The framework. Runes, no virtual DOM, and a compiled output small enough to hit the 200 KB shell budget. |
-| `@tanstack/svelte-table` / `@tanstack/table-core` | Headless data-grid logic (sorting, filtering, column visibility, row selection) with our own markup. Reimplementing this correctly, including keyboard navigation over a virtualised body, is weeks. |
+| `@tanstack/svelte-table` | Headless data-grid logic (sorting, filtering, column visibility, row selection) with our own markup. Reimplementing this correctly, including keyboard navigation over a virtualised body, is weeks. |
 | `@xterm/xterm` + `addon-fit`, `addon-search`, `addon-webgl` | The log viewer. 100k lines without jank is a hard requirement, and xterm's WebGL renderer is the reason it is achievable. |
 | `@lucide/svelte` | Icons. Imported individually so tree-shaking keeps only what is used. |
 | `@fontsource-variable/inter`, `@fontsource/jetbrains-mono` | Self-hosted fonts. An air-gapped install must not make a third-party font request, and neither should anyone else's browser. |

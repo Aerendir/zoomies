@@ -190,7 +190,7 @@ func shipFromCLI(ctx context.Context, e *env, cfg *config.Config, st *store.Stor
 // whose controller may not be running, so a database that will not open is not
 // fatal -- the file's destinations are the ones that work in that case anyway.
 func remotesFor(ctx context.Context, cfg *config.Config, st *store.Store) ([]backup.ResolvedRemote, error) {
-	key, err := backup.ConfiguredKey(cfg)
+	key, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		// Without the key the stored secrets cannot be opened, and
 		// ResolveRemotes says so per destination rather than here.

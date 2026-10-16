@@ -19,6 +19,7 @@ import {
 import type { LucideIcon } from '@lucide/svelte';
 import type { Backup } from '$lib/api/types';
 import type { StatusTone } from '$lib/status';
+import { NO_VALUE } from '../format';
 
 /** What each source is called, and how it is drawn. */
 export const SOURCES: Record<
@@ -112,7 +113,7 @@ export function keyStatus(
 
 /** A short form of a migration name: `0035_runner_fault_kind.sql` → `0035`. */
 export function schemaShort(latest: string | undefined): string {
-  if (!latest) return '--';
+  if (!latest) return NO_VALUE;
   const m = /^(\d+)/.exec(latest);
   return m?.[1] ?? latest.replace(/\.sql$/, '');
 }

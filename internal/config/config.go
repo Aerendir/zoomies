@@ -1598,10 +1598,6 @@ func (c *Config) readFile(path string) error {
 	return nil
 }
 
-// LoadOrDefault is Load, but a config file that fails to parse is fatal while a
-// missing one is not. It is what the daemon entry points call.
-func LoadOrDefault(path string) (*Config, error) { return Load(path) }
-
 // Save writes the configuration to path with 0640 permissions.
 //
 // It writes what an operator actually chose, not the whole struct. The two
@@ -1671,7 +1667,7 @@ func (c *Config) sparse() map[string]any {
 		} else if text == "" {
 			continue
 		}
-		putPath(out, s.Key, yamlValue(s, value))
+		SetNested(out, s.Key, yamlValue(s, value))
 	}
 	return out
 }
@@ -1683,20 +1679,6 @@ func yamlValue(s Setting, value any) any {
 		return Text(s, value)
 	}
 	return value
-}
-
-// putPath writes a dotted key into a tree of maps.
-func putPath(into map[string]any, key string, value any) {
-	parts := strings.Split(key, ".")
-	for _, part := range parts[:len(parts)-1] {
-		child, ok := into[part].(map[string]any)
-		if !ok {
-			child = map[string]any{}
-			into[part] = child
-		}
-		into = child
-	}
-	into[parts[len(parts)-1]] = value
 }
 
 // normaliseCheckNames lowercases and trims a list of check names and drops the

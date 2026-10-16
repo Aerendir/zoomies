@@ -8,7 +8,7 @@
 <script lang="ts">
   import Tooltip from '$lib/components/Tooltip.svelte';
   import type { RunnerDetail } from '$lib/api/types';
-  import { formatNumber, shortId } from '$lib/format';
+  import { NO_VALUE, formatNumber, shortId } from '$lib/format';
   import CopyButton from '$lib/components/CopyButton.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
 
@@ -65,7 +65,7 @@
 
   <div class="row">
     <dt>Requested image</dt>
-    <dd class="mono break">{runner.image || '--'}</dd>
+    <dd class="mono break">{runner.image || NO_VALUE}</dd>
   </div>
 
   <div class="row">

@@ -20,6 +20,7 @@ const auto: PoolAuto = {
   warm: 0,
   cap: 0,
   paused: false,
+  kept: true,
   hosts: [],
   slots: 0,
   summary: 'x',

@@ -1,7 +1,6 @@
 package naming
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 )
@@ -57,11 +56,6 @@ func (i Image) Tag() string {
 
 // Ref is the fully qualified image reference for this variant.
 func (i Image) Ref() string { return RunnerImageRepo + ":" + i.Tag() }
-
-// Describe renders the variant for prose: "Ubuntu 24.04 (amd64, arm64)".
-func (i Image) Describe() string {
-	return fmt.Sprintf("%s %s (%s)", PrettyOS(i.OS), i.Version, strings.Join(i.Arches, ", "))
-}
 
 // Supports reports whether this variant is published for an architecture. An
 // empty arch is not a mismatch -- the caller simply has not said -- but an

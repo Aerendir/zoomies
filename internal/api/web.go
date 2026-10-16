@@ -20,11 +20,14 @@ import (
 
 // webdist holds the built operator UI.
 //
-// The directory is produced by `make ui` (Vite writes straight into it) and the
-// Makefile keeps an index.html placeholder there for builds that skip the UI,
-// so this embed never fails on a fresh checkout. The all: prefix is what pulls
-// in dot-prefixed files, which a bundler will happily emit and which the
-// default embed rules would silently drop.
+// The directory is produced by `make ui` (Vite writes straight into it) and is
+// not committed, and an embed of a missing or empty directory does not compile.
+// A fresh checkout therefore fails every Go command that loads this package
+// ("pattern all:webdist: no matching files found") until `make build-nogui` or
+// `make ui-stub` has written an index.html placeholder there for builds that
+// skip the UI. The all: prefix is what pulls in dot-prefixed files, which a
+// bundler will happily emit and which the default embed rules would silently
+// drop.
 //
 //go:embed all:webdist
 var webdist embed.FS

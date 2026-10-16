@@ -43,7 +43,7 @@
     worstCoverageState,
     worstSeverity,
   } from '$lib/kennel/words';
-  import { formatNumber } from '$lib/format';
+  import { capitalise, formatNumber } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import { kennelClub } from '$lib/state/kennel.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
@@ -130,10 +130,6 @@
   const floor = $derived(overview ? countsAreAFloor(overview) : false);
   const floorText = $derived(overview ? floorSentence(overview) : '');
   const bestWord = $derived(kennelStatus('best_in_show', undefined, prefs.quirkyStatus).label);
-
-  function capitalise(word: string): string {
-    return word ? word.charAt(0).toUpperCase() + word.slice(1) : word;
-  }
 
   // A card opens the repositories it counts, and only when it counts some: a link
   // to an empty list is a click that finds nothing. "Partly checked" adds two

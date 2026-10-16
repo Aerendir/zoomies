@@ -29,7 +29,7 @@ function result(
   };
 }
 
-/** A full report: only what the page reads from it is filled in, and `summary` is left out because nextStep never reads it. */
+/** A full report: only what the page reads from it is filled in, and `summary` is zeros because nextStep never reads it. */
 function report(results: DoctorResult[], { reboot = false, container = false } = {}): DoctorReport {
   return {
     checked_at: new Date(now).toISOString(),
@@ -38,6 +38,7 @@ function report(results: DoctorResult[], { reboot = false, container = false } =
     container,
     reboot_pending: reboot,
     results,
+    summary: { counted: 0, warnings: 0, errors: 0, skipped: 0, suggestions: 0, accepted: 0 },
   };
 }
 

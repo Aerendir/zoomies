@@ -7,10 +7,11 @@ Scoped guidance for CI and generated files, read in addition to the root [AGENTS
 Beyond tests and lint, several files must stay in sync with their sources. Each
 has a CI job that diffs them:
 
-* `internal/api/openapi_spec.go` is generated from `api/openapi.yaml`. After
-  editing the spec, run `go run internal/api/gen_openapi.go` from the repo root.
-* `web/src/lib/api/schema.d.ts` is generated from the same spec. Run
-  `make openapi` and commit the result.
+* `internal/api/openapi_spec.go` is generated from `api/openapi.yaml`, and
+  `web/src/lib/api/schema.d.ts` from the same spec. After editing the spec, run
+  `make openapi`, which writes both, and commit the result. (`go run
+  internal/api/gen_openapi.go` alone writes only the first, and a stale second
+  fails the `ui` job.)
 * `internal/catalog/catalog.json` and the check list on `docs/kennel-club.md`
   are generated from `docs/problem-codes.md` and the Kennel registry by
   `make generate`; `TestTheCatalogIsCurrent` fails on a stale copy.
@@ -18,7 +19,9 @@ has a CI job that diffs them:
   both workflows' build matrices, the Makefile's `variant.*` rows and the table
   in `docs/naming.md`. Adding or swapping an operating system is a row there and
   then `make generate`; editing any of the four by hand fails a test in
-  `internal/naming`.
+  `internal/naming`. The base-image digests in those rows are moved weekly by
+  `runner-bases.yml`, which opens a pull request (`make runner-bases` does the
+  same by hand): Dependabot cannot see them, and five of seven had aged.
 * `install.sh` at the repo root is copied verbatim to the site root; the script
   people `curl` is the script a contributor edits. Do not create a second copy.
   `install.ps1` is published the same way and is held to the same rule; the
@@ -28,11 +31,28 @@ has a CI job that diffs them:
   enforces it, the number is documented in `docs/ui-guidelines.md`). Route chunks
   are excluded, so move weight to a lazily loaded route rather than raising the
   budget.
+* The full-release tag pattern in `release.yml` (`FULL_RELEASE_TAG`) must equal
+  `updates.ValidTag`, which is the only tag shape `zoomies upgrade` offers. A
+  test in `internal/docs` compares them, so changing one alone fails it; see
+  [RELEASING.md](../RELEASING.md).
 * `go mod tidy` must leave `go.mod`/`go.sum` unchanged, and `gofmt -l` must be
   empty.
 * `govulncheck ./...` must find nothing reachable. It runs in its own workflow,
   on every change and weekly against `main`, so a module found vulnerable after
   it merged still gets reported.
+* `.github/workflows/zoomies-ai-context.yml` and `.github/zoomies-ai-context/`
+  belong to Zoomies AI Context, which verifies them byte for byte against
+  `internal/aicontext`'s templates. Do not edit them by hand, and do not point
+  Dependabot at them: a change is read as somebody's edit and closes the
+  context's access gate until the bot reinstalls the file. A test in
+  `internal/docs` keeps Dependabot away. Their pins move when a release changes
+  the template, which needs the previous template kept as a recognised
+  generation (`olderGenerations` in `workflow.go`).
+* The Go CI and releases use is written once, in `.github/actions/setup-go`, and
+  every job calls that action; `go.mod` holds the lower floor a contributor
+  needs and gets no `toolchain` line. The UI's Node major is `NODE_VERSION` in
+  `ci.yml` and `release.yml`, `.nvmrc` and the `ui` stage of `deploy/Dockerfile`,
+  changed together. `internal/docs` tests all of it, so one cannot move alone.
 * Every `uses:` in `.github/workflows` is pinned to a commit with its release
   in a comment, and a workflow with more than one job grants no `write`
   permission at the top. Both are tested in `internal/docs`; Dependabot moves a
@@ -53,3 +73,8 @@ has a CI job that diffs them:
   and that the header names a release: `hooks/source.py` resolves the latest
   release, stars and forks from the GitHub API at build time, and an offline
   build is allowed to go without them where the published site is not.
+* Every job in every workflow has a `timeout-minutes` at about two to three
+  times the longest successful run, and a workflow file is named in lower-case
+  words joined by hyphens. Both are tested in `internal/docs`: a hung job holds
+  a fleet slot for GitHub's six-hour default, and a space in a name makes the
+  file the one everything has to quote.

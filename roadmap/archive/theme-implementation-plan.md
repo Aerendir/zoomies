@@ -30,7 +30,7 @@ It also found and fixed one real reflow defect: the Settings rail's hidden group
 labels escaped the rail's horizontal scroll area at 1180 pixels with enlarged
 text, widening the document to 2098 pixels. Classic was affected too.
 
-[roadmap/plans/2026-10-14-mission-control-style.md](roadmap/plans/2026-10-14-mission-control-style.md)
+[roadmap/plans/2026-10-14-mission-control-style.md](../plans/2026-10-14-mission-control-style.md)
 is the source of current status and carries the validation detail. Classic
 remains the default, Mission Control is a browser-local choice, and the design and
 phase descriptions below remain the implementation specification.
@@ -61,19 +61,19 @@ Success is a readable, recognisable, selectable visual system applied consistent
 - Existing shell: `web/src/App.svelte`, `web/src/lib/shell/{Nav,NavMenu,TopBar}.svelte`, `web/src/lib/shell/sections.ts`.
 - Existing preferences: `web/src/lib/state/{theme,prefs,viewport}.svelte.ts`, `web/index.html`.
 - Existing tokens and state vocabulary: `web/src/lib/styles/tokens.css`, `web/src/lib/status.ts`, `web/src/lib/state/status-style.ts`.
-- New findings appended to `UI_AUDIT.md`, beginning “14 October 2026”. Historical findings are not evidence that an old defect persists.
+- New findings appended to `ui-audit-2026-10-01.md` (the audit this plan answered), beginning “14 October 2026”. Historical findings are not evidence that an old defect persists.
 
 Use British spelling, existing Svelte 5 runes and API clients. All production colours belong in tokens. Do not add a router, state library, chart library, icon set or new font package for this work. Keep original logo artwork, existing logo-treatment options and the fixed status meanings. Do not copy the standalone mock's JavaScript or placeholder symbols into production.
 
 ## Reviewable designs
 
-Open [design/theme-review/mockups.html](design/theme-review/mockups.html). It is a standalone interactive concept with five screens, a Problems drawer, an assistant placeholder and a first-job success state. Serve it over loopback if the browser blocks local file URLs. See [the artefact index](design/theme-review/README.md) for all 12 main captures and the six current-app comparison captures.
+Open [design/theme-review/mockups.html](../../design/theme-review/mockups.html). It is a standalone interactive concept with five screens, a Problems drawer, an assistant placeholder and a first-job success state. Serve it over loopback if the browser blocks local file URLs. See [the artefact index](../../design/theme-review/README.md) for all 12 main captures and the six current-app comparison captures.
 
-![Mission Control overview, desktop](design/theme-review/concept-overview-1440.png)
+![Mission Control overview, desktop](../../design/theme-review/concept-overview-1440.png)
 
-![Mission Control appearance selector, desktop](design/theme-review/concept-appearance-1440.png)
+![Mission Control appearance selector, desktop](../../design/theme-review/concept-appearance-1440.png)
 
-![Mission Control jobs, phone](design/theme-review/concept-jobs-375.png)
+![Mission Control jobs, phone](../../design/theme-review/concept-jobs-375.png)
 
 ### What the mock specifies, and what it simplifies
 

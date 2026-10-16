@@ -13,7 +13,7 @@ the setting to change, and maintainers who read what comes in.
 | You want to | Go to |
 | --- | --- |
 | Work out why something is not doing what you expected | [Troubleshooting](https://zoomies.sh/troubleshooting/), and the problems panel in your own UI; it names the setting rather than the symptom |
-| Ask how to do something | [Discussions](https://github.com/eyupio/zoomies/discussions) |
+| Ask how to do something | [Issues](https://github.com/eyupio/zoomies/issues), labelled `question`. Discussions are not enabled on this repository |
 | Report a bug | [Issues](https://github.com/eyupio/zoomies/issues) |
 | Report a vulnerability | A [private advisory](https://github.com/eyupio/zoomies/security/advisories/new). Not an issue, not a discussion, see [SECURITY.md](SECURITY.md) |
 | Propose a change | [CONTRIBUTING.md](CONTRIBUTING.md) |

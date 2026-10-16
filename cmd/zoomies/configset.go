@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/eyupio/zoomies/internal/config"
@@ -51,18 +49,8 @@ func openForSettings(ctx context.Context, cfgPath string) (*config.Config, *stor
 	// A missing key is not fatal here: everything but a credential can still be
 	// read and written without one, and refusing the whole command would take
 	// away the tool somebody uses when the key is the thing that is wrong.
-	key, _ := loadSettingsKey(cfg)
+	key, _ := cfg.ResolveEncryptionKey()
 	return cfg, st, key, func() { st.Close(); _ = unlock() }, nil
-}
-
-func loadSettingsKey(cfg *config.Config) (*cryptox.Key, error) {
-	if raw := strings.TrimSpace(cfg.Security.EncryptionKey); raw != "" {
-		return cryptox.ParseKey(raw)
-	}
-	if path := strings.TrimSpace(cfg.Security.EncryptionKeyFile); path != "" {
-		return cryptox.LoadKeyFile(path)
-	}
-	return nil, os.ErrNotExist
 }
 
 // effective assembles the configuration the way the controller does, so these

@@ -357,12 +357,20 @@ func TestOneDescriptionPerScreenshot(t *testing.T) {
 // not there or to leave a top-level directory out.
 var layouts = []string{"../../README.md", "../../AGENTS.md"}
 
+// The contributor's map goes one level further: a package under internal/ is
+// where a contributor goes looking for a rule's home, so one missing from it
+// is a package nobody is told exists. The visitor's map summarises and does not
+// have to name them all.
+const contributorLayout = "../../AGENTS.md"
+
 // The fenced block under a layout heading, and one `path  what it is for` line
 // inside it. The continuation lines of a wrapped description start with spaces
-// and so do not match.
+// and so do not match. One space is enough to separate the two: a path as long
+// as `internal/controller` fills its column, and requiring two quietly dropped
+// those lines from the check.
 var (
 	layoutBlock = regexp.MustCompile("(?is)## (?:Project )?Layout\\n+```text\\n(.*?)```")
-	layoutLine  = regexp.MustCompile(`(?m)^(\S+)\s{2,}\S`)
+	layoutLine  = regexp.MustCompile(`(?m)^(\S+)\s+\S`)
 )
 
 // Directories that are build products, tooling or checkouts rather than parts
@@ -410,6 +418,7 @@ func TestTheLayoutBlocksDescribeTheRepositoryAsItIs(t *testing.T) {
 		}
 
 		covered := map[string]bool{}
+		named := map[string]bool{}
 		for _, m := range layoutLine.FindAllStringSubmatch(block[1], -1) {
 			path := strings.TrimSuffix(m[1], "/")
 			if _, err := os.Stat(filepath.Join(root, path)); err != nil {
@@ -418,12 +427,27 @@ func TestTheLayoutBlocksDescribeTheRepositoryAsItIs(t *testing.T) {
 			}
 			// `cmd/zoomies` is how a block says what `cmd/` holds.
 			covered[strings.SplitN(path, "/", 2)[0]] = true
+			named[path] = true
 		}
 
 		for dir := range wanted {
 			if !covered[dir] {
 				t.Errorf("%s does not say what %s/ is for", filepath.Base(doc), dir)
 			}
+		}
+
+		if doc != contributorLayout {
+			continue
+		}
+		packages, err := os.ReadDir(filepath.Join(root, "internal"))
+		if err != nil {
+			t.Fatalf("reading internal/: %v", err)
+		}
+		for _, p := range packages {
+			if !p.IsDir() || named["internal/"+p.Name()] {
+				continue
+			}
+			t.Errorf("%s does not say what internal/%s is for", filepath.Base(doc), p.Name())
 		}
 	}
 }
@@ -450,7 +474,11 @@ func TestEveryConfigurationKeyIsDocumented(t *testing.T) {
 
 	var missingKey, missingEnv []string
 	for _, s := range config.Settings() {
-		if !strings.Contains(text, s.Key) {
+		// A row of the "Every key" table, not just the key somewhere on the
+		// page: retention.jobs was named in another row's prose and in the
+		// sample file, so a plain substring check passed for a key that had no
+		// row of its own.
+		if !strings.Contains(text, "| `"+s.Key+"` |") {
 			missingKey = append(missingKey, s.Key)
 		}
 		if !strings.Contains(text, s.Env) {

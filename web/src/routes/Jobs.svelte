@@ -51,7 +51,7 @@
   import type { Job } from '$lib/api/types';
   import { events } from '$lib/api/sse';
   import { faultLabel, fleetFailed } from '$lib/faults';
-  import { formatDuration } from '$lib/format';
+  import { NO_VALUE, formatDuration } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import {
     HOSTED,
@@ -317,7 +317,7 @@
       help: 'Which class of host the job was put in, and where it ran when that was another.',
       priority: 'wide',
       hiddenByDefault: true,
-      value: (job) => classCell(job) || '--',
+      value: (job) => classCell(job) || NO_VALUE,
     },
     {
       id: 'runner',
@@ -331,7 +331,7 @@
       header: 'Controller version',
       priority: 'wide',
       hiddenByDefault: true,
-      value: (job) => job.controller_version ?? '--',
+      value: (job) => job.controller_version ?? NO_VALUE,
     },
     {
       id: 'queue_wait',
@@ -419,7 +419,7 @@
       <span class="failed-at">{job.failed_step.name}</span>
     </Tooltip>
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 
@@ -443,7 +443,7 @@
       {job.runner_name || job.runner_id}
     </a>
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 
@@ -461,7 +461,7 @@
   {:else if job.duration_ms}
     {formatDuration(job.duration_ms)}
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 

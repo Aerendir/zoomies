@@ -1107,15 +1107,32 @@ verify_signature() {
     fi
     # openssl wants the DER public key. The key is kept as the base64 the
     # release publishes, and the fixed Ed25519 SubjectPublicKeyInfo prefix is
-    # put in front of its 32 bytes.
+    # put in front of its 32 bytes. While a key is rotated RELEASE_KEY holds
+    # more than one, one per line, exactly as the binary's key set does, and the
+    # signature has to verify under one of them.
     printf '\060\052\060\005\006\003\053\145\160\003\041\000' > "$_dir/key.prefix"
-    if ! printf '%s' "$RELEASE_KEY" | openssl base64 -d -A > "$_dir/key.raw" 2>/dev/null || [ ! -s "$_dir/key.raw" ]; then
+    printf '%s\n' "$RELEASE_KEY" > "$_dir/keys.txt"
+    _keys=0 _matched=0
+    while IFS= read -r _key; do
+        _key=$(printf '%s' "$_key" | tr -d '[:space:]')
+        [ -n "$_key" ] || continue
+        _keys=$((_keys + 1))
+        if ! printf '%s' "$_key" | openssl base64 -d -A > "$_dir/key.raw" 2>/dev/null || [ ! -s "$_dir/key.raw" ]; then
+            warn "the release key built into this installer cannot be read; this download is checked by its checksum alone."
+            return 0
+        fi
+        cat "$_dir/key.prefix" "$_dir/key.raw" > "$_dir/release.der"
+        if openssl pkeyutl -verify -pubin -keyform DER -inkey "$_dir/release.der" \
+            -rawin -in "$_sums" -sigfile "$_dir/sig.raw" >/dev/null 2>&1; then
+            _matched=1
+            break
+        fi
+    done < "$_dir/keys.txt"
+    if [ "$_keys" -eq 0 ]; then
         warn "the release key built into this installer cannot be read; this download is checked by its checksum alone."
         return 0
     fi
-    cat "$_dir/key.prefix" "$_dir/key.raw" > "$_dir/release.der"
-    if openssl pkeyutl -verify -pubin -keyform DER -inkey "$_dir/release.der" \
-        -rawin -in "$_sums" -sigfile "$_dir/sig.raw" >/dev/null 2>&1; then
+    if [ "$_matched" -eq 1 ]; then
         ok "the release signature matches the release key"
     else
         die "the release signature does not match the release key." \

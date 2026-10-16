@@ -1163,6 +1163,17 @@ it installs on the checksum alone and says so. It is the one-line installer, so
 that is best effort rather than a hard requirement; `zoomies upgrade` holds a
 running fleet to the signature in full.
 
+The Proxmox connector (`connect-proxmox.sh`, and the full command the provider
+wizard shows for a host that cannot reach zoomies.sh) and the InstaPods build
+script hold their downloads to the same key, and run what they download, the
+first as root. They add one rule. Releases before v1.3.6.1 were never signed, so
+there is nothing to check on those and they are taken on their checksum with a
+warning; but a release from v1.3.6 up is refused when its signature is missing,
+cannot be read, or cannot be checked because the host has no `openssl` of 3.0 or
+later, because a script that only warned would run whatever was left after
+somebody deleted the signature. A signature that is there and does not match
+refuses in every case. `install.sh` keeps its best-effort rule for now.
+
 `release.yml` signs
 `checksums.txt` after it builds, verifies the signature
 against the committed key, and attaches `checksums.txt.ed25519` to the release.
@@ -1176,7 +1187,17 @@ that transition release is signed with the old key (still the secret) and its
 binary trusts both, so an instance running an older binary still accepts it and
 one running the transition binary accepts the next release, signed with the new
 key. `zoomies release verify` says which key a signature names. Ed25519 is the
-standard library's; nothing new is depended on.
+standard library's; nothing new is depended on. `install.sh`, `connect-proxmox.sh`
+and `deploy/instapods/fetch.sh` carry the same set in their `RELEASE_KEY`, one key
+per line, and accept a signature from any key in it; a test in `internal/docs`
+keeps each of them equal to `Default`, so a rotation edits all four together.
+
+To hold one download to a different key, for a mirror or a test that builds its
+own, pass the base64 public key to `zoomies upgrade --release-key`, or set
+`ZOOMIES_RELEASE_KEY`. The flag wins over the environment
+variable, and the environment variable wins over the keys compiled into the
+binary. With none of the three, nothing is held to a signature, and the download
+says so once.
 
 Every image says what it is without being started, in the standard OCI labels,
 `org.opencontainers.image.version`, `.revision` and `.created`. That includes

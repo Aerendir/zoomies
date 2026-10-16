@@ -33,8 +33,8 @@ concurrency:
   # newest one always gets a chance to publish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# The Go version is in .github/actions/setup-go, which every job uses.
 env:
-  GO_VERSION: "1.27.2"
   NODE_VERSION: "22"
 
 # CI defaults to the Zoomies pool. Forks use GitHub-hosted runners, and a
@@ -74,6 +74,7 @@ jobs:
     name: What changed
     if: github.event.action != 'closed'
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 15 # the longest successful run seen was 3 minutes
     outputs:
       go: ${{ steps.filter.outputs.go }}
       shards: ${{ steps.filter.outputs.shards }}
@@ -143,14 +144,26 @@ jobs:
               # Workflows for the demo organisation to copy. Nothing here runs
               # them; internal/docs reads them like any other prose.
               deploy/demo-org/*) docs=true ;;
+              # The marketplace image's bootstrap is shell the installer job lints.
+              deploy/marketplace/*.sh) deploy=true; installer=true; rest=true ;;
               deploy/*|docker-compose.yml|.dockerignore) deploy=true; rest=true ;;
               # The check each built runner image is run through.
               test/runner-image/*) deploy=true; installer=true ;;
+              # Shell the binary embeds, and the installer job lints.
+              internal/proxmoxsetup/release_signature.sh) go=true; installer=true ;;
               # The script people curl is checked by the install.sh job and
               # exercised by the upgrade test. No Go test reads it, and no
               # binary or image carries it: the site serves it, and the site's
               # own workflow rebuilds when it changes.
               install.sh|install.ps1|connect-proxmox.sh|test/install/*|test/upgrade/*) installer=true ;;
+              # Shell that nothing else in CI runs: the package-cleanup scripts
+              # delete from a registry on a schedule, the marketplace image's
+              # bootstrap runs as root on a new machine (matched above, with the
+              # rest of deploy/), and the tool-cache filler runs inside every
+              # runner image. The installer job lints them; the cleanup scripts
+              # are also prose to internal/docs, as everything under .github/ is.
+              .github/scripts/*) installer=true; docs=true ;;
+              internal/backend/toolfill.sh) go=true; installer=true ;;
               # Prose, and the workflows. internal/docs tests the problem-code
               # table, the README, the workflows and the roadmap against the
               # code, and internal/naming the image table; those two packages
@@ -185,28 +198,18 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "go=$go web=$web deploy=$deploy installer=$installer shards=$shards publish=$publish"
 
-  # The Go suite, split by package across runners. Three packages are most of
-  # it -- on the fleet the controller has taken 45 minutes, the API 29 and the
-  # store 22, single-threaded under the race detector -- so each is a shard of
-  # its own and everything else shares the fourth, along with the checks that
-  # read the whole tree. The wall-clock is now the slowest shard, and a shard
-  # can be tuned on its own.
-  #
-  # Coverage is measured on main and on a manual dispatch, not on a pull
-  # request: -coverpkg=./... with atomic counters is the most expensive
-  # instrumentation Go offers, and the number it produces is the one Codecov
-  # tracks on main. A pull request still runs every test under the race
-  # detector.
+      # These last two steps belong to the `changes` job, which every other job
+      # waits for: a pull request whose commit messages fail the check stops the
+      # run before anything takes a fleet slot, and Go is installed here for this
+      # one test only.
+      #
       # Commit messages carry no third-party names: the clean-room rule in
       # roadmap/agent-readiness.md section 2. The tree itself is checked by a
       # test in internal/docs on every run; the messages need the pull
       # request's commits, which the shallow checkout does not have, so they
       # come from the API.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: ./.github/actions/setup-go
         if: github.event_name == 'pull_request'
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
       - name: Commit messages carry no third-party names
         if: github.event_name == 'pull_request'
         env:
@@ -217,6 +220,18 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/commits" --paginate --jq '.[].commit.message' > "$RUNNER_TEMP/commit-messages.txt"
           PROVENANCE_MESSAGES_FILE="$RUNNER_TEMP/commit-messages.txt" go test ./internal/provenance -run TestTheCommitRangeIsClean
 
+  # The Go suite, split by package across runners. Three packages are most of
+  # it (on the fleet the controller has taken 45 minutes, the API 29 and the
+  # store 22, single-threaded under the race detector), so the controller and
+  # the API are two shards each, the store is one, and everything else shares
+  # the last, `rest`, along with the checks that read the whole tree. The
+  # wall-clock is now the slowest shard, and a shard can be tuned on its own.
+  #
+  # Coverage is measured on main and on a manual dispatch, not on a pull
+  # request: -coverpkg=./... with atomic counters is the most expensive
+  # instrumentation Go offers, and the number it produces is the one Codecov
+  # tracks on main. A pull request still runs every test under the race
+  # detector.
   go:
     name: Go (${{ matrix.shard }})
     needs: [changes]
@@ -235,10 +250,7 @@ jobs:
         shard: ${{ fromJSON(needs.changes.outputs.shards) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       # go:embed needs the directory to exist even when the UI is not built.
       # Every shard needs the stub, the docs shard too: its tests ask the binary
@@ -274,6 +286,15 @@ jobs:
       - name: go vet
         if: matrix.shard == 'rest'
         run: go vet ./...
+
+      # `go vet ./...` does not compile a suite behind a build tag, and the e2e
+      # and load suites are built by no other job (the drill suite is, by its
+      # own). A symbol one half of a package defines and the other half uses
+      # went unnoticed that way, with every gate green. `make lint` runs the
+      # same target.
+      - name: go vet the tagged suites
+        if: matrix.shard == 'rest'
+        run: make vet-tags
 
       - name: go mod tidy is clean
         if: matrix.shard == 'rest'
@@ -359,9 +380,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.2'
+      - uses: ./.github/actions/setup-go
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -386,12 +405,10 @@ jobs:
       contents: read
       id-token: write # Codecov authenticates uploads without a stored secret.
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 20 # the longest successful run seen was 2 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       - name: Download coverage shards
         id: download-covdata
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -436,10 +453,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       # The runtime tier runs the built binary as two real processes. It needs
       # no Docker daemon and no GitHub credentials: the backend is `process`
@@ -500,10 +514,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       # The drill needs the real binary, so this one builds; the bound turns
       # a stalled module fetch into a failure that names this step.
       - name: Build the binary
@@ -545,10 +556,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       # go:embed needs the directory to exist even when the UI is not built,
       # and the stock Windows runner has no make.
       - name: Stub the embedded UI
@@ -592,12 +600,10 @@ jobs:
     needs: [changes]
     if: github.event.action != 'closed' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.installer == 'true')
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 45 # the longest successful run seen was 16 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       # This is the one job that runs two builds of Zoomies: the last published
       # release, installed the way an operator installs it, and the build under
@@ -651,24 +657,23 @@ jobs:
     needs: [changes]
     if: github.event.action != 'closed' && needs.changes.outputs.go == 'true'
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 25 # the longest successful run seen was 9 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # staticcheck reads the compiler's export data, and 1.27.2 writes a
-      # version of it (5) that no staticcheck release can read yet: every
-      # import fails and the job reports nothing about our code. The linter
-      # looks at our source, not the standard library, so it runs on the
-      # module's floor until a staticcheck release catches up; the rest of
-      # the pipeline builds, tests and ships on GO_VERSION.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: true
+      # The same Go as every other job. This job once ran on the module's floor
+      # (1.27.1) because staticcheck reads the compiler's export data and could
+      # not read the version (5) 1.27.2 writes; release 2026.2.2 reads it, and
+      # runs clean over the whole module on 1.27.2, so the workaround is gone.
+      - uses: ./.github/actions/setup-go
       - name: Stub the embedded UI
         timeout-minutes: 1
         run: make ui-stub
+      # Pinned, so that a staticcheck release cannot fail CI with no change in the
+      # repository, and so that `make lint` and this job can be the same release.
+      # Moving it is a deliberate edit: run `make lint` with the new release first.
       - uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1.4.1
         with:
-          version: latest
+          version: "2026.2.2"
           install-go: false
 
   ui:
@@ -676,6 +681,7 @@ jobs:
     needs: [changes]
     if: github.event.action != 'closed' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true')
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 20 # the longest successful run seen was 3 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -696,6 +702,12 @@ jobs:
             || { echo "::error::src/lib/api/schema.d.ts is stale. Run 'make openapi' and commit the result."; exit 1; }
         working-directory: web
       - run: npm run check
+        working-directory: web
+      # Node's own test runner, no browser: about ten seconds. These were
+      # written, documented (CONTRIBUTING.md tells a contributor to run them) and
+      # cited as guards (AGENTS.md names one for the absent-value marker), and no
+      # job ran them, so a change could break every one and merge green.
+      - run: npm run test:unit
         working-directory: web
       # The build fails on its own if the gzipped shell exceeds the 200 KB
       # budget documented in docs/ui-guidelines.md.
@@ -728,16 +740,14 @@ jobs:
     # below unpacks them into a private prefix instead of installing them
     # system-wide when sudo is not available.
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 90 # the longest successful run seen was 46 minutes
     # The suite drives the real binary, so a Go change can break it as
     # surely as a web one.
     needs: [changes, ui]
     if: github.event.action != 'closed' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -807,7 +817,13 @@ jobs:
             # page, so its project drives a Vite dev server (see
             # web/tests/gallery.spec.ts). It rides with the group that already
             # waits on the least, rather than taking a runner slot of its own.
-            other) flags="--project=first-run --project=diagnostics --project=status --project=connect --project=updates --project=updates-mobile --project=gallery" ;;
+            #
+            # Every project in web/playwright.config.ts has to be named here or
+            # be one of the two groups above: the transfer projects were left
+            # out of this list, excluded from the two groups above by their own
+            # config, and so ran in no job at all. A test in internal/docs
+            # compares the config with this list.
+            other) flags="--project=first-run --project=diagnostics --project=status --project=connect --project=updates --project=updates-mobile --project=gallery --project=transfer --project=transfer-mobile" ;;
             *) echo "::error::unknown Playwright group $PROJECTS"; exit 1 ;;
           esac
           npm run test:e2e -- $flags
@@ -822,6 +838,7 @@ jobs:
   build-matrix:
     name: Cross-compile
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 25 # the longest successful run seen was 8 minutes
     needs: [changes, ui]
     if: github.event.action != 'closed' && needs.changes.outputs.go == 'true'
     strategy:
@@ -835,10 +852,7 @@ jobs:
           - { goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - uses: ./.github/actions/setup-go
       - name: Download webdist artifact
         id: download-webdist
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -873,6 +887,7 @@ jobs:
     if: ${{ !cancelled() && github.event.action != 'closed' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && needs.changes.outputs.publish == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     needs: [changes, go, ui, installer]
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 60 # the longest successful run seen was 21 minutes
     permissions:
       contents: write
       id-token: write
@@ -880,8 +895,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version: "${{ env.GO_VERSION }}", cache: true }
+      - uses: ./.github/actions/setup-go
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -997,6 +1011,7 @@ jobs:
     # the sudoers file or not. Both tools below are fetched without root
     # instead, which also works unchanged on a GitHub-hosted runner.
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 20 # the longest successful run seen was under a minute
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: POSIX shell syntax
@@ -1023,6 +1038,11 @@ jobs:
           shellcheck -s sh install.sh
           dash -n connect-proxmox.sh
           shellcheck -s sh connect-proxmox.sh
+          # The signature check the Proxmox wizard's pasted command carries; the
+          # copies in connect-proxmox.sh and fetch.sh are held equal to it by a
+          # test in internal/docs.
+          dash -n internal/proxmoxsetup/release_signature.sh
+          shellcheck -s sh internal/proxmoxsetup/release_signature.sh
           dash -n test/install/install-check.sh
           shellcheck -s sh test/install/install-check.sh
           shellcheck deploy/runner-entrypoint.sh
@@ -1052,6 +1072,15 @@ jobs:
             dash -n "$f"
             shellcheck -s sh -x "$f"
           done
+          # The scripts the package-cleanup workflow deletes with, and the
+          # marketplace image's bootstrap. Globbed for the same reason as the
+          # runner scripts: a new one is covered by the ones that exist.
+          for f in .github/scripts/*.sh deploy/marketplace/*.sh; do
+            dash -n "$f"
+            shellcheck -s sh "$f"
+          done
+          # Run inside the runner image by bash, and embedded in the binary.
+          shellcheck internal/backend/toolfill.sh
 
       - name: RPM package install recovery
         run: dash test/runner-image/dnf-check.sh
@@ -1066,6 +1095,7 @@ jobs:
   images:
     name: Images
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 90 # the longest successful run seen was 37 minutes
     needs: [changes, dev-binaries]
     # Main pushes and manual recovery publish matching binaries before images.
     # Pull requests and checks on other branches do not publish dev binaries,
@@ -1298,6 +1328,7 @@ jobs:
   runner-images:
     name: Runner image (${{ matrix.tag }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || (((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64') }}
+    timeout-minutes: 30 # the longest successful run seen was 8 minutes
     needs: [images]
     if: github.event.action != 'closed' && needs.images.outputs.runner == 'true'
     permissions:
@@ -1643,6 +1674,7 @@ jobs:
   runner-manifests:
     name: Runner image manifests
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 15 # the longest successful run seen was 1 minute
     needs: [images, runner-images]
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.images.outputs.publish == 'true' && needs.images.outputs.runner == 'true' && needs.runner-images.result != 'skipped' }}
     permissions:

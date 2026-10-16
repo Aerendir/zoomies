@@ -444,7 +444,7 @@ func setWindow(q url.Values, since, until string) error {
 		if raw == "" {
 			continue
 		}
-		when, err := parseWhen(raw)
+		when, err := ParseWhen(raw)
 		if err != nil {
 			return fmt.Errorf("%s %q: %w", key, raw, err)
 		}
@@ -819,50 +819,6 @@ func jsonContent(body []byte) []Content {
 func notFound(err error) bool {
 	var se StatusError
 	return errors.As(err, &se) && se.HTTPStatus() == http.StatusNotFound
-}
-
-// parseWhen accepts either a duration ago ("24h") or an absolute RFC 3339
-// timestamp, because both are what people reach for and neither is surprising.
-// It is the CLI's `--since` rule, so an agent and an operator mean the same
-// thing by the same words.
-func parseWhen(raw string) (time.Time, error) {
-	raw = strings.TrimSpace(raw)
-	if d, ok := parseAgo(raw); ok {
-		return time.Now().Add(-d), nil
-	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
-		if t, err := time.Parse(layout, raw); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("not a duration like 24h or 30d nor a timestamp like 2026-01-30 or 2026-01-30T12:00:00Z")
-}
-
-// parseAgo reads how long ago: a Go duration such as 90m or 24h, or whole days
-// or weeks as 30d and 2w, because release comparisons are made in those and
-// Go's own parser stops at hours.
-func parseAgo(raw string) (time.Duration, bool) {
-	if n, unit := len(raw)-1, time.Duration(0); n > 0 {
-		switch raw[n] {
-		case 'd':
-			unit = 24 * time.Hour
-		case 'w':
-			unit = 7 * 24 * time.Hour
-		}
-		if unit != 0 {
-			if days, err := strconv.Atoi(raw[:n]); err == nil {
-				return time.Duration(max(days, -days)) * unit, true
-			}
-		}
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, false
-	}
-	if d < 0 {
-		d = -d
-	}
-	return d, true
 }
 
 // lastLines returns the last n lines of s and how many lines s held.

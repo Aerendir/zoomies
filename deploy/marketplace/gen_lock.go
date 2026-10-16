@@ -23,17 +23,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/eyupio/zoomies/internal/naming"
+	"github.com/eyupio/zoomies/internal/registry"
 )
 
 const (
@@ -41,15 +38,6 @@ const (
 	lockFile = "images.lock"
 	envFile  = "release.env"
 )
-
-// manifestTypes is every media type the registry may answer a manifest request
-// with. A multi-architecture image is an index, a single-architecture one is a
-// manifest, and both spellings of each are still in the wild; asking for only
-// one of them gets a 404 that looks like a missing tag.
-const manifestTypes = "application/vnd.oci.image.index.v1+json, " +
-	"application/vnd.docker.distribution.manifest.list.v2+json, " +
-	"application/vnd.oci.image.manifest.v1+json, " +
-	"application/vnd.docker.distribution.manifest.v2+json"
 
 func main() {
 	if err := run(); err != nil {
@@ -83,11 +71,11 @@ func run() error {
 	}
 	sort.Strings(refs)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	resolver := registry.Resolver{}
 	digests := make(map[string]string, len(refs))
 	width := 0
 	for _, ref := range refs {
-		d, err := resolve(client, ref)
+		d, err := resolver.Resolve(ref)
 		if err != nil {
 			return fmt.Errorf("resolving %s: %w", ref, err)
 		}
@@ -111,97 +99,6 @@ func run() error {
 		fmt.Fprintf(&b, "%-*s  %s\n", width, ref, digests[ref])
 	}
 	return os.WriteFile(filepath.Join(dir, lockFile), []byte(b.String()), 0o644)
-}
-
-// resolve asks the registry what a tag points at, without pulling anything.
-// GHCR wants a token even for a public repository, and hands one out for the
-// asking; the digest is the header the registry answers a manifest request
-// with, which is exactly the value `docker pull` would pin.
-func resolve(client *http.Client, ref string) (string, error) {
-	host, repo, tag, err := split(ref)
-	if err != nil {
-		return "", err
-	}
-	token, err := pullToken(client, host, repo)
-	if err != nil {
-		return "", err
-	}
-	req, err := http.NewRequest(http.MethodHead, "https://"+registryHost(host)+"/v2/"+repo+"/manifests/"+tag, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", manifestTypes)
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("the registry answered %s", resp.Status)
-	}
-	d := resp.Header.Get("Docker-Content-Digest")
-	if !strings.HasPrefix(d, "sha256:") {
-		return "", fmt.Errorf("the registry returned no digest")
-	}
-	return d, nil
-}
-
-// split breaks a reference into the registry it lives on, the repository path
-// that registry knows it by, and the tag. Docker Hub is the awkward one: its
-// references carry no host at all, official images live under an implied
-// library/ prefix, and its API is on a different name from its references.
-func split(ref string) (host, repo, tag string, err error) {
-	rest := ref
-	host = "docker.io"
-	if i := strings.Index(ref, "/"); i >= 0 && strings.Contains(ref[:i], ".") {
-		host, rest = ref[:i], ref[i+1:]
-	}
-	repo, tag, ok := strings.Cut(rest, ":")
-	if !ok {
-		return "", "", "", fmt.Errorf("%q names no tag", ref)
-	}
-	if host == "docker.io" && !strings.Contains(repo, "/") {
-		repo = "library/" + repo
-	}
-	return host, repo, tag, nil
-}
-
-// registryHost is where the API lives, which is not always where references say
-// the image does.
-func registryHost(host string) string {
-	if host == "docker.io" {
-		return "registry-1.docker.io"
-	}
-	return host
-}
-
-// pullToken asks for anonymous pull access. Both registries hand one out for
-// the asking on a public repository; neither serves a manifest without it.
-func pullToken(client *http.Client, host, repo string) (string, error) {
-	authURL := "https://" + host + "/token?scope=repository:" + repo + ":pull&service=" + host
-	if host == "docker.io" {
-		authURL = "https://auth.docker.io/token?scope=repository:" + repo + ":pull&service=registry.docker.io"
-	}
-	resp, err := client.Get(authURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-	var out struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(body, &out); err != nil {
-		return "", fmt.Errorf("reading the registry's token: %w", err)
-	}
-	if out.Token == "" {
-		return "", fmt.Errorf("the registry issued no token for %s", repo)
-	}
-	return out.Token, nil
 }
 
 // readEnv reads the KEY=value lines of release.env. It is deliberately not a

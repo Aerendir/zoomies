@@ -21,7 +21,9 @@
   default back.
 -->
 <script lang="ts">
+  import { NO_VALUE } from '$lib/format';
   import { untrack } from 'svelte';
+  import { capitalise } from '$lib/format';
   import { SvelteMap } from 'svelte/reactivity';
   import { EyeOff, Search, Trophy } from '@lucide/svelte';
   import {
@@ -393,10 +395,6 @@
     return () => controller.abort();
   });
 
-  function capitalise(word: string): string {
-    return word ? word.charAt(0).toUpperCase() + word.slice(1) : word;
-  }
-
   const columns = $derived<GridColumn<KennelRepository>[]>([
     {
       id: 'name',
@@ -425,7 +423,7 @@
       header: 'Visibility',
       priority: 'wide',
       width: '8rem',
-      value: (row) => capitalise(row.visibility) || '--',
+      value: (row) => capitalise(row.visibility) || NO_VALUE,
     },
     {
       id: 'evaluated_at',

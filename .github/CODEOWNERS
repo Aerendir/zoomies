@@ -1,0 +1,36 @@
+# Who is asked to review a change, by path. GitHub reads the last matching
+# line, so the specific paths come after the default.
+#
+# Today one person maintains the repository, so every line names the same
+# owner. The paths are listed anyway: they are the ones CONTRIBUTING.md says
+# deserve an explicit threat and failure-mode review (authentication,
+# authorisation, secrets, runner isolation, container backends, networking,
+# upgrades and deletion paths), and when a second maintainer joins, changing the
+# owner on these lines is the only edit needed.
+#
+# `main` does not require a code owner's approval, so this asks for a review
+# and does not enforce one. A test in internal/docs fails if a path below no
+# longer exists.
+
+*                       @jnnngs
+
+# Identity, authorisation, secrets and the release signing key.
+/internal/auth/         @jnnngs
+/internal/cryptox/      @jnnngs
+/internal/releasekey/   @jnnngs
+
+# What runs on a host, how it is placed, tuned and updated.
+/internal/backend/      @jnnngs
+/internal/hosttune/     @jnnngs
+/internal/provider/     @jnnngs
+/internal/gateway/      @jnnngs
+/internal/updates/      @jnnngs
+/internal/backup/       @jnnngs
+
+# Scripts that download and run a binary, often as root, and the pipeline that
+# builds, signs and publishes one.
+/install.sh             @jnnngs
+/install.ps1            @jnnngs
+/connect-proxmox.sh     @jnnngs
+/deploy/                @jnnngs
+/.github/workflows/     @jnnngs

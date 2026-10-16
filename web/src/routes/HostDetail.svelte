@@ -31,7 +31,7 @@
   import { KIND_WORDS, fixCommand, rowKind } from '$lib/hosts/row-kind';
   import { hostCheckContext } from '$lib/assistant/contexts';
   import { eli } from '$lib/assistant/eli.svelte';
-  import { pluralise } from '$lib/format';
+  import { NO_VALUE, pluralise } from '$lib/format';
   import { niceValue } from '$lib/hosts/check-value';
   import { acceptedIds, acceptedLast, acceptNote, canAccept, endedNote } from '$lib/hosts/accept';
   import AcceptDialog from '$lib/hosts/AcceptDialog.svelte';
@@ -609,8 +609,8 @@
               <Badge label={badge.label} tone={badge.tone} />
               <a href="#{check.id}">{check.title}</a>
               <span class="now"
-                >now <code>{niceValue(check.current) || '—'}</code>, recommended
-                <code>{niceValue(check.recommended) || '—'}</code></span
+                >now <code>{niceValue(check.current) || NO_VALUE}</code>, recommended
+                <code>{niceValue(check.recommended) || NO_VALUE}</code></span
               >
             </li>
           {/each}
@@ -807,8 +807,8 @@
           <tr role="row" id={check.id} tabindex="-1">
             <th role="rowheader" scope="row">{check.title}<small>{check.id}</small></th>
             <td role="cell" data-label="Status">{@render statusCell(check)}</td>
-            <td role="cell" data-label="Current">{niceValue(check.current) || '—'}</td>
-            <td role="cell" data-label="Recommended">{niceValue(check.recommended) || '—'}</td>
+            <td role="cell" data-label="Current">{niceValue(check.current) || NO_VALUE}</td>
+            <td role="cell" data-label="Recommended">{niceValue(check.recommended) || NO_VALUE}</td>
             <td role="cell" data-label="Why / details"
               >{check.rationale}{#if check.reason}<small>{check.reason}</small>{/if}
               {#if check.command && check.status === 'warn' && !check.accepted}

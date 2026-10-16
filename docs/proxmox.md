@@ -263,7 +263,8 @@ run it, so you can read what it does before you run it. **Show the full command*
 reveals the same setup written out step by step, for a Proxmox host that cannot
 reach zoomies.sh.
 
-The command downloads and verifies a separate Zoomies binary, detects the local
+The command downloads a separate Zoomies binary, holds the release's checksums to
+the release signing key and the binary to those checksums, detects the local
 API certificate, creates a dedicated Proxmox user and privilege-separated token,
 and installs a persistent Tailcat gateway to the local API on port 8006. It sends
 the connection back over the controller's private Tailcat listener using a

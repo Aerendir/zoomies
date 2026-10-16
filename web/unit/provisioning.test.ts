@@ -61,12 +61,17 @@ const queued = { state: 'queued' as const, matched: true, hosted: false };
 test('a queued job offers every action but the one already in force', () => {
   const noop = () => {};
   const on = (job: Parameters<typeof jobProvisioningActions>[0]) =>
-    Object.fromEntries(jobProvisioningActions(job, noop).map((a) => [a.id, a]));
+    Object.fromEntries(jobProvisioningActions(job, noop).map((a) => [a.id, a])) as Record<
+      'run_now' | 'pause' | 'resume' | 'delete',
+      ReturnType<typeof jobProvisioningActions>[number]
+    >;
 
   const ready = on(queued);
   assert.equal(ready.resume.disabled, true);
   assert.equal(ready.resume.reason, PROVISIONING_IN_FORCE.resume);
-  for (const id of ['run_now', 'pause', 'delete']) assert.equal(ready[id].disabled, false, id);
+  for (const id of ['run_now', 'pause', 'delete'] as const) {
+    assert.equal(ready[id].disabled, false, id);
+  }
 
   const expedited = on({ ...queued, provision_now: true });
   assert.equal(expedited.run_now.disabled, true);

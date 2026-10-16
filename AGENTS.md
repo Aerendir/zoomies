@@ -27,15 +27,18 @@ make lint          # go vet, gofmt check, staticcheck if present, UI lint
 make fmt           # gofmt + prettier
 make dev           # controller with auth off, on :8080, for UI work
 make ui-dev        # Vite dev server proxying /api to that controller
+make test-unit     # the UI's unit tests: no browser, a few seconds
 make test-ui       # Playwright against a real built binary
-make openapi       # regenerate the UI's TypeScript client from api/openapi.yaml
+make openapi       # regenerate both copies of api/openapi.yaml: the embedded Go source and the UI's TypeScript client
 make screenshots   # recapture docs/screenshots from the real UI, both themes (needs Pillow)
 ```
 
 `go build ./...` fails on a clean checkout: `internal/api` embeds
 `internal/api/webdist`, which is a build product. Run `make build-nogui` once,
-it writes a placeholder, before any Go command that compiles that package. CI
-does the same thing as its first step.
+it writes a placeholder, before any plain Go command (`go build`, `go vet`,
+`go test`) that compiles that package. The `make` targets that run Go (`test`,
+`test-short`, `cover`, `lint`, `generate`) write the placeholder themselves, and
+never over a real UI build. CI does the same thing as its first step.
 
 Go 1.27.1 or later (`go.mod` sets the floor; CI builds with 1.27.2), Node 22 or
 later. Node is a build-time dependency only; the shipped binary is
@@ -64,6 +67,14 @@ review.
 | `internal/backend` | Docker, Podman, bare process. The Docker API is hand-rolled `net/http` against the Engine API on purpose (see below). |
 | `internal/agent` | The runner-executing half and its outbound transport. |
 | `internal/mcp` | The MCP tools and both transports (stdio for `zoomies mcp`, Streamable HTTP for `/mcp`). A tool calls the REST API through the `mcp.API` interface and nothing else (no store, no controller), so it can never do what the caller's token could not. |
+
+The rules that can be stated as an import are held by a test, not by review
+alone: `internal/scheduler`, `internal/updates` and `internal/provider` each have
+a purity or boundary test, `internal/mcp` may import only what its test lists,
+and a test in `internal/store` fails if any other package's shipped code imports
+`database/sql` or the SQLite driver. A test that fails on one of these names the
+rule; when the import is a pure helper that belongs, add it to that test's
+allowlist with a reason rather than loosening the rule.
 
 Other invariants worth knowing before you edit:
 
@@ -132,9 +143,14 @@ has a consistent voice, and matching it is part of a change looking finished.
 * **No em dashes.** Do not write `—` anywhere in this repository: prose,
   docs, comments, error messages, UI strings, commit messages or pull request
   text. Use a comma, a colon, a semicolon or parentheses, or split the sentence.
-  Do not use `--` as a stand-in either. The one exception is a lone `—` as the
-  UI's placeholder for an absent value, which `web/unit/absent-value.test.ts`
-  guards. `internal/docs/no_em_dash_test.go` fails the build on a spaced one.
+  Do not use `--` as a stand-in either. `internal/docs/no_em_dash_test.go`
+  fails the build on a spaced em dash, and `internal/docs/double_hyphen_test.go`
+  on a file that gains a spaced `--`. Older code comments still carry about six
+  thousand of the latter, and they go as their lines are rewritten, not in one
+  sweep that would bury every file's history. The one exception is the UI's
+  placeholder for an absent value, which is two hyphens: write it as `NO_VALUE`
+  from `web/src/lib/format.ts`, never as a dash of your own;
+  `web/unit/absent-value.test.ts` guards it.
 * **Diagrams are Mermaid**, in a `mermaid` fenced block beside the prose they
   explain, never ASCII art. The site renders them (`mkdocs.yml` registers the
   fence) and so does GitHub, so a diagram lives in the Markdown it belongs to and
@@ -159,6 +175,7 @@ internal/backend    Docker, Podman and bare-process runner backends
 internal/auth       identity, RBAC, tokens, audit, OIDC
 internal/api        REST, SSE, metrics, and the embedded UI
 internal/provider   the infrastructure-provider contract, its fake, and Proxmox
+internal/registry   what a container registry says a tag points at, for the digest-pinning generators
 internal/controller the reconcile loop, the machine loop and the agent task queue
 internal/agent      the runner-executing half
 internal/gateway    zoomies gateway: a private provider's end of the tunnel
@@ -177,13 +194,21 @@ internal/analysis   evidence-backed findings computed from explicit snapshots
 internal/assistant  the model-provider contract behind the assistant, and its adapters
 internal/catalog    the one machine-readable list of problem codes and Kennel Club checks
 internal/cliconfig  ~/.config/zoomies/cli.yaml: where the CLI finds its controller
+internal/docs       tests that hold the documentation to the code it describes; no source of its own
+internal/hosttune   host health and tuning: detection that never writes, and approved changes
 internal/kennel     pure evaluation of what is wrong with a repository's workflows
+internal/logging    the process-wide structured logger
 internal/machine    which host this process runs on: distribution, release, capacity
 internal/naming     the grammar for pool, host and runner names
+internal/optimisation  reviewable proposals computed from evidence handed in; reads no source and calls no model
+internal/provenance keeps third-party names out of the tree
+internal/proxmoxsetup  connecting a Proxmox host: its own principal, binary, service and state
 internal/prrepair   bounds what the model may edit when it proposes a pull request
+internal/qr         the smallest QR encoder that serves the two-step verification picture
 internal/redact     strips credentials and commit emails from text bound for a model
 internal/releasekey the release signing key: Ed25519 verification of a release's checksums
 internal/toolscan   reads workflows for the toolchains their jobs install
+internal/version    build metadata stamped in at link time
 internal/wsl        keeps an agent alive inside a WSL2 distro
 web/                the Svelte 5 UI
 test/e2e            the Docker end-to-end test, behind the `e2e` build tag
@@ -198,7 +223,9 @@ hooks/              the site's build-time metadata: git dates, llms.txt, and the
                     latest release and star count the header shows
 ROADMAP.md          the follow-on roadmap, and the decisions it asks the owner to take
 roadmap/            what supports it: the work-package record, decision records,
-                    gate evidence, the model guidance and the source document
+                    gate evidence, dated plans, the model guidance, the source
+                    document and an archive of finished ones; its README says which
+                    document answers which question
 skills/             what a coding agent installs: the zoomies skill, with a command
                     reference generated from the binary
 install.sh          the one-line installer, served from the site root

@@ -471,9 +471,6 @@ export const listJobs = (query?: Query<'listJobs'>, signal?: AbortSignal) =>
 export const getJobStats = (query?: Query<'getJobStats'>, signal?: AbortSignal) =>
   api.get<Result<'getJobStats'>>('/jobs/stats', { query, signal });
 
-export const getJob = (id: string, signal?: AbortSignal) =>
-  api.get<Result<'getJob'>>(`/jobs/${enc(id)}`, { signal });
-
 export const getJobFacets = (signal?: AbortSignal) =>
   api.get<Result<'getJobFacets'>>('/jobs/facets', { signal });
 
@@ -561,9 +558,6 @@ export const deleteJoinToken = (id: string) =>
 
 export const listInstallations = (signal?: AbortSignal) =>
   api.get<Result<'listInstallations'>>('/installations', { signal });
-
-export const getInstallation = (id: string, signal?: AbortSignal) =>
-  api.get<Result<'getInstallation'>>(`/installations/${enc(id)}`, { signal });
 
 export const createInstallation = (body: Body<'createInstallation'>) =>
   api.post<Result<'createInstallation'>>('/installations', { body });
@@ -882,9 +876,6 @@ export const importSettings = (body: Body<'importSettings'>) =>
 export const getUpdates = (signal?: AbortSignal) =>
   api.get<Result<'getUpdates'>>('/updates', { signal });
 
-/** Ask GitHub for the release list now (admin). Answers the status once it has been read. */
-export const checkForUpdates = () => api.post<Result<'checkForUpdates'>>('/updates/check', {});
-
 /**
  * Ask the update helper to replace the controller's binary (platform). Without a tag it takes the
  * newest release that can be installed on this system. Answers 202 with the status, whose
@@ -917,9 +908,6 @@ export const listBackups = (signal?: AbortSignal) =>
   api.get<Result<'listBackups'>>('/backups', { signal });
 
 export const takeBackup = () => api.post<Result<'takeBackup'>>('/backups', {});
-
-export const getBackup = (id: string, signal?: AbortSignal) =>
-  api.get<Result<'getBackup'>>(`/backups/${enc(id)}`, { signal });
 
 export const deleteBackup = (id: string) => api.del<Result<'deleteBackup'>>(`/backups/${enc(id)}`);
 
