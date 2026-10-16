@@ -371,6 +371,14 @@ generate: | $(UI_OUT)/.placeholder ## Rewrite everything generated from a table 
 	mkdir -p skills/zoomies && $(GO) run ./cmd/zoomies commands --output markdown > skills/zoomies/reference.md
 	$(GO) run ./cmd/zoomies mcp --describe --output markdown > skills/zoomies/mcp-reference.md
 
+.PHONY: runner-bases
+runner-bases: ## Move each runner image's base-image pin to what its tag points at today, and rewrite what is derived from it (needs network)
+	@# Only what the table feeds: not `make generate`, which also restamps the
+	@# problem catalogue and rewrites the skill references, and would put that
+	@# noise into the weekly pull request that runs this.
+	$(GO) run internal/naming/gen_base_digests.go
+	$(GO) run internal/naming/gen_catalogue.go
+
 .PHONY: marketplace-lock
 marketplace-lock: ## Re-resolve deploy/marketplace/images.lock against the registry (needs network)
 	$(GO) run deploy/marketplace/gen_lock.go

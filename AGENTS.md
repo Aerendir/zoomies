@@ -162,6 +162,7 @@ internal/backend    Docker, Podman and bare-process runner backends
 internal/auth       identity, RBAC, tokens, audit, OIDC
 internal/api        REST, SSE, metrics, and the embedded UI
 internal/provider   the infrastructure-provider contract, its fake, and Proxmox
+internal/registry   what a container registry says a tag points at, for the digest-pinning generators
 internal/controller the reconcile loop, the machine loop and the agent task queue
 internal/agent      the runner-executing half
 internal/gateway    zoomies gateway: a private provider's end of the tunnel

@@ -21,6 +21,15 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    # zoomies-ai-context.yml is written by Zoomies AI Context and verified against
+    # its template byte for byte (internal/aicontext/workflow.go). A bump here is
+    # read as somebody's edit: it closed the context's access gate until the bot
+    # reinstalled the file, and the reinstall undid the bump, twice. Its pins move
+    # when a release of Zoomies changes the template, not through this file. The
+    # generator's package.json and lockfile under .github/zoomies-ai-context/ are
+    # owned the same way, which is why no entry below reads them.
+    exclude-paths:
+      - .github/workflows/zoomies-ai-context.yml
 
   - package-ecosystem: gomod
     directory: /
@@ -75,6 +84,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+      time: "06:00"
+      timezone: Etc/UTC
     groups:
       docs:
         patterns: ["*"]
