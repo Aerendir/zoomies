@@ -9,7 +9,7 @@
   is what the bar is for anyone who cannot see it.
 -->
 <script lang="ts">
-  import { formatNumber, formatPercent } from '$lib/format';
+  import { NO_VALUE, formatNumber, formatPercent } from '$lib/format';
   import Tooltip from '$lib/components/Tooltip.svelte';
   export interface Segment {
     label: string;
@@ -70,7 +70,7 @@
       <div class="item" data-tone={segment.tone}>
         <i aria-hidden="true"></i>{#if segment.href}<a href={segment.href}>{segment.label}</a
           >{:else}<span>{segment.label}</span>{/if}<strong>{formatNumber(segment.value)}</strong
-        ><small>{total > 0 ? formatPercent(share(segment.value)) : '--'}</small>
+        ><small>{total > 0 ? formatPercent(share(segment.value)) : NO_VALUE}</small>
       </div>
     {/each}
   </div>

@@ -30,7 +30,7 @@
   } from '$lib/api/client';
   import type { Job, WorkflowRun } from '$lib/api/types';
   import { events } from '$lib/api/sse';
-  import { formatDuration, formatNumber } from '$lib/format';
+  import { NO_VALUE, formatDuration, formatNumber } from '$lib/format';
   import { session } from '$lib/state/session.svelte';
   import { fleet } from '$lib/state/fleet.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
@@ -525,7 +525,7 @@
   {#if run.head_branch}
     <span class="mono">{run.head_branch}</span>
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 
@@ -558,7 +558,7 @@
   {:else if run.duration_ms}
     {formatDuration(run.duration_ms)}
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 

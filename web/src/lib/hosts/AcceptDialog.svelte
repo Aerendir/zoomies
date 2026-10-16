@@ -22,6 +22,7 @@
   import Field from '$lib/components/Field.svelte';
   import Select from '$lib/components/Select.svelte';
   import Textarea from '$lib/components/Textarea.svelte';
+  import { NO_VALUE } from '$lib/format';
   import { niceValue } from '$lib/hosts/check-value';
   import type { DoctorResult } from '$lib/hosts/health';
   import {
@@ -126,8 +127,9 @@
         <Badge label="Warning" tone="pending" size="sm" />
         <strong>{check.title}</strong>
         <span class="now"
-          >Now “{niceValue(check.current) || '—'}”, recommended “{niceValue(check.recommended) ||
-            '—'}”</span
+          >Now “{niceValue(check.current) || NO_VALUE}”, recommended “{niceValue(
+            check.recommended,
+          ) || NO_VALUE}”</span
         >
       </p>
 

@@ -45,7 +45,7 @@ import type {
   WebhookDelivery,
 } from '../api/types';
 import { faultLabel } from '../faults';
-import { formatDuration, pluralise, shortId } from '../format';
+import { NO_VALUE, formatDuration, pluralise, shortId } from '../format';
 import { findingsLabel } from '../hosts/health';
 import {
   cpuResourceStatus,
@@ -318,7 +318,7 @@ function jobDetail(job: Job, news: JobNews): string | undefined {
     job.repo ?? '',
     job.head_branch ?? '',
     formatDuration(job.duration_ms),
-  ].filter((part) => part && part !== '--');
+  ].filter((part) => part && part !== NO_VALUE);
   return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
