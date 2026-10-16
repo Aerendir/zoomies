@@ -13,6 +13,15 @@ from the repository rather than written by hand, so neither can go stale:
   about a project instead of crawling it. It is generated from the navigation,
   so a page added to ``mkdocs.yml`` appears in it without anyone remembering.
 
+* **A Markdown copy of every page**, at the page's own address plus
+  ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
+  HTML is server-rendered and complete, but an assistant asked about a page
+  pays for the navigation, the footer and 90 inline icons to read it, and
+  GitHub Pages cannot answer ``Accept: text/markdown``. The source is already
+  Markdown, so the copy is the source with the parts only the theme understands
+  taken out. ``llms-full.txt`` stops at a size an assistant can read in one go;
+  the long reference pages are one link each rather than 185 KB in the middle.
+
 This is a hook rather than a plugin because it needs nothing a plugin would
 bring: the docs build stays at the three pinned dependencies in
 ``docs/requirements.txt``.
@@ -27,6 +36,8 @@ from __future__ import annotations
 
 import logging
 import os
+import posixpath
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -37,6 +48,23 @@ log = logging.getLogger("mkdocs.hooks.seo")
 _dates: dict[str, str] = {}
 # The resolved navigation, kept from on_nav so llms.txt can be written from it.
 _nav = None
+# Each page's Markdown as written, keyed by path relative to docs_dir, kept from
+# on_page_markdown for the per-page copies and llms-full.txt.
+_sources: dict[str, tuple[object, str]] = {}
+
+# A page larger than this is not copied into llms-full.txt, only linked. The
+# narrative pages (quickstart, the FAQ, the comparisons) are well under it; the
+# generated references (every setting, every API route, every problem code)
+# are several times over, and one of them would crowd out the rest.
+_FULL_PAGE_LIMIT = 15_000
+
+_comment = re.compile(r"<!--.*?-->", re.DOTALL)
+_jsonld = re.compile(r"<script\b[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
+_snippet = re.compile(r"^--8<--.*\n?", re.MULTILINE)
+_md_link = re.compile(r"(\]\()([^)\s#]+\.md)(#[^)\s]*)?(\))")
+_only_light = re.compile(r"^!\[[^\n]*\]\([^)\n]*#only-light\)[^\n]*\n?", re.MULTILINE)
+_image = re.compile(r"(!\[[^\]\n]*\]\()([^)\s#:]+)((?:#[^)\s]*)?\))")
+_leading_h1 = re.compile(r"\A\s*# [^\n]*\n")
 
 
 def _git_dates(docs_dir: str) -> dict[str, str]:
@@ -111,7 +139,75 @@ def on_page_markdown(markdown, page, config, files):
     date = _dates.get(page.file.src_uri)
     if date:
         page.meta.setdefault("git_date", date)
+    _sources[page.file.src_uri] = (page, markdown)
     return markdown
+
+
+def _clean(markdown: str, src_uri: str, urls: dict[str, str]) -> str:
+    """The page's Markdown without what only the theme understands.
+
+    Comments are notes to a maintainer, the structured-data script is the FAQ
+    saying its answers a second time, and an include line names a file in this
+    repository. Links between pages are written as ``other.md`` so they work on
+    GitHub and in the editor; here they become the page's address, because a
+    copy read on its own has no neighbouring file to resolve them against.
+    """
+    text = _comment.sub("", markdown)
+    text = _jsonld.sub("", text)
+    text = _snippet.sub("", text)
+    # Every screenshot is in the page twice, once for each colour scheme, and
+    # only one is ever shown. A reader without a scheme needs just one of them.
+    text = _only_light.sub("", text)
+
+    def image(match: re.Match) -> str:
+        path = posixpath.normpath(posixpath.join(posixpath.dirname(src_uri), match.group(2)))
+        return f"{match.group(1)}{urls['']}{path}{match.group(3)}"
+
+    text = _image.sub(image, text)
+
+    def link(match: re.Match) -> str:
+        target = posixpath.normpath(posixpath.join(posixpath.dirname(src_uri), match.group(2)))
+        url = urls.get(target)
+        if url is None:
+            return match.group(0)
+        return f"{match.group(1)}{url}{match.group(3) or ''}{match.group(4)}"
+
+    text = _md_link.sub(link, text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
+
+
+def _documents(config) -> list[tuple[str, str, str, str]]:
+    """(src_uri, canonical URL, title, Markdown) for every page, in navigation order.
+
+    Pages the navigation does not name (the brand guide) follow it, so each page
+    has a copy even when it is not a section of the site.
+    """
+    site_url = str(config["site_url"] or "").rstrip("/")
+    urls = {src: f"{site_url}/{page.url}" for src, (page, _) in _sources.items()}
+    # Not a page: the root, so an image path can be made absolute against it.
+    urls[""] = f"{site_url}/"
+
+    ordered: list[str] = []
+
+    def walk(items):
+        for item in items:
+            if item.is_page:
+                ordered.append(item.file.src_uri)
+            elif item.is_section:
+                walk(item.children)
+
+    walk(_nav.items if _nav is not None else [])
+    ordered += [src for src in _sources if src not in ordered]
+
+    out = []
+    for src in ordered:
+        if src not in _sources:
+            continue
+        page, markdown = _sources[src]
+        title = str(page.meta.get("title") or page.title)
+        body = _leading_h1.sub("", _clean(markdown, src, urls), count=1).strip()
+        out.append((src, urls[src], title, f"# {title}\n\nCanonical page: {urls[src]}\n\n{body}\n"))
+    return out
 
 
 def on_post_build(config):
@@ -155,6 +251,7 @@ def on_post_build(config):
         "## Source",
         "",
         f"- [Repository]({config['repo_url']}): the Go controller, the Svelte UI and these docs.",
+        f"- [Full text]({site_url}/llms-full.txt): the readable pages in one file. Every page also has a Markdown copy at its address plus index.md, for example {site_url}/quickstart/index.md.",
         f"- [install.sh]({site_url}/install.sh): the one-line installer, byte-identical to the one in the repository.",
         f"- [install.ps1]({site_url}/install.ps1): the Windows installer, run from an elevated PowerShell window; byte-identical to the one in the repository.",
         f"- [OpenAPI document]({config['repo_url']}/blob/main/api/openapi.yaml): the REST contract both clients are generated from.",
@@ -167,9 +264,43 @@ def on_post_build(config):
     with open(os.path.join(config["site_dir"], "llms.txt"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
 
+    _write_markdown(config, site_url)
+
     # The catalog is generated into the Go package that embeds it, so the
     # binary and the site serve the same bytes; the site copies it rather than
     # keeping a second tracked file that could fall behind.
     catalog_dir = os.path.join(os.path.dirname(os.path.abspath(config["docs_dir"])), "internal", "catalog")
     for name, published in (("catalog.json", "catalog.json"), ("schema.json", "catalog.schema.json")):
         shutil.copyfile(os.path.join(catalog_dir, name), os.path.join(config["site_dir"], published))
+
+
+def _write_markdown(config, site_url: str) -> None:
+    """Write each page's Markdown copy and llms-full.txt into the built site."""
+    documents = _documents(config)
+    full = [
+        f"# {config['site_name']}: the documentation in one file",
+        "",
+        "These are the pages of " + site_url + "/ as Markdown, in the order of its navigation.",
+        "The index is " + site_url + "/llms.txt. A page too long to include here is listed at the end,",
+        "with a link to its own Markdown copy.",
+        "",
+    ]
+    long_pages = []
+    for src, url, title, text in documents:
+        page = _sources[src][0]
+        target = os.path.join(config["site_dir"], page.url.replace("/", os.sep), "index.md")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        if len(text) > _FULL_PAGE_LIMIT:
+            long_pages.append((title, url))
+        else:
+            full += ["---", "", text]
+
+    if long_pages:
+        full += ["---", "", "## Pages too long to include here", ""]
+        full += [f"- [{title}]({url}index.md)" for title, url in long_pages]
+        full.append("")
+
+    with open(os.path.join(config["site_dir"], "llms-full.txt"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(full))

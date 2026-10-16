@@ -98,6 +98,12 @@
   <meta property="og:title" content="{{ title }}" />
   <meta property="og:description" content="{{ description | striptags | trim }}" />
   <meta property="og:url" content="{{ canonical }}" />
+  {#
+    The page as Markdown, for an assistant that would rather read the source
+    than the theme. hooks/seo.py writes the copy beside the page, and a 404
+    has no page and so no copy.
+  #}
+  {% if page and page.file %}<link rel="alternate" type="text/markdown" href="{{ canonical }}index.md" />{% endif %}
   <meta property="og:image" content="{{ image }}" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
