@@ -53,6 +53,9 @@ the row in `progress.md` is the record of what shipped.
   delivered).
 * [instance-transfer.md](instance-transfer.md): moving retained data between
   controllers (ZF-237).
+* [directory-submissions/](directory-submissions/): the tracker of which directories
+  Zoomies was listed in, and the draft positioning copy for them. Nothing in the
+  code reads it; it is the record, kept with the other non-code records.
 * [kennel-club.md](kennel-club.md): repository standards for the fleet (ZF-229).
 * [rc1-triage.md](rc1-triage.md): the known findings before the first release
   candidate.
