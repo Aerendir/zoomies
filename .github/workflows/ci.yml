@@ -143,6 +143,8 @@ jobs:
               # Workflows for the demo organisation to copy. Nothing here runs
               # them; internal/docs reads them like any other prose.
               deploy/demo-org/*) docs=true ;;
+              # The marketplace image's bootstrap is shell the installer job lints.
+              deploy/marketplace/*.sh) deploy=true; installer=true; rest=true ;;
               deploy/*|docker-compose.yml|.dockerignore) deploy=true; rest=true ;;
               # The check each built runner image is run through.
               test/runner-image/*) deploy=true; installer=true ;;
@@ -151,6 +153,14 @@ jobs:
               # binary or image carries it: the site serves it, and the site's
               # own workflow rebuilds when it changes.
               install.sh|install.ps1|connect-proxmox.sh|test/install/*|test/upgrade/*) installer=true ;;
+              # Shell that nothing else in CI runs: the package-cleanup scripts
+              # delete from a registry on a schedule, the marketplace image's
+              # bootstrap runs as root on a new machine (matched above, with the
+              # rest of deploy/), and the tool-cache filler runs inside every
+              # runner image. The installer job lints them; the cleanup scripts
+              # are also prose to internal/docs, as everything under .github/ is.
+              .github/scripts/*) installer=true; docs=true ;;
+              internal/backend/toolfill.sh) go=true; installer=true ;;
               # Prose, and the workflows. internal/docs tests the problem-code
               # table, the README, the workflows and the roadmap against the
               # code, and internal/naming the image table; those two packages
@@ -1052,6 +1062,15 @@ jobs:
             dash -n "$f"
             shellcheck -s sh -x "$f"
           done
+          # The scripts the package-cleanup workflow deletes with, and the
+          # marketplace image's bootstrap. Globbed for the same reason as the
+          # runner scripts: a new one is covered by the ones that exist.
+          for f in .github/scripts/*.sh deploy/marketplace/*.sh; do
+            dash -n "$f"
+            shellcheck -s sh "$f"
+          done
+          # Run inside the runner image by bash, and embedded in the binary.
+          shellcheck internal/backend/toolfill.sh
 
       - name: RPM package install recovery
         run: dash test/runner-image/dnf-check.sh

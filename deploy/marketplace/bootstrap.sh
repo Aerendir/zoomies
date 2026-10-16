@@ -73,8 +73,9 @@ ZOOMIES_ACME_EMAIL=${ZOOMIES_ACME_EMAIL:-}
 ZOOMIES_TLS_CERT_FILE=${ZOOMIES_TLS_CERT_FILE:-}
 ZOOMIES_TLS_KEY_FILE=${ZOOMIES_TLS_KEY_FILE:-}
 if [ "$ZOOMIES_TLS" = "files" ]; then
-  [ -n "$ZOOMIES_TLS_CERT_FILE" ] && [ -n "$ZOOMIES_TLS_KEY_FILE" ] || \
+  if [ -z "$ZOOMIES_TLS_CERT_FILE" ] || [ -z "$ZOOMIES_TLS_KEY_FILE" ]; then
     die "TLS mode files needs ZOOMIES_TLS_CERT_FILE and ZOOMIES_TLS_KEY_FILE: the certificate this instance serves, and its key"
+  fi
 fi
 
 # The listener, what the instance exposes, and which proxies it believes.
@@ -243,8 +244,9 @@ run_installer() {
 
 render_proxy() {
   [ "$ZOOMIES_TLS" = "acme" ] || return 0
-  [ -r "$CADDY_TMPL" ] && [ -r "$PROXY_TMPL" ] || \
+  if [ ! -r "$CADDY_TMPL" ] || [ ! -r "$PROXY_TMPL" ]; then
     die "the ACME path needs $CADDY_TMPL and $PROXY_TMPL, and the image was rendered without them"
+  fi
   [ -n "$ZOOMIES_PROXY_IMAGE" ] || die "the rendered inputs name no proxy image, so the ACME path has nothing to run"
 
   say "writing the configuration for a certificate holder in front of the controller"
