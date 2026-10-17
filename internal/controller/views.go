@@ -670,6 +670,19 @@ func NewJobView(j *store.Job, poolName string) JobView {
 	}
 }
 
+// For is the job as one audience may read it. A visitor to a public view is
+// told that a failure was marked as known, and when, but never by whom: the
+// name is an account's, and a public view shows nothing about the people who
+// run the fleet. Every other audience reads the job whole.
+//
+// It narrows a copy. The view is rendered once and handed to every audience.
+func (v JobView) For(visitor bool) JobView {
+	if visitor {
+		v.AcknowledgedBy = ""
+	}
+	return v
+}
+
 // throttledShare is the share of its CPU periods a job's runner was held back
 // in, nil when the counters were never sampled: zero is an answer and "nobody
 // looked" is not.
@@ -853,6 +866,19 @@ type RunnerView struct {
 	// CleanedUpAt is the end of the runner's life: nothing of it left, on the
 	// host or on GitHub.
 	CleanedUpAt *time.Time `json:"cleaned_up_at,omitempty"`
+}
+
+// For is the runner as one audience may read it: the job it is still pointed at
+// is narrowed as a job is, because the runner's page and frames carry the same
+// job the jobs routes do. It narrows a copy, so the job the view points to,
+// which may be shared, is never changed.
+func (v RunnerView) For(visitor bool) RunnerView {
+	if !visitor || v.CurrentJob == nil {
+		return v
+	}
+	job := v.CurrentJob.For(visitor)
+	v.CurrentJob = &job
+	return v
 }
 
 // CPUResourceView keeps the playful fleet voice beside exact numbers and a

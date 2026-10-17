@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/store"
@@ -258,11 +259,12 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	names := poolNames(pools)
+	visitor := isVisitor(r.Context())
 
 	if provisioning {
 		out := make([]jobResponse, 0, len(jobs))
 		for _, j := range jobs {
-			out = append(out, controller.NewJobView(j, names[j.PoolID]))
+			out = append(out, controller.NewJobView(j, names[j.PoolID]).For(visitor))
 		}
 		counts, err := s.ctrl.Store().ProvisioningCounts(r.Context(), filter)
 		if err != nil {
@@ -289,7 +291,7 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]jobResponse, 0, len(jobs))
 	for _, j := range jobs {
-		out = append(out, controller.NewJobView(j, names[j.PoolID]))
+		out = append(out, controller.NewJobView(j, names[j.PoolID]).For(visitor))
 	}
 	pg := newPage(out, total, p)
 	pg.Next = nextToken
@@ -433,8 +435,14 @@ func (s *Server) jobViewFor(ctx context.Context, j *store.Job) controller.JobVie
 			poolName = p.Name
 		}
 	}
-	return controller.NewJobView(j, poolName)
+	return controller.NewJobView(j, poolName).For(isVisitor(ctx))
 }
+
+// isVisitor reports whether this request is a public view's anonymous visitor,
+// who is told a failure was marked as known and when but never by whom. Every
+// route that renders a job, or a runner's current job, asks it of its own
+// context before the view leaves.
+func isVisitor(ctx context.Context) bool { return auth.IsVisitor(Identity(ctx)) }
 
 // jobEventResponse is one entry of a job's timeline. The store's record is the
 // documented shape: it has no derived fields, so there is nothing for a
@@ -451,9 +459,10 @@ func (s *Server) handleJobEvents(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "reading the job's timeline", err)
 		return
 	}
+	visitor := isVisitor(r.Context())
 	out := make([]jobEventResponse, 0, len(events))
 	for _, e := range events {
-		out = append(out, *e)
+		out = append(out, controller.JobEventFor(*e, visitor))
 	}
 	writeJSON(w, http.StatusOK, newList(out))
 }

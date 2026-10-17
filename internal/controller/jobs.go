@@ -377,7 +377,7 @@ func (c *Controller) AcknowledgeJob(ctx context.Context, jobID, by string) (*sto
 	if recorded {
 		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
 			JobID: updated.ID, Kind: store.JobEventAcknowledged, Source: sourceController,
-			Message: actorName(by) + " marked this failure as known; the attention list stops asking about it, and a re-run that passes is what settles it",
+			Message: acknowledgedMessage(actorName(by)),
 			At:      c.Now(),
 		}); err != nil {
 			return nil, err
@@ -399,7 +399,7 @@ func (c *Controller) ReopenJobAttention(ctx context.Context, jobID, by string) (
 	if removed {
 		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
 			JobID: updated.ID, Kind: store.JobEventReopened, Source: sourceController,
-			Message: actorName(by) + " put this failure back in the failures needing attention",
+			Message: reopenedMessage(actorName(by)),
 			At:      c.Now(),
 		}); err != nil {
 			return nil, err
@@ -417,6 +417,40 @@ func actorName(by string) string {
 		return "an operator"
 	}
 	return by
+}
+
+// The two timeline sentences that name a person are built from the actor, so
+// that a reader who may not be told who it was is given the same sentence with
+// nobody's name in it, rather than the stored one with a guess made at where
+// the name ends.
+func acknowledgedMessage(actor string) string {
+	return actor + " marked this failure as known; the attention list stops asking about it, and a re-run that passes is what settles it"
+}
+
+func reopenedMessage(actor string) string {
+	return actor + " put this failure back in the failures needing attention"
+}
+
+// unnamedActor is who those sentences credit when the reader is a visitor to a
+// public view.
+const unnamedActor = "Somebody"
+
+// JobEventFor is a timeline entry as one audience may read it. A visitor to a
+// public view reads that a failure was marked as known, or put back, and when,
+// and not by whom. The sentence is rebuilt from the entry's kind rather than
+// the stored one being trimmed, so no name can survive in what an older
+// version, or a rename, left in the row.
+func JobEventFor(e store.JobEvent, visitor bool) store.JobEvent {
+	if !visitor {
+		return e
+	}
+	switch e.Kind {
+	case store.JobEventAcknowledged:
+		e.Message = acknowledgedMessage(unnamedActor)
+	case store.JobEventReopened:
+		e.Message = reopenedMessage(unnamedActor)
+	}
+	return e
 }
 
 // A job's timeline is the answer to "what happened to my job?", told in the
