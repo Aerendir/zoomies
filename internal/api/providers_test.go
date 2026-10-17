@@ -395,10 +395,10 @@ func TestPressingAProvidersKillSwitchTwiceIsNotAnError(t *testing.T) {
 func TestATokenScopedToThePauseSwitchCannotBuildATestMachine(t *testing.T) {
 	h := newHarness(t)
 	prov := h.provider("proxmox-lab")
-	// Renting is on, so that a request the scope lets through would reach the
-	// machine loop and answer 202. With it off the refusal would be a 409 and the
-	// test would pass for the wrong reason.
-	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+	// Renting is on and the fleet may rent, so that a request the scope lets
+	// through would reach the machine loop and answer 202. With either off the
+	// refusal would be a 409 and the test would pass for the wrong reason.
+	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
 	base := "/api/v1/providers/" + prov.ID
 	pauseOnly := h.token("on-call", store.RoleOperator, "providers:pause")
 
@@ -449,7 +449,9 @@ func TestAcceptingATestMachineAnswersWithThePlannedMachineAndAuditsIt(t *testing
 	operator, _ := h.user("operator", store.RoleOperator)
 	cookie := h.session(operator)
 	prov := h.provider("proxmox-lab")
-	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+	// A fleet maximum of none is none, for a test machine as for any other, so
+	// the fleet is given room to rent one.
+	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
 
 	resp := h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", cookie: cookie})
 	resp.mustStatus(t, http.StatusAccepted, "start a test machine")
@@ -500,12 +502,18 @@ func TestARefusedTestMachineIsAConflictThatSaysWhyAndLeavesNothingBehind(t *test
 			}
 		}},
 		{"a test is already on its way", func(h *harness, prov *store.Provider) {
-			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
 			h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", token: h.token("first", store.RoleOperator)}).
 				mustStatus(h.t, http.StatusAccepted, "the first test machine")
 		}},
+		{"the fleet may rent nothing", func(h *harness, prov *store.Provider) {
+			// Renting is on and the provider has room, but provider.max_machines
+			// is its default of none, which is none for the planner and so for a
+			// test machine that is billed like any other.
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 0 })
+		}},
 		{"the provider has no room under its maximum", func(h *harness, prov *store.Provider) {
-			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
 			prov.MaxMachines = 1
 			if err := h.st.UpdateProvider(h.ctx, prov); err != nil {
 				h.t.Fatalf("UpdateProvider: %v", err)
