@@ -104,6 +104,14 @@
     has no page and so no copy.
   #}
   {% if page and page.file %}<link rel="alternate" type="text/markdown" href="{{ canonical }}index.md" />{% endif %}
+  {#
+    RFC 9727's api-catalog link relation and the ai-catalog index it names,
+    for a reader that parses a page's head rather than its Link headers. The
+    api-catalog well-known document and the header the site worker adds come
+    from the same generated files as these.
+  #}
+  <link rel="api-catalog" href="/.well-known/api-catalog" />
+  <link rel="ai-catalog" href="/.well-known/ai-catalog.json" />
   <meta property="og:image" content="{{ image }}" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
@@ -239,6 +247,37 @@
         , { "@type": "ListItem", "position": {{ linked_ancestors | length + 2 }}, "name": {{ page_title | tojson }}, "item": "{{ canonical }}" }
       ]
     }
-  </script>
+   </script>
   {% endif %}
+
+  <script>
+    // WebMCP (draft): the tool an agentified browser finds on this page. The
+    // page is Markdown underneath (hooks/seo.py writes the copy the theme's
+    // alternate link above names), so a registrant that would rather read the
+    // source than the theme asks for one identical thing, and the browser
+    // Agent can fetch it from where it already sits. registerTool and
+    // modelContext exist only in browsers that have the API: without one the
+    // script is a no-op, so a person's browser does nothing different.
+    (function () {
+      if (document.modelContext || navigator.modelContext) {
+        var context = document.modelContext || navigator.modelContext;
+        var copy = document.querySelector('link[rel="alternate"][type="text/markdown"]');
+        if (copy) {
+          var address = copy.getAttribute("href");
+          context.registerTool({
+            name: "read_page_as_markdown",
+            description: "The current page as the Markdown source it was written in, without the site's navigation, footer or icons",
+            inputSchema: { type: "object", properties: {} },
+            execute: async function () {
+              var response = await fetch(address);
+              if (!response.ok) {
+                throw new Error("the Markdown copy answered " + response.status);
+              }
+              return await response.text();
+            },
+          }).catch(function () {});
+        }
+      }
+    })();
+  </script>
 {% endblock %}

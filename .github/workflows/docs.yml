@@ -141,6 +141,52 @@ jobs:
           grep -q "^# " site/index.md
           grep -q "^Contact: " site/.well-known/security.txt
 
+      # The agent discovery documents name real endpoints and real artifacts,
+      # so the build refuses to ship one that is empty JSON, names a digest no
+      # skill copy answers to, or lost its auth.md heading.
+      - name: The agent discovery documents are well formed
+        run: |
+          python3 - <<'EOF'
+          import hashlib, json, re
+
+          def load(path):
+              with open("site/" + path, encoding="utf-8") as fh:
+                  return json.load(fh)
+
+          auth = open("site/auth.md", encoding="utf-8").read()
+          assert re.search(r"^# .*auth\.md", auth, re.MULTILINE), "auth.md has no auth.md heading"
+
+          card = load(".well-known/mcp/server-card.json")
+          assert card["serverInfo"]["name"] == "zoomies"
+          assert card["serverInfo"]["version"] and card["serverInfo"]["version"] != "0.0.0", "the card names no release"
+          assert card["transport"]["endpoint"].startswith("https://")
+          for key in ("tools", "resources", "prompts"):
+              assert key in card["capabilities"], "the card does not name " + key
+          assert card["authorization"]["scopesSupported"]
+
+          index = load(".well-known/agent-skills/index.json")
+          assert index["$schema"].endswith("/discovery/0.2.0/schema.json")
+          assert index["skills"], "the index has no skills"
+          for skill in index["skills"]:
+              assert re.fullmatch(r"[a-z0-9-]+", skill["name"]), skill["name"]
+              assert skill["type"] == "skill-md" and skill["description"] and skill["url"]
+              with open("site/.well-known/agent-skills/" + skill["name"] + "/SKILL.md", "rb") as fh:
+                  body = fh.read()
+              assert skill["digest"] == "sha256:" + hashlib.sha256(body).hexdigest(), skill["name"]
+
+          for name in ("ai-catalog.json", "poppy.json", "api-catalog.json"):
+              load(".well-known/" + name) if name != "api-catalog.json" else load(name)
+          catalog = load(".well-known/ai-catalog.json")
+          assert catalog["host"]["displayName"] and catalog["host"]["identifier"]
+          for entry in catalog["entries"]:
+              assert ("url" in entry) != ("data" in entry), entry["identifier"]
+              assert 2 <= len(entry["representativeQueries"]) <= 5, entry["identifier"]
+          poppy = load(".well-known/poppy.json")
+          assert poppy["organization"]["domain"] == "zoomies.sh"
+          assert poppy["protocol_version"]
+          print("discovery documents ok")
+          EOF
+
       # The header's release, stars and forks are resolved at build time, and a
       # build that cannot reach the API still succeeds -- for a developer
       # offline, not for the site. A header that names no release is the thing

@@ -25,6 +25,14 @@ from the repository rather than written by hand, so neither can go stale:
   description (the OpenAPI document in the repository) and the human
   documentation. Pages carry ``Link`` headers pointing at it and at ``llms.txt``.
 
+* **The agent discovery documents**, the rest of what a machine reader asks
+  for: ``/auth.md`` (copied from ``hooks/auth.md``), the MCP server card, the
+  two product skills with their ``SKILL.md`` copies and digests under
+  ``agent-skills/``, the ai-catalog index pointing at all of it, and a
+  ``poppy.json``. Each names something that is really serving; where
+  OAuth or A2A metadata is asked for, it stays with the deployments that run
+  it and ``/auth.md`` links to the served one.
+
 * **A Markdown copy of every page**, at the page's own address plus
   ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
   HTML is server-rendered and complete, but an assistant asked about a page
@@ -48,6 +56,7 @@ with ``fetch-depth: 0``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -281,6 +290,8 @@ def on_post_build(config):
 
     _write_markdown(config, site_url)
     _write_security_txt(config, site_url)
+    _write_auth_md(config)
+    _write_agent_discovery(config, site_url)
     _write_api_catalog(config, site_url)
 
     # The catalog is generated into the Go package that embeds it, so the
@@ -371,4 +382,172 @@ def _write_api_catalog(config, site_url: str) -> None:
     }
     with open(os.path.join(config["site_dir"], "api-catalog.json"), "w", encoding="utf-8") as fh:
         json.dump(catalog, fh, indent=2)
+        fh.write("\n")
+
+
+# The live demo instance, where every interface the docs describe is actually
+# serving. The discovery documents below name it because a machine client
+# reading the site wants a deployment it can reach, not a promise.
+_DEMO = "https://demo.zoomies.sh"
+
+
+def _write_auth_md(config) -> None:
+    """Copy /auth.md into the site root.
+
+    The document is tracked as hooks/auth.md, beside the hook that ships it,
+    because a file under docs/.well-known would never reach the site (mkdocs
+    passes over names beginning with a dot) and a page in docs/ would be
+    rendered as HTML where the convention asks for Markdown at the root.
+    """
+    root = os.path.dirname(os.path.abspath(config["config_file_path"]))
+    shutil.copyfile(os.path.join(root, "hooks", "auth.md"), os.path.join(config["site_dir"], "auth.md"))
+
+
+def _write_agent_discovery(config, site_url: str) -> None:
+    """Write the discovery documents for what the product actually offers.
+
+    Everything here names something a machine client can reach: the skills the
+    repository installs (copied byte for byte, with their digests), the MCP
+    interface the controller serves at /mcp with the demo instance standing in
+    as the reachable example, and the index under which a registry can find
+    all of it. The documents are written into .well-known/ here because mkdocs
+    passes over dot directories, and as .json files because Pages would serve
+    an extensionless name as application/octet-stream.
+
+    No document claims something is running unless it is: OAuth and A2A
+    metadata belong to a deployment, not to the site that documents it, and
+    publishing them here would be discovery metadata pointing at nothing.
+    auth.md says where the real chain lives instead.
+    """
+    root = os.path.dirname(os.path.abspath(config["config_file_path"]))
+    well = os.path.join(config["site_dir"], ".well-known")
+    os.makedirs(well, exist_ok=True)
+
+    # The release the header shows, from hooks/source.py's on_config, so the
+    # card names the version the skill and scripts were generated from. A
+    # build with no network has no facts and the card carries a placeholder.
+    version = (config.get("extra") or {}).get("source_facts", {}).get("version") or "0.0.0"
+
+    skills: list[dict] = []
+    for name in ("zoomies", "zoomies-kennel"):
+        source = os.path.join(root, "skills", name, "SKILL.md")
+        with open(source, "rb") as fh:
+            body = fh.read()
+        target = os.path.join(well, "agent-skills", name, "SKILL.md")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as fh:
+            fh.write(body)
+        front = re.search(r"^description: (.+)$", body.decode("utf-8"), re.MULTILINE)
+        if front is None:
+            raise ValueError(f"skills/{name}/SKILL.md has no front-matter description for the discovery index")
+        skills.append({
+            "name": name,
+            "type": "skill-md",
+            "description": front.group(1).strip(),
+            "url": f"{site_url}/.well-known/agent-skills/{name}/SKILL.md",
+            "digest": "sha256:" + hashlib.sha256(body).hexdigest(),
+        })
+
+    with open(os.path.join(well, "agent-skills", "index.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+            "skills": skills,
+        }, fh, indent=2)
+        fh.write("\n")
+
+    card_dir = os.path.join(well, "mcp")
+    os.makedirs(card_dir, exist_ok=True)
+    with open(os.path.join(card_dir, "server-card.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "serverInfo": {
+                "name": "zoomies",
+                "title": "Zoomies",
+                "version": version,
+                "description": (
+                    "The MCP interface of a self-hosted GitHub Actions runner fleet controller: "
+                    "why jobs queue, wait, fail or run, what the fleet's hosts and pools look like, "
+                    "and the changes an operator confirms before anything happens. The controller "
+                    "serves it at /mcp on every deployment; the endpoint here is the live demo."
+                ),
+            },
+            "transport": {
+                "protocol": "streamable-http",
+                "endpoint": f"{_DEMO}/mcp",
+            },
+            "capabilities": {
+                "tools": {"listChanged": False},
+                "resources": {"subscribe": False, "listChanged": False},
+                "prompts": {"listChanged": False},
+            },
+            "authorization": {
+                "type": "oauth2",
+                "protectedResourceMetadata": f"{_DEMO}/.well-known/oauth-protected-resource",
+                "authorizationServerMetadata": f"{_DEMO}/.well-known/oauth-authorization-server",
+                "scopesSupported": ["mcp:read", "mcp:operate"],
+                "bearerMethods": ["header"],
+            },
+            "documentation": f"{site_url}/connect-claude/",
+        }, fh, indent=2)
+        fh.write("\n")
+
+    with open(os.path.join(well, "ai-catalog.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "specVersion": "1.0",
+            "host": {"displayName": "Zoomies", "identifier": "did:web:zoomies.sh"},
+            "entries": [
+                {
+                    "identifier": "urn:air:zoomies.sh:server:fleet-mcp",
+                    "displayName": "The Zoomies MCP server",
+                    "type": "application/mcp-server-card+json",
+                    "url": f"{site_url}/.well-known/mcp/server-card.json",
+                    "representativeQueries": [
+                        "why did my GitHub Actions job queue for so long",
+                        "what is wrong with my self-hosted runner fleet",
+                        "which pools and hosts are running my CI",
+                        "diagnose a failed Actions job from its logs",
+                    ],
+                },
+                {
+                    "identifier": "urn:air:zoomies.sh:api:rest",
+                    "displayName": "The Zoomies REST interface",
+                    "type": "application/yaml",
+                    "url": f"{site_url}/api-surface/",
+                    "representativeQueries": [
+                        "which REST routes does the fleet controller expose",
+                        "what does GET /api/v1/hosts return",
+                        "how do I authenticate to the Zoomies API",
+                    ],
+                },
+                {
+                    "identifier": "urn:air:zoomies.sh:skills:product",
+                    "displayName": "The Zoomies skills",
+                    "type": "application/json",
+                    "url": f"{site_url}/.well-known/agent-skills/index.json",
+                    "representativeQueries": [
+                        "which skill should a coding agent install to run the fleet",
+                        "check GitHub Actions workflow files locally against a ruleset",
+                        "look after a self-hosted runner fleet from the terminal",
+                    ],
+                },
+                {
+                    "identifier": "urn:air:zoomies.sh:reference:problem-codes",
+                    "displayName": "The problem-code catalog",
+                    "type": "application/json",
+                    "url": f"{site_url}/catalog.json",
+                    "representativeQueries": [
+                        "what does problem code bind.public_no_tls mean",
+                        "what should I do when a host stops reporting healthy",
+                        "which problem codes can the controller raise",
+                    ],
+                },
+            ],
+        }, fh, indent=2)
+        fh.write("\n")
+
+    with open(os.path.join(well, "poppy.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "protocol_version": "0.1",
+            "organization": {"name": "Zoomies", "domain": "zoomies.sh"},
+            "web": {},
+        }, fh, indent=2)
         fh.write("\n")
