@@ -23,7 +23,16 @@ import {
   goto,
   grid,
   rowCount,
+  useClassic,
 } from './support/fixtures';
+
+// Mission Control folds the facets and switches away on a phone to put the
+// rows first; these specs are about what the filters do, so the phone project
+// starts on Classic, where they sit open. operational-layout.spec.ts holds
+// Mission Control's own layout.
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.project.name === 'mobile') await useClassic(page);
+});
 
 /**
  * What formatDuration produces: "820ms", "9.4s", "35m 00s", "2h 05m". Not

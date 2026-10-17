@@ -410,6 +410,21 @@ export async function useSystemTheme(page: Page): Promise<void> {
   await page.addInitScript(() => localStorage.setItem('zoomies.theme', 'system'));
 }
 
+/**
+ * Open the Jobs page's "Fleet context and activity" fold when the page has
+ * folded it away.
+ *
+ * Mission Control does that on a phone to put the rows first; the summary is
+ * hidden at other widths, where the section is simply open.
+ */
+export async function openFleetContext(page: Page): Promise<void> {
+  const fold = page.locator('details.fleet-context');
+  if ((await fold.count()) === 0 || (await fold.evaluate((el: HTMLDetailsElement) => el.open))) {
+    return;
+  }
+  await fold.locator(':scope > summary').click();
+}
+
 /** What the theme currently is: the attribute on `<html>` and what was stored. */
 export async function readTheme(
   page: Page,
