@@ -52,7 +52,10 @@ test('an unset colour mode boots dark', () => {
   const { attrs, tags } = boot(null, null);
   assert.equal(attrs.get('data-theme'), 'dark');
   for (const tag of tags) {
-    assert.equal(tag.data.get('media'), tag.data.get('data-theme-colour') === 'dark' ? 'all' : 'not all');
+    assert.equal(
+      tag.data.get('media'),
+      tag.data.get('data-theme-colour') === 'dark' ? 'all' : 'not all',
+    );
   }
 });
 
