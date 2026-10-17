@@ -10,8 +10,28 @@
 // HTML stays the default. Only an explicit text/markdown entry in Accept gets
 // Markdown; anything else, including a browser's */*, is passed through to the
 // origin untouched.
+//
+// Every page answer also carries a Link header (RFC 8288) with the relations
+// an agent follows to the machine-readable resources: the API Catalog
+// (RFC 9727), the plain-text index, and the REST API's description and
+// documentation. GitHub Pages cannot set arbitrary response headers, so the
+// header is added here.
 
 const MARKDOWN_TYPE = "text/markdown";
+
+// The OpenAPI document lives in the repository, not on this site: the API runs
+// on each deployment, so the authoritative machine description is the one in
+// the source tree it is generated from.
+const OPENAPI_URL = "https://raw.githubusercontent.com/eyupio/zoomies/main/api/openapi.yaml";
+
+export function discoveryLinks() {
+  return [
+    '</.well-known/api-catalog>; rel="api-catalog"',
+    `</llms.txt>; rel="describedby"`,
+    `<${OPENAPI_URL}>; rel="service-desc"; type="application/yaml"`,
+    '</api-surface/>; rel="service-doc"; type="text/html"',
+  ].join(", ");
+}
 
 // An estimate, not a count: tokens are the model's unit and four characters is
 // the usual order of magnitude for English prose. The header is advisory, and
@@ -80,19 +100,53 @@ async function markdownResponse(request, url) {
   headers.set("content-type", MARKDOWN_TYPE + "; charset=utf-8");
   headers.set("vary", "Accept");
   headers.set("x-markdown-tokens", String(tokenEstimate(body)));
+  headers.set("link", discoveryLinks());
   return new Response(body, { status: copy.status, headers });
+}
+
+// The API Catalog document (RFC 9727) at its well-known address. The origin
+// stores it as api-catalog.json, because GitHub Pages picks a content type
+// from the extension and would serve an extensionless file as
+// application/octet-stream; the type the RFC asks for is set here.
+async function apiCatalogResponse(url) {
+  const source = await fetch(new URL("/api-catalog.json", url.origin), { redirect: "follow" });
+  if (!source.ok) {
+    return null;
+  }
+  const body = await source.text();
+  const headers = new Headers(source.headers);
+  headers.set("content-type", 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"');
+  headers.set("link", discoveryLinks());
+  return new Response(body, { status: source.status, headers });
 }
 
 export default {
   async fetch(request) {
     if (request.method === "GET" || request.method === "HEAD") {
       const url = new URL(request.url);
+      if (url.pathname === "/.well-known/api-catalog" || url.pathname === "/.well-known/api-catalog/") {
+        const catalog = await apiCatalogResponse(url);
+        if (catalog !== null) {
+          return request.method === "HEAD" ? new Response(null, catalog) : catalog;
+        }
+      }
       if (wantsMarkdown(request.headers.get("accept"))) {
         const markdown = await markdownResponse(request, url);
         if (markdown !== null) {
           return request.method === "HEAD" ? new Response(null, markdown) : markdown;
         }
       }
+      const origin = await fetch(request);
+      // A page answer announces where the machine-readable resources are. The
+      // markdownPath test is the worker's existing idea of what a page is: it
+      // keeps install.sh and the images from wearing links that are not
+      // about them.
+      if (origin.ok && markdownPath(url.pathname) !== null) {
+        const response = new Response(origin.body, origin);
+        response.headers.set("link", discoveryLinks());
+        return response;
+      }
+      return origin;
     }
     // A same-zone fetch from a Worker goes to the origin directly, so the HTML
     // answer reaches GitHub Pages exactly as it always did.

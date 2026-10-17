@@ -19,6 +19,12 @@ from the repository rather than written by hand, so neither can go stale:
   would quietly lapse; it is written at build, and the site is built on every
   push to main.
 
+* **An API Catalog document** (RFC 9727), written as ``api-catalog.json`` and
+  served at ``/.well-known/api-catalog`` by the site worker. It describes the
+  controller's REST API with the two relations the RFC names: the machine
+  description (the OpenAPI document in the repository) and the human
+  documentation. Pages carry ``Link`` headers pointing at it and at ``llms.txt``.
+
 * **A Markdown copy of every page**, at the page's own address plus
   ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
   HTML is server-rendered and complete, but an assistant asked about a page
@@ -42,6 +48,7 @@ with ``fetch-depth: 0``.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import posixpath
@@ -274,6 +281,7 @@ def on_post_build(config):
 
     _write_markdown(config, site_url)
     _write_security_txt(config, site_url)
+    _write_api_catalog(config, site_url)
 
     # The catalog is generated into the Go package that embeds it, so the
     # binary and the site serve the same bytes; the site copies it rather than
@@ -332,3 +340,35 @@ def _write_security_txt(config, site_url: str) -> None:
     os.makedirs(target, exist_ok=True)
     with open(os.path.join(target, "security.txt"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
+
+
+def _write_api_catalog(config, site_url: str) -> None:
+    """Write api-catalog.json, the API Catalog document of RFC 9727.
+
+    It is written with a .json name rather than straight into .well-known/
+    because GitHub Pages guesses a file's content type from its extension, and
+    an extensionless file would be served as application/octet-stream where the
+    RFC asks for application/linkset+json. The site worker serves the well-known
+    address by fetching this file and setting the type itself.
+
+    The API itself runs on each deployment, not on this site, so the catalog
+    anchors at the page that documents the API surface and links the OpenAPI
+    document in the repository: the two things a machine client can fetch today.
+    """
+    repo = str(config["repo_url"]).rstrip("/")
+    catalog = {
+        "linkset": [
+            {
+                "anchor": f"{site_url}/api-surface/",
+                "service-desc": [
+                    {"href": f"{repo}/raw/main/api/openapi.yaml", "type": "application/yaml"},
+                ],
+                "service-doc": [
+                    {"href": f"{site_url}/api-surface/", "type": "text/html"},
+                ],
+            },
+        ],
+    }
+    with open(os.path.join(config["site_dir"], "api-catalog.json"), "w", encoding="utf-8") as fh:
+        json.dump(catalog, fh, indent=2)
+        fh.write("\n")
