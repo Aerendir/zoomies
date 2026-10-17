@@ -559,9 +559,16 @@ strict JSON plan, with at most six model turns and eight changed files. Text blo
 up to 512 KiB stay on the controller; the model receives windows of at most
 32 KiB, prioritising files and line locations named by failure evidence. Unique
 source supplied is capped at 128 KiB and the full transcript is checked against a
-192 KiB byte allowance before every model call. These are conservative application
-bounds, not a measurement of the model's token capacity. Repeated and overlapping
-reads return only new source. The PR's bounded diff is included.
+192 KiB byte allowance before every model call. The PR's changed files take at
+most half of the source allowance before the model asks for anything, and the
+rest are named as not loaded, so the other half is there for the files and
+windows the model requests. A request that does not fit is answered with how
+much remains, so the model can ask for a smaller window, and does not end the
+repair. These are conservative application bounds, not a measurement of the
+model's token capacity, and the provider's **Output limit** does not change
+them: it caps what the model may write in one round, not how much source Eli
+shows it. Repeated and overlapping reads return only new source. The PR's
+bounded diff is included.
 
 For large files, Eli returns exact before/after edits instead of rewriting the
 whole file. The controller requires unique, non-overlapping preimages in source

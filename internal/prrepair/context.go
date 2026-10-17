@@ -9,6 +9,25 @@ import (
 	"unicode/utf8"
 )
 
+// allowanceError is a read that the rest of the source allowance cannot cover.
+// It is for the model to hear and not for an operator to read in the history:
+// nothing has gone wrong with the repair, the request was too wide, and a model
+// told what remains can ask for a window instead. Ending the repair on it made a
+// PR whose changed files had already taken most of the allowance unrepairable
+// the moment the model asked for a large file it had not been shown, however
+// much room the provider's output limit gave it to write the fix.
+type allowanceError struct {
+	path       string
+	need, left int
+}
+
+func (e *allowanceError) Error() string {
+	if e.left <= 0 {
+		return fmt.Sprintf("%s was not supplied: the whole %d KiB source allowance is used up. Work from the source already supplied, or return cannot_fix.", e.path, MaxSourceBytes/1024)
+	}
+	return fmt.Sprintf("%s was not supplied: it would add %d bytes of source and %d bytes of the %d KiB allowance remain. Ask for a smaller line window of it, work from the source already supplied, or return cannot_fix.", e.path, e.need, e.left, MaxSourceBytes/1024)
+}
+
 type sourceSpan struct{ start, end int }
 type sourceContext struct {
 	reader    Reader
@@ -98,7 +117,7 @@ func (s *sourceContext) reveal(ctx context.Context, w ReadWindow) ([]File, error
 		size += v.end - v.start
 	}
 	if s.bytes+size > MaxSourceBytes {
-		return nil, fmt.Errorf("repair source budget exhausted: %d of %d KiB used; %s needs %d more bytes", s.bytes/1024, MaxSourceBytes/1024, w.Path, size)
+		return nil, &allowanceError{path: w.Path, need: size, left: MaxSourceBytes - s.bytes}
 	}
 	s.bytes += size
 	out := []File{}
