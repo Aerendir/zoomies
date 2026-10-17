@@ -23,10 +23,12 @@ from the repository rather than written by hand, so neither can go stale:
   ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
   HTML is server-rendered and complete, but an assistant asked about a page
   pays for the navigation, the footer and 90 inline icons to read it, and
-  GitHub Pages cannot answer ``Accept: text/markdown``. The source is already
-  Markdown, so the copy is the source with the parts only the theme understands
-  taken out. ``llms-full.txt`` stops at a size an assistant can read in one go;
-  the long reference pages are one link each rather than 185 KB in the middle.
+  GitHub Pages cannot answer ``Accept: text/markdown`` (the Cloudflare Worker
+  in ``site-worker/`` answers it for the site, by serving these copies). The
+  source is already Markdown, so the copy is the source with the parts only
+  the theme understands taken out. ``llms-full.txt`` stops at a size an
+  assistant can read in one go; the long reference pages are one link each
+  rather than 185 KB in the middle.
 
 This is a hook rather than a plugin because it needs nothing a plugin would
 bring: the docs build stays at the three pinned dependencies in
