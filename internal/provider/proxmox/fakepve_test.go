@@ -45,6 +45,11 @@ type fakeVM struct {
 	// disk is the guest's scsi0 line, empty for one with no disk attached.
 	disk  string
 	files map[string]string
+	// cpus and memory (bytes) are the guest's maxcpu and maxmem in
+	// /cluster/resources. Left at zero the keys are absent, as they are for a
+	// guest the cluster has not sized.
+	cpus   int
+	memory int64
 }
 
 type fakeTask struct {
@@ -132,8 +137,8 @@ func newFakePVE(t *testing.T, routes map[string]http.HandlerFunc) *fakePVE {
 		},
 		stop: make(chan struct{}),
 	}
-	f.vms[9000] = &fakeVM{vmid: 9000, node: "pve-1", name: "ubuntu-24.04-template", status: "stopped", template: true, agent: "enabled=1", disk: "local-lvm:base-9000-disk-0,size=32G"}
-	f.vms[100] = &fakeVM{vmid: 100, node: "pve-1", name: "someone-elses-vm", status: "running", description: "the finance database"}
+	f.vms[9000] = &fakeVM{vmid: 9000, node: "pve-1", name: "ubuntu-24.04-template", status: "stopped", template: true, agent: "enabled=1", disk: "local-lvm:base-9000-disk-0,size=32G", cpus: 4, memory: 8 << 30}
+	f.vms[100] = &fakeVM{vmid: 100, node: "pve-1", name: "someone-elses-vm", status: "running", description: "the finance database", cpus: 16, memory: 64 << 30}
 
 	mux := http.NewServeMux()
 	for pattern, h := range routes {
@@ -426,14 +431,20 @@ func (f *fakePVE) routes() map[string]http.HandlerFunc {
 			defer f.mu.Unlock()
 			out := []map[string]any{}
 			for _, vm := range f.vms {
-				out = append(out, map[string]any{
+				row := map[string]any{
 					"vmid": vm.vmid, "node": vm.node, "name": vm.name, "status": vm.status,
 					"type": "qemu", "tags": vm.tags,
 					// template is 1 or absent, never false.
 					"template": boolToInt(vm.template),
+				}
+				if vm.cpus > 0 {
+					row["maxcpu"] = vm.cpus
+				}
+				if vm.memory > 0 {
 					// maxmem is a string here on some releases.
-					"maxmem": "17179869184",
-				})
+					row["maxmem"] = strconv.FormatInt(vm.memory, 10)
+				}
+				out = append(out, row)
 			}
 			writeData(w, out)
 		},
