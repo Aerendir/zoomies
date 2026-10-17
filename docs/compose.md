@@ -22,13 +22,17 @@ place.
 
 `zoomies init` offers **Docker Compose** whenever the host has a `compose`
 command, and makes it the default. It writes a `docker-compose.yml` and a
-**fully populated `.env`** (external URL, a freshly generated encryption key,
-bind address, TLS mode, trusted proxies, backend, capacity, paths, the image
-tag, the published port and the host's real docker group id) then brings the
-stack up. Every variable carries a one-line comment saying what it is for; the
-file is `0600` because it holds your encryption key; and it is written
-atomically, so an interrupted install never leaves a half-written file that
-compose would then read.
+**fully populated `.env`** (a freshly generated encryption key, the paths of the
+state directory and the database, the image tag, the published address and port,
+and the host's real docker group id), stores the rest of its answers as the
+controller's settings in its database (the external URL, bind address, TLS mode,
+trusted proxies, backend and capacity), then brings the stack up. The settings
+are kept out of the file on purpose: a variable there would override the
+database, and the Settings page would show it as locked. Every variable in the
+file carries a one-line comment saying what it is for; the file is `0600`
+because it holds your encryption key; and it is written atomically, so an
+interrupted install never leaves a half-written file that compose would then
+read.
 
 ```sh
 curl -fsSL https://zoomies.sh/install.sh | sh -s -- --deployment compose
