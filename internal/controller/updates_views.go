@@ -41,6 +41,9 @@ type UpdatesView struct {
 	// Soak is updates.soak as the Settings page writes it. manual ignores it.
 	Soak    string         `json:"soak"`
 	Running UpdatesRunning `json:"running"`
+	// Development compares the stamped build with main. It does not claim
+	// that main's image has finished publishing to the dev channel.
+	Development *UpdatesDevelopment `json:"development,omitempty"`
 	// Latest is the newest release that could be installed on this system,
 	// whether or not the running build is behind it.
 	Latest *UpdatesRelease `json:"latest"`
@@ -156,6 +159,30 @@ type UpdatesRunning struct {
 	Release bool `json:"release"`
 }
 
+type UpdatesDevelopment struct {
+	Current   string     `json:"current"`
+	Latest    string     `json:"latest"`
+	State     string     `json:"state"`
+	CheckedAt *time.Time `json:"checked_at"`
+}
+
+func (c *Controller) developmentView(running string) *UpdatesDevelopment {
+	commit, ok := developmentCommit(running)
+	if !ok {
+		return nil
+	}
+	v := &UpdatesDevelopment{Current: commit, State: "unknown"}
+	if latest := c.latestDevelopment(); latest != nil {
+		v.Latest, v.State = latest.SHA, "available"
+		at := latest.At.UTC()
+		v.CheckedAt = &at
+		if strings.HasPrefix(latest.SHA, commit) {
+			v.State = "current"
+		}
+	}
+	return v
+}
+
 // UpdatesRelease is a release on offer.
 type UpdatesRelease struct {
 	Tag string `json:"tag"`
@@ -223,11 +250,12 @@ func (c *Controller) UpdatesView(ctx context.Context) (*UpdatesView, error) {
 	_, fromRelease := version.Release(version.Version)
 	probe := c.probeUpdateHelper()
 	view := &UpdatesView{
-		Mode:    string(mode),
-		Soak:    config.TidyDuration(cfg.Soak),
-		Running: UpdatesRunning{Version: version.Version, Release: fromRelease},
-		Helper:  probe.view,
-		Signing: UpdatesSigning{Keys: releasekey.IDs(releasekey.Default)},
+		Mode:        string(mode),
+		Soak:        config.TidyDuration(cfg.Soak),
+		Running:     UpdatesRunning{Version: version.Version, Release: fromRelease},
+		Development: c.developmentView(version.Version),
+		Helper:      probe.view,
+		Signing:     UpdatesSigning{Keys: releasekey.IDs(releasekey.Default)},
 		// A native service runs the binary the upgrade keeps beside it, so the
 		// previous release can be put back; a container's service is an image,
 		// which the upgrade does not keep the one before.

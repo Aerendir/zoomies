@@ -17,6 +17,24 @@ import (
 	"github.com/eyupio/zoomies/internal/updates"
 )
 
+func TestDevelopmentStatusSeparatesUncheckedCurrentAndNewerMainBuilds(t *testing.T) {
+	h := newHarness(t)
+	if got := h.c.developmentView("1.3.7"); got != nil {
+		t.Fatalf("a standard release has development status: %+v", got)
+	}
+	if got := h.c.developmentView("main-sha-abc1234"); got.State != "unknown" || got.CheckedAt != nil {
+		t.Fatalf("an unchecked build was called current: %+v", got)
+	}
+	h.c.development = &developmentState{SHA: "abc1234fffffffffffffffffffffffff", At: h.c.Now()}
+	if got := h.c.developmentView("main-sha-abc1234"); got.State != "current" || got.CheckedAt == nil {
+		t.Fatalf("matching main: %+v", got)
+	}
+	h.c.development = &developmentState{SHA: "def5678fffffffffffffffffffffffff", At: h.c.Now()}
+	if got := h.c.developmentView("main-sha-abc1234"); got.State != "available" || got.Current != "abc1234" {
+		t.Fatalf("newer main: %+v", got)
+	}
+}
+
 // readTheList makes the controller read a release list the way the background
 // pass does, so the status is tested against what that check records and not
 // against a state built by hand: the difference between a list that came back

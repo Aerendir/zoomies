@@ -11326,6 +11326,17 @@ export interface components {
             /** @description Whether the build came from a release. Only one that did is offered an update, because a build from main is usually ahead of the newest release and taking it there would be a downgrade. */
             release: boolean;
         };
+        /** @description Comparison with main for a stamped development build. Main may still be publishing to the dev channel. */
+        UpdatesDevelopment: {
+            /** @description The commit in the running build. */
+            current: string;
+            /** @description The last observed commit on main */
+            latest: string;
+            /** @enum {string} */
+            state: "unknown" | "current" | "available";
+            /** Format: date-time */
+            checked_at: string | null;
+        };
         UpdatesRelease: {
             /** @example v1.3.5 */
             tag: string;
@@ -11433,6 +11444,7 @@ export interface components {
             /** @description `updates.soak` as the Settings page writes it. `auto` waits this long after a release is published; `manual` ignores it. */
             soak: components["schemas"]["Duration"];
             running: components["schemas"]["UpdatesRunning"];
+            development?: components["schemas"]["UpdatesDevelopment"];
             /** @description The newest release that could be installed on this system, whether or not the build is behind it. Null while updating is off, until the list of releases has been read, and when nothing in it can be installed here. */
             latest: components["schemas"]["UpdatesRelease"] | null;
             /** @description What the mode would do about `latest`. Null whenever `latest` is. */

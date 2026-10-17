@@ -43,8 +43,7 @@ const MINUTE = 60_000;
 const SEEDED_REASON =
   'Available: v1.3.2 is newer than the v1.3.0 running now; manual mode waits for someone to update.';
 
-const take = (page: Page) =>
-  page.getByRole('region', { name: 'What an update would take', exact: true });
+const take = (page: Page) => page.getByRole('region', { name: 'Standard releases', exact: true });
 const mode = (page: Page) => page.getByRole('region', { name: 'Update mode', exact: true });
 const controller = (page: Page) =>
   page.getByRole('region', { name: 'This controller', exact: true });
@@ -175,11 +174,13 @@ test('the page offers the shown release and DEV, with no install or apply route'
 
   const main = page.getByRole('main');
   await expect(main.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
-  await expect(main.getByRole('button', { name: 'Update to v1.3.2', exact: true })).toBeVisible();
+  await expect(
+    main.getByRole('button', { name: 'Review update to v1.3.2…', exact: true }),
+  ).toBeVisible();
   const controllerPanel = main.getByRole('region', { name: 'Update this controller', exact: true });
   await expect(controllerPanel.getByRole('button')).toHaveCount(2);
   await expect(
-    controllerPanel.getByRole('button', { name: 'Upgrade to DEV', exact: true }),
+    controllerPanel.getByRole('button', { name: 'Review dev upgrade…', exact: true }),
   ).toBeVisible();
   await expect(
     controllerPanel.getByRole('link', { name: /update now|install|apply|upgrade|restart/i }),
@@ -552,7 +553,7 @@ test('the notice that a newer release exists opens this page from the problems d
 const update = (page: Page) =>
   page.getByRole('region', { name: 'Update this controller', exact: true });
 const updateButton = (page: Page) =>
-  update(page).getByRole('button', { name: 'Update to v1.3.2', exact: true });
+  update(page).getByRole('button', { name: 'Review update to v1.3.2…', exact: true });
 const confirmation = (page: Page) =>
   page.getByRole('dialog', { name: 'Update the controller', exact: true });
 /** The attempt's own block, named by its title: "Updating to v1.3.2", "Updated to …". */
@@ -634,6 +635,58 @@ function updatable(controller: UpdatesStatus['controller'] = null): UpdatesStatu
     controller,
   };
 }
+
+test('a dev build starts unchecked and a release check updates its status without installing', async ({
+  page,
+}) => {
+  const starts = countStarts(page);
+  let checks = 0;
+  const status: UpdatesStatus = {
+    ...updatable(),
+    running: { version: 'main-sha-abc1234', release: false },
+    development: { current: 'abc1234', latest: '', state: 'unknown', checked_at: null },
+  };
+  await serve(page, () => status);
+  await page.route('**/api/v1/updates/check', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    checks += 1;
+    status.development = {
+      current: 'abc1234',
+      latest: 'abc1234fffffffffffffffffffffffffffffffff',
+      state: 'current',
+      checked_at: new Date().toISOString(),
+    };
+    await route.fulfill({ json: status });
+  });
+  await goto(page, PAGE, 'Updates');
+  const installed = page.getByRole('region', { name: 'Installed build and release status' });
+  await expect(installed).toContainText('Development (dev)');
+  await expect(installed).toContainText('The latest dev build has not been confirmed.');
+  await installed.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  await expect(installed).toContainText('matches the latest checked commit on main');
+  await expect(update(page).getByRole('button', { name: 'Reinstall latest dev…' })).toBeVisible();
+  expect(checks).toBe(1);
+  expect(starts()).toBe(0);
+  await expectNoSidewaysScroll(page, 'the dev build status and commit details');
+});
+
+test('newer main changes are distinguished from a published dev build', async ({ page }) => {
+  await serve(page, () => ({
+    ...updatable(),
+    running: { version: 'main-sha-abc1234', release: false },
+    development: {
+      current: 'abc1234',
+      latest: 'def5678fffffffffffffffffffffffffffffffff',
+      state: 'available',
+      checked_at: new Date().toISOString(),
+    },
+  }));
+  await goto(page, PAGE, 'Updates');
+  const installed = page.getByRole('region', { name: 'Installed build and release status' });
+  await expect(installed).toContainText('The dev build may still be publishing');
+  await expect(update(page).getByRole('button', { name: 'Review dev upgrade…' })).toBeVisible();
+  await expectNoSidewaysScroll(page, 'the dev build with newer changes on main');
+});
 
 /** An attempt from 1.3.0 to v1.3.2, as the controller sends one. */
 function attemptIn(
@@ -725,7 +778,7 @@ test('an administrator sees no Update button, and is told the platform role is n
   await expect(take(page)).toContainText('Available');
 
   await expect(update(page)).toContainText('Updating the controller needs the platform role.');
-  await expect(page.getByRole('button', { name: /^Update to/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Review update to/ })).toHaveCount(0);
   await expect(update(page).getByRole('button')).toHaveCount(0);
   expect(starts()).toBe(0);
 });
@@ -910,7 +963,7 @@ test('with no helper there is no button, and the page says how to install one', 
   await expect(
     update(page).getByRole('button', { name: 'Copy the install command' }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Update to/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Review update to/ })).toHaveCount(0);
 });
 
 test('where the helper can never be installed the page says why, with the upgrade command and nothing to install', async ({
@@ -938,7 +991,7 @@ test('where the helper can never be installed the page says why, with the upgrad
   await expect(update(page).getByRole('button', { name: 'Copy the install command' })).toHaveCount(
     0,
   );
-  await expect(page.getByRole('button', { name: /^Update to/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Review update to/ })).toHaveCount(0);
 });
 
 test("a refusal to start is shown where the button was, in the controller's words", async ({

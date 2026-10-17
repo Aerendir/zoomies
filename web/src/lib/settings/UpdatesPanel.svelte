@@ -36,6 +36,7 @@
   import {
     attemptWords,
     buildText,
+    developmentStatus,
     controllerOffer,
     describeMode,
     modeLabel,
@@ -86,6 +87,20 @@
     status && attempt ? attemptWords(attempt, status.running.version) : null,
   );
 
+  let checking = $state(false);
+  let checkError = $state('');
+  async function check(): Promise<void> {
+    if (checking) return;
+    checking = true;
+    checkError = '';
+    try {
+      await updates.check();
+    } catch (cause) {
+      checkError = authFailureText(cause);
+    } finally {
+      checking = false;
+    }
+  }
   let confirming = $state(false);
   // The release the button named when it was pressed. The request carries this
   // one and the dialog names it, so a newer release arriving while the dialog is
@@ -172,7 +187,7 @@
 
 <PageHeader
   title="Updates"
-  subtitle="Which release the update mode would take, and when."
+  subtitle="Check the installed build, choose a release, then follow the controller restart."
   onrefresh={() => updates.refresh()}
 />
 
@@ -201,7 +216,39 @@
         </div>
       {/if}
 
-      <Panel title="What an update would take">
+      <Panel title="Installed build and release status">
+        {#snippet actions()}<Badge
+            tone="neutral"
+            label={status.running.release
+              ? 'Standard release'
+              : status.development
+                ? 'Development (dev)'
+                : 'Custom build'}
+            dot={false}
+          />{/snippet}
+        <p class="line mono">{status.running.version}</p>
+        {#if status.development}
+          <p class="reason">{developmentStatus(status.development)}</p>
+          <dl class="facts">
+            <dt>Installed commit</dt>
+            <dd class="mono">{status.development.current}</dd>
+            <dt>Latest main commit</dt>
+            <dd class="mono">{status.development.latest || 'Not checked yet'}</dd>
+            {#if status.development.checked_at}<dt>Dev last checked</dt>
+              <dd><RelativeTime value={status.development.checked_at} /></dd>{/if}
+          </dl>
+        {:else if status.running.release && status.target && !status.target.newer}
+          <p class="reason">
+            This controller is on the latest offered standard release or a newer release.
+          </p>
+        {/if}
+        {#if canAdmin}<Button onclick={() => check()} disabled={checking}
+            >{checking ? 'Checking releases…' : 'Check for updates'}</Button
+          >{/if}
+        {#if checkError}<p class="refusal" role="alert">{checkError}</p>{/if}
+      </Panel>
+
+      <Panel title="Standard releases">
         {#snippet actions()}
           {#if badge}<Badge tone={badge.tone} label={badge.label} dot={false} />{/if}
         {/snippet}
@@ -298,7 +345,9 @@
         {#if offer?.kind === 'offer'}
           <div class="act">
             {#if refusal}<p class="refusal" role="alert">{refusal}</p>{/if}
-            <Button variant="primary" onclick={() => ask(offer.tag)}>Update to {offer.tag}</Button>
+            <Button variant="primary" onclick={() => ask(offer.tag)}
+              >Review update to {offer.tag}…</Button
+            >
           </div>
         {:else if offer?.kind === 'none'}
           <div class="act">
@@ -324,10 +373,14 @@
         {#if canUpdate && status.mode !== 'off' && status.helper.state === 'ready' && offer?.kind !== 'in-flight'}
           <div class="dev-update">
             <p class="reason">
-              DEV follows the latest build from main and may include changes that have not been
-              released.
+              Development (dev) installs the latest published build from main. It may include
+              untested changes. Standard automatic updates follow the update mode below.
             </p>
-            <Button onclick={() => ask('dev')}>Upgrade to DEV</Button>
+            <Button onclick={() => ask('dev')}
+              >{status.development?.state === 'current'
+                ? 'Reinstall latest dev…'
+                : 'Review dev upgrade…'}</Button
+            >
           </div>
         {:else if canUpdate && offer?.kind === 'none' && offer.upgradeCommand}
           <div class="dev-update">
@@ -353,6 +406,14 @@
           {/if}
         </Panel>
       {/if}
+
+      <Panel title="Update hosts after the controller">
+        <p class="reason">
+          Once the controller reports the target build, open Hosts to update agents to match it.
+          Each host reports its own progress; running jobs continue.
+        </p>
+        <a href="/hosts">Review hosts and update progress</a>
+      </Panel>
 
       <Panel title="Update mode">
         <dl class="facts">

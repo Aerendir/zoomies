@@ -4,6 +4,7 @@ import {
   attemptIsOpen,
   attemptWords,
   buildText,
+  developmentStatus,
   confirmControllerUpdate,
   confirmRollout,
   controllerOffer,
@@ -753,4 +754,17 @@ test('DEV confirmation identifies the moving development channel without a relea
   assert.match(words.description, /to dev/);
   assert.ok(words.consequences.some((line) => line.includes('moving channel')));
   assert.ok(!words.consequences.some((line) => line.includes('older code')));
+});
+
+test('development status distinguishes main from a published dev image', () => {
+  const dev = { current: 'abc1234', latest: '', state: 'unknown' as const, checked_at: null };
+  assert.match(developmentStatus(dev), /has not been confirmed/);
+  assert.match(
+    developmentStatus({ ...dev, latest: 'abc1234', state: 'current' }),
+    /matches the latest checked commit/,
+  );
+  assert.match(
+    developmentStatus({ ...dev, latest: 'def5678', state: 'available' }),
+    /may still be publishing/,
+  );
 });
