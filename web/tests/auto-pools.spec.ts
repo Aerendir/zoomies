@@ -986,6 +986,7 @@ test.describe('job size', () => {
       return route.fulfill({ json: { items: [] } });
     });
     await goto(page, '/jobs', 'Jobs');
+    await openFleetContext(page);
     const panel = page.getByTestId('size-advice');
     await panel.locator('summary').click();
     await expect(panel.getByTestId('advice-none')).toContainText('Nothing to suggest');
