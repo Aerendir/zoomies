@@ -967,3 +967,36 @@ func TestALiveMachinesIdOfferedAgainIsNotTaken(t *testing.T) {
 		t.Fatalf("a working machine was settled as gone: %s", got.State)
 	}
 }
+
+// An enrolment window that ran out with the machine's join token still unspent
+// is not "the agent did not join": the guest never offered the credential, and
+// the two reasons for that are a guest that cannot reach this controller and a
+// guest heartbeating under an identity its template carried. The failure has to
+// name both, because the old sentence named only the first and sent operators
+// to look at a network that was fine.
+func TestAnEnrolmentTimeoutSaysTheTokenWasNeverRedeemed(t *testing.T) {
+	h := newHarness(t)
+	h.machineFleet(t)
+
+	h.machinePass(t)
+	m := h.onlyMachine(t)
+	m = h.drive(t, m.ID, store.MachineEnrolling, 8)
+	if m.JoinTokenID == "" {
+		t.Fatal("the machine reached enrolling with no join token; nothing could ever join with it")
+	}
+
+	h.advance(h.cfg.Provider.EnrolTimeout + time.Minute)
+	h.machinePass(t)
+
+	// The queue that bought this machine buys its replacement in the same pass
+	// that fails it, so the row is picked up by id rather than as the only one.
+	m = h.machineByID(t, m.ID)
+	if m.State != store.MachineFailed {
+		t.Fatalf("past its enrolment window the machine is %s, want failed: %s", m.State, m.Message)
+	}
+	for _, want := range []string{"nothing redeemed this machine's join token", "Hosts page", "external URL"} {
+		if !strings.Contains(m.Message, want) {
+			t.Errorf("the failure does not mention %q:\n%s", want, m.Message)
+		}
+	}
+}
