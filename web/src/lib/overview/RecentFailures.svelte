@@ -57,7 +57,7 @@
    * the Overview's own rule is that nothing needing a person pushes the fleet
    * below the fold of a 1440x900 laptop.
    */
-  const SHOWN = 3;
+  const SHOWN = 2;
 
   let jobs = $state.raw<Job[]>([]);
   let total = $state(0);
