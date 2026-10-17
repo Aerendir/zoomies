@@ -3,7 +3,10 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -283,5 +286,95 @@ func TestGitHubAttentionObservationsDoNotAcknowledgeOrHideNewFailures(t *testing
 	}
 	if err := s.PruneJobAttentionRuns(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// legacyUnreplacedJobSQL is the replacement test as it was first written: one
+// NOT EXISTS with the two kinds of later job joined by an OR. It is kept here,
+// and only here, as the definition the split into two has to agree with. The
+// arguments leave out one half or the other, so a test can tell that a fixture
+// really contains both kinds.
+func legacyUnreplacedJobSQL(laterAttempt, laterRun bool) string {
+	var kinds []string
+	if laterAttempt {
+		kinds = append(kinds, `(later.github_run_id = jobs.github_run_id AND later.github_run_id != 0
+				AND later.run_attempt > jobs.run_attempt)`)
+	}
+	if laterRun {
+		kinds = append(kinds, `(jobs.github_run_id != 0 AND later.github_run_id != 0
+				AND jobs.head_branch != '' AND jobs.workflow != ''
+				AND later.head_branch = jobs.head_branch AND later.workflow = jobs.workflow
+				AND later.github_run_id != jobs.github_run_id
+				AND later.queued_at > jobs.queued_at)`)
+	}
+	return `NOT EXISTS (
+		SELECT 1 FROM jobs later
+		WHERE later.repo = jobs.repo AND later.job_name = jobs.job_name
+			AND (later.state != 'completed' OR later.conclusion NOT IN ('cancelled','skipped','neutral')
+				OR later.runner_fault != '' OR later.fault_kind != '')
+			AND (` + strings.Join(kinds, " OR ") + `))`
+}
+
+// The replacement test was split in two so that SQLite can find a later
+// attempt through the run and a later run through the branch. NOT EXISTS (A OR
+// B) is NOT EXISTS (A) AND NOT EXISTS (B) on paper; this holds the SQL to it,
+// on a small pseudo-random fleet whose few repositories, runs, branches and
+// workflows collide constantly, so every combination of the two kinds of later
+// job, the guards on missing metadata and the jobs that do not count as a
+// replacement turn up many times over.
+func TestSplittingTheReplacementTestKeepsTheSameJobs(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	s := newTestStoreAt(t, func() time.Time { return now })
+	ctx := context.Background()
+	rng := rand.New(rand.NewPCG(7, 11))
+	pick := func(from ...string) string { return from[rng.IntN(len(from))] }
+	for i := 1; i <= 600; i++ {
+		state, conclusion := "completed", pick("success", "failure", "failure", "cancelled", "skipped", "neutral", "timed_out")
+		if rng.IntN(8) == 0 {
+			state, conclusion = pick("queued", "in_progress", "waiting"), ""
+		}
+		fault, kind := "", ""
+		if rng.IntN(10) == 0 {
+			fault, kind = "runner exited with code 137", "out_of_memory"
+		}
+		_, err := s.write.ExecContext(ctx, `INSERT INTO jobs
+			(id, github_job_id, github_run_id, repo, workflow, job_name, head_branch, run_attempt,
+			 state, conclusion, runner_fault, fault_kind, queued_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			fmt.Sprintf("job_%d", i), i, rng.IntN(6), pick("acme/a", "acme/b"), pick("", "CI", "CI", "Deploy"),
+			pick("Test", "Lint"), pick("", "main", "main", "feature"), rng.IntN(4), state, conclusion, fault, kind,
+			ms(now.Add(-time.Duration(rng.IntN(12))*time.Minute)))
+		if err != nil {
+			t.Fatalf("seeding job %d: %v", i, err)
+		}
+	}
+	unreplaced := func(test string) []int64 {
+		t.Helper()
+		rows, err := s.read.QueryContext(ctx, `SELECT github_job_id FROM jobs WHERE `+test+` ORDER BY github_job_id`)
+		if err != nil {
+			t.Fatalf("%v in %s", err, test)
+		}
+		defer rows.Close()
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			ids = append(ids, id)
+		}
+		return ids
+	}
+
+	single, split := unreplaced(legacyUnreplacedJobSQL(true, true)), unreplaced(unreplacedJobSQL())
+	if !slices.Equal(single, split) {
+		t.Fatalf("splitting the replacement test changed which jobs are unreplaced: %d before, %d after", len(single), len(split))
+	}
+	// A fixture in which only one kind of later job ever mattered would pass
+	// the comparison above whatever the second half did.
+	byAttempt, byRun := unreplaced(legacyUnreplacedJobSQL(true, false)), unreplaced(legacyUnreplacedJobSQL(false, true))
+	if len(single) == 0 || len(byAttempt) <= len(single) || len(byRun) <= len(single) {
+		t.Fatalf("the fixture does not need both kinds of later job: %d unreplaced, %d if only a later attempt replaced, %d if only a later run did",
+			len(single), len(byAttempt), len(byRun))
 	}
 }

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -44,6 +45,40 @@ func TestFaultedJobsAreReadFromTheirOwnIndex(t *testing.T) {
 		}
 		if strings.Contains(plan, "TEMP B-TREE") {
 			t.Errorf("%s sorts in a temporary b-tree: %s", name, plan)
+		}
+	}
+}
+
+// The attention view asks, for each recent failure, whether a newer job has
+// taken its place, and there are two ways one can: a later attempt of the same
+// run, which idx_jobs_run finds, and a later run of the same workflow on the
+// same branch, which idx_jobs_attention_branch finds. Joined by an OR inside
+// one NOT EXISTS, SQLite could use neither and walked every retained job with
+// the same name in every repository (idx_jobs_name_queued): seconds on a month
+// of history for the page, the same for the loop that picks runs to check, and
+// every other read queued behind them. This is the test that notices, rather
+// than an Overview that stops loading.
+func TestTheAttentionFilterIsReadFromTheRunAndBranchIndexes(t *testing.T) {
+	s := newTestStore(t)
+	where, args := jobWhere(JobFilter{AttentionOnly: true}, s.Now())
+	for name, q := range map[string]struct {
+		query string
+		args  []any
+	}{
+		"the page":                {`SELECT id FROM jobs ` + where + ` ORDER BY queued_at DESC, id ASC LIMIT 50`, args},
+		"the count":               {`SELECT COUNT(*) FROM jobs ` + where, args},
+		"the runs to check again": {jobAttentionRunsToCheckSQL(), []any{0, 0, 5}},
+	} {
+		plan := explain(t, s, q.query, q.args...)
+		// The replacement is the subquery's alias, so the outer scan of the
+		// runs to check (which is also over idx_jobs_run) cannot satisfy it.
+		for _, index := range []string{"idx_jobs_run", "idx_jobs_attention_branch"} {
+			if !regexp.MustCompile(`SEARCH later USING (COVERING )?INDEX ` + index + ` \(`).MatchString(plan) {
+				t.Errorf("%s does not look for a replacement through %s: %s", name, index, plan)
+			}
+		}
+		if strings.Contains(plan, "idx_jobs_name_queued") {
+			t.Errorf("%s scans every job with the same name to look for a replacement: %s", name, plan)
 		}
 	}
 }

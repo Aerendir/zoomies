@@ -13,13 +13,7 @@ type JobAttentionRun struct {
 // JobAttentionRunsToCheck rotates through runs, including ones previously
 // settled on GitHub: a closed PR can reopen and checks can be run again.
 func (s *Store) JobAttentionRunsToCheck(ctx context.Context, limit int) ([]JobAttentionRun, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT jobs.repo, jobs.github_run_id
-		FROM jobs LEFT JOIN job_attention_runs a ON a.repo=jobs.repo AND a.run_id=jobs.github_run_id
-		WHERE jobs.github_run_id != 0 AND jobs.acknowledged_at IS NULL
-			AND jobs.queued_at >= ? AND `+failedJobSQL()+` AND `+unreplacedJobSQL()+`
-			AND COALESCE(a.attempted_at,0) < ?
-		GROUP BY jobs.repo, jobs.github_run_id
-		ORDER BY COALESCE(a.attempted_at,0), MAX(jobs.queued_at) DESC, jobs.repo, jobs.github_run_id LIMIT ?`,
+	rows, err := s.read.QueryContext(ctx, jobAttentionRunsToCheckSQL(),
 		ms(s.Now().Add(-AttentionWindow)), ms(s.Now().Add(-5*time.Minute)), limit)
 	if err != nil {
 		return nil, err
@@ -34,6 +28,19 @@ func (s *Store) JobAttentionRunsToCheck(ctx context.Context, limit int) ([]JobAt
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// jobAttentionRunsToCheckSQL is a function so that a test can ask SQLite how it
+// reads it: the replacement test inside is the part that is expensive to get
+// wrong, and a plan is only visible from the statement.
+func jobAttentionRunsToCheckSQL() string {
+	return `SELECT jobs.repo, jobs.github_run_id
+		FROM jobs LEFT JOIN job_attention_runs a ON a.repo=jobs.repo AND a.run_id=jobs.github_run_id
+		WHERE jobs.github_run_id != 0 AND jobs.acknowledged_at IS NULL
+			AND jobs.queued_at >= ? AND ` + failedJobSQL() + ` AND ` + unreplacedJobSQL() + `
+			AND COALESCE(a.attempted_at,0) < ?
+		GROUP BY jobs.repo, jobs.github_run_id
+		ORDER BY COALESCE(a.attempted_at,0), MAX(jobs.queued_at) DESC, jobs.repo, jobs.github_run_id LIMIT ?`
 }
 
 // RecordJobAttentionRun records only evidence, never an acknowledgement. On
