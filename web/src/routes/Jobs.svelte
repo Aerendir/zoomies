@@ -42,15 +42,18 @@
 -->
 <script lang="ts">
   import Tooltip from '$lib/components/Tooltip.svelte';
+  import { Check } from '@lucide/svelte';
   import { readableJobText } from '$lib/jobs/name';
   import { visualStyle } from '$lib/state/ui-style.svelte';
   import { viewport } from '$lib/state/viewport.svelte';
   import JobsInsights from '$lib/insights/JobsInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
-  import { getJobFacets, listJobs } from '$lib/api/client';
+  import { acknowledgeJob, getJobFacets, listJobs, reopenJobAttention } from '$lib/api/client';
   import type { Job } from '$lib/api/types';
   import { events } from '$lib/api/sse';
-  import { faultLabel, fleetFailed } from '$lib/faults';
+  import { session } from '$lib/state/session.svelte';
+  import { toasts } from '$lib/state/toasts.svelte';
+  import { fleetFailed } from '$lib/faults';
   import { NO_VALUE, formatDuration } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import {
@@ -68,6 +71,8 @@
   import Duration from '$lib/components/Duration.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
+  import RowActions from '$lib/components/RowActions.svelte';
+  import type { RowAction } from '$lib/components/RowActions.svelte';
   import StateCell from '$lib/components/StateCell.svelte';
   import { endOfMoment, startOfMoment } from '$lib/jobs/DateRange.svelte';
   import GitHubLink from '$lib/jobs/GitHubLink.svelte';
@@ -77,6 +82,7 @@
   import JobViewFilter from '$lib/jobs/JobViewFilter.svelte';
   import SizeAdvice from '$lib/jobs/SizeAdvice.svelte';
   import { classCell } from '$lib/jobs/size';
+  import { failureSummary } from '$lib/jobs/why';
   import UnmatchedNote from '$lib/jobs/UnmatchedNote.svelte';
   import { jobFilterState } from '$lib/jobs/filter-state.svelte';
   import LevelSwitch from '$lib/workflows/LevelSwitch.svelte';
@@ -167,19 +173,21 @@
       ? 'No jobs match these filters'
       : filters.unmatched
         ? 'No unmatched jobs'
-        : filters.faulted
-          ? 'This fleet has broken nothing'
-          : filters.failed
-            ? 'No failed jobs'
-            : view === 'running'
-              ? 'Nothing is running right now'
-              : view === 'queued'
-                ? 'Nothing is queued'
-                : view === 'finished'
-                  ? 'Nothing has finished yet'
-                  : filters.all
-                    ? 'No jobs recorded yet'
-                    : 'No jobs have run on this fleet',
+        : filters.attention
+          ? 'No failure is waiting on you'
+          : filters.faulted
+            ? 'This fleet has broken nothing'
+            : filters.failed
+              ? 'No failed jobs'
+              : view === 'running'
+                ? 'Nothing is running right now'
+                : view === 'queued'
+                  ? 'Nothing is queued'
+                  : view === 'finished'
+                    ? 'Nothing has finished yet'
+                    : filters.all
+                      ? 'No jobs recorded yet'
+                      : 'No jobs have run on this fleet',
   );
 
   const emptyDescription = $derived(
@@ -187,19 +195,21 @@
       ? 'Nothing fits the search and filters above. Clear filters returns to what is running now, and All shows every status.'
       : filters.unmatched
         ? 'Nothing is queued with labels no pool claims, which is how it should be. Jobs that already ran are not counted here however their labels read.'
-        : filters.faulted
-          ? "No runner here stopped under a job or failed to start one within these filters. Any failures in this period are the workflows' own. Widen the dates to look further back."
-          : filters.failed
-            ? 'Nothing GitHub reported as failed or timed out, and no runner here has stopped under a job. Widen the dates to look further back.'
-            : view === 'running'
-              ? 'No runner here is working on a job at this moment, which on a quiet fleet is the ordinary state. Queued shows what is waiting for one, and All shows everything this fleet has been asked to do.'
-              : view === 'queued'
-                ? 'Nothing is waiting for a runner, so the fleet is keeping up with what GitHub is asking of it. Running shows what is being worked on now, and the Queue holds anything removed from the queue rather than run.'
-                : view === 'finished'
-                  ? 'Nothing has ended within these filters. Running and Queued show the work still in hand, and All shows every status at once.'
-                  : filters.all
-                    ? 'Zoomies records a job the first time GitHub tells it about one, over a webhook delivery. If workflows are running and nothing appears here, the delivery is not arriving.'
-                    : 'This view shows jobs a pool claims or a runner here ran. Include other runners to see everything GitHub has reported, hosted runners included.',
+        : filters.attention
+          ? 'Nothing failed in the last week that nobody has acknowledged and no later attempt has replaced. The Failed view keeps every failure in history, and a re-run that passes settles one.'
+          : filters.faulted
+            ? "No runner here stopped under a job or failed to start one within these filters. Any failures in this period are the workflows' own. Widen the dates to look further back."
+            : filters.failed
+              ? 'Nothing GitHub reported as failed or timed out, and no runner here has stopped under a job. Widen the dates to look further back.'
+              : view === 'running'
+                ? 'No runner here is working on a job at this moment, which on a quiet fleet is the ordinary state. Queued shows what is waiting for one, and All shows everything this fleet has been asked to do.'
+                : view === 'queued'
+                  ? 'Nothing is waiting for a runner, so the fleet is keeping up with what GitHub is asking of it. Running shows what is being worked on now, and the Queue holds anything removed from the queue rather than run.'
+                  : view === 'finished'
+                    ? 'Nothing has ended within these filters. Running and Queued show the work still in hand, and All shows every status at once.'
+                    : filters.all
+                      ? 'Zoomies records a job the first time GitHub tells it about one, over a webhook delivery. If workflows are running and nothing appears here, the delivery is not arriving.'
+                      : 'This view shows jobs a pool claims or a runner here ran. Include other runners to see everything GitHub has reported, hosted runners included.',
   );
 
   /* -- the grid ---------------------------------------------------------------- */
@@ -223,6 +233,7 @@
         hosted: filters.hosted === 'false' ? false : undefined,
         failed: filters.failed ? true : undefined,
         faulted: filters.faulted ? true : undefined,
+        attention: filters.attention ? true : undefined,
         managed: filters.all ? undefined : true,
         limit: query.limit,
         offset: query.offset,
@@ -242,6 +253,66 @@
     drawerOpen = true;
   }
 
+  /** The job whose triage action is in flight, so its button cannot be pressed twice. */
+  let acking = $state<string | null>(null);
+
+  function subjectOf(job: Job): string {
+    return `${job.repo ?? 'this repository'} / ${readableJobText(job.job_name) || 'this job'}`;
+  }
+
+  /**
+   * The triage action on a row of the attention view: the same decision the
+   * Overview's failures panel and the drawer write, through the same route.
+   * Checking failures off as they are read is what this view is for, and a
+   * page that showed the work but made the operator open each drawer to act
+   * on it would be a list that refuses to be worked through.
+   */
+  function rowActions(job: Job): RowAction[] {
+    if (!filters.attention || !session.can('operator') || !job.id) return [];
+    return [
+      {
+        id: 'acknowledge',
+        label: 'Mark as known',
+        icon: Check,
+        disabled: acking === job.id,
+        onSelect: () => void acknowledge(job),
+      },
+    ];
+  }
+
+  /**
+   * Mark one failure as known, from its row. The row leaves on the next
+   * refetch, which the frame triggers; the toast is the undo, exactly as in
+   * the Overview's panel.
+   */
+  async function acknowledge(job: Job): Promise<void> {
+    if (!job.id || acking !== null) return;
+    acking = job.id;
+    try {
+      await acknowledgeJob(job.id);
+      liveKey += 1;
+      toasts.success(
+        'Marked as known',
+        'The failure stays in the failed view; a re-run that passes is what settles it.',
+        { label: 'Undo', run: () => void reopen(job) },
+      );
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not mark the failure as known');
+    } finally {
+      acking = null;
+    }
+  }
+
+  async function reopen(job: Job): Promise<void> {
+    if (!job.id) return;
+    try {
+      await reopenJobAttention(job.id);
+      liveKey += 1;
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not put the failure back');
+    }
+  }
+
   // A named function, not an inline arrow: the grid's fetch effect reads its
   // props, and a fresh function identity on every render would make it refetch
   // in response to its own results.
@@ -254,19 +325,10 @@
   }
 
   /**
-   * The one phrase a row has room for on a job that went wrong: the fleet's own
-   * category, or the step the workflow failed at.
-   *
-   * The category rather than "Runner lost" for every one of them, because the
-   * column is read down rather than across: nine rows saying the same two words
-   * say only that the fleet is unwell, and six saying "Out of memory" say what
-   * to do about it.
+   * The one phrase a row has room for on a job that went wrong comes from the
+   * shared helper, because the Overview's failures panel shows the same
+   * failure in the same words.
    */
-  function failedAt(job: Job): string {
-    if (fleetFailed(job)) return faultLabel(job.fault_kind) || 'Runner lost';
-    if (job.failed_step) return job.failed_step.name ?? `step ${job.failed_step.number ?? '?'}`;
-    return '';
-  }
 
   // The sortable ids are the column names the store understands: queued_at,
   // started_at, completed_at, repo, workflow, state, duration and queue_wait.
@@ -284,7 +346,13 @@
       },
       cell: stateCell,
     },
-    { id: 'failed_at', header: 'Failed at', priority: 'wide', value: failedAt, cell: failedAtCell },
+    {
+      id: 'failed_at',
+      header: 'Failed at',
+      priority: 'wide',
+      value: failureSummary,
+      cell: failedAtCell,
+    },
     { id: 'repo', header: 'Repository', sortable: true, value: (job) => job.repo ?? '' },
     { id: 'workflow', header: 'Workflow', sortable: true, value: (job) => job.workflow ?? '' },
     {
@@ -362,7 +430,7 @@
     { id: 'link', header: 'Run', priority: 'wide', width: '5.5rem', align: 'end', cell: linkCell },
   ]);
   const preferred = ['job_name', 'repo', 'state', 'queue_wait', 'duration'];
-  const columns = $derived(
+  const shownColumns = $derived(
     operational
       ? [...baseColumns].sort(
           (a, b) =>
@@ -371,6 +439,21 @@
         )
       : baseColumns,
   );
+  /*
+   * The triage action is a column rather than a row action on the whole grid,
+   * and only in the attention view: every other view is history, where "mark
+   * as known" is a decision about a failure somebody has gone looking for, not
+   * about the row in front of them. It is last so the columns an operator
+   * reads keep the places they have everywhere else.
+   */
+  const triageColumn: GridColumn<Job> = {
+    id: 'triage',
+    header: 'Triage',
+    width: '4.5rem',
+    align: 'end',
+    cell: triageCell,
+  };
+  const columns = $derived(filters.attention ? [...shownColumns, triageColumn] : shownColumns);
 </script>
 
 {#snippet jobNameCell(job: Job)}
@@ -412,7 +495,7 @@
 {#snippet failedAtCell(job: Job)}
   {#if fleetFailed(job)}
     <Tooltip bare text={job.runner_fault || job.fault_fix || ''}>
-      <span class="failed-at danger">{failedAt(job)}</span>
+      <span class="failed-at danger">{failureSummary(job)}</span>
     </Tooltip>
   {:else if job.failed_step}
     <Tooltip bare text="Step {job.failed_step.number}: {job.failed_step.name}">
@@ -476,6 +559,10 @@
     label="Open {readableJobText(job.job_name) || 'this job'} on GitHub, in a new tab"
     onclick={(event) => event.stopPropagation()}
   />
+{/snippet}
+
+{#snippet triageCell(job: Job)}
+  <RowActions actions={rowActions(job)} subject={subjectOf(job)} />
 {/snippet}
 
 <PageHeader

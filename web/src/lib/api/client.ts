@@ -501,6 +501,18 @@ export const controlWorkflowRunProvisioning = (body: Body<'controlWorkflowRunPro
 export const rerunJobWorkflow = (id: string) =>
   api.post<Result<'rerunJobWorkflow'>>(`/jobs/${enc(id)}/rerun`, {});
 
+/**
+ * Mark a failed job as known, so the attention list stops asking about it. It
+ * is not a resolution: the failure keeps its row and its conclusion, and the
+ * answer is that job's GET shape.
+ */
+export const acknowledgeJob = (id: string) =>
+  api.post<Result<'acknowledgeJob'>>(`/jobs/${enc(id)}/acknowledge`, {});
+
+/** Put an acknowledged failure back in front of whoever looks next. */
+export const reopenJobAttention = (id: string) =>
+  api.del<Result<'reopenJobAttention'>>(`/jobs/${enc(id)}/acknowledge`);
+
 /* -- hosts ---------------------------------------------------------------- */
 
 export const listHosts = (signal?: AbortSignal) =>

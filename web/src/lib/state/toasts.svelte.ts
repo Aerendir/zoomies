@@ -117,8 +117,14 @@ class Toasts {
     return toast.id;
   }
 
-  success(title: string, message?: string): number {
-    return this.push({ tone: 'success', title, message });
+  /**
+   * A success may carry an action when the change it reports can be taken
+   * back with one click: an acknowledgement of a failure is the case this
+   * exists for. The toast is then the undo, which is cheaper than a second
+   * surface listing what has been put away.
+   */
+  success(title: string, message?: string, action?: ToastAction): number {
+    return this.push({ tone: 'success', title, message, action });
   }
 
   info(title: string, message?: string): number {

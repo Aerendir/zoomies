@@ -36,6 +36,7 @@ const FILTER_KEYS = [
   'hosted',
   'failed',
   'faulted',
+  'attention',
   'all',
 ] as const;
 
@@ -46,6 +47,7 @@ const STATUS_KEYS = [
   'failed',
   'faulted',
   'unmatched',
+  'attention',
   'provisioning',
 ] as const;
 
@@ -140,6 +142,7 @@ export function jobFilterState(): JobFilterHandle {
     hosted: router.param('hosted') === 'false' ? 'false' : '',
     failed: router.param('failed') === 'true',
     faulted: router.param('faulted') === 'true',
+    attention: router.param('attention') === 'true',
     all: router.param('all') === 'true',
   });
 
@@ -192,8 +195,13 @@ export function jobFilterState(): JobFilterHandle {
      * "running" to every job the fleet has ever run, and removing the last chip
      * from a link that asked for every status took it the other way, down to
      * running. Both are the page answering a question nobody asked.
+     *
+     * The attention view is left out: its status is the explicit
+     * `attention=true` the URL already carries, and writing every state beside
+     * it would add four keys that narrow nothing to a question that is already
+     * fully said.
      */
-    if (!choosingStatus) {
+    if (!choosingStatus && !filters.attention) {
       out.state = filters.state.length > 0 ? filters.state : [...JOB_STATES];
     }
 
@@ -222,6 +230,20 @@ export function jobFilterState(): JobFilterHandle {
     }
     if (next.failed === true) out.state = [];
     if (next.faulted === true) out.state = [];
+    /*
+     * Anything that is not the attention question takes the page off it. The
+     * switches and the facet menus write a status key without writing the
+     * attention key, and leaving it behind would ask the server for the
+     * intersection of two questions at once: `attention=true&failed=true` is
+     * something no button says, and clearing the state beside it is not
+     * enough, because the attention half would still be narrowing.
+     */
+    if (
+      next.attention === undefined &&
+      STATUS_KEYS.some((key) => key !== 'attention' && next[key] !== undefined)
+    ) {
+      out.attention = null;
+    }
 
     for (const [key, value] of Object.entries(next)) {
       if (typeof value === 'boolean') out[key] = value ? 'true' : null;

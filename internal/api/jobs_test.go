@@ -634,3 +634,108 @@ func TestTheExplanationCarriesItsClassAndABoundedExcerpt(t *testing.T) {
 		t.Fatalf("the 400 does not name the parameter: %s", resp.body)
 	}
 }
+
+// The attention filter and the two triage routes are one question: which
+// failures nobody has dealt with yet. Marking one as known takes it out of the
+// list without touching the failure, reopening puts it back, and both answer
+// with the job's GET shape, which is what the UI drops into its cache.
+func TestAttentionAndItsTriageRoutesAskOneQuestion(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux")
+	done := time.Now().UTC().Add(-time.Minute)
+	started := done.Add(-2 * time.Minute)
+	failed, err := h.st.UpsertJob(h.ctx, &store.Job{
+		GitHubJobID: 7101, GitHubRunID: 55, Repo: "acme/widgets", Workflow: "CI", JobName: "build",
+		Labels: store.StringSlice{"self-hosted", "linux", "x64"}, State: store.JobCompleted,
+		Conclusion: "failure", InstallationID: inst.ID, PoolID: pool.ID, Matched: true,
+		QueuedAt: started.Add(-time.Minute), StartedAt: &started, CompletedAt: &done, RunAttempt: 1,
+	})
+	if err != nil {
+		t.Fatalf("UpsertJob failed: %v", err)
+	}
+	running := h.job(pool, store.JobInProgress)
+	_, viewer := h.user("viewer", store.RoleViewer)
+	_, operator := h.user("operator", store.RoleOperator)
+
+	var page struct {
+		Items []struct {
+			ID             string `json:"id"`
+			AcknowledgedAt string `json:"acknowledged_at"`
+			AcknowledgedBy string `json:"acknowledged_by"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	resp := h.do(request{method: "GET", path: "/api/v1/jobs?attention=true", cookie: viewer})
+	resp.mustStatus(t, 200, "listing the failures needing attention")
+	resp.into(t, &page)
+	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != failed.ID {
+		t.Fatalf("attention jobs = %+v (total %d), want only %s", page.Items, page.Total, failed.ID)
+	}
+
+	// A viewer may read the list but not decide it is answered for.
+	resp = h.do(request{method: "POST", path: "/api/v1/jobs/" + failed.ID + "/acknowledge", cookie: viewer})
+	resp.mustStatus(t, 403, "a viewer acknowledging a failure")
+	if msg := resp.errorMessage(t); !strings.Contains(msg, string(store.RoleOperator)) {
+		t.Fatalf("the refusal does not name the role that is missing: %q", msg)
+	}
+
+	// A job with nothing to triage yet cannot be put on the triaged list.
+	resp = h.do(request{method: "POST", path: "/api/v1/jobs/" + running.ID + "/acknowledge", cookie: operator})
+	resp.mustStatus(t, 409, "acknowledging a job that has not finished")
+	if msg := resp.errorMessage(t); !strings.Contains(msg, "did not fail") {
+		t.Fatalf("the refusal does not say why: %q", msg)
+	}
+
+	resp = h.do(request{method: "POST", path: "/api/v1/jobs/" + failed.ID + "/acknowledge", cookie: operator})
+	resp.mustStatus(t, 200, "acknowledging the failure")
+	var out struct {
+		ID             string `json:"id"`
+		AcknowledgedAt string `json:"acknowledged_at"`
+		AcknowledgedBy string `json:"acknowledged_by"`
+		Conclusion     string `json:"conclusion"`
+	}
+	resp.into(t, &out)
+	if out.ID != failed.ID || out.AcknowledgedAt == "" || out.AcknowledgedBy != "operator" {
+		t.Fatalf("acknowledged job = %+v, want the operator named", out)
+	}
+	if out.Conclusion != "failure" {
+		t.Fatalf("acknowledging changed the conclusion: %+v", out)
+	}
+
+	resp = h.do(request{method: "GET", path: "/api/v1/jobs?attention=true", cookie: viewer})
+	resp.mustStatus(t, 200, "the attention list after acknowledging")
+	resp.into(t, &page)
+	if page.Total != 0 || len(page.Items) != 0 {
+		t.Fatalf("attention jobs after acknowledging = %+v (total %d), want none", page.Items, page.Total)
+	}
+	// It is still a failure; only the attention view stopped asking.
+	resp = h.do(request{method: "GET", path: "/api/v1/jobs?failed=true", cookie: viewer})
+	resp.mustStatus(t, 200, "the failed list after acknowledging")
+	resp.into(t, &page)
+	if page.Total != 1 {
+		t.Fatalf("failed jobs after acknowledging = %d, want the failure still listed", page.Total)
+	}
+
+	resp = h.do(request{method: "DELETE", path: "/api/v1/jobs/" + failed.ID + "/acknowledge", cookie: operator})
+	resp.mustStatus(t, 200, "reopening the failure")
+	var reopened struct {
+		AcknowledgedAt string `json:"acknowledged_at"`
+		AcknowledgedBy string `json:"acknowledged_by"`
+	}
+	resp.into(t, &reopened)
+	if reopened.AcknowledgedAt != "" || reopened.AcknowledgedBy != "" {
+		t.Fatalf("reopened job = %+v, want the acknowledgement gone", reopened)
+	}
+	resp = h.do(request{method: "GET", path: "/api/v1/jobs?attention=true", cookie: viewer})
+	resp.mustStatus(t, 200, "the attention list after reopening")
+	resp.into(t, &page)
+	if page.Total != 1 || page.Items[0].ID != failed.ID {
+		t.Fatalf("attention jobs after reopening = %+v (total %d), want %s back", page.Items, page.Total, failed.ID)
+	}
+
+	resp = h.do(request{method: "POST", path: "/api/v1/jobs/job_missing/acknowledge", cookie: operator})
+	resp.mustStatus(t, 404, "acknowledging a job that does not exist")
+	resp = h.do(request{method: "DELETE", path: "/api/v1/jobs/job_missing/acknowledge", cookie: operator})
+	resp.mustStatus(t, 404, "reopening a job that does not exist")
+}

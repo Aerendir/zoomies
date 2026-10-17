@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -394,5 +395,80 @@ func TestAHeldJobsTimelineSaysWhoItWasWaitingFor(t *testing.T) {
 	h.deliverJob(jobEvent{Action: "queued", JobID: 8201, Name: "deploy", Workflow: "Release", Labels: labels})
 	if got := h.timeline(job.ID); len(got) != 3 {
 		t.Fatalf("a redelivered approval added a timeline entry: %v", kindsOfEvents(got))
+	}
+}
+
+// Acknowledging a failure is the fleet's triage record, so it has to be
+// visible on the job's own timeline, name the person who looked, and stay put
+// under a second press. Reopening is the undo, and it says so too. Neither
+// changes the failure: the conclusion and the row are exactly what they were.
+func TestAcknowledgingAFailureIsRecordedOnceWithTheFirstName(t *testing.T) {
+	h := newHarness(t)
+	done := time.Now().UTC().Add(-time.Minute)
+	job, err := h.st.UpsertJob(h.ctx, &store.Job{
+		GitHubJobID: 9001, GitHubRunID: 44, Repo: "acme/widgets", Workflow: "CI", JobName: "test",
+		State: store.JobCompleted, Conclusion: "failure",
+		QueuedAt: done.Add(-time.Minute), CompletedAt: &done,
+	})
+	if err != nil {
+		t.Fatalf("UpsertJob: %v", err)
+	}
+
+	got, err := h.c.AcknowledgeJob(h.ctx, job.ID, "alice")
+	if err != nil {
+		t.Fatalf("AcknowledgeJob: %v", err)
+	}
+	if got.AcknowledgedAt == nil || got.AcknowledgedBy != "alice" {
+		t.Fatalf("acknowledgement = %+v, want alice named", got)
+	}
+	if got.Conclusion != "failure" || got.State != store.JobCompleted {
+		t.Fatalf("acknowledging changed the job: %+v", got)
+	}
+	events := h.timeline(job.ID)
+	last := events[len(events)-1]
+	if last.Kind != store.JobEventAcknowledged || !strings.Contains(last.Message, "alice") {
+		t.Fatalf("timeline entry = %+v, want an acknowledged entry naming alice", last)
+	}
+
+	got, err = h.c.AcknowledgeJob(h.ctx, job.ID, "bob")
+	if err != nil {
+		t.Fatalf("second AcknowledgeJob: %v", err)
+	}
+	if got.AcknowledgedBy != "alice" {
+		t.Fatalf("a second acknowledgement replaced the first: %+v", got)
+	}
+	if entries := h.timeline(job.ID); len(entries) != len(events) {
+		t.Fatalf("a second acknowledgement added a timeline entry: %v", kindsOfEvents(entries))
+	}
+
+	got, err = h.c.ReopenJobAttention(h.ctx, job.ID, "bob")
+	if err != nil {
+		t.Fatalf("ReopenJobAttention: %v", err)
+	}
+	if got.AcknowledgedAt != nil || got.AcknowledgedBy != "" {
+		t.Fatalf("reopening left an acknowledgement behind: %+v", got)
+	}
+	events = h.timeline(job.ID)
+	last = events[len(events)-1]
+	if last.Kind != store.JobEventReopened || !strings.Contains(last.Message, "bob") {
+		t.Fatalf("timeline entry = %+v, want a reopened entry naming bob", last)
+	}
+	if _, err := h.c.ReopenJobAttention(h.ctx, job.ID, "bob"); err != nil {
+		t.Fatalf("second ReopenJobAttention: %v", err)
+	}
+	if entries := h.timeline(job.ID); len(entries) != len(events) {
+		t.Fatalf("reopening twice added a timeline entry: %v", kindsOfEvents(entries))
+	}
+	if _, _, err := h.st.AcknowledgeJob(h.ctx, job.ID, "alice"); err != nil {
+		t.Fatalf("acknowledging after reopening: %v", err)
+	}
+
+	// A job that has not failed has nothing to triage yet.
+	queued, err := h.st.UpsertJob(h.ctx, &store.Job{GitHubJobID: 9002, State: store.JobQueued})
+	if err != nil {
+		t.Fatalf("UpsertJob queued: %v", err)
+	}
+	if _, err := h.c.AcknowledgeJob(h.ctx, queued.ID, "alice"); !errors.Is(err, ErrJobDidNotFail) {
+		t.Fatalf("acknowledging a queued job: %v, want ErrJobDidNotFail", err)
 	}
 }

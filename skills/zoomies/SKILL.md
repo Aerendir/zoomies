@@ -124,7 +124,7 @@ minutes.
 * `zoomies runners drain`, `zoomies runners delete`
 * `zoomies problems apply`
 * `zoomies comparisons capture` (collects GitHub evidence and changes bounded shared history; never automatically retry)
-* `zoomies jobs rerun`
+* `zoomies jobs rerun`, `zoomies jobs acknowledge`, `zoomies jobs reopen` (the last two change what the fleet reports as still needing attention, not the failure itself)
 * `zoomies kennel recheck`
 * `zoomies size-pins set`, `zoomies size-pins delete`
 * `zoomies hosts edit`, `zoomies hosts cordon`, `zoomies hosts drain`, `zoomies hosts uncordon`, `zoomies hosts delete`, `zoomies hosts retire`, `zoomies hosts join-token`

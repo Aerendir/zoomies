@@ -2346,6 +2346,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a failure as known
+         * @description Record that somebody has read this job's failure, so the attention list (`GET /jobs?attention=true`, the Jobs page's "Needs attention" view and the Overview's failures panel) stops asking about it. It is not a resolution: the failure keeps its conclusion on GitHub and its row here, and a re-run that passes is what settles it. A later attempt that fails is a new failure that has to be looked at on its own.
+         *     Only a job that failed can be acknowledged, and a second acknowledgement is a no-op: the first name and the first timeline entry are the person who actually looked. Returns the job in the shape `GET /jobs/{id}` returns, so a client can drop it into the same cache a `job.updated` frame goes into.
+         */
+        post: operations["acknowledgeJob"];
+        /**
+         * Put a failure back in the attention list
+         * @description Take an acknowledgement back, so the failure asks for attention again: the undo for a row marked as known by mistake. It changes nothing about the job or GitHub's record, and reopening one nobody had acknowledged is a no-op. Returns the job in the shape `GET /jobs/{id}` returns.
+         */
+        delete: operations["reopenJobAttention"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{id}/events": {
         parameters: {
             query?: never;
@@ -8689,6 +8717,13 @@ export interface components {
             fault_domain?: "fleet" | "workflow";
             /** @description What to do about a fault of this kind, in the words of the person who has to do it. Empty when there is nothing to do, which is different from not knowing. */
             fault_fix?: string;
+            /**
+             * Format: date-time
+             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Null on a failure nobody has triaged, which is the ordinary state.
+             */
+            acknowledged_at?: string | null;
+            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Empty when nobody has, and on an instance with authentication off, where there is no account behind the action. */
+            acknowledged_by?: string;
             /** Format: date-time */
             queued_at?: string;
             /** Format: date-time */
@@ -9498,10 +9533,10 @@ export interface components {
          */
         FaultKind: "host_lost" | "out_of_memory" | "out_of_disk" | "removed" | "image" | "registration" | "backend" | "backend_busy" | "container_conflict" | "config" | "runner_exited";
         /**
-         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits.
+         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits. `acknowledged` and `reopened` are the fleet's triage of a failure: somebody said they had read it, and somebody put it back in front of whoever looks next. Neither changes the job, which is why they are entries here rather than a move of the job.
          * @enum {string}
          */
-        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed";
+        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed" | "acknowledged" | "reopened";
         JobEvent: {
             id?: string;
             job_id?: string;
@@ -15784,6 +15819,8 @@ export interface operations {
                 managed?: boolean;
                 /** @description Only jobs that went wrong, on either side: a conclusion GitHub counts as a failure (failure, timed_out, startup_failure), or a runner of this fleet that stopped under the job -- including one GitHub still believes is running. */
                 failed?: boolean;
+                /** @description Only the failures that still want a person: failed, queued within the last week, acknowledged by nobody, and not replaced by a later attempt of the same job in the same run. This is the question behind the Jobs page's "Needs attention" view and the Overview's failures panel, asked as one parameter so a link into it cannot compose half of it. Acknowledging a job removes it from this list without changing the failure; a re-run that passes is what settles the failure itself. */
+                attention?: boolean;
                 /** @description Only the failures this fleet caused: the `failed` list narrowed to the jobs whose runner never started or stopped under them. This is the list to open when somebody says CI is flaky, because it is the half nobody else can fix. */
                 faulted?: boolean;
                 /** @description The other half: jobs GitHub failed with nothing wrong on this side. Sending this and `faulted` together is a 400, because they ask for opposite halves of one list. */
@@ -15957,6 +15994,57 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    acknowledgeJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job, with the acknowledgement recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    reopenJobAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job, with the acknowledgement cleared */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getJobEvents: {
         parameters: {
             query?: never;
@@ -16124,6 +16212,8 @@ export interface operations {
                 managed?: boolean;
                 /** @description Runs with a job that went wrong on either side */
                 failed?: boolean;
+                /** @description Runs with a failure that still wants a person; see the `attention` parameter of GET /jobs. */
+                attention?: boolean;
                 /** @description Runs with a failure this fleet caused. */
                 faulted?: boolean;
                 /** @description Runs GitHub failed with nothing wrong on this side. Sending this and `faulted` together is a 400. */

@@ -138,7 +138,7 @@ func tools() []*tool {
 			Name:  "list_jobs",
 			Title: "List jobs",
 			Description: "Workflow jobs this fleet has seen, newest first, with their pool, runner, queue wait, duration and outcome. " +
-				"Use failed to find what went wrong, and ours or theirs to split failures the fleet caused from the workflows' own. " +
+				"Use failed to find what went wrong, ours or theirs to split failures the fleet caused from the workflows' own, and attention to find the failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt. " +
 				"Each job is a one-line summary without its steps unless include_steps is true; get_job has the steps. " +
 				"A full page carries a next value: pass it back as before to read the next page, until next is absent. " +
 				"For counts and percentiles over a period, use job_stats rather than paging through jobs.",
@@ -149,6 +149,7 @@ func tools() []*tool {
 				"state":              enum("only jobs in this state", "waiting", "queued", "in_progress", "completed"),
 				"conclusion":         enum("only jobs that finished this way", "success", "failure", "cancelled", "skipped"),
 				"failed":             boolean("only jobs that went wrong: a failing conclusion, or a runner that stopped under the job"),
+				"attention":          boolean("only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt of the same job"),
 				"ours":               boolean("only failures this fleet caused"),
 				"theirs":             boolean("only failures the workflow caused, with nothing wrong on the fleet's side"),
 				"unmatched":          boolean("only queued jobs no enabled pool claims; these will never run"),
@@ -359,6 +360,7 @@ func listJobs(ctx context.Context, c API, raw json.RawMessage) ([]Content, error
 		State             string `json:"state"`
 		Conclusion        string `json:"conclusion"`
 		Failed            bool   `json:"failed"`
+		Attention         bool   `json:"attention"`
 		Ours              bool   `json:"ours"`
 		Theirs            bool   `json:"theirs"`
 		Unmatched         bool   `json:"unmatched"`
@@ -387,7 +389,7 @@ func listJobs(ctx context.Context, c API, raw json.RawMessage) ([]Content, error
 			q.Set(key, v)
 		}
 	}
-	for key, v := range map[string]bool{"failed": a.Failed, "faulted": a.Ours, "workflow_failed": a.Theirs, "unmatched": a.Unmatched} {
+	for key, v := range map[string]bool{"failed": a.Failed, "attention": a.Attention, "faulted": a.Ours, "workflow_failed": a.Theirs, "unmatched": a.Unmatched} {
 		if v {
 			q.Set(key, "true")
 		}

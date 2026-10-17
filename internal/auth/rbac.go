@@ -45,7 +45,14 @@ const (
 	ActionJobsRead          Action = "jobs.read"
 	ActionJobsCancel        Action = "jobs.cancel"
 	ActionJobsRerun         Action = "jobs.rerun"
-	ActionComparisonsWrite  Action = "comparisons.write"
+	// ActionJobsAcknowledge is saying that a failure has been read, so the
+	// attention list stops asking about it, and taking that back. It changes
+	// nothing about the job or GitHub's record, but it changes what the
+	// fleet reports as still wanting a person, which is why it is an
+	// operator's and has a scope of its own: a token that may re-run work
+	// is not automatically one that may say the fleet is answered for.
+	ActionJobsAcknowledge  Action = "jobs.acknowledge"
+	ActionComparisonsWrite Action = "comparisons.write"
 )
 const ActionUsageRead Action = "usage.read"
 
@@ -301,6 +308,7 @@ var actionRoles = map[Action]store.Role{
 	// minutes and can have whatever side effects the workflow has, which is
 	// the same bar cancelling one clears.
 	ActionJobsRerun:        store.RoleOperator,
+	ActionJobsAcknowledge:  store.RoleOperator,
 	ActionComparisonsWrite: store.RoleOperator,
 	ActionUsageRead:        store.RoleViewer,
 	// Operator: it makes a change, as the pool and host updates it stands in for do.

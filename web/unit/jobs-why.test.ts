@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { evidenceRows, stepAction } from '../src/lib/jobs/why.ts';
+import { evidenceRows, failureSummary, stepAction } from '../src/lib/jobs/why.ts';
 
 // A next step is a button where an action exists and a row where it does
 // not: a re-run is the drawer's own button, a path in this UI is a link that
@@ -50,4 +50,18 @@ test('evidence keeps its order and marks the figures', () => {
       ['host', 'healthy', false, '/hosts/host_1'],
     ],
   );
+});
+
+// The phrase a list row has room for: the fleet's own category, or the step
+// the workflow failed at. The Jobs page and the Overview's failures panel both
+// read it, so one failure cannot read two ways on one screen.
+test('a failure reads as its category or the step it stopped at', () => {
+  assert.equal(
+    failureSummary({ fault_kind: 'out_of_memory', runner_fault: 'exited with 137' }),
+    'Out of memory',
+  );
+  assert.equal(failureSummary({ runner_fault: 'the runner stopped' }), 'Runner lost');
+  assert.equal(failureSummary({ failed_step: { name: 'Run tests', number: 2 } }), 'Run tests');
+  assert.equal(failureSummary({ failed_step: { number: 2 } }), 'step 2');
+  assert.equal(failureSummary({}), '');
 });

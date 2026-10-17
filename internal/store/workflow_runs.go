@@ -166,7 +166,7 @@ func (s *Store) ListWorkflowRuns(ctx context.Context, f JobFilter, p Page) ([]*W
 	if runs, total, ok, err := s.listWorkflowRunsNewestFirst(ctx, f, p); err != nil || ok {
 		return runs, total, err
 	}
-	from, args := workflowRunsFrom(f)
+	from, args := workflowRunsFrom(f, s.Now())
 	var total int
 	if err := s.read.QueryRowContext(ctx, `SELECT COUNT(*) `+from, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -232,7 +232,7 @@ func (s *Store) listWorkflowRunsNewestFirst(ctx context.Context, f JobFilter, p 
 	limit, offset := p.limit(50, 500), max(p.Offset, 0)
 	need := offset + limit
 
-	where, whereArgs := jobWhere(f)
+	where, whereArgs := jobWhere(f, s.Now())
 	var total int
 	if err := s.read.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM (SELECT 1 FROM jobs `+where+` GROUP BY repo, github_run_id)`, whereArgs...).Scan(&total); err != nil {
@@ -255,7 +255,7 @@ func (s *Store) listWorkflowRunsNewestFirst(ctx context.Context, f JobFilter, p 
 			return nil, 0, false, err
 		}
 		restrict := ` WHERE (repo, github_run_id) IN (SELECT repo, github_run_id FROM jobs WHERE queued_at >= ?)`
-		from, args := workflowRunsFromRestricted(f, restrict, []any{bound})
+		from, args := workflowRunsFromRestricted(f, restrict, []any{bound}, s.Now())
 		q := `SELECT ` + workflowRunCols + ` ` + from +
 			` ORDER BY queued_at DESC, repo ASC, github_run_id ASC LIMIT ?`
 		runs, _, err := s.queryWorkflowRuns(ctx, q, append(args, need), total)
@@ -273,15 +273,15 @@ func (s *Store) listWorkflowRunsNewestFirst(ctx context.Context, f JobFilter, p 
 // workflowRunsFrom renders the FROM and WHERE of a run listing: the jobs
 // reduced to the latest attempt of each, summed per run, and narrowed by the
 // filter's two halves.
-func workflowRunsFrom(f JobFilter) (string, []any) {
-	return workflowRunsFromRestricted(f, "", nil)
+func workflowRunsFrom(f JobFilter, now time.Time) (string, []any) {
+	return workflowRunsFromRestricted(f, "", nil, now)
 }
 
 // workflowRunsFromRestricted is workflowRunsFrom over only the jobs a WHERE
 // clause on the jobs table keeps, applied before the window is computed so that
 // the window sees those rows and no others. restrictArgs are that clause's
 // placeholders.
-func workflowRunsFromRestricted(f JobFilter, restrict string, restrictArgs []any) (string, []any) {
+func workflowRunsFromRestricted(f JobFilter, restrict string, restrictArgs []any, now time.Time) (string, []any) {
 	// The job half of the filter keeps a run whenever any of its jobs matches.
 	// The status half is cleared here and applied to the run's own aggregates
 	// below, since a job's state says nothing about its run's.
@@ -289,7 +289,7 @@ func workflowRunsFromRestricted(f JobFilter, restrict string, restrictArgs []any
 	jobs.States, jobs.Conclusions = nil, nil
 	jobs.FailedOnly, jobs.FaultedOnly, jobs.WorkflowFailedOnly = false, false, false
 	jobs.Cancelling = nil
-	where, args := jobWhere(jobs)
+	where, args := jobWhere(jobs, now)
 	inner := `WHERE run_attempt = latest_attempt`
 	if where != "" {
 		inner += ` AND (repo, github_run_id) IN (SELECT repo, github_run_id FROM jobs ` + where + `)`

@@ -2,7 +2,7 @@
   The Overview: the one page that has to earn a place on a second monitor.
 
   Classic keeps its familiar history-first order. Mission Control moves problems,
-  live metrics and current work ahead of history without remounting those panels.
+  failures and live metrics ahead of history without remounting those panels.
   First-run guidance stays first in either style. In Classic the activity matrix comes first: a year of the
   fleet's days as one band of squares, the shape an operator recognises from a
   contribution graph, which says at a glance whether this week looks like last
@@ -12,11 +12,15 @@
   operator watches when nothing is wrong -- where the capacity is going, and
   what has happened to the fleet lately -- and finally the work itself.
 
-  What needs a person is one line here rather than a full panel. The list it
-  summarises lives in the problems drawer, reachable from the top bar on every
-  page: a fleet whose deliberate configuration warnings pushed its pools and its
-  running jobs below the fold was answering "what is happening right now?" with
-  a month-old decision.
+  What needs a person comes in two shapes. The fleet's own problems are one
+  line here rather than a full panel: the list lives in the problems drawer,
+  reachable from the top bar on every page, and a fleet whose deliberate
+  configuration warnings pushed its pools and its running jobs below the fold
+  was answering "what is happening right now?" with a month-old decision. The
+  failures nobody has read are a short panel of their own, because each is a
+  separate job with a separate thing to do about it, and each leaves the panel
+  when somebody says they have seen it: the one question GitHub cannot answer
+  is which failures anybody has looked at.
 
   On a desktop the pools and the running jobs share the left-hand column and
   the events feed takes the right, cut to their height. The feed is the one
@@ -60,6 +64,7 @@
   import FleetMetrics from '$lib/overview/FleetMetrics.svelte';
   import PoolUtilisation from '$lib/overview/PoolUtilisation.svelte';
   import ProblemsSummary from '$lib/overview/ProblemsSummary.svelte';
+  import RecentFailures from '$lib/overview/RecentFailures.svelte';
   import EventsFeed from '$lib/overview/EventsFeed.svelte';
 
   // Raised by the checklist while it is on screen, so the problems summary
@@ -72,8 +77,8 @@
   );
   const sections = $derived(
     operational
-      ? ['problems', 'metrics', 'repairs', 'work', 'activity', 'capacity']
-      : ['activity', 'metrics', 'problems', 'repairs', 'work', 'capacity'],
+      ? ['problems', 'failures', 'metrics', 'repairs', 'work', 'activity', 'capacity']
+      : ['activity', 'metrics', 'problems', 'failures', 'repairs', 'work', 'capacity'],
   );
 
   // The matrix fetches its own year of history, so the page's refresh reaches
@@ -143,6 +148,11 @@
         <FleetMetrics {loading} {operational} />
       {:else if section === 'problems'}
         <ProblemsSummary {loading} {setupPending} />
+      {:else if section === 'failures'}
+        <!-- Like the matrix, not the questions panel above it: a fleet that
+             has never run a job has no failures, and the checklist is what
+             the page is for until it has. -->
+        {#if !setupPending}<RecentFailures />{/if}
       {:else if section === 'repairs'}
         <RepairOffers />
       {:else if section === 'work'}

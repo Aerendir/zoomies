@@ -11,8 +11,13 @@
 -->
 <script lang="ts">
   import { readableJobText, unresolvedJobName } from '$lib/jobs/name';
-  import { CircleX } from '@lucide/svelte';
-  import { cancelJobWorkflow, rerunJobWorkflow } from '$lib/api/client';
+  import { Check, CircleX, Undo2 } from '@lucide/svelte';
+  import {
+    acknowledgeJob,
+    cancelJobWorkflow,
+    reopenJobAttention,
+    rerunJobWorkflow,
+  } from '$lib/api/client';
   import { NO_VALUE, formatDuration, formatMegabytes, formatNumber, shortId } from '$lib/format';
   import {
     HOSTED,
@@ -106,9 +111,48 @@
       job?.state === 'completed' &&
       failed,
   );
+  /**
+   * Triage, as distinct from the two actions above: a failure that somebody
+   * has read can be taken off the attention list without changing anything
+   * about the failure, and one already acknowledged can be put back. The
+   * Overview's failures panel writes the same two, through the same routes.
+   */
+  const canAcknowledge = $derived(session.can('operator') && Boolean(job?.id) && failed);
+  const acknowledged = $derived(job?.acknowledged_at != null);
   let rerunning = $state(false);
+  let acking = $state(false);
   let cancelOpen = $state(false);
   let forceCancel = $state(false);
+
+  async function acknowledge(): Promise<void> {
+    if (!job?.id || acking) return;
+    acking = true;
+    try {
+      await acknowledgeJob(job.id);
+      toasts.success(
+        'Marked as known',
+        'The failure stays in the failed view; a re-run that passes is what settles it.',
+        { label: 'Undo', run: () => void reopen() },
+      );
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not mark the failure as known');
+    } finally {
+      acking = false;
+    }
+  }
+
+  async function reopen(): Promise<void> {
+    if (!job?.id || acking) return;
+    acking = true;
+    try {
+      await reopenJobAttention(job.id);
+      toasts.success('Back on the attention list', 'Whoever looks next will see this failure.');
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not put the failure back');
+    } finally {
+      acking = false;
+    }
+  }
 
   async function rerun(): Promise<void> {
     if (!job?.id || rerunning) return;
@@ -154,6 +198,13 @@
         {#if status}<Badge {status} />{/if}
         {#if queue}<Badge status={queue} help={queue.hint} />{/if}
         {#if job.runner_fault}<Badge status={RUNNER_LOST} />{/if}
+        {#if acknowledged}
+          <Badge
+            tone="neutral"
+            label="Known"
+            help="Somebody has marked this failure as known, so it is off the failures needing attention. The failure itself is unchanged."
+          />
+        {/if}
         {#if unmatched}<Badge status={UNMATCHED} />{:else if job.hosted && !job.matched}<Badge
             status={HOSTED}
           />{/if}
@@ -268,6 +319,18 @@
               >Not finished</span
             >{/if}
         </dd>
+
+        {#if acknowledged}
+          <dt>Acknowledged</dt>
+          <dd data-testid="job-acknowledged">
+            {#if job.acknowledged_by}
+              by {job.acknowledged_by}
+            {:else}
+              by an operator
+            {/if}
+            <span class="muted"> · <RelativeTime value={job.acknowledged_at} /></span>
+          </dd>
+        {/if}
 
         <dt>Queue wait</dt>
         <dd class="tabular">
@@ -386,6 +449,22 @@
 
   {#snippet footer()}
     <div class="footer-actions">
+      {#if canAcknowledge}
+        {#if acknowledged}
+          <Button variant="secondary" icon={Undo2} loading={acking} onclick={() => void reopen()}>
+            Needs attention again
+          </Button>
+        {:else}
+          <Button
+            variant="secondary"
+            icon={Check}
+            loading={acking}
+            onclick={() => void acknowledge()}
+          >
+            Mark as known
+          </Button>
+        {/if}
+      {/if}
       {#if canCancel}
         <Button variant="danger" icon={CircleX} onclick={() => (cancelOpen = true)}>
           Cancel workflow

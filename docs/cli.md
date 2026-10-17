@@ -269,8 +269,10 @@ The runners that exist right now.
 
 `jobs list` is job history newest first, filtered by `--repo`, `--workflow`,
 `--pool`, `--state`, `--conclusion`, `--q`, and a window with `--since` and
-`--until`; each of which takes a duration (`24h`) or a date. `--unmatched`
-and `--failed` are the two questions worth a switch of their own.
+`--until`; each of which takes a duration (`24h`) or a date. `--unmatched`,
+`--failed` and `--attention` are the three questions worth a switch of their
+own; `--attention` is the one GitHub cannot answer at all: failures from the
+last week that nobody has acknowledged and no later attempt has replaced.
 `jobs get <job-id>` shows one.
 
 `--ours` and `--theirs` split `--failed` by whose failure it was. GitHub records
@@ -283,7 +285,16 @@ matching everything.
 ```sh
 zoomies jobs list --ours --since 24h       # what this deployment broke today
 zoomies jobs list --fault out_of_memory    # and how much of it was memory
+zoomies jobs list --attention              # failures nobody has read yet
 ```
+
+A failure can be marked as read, which takes it off that attention list without
+changing anything about it: the failure keeps its conclusion and its row, and a
+re-run that passes is what settles it. `zoomies jobs acknowledge <job-id>` says
+somebody has looked, and `zoomies jobs reopen <job-id>` takes the decision back.
+It is the same fleet-wide record the Jobs page's "Needs attention" view and the
+Overview's failures panel write, so a failure acknowledged here stops asking on
+every screen.
 
 `--until` is not included in the window and `--since` is, so two windows cut at
 one instant share no job. `--job-name` matches a job's name exactly, where `-q`
@@ -775,7 +786,7 @@ again.
 | --- | --- |
 | `fleet_status` | Queued and running jobs, outcomes, queue wait and pool utilisation over a window. `GET /stats`. |
 | `list_problems` | Everything the controller thinks is wrong, with what to do. `GET /problems`. |
-| `list_jobs` | Jobs, with the same filters as `zoomies jobs list`: `failed`, `ours`, `theirs`, `unmatched`, `repo`, `since`, `until`, `job_name`, `hosted`, `controller_version` and `host_id`. Each job is a summary without its steps unless `include_steps` is set, and a full page carries `next` to pass back as `before`. |
+| `list_jobs` | Jobs, with the same filters as `zoomies jobs list`: `failed`, `attention`, `ours`, `theirs`, `unmatched`, `repo`, `since`, `until`, `job_name`, `hosted`, `controller_version` and `host_id`. Each job is a summary without its steps unless `include_steps` is set, and a full page carries `next` to pass back as `before`. |
 | `job_stats` | Completed jobs counted and timed over a window, grouped by up to two of `controller_version`, `day`, `host`, `pool`, `job_name` and `size`. `GET /jobs/stats`. |
 | `get_job` | One job, its timeline and the controller's explanation, as one document: the class of failure, how sure, the evidence, the catalog code and the next steps. The runner's last lines, and any evidence quoted from them, come in a second block announced as untrusted, the way a runner's log does. |
 | `get_runner_log` | The last lines of a runner's output, while the runner still exists. It asks the controller for just the end, holds what it returns to 256 KiB, and says so when it had to shorten it or could only read the start of a very long log. |
