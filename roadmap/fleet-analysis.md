@@ -290,9 +290,9 @@ pool claimed the job (`jobs.eligible_at`, the `jobs.unmatched` problem); a job
 nothing has claimed by the period's end is unmatched to its end. *Pool at its
 ceiling* is `pool_ceiling`, the minutes the pool's live, registered runners
 stood at its `max_runners`; a runner that failed before it registered holds no
-place. A fleet that was full is `no_room`, from the per-minute
-`usage_capacity_samples` the scheduler already writes, and *hosts throttled* is
-`throttled`, a `no_room` minute in which a host that could run the pool
+place. A fleet that was full is `no_room`, the first addition, from the
+per-minute `usage_capacity_samples` the scheduler already writes, and *hosts
+throttled* is `throttled`, a `no_room` minute in which a host that could run the pool
 (backend, platform, selector and size, the scheduler's own placement rule) was
 on a throttle rung. *Runner startup* is `runner_startup`, from the runner's
 request to its registration, and every minute of the wait after a failed start
@@ -398,7 +398,8 @@ the largest possible head fits 12 KiB. The structured copy holds exactly the
 rows the text shows, at most 64 KiB. The names a workflow or a host wrote are
 quoted only in the untrusted block of the text, and the structured copy carries
 them inline under a schema that says they are untrusted. None of the four is
-`live`, and Eli answers each of the four scenarios from one call.
+`live`, and under the scripted model Eli answers each of the four scenarios from
+one call.
 
 ## 6. Limits and settings
 

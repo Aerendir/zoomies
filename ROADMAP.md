@@ -1728,14 +1728,15 @@ the fleet's records refuse is answered with a code of its own and the sentence
 that says what to change (#975). The MCP tools `queue_wait_breakdown`,
 `compare_periods`, `host_pressure` and `startup_failures`, each answer cut on
 whole rows under the server's window block with a note naming the argument that
-shows more, the names a workflow or a host wrote quoted only in the untrusted
-block; all four on Eli's list, with an Eli scenario each answered from one call;
+shows more, the names a workflow or a host wrote quoted in the text only in the
+untrusted block, and inline in the structured copy under a schema that marks
+them untrusted; all four on Eli's list, with an Eli scenario each answered from one call;
 and `zoomies analyse` with its four subcommands (#983). A card where each
 question is already asked, rendering its route's answer: **Why jobs waited** on
 the Jobs page's Queued view, **What got worse and what got better** under the
 Usage page's "By release" table, **Whether its failures came under pressure**
 on a host's own page, and **What keeps failing to start** on the Runners page
-when it is narrowed to failed runners; and *Asking why* in
+when its state filter includes failed runners; and *Asking why* in
 `docs/connect-claude.md` (#1130). [fleet-analysis.md](roadmap/fleet-analysis.md)
 section 5.7 records what was built against the plan's decisions. `implemented`
 and not `done` until the cards are seen against a real fleet's data: the Eli
@@ -2055,7 +2056,8 @@ results or user feedback; do not wait for them either.
   `internal/analysis`, each a viewer route under `/api/v1/analysis`, an MCP tool
   on Eli's list, a subcommand of `zoomies analyse` and a card where its question
   is already asked (the Jobs page's Queued view, Usage under "By release", a
-  host's own page, and the Runners page narrowed to failed runners), documented
+  host's own page, and the Runners page when its state filter includes failed
+  runners), documented
   as *Asking why* in `docs/connect-claude.md`. The entry and row 20 record it,
   and [fleet-analysis.md](roadmap/fleet-analysis.md) section 5.7 records what was
   built against the plan's decisions 3 to 8: the comparison card is on Usage,

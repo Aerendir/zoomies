@@ -453,11 +453,11 @@ the sentence that says so. All four only read.
 
 Every answer has the same shape: a summary, a **confidence** (`high`, `medium`
 or `low`) with its reason whenever it is not high, the next steps in order, the
-catalog codes to read on, and the evidence the summary rests on. A next step
-names a setting or a pool's or host's field, such as `pool.max_runners`, or a
-[catalog](ai-context.md) code, and never a command to run, which is the
-catalog's own rule; Claude can open the code with `get_catalog` before it
-explains it. When the queue wait, host
+catalog codes to read on, and the evidence the summary rests on. Most next
+steps name a setting or a pool's or host's field, such as `pool.max_runners`, or
+a [catalog](ai-context.md) code; none names a command to run, which is the
+catalog's own rule. Claude can open a code with `get_catalog` before it explains
+it. When the queue wait, host
 pressure or startup failures meet more than 5,000 jobs or runners in the period,
 they read the newest 5,000 and are never more than medium, with a reason that
 says to narrow `since`.
@@ -470,16 +470,16 @@ jobs. A period side older than `retention.jobs` is read from the daily roll-up
 in whole UTC days, counts only, so it is compared on the fleet failure rate
 alone and the answer says its percentiles are unavailable. A release side has
 no such fallback, because the roll-up does not record which release ran a job:
-it compares the jobs still kept and says the earlier ones are gone. When the
-fleet's records cannot answer at all (one release named twice, fewer than two
-releases in the period, a side past retention that cannot be read in whole
-days, or a pool or host this fleet does not have) the call fails with the route's own
-sentence saying what to change.
+it compares the jobs still kept and says the earlier ones are gone. When a
+request cannot be answered (one release named twice, or a pool or host this
+fleet does not have) or the fleet's records refuse it (fewer than two releases
+in the period, a side past retention that cannot be read in whole days), the
+call fails with the route's own sentence saying what to change.
 
 `host_pressure` names the jobs only for a connection that can also read jobs. A
 connection narrowed to `hosts:read` is told when and how things went wrong on
-the host, but not which jobs: each event's repository, workflow and job name
-are left out, and a next step says so.
+the host and each job's id, but not its repository, workflow or name, and a next
+step says so.
 
 The repository, workflow and job names the answers quote are written by
 workflows, and a runner's failure message is written by its host and can quote a
