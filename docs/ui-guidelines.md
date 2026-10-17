@@ -886,6 +886,20 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 
 ### The log viewer
 
+Runner details open on **Build log**, the workflow's console output after the
+GitHub runner has masked secrets. **Runner diagnostics** keeps startup and worker
+messages separate. Switching tabs reuses the stream and preserves both buffers.
+The step summary reflects GitHub's latest report; it does not claim to update
+after every step. Save log exports the build output received in this view,
+and the GitHub link opens the complete archived job log.
+
+Live build capture requires the updated stock runner entrypoint. It extracts
+the runner's masked `JobServerQueue` console trace before GitHub truncates long
+lines; other verbose traces are discarded before entering the relay. Older,
+native and custom runners without this capture show an explicit waiting message
+and the GitHub link. This live feed is best effort, not an archive: relay limits
+still apply, and output is unavailable after the container is removed.
+
 100k lines without jank is a hard requirement. xterm.js with the canvas/WebGL
 addon handles the rendering; the constraints on our side are:
 

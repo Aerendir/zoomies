@@ -68,6 +68,12 @@ Build and test only:
 | --- | --- |
 | `repomix` 1.18.1 | Scans and packs repository source for AI context. The setup template embeds its integrity-locked npm dependency tree; Actions installs it in a temporary tool directory with lifecycle scripts disabled. It is not a controller or browser dependency. Source bytes come from the pinned Git commit so Repomix boundary trimming cannot change line numbers. |
 
+## Runner images
+
+Runner images also carry `mawk` (apt) or `gawk` (dnf) to extract the runner's
+masked build console lines and discard verbose worker noise before it reaches
+the live relay, without adding a second runtime or buffering a build's output.
+
 ## The docs site
 
 `docs/requirements.txt`, pinned. These never reach a user's machine; they

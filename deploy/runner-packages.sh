@@ -21,7 +21,7 @@ case "${family}" in
   apt)
     "$(dirname "$0")/runner-apt.sh" \
       ca-certificates curl git jq unzip zip tar gzip xz-utils \
-      sudo gosu tzdata locales openssh-client rsync
+      sudo gosu tzdata locales openssh-client rsync mawk
     # A runner without a UTF-8 locale mangles any non-ASCII line a job prints,
     # which is a confusing thing to debug from a workflow log.
     # The alias file is optional to localedef, and Ubuntu 26.04's packages
@@ -37,7 +37,7 @@ case "${family}" in
     # entrypoint uses neither -- it is here only for a workflow that expects it.
     "$(dirname "$0")/runner-dnf.sh" --allowerasing --setopt=install_weak_deps=False \
       ca-certificates curl git jq unzip zip tar gzip xz \
-      sudo shadow-utils tzdata glibc-langpack-en openssh-clients rsync hostname
+      sudo shadow-utils tzdata glibc-langpack-en openssh-clients rsync hostname gawk
     dnf clean all
     rm -rf /var/cache/dnf
     ;;
