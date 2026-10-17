@@ -27,12 +27,13 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { router } from '$lib/router';
   import { toasts } from '$lib/state/toasts.svelte';
-  import { isActive, stateLabel } from './history';
+  import { stateLabel } from './history';
   import {
     JOURNEY_STEPS,
     REPAIR_TRACK,
     isTerminal,
     outcomeTone,
+    runningRepair,
     stateOf,
     stepState,
     trackIndex,
@@ -222,37 +223,44 @@
     void followOnce();
   }
 
+  /** Follow a repair that is already under way rather than offer to start one. */
+  function adopt(row: Schemas['EliRepair']): void {
+    followKey = { repo: row.repo, pull: row.pull_number, head: row.head_sha, id: row.id };
+    repair = row;
+    stage = 'running';
+    follow();
+  }
+
   /**
    * Arrival with a failure in hand. A repair already running for it is the
-   * process itself, so the card follows that rather than offering to queue a
-   * second one the server would refuse on the deduplication key.
+   * process itself, so the card follows that rather than offering to start it
+   * again: the server would answer a second request with the row that is already
+   * there, but the button would have offered as new something that is under way.
    */
   async function begin(): Promise<void> {
+    let rows: Schemas['EliRepair'][] = [];
     try {
-      const page = await listEliRepairs({ repo, limit: 20 });
-      const active = page.items.find(
-        (row) =>
-          isActive(row.state) &&
-          row.repo.toLowerCase() === repo.toLowerCase() &&
-          (run > 0 ? row.run_id === run : row.pull_number === pull),
-      );
-      if (active) {
-        followKey = {
-          repo: active.repo,
-          pull: active.pull_number,
-          head: active.head_sha,
-          id: active.id,
-        };
-        repair = active;
-        stage = 'running';
-        follow();
-        return;
-      }
+      rows = (await listEliRepairs({ repo, limit: 20 })).items;
     } catch {
       // The history read is a courtesy; without it the readiness check below
       // still starts the journey.
     }
+    const active = runningRepair(rows, { repo, pull, run });
+    if (active) {
+      adopt(active);
+      return;
+    }
     await review();
+    // A run is only a run until readiness has said which pull request and commit
+    // it is, and those are what a repair queued from this page is known by: it
+    // carries no run, so the look by run above cannot have found it.
+    if (stage !== 'ready' || !ready) return;
+    const queued = runningRepair(rows, {
+      repo: ready.repo,
+      pull: ready.pull_number,
+      head: ready.head_sha,
+    });
+    if (queued) adopt(queued);
   }
 
   function reset(): void {

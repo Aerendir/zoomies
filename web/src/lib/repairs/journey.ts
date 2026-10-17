@@ -105,6 +105,48 @@ export function trackIndex(repair: {
   return Math.min(index, REPAIR_TRACK.length - 1);
 }
 
+/** The fields of a repair that say what it is for, and so whether it is the one being looked for. */
+interface RepairRow {
+  state: string;
+  repo: string;
+  run_id: number;
+  pull_number: number;
+  head_sha: string;
+}
+
+/** What a failure is known by when its repair is looked for. */
+export interface RepairWanted {
+  repo: string;
+  /** The run the failure was reached by, which only a repair Eli queued itself records. */
+  run?: number;
+  pull?: number;
+  /** The commit readiness resolved, which a repair a person queued is pinned to. */
+  head?: string;
+}
+
+/**
+ * The repair already working on a failure, if there is one.
+ *
+ * A failure reached from a run is first looked for by the run's id, but only a
+ * repair Eli queues by itself records a run: one a person queued from this page
+ * carries the pull request and the commit and no run, so by the run alone it is
+ * never found and is offered a second time. Once readiness has said which pull
+ * request and commit the run is, the same question is asked again of those.
+ * Pressing the button would not queue a second repair, because the server answers
+ * with the first, but it would offer as new something that is already under way.
+ */
+export function runningRepair<T extends RepairRow>(
+  rows: readonly T[],
+  want: RepairWanted,
+): T | undefined {
+  const repo = want.repo.toLowerCase();
+  return rows.find((row) => {
+    if (!isActive(row.state) || row.repo.toLowerCase() !== repo) return false;
+    if (want.run) return row.run_id === want.run;
+    return row.pull_number === want.pull && (want.head === undefined || row.head_sha === want.head);
+  });
+}
+
 /** A state the worker will not move on from, which is when following stops. */
 export const isTerminal = (state: string): boolean => !isActive(state);
 

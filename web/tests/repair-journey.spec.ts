@@ -1,9 +1,13 @@
 /**
- * How the repair card is entered by pasting a pull request link.
+ * How the repair card is entered: by pasting a pull request link, and by arriving
+ * from a failure.
  *
- * Pasting a link rewrote the address with the pull request, and the page keyed the
- * card on the address, so the card that had just started a readiness check was
- * thrown away with the check in flight and a new one asked again.
+ * Both used to cost more than they should. Pasting a link rewrote the address
+ * with the pull request, and the page keyed the card on the address, so the card
+ * that had just started a readiness check was thrown away with the check in
+ * flight and a new one asked again. Arriving by run looked for a repair already
+ * running by the run's id, which only the repairs Eli queues by itself carry, so
+ * a repair a person had queued from this page was offered a second time.
  */
 import { expect, test, type Page } from '@playwright/test';
 import type { Schemas } from '../src/lib/api/types';
@@ -103,4 +107,24 @@ test('pasting a pull request link checks its readiness once, in the card it was 
   expect(model.checks).toHaveLength(1);
   expect(model.checks[0]?.get('pull_number')).toBe('17');
   expect(model.histories).toEqual([]);
+});
+
+test('arriving by run follows the repair a person already queued for that pull request', async ({
+  page,
+}) => {
+  await mockJourney(page, [queuedFromThePage]);
+  await page.goto(`/repairs?repo=${repo}&run=1234`);
+
+  await expect(page.getByRole('list', { name: 'What Eli is doing' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+});
+
+test('arriving by run still offers a repair when the one running is for another commit', async ({
+  page,
+}) => {
+  await mockJourney(page, [{ ...queuedFromThePage, head_sha: 'an-older-head' }]);
+  await page.goto(`/repairs?repo=${repo}&run=1234`);
+
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'What Eli is doing' })).toHaveCount(0);
 });
