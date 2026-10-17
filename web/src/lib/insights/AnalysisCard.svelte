@@ -15,9 +15,10 @@
   runner and job states (web/AGENTS.md); a confidence painted amber would read
   as a pending runner to anyone who has learnt them.
 
-  Everything here is rendered as text. A summary quotes job, workflow and
-  repository names a workflow wrote, and the evidence a runner's failure
-  message a host wrote; none of it is ever parsed as markup.
+  Everything here is rendered as text. The evidence quotes job, workflow and
+  repository names a workflow wrote, and a runner's failure message a host
+  wrote; none of it is ever parsed as markup. The summary never quotes them,
+  which is what lets the MCP tools put it among the controller's own lines.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';

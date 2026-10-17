@@ -7,9 +7,10 @@
  *
  * The binding check is one answer: a card's summary is exactly the `summary`
  * of the same route asked for the same period, which is what an agent's tool
- * and `zoomies analyse` print. The card asks for an explicit period, so the
- * test asks with the very address the page used rather than with a default
- * that would have moved on by the time it asked.
+ * and `zoomies analyse` print. The card names the period's end, and its start
+ * when the page has a window of its own, so the test asks with the very
+ * address the page used rather than with a default that would have moved on
+ * by the time it asked.
  *
  * The demo seeds a cause for each analysis between 22 and 20 hours ago (see
  * seedAnalyses in internal/controller/seed_analysis.go), inside the last day
@@ -41,15 +42,18 @@ async function expectOneAnswer(
   page: Page,
   title: string,
   requests: string[],
+  windowed = false,
 ): Promise<{ summary: string; confidence: string }> {
   const summary = card(page, title).getByTestId('analysis-summary');
   await expect(summary).toBeVisible();
   const url = requests.at(-1);
   expect(url, 'the page asked the analysis route').toBeTruthy();
   const query = new URL(url!).searchParams;
-  // An explicit period, or the test's own request would read a later one.
-  expect(query.get('since')).toBeTruthy();
+  // An explicit end, or the test's own request would read a later period.
+  // A page with no window of its own leaves since to the route, whose
+  // default before that end is min(24h, limits.job_stats_window).
   expect(query.get('until')).toBeTruthy();
+  expect(query.has('since')).toBe(windowed);
   const response = await page.request.get(url!);
   expect(response.status()).toBe(200);
   const finding = (await response.json()) as { summary: string; confidence: string };
@@ -144,7 +148,7 @@ test("the Queued card reads the list's own dates", async ({ page }) => {
   const since = await day(3);
   const until = await day(2);
   await goto(page, `/jobs?state=queued&since=${since}&until=${until}`, 'Jobs');
-  await expectOneAnswer(page, 'Why jobs waited', requests);
+  await expectOneAnswer(page, 'Why jobs waited', requests, true);
   const query = new URL(requests.at(-1)!).searchParams;
   // The whole of each day on the operator's clock, as the list reads them.
   const expected = await page.evaluate(
@@ -218,7 +222,7 @@ test('Usage compares releases beside its table, as the route does', async ({ pag
   const requests = watchAnalysis(page, 'compare');
   await goto(page, '/usage?range=30d', 'Usage');
   const title = 'What got worse and what got better';
-  const finding = await expectOneAnswer(page, title, requests);
+  const finding = await expectOneAnswer(page, title, requests, true);
   // The demo's two releases ran fewer than thirty jobs each.
   expect(finding.summary).toContain('not ranked');
   // The page's own range: thirty days, today included, from local midnight.
@@ -233,7 +237,7 @@ test('Usage compares releases beside its table, as the route does', async ({ pag
   await expect(found.locator('details')).not.toHaveAttribute('open', '');
   await expect(
     found.getByText(
-      /^v1\.3\.2 from .+; v1\.3\.3 from .+\. Cancelled and skipped jobs are left out\.$/,
+      /^v1\.3\.2 from .+; v1\.3\.3 from .+\. Cancelled and skipped jobs are left out of every figure read from the job rows\.$/,
     ),
   ).toBeVisible();
   await expectAccessible(page, title);

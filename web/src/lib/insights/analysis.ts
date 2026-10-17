@@ -45,27 +45,32 @@ export function stepLine(s: {
   return { text: s.text, setting: s.setting || null, href };
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
- * The period a page asks about, as two instants. Always explicit, so the
- * finding on screen is the one anyone asking about the same period is given;
- * the route's own default would have moved on by the time they asked.
+ * The period a page asks about. Its end is always explicit, so the finding on
+ * screen is the one anyone asking with the same address is given; the route's
+ * own default would have moved on by the time they asked.
  *
- * A page with no window of its own asks about the day before now, the route's
- * default. A window that runs past now ends now: the rest has not happened,
- * and a job still waiting would have its wait counted into it. A window that
- * does not end after it starts asks nothing, because the page that holds it
- * already says it is backwards.
+ * A page with no window of its own leaves `since` out, so the route takes its
+ * own default before that end: a day, or `limits.job_stats_window` where that
+ * is shorter. Asking for a day by name would be refused on a fleet that set the
+ * limit lower, where the CLI and the tools, which also leave it out, answer.
+ *
+ * A window that runs past now ends now: the rest has not happened, and a job
+ * still waiting would have its wait counted into it. The controller clamps the
+ * same way for every caller; doing it here too keeps the period the card
+ * describes the one it was given. A window that does not end after it starts
+ * asks nothing, because the page that holds it already says it is backwards.
  */
 export function analysisWindow(
   since: string | undefined,
   until: string | undefined,
   now: number,
-): { since: string; until: string } | null {
+): { since?: string; until: string } | null {
   const end = Math.min(until ? Date.parse(until) : now, now);
-  const start = since ? Date.parse(since) : end - DAY_MS;
-  if (Number.isNaN(end) || Number.isNaN(start) || start >= end) return null;
+  if (Number.isNaN(end)) return null;
+  if (!since) return { until: new Date(end).toISOString() };
+  const start = Date.parse(since);
+  if (Number.isNaN(start) || start >= end) return null;
   return { since: new Date(start).toISOString(), until: new Date(end).toISOString() };
 }
 
@@ -145,7 +150,9 @@ export function findingDescription(
     const side = (x: ComparedSides['a']) =>
       `${x.label} from ${format(x.since)} to ${format(x.until)}`;
     const left = joinWords(ev.excluded);
-    const out = left ? ` ${capitalise(left)} jobs are left out.` : '';
+    const out = left
+      ? ` ${capitalise(left)} jobs are left out of every figure read from the job rows.`
+      : '';
     return `${side(ev.a)}; ${side(ev.b)}.${out}`;
   }
   const period = `${format(f.since)} to ${format(f.until)}`;
@@ -228,6 +235,30 @@ export function jobWords(e: { repo?: string; workflow?: string; job_name?: strin
     .join(' · ');
 }
 
+/**
+ * The pool the jobs no pool claimed are counted under, which has no id or name
+ * of its own. The MCP tools say it in the same words, so a person and an agent
+ * read the row alike.
+ */
+export const UNCLAIMED_POOL = 'unclaimed (no pool claimed these jobs)';
+
+/**
+ * Every pool's longest waits, longest first, as one list, each naming its
+ * pool. A row with no pool is the jobs no pool claimed, which would otherwise
+ * read as waiting "in" nothing.
+ */
+export function longestWaits<J extends { wait_seconds: number }>(
+  pools: readonly { pool_id: string; pool_name?: string; longest: readonly J[] }[],
+  n = 5,
+): (J & { pool: string })[] {
+  return pools
+    .flatMap((p) =>
+      p.longest.map((j) => ({ ...j, pool: p.pool_name || p.pool_id || UNCLAIMED_POOL })),
+    )
+    .sort((a, b) => b.wait_seconds - a.wait_seconds)
+    .slice(0, n);
+}
+
 /** Each queue-wait cause, as the time it names. */
 export const CAUSE_WORDS: Record<string, string> = {
   held_for_review: 'Held for review',
@@ -277,10 +308,16 @@ export const PRESSURE_MEASURE_WORDS: Record<string, string> = {
   memory_used: 'Memory in use',
 };
 
-/** A threshold's value in its measure's own terms. */
+/**
+ * A threshold's value in its measure's own terms, as the controller's summary
+ * says it: the CPU line and the memory line to a tenth of a percent, the load
+ * to a hundredth, a trailing zero dropped. The controller floors the line to
+ * that, so rounding it further would name a line some events below it would
+ * read as above, and the card would disagree with the summary over it.
+ */
 export function thresholdValue(measure: string, value: number): string {
-  if (measure === 'cpu_percent') return `${Math.round(value)}%`;
-  if (measure === 'memory_used') return formatPercent(value);
+  if (measure === 'cpu_percent') return `${Math.round(value * 10) / 10}%`;
+  if (measure === 'memory_used') return `${Math.round(value * 1000) / 10}%`;
   return String(Math.round(value * 100) / 100);
 }
 

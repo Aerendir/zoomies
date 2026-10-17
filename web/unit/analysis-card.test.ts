@@ -8,9 +8,12 @@ import {
   confidenceWords,
   findingDescription,
   jobWords,
+  longestWaits,
   queueWaitScope,
   refusalOf,
   stepLine,
+  thresholdValue,
+  UNCLAIMED_POOL,
 } from '../src/lib/insights/analysis.ts';
 
 // The confidence is words on a neutral badge, so the words carry all of it:
@@ -65,17 +68,18 @@ test('a step link that is not a web address is not followed', () => {
 
 const NOW = Date.parse('2026-10-13T12:00:00Z');
 
-// The card asks for an explicit period, never the route's default, so the
-// answer on screen is the answer anyone asking for the same period gets.
-test('a page with no window of its own asks about the day before now', () => {
+// The card names its end, so the answer on screen is the answer anyone asking
+// with the same address gets. It leaves since out, so the route takes its own
+// default before that end: a day, or limits.job_stats_window where that is
+// shorter. Asking for a day by name is refused on a fleet whose limit is less.
+test('a page with no window of its own leaves since to the route', () => {
   assert.deepEqual(analysisWindow(undefined, undefined, NOW), {
-    since: '2026-10-12T12:00:00.000Z',
     until: '2026-10-13T12:00:00.000Z',
   });
   assert.deepEqual(analysisWindow(undefined, '2026-10-13T06:00:00.000Z', NOW), {
-    since: '2026-10-12T06:00:00.000Z',
     until: '2026-10-13T06:00:00.000Z',
   });
+  assert.equal('since' in analysisWindow(undefined, undefined, NOW)!, false);
 });
 
 // A range that runs to the end of today has hours that have not happened, and
@@ -93,6 +97,7 @@ test('a window that does not end after it starts asks nothing', () => {
   assert.equal(analysisWindow('2026-10-13T10:00:00.000Z', '2026-10-13T09:00:00.000Z', NOW), null);
   assert.equal(analysisWindow('2026-10-14T00:00:00.000Z', undefined, NOW), null);
   assert.equal(analysisWindow('not a time', undefined, NOW), null);
+  assert.equal(analysisWindow(undefined, 'not a time', NOW), null);
 });
 
 // Eli is handed what the card shows, named one by one, and never the evidence
@@ -256,7 +261,7 @@ test('a finding describes its own period, and a comparison each side', () => {
       },
       plainTime,
     ),
-    'v1.3.2 from 2026-10-13 04:11 to 2026-10-13 05:43; v1.3.3 from 2026-10-13 05:25 to 2026-10-13 07:28. Cancelled and skipped jobs are left out.',
+    'v1.3.2 from 2026-10-13 04:11 to 2026-10-13 05:43; v1.3.3 from 2026-10-13 05:25 to 2026-10-13 07:28. Cancelled and skipped jobs are left out of every figure read from the job rows.',
   );
 });
 
@@ -300,4 +305,40 @@ test('a server failure names the request to quote', () => {
     message: `Bad gateway. ${generic}`,
     refused: false,
   });
+});
+
+// The controller floors a threshold's line to a tenth of a percent and says it
+// so in the summary. Rounded to a whole number, 87.5 would read as 88, a line
+// some of the events counted above it sit below.
+test('a threshold reads as the summary says it', () => {
+  assert.equal(thresholdValue('cpu_percent', 87.5), '87.5%');
+  assert.equal(thresholdValue('cpu_percent', 88), '88%');
+  assert.equal(thresholdValue('memory_used', 0.924), '92.4%');
+  assert.equal(thresholdValue('memory_used', 0.9), '90%');
+  assert.equal(thresholdValue('load_per_cpu', 1.25), '1.25');
+});
+
+// The jobs no pool claimed are counted under a row with no id or name. Listed
+// with the rest, they would wait "in" nothing; they read as the MCP tools say
+// them instead.
+test('the longest waits name the unclaimed jobs as unclaimed', () => {
+  const job = (job_id: string, wait_seconds: number) => ({
+    job_id,
+    wait_seconds,
+    cause: 'unmatched',
+  });
+  const got = longestWaits([
+    { pool_id: '', pool_name: '', longest: [job('job_a', 600)] },
+    { pool_id: 'pool_1', pool_name: 'linux', longest: [job('job_b', 900)] },
+    { pool_id: 'pool_2', pool_name: '', longest: [job('job_c', 300)] },
+  ]);
+  assert.deepEqual(
+    got.map((j) => [j.job_id, j.pool]),
+    [
+      ['job_b', 'linux'],
+      ['job_a', UNCLAIMED_POOL],
+      ['job_c', 'pool_2'],
+    ],
+  );
+  assert.equal(UNCLAIMED_POOL, 'unclaimed (no pool claimed these jobs)');
 });

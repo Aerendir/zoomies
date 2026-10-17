@@ -63,6 +63,7 @@
     refusalOf,
     CAUSE_WORDS,
     jobWords,
+    longestWaits,
     queueWaitScope,
     wordFor,
   } from '$lib/insights/analysis';
@@ -243,12 +244,7 @@
   );
 
   /** Every pool's longest waits, longest first, as one list. */
-  const longestWaits = $derived(
-    (wait?.evidence.pools ?? [])
-      .flatMap((p) => p.longest.map((j) => ({ ...j, pool: p.pool_name || p.pool_id })))
-      .sort((a, b) => b.wait_seconds - a.wait_seconds)
-      .slice(0, 5),
-  );
+  const longest = $derived(longestWaits(wait?.evidence.pools ?? []));
 
   /** Labels worth offering in the filter: what the pools answer to, plus what this page asked for. */
   const labelOptions = $derived.by(() => {
@@ -826,10 +822,10 @@
             {/each}
           </ul>
         {/if}
-        {#if longestWaits.length}
+        {#if longest.length}
           <p class="rows-label" id="wait-longest">Longest waits</p>
           <ul class="rows" aria-labelledby="wait-longest">
-            {#each longestWaits as j (j.job_id)}
+            {#each longest as j (j.job_id)}
               <li>
                 <span class="quoted">{jobWords(j) || j.job_id}</span>
                 <span class="figure muted"
