@@ -143,3 +143,98 @@ func TestCIRunsOnlyWhatAChangeCanAffect(t *testing.T) {
 		})
 	}
 }
+
+// runnerImageScript is the shell the images job runs to decide whether to build
+// the runner images, taken out of ci.yml like the filter above. GitHub fills in
+// ${{ github.event_name }} before a shell sees the script, so it is filled in
+// here as a pull request.
+func runnerImageScript(t *testing.T) string {
+	t.Helper()
+	var wf struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				ID  string `yaml:"id"`
+				Run string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(workflowFiles(t)["ci.yml"]), &wf); err != nil {
+		t.Fatalf("parsing ci.yml: %v", err)
+	}
+	for _, step := range wf.Jobs["images"].Steps {
+		if step.ID == "changed" {
+			return strings.ReplaceAll(step.Run, "${{ github.event_name }}", "pull_request")
+		}
+	}
+	t.Fatal("ci.yml's images job has no step with the id changed")
+	return ""
+}
+
+// buildsRunnerImages runs that step for a pull request that changed these
+// files, with a git that answers only the two questions it asks, and says
+// whether it chose to build the runner images.
+func buildsRunnerImages(t *testing.T, files ...string) bool {
+	t.Helper()
+	dir := t.TempDir()
+	stub := "#!/bin/sh\ncase \"$1\" in cat-file) exit 0 ;; diff) printf '%s\\n' " + strings.Join(files, " ") + " ;; esac\n"
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "output")
+	cmd := exec.Command("sh", "-c", runnerImageScript(t))
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"BASE=0123abc", "PUBLISH=false", "GITHUB_OUTPUT="+out)
+	if msg, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("the step failed for %v: %v\n%s", files, err, msg)
+	}
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if v, ok := strings.CutPrefix(line, "runner="); ok {
+			return v == "true"
+		}
+	}
+	t.Fatalf("the step wrote no runner output for %v: %q", files, raw)
+	return false
+}
+
+// The weekly base-image refresh opens a pull request that moves digests in
+// internal/naming/images.go and regenerates what is derived from it, and its
+// description says CI builds every variant on that pull request. The step only
+// looked under deploy/ and test/runner-image, so that pull request built no
+// runner image and a digest nobody had built went unproven. The tool-cache lock
+// is copied into every image, and was missed the same way.
+func TestTheRunnerImagesAreBuiltWhenAnythingTheyAreMadeFromChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the step is POSIX shell, and runs on Linux in CI")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh to run the step with")
+	}
+	for _, tc := range []struct {
+		name  string
+		files []string
+		want  bool
+	}{
+		{"the weekly base refresh moves digests, and the files generated from them", []string{
+			"internal/naming/images.go", "Makefile", ".github/workflows/ci.yml", ".github/workflows/release.yml", "docs/naming.md"}, true},
+		{"the tool-cache lock is copied into every image", []string{"deploy/toolcache.lock"}, true},
+		{"the runner Dockerfile", []string{"deploy/Dockerfile.runner"}, true},
+		{"a script the runner Dockerfile copies in", []string{"deploy/runner-apt.sh"}, true},
+		{"the runner entrypoint", []string{"deploy/runner-entrypoint.sh"}, true},
+		{"the check each built image is run through", []string{"test/runner-image/check.sh"}, true},
+		{"prose about the images", []string{"docs/naming.md"}, false},
+		{"the catalogue's tests and its generators build nothing", []string{"internal/naming/images_test.go", "internal/naming/gen_base_digests.go"}, false},
+		{"the lock's generator is not the lock", []string{"deploy/gen_toolcache_lock.go"}, false},
+		{"the controller image is not a runner image", []string{"deploy/Dockerfile"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := buildsRunnerImages(t, tc.files...); got != tc.want {
+				t.Errorf("a pull request changing %v: runner=%v, want %v", tc.files, got, tc.want)
+			}
+		})
+	}
+}

@@ -1236,8 +1236,12 @@ jobs:
             build_it
           fi
 
+          # Everything a runner image is made of: its Dockerfile, the scripts
+          # and the tool-cache lock it copies in, and the catalogue whose
+          # base-image digests every variant is built FROM, which the weekly
+          # refresh moves.
           if git diff --name-only "$BASE" HEAD |
-             grep -qE '^(deploy/(Dockerfile\.runner|runner-entrypoint\.sh|runner-[a-z-]+\.sh)|test/runner-image/.*)$'; then
+             grep -qE '^(deploy/(Dockerfile\.runner|runner-entrypoint\.sh|runner-[a-z-]+\.sh|toolcache\.lock)|internal/naming/images\.go|test/runner-image/.*)$'; then
             echo "runner=true" >> "$GITHUB_OUTPUT"
           else
             echo "runner=false" >> "$GITHUB_OUTPUT"
