@@ -74,6 +74,12 @@
 
   type Status = 'starting' | 'live' | 'reconnecting' | 'ended' | 'failed';
 
+  /** The two views, named once for the tabs and for what is announced when one is chosen. */
+  const VIEWS = [
+    { id: 'build', label: 'Build log' },
+    { id: 'diagnostics', label: 'Runner diagnostics' },
+  ];
+
   /* -- reactive surface ---------------------------------------------------- */
 
   let ready = $state(false);
@@ -294,7 +300,11 @@
     matchCount = 0;
     matchIndex = -1;
     finder?.clearDecorations();
-    setWrap(wrap);
+    redraw();
+    // Name the view. This used to go through setWrap, which announced whether long
+    // lines wrap and never said which log had just replaced the one on screen.
+    const label = VIEWS.find((item) => item.id === next)?.label ?? next;
+    announcement = `Showing the ${label.toLowerCase()}.`;
   }
 
   function saveBuildLog(): void {
@@ -341,8 +351,8 @@
     target.write(`\x1b[?25l${wrapMode(wrap)}`);
   }
 
-  function setWrap(on: boolean): void {
-    wrap = on;
+  /** Start the screen again from what is kept, in the view and wrap mode it is now in. */
+  function redraw(): void {
     if (!term) return;
     const text = replay();
     const target = term;
@@ -355,6 +365,12 @@
     };
     if (text !== '') target.write(text, settled);
     else settled();
+  }
+
+  function setWrap(on: boolean): void {
+    wrap = on;
+    if (!term) return;
+    redraw();
     announcement = on ? 'Long lines wrap.' : 'Long lines are cut off at the right edge.';
   }
 
@@ -681,15 +697,7 @@
 
 <div class="viewer {className}">
   {#if buildOutput}
-    <Tabs
-      label="Log source"
-      tabs={[
-        { id: 'build', label: 'Build log' },
-        { id: 'diagnostics', label: 'Runner diagnostics' },
-      ]}
-      value={view}
-      onchange={selectView}
-    />
+    <Tabs label="Log source" tabs={VIEWS} value={view} onchange={selectView} />
     <p class="source-note">
       {showingBuild
         ? 'Live workflow output, with secrets masked by the GitHub runner.'
