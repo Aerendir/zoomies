@@ -63,6 +63,7 @@
     type HealthFilter,
   } from '$lib/hosts/health-filter';
   import { slotsOf } from '$lib/hosts/slots';
+  import { EXPANDED_KEY, isIdList, setExpanded } from '$lib/hosts/card-fold';
   import HostDeleteDialog from '$lib/hosts/HostDeleteDialog.svelte';
   import HostPriorityDialog from '$lib/hosts/HostPriorityDialog.svelte';
   import HostRenameDialog from '$lib/hosts/HostRenameDialog.svelte';
@@ -146,6 +147,27 @@
     const heading = document.getElementById(`host-${host.id}-name`);
     heading?.scrollIntoView({ block: 'center' });
     heading?.focus({ preventScroll: true });
+  }
+
+  /*
+   * The cards that are open.
+   *
+   * A card is closed unless this browser has been asked to open it. The page
+   * holds the choice rather than the card, so a filter that takes a card off the
+   * screen and brings it back does not close it, and it is written when a card is
+   * opened or closed and never on sight, for the same reason as the map's.
+   */
+
+  let openCards = $state(remembered(EXPANDED_KEY, [] as string[], isIdList));
+  function toggleCard(host: Host, open: boolean): void {
+    if (!host.id) return;
+    openCards = setExpanded(
+      openCards,
+      host.id,
+      open,
+      hosts.map((h) => h.id ?? ''),
+    );
+    remember(EXPANDED_KEY, openCards);
   }
 
   /* -- the machines behind the hosts -------------------------------------------
@@ -701,6 +723,8 @@
             onrename={rename}
             ondelete={remove}
             onupdate={update}
+            expanded={host.id ? openCards.includes(host.id) : false}
+            ontoggle={toggleCard}
           />
         {/each}
       </div>
@@ -842,18 +866,21 @@
     font-size: var(--z-text-xs);
     color: var(--z-text-muted);
   }
-  /* Cards in a row share a height rather than each stopping where its own
-     content runs out. A host with a cordon notice, or one label more than its
-     neighbour, otherwise leaves a ragged edge and a band of empty page before
-     the next row -- and the whole point of laying hosts out side by side is
-     that their figures can be compared across the row. */
+  /* Cards in a row share a height, and the sections of a card are rows of this
+     grid (HostCard says how), so the slot bars, the three bars and the Details
+     buttons line up across a row instead of sitting wherever a card's own content
+     put them. The row gap is zero because it would also open up the rows inside
+     every card; each card carries the space beneath it instead, and the last
+     row's is taken back. */
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: var(--z-space-4);
-    align-items: stretch;
+    column-gap: var(--z-space-4);
+    row-gap: 0;
+    margin-bottom: calc(-1 * var(--z-space-4));
   }
   .card-skeleton {
+    margin-bottom: var(--z-space-4);
     display: flex;
     flex-direction: column;
     gap: var(--z-space-3);

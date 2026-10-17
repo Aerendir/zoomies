@@ -512,6 +512,37 @@ export async function openHostCapacityMap(page: Page): Promise<Locator> {
   return map;
 }
 
+/**
+ * Open a host card's Details, which a card does not show until it is asked, and
+ * return the card.
+ *
+ * Idempotent, because the choice is remembered: a test that opened it and then
+ * reloads, or that visits the page twice, finds it open and must not close it.
+ * It waits for the card, so it is also how a test says "once the host is on the
+ * page".
+ *
+ * `keyboard` opens it with Enter instead of a click. A test about what keyboard
+ * focus does needs it: after a mouse click the browser stops counting a scripted
+ * `focus()` as keyboard focus (`:focus-visible`), and that is what opens help
+ * on focus.
+ */
+export async function openHostCard(
+  card: Locator,
+  via: 'pointer' | 'keyboard' = 'pointer',
+): Promise<Locator> {
+  const toggle = card.getByRole('button', { name: /^Details for / });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    if (via === 'keyboard') {
+      await toggle.focus();
+      await card.page().keyboard.press('Enter');
+    } else {
+      await toggle.click();
+    }
+  }
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  return card;
+}
+
 /** True when the element currently holds focus. */
 export function isFocused(locator: Locator): Promise<boolean> {
   return locator.evaluate((element) => element === document.activeElement);
