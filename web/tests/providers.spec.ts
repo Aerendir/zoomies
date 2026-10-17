@@ -1130,9 +1130,15 @@ function testMachineRow(
  */
 async function listTestMachine(page: Page, machine: Record<string, unknown>): Promise<void> {
   await page.route('**/api/v1/machines?*', async (route) => {
-    const response = await route.fetch();
-    const data = (await response.json()) as { items: unknown[] };
-    await route.fulfill({ response, json: { ...data, items: [...data.items, machine] } });
+    try {
+      const response = await route.fetch();
+      const data = (await response.json()) as { items: unknown[] };
+      await route.fulfill({ response, json: { ...data, items: [...data.items, machine] } });
+    } catch {
+      // A request still out when the spec ends finds the page gone, and an error
+      // thrown from here would fail the run as a whole: nobody is left to answer.
+      await route.abort().catch(() => {});
+    }
   });
 }
 
