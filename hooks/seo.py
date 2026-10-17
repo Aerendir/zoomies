@@ -30,9 +30,11 @@ from the repository rather than written by hand, so neither can go stale:
   two product skills, each folder copied under ``agent-skills/`` with the
   digest of its ``SKILL.md``, the ai-catalog index pointing at all of it, the
   ``did.json`` its host identifier resolves to, and a
-  ``poppy.json``. Each names something that is really serving; where
-  OAuth or A2A metadata is asked for, it stays with the deployments that run
-  it and ``/auth.md`` links to the served one.
+  ``poppy.json``, and the site's own OAuth protected-resource metadata. Each
+  names something that is really serving. The authorization server's metadata
+  is the hosted service's and is mirrored at the edge (``site-worker/``), and
+  A2A metadata stays with the deployments that run it; ``/auth.md`` links to
+  the served one.
 
 * **A Markdown copy of every page**, at the page's own address plus
   ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
@@ -425,10 +427,12 @@ def _write_agent_discovery(config, site_url: str) -> None:
     passes over dot directories, and as .json files because Pages would serve
     an extensionless name as application/octet-stream.
 
-    No document claims something is running unless it is: OAuth and A2A
-    metadata belong to a deployment, not to the site that documents it, and
-    publishing them here would be discovery metadata pointing at nothing.
-    auth.md says where the real chain lives instead.
+    No document claims something is running unless it is: A2A metadata belongs
+    to a deployment, not to the site that documents it, and publishing it here
+    would be discovery metadata pointing at nothing. The OAuth protected-resource
+    document is written here because the site declares it for itself; the
+    authorization server it names is the hosted service's, whose own documents
+    the edge worker mirrors. auth.md says where the real chain lives.
     """
     root = os.path.dirname(os.path.abspath(config["config_file_path"]))
     well = os.path.join(config["site_dir"], ".well-known")
