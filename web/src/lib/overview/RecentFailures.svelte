@@ -70,6 +70,9 @@
   let drawerOpen = $state(false);
 
   const others = $derived(prefs.otherRunners);
+  // The Jobs page lists this fleet's own jobs unless it is told otherwise, so the
+  // link to the rest has to carry the scope the count above it was made in.
+  const restHref = $derived(`/jobs?attention=true${others ? '&all=true' : ''}`);
   // Marking a failure as known is the fleet's, not one reader's, so it takes
   // the operator role the API asks for and nobody below it.
   const canAcknowledge = $derived(session.can('operator'));
@@ -284,9 +287,7 @@
     </ul>
     {#if total > jobs.length}
       <p class="more">
-        <a href="/jobs?attention=true"
-          >and {formatNumber(total - jobs.length)} more on the jobs page</a
-        >
+        <a href={restHref}>and {formatNumber(total - jobs.length)} more on the jobs page</a>
       </p>
     {/if}
   {/if}

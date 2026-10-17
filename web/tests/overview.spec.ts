@@ -1066,3 +1066,29 @@ test('recent failures says which failures nobody has read, and links to the rest
     await expect(more).toHaveCount(0);
   }
 });
+
+/*
+ * The link under the panel is the rest of what the panel counted, so it has to
+ * lead to the same scope. The Jobs page lists this fleet's own jobs unless it is
+ * told otherwise, and the panel's switch is the same preference the tiles use:
+ * with other runners on, the count includes failures elsewhere and a bare link
+ * lands on a list that is shorter than the number it was reached from.
+ */
+test("the failures panel's link to the rest keeps the scope the panel counted", async ({
+  page,
+}) => {
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const more = failures.getByRole('link', { name: /more on the jobs page/ });
+  await expect(more, 'the fixture has more failures than the panel shows').toBeVisible();
+  await expect(more).toHaveAttribute('href', '/jobs?attention=true');
+
+  const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
+  const toggle = header.getByRole('switch', { name: 'Other runners' });
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(more).toHaveAttribute('href', '/jobs?attention=true&all=true');
+
+  await more.click();
+  await expect(page).toHaveURL(/[?&]attention=true/);
+  await expect(page).toHaveURL(/[?&]all=true/);
+});
