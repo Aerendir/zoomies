@@ -471,6 +471,8 @@ Pending checks ask the reader to wait; unavailable GitHub checks offer a retry.
 Starting a repair checks again before using an attempt. If the target changed
 since review, the page replaces the stale offer with the current explanation.
 
+![A closed PR failure explains that a repair is no longer needed and offers the original GitHub run, the overview and a status recheck](screenshots/eli-stale-failure-mobile.png){ .zoomies-shot }
+
 The wizard below uses a sample failure; no real PR was changed.
 
 ![Eli repair setup for a sample failed run, with the repository's installation preselected and a single save action](screenshots/eli-failure-setup-dark.png){ .zoomies-shot }
