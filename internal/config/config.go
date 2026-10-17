@@ -1988,19 +1988,7 @@ func (c *Config) applyEnvFrom(lookup func(string) (string, bool)) error {
 	var errs []string
 	for _, s := range Settings() {
 		raw, ok := lookup(s.Env)
-		if !ok {
-			continue
-		}
-		// A blank number says nothing. The compose file hands the container
-		// every line of .env, and Compose passes an empty value (or a bare
-		// ${NAME} that .env never sets) as the empty string rather than
-		// leaving the variable out. .env.example relies on that for
-		// ZOOMIES_AGENT_CAPACITY, where empty means the agent works the figure
-		// out from the machine, and refusing it stopped the documented first
-		// run. A number has no empty spelling to honour, so the layers beneath
-		// stand; a string or a list keeps its own, because empty is a value
-		// there.
-		if (s.Kind == KindInt || s.Kind == KindFloat) && strings.TrimSpace(raw) == "" {
+		if !ok || s.blankSaysNothing(raw) {
 			continue
 		}
 		if _, err := c.SetValueString(s.Key, raw); err != nil {

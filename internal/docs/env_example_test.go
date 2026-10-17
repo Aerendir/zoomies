@@ -70,6 +70,16 @@ func TestTheExampleEnvFileShipsNothingTheControllerRefuses(t *testing.T) {
 	}
 }
 
+// docs/upgrading.md tells an operator with this Compose file to run
+// `zoomies config import-env < .env`, to move the settings in .env into the
+// database. A refusal there is the same stopped first step as a refusal at
+// start, and it stops every other setting moving with it.
+func TestTheExampleEnvFileCanBeImportedIntoTheDatabase(t *testing.T) {
+	if _, _, _, err := config.ImportEnvironment(exampleEnv(t), nil); err != nil {
+		t.Errorf("`zoomies config import-env` refuses .env.example, so the documented way to move its settings into the database fails:\n%v", err)
+	}
+}
+
 // bareInterpolation is a value that is nothing but a reference to a variable
 // with no default and no demand that it be set. Compose renders it as the empty
 // string when .env says NAME= and when .env does not mention NAME at all, so
