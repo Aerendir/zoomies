@@ -362,17 +362,22 @@ func (c *Controller) askGitHubToRerun(ctx context.Context, j *store.Job, trigger
 // Only a job that failed can be acknowledged: there is nothing to triage
 // about one that is still running, and marking it would take it out of the
 // attention list before it has an outcome to be out of the list for.
-func (c *Controller) AcknowledgeJob(ctx context.Context, jobID, by string) (*store.Job, error) {
+//
+// Both report whether this call is the one that changed the row. A second
+// press on a failure somebody has already marked changes nothing, and writes
+// no timeline entry; the caller writes its audit row from the same flag, so
+// that the log never credits a person with a decision that was another's.
+func (c *Controller) AcknowledgeJob(ctx context.Context, jobID, by string) (*store.Job, bool, error) {
 	j, err := c.st.GetJob(ctx, jobID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if !j.Failed() {
-		return nil, ErrJobDidNotFail
+		return nil, false, ErrJobDidNotFail
 	}
 	updated, recorded, err := c.st.AcknowledgeJob(ctx, jobID, by)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if recorded {
 		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
@@ -380,21 +385,21 @@ func (c *Controller) AcknowledgeJob(ctx context.Context, jobID, by string) (*sto
 			Message: acknowledgedMessage(actorName(by)),
 			At:      c.Now(),
 		}); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	c.publishJob(ctx, updated)
-	return updated, nil
+	return updated, recorded, nil
 }
 
 // ReopenJobAttention puts an acknowledged failure back in front of whoever
 // looks next. It is the undo for a row put away by mistake, and it is
 // deliberately as easy as the acknowledgement: a triage decision nobody can
 // take back is one people learn not to make.
-func (c *Controller) ReopenJobAttention(ctx context.Context, jobID, by string) (*store.Job, error) {
+func (c *Controller) ReopenJobAttention(ctx context.Context, jobID, by string) (*store.Job, bool, error) {
 	updated, removed, err := c.st.ClearJobAcknowledgement(ctx, jobID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if removed {
 		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
@@ -402,11 +407,11 @@ func (c *Controller) ReopenJobAttention(ctx context.Context, jobID, by string) (
 			Message: reopenedMessage(actorName(by)),
 			At:      c.Now(),
 		}); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	c.publishJob(ctx, updated)
-	return updated, nil
+	return updated, removed, nil
 }
 
 // actorName is who a timeline sentence credits, given the name an account goes

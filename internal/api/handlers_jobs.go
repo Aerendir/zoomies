@@ -146,7 +146,7 @@ func (s *Server) handleRerunJobWorkflow(w http.ResponseWriter, r *http.Request) 
 // job comes back in its GET shape, so the caller can drop it into the same
 // cache a job.updated frame goes into.
 func (s *Server) handleAcknowledgeJob(w http.ResponseWriter, r *http.Request) {
-	j, err := s.ctrl.AcknowledgeJob(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
+	j, recorded, err := s.ctrl.AcknowledgeJob(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
 	if err != nil {
 		if errors.Is(err, controller.ErrJobDidNotFail) {
 			conflict(w, err.Error()+"; only a failure waits for triage, so there is nothing to mark as known")
@@ -155,9 +155,13 @@ func (s *Server) handleAcknowledgeJob(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "acknowledging the job's failure", err)
 		return
 	}
-	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.acknowledged", "job", j.ID, map[string]any{
-		"repo": j.Repo, "run_id": j.GitHubRunID,
-	})
+	// Only the press that changed the row is an entry: a second one leaves the
+	// first name where it was, and the log must not say otherwise.
+	if recorded {
+		s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.acknowledged", "job", j.ID, map[string]any{
+			"repo": j.Repo, "run_id": j.GitHubRunID,
+		})
+	}
 	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
 }
 
@@ -165,14 +169,16 @@ func (s *Server) handleAcknowledgeJob(w http.ResponseWriter, r *http.Request) {
 // failure somebody has read back in front of whoever looks next, which is the
 // undo for a row acknowledged by mistake.
 func (s *Server) handleReopenJobAttention(w http.ResponseWriter, r *http.Request) {
-	j, err := s.ctrl.ReopenJobAttention(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
+	j, reopened, err := s.ctrl.ReopenJobAttention(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
 	if err != nil {
 		s.fail(w, r, "putting the job's failure back in the attention list", err)
 		return
 	}
-	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.reopened", "job", j.ID, map[string]any{
-		"repo": j.Repo, "run_id": j.GitHubRunID,
-	})
+	if reopened {
+		s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.reopened", "job", j.ID, map[string]any{
+			"repo": j.Repo, "run_id": j.GitHubRunID,
+		})
+	}
 	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
 }
 
