@@ -74,6 +74,23 @@ Its `resource_documentation` points back at
 [the connection walkthrough](https://zoomies.sh/connect-claude/), which walks
 an MCP client through the flow by hand.
 
+## Where the identity provider is
+
+Beside the deployment interfaces, the hosted service runs its own OpenID
+Provider at the portal, `https://portal.zoomies.sh`, which signs the
+accounts on that surface and answers discovery for itself with an `issuer`
+that names it, `RS256` ID tokens and a `jwks_uri` holding its keys:
+
+```
+curl -s https://portal.zoomies.sh/.well-known/openid-configuration
+```
+
+This site mirrors that document, unchanged, at
+`/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`,
+so a reader of the site finds the real issuer without leaving it; every
+endpoint and key it names belongs to the portal, refetched at each request,
+so a rotation or an added endpoint can never leave a stale copy here.
+
 ## Registration instead of accounts
 
 There is no agent account to create. A token is granted by the person who

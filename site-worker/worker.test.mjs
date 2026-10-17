@@ -19,7 +19,9 @@ const MARKDOWN = "# The page\n\nIts body as Markdown.\n";
 function originFor(paths) {
   return async (input) => {
     const url = input instanceof URL ? input : new URL(input.url);
-    const found = paths.get(url.pathname);
+    // Keys are "/path" for this site's origin, or "host/path" for an
+    // upstream the mirror fetches by name.
+    const found = paths.get(url.host + url.pathname) ?? paths.get(url.pathname);
     if (found === undefined) {
       return new Response(HTML, {
         status: 404,
@@ -260,4 +262,66 @@ test("a HEAD request for the api-catalog answers with headers and no body", asyn
 
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "");
+});
+
+test("the identity provider's discovery document is mirrored from the portal", async () => {
+  const discovery = JSON.stringify({
+    issuer: "https://portal.zoomies.sh",
+    authorization_endpoint: "https://portal.zoomies.sh/authorize",
+    token_endpoint: "https://portal.zoomies.sh/token",
+    jwks_uri: "https://portal.zoomies.sh/jwks.json",
+    grant_types_supported: ["authorization_code"],
+    response_types_supported: ["code"],
+  });
+  const response = await handle(
+    "https://zoomies.sh/.well-known/openid-configuration",
+    new Map([
+      ["portal.zoomies.sh/.well-known/openid-configuration", { type: "application/json", body: discovery }],
+    ]),
+    { headers: { accept: "application/json" } },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/json");
+  assert.equal(await response.text(), discovery);
+});
+
+test("the authorization-server address serves the same document", async () => {
+  const discovery = '{"issuer": "https://portal.zoomies.sh"}';
+  const response = await handle(
+    "https://zoomies.sh/.well-known/oauth-authorization-server",
+    new Map([
+      ["portal.zoomies.sh/.well-known/openid-configuration", { type: "application/json", body: discovery }],
+    ]),
+    {},
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/json");
+  assert.equal(await response.text(), discovery);
+});
+
+test("a HEAD request for the discovery document answers with no body", async () => {
+  const discovery = '{"issuer": "https://portal.zoomies.sh"}';
+  const response = await handle(
+    "https://zoomies.sh/.well-known/openid-configuration",
+    new Map([
+      ["portal.zoomies.sh/.well-known/openid-configuration", { type: "application/json", body: discovery }],
+    ]),
+    { method: "HEAD" },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "");
+});
+
+test("when the provider cannot be reached, the origin's answer stands", async () => {
+  const response = await handle(
+    "https://zoomies.sh/.well-known/openid-configuration",
+    new Map([]),
+    {},
+  );
+
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
 });
