@@ -168,7 +168,7 @@ func (c *appClient) RepairPullForRun(ctx context.Context, repo string, run int64
 		}
 	}
 	if len(r.Pulls) != 1 {
-		return RepairPull{}, fmt.Errorf("%w: the failed run does not identify a single PR. Choose an open PR or paste its GitHub URL.", ErrRepairUnsupported)
+		return RepairPull{}, fmt.Errorf("%w: the failed run does not identify a single PR. Choose an open PR or paste its GitHub URL", ErrRepairUnsupported)
 	}
 	p, err := c.RepairPull(ctx, repo, r.Pulls[0].Number)
 	if err != nil {
