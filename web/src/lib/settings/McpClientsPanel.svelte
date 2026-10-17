@@ -13,6 +13,7 @@
     ApiError,
     createMCPClient,
     listMCPClients,
+    updateMCPClient,
     listMCPConnections,
     revokeMCPClient,
     revokeMCPConnection,
@@ -132,6 +133,49 @@
     }
   }
 
+  /* edit the name and redirections, the facts a mis-registered callback is repaired with */
+
+  let editOpen = $state(false);
+  let editName = $state('');
+  let editRedirectText = $state('');
+  let saving = $state(false);
+  let editErrors = $state<Record<string, string>>({});
+
+  function openEdit(c: MCPClient): void {
+    editName = c.name;
+    editRedirectText = c.redirect_uris.join('\n');
+    editErrors = {};
+    editOpen = true;
+  }
+
+  const editRedirects = $derived(
+    editRedirectText
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+
+  async function saveEdit(): Promise<void> {
+    const id = editName.trim();
+    if (!id) return;
+    saving = true;
+    editErrors = {};
+    try {
+      const fresh = await updateMCPClient(id, { name: id, redirect_uris: editRedirects });
+      editOpen = false;
+      toasts.success(
+        `${fresh.name} updated`,
+        'Clients configured with its ID pick the change up on their next sign-in.',
+      );
+      reload += 1;
+    } catch (cause) {
+      if (cause instanceof ApiError) editErrors = cause.fieldErrors();
+      toasts.fromError(cause, 'That client was not saved');
+    } finally {
+      saving = false;
+    }
+  }
+
   /* -- revoke --------------------------------------------------------------- */
 
   let revokeOpen = $state(false);
@@ -237,6 +281,11 @@
                 </td>
                 <td role="cell" data-label="Actions" class="actions">
                   {#if !client.revoked_at}
+                    {#if client.kind === 'admin'}
+                      <Button size="sm" variant="ghost" onclick={() => openEdit(client)}
+                        >Edit</Button
+                      >
+                    {/if}
                     {#if client.kind === 'admin' && client.confidential}
                       <Button
                         size="sm"
@@ -371,6 +420,54 @@
         Create client
       </Button>
     {/if}
+  {/snippet}
+</Dialog>
+
+<Dialog
+  bind:open={editOpen}
+  title="Edit MCP client"
+  description="A client ID and secret keep working: only what it is called and where it returns to change."
+  size="md"
+>
+  <form
+    id="mcp-client-edit-form"
+    class="form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void saveEdit();
+    }}
+  >
+    <Field
+      label="Name"
+      hint="What people see when they are asked to approve it."
+      error={editErrors.name}
+    >
+      {#snippet children({ id, describedBy, invalid })}
+        <Input bind:value={editName} {id} {describedBy} {invalid} autocomplete="off" />
+      {/snippet}
+    </Field>
+    <Field
+      label="Redirect URIs"
+      hint="One per line. Claude's apps return to {CLAUDE_CALLBACK}; add http://localhost/callback for Claude Code, whose port may differ."
+      error={editErrors.redirect_uris}
+    >
+      {#snippet children({ id, describedBy, invalid })}
+        <Textarea bind:value={editRedirectText} {id} {describedBy} {invalid} rows={3} mono />
+      {/snippet}
+    </Field>
+  </form>
+
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (editOpen = false)}>Cancel</Button>
+    <Button
+      variant="primary"
+      type="submit"
+      form="mcp-client-edit-form"
+      loading={saving}
+      disabled={!editName.trim()}
+    >
+      Save changes
+    </Button>
   {/snippet}
 </Dialog>
 

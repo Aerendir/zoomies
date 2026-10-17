@@ -155,6 +155,19 @@ func (s *Store) UpdateOAuthMetadataClient(ctx context.Context, id, name, clientU
 	return affected(res, "oauth client", id)
 }
 
+// UpdateOAuthAdminClient changes what an administrator's client is called and
+// what redirect URIs it accepts. Only a live admin client may change: a dynamic
+// one owns its registration, a metadata client's facts come from its document,
+// and a revoked one has nothing left to grant.
+func (s *Store) UpdateOAuthAdminClient(ctx context.Context, id, name string, redirects []string) error {
+	res, err := s.exec(ctx, `UPDATE oauth_clients SET name=?, redirect_uris=? WHERE id=? AND kind=? AND revoked_at IS NULL`,
+		name, StringSlice(redirects), id, OAuthClientAdmin)
+	if err != nil {
+		return err
+	}
+	return affected(res, "oauth client", id)
+}
+
 // GetOAuthClient finds a client by its row ID.
 func (s *Store) GetOAuthClient(ctx context.Context, id string) (*OAuthClient, error) {
 	return s.oauthClientWhere(ctx, `id = ?`, id)

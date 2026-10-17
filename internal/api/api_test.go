@@ -1047,6 +1047,7 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "DELETE", path: "/api/v1/join-tokens/missing", role: store.RoleAdmin, action: auth.ActionJoinsWrite},
 		{method: "GET", path: "/api/v1/mcp-clients", role: store.RoleAdmin, action: auth.ActionMCPClientsRead},
 		{method: "POST", path: "/api/v1/mcp-clients", role: store.RoleAdmin, body: map[string]any{"name": "Claude"}, action: auth.ActionMCPClientsWrite},
+		{method: "PATCH", path: "/api/v1/mcp-clients/missing", role: store.RoleAdmin, body: map[string]any{"name": "Claude"}, action: auth.ActionMCPClientsWrite},
 		{method: "POST", path: "/api/v1/mcp-clients/missing/secret", role: store.RoleAdmin, action: auth.ActionMCPClientsWrite},
 		{method: "DELETE", path: "/api/v1/mcp-clients/missing", role: store.RoleAdmin, action: auth.ActionMCPClientsWrite},
 		{method: "GET", path: "/api/v1/mcp-connections", role: store.RoleAdmin, action: auth.ActionMCPClientsRead},

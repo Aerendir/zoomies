@@ -689,6 +689,9 @@ export const listMCPClients = (signal?: AbortSignal) =>
 export const createMCPClient = (body: Body<'createMCPClient'>) =>
   api.post<Result<'createMCPClient'>>('/mcp-clients', { body });
 
+export const updateMCPClient = (id: string, body: Body<'updateMCPClient'>) =>
+  api.patch<Result<'updateMCPClient'>>(`/mcp-clients/${enc(id)}`, { body });
+
 export const rotateMCPClientSecret = (id: string) =>
   api.post<Result<'rotateMCPClientSecret'>>(`/mcp-clients/${enc(id)}/secret`, {});
 

@@ -551,6 +551,7 @@ func (s *Server) apiRoutes() chi.Router {
 		r.Route("/mcp-clients", func(r chi.Router) {
 			r.With(s.require(auth.ActionMCPClientsRead)).Get("/", s.handleListMCPClients)
 			r.With(s.require(auth.ActionMCPClientsWrite)).Post("/", s.handleCreateMCPClient)
+			r.With(s.require(auth.ActionMCPClientsWrite)).Patch("/{id}", s.handleUpdateMCPClient)
 			r.With(s.require(auth.ActionMCPClientsWrite)).Post("/{id}/secret", s.handleRotateMCPClientSecret)
 			r.With(s.require(auth.ActionMCPClientsWrite)).Delete("/{id}", s.handleRevokeMCPClient)
 		})
