@@ -9,9 +9,11 @@
 
   `jumpable` makes each stage in the list a button that goes straight to that
   stage, for a form whose answers can be given in any order and are all checked
-  again at the end (the provider form: its review step names every answer still
-  wrong, and sends the operator to the first one). Off, the list is only a
-  picture of where you are, and the flow stays a sequence.
+  again at the end. Such a form leaves its last button pressable whatever the
+  other stages hold, and has `onfinish` send the operator to the first one that
+  is wrong (the provider form does, and says where on its review step): a button
+  that is off for a reason on a stage they are not standing on explains nothing.
+  Off, the list is only a picture of where you are, and the flow stays a sequence.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -88,7 +90,8 @@
    * Go to a stage by its place in the list. Leaving a stage runs the same hook
    * Next or Back would, so whatever that stage marks as seen is marked here too.
    * Deliberately not gated on `canAdvance`: the stage being left may be invalid,
-   * and the operator is allowed to look elsewhere. The final check still is.
+   * and the operator is allowed to look elsewhere. Whatever is wrong is caught
+   * by `onfinish`.
    */
   async function jump(index: number): Promise<void> {
     if (busy || index === current || index < 0 || index >= steps.length) return;

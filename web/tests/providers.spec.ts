@@ -295,6 +295,46 @@ test('typing zero in the maximum is one answer: the warm machine goes with it an
 });
 
 /**
+ * The stages can be visited in any order, so the last button cannot wait for a
+ * stage the operator is not on: a button that is off for a reason on another
+ * stage explains nothing from where they stand. Add stays pressable, says
+ * before it is pressed where it will take them, and takes them there without
+ * sending anything.
+ */
+test('adding with an answer still wrong takes the operator to the first stage that has one', async ({
+  page,
+}) => {
+  const creates: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/providers')
+      creates.push(request.url());
+  });
+
+  await goto(page, '/providers/new', 'Add a provider');
+  await page.getByRole('button', { name: 'Configure connection manually' }).click();
+
+  // Straight to the end with nothing filled in, as the stage list allows.
+  await page
+    .locator('ol.steps')
+    .getByRole('button', { name: /Review/ })
+    .click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Review' })).toBeVisible();
+  await expect(
+    page.getByText('Connect still has an answer to fix. Add provider takes you there.'),
+  ).toBeVisible();
+
+  const add = page.getByRole('button', { name: 'Add provider' });
+  await expect(add).toBeEnabled();
+  await add.click();
+
+  await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeVisible();
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+  // What was wrong is marked now, rather than waiting for each box to be left.
+  await expect(page.getByText('Give this provider a name you will recognise.')).toBeVisible();
+  expect(creates, 'nothing was sent for a provider with answers missing').toHaveLength(0);
+});
+
+/**
  * The two answers that are wrong for reasons no browser could know.
  *
  * A name already taken is a fact about the fleet's other rows, and a VMID range

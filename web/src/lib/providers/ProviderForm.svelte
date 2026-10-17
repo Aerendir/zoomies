@@ -374,13 +374,26 @@
     return out;
   });
 
+  // Next waits on the step it is on, and on that step alone. The last button
+  // waits on nothing: the stages can be visited in any order, so an answer that
+  // is wrong on another one is for Add to send the operator to (`finish`), and a
+  // button that is off for a reason on a stage they are not standing on explains
+  // nothing.
   const blocking = $derived.by(() => {
-    const fields = current === reviewStep ? Object.keys(clientErrors) : fieldsForStep(current);
+    if (current === reviewStep) return [];
+    const fields = fieldsForStep(current);
     return Object.entries(clientErrors)
       .filter(([field]) => fields.includes(field) || fields.includes(settingGroup(field)))
       .map(([, message]) => message);
   });
   const canAdvance = $derived(blocking.length === 0 && !submitting);
+
+  /** Where Add sends the operator: the first stage with an answer still wrong. */
+  const firstWrongStage = $derived.by(() => {
+    const field = Object.keys(clientErrors)[0];
+    return field === undefined ? null : (wizardSteps[stepForDraftField(field)] ?? null);
+  });
+  const finishLabel = $derived(editing ? 'Save changes' : 'Add provider');
 
   /** A driver setting's step key: every `settings.<key>` belongs to placement. */
   function settingGroup(field: string): string {
@@ -544,6 +557,8 @@
   async function finish(): Promise<void> {
     if (submitting) return;
     touchStep(current);
+    // The last button is pressable while an earlier stage is wrong, so this is
+    // where the operator is sent to it, with what is wrong shown.
     const outstanding = Object.keys(clientErrors);
     if (outstanding.length > 0) {
       const next = { ...touched };
@@ -884,7 +899,7 @@
   {canAdvance}
   busy={submitting}
   jumpable
-  finishLabel={editing ? 'Save changes' : 'Add provider'}
+  {finishLabel}
   cancelLabel="Cancel"
   onnext={() => touchStep(current)}
   onback={() => touchStep(current)}
@@ -1429,6 +1444,12 @@
             <dd>{pluralise(Number(draft.max_machines) || 0, 'machine')}</dd>
           </div>
         </dl>
+
+        {#if firstWrongStage}
+          <p class="note bad" role="status">
+            {firstWrongStage.title} still has an answer to fix. {finishLabel} takes you there.
+          </p>
+        {/if}
 
         <section class="verdict" aria-live="polite" aria-label="What the controller makes of it">
           {#if validating && !verdict}
