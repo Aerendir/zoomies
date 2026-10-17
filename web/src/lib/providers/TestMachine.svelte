@@ -20,7 +20,7 @@
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import Panel from '$lib/components/Panel.svelte';
-  import { latestTest, testProgress } from './testmachine';
+  import { latestTest, stepStatusText, testProgress } from './testmachine';
 
   interface Props {
     provider: Pick<Provider, 'id' | 'name' | 'max_machines' | 'owned' | 'held'>;
@@ -135,7 +135,7 @@
             {:else}
               <CircleDashed size={14} aria-hidden="true" />
             {/if}
-            <span>{step.label}</span>
+            <span>{step.label}<span class="sr-only">, {stepStatusText(step.status)}</span></span>
           </li>
         {/each}
       </ol>

@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isTestMachine, latestTest, testProgress } from '../src/lib/providers/testmachine.ts';
+import {
+  isTestMachine,
+  latestTest,
+  stepStatusText,
+  testProgress,
+} from '../src/lib/providers/testmachine.ts';
+import type { StepStatus } from '../src/lib/providers/testmachine.ts';
 import type { Machine } from '../src/lib/api/types.ts';
 
 function machine(over: Partial<Machine> & { phases?: string[] }): Machine {
@@ -73,4 +79,39 @@ test('the newest test machine is found among machines that are not tests', () =>
   assert.equal(latestTest([older, demand, newer])?.id, 'b');
   assert.equal(latestTest([demand]), null);
   assert.equal(isTestMachine(demand), false);
+});
+
+// The icon and the colour that say where a step stands are drawn, not read, so
+// a screen reader gets five identical list items unless each carries a word of
+// its own. A failed test is the reason the panel exists, and the one step that
+// failed is what somebody listening has to be told.
+test('every step says where it stands in words, and the failed one is not left to its icon', () => {
+  const progress = testProgress(
+    machine({
+      state: 'failed',
+      phases: ['planned', 'created', 'starting'],
+      bootstrap_error: 'the agent could not reach the controller',
+    }),
+  );
+  assert.deepEqual(
+    progress.steps.map((step) => stepStatusText(step.status)),
+    ['done', 'done', 'failed', 'not reached', 'not reached'],
+  );
+});
+
+test('a step that is under way is told apart from one that has not been reached', () => {
+  const progress = testProgress(
+    machine({ state: 'bootstrapping', phases: ['planned', 'creating', 'created', 'starting'] }),
+  );
+  assert.deepEqual(
+    progress.steps.map((step) => stepStatusText(step.status)),
+    ['done', 'done', 'in progress', 'not reached', 'not reached'],
+  );
+});
+
+test('no two states share a word, so the words can stand in for the icons', () => {
+  const states: StepStatus[] = ['done', 'active', 'waiting', 'failed'];
+  const words = states.map(stepStatusText);
+  assert.equal(new Set(words).size, states.length);
+  assert.ok(words.every((word) => word.trim() !== ''));
 });

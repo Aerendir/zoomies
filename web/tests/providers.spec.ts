@@ -1022,3 +1022,73 @@ test("a provider's own pool selector is edited beside its ceiling, and says whic
     'No pool matches this selector',
   );
 });
+
+/**
+ * A test machine as the controller describes one, in whatever state a spec
+ * needs. The panel reads its state and the phases of its timeline, and nothing
+ * else about it.
+ */
+function testMachineRow(
+  state: string,
+  phases: readonly string[],
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id: 'mach_spectest',
+    provider_id: FIXTURE.providerId,
+    name: 'zoomies-mach-spectest',
+    state,
+    labels: {},
+    safe_to_delete: false,
+    test: true,
+    timeline: phases.map((phase) => ({ phase, at: '2026-10-17T03:00:00Z' })),
+    created_at: '2026-10-17T03:00:00Z',
+    updated_at: '2026-10-17T03:10:00Z',
+    ...extra,
+  };
+}
+
+/**
+ * Put that machine in every list of machines the page asks for, and leave the
+ * rest of the answer as the controller gave it. The seeded fleet has no test
+ * machine, and building one takes a hypervisor.
+ */
+async function listTestMachine(page: Page, machine: Record<string, unknown>): Promise<void> {
+  await page.route('**/api/v1/machines?*', async (route) => {
+    const response = await route.fetch();
+    const data = (await response.json()) as { items: unknown[] };
+    await route.fulfill({ response, json: { ...data, items: [...data.items, machine] } });
+  });
+}
+
+/** The test machine panel on the provider's page. */
+const testMachinePanel = (page: Page) => page.getByRole('region', { name: 'Test machine' });
+
+/**
+ * A failed test is why the panel exists, and the step that failed is what it
+ * says. The icon and the colour that say so are drawn, which a screen reader
+ * does not read, so each step carries its own state as text as well.
+ */
+test('a failed test machine says which step failed in words, not only in its icon', async ({
+  page,
+}) => {
+  await listTestMachine(
+    page,
+    testMachineRow('failed', ['planned', 'created', 'starting'], {
+      bootstrap_error: 'the agent could not reach the controller',
+    }),
+  );
+  await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+  const panel = testMachinePanel(page);
+  await expect(panel.getByTestId('test-machine-result')).toContainText(
+    'the agent could not reach the controller',
+  );
+  await expect(panel.getByRole('listitem')).toHaveText([
+    'Cloned from the template, done',
+    'Powered on, done',
+    'Agent installed, failed',
+    'Enrolled as a host, not reached',
+    'Reported ready, not reached',
+  ]);
+});

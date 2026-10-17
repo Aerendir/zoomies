@@ -36,6 +36,22 @@ const STEPS: readonly { id: string; phase: string; label: string }[] = [
   { id: 'ready', phase: 'ready', label: 'Reported ready' },
 ];
 
+/**
+ * What a step says about itself to somebody who is told rather than shown. The
+ * icon and the colour that say it to everyone else are drawn, and a screen
+ * reader gets five identical list items without these.
+ */
+const STEP_WORDS: Record<StepStatus, string> = {
+  done: 'done',
+  active: 'in progress',
+  waiting: 'not reached',
+  failed: 'failed',
+};
+
+export function stepStatusText(status: StepStatus): string {
+  return STEP_WORDS[status];
+}
+
 /** Whether this is the machine a provider's test built. */
 export function isTestMachine(machine: Machine): boolean {
   return machine.test === true;
