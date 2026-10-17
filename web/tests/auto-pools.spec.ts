@@ -21,7 +21,7 @@
  * every test that turns one on puts it back.
  */
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { dataRows, documentWidth, goto, grid } from './support/fixtures';
+import { dataRows, documentWidth, goto, grid, useClassic } from './support/fixtures';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -635,6 +635,7 @@ test.describe('pools the controller keeps', () => {
   }) => {
     // The pools most fleets run on are the ones the controller keeps, so without
     // this the valve could never be turned on for them.
+    await useClassic(page); // the hint's 12px is Classic's type scale
     const pool = await realPool(page);
     let patched: Record<string, unknown> | null = null;
     const current = auto();

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { goto } from './support/fixtures';
+import { goto, useClassic } from './support/fixtures';
 
 test('private enrolment explains unavailable configuration in an auth-disabled demo', async ({
   page,
@@ -86,6 +86,7 @@ test('private hosts retain a distinct badge alongside normal health and capacity
 test('the connection chooser labels itself like every other group and rings a card only for the keyboard', async ({
   page,
 }) => {
+  await useClassic(page); // the legend's 12px is Classic's type scale
   await goto(page, '/hosts/new', 'Add a host');
   const legend = page.locator('legend', { hasText: 'How should this host connect?' });
   const weight = await page.evaluate(() =>

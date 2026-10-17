@@ -133,13 +133,22 @@
       // flashes light before the app boots, which on a dark-mode dashboard is
       // genuinely unpleasant. Kept inline and tiny on purpose.
       (function () {
+        // Blocked storage reads as "nothing chosen", which is the default
+        // look rather than no look: the app's own state resolves the same way.
+        function read(key) {
+          try {
+            return localStorage.getItem(key);
+          } catch (e) {
+            return null;
+          }
+        }
         try {
-          var t = localStorage.getItem('zoomies.theme');
+          var t = read('zoomies.theme');
           // Dark is the default; only a stored 'system' or 'light' differs.
           if (t !== 'system' && t !== 'light') t = 'dark';
           if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
           // Mission Control is the default; only a stored 'classic' differs.
-          var style = localStorage.getItem('zoomies.ui-style');
+          var style = read('zoomies.ui-style');
           if (style !== 'classic') {
             style = 'mission-control';
             document.documentElement.setAttribute('data-ui-style', style);
@@ -156,7 +165,7 @@
                 : '(prefers-color-scheme: ' + which + ')',
             );
           });
-          var n = localStorage.getItem('zoomies.nav.collapsed');
+          var n = read('zoomies.nav.collapsed');
           // No choice recorded: a tablet-width window starts collapsed, as
           // the guidelines promise. A phone is excluded -- its navigation is a
           // bar along the bottom edge, which has nothing to collapse.
@@ -167,7 +176,7 @@
             matchMedia('(min-width: 769px) and (max-width: 1180px)').matches;
           if (n === '1' || tablet) document.documentElement.setAttribute('data-nav', 'collapsed');
         } catch (e) {
-          /* private mode: fall back to the system preference */
+          /* no document to style: nothing to do */
         }
       })();
     </script>

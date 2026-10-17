@@ -9,6 +9,7 @@ test('style selection keeps colour mode, logo, dog vocabulary and saved grid pre
   await page.addInitScript(() => {
     if (sessionStorage.getItem('style-test-seeded')) return;
     localStorage.setItem('zoomies.theme', 'dark');
+    localStorage.setItem('zoomies.ui-style', 'classic');
     localStorage.setItem(
       'zoomies.prefs',
       JSON.stringify({ statusStyle: 'cute', logoTreatment: 'circle', gridView: 'cards' }),
@@ -32,8 +33,15 @@ test('style selection keeps colour mode, logo, dog vocabulary and saved grid pre
   await page.reload();
   await expect(mission).toBeChecked();
   await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
-  await page.getByRole('button', { name: 'Reset visual style to Classic' }).click();
+  // Mission Control is the default, so choosing it stores nothing; Classic is
+  // the deliberate choice and is remembered.
+  expect(await page.evaluate(() => localStorage.getItem('zoomies.ui-style'))).toBeNull();
+  await page.getByRole('radio', { name: /^Classic/ }).check();
   await expect(root(page)).not.toHaveAttribute('data-ui-style');
+  await expect(root(page)).toHaveAttribute('data-theme', 'dark');
+  expect(await page.evaluate(() => localStorage.getItem('zoomies.ui-style'))).toBe('classic');
+  await page.getByRole('button', { name: 'Reset visual style to Mission Control' }).click();
+  await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
   await expect(root(page)).toHaveAttribute('data-theme', 'dark');
   expect(await page.evaluate(() => localStorage.getItem('zoomies.ui-style'))).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('zoomies.prefs'))).toBe(saved);
@@ -52,7 +60,11 @@ test('visual-style cards support native radio keyboard navigation', async ({ pag
 });
 
 test('system colour changes retain Mission Control and update browser chrome', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('zoomies.ui-style', 'mission-control'));
+  await page.addInitScript(() => {
+    localStorage.setItem('zoomies.ui-style', 'mission-control');
+    // Dark is the default; this test is about following the system.
+    localStorage.setItem('zoomies.theme', 'system');
+  });
   await page.emulateMedia({ colorScheme: 'light' });
   await goto(page, '/settings/appearance', 'Appearance');
   const background = () =>
@@ -189,9 +201,11 @@ test('blocked browser storage still allows an in-page visual-style choice', asyn
     }),
   );
   await goto(page, '/settings/appearance', 'Appearance');
-  await expect(page.getByRole('radio', { name: /^Classic/ })).toBeChecked();
-  await page.getByRole('radio', { name: /^Mission Control/ }).check();
+  // Nothing can be read, so nothing is chosen: the default, Mission Control.
+  await expect(page.getByRole('radio', { name: /^Mission Control/ })).toBeChecked();
   await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
+  await page.getByRole('radio', { name: /^Classic/ }).check();
+  await expect(root(page)).not.toHaveAttribute('data-ui-style');
 });
 
 test('the first-account screen honours stored style and keeps the original Zoomies artwork', async ({

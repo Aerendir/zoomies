@@ -87,8 +87,10 @@ test('system mode keeps its native media queries independently of visual style',
   }
 });
 
-test('blocked storage does not prevent the page from booting with no attributes', () => {
-  assert.equal(boot('mission-control', 'dark', true).attrs.size, 0);
+test('blocked storage boots the defaults, the same look the app state resolves to', () => {
+  const { attrs } = boot('classic', 'light', true);
+  assert.equal(attrs.get('data-ui-style'), 'mission-control');
+  assert.equal(attrs.get('data-theme'), 'dark');
 });
 
 test('browser-chrome colours match the actual palette tokens in both styles', () => {
