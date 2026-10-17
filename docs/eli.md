@@ -298,13 +298,16 @@ a hostile name can do is mislead an answer: check what you act on.
 ## Limits
 
 * One question may take at most six rounds of looking and twelve tool calls.
-* Each round may write at most the provider's **output limit**, 8,192 tokens
-  unless its form says otherwise (1,024 to 65,536), thinking included. A model
-  that reaches it is stopped by its provider, and Eli says so under the answer,
-  naming the provider and the limit, with a button that raises the limit on
-  your own provider and asks again: a thinking model at high effort can spend
-  the ceiling on reasoning and send no words at all. Lowering the provider's
-  reasoning effort is the cheaper cure.
+* Each round may write at most the provider's **output limit**, thinking
+  included: a number from 1,024 to 65,536 tokens, or automatic when its form
+  leaves it empty. A number is kept exactly, so it also caps what an answer can
+  cost. Automatic is 8,192 tokens in chat, and in a repair 12,000 that Eli
+  raises itself (see What a repair does). A chat answer that reaches the limit
+  is stopped by its provider, and Eli says so under the answer, naming the
+  provider and the limit, with a button that raises the limit on your own
+  provider and asks again: a thinking model at high effort can spend the ceiling
+  on reasoning and send no words at all. Lowering the provider's reasoning
+  effort is the cheaper cure.
 * A conversation is at most 40 messages and 32 KiB in all, and a message you
   write is at most 8 KiB. Eli's own answers have no limit of their own, only the
   32 KiB, so a long answer never stops you asking the next question; a
@@ -569,6 +572,22 @@ model's token capacity, and the provider's **Output limit** does not change
 them: it caps what the model may write in one round, not how much source Eli
 shows it. Repeated and overlapping reads return only new source. The PR's
 bounded diff is included.
+
+Each model turn may write at most the provider's output limit. When the
+provider's form leaves it empty, which is automatic, a repair starts at 12,000
+tokens. Each time the provider reports that the model ran out of room, Eli asks
+again with twice as much, up to 65,536, and keeps that amount for the rest of the
+repair, so only one step pays to find it. A thinking model's reasoning counts
+against the limit, so such a model may need the most. Every attempt is a step in
+the repair history with the usage the provider reported, so the tokens spent
+finding the room stay visible; a cut attempt is billed by the provider, and its
+input is sent again. A provider that refuses a larger request (its model's own
+ceiling is lower, or too little context is left beside the prompt) ends the
+repair at the last amount it accepted. A number set on the provider is never
+raised: it is the cap, and a cut at it ends the repair. The whole repair has ten
+minutes, so a slow model can run out of time before it has found its room.
+Lowering the model's reasoning effort is the cheaper cure for a model that keeps
+running out.
 
 For large files, Eli returns exact before/after edits instead of rewriting the
 whole file. The controller requires unique, non-overlapping preimages in source
