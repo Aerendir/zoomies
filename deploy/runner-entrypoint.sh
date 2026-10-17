@@ -227,10 +227,37 @@ runner_token="${ZOOMIES_RUNNER_TOKEN:-}"
 runner_url="${ZOOMIES_RUNNER_URL:-}"
 unset ZOOMIES_JITCONFIG ACTIONS_RUNNER_INPUT_JITCONFIG ZOOMIES_RUNNER_TOKEN ZOOMIES_RUNNER_URL
 
+# JobServerQueue traces the same secret-masked lines it sends to GitHub's live
+# console, before the console's 1024-character truncation. Keep those lines and
+# discard other verbose traces before they can overwhelm the log relay. The
+# version marker lets the UI distinguish an older image from a quiet build.
+filter_runner_output() {
+  awk '
+    /^\[(WORKER|RUNNER|LISTENER) [^]]+\] / {
+      build = ($0 ~ /^\[WORKER [^]]+ VERB JobServerQueue\] Enqueue web console line queue: /)
+      verbose = ($0 ~ /^\[[^]]+ VERB /)
+      if (build) sub(/^\[WORKER [^]]+ VERB JobServerQueue\] Enqueue web console line queue: /, "")
+    }
+    build { print "ZOOMIES_BUILD_LOG " $0; fflush(); next }
+    !verbose { print; fflush() }
+  '
+}
+
+start_runner() {
+  printf 'ZOOMIES_BUILD_LOG_V1\n'
+  exec 3> >(filter_runner_output)
+  output_filter=$!
+  GITHUB_ACTIONS_RUNNER_TRACE=1 \
+    ACTIONS_RUNNER_PRINT_LOG_TO_STDOUT=1 \
+    ACTIONS_RUNNER_DISABLE_STDOUT_MULTILINE_LOG_PREFIXING=1 \
+    ./run.sh "$@" >&3 2>&1 3>&- &
+  child=$!
+  exec 3>&-
+}
+
 if [ -n "${jitconfig}" ]; then
   log "starting with a just-in-time configuration (ephemeral, single use)"
-  ./run.sh --jitconfig "${jitconfig}" &
-  child=$!
+  start_runner --jitconfig "${jitconfig}"
 elif [ -n "${runner_token}" ]; then
   : "${runner_url:?ZOOMIES_RUNNER_URL is required alongside ZOOMIES_RUNNER_TOKEN}"
   log "registering ${ZOOMIES_RUNNER_NAME:-unnamed} against ${runner_url}"
@@ -264,8 +291,7 @@ elif [ -n "${runner_token}" ]; then
   }
   trap cleanup EXIT
 
-  ./run.sh &
-  child=$!
+  start_runner
 else
   log "no credentials supplied."
   log "set ZOOMIES_JITCONFIG, or ZOOMIES_RUNNER_URL together with ZOOMIES_RUNNER_TOKEN."
@@ -294,5 +320,7 @@ while :; do
     break
   fi
 done
+# Drain the console pipe before PID 1 exits and the container stops its reader.
+wait "$output_filter" || true
 log "runner exited with status ${status}"
 exit "$status"

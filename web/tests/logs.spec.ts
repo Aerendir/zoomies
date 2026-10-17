@@ -29,9 +29,38 @@ async function booted(page: Page): Promise<void> {
 
 async function openLog(page: Page): Promise<void> {
   await goto(page, `/runners/${FIXTURE.busyRunnerId}`, FIXTURE.busyRunner);
-  await expect(page.getByRole('heading', { name: 'Log', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Runner diagnostics' }).click();
   await booted(page);
 }
+
+test('build output comes first and changing log source reuses the stream', async ({ page }) => {
+  const logRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes(`/runners/${FIXTURE.busyRunnerId}/logs?`))
+      logRequests.push(request.url());
+  });
+  await goto(page, `/runners/${FIXTURE.busyRunnerId}`, FIXTURE.busyRunner);
+  const output = page.getByRole('region', { name: 'Job output', exact: true });
+  await output.getByText('Step summary', { exact: true }).click();
+  await expect(output.getByRole('list', { name: 'Steps' })).toBeVisible();
+  await expect(output.getByText('Set up job', { exact: true })).toBeVisible();
+  const link = output.getByRole('link', { name: /Open on GitHub/ });
+  await expect(link).toHaveAttribute('href', /^https:\/\/github.com\/acme\/.+\/actions\/runs\//);
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(page.getByRole('tab', { name: 'Build log', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByText('Waiting for build output', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save log', exact: true })).toBeDisabled();
+  await page.getByRole('tab', { name: 'Runner diagnostics' }).click();
+  await booted(page);
+  await expect(page.getByText('Waiting for output. Nothing has been written yet.')).toBeVisible();
+  expect(logRequests).toHaveLength(1);
+  await page.getByRole('tab', { name: 'Build log', exact: true }).click();
+  await expect(page.getByRole('group', { name: /^Build output for/ })).toBeVisible();
+  expect(logRequests).toHaveLength(1);
+});
 
 test('with nothing relayed it says it is waiting, not that there was nothing', async ({ page }) => {
   await openLog(page);
@@ -112,6 +141,8 @@ test('a runner that is gone says the log cannot be read, rather than waiting for
 }) => {
   // run_demo10 is seeded as removed, so its host can no longer be asked.
   await page.goto('/runners/run_demo10', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Job output', exact: true })).toBeVisible();
+  await page.getByText('Runner diagnostics', { exact: true }).click();
   await expect(page.getByText('The log cannot be read right now')).toBeVisible();
   await expect(follow(page), 'no toolbar for a stream that cannot open').toHaveCount(0);
 });
