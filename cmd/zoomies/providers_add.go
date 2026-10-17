@@ -48,8 +48,14 @@ type providerSpec struct {
 	enabled     *bool
 }
 
-// registerProviderFlags declares them, with the API's own defaults so that a
-// provider created here is the same as one the wizard made.
+// registerProviderFlags declares them, with the API's own defaults for what the
+// line leaves out. They are not the wizard's. The wizard opens on one warm
+// machine and a ceiling worked out from the cluster; a provider created here
+// rents nothing until --max-machines says otherwise and keeps nothing warm,
+// because there is no flag for warm machines (min_machines). A scripted
+// provider's first job after a quiet spell therefore waits for a clone until
+// the form or the API sets the floor, and an edit here leaves a floor set there
+// as it was.
 func registerProviderFlags(fs *flagSet) *providerSpec {
 	spec := &providerSpec{
 		nodes:    &listValue{},
