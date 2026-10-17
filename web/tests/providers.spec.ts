@@ -230,8 +230,15 @@ test('a provider wizard stage can be clicked to jump straight to that stage', as
   await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeVisible();
   await expect(page.getByText('Step 1 of 5')).toBeVisible();
 
-  // The current stage is named as such, and is not a button that does nothing.
-  await expect(steps.getByText('Connect', { exact: true })).toHaveAttribute('aria-current', 'step');
+  // The current stage is named as such, on the list item rather than inside a
+  // button (whose children a screen reader does not take apart), and it is the
+  // one stage that cannot be pressed: a button that went nowhere would be a tab
+  // stop that does nothing.
+  const current = steps.locator('li[aria-current="step"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toContainText('Connect');
+  await expect(steps.getByRole('button', { name: /Connect/ })).toHaveCount(0);
+  await expect(steps.getByRole('button')).toHaveCount(4);
 });
 
 /**

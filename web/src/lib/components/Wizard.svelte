@@ -7,13 +7,14 @@
   the pool editor is one page of sections that can each be reached in a tap; see
   "The pool editor" in docs/ui-guidelines.md.
 
-  `jumpable` makes each stage in the list a button that goes straight to that
-  stage, for a form whose answers can be given in any order and are all checked
-  again at the end. Such a form leaves its last button pressable whatever the
-  other stages hold, and has `onfinish` send the operator to the first one that
-  is wrong (the provider form does, and says where on its review step): a button
-  that is off for a reason on a stage they are not standing on explains nothing.
-  Off, the list is only a picture of where you are, and the flow stays a sequence.
+  `jumpable` makes each stage in the list but the current one a button that goes
+  straight to that stage, for a form whose answers can be given in any order and
+  are all checked again at the end. Such a form leaves its last button pressable
+  whatever the other stages hold, and has `onfinish` send the operator to the
+  first one that is wrong (the provider form does, and says where on its review
+  step): a button that is off for a reason on a stage they are not standing on
+  explains nothing. Off, the list is only a picture of where you are, and the
+  flow stays a sequence.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -106,7 +107,7 @@
     {#if i < current}<Check size={12} />{:else}{i + 1}{/if}
   </span>
   <span class="step-text">
-    <span class="step-title" aria-current={i === current ? 'step' : undefined}>{s.title}</span>
+    <span class="step-title">{s.title}</span>
     {#if s.description}<span class="step-description">{s.description}</span>{/if}
   </span>
 {/snippet}
@@ -114,8 +115,18 @@
 <div class="wizard {className}">
   <ol class="steps">
     {#each steps as s, i (s.id)}
-      <li class:done={i < current} class:active={i === current}>
-        {#if jumpable}
+      <!--
+        `aria-current` is on the item, because a button's children are
+        presentational and one set on a span inside it is not announced. The stage
+        you are on is the one stage that goes nowhere, so it is never a button: a
+        control that did nothing would be a tab stop, and a dead one.
+      -->
+      <li
+        class:done={i < current}
+        class:active={i === current}
+        aria-current={i === current ? 'step' : undefined}
+      >
+        {#if jumpable && i !== current}
           <button type="button" class="step-link" disabled={busy} onclick={() => jump(i)}>
             {@render stage(s, i)}
           </button>
