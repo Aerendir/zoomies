@@ -328,6 +328,73 @@ test("a markdown copy carries the discovery links too", async () => {
   assert.match(response.headers.get("link"), /rel="describedby"/);
 });
 
+// The worker, not the origin, picks the format of a page from its Accept
+// header, so a cache between the worker and the reader must key the answer on
+// Accept for both variants, and must go on keying it on the encoding the
+// origin already varies on.
+function varyTokens(response) {
+  return (response.headers.get("vary") ?? "")
+    .split(",")
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean)
+    .sort();
+}
+
+test("both variants of a page vary on Accept and keep the origin's Accept-Encoding", async () => {
+  const origin = new Map([
+    [
+      "/quickstart/",
+      {
+        body: HTML,
+        headers: { "content-type": "text/html; charset=utf-8", vary: "Accept-Encoding" },
+      },
+    ],
+    [
+      "/quickstart/index.md",
+      {
+        body: MARKDOWN,
+        headers: { "content-type": "text/markdown; charset=utf-8", vary: "Accept-Encoding" },
+      },
+    ],
+  ]);
+
+  const html = await handle("https://zoomies.sh/quickstart/", origin, {
+    headers: { accept: "text/html" },
+  });
+  const markdown = await handle("https://zoomies.sh/quickstart/", origin, {
+    headers: { accept: "text/markdown" },
+  });
+
+  assert.equal(await html.text(), HTML);
+  assert.equal(await markdown.text(), MARKDOWN);
+  assert.deepEqual(varyTokens(html), ["accept", "accept-encoding"], "the HTML variant");
+  assert.deepEqual(varyTokens(markdown), ["accept", "accept-encoding"], "the Markdown variant");
+});
+
+test("a page whose origin sends no Vary still varies on Accept in both variants", async () => {
+  const origin = new Map([
+    ["/quickstart/", { type: "text/html; charset=utf-8", body: HTML }],
+    ["/quickstart/index.md", { type: "text/markdown; charset=utf-8", body: MARKDOWN }],
+  ]);
+
+  for (const accept of ["text/html", "text/markdown"]) {
+    const response = await handle("https://zoomies.sh/quickstart/", origin, {
+      headers: { accept },
+    });
+    assert.deepEqual(varyTokens(response), ["accept"], accept);
+  }
+});
+
+test("a file that is not a page does not vary on Accept", async () => {
+  const response = await handle(
+    "https://zoomies.sh/install.sh",
+    new Map([["/install.sh", { type: "text/x-shellscript", body: "#!/bin/sh\n" }]]),
+    { headers: { accept: "text/markdown" } },
+  );
+
+  assert.equal(response.headers.get("vary"), null);
+});
+
 test("a file that is not a page wears no discovery links", async () => {
   const response = await handle(
     "https://zoomies.sh/install.sh",

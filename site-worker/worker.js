@@ -102,8 +102,9 @@ function onThisSite(origin, path) {
 // body is re-sent as this site's own, so the cookies, policies and CORS grants
 // of whatever answered the fetch are not the worker's to pass on; what is left
 // is what lets a cache and a conditional request treat the copy as the file it
-// is.
-const RELAYED_HEADERS = ["cache-control", "etag", "last-modified"];
+// is. Vary is among them because it only ever narrows what a cache may reuse:
+// it names a request header, and carries nothing a client acts on.
+const RELAYED_HEADERS = ["cache-control", "etag", "last-modified", "vary"];
 
 function relayedHeaders(upstream) {
   const headers = new Headers();
@@ -119,9 +120,10 @@ function relayedHeaders(upstream) {
 // The Markdown copy as a response, or null when this address has none, in
 // which case the origin's answer (including a real 404) stands.
 //
-// The Vary header is set even though GitHub Pages does not: the worker, not
-// the origin, chooses the format, so a cache in front of the origin has to
-// know that the choice depends on Accept.
+// Both variants of a page carry Vary: Accept, this one and the HTML the origin
+// serves (see the handler below): the worker, not the origin, chooses the
+// format, so a cache has to know that the choice depends on Accept. It is
+// appended to what the origin sends, Accept-Encoding, never put in its place.
 async function markdownResponse(request, url) {
   const path = markdownPath(url.pathname);
   if (path === null) {
@@ -141,7 +143,7 @@ async function markdownResponse(request, url) {
   const body = await copy.text();
   const headers = relayedHeaders(copy);
   headers.set("content-type", MARKDOWN_TYPE + "; charset=utf-8");
-  headers.set("vary", "Accept");
+  headers.append("vary", "Accept");
   headers.set("x-markdown-tokens", String(tokenEstimate(body)));
   headers.set("link", discoveryLinks());
   return new Response(body, { status: copy.status, headers });
@@ -258,10 +260,12 @@ export default {
       // A page answer announces where the machine-readable resources are. The
       // markdownPath test is the worker's existing idea of what a page is: it
       // keeps install.sh and the images from wearing links that are not
-      // about them.
+      // about them. It is also what can be answered as Markdown, so it is the
+      // HTML variant of a negotiated page and varies on Accept like the other.
       if (origin.ok && markdownPath(url.pathname) !== null) {
         const response = new Response(origin.body, origin);
         response.headers.set("link", discoveryLinks());
+        response.headers.append("vary", "Accept");
         return response;
       }
       return origin;

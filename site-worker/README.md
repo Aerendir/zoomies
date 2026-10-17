@@ -70,4 +70,5 @@ name all four relations (`api-catalog`, `describedby`, `service-desc` and
 `service-doc`). The fourth should be the linkset JSON, the fifth the portal's
 discovery document (its `issuer` must be `https://portal.zoomies.sh`).
 Browsers and crawlers that send no markdown header keep receiving the HTML,
-with only the `Link` header added.
+with only the `Link` and `Vary: Accept` headers added (the Markdown copy
+carries the same `Vary`, after whatever the origin already varies on).
