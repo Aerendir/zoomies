@@ -21,9 +21,9 @@ from the repository rather than written by hand, so neither can go stale:
 
 * **An API Catalog document** (RFC 9727), written as ``api-catalog.json`` and
   served at ``/.well-known/api-catalog`` by the site worker. It describes the
-  controller's REST API with the two relations the RFC names: the machine
-  description (the OpenAPI document in the repository) and the human
-  documentation. Pages carry ``Link`` headers pointing at it and at ``llms.txt``.
+  controller's REST API with the machine description (the OpenAPI document in
+  the repository), the human documentation, and the health endpoint of the
+  live demo. Pages carry ``Link`` headers pointing at it and at ``llms.txt``.
 
 * **The agent discovery documents**, the rest of what a machine reader asks
   for: ``/auth.md`` (copied from ``hooks/auth.md``), the MCP server card, the
@@ -353,6 +353,12 @@ def _write_security_txt(config, site_url: str) -> None:
         fh.write("\n".join(lines))
 
 
+# The live demo instance, where every interface the docs describe is actually
+# serving. The discovery documents below name it because a machine client
+# reading the site wants a deployment it can reach, not a promise.
+_DEMO = "https://demo.zoomies.sh"
+
+
 def _write_api_catalog(config, site_url: str) -> None:
     """Write api-catalog.json, the API Catalog document of RFC 9727.
 
@@ -364,7 +370,11 @@ def _write_api_catalog(config, site_url: str) -> None:
 
     The API itself runs on each deployment, not on this site, so the catalog
     anchors at the page that documents the API surface and links the OpenAPI
-    document in the repository: the two things a machine client can fetch today.
+    document in the repository: the two things a machine client can fetch
+    today. The status relation breaks that rule on purpose: health belongs to
+    a deployment, and the demo is the one whose health a machine client can
+    read. Should the demo go away, the link answers 404, which is the honest
+    answer for a health check, not a promise that has stopped being kept.
     """
     repo = str(config["repo_url"]).rstrip("/")
     catalog = {
@@ -377,18 +387,15 @@ def _write_api_catalog(config, site_url: str) -> None:
                 "service-doc": [
                     {"href": f"{site_url}/api-surface/", "type": "text/html"},
                 ],
+                "status": [
+                    {"href": f"{_DEMO}/readyz", "type": "application/json"},
+                ],
             },
         ],
     }
     with open(os.path.join(config["site_dir"], "api-catalog.json"), "w", encoding="utf-8") as fh:
         json.dump(catalog, fh, indent=2)
         fh.write("\n")
-
-
-# The live demo instance, where every interface the docs describe is actually
-# serving. The discovery documents below name it because a machine client
-# reading the site wants a deployment it can reach, not a promise.
-_DEMO = "https://demo.zoomies.sh"
 
 
 def _write_auth_md(config) -> None:
