@@ -182,14 +182,25 @@ func (s *Server) handleReopenJobAttention(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
 }
 
-// requestingActor is the name a timeline entry credits, empty when the route
-// has no authenticated caller (an instance with authentication off). The
-// controller reads an empty name as "an operator".
+// requestingActor is the name a timeline entry credits, empty when there is no
+// account behind the request: no caller at all, or an instance with
+// authentication off, where the caller is the development identity and its
+// name is a placeholder rather than a person. The controller reads an empty
+// name as "an operator".
 func requestingActor(ctx context.Context) string {
-	if id := Identity(ctx); id != nil {
-		return id.Name
+	id := Identity(ctx)
+	if id == nil || isDevelopmentIdentity(id) {
+		return ""
 	}
-	return ""
+	return id.Name
+}
+
+// isDevelopmentIdentity reports whether id is the one every request resolves to
+// when security.disable_auth is on. It is asked of the identity itself, rather
+// than of the setting, so that the answer follows whatever resolved the caller.
+func isDevelopmentIdentity(id *auth.Identity) bool {
+	dev := auth.DevIdentity("")
+	return id.Kind == dev.Kind && id.ID == dev.ID
 }
 
 // jobResponse is one workflow job as Zoomies observed it.

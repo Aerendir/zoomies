@@ -787,3 +787,42 @@ func TestOnlyAPressThatChangedSomethingIsAudited(t *testing.T) {
 		t.Fatalf("reopenings audited for %v, want bob alone: alice changed nothing", got)
 	}
 }
+
+// With authentication off every request is the development identity, whose name
+// is a placeholder rather than a person. The API documents acknowledged_by as
+// empty there, "where there is no account behind the action", and the drawer
+// falls back to "an operator" for an empty one; the placeholder in its place
+// had it say a person called auth-disabled looked at the failure. The timeline
+// takes the same fallback, so it does not name them either.
+func TestAcknowledgingWithAuthenticationOffNamesNobody(t *testing.T) {
+	h := newHarness(t, func(c *config.Config) { c.Security.DisableAuth = true })
+	inst := h.installation()
+	pool := h.pool(inst, "linux")
+	done := time.Now().UTC().Add(-time.Minute)
+	started := done.Add(-2 * time.Minute)
+	failed, err := h.st.UpsertJob(h.ctx, &store.Job{
+		GitHubJobID: 7401, GitHubRunID: 58, Repo: "acme/widgets", Workflow: "CI", JobName: "build",
+		State: store.JobCompleted, Conclusion: "failure", InstallationID: inst.ID, PoolID: pool.ID,
+		QueuedAt: started.Add(-time.Minute), StartedAt: &started, CompletedAt: &done, RunAttempt: 1,
+	})
+	if err != nil {
+		t.Fatalf("UpsertJob failed: %v", err)
+	}
+
+	resp := h.do(request{method: "POST", path: "/api/v1/jobs/" + failed.ID + "/acknowledge"})
+	resp.mustStatus(t, 200, "acknowledging with authentication off")
+	var out struct {
+		AcknowledgedAt string `json:"acknowledged_at"`
+		AcknowledgedBy string `json:"acknowledged_by"`
+	}
+	resp.into(t, &out)
+	if out.AcknowledgedAt == "" || out.AcknowledgedBy != "" {
+		t.Fatalf("acknowledged job = %+v, want the moment recorded and nobody named", out)
+	}
+
+	events := h.do(request{method: "GET", path: "/api/v1/jobs/" + failed.ID + "/events"})
+	events.mustStatus(t, 200, "reading the timeline")
+	if strings.Contains(string(events.body), "auth-disabled") || !strings.Contains(string(events.body), "an operator marked this failure as known") {
+		t.Fatalf("the timeline credits the placeholder, want \"an operator\": %s", events.body)
+	}
+}
