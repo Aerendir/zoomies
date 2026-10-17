@@ -14,6 +14,9 @@ Two things the origin cannot do itself, the worker does on the way through:
 * `/.well-known/api-catalog` is served from `api-catalog.json` at the origin,
   with the `application/linkset+json` content type the RFC asks for. GitHub
   Pages picks a content type from a file's extension and cannot set this one.
+* `/.well-known/oauth-protected-resource` is served from
+  `.well-known/oauth-protected-resource.json` at the origin, with the
+  `application/json` type RFC 9728 requires, for the same reason.
 * The hosted service's OpenID Provider discovery document is mirrored at
   `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`,
   byte for byte from `https://portal.zoomies.sh` and refetched on each
@@ -64,11 +67,12 @@ machine. `.github/workflows/docs.yml` runs them on every site change.
     curl -sI https://zoomies.sh/ | grep -i "^link"
     curl -s https://zoomies.sh/.well-known/api-catalog
     curl -s https://zoomies.sh/.well-known/openid-configuration
+    curl -sI https://zoomies.sh/.well-known/oauth-protected-resource | grep -i "content-type"
 
 The second command should say `text/markdown; charset=utf-8`. The third should
 name all four relations (`api-catalog`, `describedby`, `service-desc` and
 `service-doc`). The fourth should be the linkset JSON, the fifth the portal's
-discovery document (its `issuer` must be `https://portal.zoomies.sh`).
-Browsers and crawlers that send no markdown header keep receiving the HTML,
+discovery document (its `issuer` must be `https://portal.zoomies.sh`), and the
+last should say `application/json`. Browsers and crawlers that send no markdown header keep receiving the HTML,
 with only the `Link` and `Vary: Accept` headers added (the Markdown copy
 carries the same `Vary`, after whatever the origin already varies on).

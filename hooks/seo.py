@@ -556,9 +556,12 @@ def _write_agent_discovery(config, site_url: str) -> None:
     # provider, and the agent_auth block is the same one the provider's
     # metadata carries. The mirrors (site-worker/) serve the provider's two
     # documents; this one is written here, because the resource is the site's
-    # to declare and a mirror's bytes must name the mirror's host.
+    # to declare and a mirror's bytes must name the mirror's host. It is a
+    # .json file for the reason every document here is, and the worker serves
+    # it at the extensionless well-known address with the application/json
+    # that RFC 9728 requires and Pages would not give it.
     portal = "https://portal.zoomies.sh"
-    with open(os.path.join(well, "oauth-protected-resource"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(well, "oauth-protected-resource.json"), "w", encoding="utf-8") as fh:
         json.dump({
             "resource": f"{site_url}/",
             "authorization_servers": [portal],

@@ -165,6 +165,23 @@ async function apiCatalogResponse(url) {
   return new Response(body, { status: source.status, headers });
 }
 
+// The site's own protected-resource metadata (RFC 9728) at its well-known
+// address, for the same reason as the catalog above: the origin stores it as a
+// .json file and Pages types an extensionless one as application/octet-stream,
+// where the RFC requires application/json.
+async function protectedResourceResponse(url) {
+  const source = await fetch(new URL("/.well-known/oauth-protected-resource.json", url.origin), {
+    redirect: "follow",
+  });
+  if (!source.ok) {
+    return null;
+  }
+  const body = await source.text();
+  const headers = new Headers(source.headers);
+  headers.set("content-type", "application/json");
+  return new Response(body, { status: source.status, headers });
+}
+
 // The identity documents this site can back truthfully are the hosted
 // service's own: the portal runs an OpenID Provider whose discovery names a
 // real issuer, real endpoints and signing keys, and its authorization-server
@@ -175,7 +192,8 @@ async function apiCatalogResponse(url) {
 // and the documents say that is where they live: a mirror changes nothing
 // inside their bytes, and a client that insists on fetching at the issuer
 // itself is pointed there by everything in them. The resource's own metadata
-// is not mirrored: it is the site's to declare, and hooks/seo.py writes it.
+// is not mirrored: it is the site's to declare, hooks/seo.py writes it, and
+// protectedResourceResponse serves it.
 const ISSUER_ORIGIN = "https://portal.zoomies.sh";
 const MIRRORS = [
   { from: "/.well-known/openid-configuration",
@@ -248,6 +266,12 @@ export default {
         const catalog = await apiCatalogResponse(url);
         if (catalog !== null) {
           return request.method === "HEAD" ? new Response(null, catalog) : catalog;
+        }
+      }
+      if (url.pathname === "/.well-known/oauth-protected-resource") {
+        const resource = await protectedResourceResponse(url);
+        if (resource !== null) {
+          return request.method === "HEAD" ? new Response(null, resource) : resource;
         }
       }
       if (wantsMarkdown(request.headers.get("accept"))) {

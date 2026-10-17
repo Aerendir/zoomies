@@ -176,7 +176,10 @@ jobs:
                   body = fh.read()
               assert skill["digest"] == "sha256:" + hashlib.sha256(body).hexdigest(), skill["name"]
 
-          prm = load(".well-known/oauth-protected-resource")
+          # A .json name, because Pages types a file by its extension and
+          # RFC 9728 requires application/json; the edge worker serves it at
+          # the extensionless well-known address.
+          prm = load(".well-known/oauth-protected-resource.json")
           assert prm["resource"].startswith("https://zoomies.sh"), prm["resource"]
           assert prm["authorization_servers"] == ["https://portal.zoomies.sh"]
           assert prm["bearer_methods_supported"] == ["header"]

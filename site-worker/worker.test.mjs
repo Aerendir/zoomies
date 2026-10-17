@@ -617,10 +617,53 @@ const PRM = JSON.stringify({
   agent_auth: { skill: "https://portal.zoomies.sh/auth.md", register_uri: "https://portal.zoomies.sh/oauth/register" },
 });
 
-test("the generated resource metadata passes through from the origin untouched", async () => {
-  const response = await handle("https://zoomies.sh/.well-known/oauth-protected-resource", new Map([
-    ["/.well-known/oauth-protected-resource", { type: "application/json", body: PRM }],
-  ]), { headers: { accept: "application/json" } });
+// RFC 9728 asks for application/json, and GitHub Pages types a file by its
+// extension: the extensionless file this document used to be was served as
+// application/octet-stream. The build now writes it as a .json file, and the
+// worker serves it at the well-known address with the type the RFC asks for,
+// whatever type the origin gave the file.
+for (const [what, originType] of [
+  ["JSON", "application/json; charset=utf-8"],
+  ["opaque bytes", "application/octet-stream"],
+]) {
+  test(`the resource metadata is served at its well-known address as JSON when the origin types the file as ${what}`, async () => {
+    const response = await handle(
+      "https://zoomies.sh/.well-known/oauth-protected-resource",
+      new Map([
+        // The old build's extensionless file, typed as Pages typed it.
+        ["/.well-known/oauth-protected-resource", { type: "application/octet-stream", body: "stale" }],
+        ["/.well-known/oauth-protected-resource.json", { type: originType, body: PRM }],
+      ]),
+      { headers: { accept: "application/json" } },
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "application/json");
+    assert.equal(await response.text(), PRM);
+  });
+}
+
+test("a HEAD request for the resource metadata answers with the type and no body", async () => {
+  const response = await handle(
+    "https://zoomies.sh/.well-known/oauth-protected-resource",
+    new Map([
+      ["/.well-known/oauth-protected-resource.json", { type: "application/octet-stream", body: PRM }],
+    ]),
+    { method: "HEAD" },
+  );
+
   assert.equal(response.status, 200);
-  assert.equal(await response.text(), PRM);
+  assert.equal(response.headers.get("content-type"), "application/json");
+  assert.equal(await response.text(), "");
+});
+
+test("without the generated file the origin's own answer for the well-known address stands", async () => {
+  const response = await handle(
+    "https://zoomies.sh/.well-known/oauth-protected-resource",
+    new Map([]),
+    {},
+  );
+
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
 });
