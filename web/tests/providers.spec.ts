@@ -235,6 +235,31 @@ test('a provider wizard stage can be clicked to jump straight to that stage', as
 });
 
 /**
+ * Forced-colours mode (Windows High Contrast) strips every box-shadow, and the
+ * stage buttons draw their focus ring as one. An outline survives that mode
+ * where a shadow does not, so a transparent one beside the shadow is what keeps
+ * the stage a keyboard has reached visible to someone who cannot see the
+ * difference between two colours.
+ */
+test.describe('with forced colours', () => {
+  test.use({ forcedColors: 'active' });
+
+  test('a focused wizard stage still has an outline', async ({ page }) => {
+    await goto(page, '/providers/new', 'Add a provider');
+    await page.getByRole('button', { name: 'Configure connection manually' }).click();
+    const stages = page.locator('ol.steps').getByRole('button');
+    await expect(stages.nth(1)).toBeVisible();
+
+    // From the keyboard, because a pointer would not draw a focus ring at all.
+    await stages.first().focus();
+    await page.keyboard.press('Tab');
+    await expect(stages.nth(1)).toBeFocused();
+    await expect(stages.nth(1)).toHaveCSS('outline-style', 'solid');
+    await expect(stages.nth(1)).not.toHaveCSS('outline-width', '0px');
+  });
+});
+
+/**
  * The two answers that are wrong for reasons no browser could know.
  *
  * A name already taken is a fact about the fleet's other rows, and a VMID range

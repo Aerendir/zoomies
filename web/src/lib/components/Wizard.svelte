@@ -181,8 +181,14 @@
   button.step-link:hover .step-title {
     color: var(--z-text);
   }
+  /*
+    A shadow is not drawn in forced-colours mode (Windows High Contrast), which
+    would leave the stage a keyboard has reached with no indicator at all. The
+    outline is transparent so nothing changes anywhere else, and that mode paints
+    it in a system colour.
+  */
   button.step-link:focus-visible {
-    outline: none;
+    outline: var(--z-focus-width) solid transparent;
     box-shadow: var(--z-focus-ring);
   }
   button.step-link:disabled {
