@@ -17,7 +17,6 @@
   import { fleet } from '$lib/state/fleet.svelte';
   import { freshness } from '$lib/hosts/freshness';
   import { session } from '$lib/state/session.svelte';
-  import { formatAbsolute, formatPercent, onClockTick } from '$lib/format';
   import {
     attention as attentionOf,
     bySeverity,
@@ -41,7 +40,7 @@
   import { KIND_WORDS, fixCommand, rowKind } from '$lib/hosts/row-kind';
   import { hostCheckContext } from '$lib/assistant/contexts';
   import { eli } from '$lib/assistant/eli.svelte';
-  import { NO_VALUE, pluralise } from '$lib/format';
+  import { formatAbsolute, formatPercent, NO_VALUE, onClockTick, pluralise } from '$lib/format';
   import { niceValue } from '$lib/hosts/check-value';
   import { acceptedIds, acceptedLast, acceptNote, canAccept, endedNote } from '$lib/hosts/accept';
   import AcceptDialog from '$lib/hosts/AcceptDialog.svelte';
@@ -404,7 +403,7 @@
     if (!canOperate || readOnly) return base;
     return `${base} ${PREVIEW_SENTENCE}${tier === 'dedicated' ? ` ${DEDICATED_SENTENCE}` : ''}`;
   }
-  /* -- whether its failures came under pressure ------------------------------
+  /* Whether its failures came under pressure ---------------------------------
    * A host's own page is where "is this machine the trouble?" is asked, so
    * the pressure analysis sits here, over the day before now: the window the
    * Hosts page's charts open on. It is asked again when the page is given

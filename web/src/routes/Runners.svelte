@@ -91,7 +91,7 @@
 
   const filters = $derived({ search, poolId, hostId, includeRemoved, states });
 
-  /* -- what keeps failing to start ---------------------------------------------
+  /* What keeps failing to start ------------------------------------------------
    * Narrowing the list to failed runners is asking "why do these keep
    * failing?", so that is when the startup-failures analysis is shown. It
    * reads the day before now (failed runners are kept for retention.runners,

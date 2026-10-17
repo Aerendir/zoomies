@@ -184,7 +184,7 @@
     return () => pending?.abort();
   });
 
-  /* -- what got worse between the releases ---------------------------------
+  /* What got worse between the releases ------------------------------------
    * Beside the table of releases, because that table is where "did the
    * upgrade make things worse?" is asked, and over the same range, so the two
    * read the same jobs. The table lays the releases out; the comparison says

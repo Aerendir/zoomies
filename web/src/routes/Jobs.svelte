@@ -168,7 +168,7 @@
   /** Bumped by the refresh button so the size-label report reads again too. */
   let adviceKey = $state(0);
 
-  /* -- why the queued jobs waited ---------------------------------------------
+  /* Why the queued jobs waited ------------------------------------------------
    * The Queued view is where "why is this waiting?" is asked of the whole
    * queue, so the queue-wait analysis sits there and nowhere else on the page.
    * It reads the page's own dates, or the day before now when none are set,
@@ -704,106 +704,10 @@
         onclear={clearFilters}
       />
 
-      {#if queuedShown}
-        <AnalysisCard
-          title="Why jobs waited"
-          finding={wait}
-          error={waitError}
-          loading={waitLoading}
-          scope={waitScope.scope}
-          note={waitScope.unapplied}
-        >
-          {#if wait}
-            {@const ev = wait.evidence}
-            <dl class="facts">
-              <div>
-                <dt>Jobs</dt>
-                <dd class="figure">
-                  {pluralise(ev.jobs, 'job')} queued, {formatNumber(ev.waited)} waited, {formatDuration(
-                    ev.wait_seconds * 1000,
-                  )} of waiting
-                </dd>
-              </div>
-              {#if !waitPool && ev.pools_cut > 0}
-                <div>
-                  <dt>Pools</dt>
-                  <dd>
-                    {pluralise(ev.pools_cut, 'pool')} left out below and counted in the totals; filter
-                    to one pool to read it whole.
-                  </dd>
-                </div>
-              {/if}
-            </dl>
-            {#if ev.fleet.length}
-              <p class="rows-label" id="wait-causes">Where the wait went</p>
-              <ul class="rows" aria-labelledby="wait-causes">
-                {#each ev.fleet as c (c.cause)}
-                  <li>
-                    <span>{wordFor(CAUSE_WORDS, c.cause)}</span>
-                    <span class="figure muted"
-                      >{formatPercent(c.share)}, {formatDuration(c.seconds * 1000)}</span
-                    >
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            {#if ev.pools.length > 1}
-              <p class="rows-label" id="wait-pools">By pool</p>
-              <ul class="rows" aria-labelledby="wait-pools">
-                {#each ev.pools as p (p.pool_id)}
-                  <li>
-                    {#if p.pool_id && !p.deleted}
-                      <a href="/pools/{p.pool_id}">{p.pool_name || p.pool_id}</a>
-                    {:else}
-                      <span>{p.pool_name || (p.pool_id ? p.pool_id : 'No pool claimed them')}</span>
-                    {/if}
-                    {#if p.deleted}<span class="muted">deleted since</span>{/if}
-                    <span class="figure muted"
-                      >{pluralise(p.jobs, 'job')}, {formatDuration(p.wait_seconds * 1000)} waiting{p.dominant
-                        ? `, most of it ${wordFor(CAUSE_WORDS, p.dominant).toLowerCase()}`
-                        : ''}</span
-                    >
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            {#if longestWaits.length}
-              <p class="rows-label" id="wait-longest">Longest waits</p>
-              <ul class="rows" aria-labelledby="wait-longest">
-                {#each longestWaits as j (j.job_id)}
-                  <li>
-                    <span class="quoted">{jobWords(j) || j.job_id}</span>
-                    <span class="figure muted"
-                      >{formatDuration(j.wait_seconds * 1000)} in {j.pool}, {wordFor(
-                        CAUSE_WORDS,
-                        j.cause,
-                      ).toLowerCase()}</span
-                    >
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            {#if ev.no_runner_record > 0}
-              <p class="evidence-note">
-                {pluralise(ev.no_runner_record, 'job')} waited past becoming eligible with no record of
-                its runner left, so that wait could not be split into startup and GitHub's hand-off.
-              </p>
-            {/if}
-            {#if ev.runner_kept > 0}
-              <p class="evidence-note">
-                {pluralise(ev.runner_kept, 'job')} waited on a runner its pool keeps between jobs, so
-                that wait could not be split either.
-              </p>
-            {/if}
-            {#if ev.jobs_truncated || ev.runners_truncated}
-              <p class="evidence-note">
-                A read stopped at its limit, so the newest records were read; a shorter period reads
-                all of them.
-              </p>
-            {/if}
-          {/if}
-        </AnalysisCard>
-      {/if}
+      <!-- Before the list, where its question is asked; on a Mission Control
+           phone after it, since records come before supplementary analytics
+           there (docs/ui-guidelines.md). -->
+      {#if !compact}{@render queuedCard()}{/if}
 
       {#if filters.unmatched && unmatchedOnPage > 0}
         <UnmatchedNote count={unmatchedOnPage} />
@@ -847,6 +751,8 @@
         {/snippet}
       </DataGrid>
 
+      {#if compact}{@render queuedCard()}{/if}
+
       <p class="footnote">
         Sort by queue wait to find work that waited, or by duration to find work that took its time.
         Both are sorted by the server, so the slowest job in the fleet is one click away rather than
@@ -855,6 +761,109 @@
     </div>
   {/if}
 {/each}
+
+{#snippet queuedCard()}
+  {#if queuedShown}
+    <AnalysisCard
+      title="Why jobs waited"
+      finding={wait}
+      error={waitError}
+      loading={waitLoading}
+      scope={waitScope.scope}
+      note={waitScope.unapplied}
+    >
+      {#if wait}
+        {@const ev = wait.evidence}
+        <dl class="facts">
+          <div>
+            <dt>Jobs</dt>
+            <dd class="figure">
+              {pluralise(ev.jobs, 'job')} queued, {formatNumber(ev.waited)} waited, {formatDuration(
+                ev.wait_seconds * 1000,
+              )} of waiting
+            </dd>
+          </div>
+          {#if !waitPool && ev.pools_cut > 0}
+            <div>
+              <dt>Pools</dt>
+              <dd>
+                {pluralise(ev.pools_cut, 'pool')} left out below and counted in the totals; filter to
+                one pool to read it whole.
+              </dd>
+            </div>
+          {/if}
+        </dl>
+        {#if ev.fleet.length}
+          <p class="rows-label" id="wait-causes">Where the wait went</p>
+          <ul class="rows" aria-labelledby="wait-causes">
+            {#each ev.fleet as c (c.cause)}
+              <li>
+                <span>{wordFor(CAUSE_WORDS, c.cause)}</span>
+                <span class="figure muted"
+                  >{formatPercent(c.share)}, {formatDuration(c.seconds * 1000)}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ev.pools.length > 1}
+          <p class="rows-label" id="wait-pools">By pool</p>
+          <ul class="rows" aria-labelledby="wait-pools">
+            {#each ev.pools as p (p.pool_id)}
+              <li>
+                {#if p.pool_id && !p.deleted}
+                  <a href="/pools/{p.pool_id}">{p.pool_name || p.pool_id}</a>
+                {:else}
+                  <span>{p.pool_name || (p.pool_id ? p.pool_id : 'No pool claimed them')}</span>
+                {/if}
+                {#if p.deleted}<span class="muted">deleted since</span>{/if}
+                <span class="figure muted"
+                  >{pluralise(p.jobs, 'job')}, {formatDuration(p.wait_seconds * 1000)} waiting{p.dominant
+                    ? `, most of it ${wordFor(CAUSE_WORDS, p.dominant).toLowerCase()}`
+                    : ''}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if longestWaits.length}
+          <p class="rows-label" id="wait-longest">Longest waits</p>
+          <ul class="rows" aria-labelledby="wait-longest">
+            {#each longestWaits as j (j.job_id)}
+              <li>
+                <span class="quoted">{jobWords(j) || j.job_id}</span>
+                <span class="figure muted"
+                  >{formatDuration(j.wait_seconds * 1000)} in {j.pool}, {wordFor(
+                    CAUSE_WORDS,
+                    j.cause,
+                  ).toLowerCase()}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ev.no_runner_record > 0}
+          <p class="evidence-note">
+            {pluralise(ev.no_runner_record, 'job')} waited past becoming eligible with no record of its
+            runner left, so that wait could not be split into startup and GitHub's hand-off.
+          </p>
+        {/if}
+        {#if ev.runner_kept > 0}
+          <p class="evidence-note">
+            {pluralise(ev.runner_kept, 'job')} waited on a runner its pool keeps between jobs, so that
+            wait could not be split either.
+          </p>
+        {/if}
+        {#if ev.jobs_truncated || ev.runners_truncated}
+          <p class="evidence-note">
+            A read stopped at its limit, so the newest records were read; a shorter period reads all
+            of them.
+          </p>
+        {/if}
+      {/if}
+    </AnalysisCard>
+  {/if}
+{/snippet}
 
 {#snippet fleetContext()}
   <JobsInsights others={filters.all} />

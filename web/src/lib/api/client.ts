@@ -477,7 +477,7 @@ export const getJobFacets = (signal?: AbortSignal) =>
 export const listWorkflowRuns = (query?: Query<'listWorkflowRuns'>, signal?: AbortSignal) =>
   api.get<Result<'listWorkflowRuns'>>('/workflow-runs', { query, signal });
 
-/* -- analyses -------------------------------------------------------------- */
+/* Analyses ----------------------------------------------------------------- */
 
 /*
  * The four analyses the CLI, the MCP tools and Eli read too, so the card on a

@@ -11,12 +11,12 @@
  */
 import type { EliContext } from '../assistant/prompts';
 import { sentence, supportHint } from '../errors';
-import { formatDuration, formatPercent, joinWords } from '../format';
+import { capitalise, formatDuration, formatPercent, joinWords } from '../format';
 import { readableJobText } from '../jobs/name';
 
 /** How far to lean on a finding, as words: the level, and what was thin. */
 export function confidenceWords(c: string, reason?: string | null): string {
-  const level = c ? c.charAt(0).toUpperCase() + c.slice(1) : 'Unknown';
+  const level = c ? capitalise(c) : 'Unknown';
   const why = reason?.trim();
   return why ? `${level} confidence: ${why}` : `${level} confidence`;
 }
@@ -145,7 +145,7 @@ export function findingDescription(
     const side = (x: ComparedSides['a']) =>
       `${x.label} from ${format(x.since)} to ${format(x.until)}`;
     const left = joinWords(ev.excluded);
-    const out = left ? ` ${left.charAt(0).toUpperCase()}${left.slice(1)} jobs are left out.` : '';
+    const out = left ? ` ${capitalise(left)} jobs are left out.` : '';
     return `${side(ev.a)}; ${side(ev.b)}.${out}`;
   }
   const period = `${format(f.since)} to ${format(f.until)}`;

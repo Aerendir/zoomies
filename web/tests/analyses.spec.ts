@@ -17,9 +17,7 @@
  * range, and is opened on thirty days so the demo's two releases are in it.
  */
 import { expect, test, type Dialog, type Page } from '@playwright/test';
-import { browserOverride, documentWidth, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { expectNoSidewaysScroll, FIXTURE, goto } from './support/fixtures';
 
 /** Every analysis request the page sends, in order, so the last is the one on screen. */
 function watchAnalysis(page: Page, route: string): string[] {
@@ -101,8 +99,7 @@ async function expectAccessible(page: Page, title: string): Promise<void> {
   // outline has it in the right place.
   await expect(card(page, title).getByRole('heading', { level: 2, name: title })).toHaveCount(1);
   // On a phone the card reads down the page and never widens it.
-  const { scrollWidth, clientWidth } = await documentWidth(page);
-  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  await expectNoSidewaysScroll(page, `The page with the card "${title}"`);
 }
 
 test('the Queued view says why jobs waited, as the route does', async ({ page }) => {
@@ -180,6 +177,35 @@ test('a new window does not leave the last answer standing while it loads', asyn
   await expect.poll(() => held).toBeGreaterThan(1);
   await expect(found.getByTestId('analysis-summary')).toHaveCount(0);
   await expect(found.getByText('Working it out')).toBeVisible();
+});
+
+/** Mission Control at a phone's width, set up as operational-layout.spec.ts does. */
+async function missionControl(page: Page): Promise<void> {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('layout-seeded')) return;
+    localStorage.setItem('zoomies.ui-style', 'mission-control');
+    sessionStorage.setItem('layout-seeded', '1');
+  });
+}
+
+const top = (locator: import('@playwright/test').Locator) =>
+  locator.evaluate((node) => node.getBoundingClientRect().top);
+
+test('on a Mission Control phone the queued jobs come before the card', async ({ page }) => {
+  // docs/ui-guidelines.md: on a Mission Control phone, records come before
+  // supplementary analytics; the card is one.
+  await missionControl(page);
+  await goto(page, '/jobs?state=queued', 'Jobs');
+  const found = card(page, 'Why jobs waited');
+  const grid = page.locator('table[aria-label="Jobs"]');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await expect(grid).toBeVisible();
+  expect(await top(grid)).toBeLessThan(await top(found));
+  // A wide window keeps the card beside the filters it reads, above the list.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  expect(await top(found)).toBeLessThan(await top(grid));
 });
 
 test('the card is the Queued view’s alone', async ({ page }) => {
