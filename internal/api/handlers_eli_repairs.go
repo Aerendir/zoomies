@@ -394,7 +394,10 @@ func (s *Server) handleRequestEliRepair(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	row, err := s.ctrl.RequestPinnedEliRepair(r.Context(), owner, in.Repo, in.PullNumber, in.Instruction, in.HeadSHA, s.isAssistantAdmin(r))
+	var changed *github.RepairTargetChanged
 	switch {
+	case errors.As(err, &changed):
+		conflict(w, changed.Message)
 	case errors.Is(err, controller.ErrAssistantSubscriptionRestricted):
 		forbidden(w, err.Error())
 	case errors.Is(err, store.ErrNotFound):
@@ -452,6 +455,11 @@ func (s *Server) handleEliOpportunityAction(w http.ResponseWriter, r *http.Reque
 	}
 	row, err := s.ctrl.ActEliOpportunity(r.Context(), Identity(r.Context()).UserID, chiURLParam(r, "id"), in.Action, s.isAssistantAdmin(r))
 	if err != nil {
+		var changed *github.RepairTargetChanged
+		if errors.As(err, &changed) {
+			conflict(w, changed.Message)
+			return
+		}
 		s.fail(w, r, "acting on repair offer; refresh the PR and repair setup", err)
 		return
 	}

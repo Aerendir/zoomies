@@ -3,11 +3,14 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/assistant"
+	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/prrepair"
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -88,5 +91,51 @@ func TestRepairUsageIsSavedEvenWhenTheProviderCutsItsAnswer(t *testing.T) {
 	}
 	if steps[1].UsageReported {
 		t.Fatal("missing usage was reported as zero")
+	}
+}
+
+type unresolvedRepairRun struct {
+	*repairFake
+	err error
+}
+
+func (f unresolvedRepairRun) RepairPullForRun(context.Context, string, int64) (github.RepairPull, error) {
+	return github.RepairPull{Number: 313, HeadSHA: "old"}, f.err
+}
+
+func TestReadinessExplainsAClosedPRAndDistinguishesGitHubFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name, code, message string
+		err                 error
+	}{
+		{"closed PR", "pull", "PR #313 is closed or merged.", fmt.Errorf("%w: PR #313 is closed or merged.", github.ErrRepairUnsupported)},
+		{"GitHub unavailable", "github", "GitHub could not resolve this repair target. Try checking readiness again.", errors.New("transport failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			inst := h.installation()
+			fake := unresolvedRepairRun{repairFake: &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType)}, err: tc.err}
+			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+			user := &store.User{Username: "owner", Role: store.RoleViewer}
+			if err := h.st.CreateUser(h.ctx, user); err != nil {
+				t.Fatal(err)
+			}
+			if err := h.st.SetEliIdentity(h.ctx, store.EliIdentity{UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := h.st.ConfirmEliIdentity(h.ctx, user.ID, 42, true); err != nil {
+				t.Fatal(err)
+			}
+			ready := h.c.EliReadiness(h.ctx, user.ID, inst.Target+"/repo", 0, 9)
+			if ready.Ready || ready.PullNumber != 313 {
+				t.Fatalf("readiness lost the blocked PR: %+v", ready)
+			}
+			for _, blocker := range ready.Blockers {
+				if blocker.Code == tc.code && blocker.Message == tc.message {
+					return
+				}
+			}
+			t.Fatalf("missing actionable blocker: %+v", ready.Blockers)
+		})
 	}
 }

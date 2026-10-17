@@ -179,3 +179,109 @@ func TestAcknowledgingWithoutANameStillRecordsTheMoment(t *testing.T) {
 		t.Fatal("an acknowledgement with no name lost its time")
 	}
 }
+
+func TestAttentionFollowsNewRunsWithoutCrossingBranchesOrJobs(t *testing.T) {
+	for _, tc := range []struct {
+		name, branch, workflow, job, conclusion string
+		wantOld                                 bool
+	}{
+		{"fixed on new commit", "feature", "CI", "Test", "success", false},
+		{"new failure replaces old", "feature", "CI", "Test", "failure", false},
+		{"cancelled is not a fix", "feature", "CI", "Test", "cancelled", true},
+		{"skipped is not a fix", "feature", "CI", "Test", "skipped", true},
+		{"neutral is not a fix", "feature", "CI", "Test", "neutral", true},
+		{"newer run in progress", "feature", "CI", "Test", "", false},
+		{"other branch", "other", "CI", "Test", "success", true},
+		{"other workflow", "feature", "Deploy", "Test", "success", true},
+		{"other matrix job", "feature", "CI", "Test (arm)", "success", true},
+		{"missing branch", "", "CI", "Test", "success", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now().UTC()
+			s := newTestStoreAt(t, func() time.Time { return now })
+			ctx := context.Background()
+			old := &Job{GitHubJobID: 1, GitHubRunID: 1, Repo: "acme/repo", Workflow: "CI", JobName: "Test", HeadBranch: "feature", State: JobCompleted, Conclusion: "failure", QueuedAt: now.Add(-time.Hour)}
+			if _, err := s.UpsertJob(ctx, old); err != nil {
+				t.Fatal(err)
+			}
+			later := &Job{GitHubJobID: 2, GitHubRunID: 2, Repo: "acme/repo", Workflow: tc.workflow, JobName: tc.job, HeadBranch: tc.branch, State: JobCompleted, Conclusion: tc.conclusion, QueuedAt: now.Add(-time.Minute)}
+			if tc.conclusion == "" {
+				later.State = JobInProgress
+			}
+			if _, err := s.UpsertJob(ctx, later); err != nil {
+				t.Fatal(err)
+			}
+			rows, _, err := s.ListJobs(ctx, JobFilter{AttentionOnly: true}, Page{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, row := range rows {
+				if row.GitHubJobID == 1 {
+					found = true
+				}
+			}
+			if found != tc.wantOld {
+				t.Fatalf("old failure visible = %v, want %v", found, tc.wantOld)
+			}
+		})
+	}
+}
+
+func TestGitHubAttentionObservationsDoNotAcknowledgeOrHideNewFailures(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	s := newTestStoreAt(t, func() time.Time { return now })
+	ctx := context.Background()
+	completed := now.Add(-time.Minute)
+	job := &Job{GitHubJobID: 1, GitHubRunID: 1, Repo: "acme/repo", State: JobCompleted, Conclusion: "failure", QueuedAt: now.Add(-time.Hour), CompletedAt: &completed}
+	if _, err := s.UpsertJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	assertCount := func(want int) {
+		t.Helper()
+		_, n, err := s.ListJobs(ctx, JobFilter{AttentionOnly: true}, Page{})
+		if err != nil || n != want {
+			t.Fatalf("attention count = %d, error %v; want %d", n, err, want)
+		}
+	}
+	assertCount(1)
+	for _, reason := range []string{"closed", "superseded", "fixed"} {
+		if err := s.RecordJobAttentionRun(ctx, job.Repo, 1, reason, now, true); err != nil {
+			t.Fatal(err)
+		}
+		assertCount(0)
+	}
+	// A reopened PR becomes actionable without undoing a person's triage.
+	if err := s.RecordJobAttentionRun(ctx, job.Repo, 1, "", now, true); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(1)
+	if err := s.RecordJobAttentionRun(ctx, job.Repo, 1, "fixed", now, true); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Minute)
+	completed = now
+	fresh := &Job{GitHubJobID: 2, GitHubRunID: 1, Repo: job.Repo, State: JobCompleted, Conclusion: "failure", QueuedAt: now, CompletedAt: &completed}
+	if _, err := s.UpsertJob(ctx, fresh); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(1)
+	// A network failure must not advance the evidence timestamp and apply an
+	// old success to a failure that arrived after it.
+	if err := s.RecordJobAttentionRun(ctx, job.Repo, 1, "", now, false); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(1)
+	all, total, err := s.ListJobs(ctx, JobFilter{FailedOnly: true}, Page{})
+	if err != nil || total != 2 {
+		t.Fatalf("history = %d, %v", total, err)
+	}
+	for _, row := range all {
+		if row.AcknowledgedAt != nil {
+			t.Fatal("GitHub observation forged an acknowledgement")
+		}
+	}
+	if err := s.PruneJobAttentionRuns(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
