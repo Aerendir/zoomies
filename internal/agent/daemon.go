@@ -793,9 +793,13 @@ func (a *Agent) Run(ctx context.Context) error {
 // hashes, the token that made the credentials and the last one offered after a
 // refusal, and a token matching either is left alone.
 //
-// A failed offer counts as a use whatever went wrong, since the next start has
-// the same token and would get the same answer; a fresh token is the way on, as
-// the error says. Only an offer cut short by ctx is not held against it.
+// An offer counts as a use when the controller answered and turned the token
+// away: the next start has the same token and would get the same answer, and a
+// fresh one is the way on, as the error says. An offer that could not be made
+// (no route yet at boot, a timeout, a stopped service, a 5xx or a 429) is not
+// held against the token. A machine cloned from a template is most likely to
+// fail that way, because it starts before its network is up, and a host that
+// wrote off its only token for that would stay stranded until a person came.
 func (a *Agent) fallBack(ctx context.Context, refusal error) error {
 	token := a.opts.FallbackJoinToken
 	hash := joinTokenHash(token)
@@ -808,7 +812,7 @@ func (a *Agent) fallBack(ctx context.Context, refusal error) error {
 			"the join token this host was handed has been used already, so it was not offered again: mint a fresh one under Hosts -> Add a host and run `zoomies agent join` with it"))
 	}
 	if jerr := a.Join(ctx, token); jerr != nil {
-		if ctx.Err() == nil {
+		if tokenTurnedAway(jerr) {
 			a.rememberFallback(saved, hash)
 		}
 		a.backOff(ctx)
@@ -817,6 +821,19 @@ func (a *Agent) fallBack(ctx context.Context, refusal error) error {
 	}
 	a.log.Info("the controller refused this host's saved credentials; it re-joined with the token it was handed")
 	return a.run(ctx)
+}
+
+// tokenTurnedAway reports whether err is the controller answering a join with a
+// refusal it would give again: the 422 the join route gives a spent or unknown
+// token (which the transport reports as ErrUnauthorized), or any other answer
+// that says retrying cannot help. An error with no answer behind it, or one the
+// transport marks as worth retrying, is not.
+func tokenTurnedAway(err error) bool {
+	if errors.Is(err, ErrUnauthorized) {
+		return true
+	}
+	var refusal *HTTPError
+	return errors.As(err, &refusal) && !refusal.Retry
 }
 
 // rememberFallback records that the join token with this hash has been offered

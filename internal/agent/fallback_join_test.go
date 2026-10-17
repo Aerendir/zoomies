@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"runtime"
 	"slices"
@@ -25,6 +26,9 @@ type singleUseJoins struct {
 	joinsMu sync.Mutex
 	spent   map[string]bool
 	offered []string
+	// down, when set, is the answer to every join: the controller could not be
+	// asked, or would not answer, so the token is not used up.
+	down error
 }
 
 func newSingleUseJoins() *singleUseJoins {
@@ -34,6 +38,11 @@ func newSingleUseJoins() *singleUseJoins {
 func (s *singleUseJoins) Join(ctx context.Context, req JoinRequest) (*JoinResponse, error) {
 	s.joinsMu.Lock()
 	s.offered = append(s.offered, req.JoinToken)
+	if s.down != nil {
+		err := s.down
+		s.joinsMu.Unlock()
+		return nil, err
+	}
 	again := s.spent[req.JoinToken]
 	s.spent[req.JoinToken] = true
 	s.joinsMu.Unlock()
@@ -170,6 +179,72 @@ func TestAFailedFallbackIsNotRetriedWithTheSameTokenOnTheNextStart(t *testing.T)
 		}
 		if perm := info.Mode().Perm(); perm != 0o600 {
 			t.Fatalf("state file is mode %04o after the failed fallback, want 0600", perm)
+		}
+	}
+}
+
+// A fallback that could not be made is not a use of the token. A machine cloned
+// from a template starts before its network is up, so the first offer it makes
+// is the one most likely to fail for want of a route, and a token written off
+// for that would strand the host until somebody minted another. The offer is
+// made again on the next start, once the answer can be had, and only then
+// counts.
+func TestAFallbackThatCouldNotBeMadeIsOfferedAgainOnTheNextStart(t *testing.T) {
+	for name, down := range map[string]error{
+		"no route yet":            errors.New("dial tcp 10.0.0.1:8080: connect: network is unreachable"),
+		"a controller restarting": &HTTPError{Status: http.StatusServiceUnavailable, Method: http.MethodPost, Path: PathJoin, Retry: true},
+		"a limit reached":         &HTTPError{Status: http.StatusTooManyRequests, Method: http.MethodPost, Path: PathJoin, Retry: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			tr := newSingleUseJoins()
+			joinedWith(t, dir, tr, "zoojoin_template")
+			tr.refuseForGood()
+
+			tr.down = down
+			err := startAgent(t, dir, tr, "zoojoin_clone")
+			if !errors.Is(err, ErrHostGone) || !errors.Is(err, down) {
+				t.Fatalf("first start: Run error = %v, want the refusal and the join's own failure", err)
+			}
+			if creds, err := Load(StatePath(dir)); err != nil || creds.FallbackTokenHash != "" {
+				t.Fatalf("a join that could not be made was written off as a use of the token (%v): %+v", err, creds)
+			}
+
+			tr.down = nil
+			for start := 2; start <= 3; start++ {
+				if err := startAgent(t, dir, tr, "zoojoin_clone"); !errors.Is(err, ErrHostGone) {
+					t.Fatalf("start %d: Run error = %v, want one wrapping ErrHostGone", start, err)
+				}
+			}
+			// Offered on the start that could not ask, offered again on the first
+			// that could, and then it has made the credentials and is left alone.
+			if got, want := tr.tokensOffered(), []string{"zoojoin_template", "zoojoin_clone", "zoojoin_clone"}; !slices.Equal(got, want) {
+				t.Fatalf("the controller was offered %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// What counts as the controller turning a token away is an answer that would be
+// the same next time. Everything else is a failure to ask.
+func TestOnlyAnAnswerThatWouldComeAgainTurnsAJoinTokenAway(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err  error
+		want bool
+	}{
+		"the join route's 422, as the transport reports it": {fmt.Errorf("%w: %w", ErrUnauthorized, &HTTPError{Status: http.StatusUnprocessableEntity}), true},
+		"a spent token":                    {fmt.Errorf("%w: HTTP 422: join token already used", ErrUnauthorized), true},
+		"a 403":                            {&HTTPError{Status: http.StatusForbidden}, true},
+		"a 404":                            {&HTTPError{Status: http.StatusNotFound}, true},
+		"a 503":                            {&HTTPError{Status: http.StatusServiceUnavailable, Retry: true}, false},
+		"a 429":                            {&HTTPError{Status: http.StatusTooManyRequests, Retry: true}, false},
+		"a 408":                            {&HTTPError{Status: http.StatusRequestTimeout, Retry: true}, false},
+		"no route":                         {errors.New("dial tcp 10.0.0.1:8080: connect: network is unreachable"), false},
+		"a service that was stopped":       {context.Canceled, false},
+		"a controller that did not answer": {context.DeadlineExceeded, false},
+	} {
+		if got := tokenTurnedAway(fmt.Errorf("agent: joining controller: %w", tc.err)); got != tc.want {
+			t.Errorf("%s: tokenTurnedAway = %v, want %v", name, got, tc.want)
 		}
 	}
 }
