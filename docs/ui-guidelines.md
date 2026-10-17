@@ -793,7 +793,9 @@ The one page that has to earn the second monitor.
   separate job with a separate thing to do about it and each leaves when
   somebody says they have seen it: the one question GitHub cannot answer is
   which failures anybody has looked at, and a panel that showed every recent
-  failure for ever would stop being read.
+  failure for ever would stop being read. It shows a short glance of the newest
+  few with the whole count in the header, not the whole list, so it too leaves
+  the pools and the running jobs above the fold of a laptop screen.
 
 ### The problems drawer
 
