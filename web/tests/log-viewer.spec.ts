@@ -20,7 +20,7 @@ const RUNNER = `/runners/${FIXTURE.busyRunnerId}`;
 async function overhang(page: Page): Promise<number> {
   return page.evaluate(() => {
     const term = document.querySelector('.xterm');
-    const pane = document.querySelector('[aria-label^="Log output"]');
+    const pane = document.querySelector('.screen');
     if (!term || !pane) return Number.NaN;
     return term.getBoundingClientRect().bottom - pane.getBoundingClientRect().bottom;
   });

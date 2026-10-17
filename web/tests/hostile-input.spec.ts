@@ -94,6 +94,9 @@ test("a runner's output cannot retitle the page or clear it", async ({ page }) =
   });
 
   await goto(page, `/runners/${FIXTURE.busyRunnerId}`, FIXTURE.busyRunner);
+  // Busy runners open in Build log mode, but these unmarked events belong to
+  // the diagnostics view whose line counter reports raw log output.
+  await page.getByRole('tab', { name: 'Runner diagnostics' }).click();
   await expect(page.getByRole('switch', { name: 'Follow' })).toBeVisible();
   const titleBefore = await page.title();
 
