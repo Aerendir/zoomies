@@ -10,7 +10,7 @@
  * and pressing it changes nothing about what the page says.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { FIXTURE, goto } from './support/fixtures';
+import { FIXTURE, goto, reload } from './support/fixtures';
 
 test.beforeEach(async ({ page }) => {
   await goto(page, '/', 'Overview');
@@ -1091,4 +1091,58 @@ test("the failures panel's link to the rest keeps the scope the panel counted", 
   await more.click();
   await expect(page).toHaveURL(/[?&]attention=true/);
   await expect(page).toHaveURL(/[?&]all=true/);
+});
+
+// Marking a failure as known takes its row off the list, and the button that was
+// pressed goes with it. Keyboard focus fell to the top of the document, so
+// working down the list meant tabbing back to where you had been after every row.
+test('marking a failure as known moves focus to the failure that takes its place', async ({
+  page,
+}) => {
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const rows = failures.getByRole('listitem');
+  const count = failures.getByText(/\d+ to look at/);
+  await expect(rows).toHaveCount(2);
+  const before = await count.textContent();
+  const next = await rows
+    .nth(1)
+    .getByRole('button', { name: /^Inspect/ })
+    .getAttribute('aria-label');
+
+  await rows.first().getByRole('button', { name: 'Mark this failure as known' }).click();
+
+  const inspect = rows.first().getByRole('button', { name: /^Inspect/ });
+  await expect(inspect).toHaveAttribute('aria-label', next ?? '');
+  await expect(inspect).toBeFocused();
+
+  // Put it back, so the fleet the other specs share is as this one found it.
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(count).toHaveText(before ?? '');
+});
+
+// With no failure left to take the row's place, focus has nowhere on the panel to
+// go, and the page heading is where the app puts it after any other change of
+// place. The fleet is given one failure and the requests that mark it as known
+// are answered here, so the fixture the other specs share is not touched.
+test('marking the only failure as known moves focus to the page heading', async ({ page }) => {
+  let acknowledged = false;
+  await page.route(/\/api\/v1\/jobs\?.*attention=true/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const items = acknowledged ? [] : (body.items ?? []).slice(0, 1);
+    await route.fulfill({ response, json: { ...body, items, total: items.length } });
+  });
+  await page.route(/\/api\/v1\/jobs\/[^/]+\/acknowledge$/, (route) => {
+    acknowledged = route.request().method() === 'POST';
+    return route.fulfill({ json: {} });
+  });
+  await reload(page, 'Overview');
+
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const rows = failures.getByRole('listitem');
+  await expect(rows).toHaveCount(1);
+  await rows.first().getByRole('button', { name: 'Mark this failure as known' }).click();
+
+  await expect(failures.getByText('No failure is waiting on you')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeFocused();
 });

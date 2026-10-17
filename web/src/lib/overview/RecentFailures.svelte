@@ -23,6 +23,7 @@
   beside it.
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import { Check, CircleCheck } from '@lucide/svelte';
   import { acknowledgeJob, listJobs, reopenJobAttention } from '$lib/api/client';
   import { events } from '$lib/api/sse';
@@ -68,6 +69,7 @@
   let acking = $state<string | null>(null);
   let selected = $state<Job | null>(null);
   let drawerOpen = $state(false);
+  let list = $state<HTMLUListElement | null>(null);
 
   const others = $derived(prefs.otherRunners);
   // The Jobs page lists this fleet's own jobs unless it is told otherwise, so the
@@ -159,10 +161,14 @@
     if (!job.id || acking !== null) return;
     const before = jobs;
     const beforeTotal = total;
+    // The press is on the row that is about to leave, and focus leaves with it.
+    const held = list?.contains(document.activeElement) ?? false;
+    const at = jobs.findIndex((row) => row.id === job.id);
     acking = job.id;
     ++loadRevision;
     jobs = jobs.filter((row) => row.id !== job.id);
     total = Math.max(0, beforeTotal - 1);
+    if (held) void settleFocus(at);
     try {
       await acknowledgeJob(job.id);
       toasts.success(
@@ -177,6 +183,18 @@
     } finally {
       acking = null;
     }
+  }
+
+  /**
+   * Put focus on the failure that took the place of the one that left, or on the
+   * page when none is left, so the keyboard carries on down the list instead of
+   * starting again from the top of the document.
+   */
+  async function settleFocus(at: number): Promise<void> {
+    await tick();
+    const rows = list ? Array.from(list.querySelectorAll<HTMLElement>('.what')) : [];
+    const next = rows[Math.min(at, rows.length - 1)] ?? document.getElementById('page-heading');
+    next?.focus();
   }
 
   async function reopen(job: Job): Promise<void> {
@@ -236,7 +254,7 @@
       description="No unresolved failure from the last week is waiting for review. The Failed view keeps the original runs, including fixed, superseded and acknowledged failures."
     />
   {:else}
-    <ul class="rows">
+    <ul class="rows" bind:this={list}>
       {#each jobs as job (job.id)}
         <li class="row">
           <button

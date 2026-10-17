@@ -128,3 +128,57 @@ test('arriving by run still offers a repair when the one running is for another 
   await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toBeVisible();
   await expect(page.getByRole('list', { name: 'What Eli is doing' })).toHaveCount(0);
 });
+
+/** Where keyboard focus is, named by the section it sits in (or by the element, outside any). */
+const focusedIn = (page: Page) =>
+  page.evaluate(
+    () =>
+      document.activeElement?.closest('section')?.getAttribute('aria-label') ??
+      document.activeElement?.tagName ??
+      'nothing',
+  );
+
+// Each stage replaces the one before it, and the control that was pressed goes
+// with it: Check readiness and Fix with Eli both leave the page as their stage
+// ends. Keyboard focus went with them, to the top of the document, and whoever
+// was working by keyboard had to find the card again.
+test('each stage of the card keeps keyboard focus inside the card', async ({ page }) => {
+  await mockJourney(page);
+  await page.goto('/repairs');
+  await page
+    .getByRole('textbox', { name: 'Pull request' })
+    .fill('https://github.com/acme/widgets/pull/17');
+  await page.getByRole('button', { name: 'Check readiness' }).click();
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toBeVisible();
+  await expect.poll(() => focusedIn(page)).toBe('Repair process');
+
+  await page.getByRole('button', { name: 'Fix with Eli', exact: true }).click();
+  await expect(page.getByRole('list', { name: 'What Eli is doing' })).toBeVisible();
+  await expect.poll(() => focusedIn(page)).toBe('Repair process');
+});
+
+// A stage that arrives on its own, as a running repair does when CI answers, has
+// no business taking focus from wherever the person has gone in the meantime.
+test('a stage that changes by itself leaves focus where the person put it', async ({ page }) => {
+  const running: Schemas['EliRepair'] = { ...queuedFromThePage, state: 'working' };
+  await mockJourney(page, [running]);
+  await page.goto(`/repairs?repo=${repo}&pull=17`);
+  await expect(page.getByRole('list', { name: 'What Eli is doing' })).toBeVisible();
+  const providers = page.getByRole('link', { name: 'Model providers' });
+  await providers.focus();
+
+  // The repair finishes on the server; the card finds out on its next look.
+  await page.unroute(/\/api\/v1\/assistant\/repairs(\?.*)?$/);
+  await page.route(/\/api\/v1\/assistant\/repairs(\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        items: [{ ...running, state: 'succeeded', message: 'The checks passed.' }],
+        total: 1,
+      },
+    }),
+  );
+  await expect(page.getByRole('heading', { name: 'Checks passed' })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(providers).toBeFocused();
+});

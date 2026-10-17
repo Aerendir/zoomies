@@ -280,9 +280,30 @@
     if (repo && (pull > 0 || run > 0)) void begin();
     return stopFollowing;
   });
+
+  let card = $state<HTMLElement | null>(null);
+  // A stage replaces the one before it, and the control that was pressed goes with
+  // it: Check readiness and Fix with Eli both leave the page as their stage ends,
+  // and focus falls to the top of the document. When it was inside the card, it
+  // follows the card to the heading of the stage that took over. A stage that
+  // arrives by itself, as a running repair does when CI answers, finds focus
+  // wherever the person has put it and leaves it there.
+  let heldFocus = false;
+  $effect.pre(() => {
+    void stage;
+    heldFocus = card?.contains(document.activeElement) ?? false;
+  });
+  $effect(() => {
+    void stage;
+    if (!heldFocus || !card || card.contains(document.activeElement)) return;
+    const landing =
+      card.querySelector<HTMLElement>('[data-stage-heading]') ??
+      card.querySelector<HTMLElement>('input');
+    landing?.focus();
+  });
 </script>
 
-<section class="journey" aria-label="Repair process">
+<section class="journey" aria-label="Repair process" bind:this={card}>
   <output class="sr-only" aria-live="polite">{spoken}</output>
 
   {#if stage !== 'idle' && !changed}
@@ -330,11 +351,13 @@
       <Button type="submit" loading={busy}>Check readiness</Button>
     </form>
   {:else if stage === 'checking'}
-    <p role="status">Checking what Eli can do for <strong>{checkingLabel}</strong>.</p>
+    <p role="status" tabindex="-1" data-stage-heading>
+      Checking what Eli can do for <strong>{checkingLabel}</strong>.
+    </p>
     <Skeleton lines={2} />
   {:else if stage === 'blocked' && changed}
     <section role="status" aria-label="Failure status changed" class="outcome">
-      <h4>
+      <h4 tabindex="-1" data-stage-heading>
         {changed.code === 'fixed'
           ? 'Already fixed'
           : changed.code === 'closed'
@@ -361,7 +384,7 @@
       <Button loading={busy} onclick={() => void review()}>Check status again</Button>
     </section>
   {:else if stage === 'blocked' && ready}
-    <h4>Not ready yet</h4>
+    <h4 tabindex="-1" data-stage-heading>Not ready yet</h4>
     <ul class="blockers">
       {#each ready.blockers as blocker (blocker.message)}
         <li><CircleAlert size={14} aria-hidden="true" /> {blocker.message}</li>
@@ -401,7 +424,7 @@
       {#key ready.repo}<RepairSetup repo={ready.repo} oncomplete={review} />{/key}
     {/if}
   {:else if stage === 'ready' && ready}
-    <h4>
+    <h4 tabindex="-1" data-stage-heading>
       {#if ready.pull_number}
         <a
           href="https://github.com/{ready.repo}/pull/{ready.pull_number}"
@@ -449,9 +472,11 @@
     </div>
   {:else if stage === 'running' && repair}
     {#if stateOf(repair) === 'queued'}
-      <p role="status">Repair queued. Follow its progress in recent repairs below.</p>
+      <p role="status" tabindex="-1" data-stage-heading>
+        Repair queued. Follow its progress in recent repairs below.
+      </p>
     {:else}
-      <p role="status">{repair.message || `${trackLabel}.`}</p>
+      <p role="status" tabindex="-1" data-stage-heading>{repair.message || `${trackLabel}.`}</p>
     {/if}
     <ol class="track" aria-label="What Eli is doing">
       {#each REPAIR_TRACK as item, index (item.id)}
@@ -479,7 +504,7 @@
   {:else if stage === 'done' && repair}
     {@const row = repair}
     <div class="outcome {tone}">
-      <h5>{stateLabel(stateOf(row))}</h5>
+      <h5 tabindex="-1" data-stage-heading>{stateLabel(stateOf(row))}</h5>
       <p>{row.message}</p>
       <div class="actions">
         <Button href="https://github.com/{row.repo}/pull/{row.pull_number}" newTab
