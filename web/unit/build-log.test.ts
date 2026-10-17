@@ -201,7 +201,7 @@ function startEntrypoint(runSh: string, awk?: string) {
   let stderr = '';
   child.stdout?.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk));
   child.stderr?.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
-  const closed = once(child, 'close').then(([code]) => code as number | null);
+  const exited = once(child, 'exit').then(([code]) => code as number | null);
 
   return {
     get stdout() {
@@ -228,9 +228,11 @@ function startEntrypoint(runSh: string, awk?: string) {
     release() {
       gate.write('go\n');
     },
-    // The entrypoint's exit status, or undefined if it has not exited by the bound.
+    // The entrypoint's exit status, or undefined if it has not exited by the
+    // bound. Its output can outlive it, when a fake leaves a process holding the
+    // pipe, so a test that reads output waits for it with sees().
     exit(): Promise<number | null | undefined> {
-      return Promise.race([closed, delay(BOUND_MS, undefined, { ref: false })]);
+      return Promise.race([exited, delay(BOUND_MS, undefined, { ref: false })]);
     },
     stop() {
       try {
@@ -274,11 +276,38 @@ test(
         `the first build line was still held back ${BOUND_MS} ms into a runner that was waiting to be told it had been seen; stdout so far:\n${run.stdout}`,
       );
       run.release();
-      assert.equal(await run.exit(), 7, `stdout:\n${run.stdout}\nstderr:\n${run.stderr}`);
+      assert.ok(
+        await run.sees('runner exited with status 7\n'),
+        `stdout:\n${run.stdout}\nstderr:\n${run.stderr}`,
+      );
       assert.match(run.stdout, /ZOOMIES_BUILD_LOG second line of the build\n/);
-      assert.match(run.stdout, /runner exited with status 7/);
+      assert.equal(await run.exit(), 7);
     } finally {
       run.stop();
     }
   },
 );
+
+// A step can leave a process behind that holds the runner's output open: a
+// daemon started under sudo is not swept up by the runner, because sudo resets
+// the environment its tracking id lives in. The filter then never sees the end
+// of its input, and the entrypoint waited for it for ever, so the container
+// never said how the runner had finished. This does not depend on which awk the
+// machine has.
+test('the real entrypoint reports the runner exit status although a step left a process holding its output', async () => {
+  const run = startEntrypoint(
+    '#!/usr/bin/env bash\n' +
+      // Outlives run.sh by far more than the test will wait, and holds its output.
+      'sleep 60 &\n' +
+      'exit 3\n',
+  );
+  try {
+    assert.ok(
+      await run.sees('runner exited with status 3\n'),
+      `the runner had exited and its status was still unreported ${BOUND_MS} ms later; stdout so far:\n${run.stdout}`,
+    );
+    assert.equal(await run.exit(), 3, `stdout:\n${run.stdout}\nstderr:\n${run.stderr}`);
+  } finally {
+    run.stop();
+  }
+});

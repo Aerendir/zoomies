@@ -329,6 +329,16 @@ while :; do
   fi
 done
 # Drain the console pipe before PID 1 exits and the container stops its reader.
-wait "$output_filter" || true
+#
+# The filter ends once nothing holds the pipe's write end, and a step can leave
+# something that does: a daemon started under sudo outlives the runner, which
+# cannot sweep it up because sudo resets the environment its tracking id lives
+# in. Waiting for the filter outright then held PID 1 until that daemon went, and
+# the status below was never reported. So the filter gets a few seconds, which
+# is long for what a pipe has left in it, and the status is reported either way.
+drain_by=$((SECONDS + 3))
+while kill -0 "$output_filter" 2>/dev/null && [ "$SECONDS" -lt "$drain_by" ]; do
+  sleep 0.1 || :
+done
 log "runner exited with status ${status}"
 exit "$status"
