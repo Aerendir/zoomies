@@ -1104,8 +1104,17 @@ func attentionJobSQL() string {
 	return unreplacedJobSQL() + ` AND NOT EXISTS (
 		SELECT 1 FROM job_attention_runs a
 		WHERE a.repo = jobs.repo AND a.run_id = jobs.github_run_id
-			AND a.reason IN ('closed','superseded','fixed')
-			AND a.checked_at >= COALESCE(jobs.completed_at, jobs.queued_at))`
+			AND ` + settledOnGitHubSQL("a", "jobs") + `)`
+}
+
+// settledOnGitHubSQL is the observation that takes a failure out of the
+// attention list: GitHub said, after the job finished, that its PR is closed,
+// that newer commits replaced it or that its checks pass. The list and the loop
+// that asks GitHub again both read it, so that "settled" cannot mean one thing
+// to the page and another to the schedule.
+func settledOnGitHubSQL(observation, jobs string) string {
+	return `(` + observation + `.reason IN ('closed','superseded','fixed')
+		AND ` + observation + `.checked_at >= COALESCE(` + jobs + `.completed_at, ` + jobs + `.queued_at))`
 }
 
 // unreplacedJobSQL says that no later job has taken this one's place. A later

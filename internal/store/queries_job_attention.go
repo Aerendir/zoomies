@@ -10,11 +10,27 @@ type JobAttentionRun struct {
 	RunID int64
 }
 
+// How long a run is left alone before GitHub is asked about it again.
+//
+// Every check costs several requests against the installation's quota, which
+// runner registration shares, and the loop makes a fixed number of checks an
+// hour once enough runs are waiting; so the checks go to the runs a person is
+// waiting on. A run GitHub has settled is looked at again in case that changes
+// (a closed PR can reopen, checks can be run again) but an hour is soon enough
+// for that, and it is most of the runs in a fleet with a week of failures.
+const (
+	attentionRecheck        = 5 * time.Minute
+	attentionSettledRecheck = time.Hour
+)
+
 // JobAttentionRunsToCheck rotates through runs, including ones previously
 // settled on GitHub: a closed PR can reopen and checks can be run again.
+// Those wait longer between checks than the rest, so that they do not use
+// up the quota the rest are checked with.
 func (s *Store) JobAttentionRunsToCheck(ctx context.Context, limit int) ([]JobAttentionRun, error) {
+	now := s.Now()
 	rows, err := s.read.QueryContext(ctx, jobAttentionRunsToCheckSQL(),
-		ms(s.Now().Add(-AttentionWindow)), ms(s.Now().Add(-5*time.Minute)), limit)
+		ms(now.Add(-AttentionWindow)), ms(now.Add(-attentionSettledRecheck)), ms(now.Add(-attentionRecheck)), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +54,7 @@ func jobAttentionRunsToCheckSQL() string {
 		FROM jobs LEFT JOIN job_attention_runs a ON a.repo=jobs.repo AND a.run_id=jobs.github_run_id
 		WHERE jobs.github_run_id != 0 AND jobs.acknowledged_at IS NULL
 			AND jobs.queued_at >= ? AND ` + failedJobSQL() + ` AND ` + unreplacedJobSQL() + `
-			AND COALESCE(a.attempted_at,0) < ?
+			AND COALESCE(a.attempted_at,0) < CASE WHEN ` + settledOnGitHubSQL("a", "jobs") + ` THEN ? ELSE ? END
 		GROUP BY jobs.repo, jobs.github_run_id
 		ORDER BY COALESCE(a.attempted_at,0), MAX(jobs.queued_at) DESC, jobs.repo, jobs.github_run_id LIMIT ?`
 }

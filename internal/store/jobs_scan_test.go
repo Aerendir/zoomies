@@ -67,7 +67,7 @@ func TestTheAttentionFilterIsReadFromTheRunAndBranchIndexes(t *testing.T) {
 	}{
 		"the page":                {`SELECT id FROM jobs ` + where + ` ORDER BY queued_at DESC, id ASC LIMIT 50`, args},
 		"the count":               {`SELECT COUNT(*) FROM jobs ` + where, args},
-		"the runs to check again": {jobAttentionRunsToCheckSQL(), []any{0, 0, 5}},
+		"the runs to check again": {jobAttentionRunsToCheckSQL(), []any{0, 0, 0, 5}},
 	} {
 		plan := explain(t, s, q.query, q.args...)
 		// The replacement is the subquery's alias, so the outer scan of the

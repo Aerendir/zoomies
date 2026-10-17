@@ -17,9 +17,14 @@ type attentionFake struct {
 	checksErr error
 	runState  github.WorkflowRunState
 	runErr    error
+	// asked, when set, counts the times GitHub was asked about a run.
+	asked *int
 }
 
 func (f attentionFake) GetWorkflowRun(context.Context, string, int64) (*github.WorkflowRunState, error) {
+	if f.asked != nil {
+		*f.asked++
+	}
 	return &f.runState, f.runErr
 }
 func (f attentionFake) RepairPullForRun(ctx context.Context, repo string, run int64) (github.RepairPull, error) {
@@ -58,9 +63,9 @@ func TestAttentionRechecksGitHubWithoutPersonalRepairSetup(t *testing.T) {
 			fake := attentionFake{repairFake: &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: tc.checks}, pullErr: tc.pullErr, checksErr: tc.checksErr, runErr: tc.runErr, runState: github.WorkflowRunState{Status: "completed", Conclusion: tc.runConclusion}}
 			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
 			repo := inst.Target + "/repo"
-			reason, known := h.c.jobAttentionOnGitHub(h.ctx, repo, 9)
-			if reason != tc.reason || known != tc.known {
-				t.Fatalf("reason %q, known %v; want %q, %v", reason, known, tc.reason, tc.known)
+			reason, known, deferred := h.c.jobAttentionOnGitHub(h.ctx, repo, 9)
+			if reason != tc.reason || known != tc.known || deferred {
+				t.Fatalf("reason %q, known %v, deferred %v; want %q, %v, false", reason, known, deferred, tc.reason, tc.known)
 			}
 			job := &store.Job{GitHubJobID: 1, GitHubRunID: 9, Repo: repo, State: store.JobCompleted, Conclusion: "failure", QueuedAt: h.st.Now().Add(-time.Minute)}
 			if _, err := h.st.UpsertJob(h.ctx, job); err != nil {
@@ -180,17 +185,81 @@ func TestPendingChecksDoNotUndoAnObservedFix(t *testing.T) {
 	if err := h.st.RecordJobAttentionRun(h.ctx, repo, 9, "fixed", h.st.Now(), true); err != nil {
 		t.Fatal(err)
 	}
-	now = now.Add(6 * time.Minute)
+	// A settled run is looked at again after an hour, not five minutes.
+	now = now.Add(61 * time.Minute)
 	h.c.refreshJobAttention(h.ctx)
 	_, count, err := h.st.ListJobs(h.ctx, store.JobFilter{AttentionOnly: true}, store.Page{})
 	if err != nil || count != 0 {
 		t.Fatalf("pending checks resurrected an already fixed failure: %d, %v", count, err)
 	}
 	fake.check = "failed"
-	now = now.Add(6 * time.Minute)
+	now = now.Add(61 * time.Minute)
 	h.c.refreshJobAttention(h.ctx)
 	_, count, err = h.st.ListJobs(h.ctx, store.JobFilter{AttentionOnly: true}, store.Page{})
 	if err != nil || count != 1 {
 		t.Fatalf("a confirmed failure did not return to the inbox: %d, %v", count, err)
+	}
+}
+
+// The quota a check spends is the installation's, and runner registration is
+// spent from the same one. A check GitHub refuses for it says nothing about the
+// run, so it is not an attempt: the run stays first in line instead of waiting
+// behind a refusal, and the tick stops asking. The installation is stood down
+// the way every other background sweep stands down from one, so the ticks that
+// follow do not ask either until the time GitHub named.
+func TestAttentionStandsDownFromAnInstallationGitHubRateLimits(t *testing.T) {
+	now := time.Now().UTC()
+	h := newHarnessAt(t, func() time.Time { return now })
+	inst := h.installation()
+	repo := inst.Target + "/repo"
+	for run := int64(9); run <= 10; run++ {
+		job := &store.Job{GitHubJobID: run, GitHubRunID: run, Repo: repo, State: store.JobCompleted, Conclusion: "failure", QueuedAt: now.Add(-time.Hour)}
+		if _, err := h.st.UpsertJob(h.ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+	asked := 0
+	client := func(runErr error, checks string) *clientEntry {
+		fake := attentionFake{
+			repairFake: &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: checks},
+			runErr:     runErr, asked: &asked, runState: github.WorkflowRunState{Status: "completed"},
+		}
+		return &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+	}
+	due := func() int {
+		t.Helper()
+		runs, err := h.st.JobAttentionRunsToCheck(h.ctx, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(runs)
+	}
+
+	h.c.clients.entries[inst.ID] = client(&github.RateLimitedError{ResetAt: now.Add(10 * time.Minute)}, "")
+	h.c.refreshJobAttention(h.ctx)
+	if asked != 1 {
+		t.Fatalf("GitHub was asked %d times in a tick that was refused for quota, want once", asked)
+	}
+	if !h.c.githubHeld(inst.ID, now) {
+		t.Fatal("the installation was not stood down after GitHub said it was out of quota")
+	}
+	if got := due(); got != 2 {
+		t.Fatalf("%d runs are due again after a refused tick, want both: a refusal is not an attempt", got)
+	}
+
+	now = now.Add(time.Minute)
+	h.c.refreshJobAttention(h.ctx)
+	if asked != 1 {
+		t.Fatalf("GitHub was asked again (%d times in all) while the installation was stood down", asked)
+	}
+
+	now = now.Add(10 * time.Minute)
+	h.c.clients.entries[inst.ID] = client(nil, "failed")
+	h.c.refreshJobAttention(h.ctx)
+	if asked != 3 {
+		t.Fatalf("GitHub was asked %d times in all, want both runs checked once the hold had ended", asked)
+	}
+	if got := due(); got != 0 {
+		t.Fatalf("%d runs are still due after both were answered", got)
 	}
 }

@@ -37,7 +37,14 @@ func (c *Controller) refreshJobAttention(parent context.Context) {
 			return
 		}
 		checked := c.st.Now()
-		reason, known := c.jobAttentionOnGitHub(ctx, run.Repo, run.RunID)
+		reason, known, deferred := c.jobAttentionOnGitHub(ctx, run.Repo, run.RunID)
+		if deferred {
+			// GitHub is refusing this installation for quota, which says
+			// nothing about the run: it is not an attempt, so it stays first
+			// in line for when the hold ends. Runs of other installations
+			// in the batch are still checked.
+			continue
+		}
 		if err := c.st.RecordJobAttentionRun(ctx, run.Repo, run.RunID, reason, checked, known); err != nil {
 			return
 		}
@@ -45,44 +52,63 @@ func (c *Controller) refreshJobAttention(parent context.Context) {
 	_ = c.st.PruneJobAttentionRuns(ctx)
 }
 
-func (c *Controller) jobAttentionOnGitHub(ctx context.Context, repo string, run int64) (string, bool) {
+// jobAttentionOnGitHub says what GitHub now thinks of a failed run, and whether
+// it said anything. deferred is set when it was not asked, or refused, because
+// the installation is out of quota: the same quota runner registration is
+// minted from, so the installation is stood down for as long as GitHub said
+// (as every other background sweep stands down from one) and the run is left
+// as it was.
+func (c *Controller) jobAttentionOnGitHub(ctx context.Context, repo string, run int64) (reason string, known, deferred bool) {
 	inst, err := c.st.FindInstallationByTarget(ctx, repo)
 	if err != nil {
-		return "", false
+		return "", false, false
+	}
+	if c.githubHeld(inst.ID, c.Now()) {
+		return "", false, true
+	}
+	// limited stands the installation down when err is GitHub refusing for
+	// quota, and reports whether it was. Any other failure is an unknown, which
+	// the caller records so that the run waits its interval.
+	limited := func(err error) bool {
+		if !errors.Is(err, github.ErrRateLimited) {
+			return false
+		}
+		c.holdRateLimited(inst.ID, err, c.Now(), "re-checking failed runs")
+		return true
 	}
 	raw, err := c.ClientFor(ctx, inst.ID)
 	if err != nil {
-		return "", false
+		return "", false, limited(err)
 	}
 	state, err := raw.GetWorkflowRun(ctx, repo, run)
 	if err != nil {
-		return "", false
+		return "", false, limited(err)
 	}
 	if state != nil && state.Status == "completed" && state.Conclusion == "success" {
-		return "fixed", true
+		return "fixed", true, false
 	}
 	client, ok := raw.(github.RepairClient)
 	if !ok {
-		return "", false
+		return "", false, false
 	}
 	pr, err := client.RepairPullForRun(ctx, repo, run)
 	var changed *github.RepairTargetChanged
 	if errors.As(err, &changed) {
-		return changed.Code, true
+		return changed.Code, true, false
 	}
 	if err != nil {
 		// A push run without a PR can still have a real failure to fix.
 		// Neither an unsupported repair nor a read failure proves it settled.
-		return "", false
+		return "", false, limited(err)
 	}
 	checks, err := client.RepairChecks(ctx, repo, pr.HeadSHA)
 	if err != nil {
-		return "", false
+		return "", false, limited(err)
 	}
 	if checks == "passed" {
-		return "fixed", true
+		return "fixed", true, false
 	}
 	// Pending or cancelled checks neither settle an unknown failure nor undo
 	// an earlier observed success. A fresh failed job is visible by its time.
-	return "", checks == "failed"
+	return "", checks == "failed", false
 }

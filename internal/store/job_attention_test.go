@@ -378,3 +378,64 @@ func TestSplittingTheReplacementTestKeepsTheSameJobs(t *testing.T) {
 			len(single), len(byAttempt), len(byRun))
 	}
 }
+
+// Every check of a run costs GitHub requests the runner registrations share the
+// installation's quota with, and the loop makes a fixed number of checks an
+// hour whenever enough runs are waiting, so what it spends them on matters. A
+// run GitHub has settled (its PR closed, a newer commit, a passing re-run) is
+// looked at again only in case that changes, and an hour is soon enough for a
+// PR to be reopened; a run it has not settled, or has said nothing about, is
+// the one a person is waiting on and keeps the short interval. A failure newer
+// than the observation is not settled by it, so it is not made to wait either.
+func TestSettledRunsAreCheckedAgainHourlyAndTheRestEveryFiveMinutes(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Millisecond)
+	clock := start
+	s := newTestStoreAt(t, func() time.Time { return clock })
+	ctx := context.Background()
+	failure := func(id, run int64, completed time.Time) {
+		t.Helper()
+		job := &Job{GitHubJobID: id, GitHubRunID: run, Repo: "acme/repo", State: JobCompleted, Conclusion: "failure",
+			QueuedAt: completed.Add(-time.Minute), CompletedAt: &completed}
+		if _, err := s.UpsertJob(ctx, job); err != nil {
+			t.Fatalf("UpsertJob: %v", err)
+		}
+	}
+	earlier := start.Add(-10 * time.Minute)
+	failure(1, 1, earlier) // closed
+	failure(2, 2, earlier) // checked, still failing
+	failure(3, 3, earlier) // fixed, and then a new failure
+	failure(4, 4, earlier) // never checked
+	for run, reason := range map[int64]string{1: "closed", 2: "", 3: "fixed"} {
+		if err := s.RecordJobAttentionRun(ctx, "acme/repo", run, reason, start, true); err != nil {
+			t.Fatalf("RecordJobAttentionRun: %v", err)
+		}
+	}
+	failure(5, 3, start.Add(30*time.Second))
+
+	dueAt := func(after time.Duration) []int64 {
+		t.Helper()
+		clock = start.Add(after)
+		runs, err := s.JobAttentionRunsToCheck(ctx, 10)
+		if err != nil {
+			t.Fatalf("JobAttentionRunsToCheck: %v", err)
+		}
+		var ids []int64
+		for _, r := range runs {
+			ids = append(ids, r.RunID)
+		}
+		slices.Sort(ids)
+		return ids
+	}
+	if got := dueAt(time.Minute); !slices.Equal(got, []int64{4}) {
+		t.Fatalf("a minute later the runs due are %v, want only the one never checked", got)
+	}
+	if got := dueAt(6 * time.Minute); !slices.Equal(got, []int64{2, 3, 4}) {
+		t.Fatalf("six minutes later the runs due are %v, want every run but the closed one", got)
+	}
+	if got := dueAt(59 * time.Minute); !slices.Equal(got, []int64{2, 3, 4}) {
+		t.Fatalf("just under an hour later the runs due are %v, want the closed run still left alone", got)
+	}
+	if got := dueAt(61 * time.Minute); !slices.Equal(got, []int64{1, 2, 3, 4}) {
+		t.Fatalf("an hour later the runs due are %v, want the closed run looked at again", got)
+	}
+}
