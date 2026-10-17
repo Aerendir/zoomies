@@ -987,7 +987,7 @@ test("a host's memory to lend opens its ledger from the keyboard and from a tap"
   );
   await goto(page, '/hosts', 'Hosts');
   const card = page.getByRole('article', { name: 'demo-builder-1', exact: true });
-  await openHostCard(card);
+  await openHostCard(card, 'keyboard');
   const figure = card.getByTestId('host-memory-pool');
   const ledger = page.locator('.host-pool-tip .bubble:popover-open');
 

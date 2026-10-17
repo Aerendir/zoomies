@@ -211,3 +211,110 @@ test('the Details button is a finger-sized target on a touch screen, and neither
   await expect(button).toHaveAttribute('aria-expanded', 'true');
   await expectNoSidewaysScroll(page, 'an open card');
 });
+
+test('a card that a filter takes off the page comes back as it was left', async ({ page }) => {
+  // Every host without an OS report, so no filter but All has anything to show.
+  // The list response is rewritten rather than the fleet changed, because the
+  // demo fleet is shared, and there is no stream, or a heartbeat's host frame
+  // would put a report back.
+  await page.route(/\/api\/v1\/hosts(?:\?.*)?$/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.items = body.items.map(({ doctor: _doctor, ...host }: { doctor?: unknown }) => host);
+    await route.fulfill({ json: body });
+  });
+  await page.route('**/api/v1/events*', (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+      body: '',
+    }),
+  );
+  await goto(page, '/hosts', 'Hosts');
+  await toggle(page, BUILDER).click();
+  await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'true');
+
+  // The page holds which cards are open, not the cards, so a card that leaves
+  // the screen and returns is not closed by the trip.
+  await page
+    .getByRole('group', { name: 'Show hosts by OS health' })
+    .getByRole('button', { name: /^Need attention \d+$/ })
+    .click();
+  await expect(card(page, BUILDER)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show all hosts' }).click();
+  await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'true');
+  for (const region of folded(page, BUILDER)) await expect(region).toBeVisible();
+  await expect(toggle(page, LOW_DISK)).toHaveAttribute('aria-expanded', 'false');
+});
+
+/**
+ * A row of cards is a row of equals. The three fixture hosts are unalike on
+ * purpose: one has a notice a cordon brings, one a machine chip long enough to
+ * wrap, one neither. Left to their own content they came out three heights, with
+ * each card's slot bar and bars wherever its own header happened to end, so a
+ * row could not be read across.
+ */
+async function measure(page: Page, name: string) {
+  const host = card(page, name);
+  // Down the page, not down the window: a click scrolls to what it presses.
+  const scrolled = await page.evaluate(() => window.scrollY);
+  const box = async (locator: Locator) => {
+    const found = await locator.boundingBox();
+    expect(found, `${name} has it on the page`).not.toBeNull();
+    return { ...found!, y: found!.y + scrolled };
+  };
+  return {
+    card: await box(host),
+    slots: await box(host.getByRole('img', { name: /^Runner slots in use on / })),
+    bars: await box(host.getByRole('group', { name: /^Utilisation of / })),
+    details: await box(toggle(page, name)),
+  };
+}
+
+type Measured = Awaited<ReturnType<typeof measure>>;
+
+/** Every card has the part at the same height and of the same size, to a pixel. */
+function expectUniform(cards: Measured[], when: string): void {
+  for (const part of ['card', 'slots', 'bars', 'details'] as const) {
+    const tops = cards.map((c) => c[part].y);
+    const heights = cards.map((c) => c[part].height);
+    expect(
+      Math.max(...tops) - Math.min(...tops),
+      `${when}: the ${part} starts at one height`,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.max(...heights) - Math.min(...heights),
+      `${when}: the ${part} is one size`,
+    ).toBeLessThanOrEqual(1);
+  }
+}
+
+test('the cards in a row are one height, and their sections line up across it', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'a phone has one card to a row, so there is nothing to line up with');
+  // Wide enough for the three to share a row whatever the sidebar takes.
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await goto(page, '/hosts', 'Hosts');
+  const names = [CORDONED, BUILDER, LOW_DISK];
+
+  await expect(card(page, CORDONED)).toContainText('Cordoned.');
+  const closed = await Promise.all(names.map((name) => measure(page, name)));
+  expectUniform(closed, 'with every card closed');
+
+  // Opening one makes the row as tall as that card needs. The rest keep their
+  // own sections where they were, and the open card's buttons do not move.
+  await toggle(page, BUILDER).click();
+  await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'true');
+  for (const region of folded(page, BUILDER)) await expect(region).toBeVisible();
+  const opened = await Promise.all(names.map((name) => measure(page, name)));
+  expectUniform(opened, 'with one card open');
+  expect(opened[1]!.details.y, 'the button that was pressed stays where it was').toBeCloseTo(
+    closed[1]!.details.y,
+    0,
+  );
+  expect(opened[0]!.card.height, 'the row grew to fit the open card').toBeGreaterThan(
+    closed[0]!.card.height + 200,
+  );
+});

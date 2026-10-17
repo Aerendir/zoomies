@@ -603,78 +603,83 @@
     </div>
   {/if}
 
-  {#if host.healthy === false}
-    <p class="health bad">
-      No heartbeat since <RelativeTime value={host.last_heartbeat} plain />. The agent is not
-      reporting, so no runner will be placed here until it does.
-    </p>
-  {/if}
+  <!-- Everything that says why this host is not taking work, in one row of the
+       card, so that a row of cards leaves the same space for it whether or not
+       any card has something to say. -->
+  <div class="alerts">
+    {#if host.healthy === false}
+      <p class="health bad">
+        No heartbeat since <RelativeTime value={host.last_heartbeat} plain />. The agent is not
+        reporting, so no runner will be placed here until it does.
+      </p>
+    {/if}
 
-  {#if host.incompatible}
-    <!-- The controller's own sentence, which already names both protocol
+    {#if host.incompatible}
+      <!-- The controller's own sentence, which already names both protocol
          versions and what happens to the work here. Appending one of our own
          produced a run-on paragraph saying the same thing twice. -->
-    <p class="cordoned">
-      {host.incompatible_reason ||
-        'This agent speaks a protocol the controller does not, so no new runner is placed here. Its running work finishes and is drained as normal.'}
-    </p>
-  {:else if machine?.state === 'draining' || machine?.state === 'deleting'}
-    <!-- Before the plain cordon sentence, because this host is cordoned and
+      <p class="cordoned">
+        {host.incompatible_reason ||
+          'This agent speaks a protocol the controller does not, so no new runner is placed here. Its running work finishes and is drained as normal.'}
+      </p>
+    {:else if machine?.state === 'draining' || machine?.state === 'deleting'}
+      <!-- Before the plain cordon sentence, because this host is cordoned and
          saying only that would leave an operator waiting for it to come back.
          It is not coming back: the machine under it is on its way out. -->
-    <p class="cordoned">
-      This host is a machine Zoomies created. It is draining because the pools it serves have had no
-      queued work for long enough to stop paying for it; the machine is deleted when the last runner
-      finishes.
-      <a href="/machines/{machine.id}">Open the machine</a>
-    </p>
-  {:else if host.cordoned}
-    <p class="cordoned">
-      Cordoned. Its running work finishes; no new runner is placed here until it is uncordoned.
-    </p>
-  {:else if isThrottled && host.throttle_reason}
-    <!-- The controller's sentence, whole: it already says what was taken,
+      <p class="cordoned">
+        This host is a machine Zoomies created. It is draining because the pools it serves have had
+        no queued work for long enough to stop paying for it; the machine is deleted when the last
+        runner finishes.
+        <a href="/machines/{machine.id}">Open the machine</a>
+      </p>
+    {:else if host.cordoned}
+      <p class="cordoned">
+        Cordoned. Its running work finishes; no new runner is placed here until it is uncordoned.
+      </p>
+    {:else if isThrottled && host.throttle_reason}
+      <!-- The controller's sentence, whole: it already says what was taken,
          why, what the running jobs are doing and how it ends. It takes the
          pending colour because a throttle is the fleet attending to
          something, not the operator having stopped it. -->
-    <p class="cordoned throttled">{host.throttle_reason}</p>
-  {:else if host.admission_reason}
-    <p class="cordoned">{host.admission_reason}. Running jobs continue.</p>
-  {:else if host.usage_fresh && (host.usage?.cpu_percent ?? 0) >= 85}
-    <p class="cordoned">CPU is busy. New runners start one at a time while pressure clears.</p>
-  {/if}
+      <p class="cordoned throttled">{host.throttle_reason}</p>
+    {:else if host.admission_reason}
+      <p class="cordoned">{host.admission_reason}. Running jobs continue.</p>
+    {:else if host.usage_fresh && (host.usage?.cpu_percent ?? 0) >= 85}
+      <p class="cordoned">CPU is busy. New runners start one at a time while pressure clears.</p>
+    {/if}
 
-  {#if recovering}
-    <!-- Outside the chain above: a cordoned or throttled host's runtime can
+    {#if recovering}
+      <!-- Outside the chain above: a cordoned or throttled host's runtime can
          fail too, and the operator needs both facts. Pending, like the
          throttle, because the agent is attending to it and it clears itself. -->
-    <p class="cordoned throttled" data-testid="host-runtime-recovering">
-      {host.runtime_reason}
-      {#if retryDue}
-        The recovery attempt is due now.
-      {:else}
-        Retrying <RelativeTime value={recovering.retry_at} plain />.
-      {/if}
-      <span class="muted">Reported <RelativeTime value={recovering.observed_at} plain />.</span>
-    </p>
-  {/if}
-  {#if pullFailed}
-    <p class="cordoned failing" data-testid="host-image-pull-failed">
-      Cannot pull pool {pullFailed.pool}'s image from
-      <span class="mono">{pullFailed.registry}</span>: the last {pullFailed.source === 'prewarm'
-        ? 'prewarm'
-        : 'runner start'} here failed because the image could not be made ready. Every runner that pool
-      places here fails the same way until it can.
-      <span class="muted">Failed <RelativeTime value={pullFailed.observed_at} plain />.</span>
-    </p>
-  {/if}
+      <p class="cordoned throttled" data-testid="host-runtime-recovering">
+        {host.runtime_reason}
+        {#if retryDue}
+          The recovery attempt is due now.
+        {:else}
+          Retrying <RelativeTime value={recovering.retry_at} plain />.
+        {/if}
+        <span class="muted">Reported <RelativeTime value={recovering.observed_at} plain />.</span>
+      </p>
+    {/if}
+    {#if pullFailed}
+      <p class="cordoned failing" data-testid="host-image-pull-failed">
+        Cannot pull pool {pullFailed.pool}'s image from
+        <span class="mono">{pullFailed.registry}</span>: the last {pullFailed.source === 'prewarm'
+          ? 'prewarm'
+          : 'runner start'} here failed because the image could not be made ready. Every runner that pool
+        places here fails the same way until it can.
+        <span class="muted">Failed <RelativeTime value={pullFailed.observed_at} plain />.</span>
+      </p>
+    {/if}
 
-  {#if noBackend}
-    <!-- Out of the fold for as long as it is true, and in the same place
+    {#if noBackend}
+      <!-- Out of the fold for as long as it is true, and in the same place
          whether the card is open or not, so opening it moves nothing that was
          already there. -->
-    {@render backendsBlock()}
-  {/if}
+      {@render backendsBlock()}
+    {/if}
+  </div>
 
   <div class="capacity">
     <UtilisationBar
@@ -702,7 +707,9 @@
     </div>
   </div>
 
-  <HostVitals {vitals} name={host.name || host.id || ''} />
+  <div class="vitals-slot">
+    <HostVitals {vitals} name={host.name || host.id || ''} />
+  </div>
 
   <!--
     A disclosure, not a link: it changes this card and goes nowhere. It keeps its
@@ -1118,14 +1125,77 @@
     overflow-wrap: anywhere;
   }
 
+  /* A card is a column of sections, each with its own space above it, so a
+     section that is absent leaves no gap behind it.
+
+     Where the browser has subgrid, the card is also one share of the page's
+     grid and its sections are rows of that grid. Every card in a row of cards
+     shares the same eight row tracks, each as tall as the tallest section in it,
+     so the cards in a row are one height and the slot bars, the three bars and
+     the Details buttons sit at the same height across it. A cordon notice on one
+     card leaves the space for it on the others, which is the price of lining
+     them up. Without subgrid the cards are still one height to a row and only
+     their sections do not line up. */
   .card {
     display: flex;
     flex-direction: column;
-    gap: var(--z-space-3);
     padding: var(--z-space-5);
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-md);
     background: var(--z-surface);
+    min-width: 0;
+    /* The space the page's row gap would give, which the page leaves at zero:
+       a row gap would also open up the rows inside every card. */
+    margin-bottom: var(--z-space-4);
+  }
+  @supports (grid-template-rows: subgrid) {
+    .card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: subgrid;
+      grid-row: span 8;
+    }
+    .card > header {
+      grid-row: 1;
+    }
+    .card > .about {
+      grid-row: 2;
+    }
+    .card > .alerts {
+      grid-row: 3;
+    }
+    .card > .capacity {
+      grid-row: 4;
+    }
+    .card > .vitals-slot {
+      grid-row: 5;
+    }
+    .card > .fold {
+      grid-row: 6;
+    }
+    .card > .details {
+      grid-row: 7;
+    }
+    /* Its row is the last, so it lines up across the cards without being
+       pushed to the bottom of a card that is taller than its own content. */
+    .card > .foot {
+      grid-row: 8;
+      margin-top: var(--z-space-3);
+    }
+  }
+  /* Nothing in this row means no height at all: the first alert brings the
+     space above it, so a row of cards with nothing to say takes none. */
+  .alerts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--z-space-3);
+    min-width: 0;
+  }
+  .alerts > :first-child {
+    margin-top: var(--z-space-3);
+  }
+  .vitals-slot {
+    margin-top: var(--z-space-3);
     min-width: 0;
   }
   header {
@@ -1232,6 +1302,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--z-space-1);
+    margin-top: var(--z-space-3);
   }
   .capacity-line {
     display: flex;
@@ -1362,6 +1433,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--z-space-2) var(--z-space-3);
+    margin-top: var(--z-space-3);
     min-width: 0;
   }
   .about-text {
@@ -1375,7 +1447,7 @@
      past it, so the word lines up with everything else on the card and the
      hover has room to be seen. */
   .fold {
-    margin-top: var(--z-space-1);
+    margin-top: var(--z-space-4);
     padding-top: var(--z-space-1);
     border-top: var(--z-border-width) solid var(--z-border);
   }
@@ -1418,6 +1490,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--z-space-3);
+    margin-top: var(--z-space-3);
     min-width: 0;
     animation: reveal var(--z-motion-base) var(--z-ease);
   }

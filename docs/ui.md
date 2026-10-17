@@ -499,9 +499,13 @@ Docker and no Podman is the ordinary case and is not one of them.
 **Details** opens the rest beneath it: the size class and the other neutral
 chips, the disk figure with its link to the check, the heartbeat and usage
 lines, why the slot count is what it is, **Committed**, **Memory to lend**,
-**Runner sizes**, **Priority**, **Backends** and **Tags**. Opening a card does not
-stretch the cards beside it. The button names its host for a screen reader,
-says whether it is open, and is 44 pixels tall on a touch screen. This browser
+**Runner sizes**, **Priority**, **Backends** and **Tags**. The cards in a row are
+one height and their sections line up across it: the pills, the slot bars, the
+three utilisation bars and the **Details** buttons sit at the same height from
+card to card, so a row reads straight across. A card with a notice leaves the
+same space on the cards beside it, and opening one makes its row as tall as that
+card needs. The button names its host for a screen reader, says whether it is
+open, and is 44 pixels tall on a touch screen. This browser
 remembers which cards are open, writing it when one is opened or closed and never
 on sight, and forgets a host that no longer exists.
 
@@ -548,8 +552,8 @@ throttle by hand once the cause is fixed. The adjust dialog's note about the
 floors under a reserve names the CPU floor too: half a core, or a twentieth of
 the machine, held back for the daemon whatever the operator sets.
 
-![The Hosts page scrolled to its host cards, below the capacity map: each card opens closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card is open beneath its Details button on committed CPU and memory, the memory it can lend, its priority and its backends](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
-![The Hosts page scrolled to its host cards, below the capacity map: each card opens closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card is open beneath its Details button on committed CPU and memory, the memory it can lend, its priority and its backends](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
 
 ### Updating every host that is behind
 

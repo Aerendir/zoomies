@@ -42,8 +42,8 @@ machine without touching a pool, and add a pool without touching a machine.
 
 ## Adding a host
 
-![The Hosts page scrolled to its host cards, below the capacity map: each card opens closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card is open beneath its Details button on committed CPU and memory, the memory it can lend, its priority and its backends](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
-![The Hosts page scrolled to its host cards, below the capacity map: each card opens closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card is open beneath its Details button on committed CPU and memory, the memory it can lend, its priority and its backends](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
 
 **Hosts → Add a host** in the UI does the whole thing on one page: it mints a
 join token and prints the command to paste on the new machine, already filled in

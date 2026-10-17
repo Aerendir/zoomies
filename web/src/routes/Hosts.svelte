@@ -866,18 +866,21 @@
     font-size: var(--z-text-xs);
     color: var(--z-text-muted);
   }
-  /* Each card is as tall as what it is showing. Cards used to share a height
-     across a row, which was right while every card carried the same dozen blocks
-     and a cordon notice only made one a little taller. They open closed now, and
-     opening one stretched its neighbours into tall boxes with nothing in the
-     lower half. */
+  /* Cards in a row share a height, and the sections of a card are rows of this
+     grid (HostCard says how), so the slot bars, the three bars and the Details
+     buttons line up across a row instead of sitting wherever a card's own content
+     put them. The row gap is zero because it would also open up the rows inside
+     every card; each card carries the space beneath it instead, and the last
+     row's is taken back. */
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: var(--z-space-4);
-    align-items: start;
+    column-gap: var(--z-space-4);
+    row-gap: 0;
+    margin-bottom: calc(-1 * var(--z-space-4));
   }
   .card-skeleton {
+    margin-bottom: var(--z-space-4);
     display: flex;
     flex-direction: column;
     gap: var(--z-space-3);
