@@ -409,8 +409,9 @@ that adds, and what it is built not to add:
   say-so. `security.mcp_open_registration: false` closes both, leaving only the
   clients an administrator creates, which may be confidential and carry a secret.
 * **Audited.** `mcp_client.register`, `mcp_client.create`,
-  `mcp_client.secret_rotate`, `mcp_client.revoke`, `mcp_connection.grant`,
-  `mcp_connection.deny`, `mcp_connection.revoke`, `mcp_connection.replay`,
+  `mcp_client.update`, `mcp_client.secret_rotate`, `mcp_client.revoke`,
+  `mcp_connection.grant`, `mcp_connection.deny`, `mcp_connection.revoke`,
+  `mcp_connection.replay`,
   `mcp_connection.revoke_all` when a password change, an administrator's
   password reset or **Sign out other sessions** ends every connection an
   account holds (a connection outlives any session, and whoever does either
