@@ -78,6 +78,69 @@ test('a node too small for one machine says so and suggests one, not none', () =
   assert.match(rec.reason, /cannot hold even one machine/);
 });
 
+// The sentence is what an operator reads under the box, so it has to say what
+// the arithmetic does. A 4 GB node keeps 2 GB, which is half of it, and an 8 GB
+// one keeps 2 GB, which is a quarter: "a fifth of its memory" described
+// neither, and an operator who checked the sum against it would doubt the rest.
+test('the reason says the larger of two gigabytes and a fifth is kept back, as the arithmetic does', () => {
+  for (const memory of [3, 4, 8, 10, 64, 512]) {
+    const kept = nodeReserveMb(memory * GB);
+    assert.ok(kept >= 2 * GB, `${memory} GB keeps at least two gigabytes`);
+    assert.ok(kept >= Math.round(memory * GB * 0.2), `${memory} GB keeps at least a fifth`);
+    assert.ok(
+      kept === 2 * GB || kept === Math.round(memory * GB * 0.2),
+      `${memory} GB keeps one of the two, whichever is larger`,
+    );
+  }
+  const size = { cpus: 2, memoryMb: 1 * GB, source: 'template' as const };
+  for (const memory of [4, 8, 64]) {
+    const rec = recommendLimits([{ value: 'pve1', cpus: 16, memory_mb: memory * GB }], size);
+    assert.match(
+      rec.reason,
+      /after keeping memory for Proxmox \(at least 2 GB, or a fifth of its memory, whichever is larger\)/,
+      `${memory} GB node`,
+    );
+    assert.doesNotMatch(rec.reason, /keeping a fifth of its memory/, `${memory} GB node`);
+  }
+});
+
+test('two nodes are told each keeps the reserve, not that they share one', () => {
+  const rec = recommendLimits(
+    [
+      { value: 'pve1', cpus: 8, memory_mb: 16 * GB },
+      { value: 'pve2', cpus: 8, memory_mb: 16 * GB },
+    ],
+    { cpus: 2, memoryMb: 4 * GB, source: 'template' },
+  );
+  assert.match(rec.reason, /at least 2 GB, or a fifth of each node's memory, whichever is larger/);
+});
+
+test('a node too small after its reserve says what the reserve is', () => {
+  const rec = recommendLimits([{ value: 'pve1', cpus: 4, memory_mb: 4 * GB }], {
+    cpus: 2,
+    memoryMb: 4 * GB,
+    source: 'template',
+  });
+  assert.match(rec.reason, /cannot hold even one machine/);
+  assert.match(rec.reason, /at least 2 GB, or a fifth of its memory, whichever is larger/);
+});
+
+// The figure is worked out from what a node has, not from what is free on it:
+// the cluster is not asked what its other guests use. A node shared with other
+// guests would be told it holds more than it does, so the sentence says where
+// the figure comes from and which way a shared node differs.
+test('the reason says the figure counts total memory, so a shared node holds fewer', () => {
+  const rec = recommendLimits([{ value: 'pve1', cpus: 16, memory_mb: 32 * GB }], {
+    cpus: 2,
+    memoryMb: 4 * GB,
+    source: 'template',
+  });
+  assert.match(
+    rec.reason,
+    /counts the node's total memory, not what other guests are using, so a node shared with other guests holds fewer/,
+  );
+});
+
 test('a cluster that did not size its nodes gets a small start rather than a guess', () => {
   const rec = recommendLimits([{ value: 'pve1' }], DEFAULT_MACHINE);
   assert.deepEqual([rec.max, rec.min], [2, 1]);
