@@ -155,6 +155,8 @@ jobs:
 
           auth = open("site/auth.md", encoding="utf-8").read()
           assert re.search(r"^# .*auth\.md", auth, re.MULTILINE), "auth.md has no auth.md heading"
+          for marker in ("## Flows", "## Scopes", "## Registration", "/oauth/register", "oauth-protected-resource"):
+              assert marker in auth, "auth.md lost " + marker
 
           card = load(".well-known/mcp/server-card.json")
           assert card["serverInfo"]["name"] == "zoomies"

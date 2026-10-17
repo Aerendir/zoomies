@@ -325,3 +325,28 @@ test("when the provider cannot be reached, the origin's answer stands", async ()
   assert.equal(response.status, 404);
   assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
 });
+
+const PRM = JSON.stringify({
+  resource: "https://portal.zoomies.sh/api/admin/mcp",
+  authorization_servers: ["https://portal.zoomies.sh"],
+  scopes_supported: ["mcp:read"],
+  bearer_methods_supported: ["header"],
+  agent_auth: { skill: "https://portal.zoomies.sh/auth.md", register_uri: "https://portal.zoomies.sh/oauth/register" },
+});
+
+test("the protected resource's metadata is mirrored at both of its addresses", async () => {
+  for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/admin/mcp"]) {
+    globalThis.fetch = async () => new Response(PRM, { status: 200, headers: { "content-type": "application/json" } });
+    const response = await worker.fetch(new Request("https://zoomies.sh" + path));
+    assert.equal(response.status, 200, path);
+    assert.equal(response.headers.get("content-type"), "application/json", path);
+    assert.equal(await response.text(), PRM, path);
+  }
+});
+
+test("a metadata path the hosted service cannot answer falls back to the origin's own 404", async () => {
+  globalThis.fetch = async () => new Response(HTML, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
+  const response = await worker.fetch(new Request("https://zoomies.sh/.well-known/oauth-protected-resource"));
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+});

@@ -120,23 +120,28 @@ async function apiCatalogResponse(url) {
   return new Response(body, { status: source.status, headers });
 }
 
-// The identity document this site can back truthfully is the hosted service's
-// own: the portal runs an OpenID Provider whose discovery names a real
-// issuer, real endpoints and signing keys. The mirror serves that document at
-// the site's two discovery addresses exactly as the portal serves it,
-// refetched on every request, so key rotation or an added endpoint can never
-// leave a stale copy here. Where discovery "should" live is the issuer's own
-// well-known address, and the document says that is where it lives: a mirror
-// changes nothing inside its bytes, and a client that insists on fetching at
-// the issuer itself is pointed there by everything in it.
+// The identity documents this site can back truthfully are the hosted
+// service's own: the portal runs an OpenID Provider whose discovery names a
+// real issuer, real endpoints and signing keys. The mirrors serve those
+// documents at the site's discovery addresses exactly as the portal serves
+// them, refetched on every request, so key rotation or an added block can
+// never leave a stale copy here. Where discovery "should" live is the issuer's
+// own well-known address, and the documents say that is where they live: a
+// mirror changes nothing inside their bytes, and a client that insists on
+// fetching at the issuer itself is pointed there by everything in them.
 const ISSUER_ORIGIN = "https://portal.zoomies.sh";
-const DISCOVERY_PATHS = [
-  "/.well-known/openid-configuration",
-  "/.well-known/oauth-authorization-server",
+const MIRRORS = [
+  // The provider's discovery: one document, at two of the site's addresses.
+  { from: "/.well-known/openid-configuration",
+    at: ["/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"] },
+  // The protected resource's metadata: the agent_auth block the walkthrough
+  // points at, at the endpoint's address variant beside the bare well-known.
+  { from: "/.well-known/oauth-protected-resource",
+    at: ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/admin/mcp"] },
 ];
 
-async function discoveryResponse() {
-  const upstream = await fetch(new URL("/.well-known/openid-configuration", ISSUER_ORIGIN), {
+async function mirrorResponse(from) {
+  const upstream = await fetch(new URL(from, ISSUER_ORIGIN), {
     headers: { accept: "application/json" },
   });
   if (!upstream.ok) {
@@ -152,10 +157,11 @@ export default {
   async fetch(request) {
     if (request.method === "GET" || request.method === "HEAD") {
       const url = new URL(request.url);
-      if (DISCOVERY_PATHS.includes(url.pathname)) {
-        const discovery = await discoveryResponse();
-        if (discovery !== null) {
-          return request.method === "HEAD" ? new Response(null, discovery) : discovery;
+      const mirror = MIRRORS.find((m) => m.at.includes(url.pathname));
+      if (mirror) {
+        const mirrored = await mirrorResponse(mirror.from);
+        if (mirrored !== null) {
+          return request.method === "HEAD" ? new Response(null, mirrored) : mirrored;
         }
       }
       if (url.pathname === "/.well-known/api-catalog" || url.pathname === "/.well-known/api-catalog/") {

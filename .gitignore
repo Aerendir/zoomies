@@ -45,3 +45,6 @@ __pycache__/
 # scenario per run (see test/e2e/README.md); the records are evidence about a
 # run, not about the tree.
 roadmap/validation/e2e/
+
+.venv/
+config.json
