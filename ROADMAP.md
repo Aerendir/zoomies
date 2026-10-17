@@ -1730,18 +1730,18 @@ that says what to change (#975). The MCP tools `queue_wait_breakdown`,
 whole rows under the server's window block with a note naming the argument that
 shows more, the names a workflow or a host wrote quoted in the text only in the
 untrusted block, and inline in the structured copy under a schema that marks
-them untrusted; all four on Eli's list, with an Eli scenario each answered from one call;
-and `zoomies analyse` with its four subcommands (#983). A card where each
-question is already asked, rendering its route's answer: **Why jobs waited** on
-the Jobs page's Queued view, **What got worse and what got better** under the
-Usage page's "By release" table, **Whether its failures came under pressure**
-on a host's own page, and **What keeps failing to start** on the Runners page
-when its state filter includes failed runners; and *Asking why* in
+them untrusted; all four on Eli's list, with an Eli scenario each answered from
+one call; and `zoomies analyse` with its four subcommands (#983). A card where
+each question is already asked, rendering its route's answer: **Why jobs
+waited** on the Jobs page's Queued view, **What got worse and what got better**
+under the Usage page's "By release" table, **Whether its failures came under
+pressure** on a host's own page, and **What keeps failing to start** on the
+Runners page when its state filter includes failed runners; and *Asking why* in
 `docs/connect-claude.md` (#1130). [fleet-analysis.md](roadmap/fleet-analysis.md)
 section 5.7 records what was built against the plan's decisions. `implemented`
 and not `done` until the cards are seen against a real fleet's data: the Eli
-scenarios have played only under the scripted model, and no real MCP client
-has called the tools.
+scenarios have played only under the scripted model, and no real MCP client has
+called the tools.
 
 Depends on ZF-240, ZF-231, ZF-226. Size M.
 

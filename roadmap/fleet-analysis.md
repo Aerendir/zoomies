@@ -292,9 +292,9 @@ ceiling* is `pool_ceiling`, the minutes the pool's live, registered runners
 stood at its `max_runners`; a runner that failed before it registered holds no
 place. A fleet that was full is `no_room`, the first addition, from the
 per-minute `usage_capacity_samples` the scheduler already writes, and *hosts
-throttled* is `throttled`, a `no_room` minute in which a host that could run the pool
-(backend, platform, selector and size, the scheduler's own placement rule) was
-on a throttle rung. *Runner startup* is `runner_startup`, from the runner's
+throttled* is `throttled`, a `no_room` minute in which a host that could run the
+pool (backend, platform, selector and size, the scheduler's own placement rule)
+was on a throttle rung. *Runner startup* is `runner_startup`, from the runner's
 request to its registration, and every minute of the wait after a failed start
 that the ceiling does not explain. *Held for review* is `held_for_review`, and
 *GitHub's own delay* is `github_delay`, from registration to the job's start.
