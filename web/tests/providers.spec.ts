@@ -207,6 +207,34 @@ test("the wizard is rendered from the driver's schema, with the driver's own def
 });
 
 /**
+ * The stages are the way to a section, not only a picture of where you are.
+ *
+ * Clicking one goes straight there in either direction, without filling in the
+ * stages between, and the answers are still checked when the operator adds the
+ * provider. The stage list is a list of buttons here, which is what makes the
+ * stage reachable from a keyboard and announced as one.
+ */
+test('a provider wizard stage can be clicked to jump straight to that stage', async ({ page }) => {
+  await goto(page, '/providers/new', 'Add a provider');
+  await page.getByRole('button', { name: 'Configure connection manually' }).click();
+  const steps = page.locator('ol.steps');
+  await expect(steps.getByRole('button', { name: /Limits/ })).toBeVisible();
+
+  // Forward, past two stages nobody has filled in.
+  await steps.getByRole('button', { name: /Limits/ }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Limits' })).toBeVisible();
+  await expect(page.getByText('Step 4 of 5')).toBeVisible();
+
+  // Back, to the first stage, which is where the connection is made.
+  await steps.getByRole('button', { name: /Connect/ }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeVisible();
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+
+  // The current stage is named as such, and is not a button that does nothing.
+  await expect(steps.getByText('Connect', { exact: true })).toHaveAttribute('aria-current', 'step');
+});
+
+/**
  * The two answers that are wrong for reasons no browser could know.
  *
  * A name already taken is a fact about the fleet's other rows, and a VMID range
