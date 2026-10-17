@@ -259,13 +259,31 @@
       {:else}<p>
           No pending offers. Enable Ask me first for your repositories, or paste a PR link below.
         </p>{/if}
-      {#key selectedOffer?.id ?? (retryTarget ? `${retryTarget.repo}:${retryTarget.pull}` : 'manual')}
+      {#key selectedOffer?.id ?? (retryTarget ? `${retryTarget.repo}:${retryTarget.pull}` : `${initialRepo}:${initialPull}:${initialRun}`)}
         <RepairRequest
           repo={selectedOffer?.repo ?? retryTarget?.repo ?? initialRepo}
           pull={selectedOffer?.pull_number ?? retryTarget?.pull ?? initialPull}
           run={initialRun}
           opportunity={selectedOffer?.id ?? ''}
-          onsetup={() => (showSetup = true)}
+          onsetup={() => {
+            showSetup = true;
+            const repo = selectedOffer?.repo ?? retryTarget?.repo ?? initialRepo;
+            if (!repo) return;
+            const policy = policies.find((item) => item.repo.toLowerCase() === repo.toLowerCase());
+            if (policy) editPolicy(policy);
+            else {
+              selectedRepos = [repo];
+              const match =
+                installations.find((item) => item.target?.toLowerCase() === repo.toLowerCase()) ??
+                installations.find(
+                  (item) => item.target?.toLowerCase() === repo.split('/')[0]?.toLowerCase(),
+                );
+              installation = match?.id ?? '';
+            }
+            linkRepos = [repo];
+            linkInstallation = installation;
+            user = session.identity?.id ?? '';
+          }}
           onqueued={() => {
             offersReadAt = 0;
             void refresh();

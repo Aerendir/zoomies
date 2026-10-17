@@ -36,6 +36,7 @@
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import Badge from '$lib/components/Badge.svelte';
+  import Button from '$lib/components/Button.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
@@ -221,31 +222,39 @@
     <ul class="rows">
       {#each jobs as job (job.id)}
         <li class="row">
-          <div class="what">
-            <button
-              class="title"
-              type="button"
-              aria-label="Inspect {readableJobText(job.job_name) || 'this failure'}"
-              onclick={() => open(job)}
-            >
+          <button
+            class="what"
+            type="button"
+            aria-label="Inspect {readableJobText(job.job_name) || 'this failure'}"
+            onclick={() => open(job)}
+          >
+            <span class="title">
               <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
               <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
-            </button>
-            <p class="detail">
+            </span>
+            <span class="detail">
               {#if readableJobText(job.job_name)}<span class="job-name"
                   >{readableJobText(job.job_name)}</span
                 >{/if}
               {#if failureSummary(job)}
                 <span class="reason" class:danger={fleetFailed(job)}>{failureSummary(job)}</span>
               {/if}
-            </p>
-          </div>
+            </span>
+            <span class="inspect">View failure details</span>
+          </button>
           <p class="elapsed">
             <span class="sr-only">Failed </span>
             <RelativeTime value={job.completed_at ?? job.queued_at} />
           </p>
-          {#if canAcknowledge}
-            <div class="act">
+          <div class="act">
+            {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}
+              <Button
+                size="sm"
+                href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
+                >Fix with Eli</Button
+              >
+            {/if}
+            {#if canAcknowledge}
               <IconButton
                 icon={Check}
                 label="Mark this failure as known"
@@ -254,8 +263,8 @@
                 disabled={acking === job.id}
                 onclick={() => void acknowledge(job)}
               />
-            </div>
-          {/if}
+            {/if}
+          </div>
         </li>
       {/each}
     </ul>
@@ -293,6 +302,19 @@
   }
   .what {
     min-width: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--z-radius-sm);
+  }
+  .inspect {
+    display: block;
+    margin-top: var(--z-space-1);
+    color: var(--z-accent);
+    font-size: var(--z-text-xs);
+  }
+  .what:hover .inspect {
+    text-decoration: underline;
   }
   .title {
     display: inline-flex;
@@ -304,8 +326,8 @@
     text-align: left;
     cursor: pointer;
   }
-  .title:hover .workflow,
-  .title:hover .repo {
+  .what:hover .workflow,
+  .what:hover .repo {
     color: var(--z-accent);
     text-decoration: underline;
   }
@@ -346,6 +368,9 @@
     white-space: nowrap;
   }
   .act {
+    display: flex;
+    align-items: center;
+    gap: var(--z-space-2);
     justify-self: end;
   }
   .more {

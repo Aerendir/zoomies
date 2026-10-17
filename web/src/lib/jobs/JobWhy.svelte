@@ -30,6 +30,7 @@
   import { catalogLink, evidenceRows, stepAction } from './why';
   import Button from '$lib/components/Button.svelte';
   import AskEli from '$lib/assistant/AskEli.svelte';
+  import { session } from '$lib/state/session.svelte';
   import { jobContext } from '$lib/assistant/contexts';
 
   interface Props {
@@ -187,9 +188,9 @@
     <!-- The verdict above is the snapshot Eli is handed; with no verdict yet,
          the job's own facts are, and Eli can fetch the explanation itself. -->
     <AskEli context={jobContext(job, why, mode)} />
-    {#if failed && !ours && job.repo && job.github_run_id}<Button
+    {#if failed && session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}<Button
         href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
-        >Review a repair with Eli</Button
+        >Fix with Eli</Button
       >{/if}
 
     {#if !failed && counts}

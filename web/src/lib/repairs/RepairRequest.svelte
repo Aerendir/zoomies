@@ -8,6 +8,7 @@
   import { toasts } from '$lib/state/toasts.svelte';
   import { router } from '$lib/router';
   import { parseRepairTarget } from './target';
+  import RepairSetup from './RepairSetup.svelte';
   let {
     repo = '',
     pull = 0,
@@ -29,6 +30,10 @@
   let busy = $state(false);
   let error = $state('');
   let queued = $state(false);
+  let showSetup = $state(false);
+  const setupNeeded = $derived(
+    ready?.blockers.some((blocker) => ['identity', 'policy'].includes(blocker.code)) ?? false,
+  );
   async function review(): Promise<void> {
     if (busy) return;
     const target = parseRepairTarget(url);
@@ -44,6 +49,7 @@
     queued = false;
     try {
       ready = await getEliReadiness(target ?? { repo, run_id: run });
+      showSetup = ready.blockers.some((blocker) => ['identity', 'policy'].includes(blocker.code));
     } catch (cause) {
       error = cause instanceof ApiError ? cause.message : 'Could not check repair readiness.';
     } finally {
@@ -82,34 +88,48 @@
 </script>
 
 <div class="request">
-  <form
-    onsubmit={(event) => {
-      event.preventDefault();
-      void review();
-    }}
-  >
-    <Field
-      id="repair-url"
-      label="Pull request"
-      hint="Paste a PR link. Eli finds the repository, installation and failed checks."
+  {#if repo && run > 0 && !url}
+    <p>
+      Fix the failure in <strong>{repo}</strong>, run {run}. Eli finds the associated PR and its
+      current failed checks.
+    </p>
+  {/if}
+  <details open={!(repo && run > 0) || ready?.blockers.some((blocker) => blocker.code === 'pull')}>
+    <summary
+      >{repo && run > 0 ? 'Choose a different pull request' : 'Choose a pull request'}</summary
     >
-      <Input
+    <form
+      onsubmit={(event) => {
+        event.preventDefault();
+        void review();
+      }}
+    >
+      <Field
         id="repair-url"
-        readonly={!!opportunity}
-        bind:value={url}
-        placeholder="https://github.com/owner/repo/pull/123"
-        oninput={() => {
-          ready = null;
-          queued = false;
-        }}
-      />
-    </Field>
-    <Button type="submit" loading={busy}>Check readiness</Button>
-  </form>
+        label="Pull request"
+        hint="Paste a PR link. Eli finds the repository, installation and failed checks."
+      >
+        <Input
+          id="repair-url"
+          readonly={!!opportunity}
+          bind:value={url}
+          placeholder="https://github.com/owner/repo/pull/123"
+          oninput={() => {
+            ready = null;
+            queued = false;
+          }}
+        />
+      </Field>
+      <Button type="submit" loading={busy}>Check readiness</Button>
+    </form>
+  </details>
+  {#if repo && run > 0 && !url && !ready}
+    <Button loading={busy} onclick={() => void review()}>Check this failure again</Button>
+  {/if}
   {#if error}<p role="alert">{error}</p>{/if}
   {#if queued}<p role="status">Repair queued. Follow its progress in recent repairs below.</p>
   {:else if ready}
-    <h4>{ready.repo} #{ready.pull_number || '?'}</h4>
+    <h4>{ready.repo}{ready.pull_number ? ` #${ready.pull_number}` : ''}</h4>
     {#if ready.blockers.length}
       <ul>
         {#each ready.blockers as blocker (blocker.message)}<li>{blocker.message}</li>{/each}
@@ -118,14 +138,29 @@
           Next allowance change: {new Date(ready.reset_at).toLocaleString()}
         </p>{/if}
       <div class="actions">
+        {#if setupNeeded}
+          <Button onclick={() => (showSetup = !showSetup)}>Set up Eli for this failure</Button>
+        {/if}
         <Button
           onclick={() => {
             onsetup?.();
             document.getElementById('repair-setup')?.scrollIntoView();
-          }}>Finish repair setup</Button
-        ><Button href="/settings/assistant">Personal provider settings</Button>
+          }}>Advanced repair setup</Button
+        >
+        {#if ready.blockers.some((blocker) => blocker.code === 'provider')}
+          <Button href="/settings/assistant" newTab>Add a personal provider</Button>
+        {/if}
       </div>
-      <p>Return here and check readiness again after setup.</p>
+      {#if showSetup && setupNeeded}
+        {#key ready.repo}<RepairSetup repo={ready.repo} oncomplete={review} />{/key}
+      {/if}
+      {#if ready.blockers.some((blocker) => blocker.code === 'pull')}
+        <p>
+          Eli repairs open PR branches in this repository. Choose a PR above if this run has no
+          eligible PR.
+        </p>
+      {/if}
+      <Button loading={busy} onclick={() => void review()}>Check readiness again</Button>
     {:else}
       <p>
         Uses your personal provider <strong>{ready.provider}</strong> ({ready.model ||
@@ -141,8 +176,7 @@
           hint="Optional. Failed-check evidence is included automatically."
           ><Input id="repair-instruction" bind:value={instruction} /></Field
         >{/if}
-      <Button variant="primary" onclick={() => void repair()} loading={busy}>Repair with Eli</Button
-      >
+      <Button variant="primary" onclick={() => void repair()} loading={busy}>Fix with Eli</Button>
     {/if}
   {/if}
 </div>

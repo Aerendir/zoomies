@@ -446,7 +446,23 @@ you spend another attempt, while a passed repair still needs normal PR review.
 ![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
 ![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
-1. Open **Eli repairs** from the navigation, or **Review a repair with Eli**
+From **Recent failures**, click the failure summary to inspect its failed step,
+explanation and timeline, or choose **Fix with Eli**. The repair page keeps the
+repository and failed run, finds the associated PR and checks readiness without
+invoking a model. Missing account or repository setup opens a wizard for that
+failure. It reuses existing settings; an administrator can link their own GitHub
+account and enable manual repairs in one save, with five attempts per day and
+workflow edits disabled for a new policy. A personal provider is still required.
+Setup checks the same run again before offering the repair. Runs without an
+eligible open PR explain why they cannot be repaired.
+
+The wizard below uses a sample failure; no real PR was changed.
+
+![Eli repair setup for a sample failed run, with the repository's installation preselected and a single save action](screenshots/eli-failure-setup-dark.png){ .zoomies-shot }
+
+For advanced setup across repositories:
+
+1. Open **Eli repairs** from the navigation, or **Fix with Eli**
    beside a failed job. Paste a PR link to check readiness without invoking a model.
 2. In **Repository repair policies**, choose a GitHub installation, search its
    repositories and select the ones to enable together. Owner and installation
@@ -473,7 +489,7 @@ you spend another attempt, while a passed repair still needs normal PR review.
    taken from. History the old account asked for stays with that account; a
    move is a link, not a takeover of its record.
 6. Return to the original PR and check readiness again. Review the payer, model,
-   workflow permission and remaining allowance before choosing **Repair with Eli**.
+   workflow permission and remaining allowance before choosing **Fix with Eli**.
 
 Ask me first groups failed jobs into one persistent offer per PR head. The
 Overview shows available offers; Eli repairs lets you review or dismiss them.
