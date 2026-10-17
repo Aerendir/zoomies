@@ -1019,8 +1019,9 @@ test('a fleet that has run jobs is never announced its first one while its count
  * The question GitHub cannot answer, on the page an operator leaves open:
  * which failures has anybody read. The panel lists the failures from the last
  * week that nobody has acknowledged and no later attempt has replaced, its
- * header carries the whole count rather than the five rows, and a row opens
- * the job's own drawer where the same decision can be taken and taken back.
+ * header carries the whole count rather than the two rows it shows (SHOWN in
+ * RecentFailures.svelte), and a row opens the job's own drawer where the same
+ * decision can be taken and taken back.
  */
 test('recent failures says which failures nobody has read, and links to the rest', async ({
   page,
