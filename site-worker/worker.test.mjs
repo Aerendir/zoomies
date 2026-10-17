@@ -250,8 +250,9 @@ for (const [name, address] of [
 
 // Even from the site's own origin, a copy is relayed with a short list of
 // headers rather than all of them: a cookie, a content security policy or a
-// CORS grant that came from whatever answered the fetch must never be set on
-// zoomies.sh by this worker.
+// credentials grant that came from whatever answered the fetch must never be
+// set on zoomies.sh by this worker. The origin's read grant is on the list, so
+// the Markdown copy stays readable from a browser as the page is.
 test("a markdown copy is answered with only the headers the worker means to relay", async () => {
   const response = await handle(
     "https://zoomies.sh/quickstart/",
@@ -267,7 +268,7 @@ test("a markdown copy is answered with only the headers the worker means to rela
             "last-modified": "Tue, 13 Oct 2026 09:00:00 GMT",
             "set-cookie": "session=1; Domain=zoomies.sh; Path=/",
             "content-security-policy": "default-src 'none'",
-            "access-control-allow-origin": "https://attacker.example",
+            "access-control-allow-origin": "*",
             "access-control-allow-credentials": "true",
             "x-served-by": "cache-lhr-1",
           },
@@ -284,10 +285,10 @@ test("a markdown copy is answered with only the headers the worker means to rela
     response.headers.get("last-modified"),
     "Tue, 13 Oct 2026 09:00:00 GMT",
   );
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
   for (const name of [
     "set-cookie",
     "content-security-policy",
-    "access-control-allow-origin",
     "access-control-allow-credentials",
     "x-served-by",
   ]) {

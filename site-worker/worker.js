@@ -100,12 +100,22 @@ function onThisSite(origin, path) {
 }
 
 // The headers of a fetched answer that a response built here may carry. The
-// body is re-sent as this site's own, so the cookies, policies and CORS grants
-// of whatever answered the fetch are not the worker's to pass on; what is left
-// is what lets a cache and a conditional request treat the copy as the file it
-// is. Vary is among them because it only ever narrows what a cache may reuse:
-// it names a request header, and carries nothing a client acts on.
-const RELAYED_HEADERS = ["cache-control", "etag", "last-modified", "vary"];
+// body is re-sent as this site's own, so the cookies and policies of whatever
+// answered the fetch are not the worker's to pass on; what is left is what lets
+// a cache and a conditional request treat the copy as the file it is. Vary is
+// among them because it only ever narrows what a cache may reuse: it names a
+// request header, and carries nothing a client acts on. So is the origin's read
+// grant: Pages sends access-control-allow-origin on every file, the page's HTML
+// carries it, and a browser that may read a page may read its Markdown copy.
+// The credentials grant is not relayed, because a wildcard origin and
+// credentials do not combine and nothing here is read with a cookie.
+const RELAYED_HEADERS = [
+  "cache-control",
+  "etag",
+  "last-modified",
+  "vary",
+  "access-control-allow-origin",
+];
 
 function relayedHeaders(upstream) {
   const headers = new Headers();
