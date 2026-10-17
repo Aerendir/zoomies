@@ -264,4 +264,4 @@ Issues live in GitHub Issues for eyupio/zoomies, driven by the `gh` CLI. See `do
 
 ### Domain docs
 
-Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: one `GLOSSARY.md` at the repo root, and the numbered decision records in `roadmap/decisions/`. See `docs/agents/domain.md`.
