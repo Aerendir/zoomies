@@ -88,7 +88,12 @@ rather than a missing binary.
 
 The pods download whichever release `ZOOMIES_VERSION` names:
 
-* **`latest`**, the default: the newest numbered release.
+* **`latest`**, the default: the newest numbered release. GitHub decides which
+  that is, by date, and whoever publishes a release chooses its name. If the name
+  is a version older than v1.3.6, which needs no signature, the script stops
+  before it downloads anything and tells you to set `ZOOMIES_VERSION` to a tag
+  you trust, instead of installing whatever was published last. Any other name
+  has to carry a signature ([Upgrading](upgrading.md#signing-releases)).
 * **`vX.Y.Z`**: exactly that release. Pin one for anything you depend on, so a
   redeploy never moves you to a release you have not read the notes for.
 * **`dev`**: the moving prerelease built from `main`.
@@ -323,17 +328,23 @@ It does what the dashboard's Deploy does, so it works on the worker, which has
 no Deploy button: it moves the checkout to the newest commit, downloads the
 release the pod's `ZOOMIES_VERSION` names (checked against the release's
 checksums), and restarts the app. Nothing is restarted when nothing changed, so
-a pod that is already current is left alone. The pod's role is read from its
-environment (a pod with `ZOOMIES_CONTROLLER_URL` is the worker); name it as
-`controller` or `agent` if that ever guesses wrong.
+a pod that is already current is left alone. A pod with no `app` service has
+nothing to restart: the script prints the `systemctl` line to run, and says the
+new version is "installed" rather than "now running". The pod's role is read
+from its environment (a pod with `ZOOMIES_CONTROLLER_URL` is the worker); name
+it as `controller` or `agent` if that ever guesses wrong.
 
 Update the controller first, then the worker: an agent may be older than its
 controller, never newer.
 
-On the worker, the script stops without changing anything if a job is running,
-because the restart would fail it. Run it again when the job has finished, or
-pass `--force` to update anyway. To avoid the wait, drain the host first and
-uncordon it after:
+On the worker, a restart would fail a job that is running, so the script looks
+for one twice. If a job is running when you start it, the script stops without
+changing anything. If a job starts while the release is downloading, which can
+take minutes, the new binary is installed but the restart waits. The script says
+so and leaves a `restart-pending` file beside the binary, so that the next run,
+which finds nothing new to download, still makes the restart. Either way, run it
+again when the job has finished, or pass `--force` to update anyway. To avoid
+the wait, drain the host first and uncordon it after:
 
 ```sh
 zoomies hosts drain <host-id>       # before: no new work, and let what is running finish
@@ -372,10 +383,10 @@ to the pod's crontab (`crontab -e`), the controller a little before the worker:
 45 4 * * * cd ~/app && sh deploy/instapods/update.sh >> ~/update.log 2>&1
 ```
 
-A worker with a job running skips that night and tries the next. Be aware that
-on `dev` an unattended update takes whatever `main` last published, including a
-broken build; pin a release tag for anything you would not want to fix at
-breakfast.
+A worker with a job running is not restarted that night, and the next night's
+run finishes the update. Be aware that on `dev` an unattended update takes
+whatever `main` last published, including a broken build; pin a release tag for
+anything you would not want to fix at breakfast.
 
 ## The zoomies.sh demo
 
