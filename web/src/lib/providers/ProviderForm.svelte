@@ -883,6 +883,7 @@
   bind:current
   {canAdvance}
   busy={submitting}
+  jumpable
   finishLabel={editing ? 'Save changes' : 'Add provider'}
   cancelLabel="Cancel"
   onnext={() => touchStep(current)}

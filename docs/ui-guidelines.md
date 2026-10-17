@@ -882,7 +882,7 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 | `HostMemoryPool` | `lib/hosts/`. The memory a host may lend, as a figure and a bar drawn against the whole machine, so segments compare between hosts of different sizes; the ledger it was worked out from, line by line, is the card behind it. The figure and bar are one button, so the ledger opens on focus and a tap as well as on hover |
 | `MemoryBar` | `lib/runners/`. A runner's memory as one bar: guaranteed, lent, swap (hatched, so it cannot be mistaken for the solid fill where colour is lost) and a tick at the ceiling. `aria-hidden`: the figures beside it carry the meaning |
 | `RunnerTimeline` | `lib/runners/`. One row per state with how long the runner stayed there, reconstructed from the four timestamps a runner row carries -- and it says so, rather than letting an operator read it as an audit trail |
-| `Wizard` | a flow of steps that is genuinely a sequence; the AI Context setup, the provider form, the migration; on a phone its footer stays pinned above the bottom bar. A pool is not one: see [the pool editor](#the-pool-editor) |
+| `Wizard` | a flow of steps that is genuinely a sequence; the AI Context setup, the provider form, the migration; on a phone its footer stays pinned above the bottom bar. The provider form also sets `jumpable`, so each stage in the list is a button that goes straight to it. A pool is not one: see [the pool editor](#the-pool-editor) |
 
 ### The log viewer
 
