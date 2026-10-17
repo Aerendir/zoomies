@@ -438,6 +438,125 @@ func TestATokenScopedToThePauseSwitchCannotBuildATestMachine(t *testing.T) {
 	}
 }
 
+// Building a test machine spends money and uses the provider's credential. The
+// request that is accepted answers 202 with the machine it planned, which the
+// page then follows, and leaves a row saying who asked and which machine came of
+// it, because "who started the machine we are paying for" is what that log is
+// read for.
+func TestAcceptingATestMachineAnswersWithThePlannedMachineAndAuditsIt(t *testing.T) {
+	h := newHarness(t)
+	operator, _ := h.user("operator", store.RoleOperator)
+	cookie := h.session(operator)
+	prov := h.provider("proxmox-lab")
+	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+
+	resp := h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", cookie: cookie})
+	resp.mustStatus(t, http.StatusAccepted, "start a test machine")
+	var planned machineResponse
+	resp.into(t, &planned)
+	if !planned.Test || planned.State != store.MachinePlanned || planned.ProviderID != prov.ID {
+		t.Fatalf("the answer is not a planned test machine on the provider: %s", truncate(resp.body))
+	}
+	// The answer describes the machine that was reserved, not one made up for it.
+	row := h.lastMachine(prov.ID)
+	if row.ID != planned.ID || !row.Test || row.State != store.MachinePlanned {
+		t.Errorf("the machine reserved is %s (test %v, %s); the answer was about %s", row.ID, row.Test, row.State, planned.ID)
+	}
+
+	rows, _, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"provider.test_machine"}}, store.Page{})
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("want one provider.test_machine row, got %d", len(rows))
+	}
+	if got := rows[0]; got.TargetKind != "provider" || got.TargetID != prov.ID || got.ActorName != "operator" ||
+		!strings.Contains(got.After, planned.ID) || !strings.Contains(got.After, prov.Name) {
+		t.Errorf("the audit row does not say who asked for which machine on which provider: %+v", got)
+	}
+}
+
+// A test machine that cannot start says why, in a 409 whose sentence is the
+// controller's own and names what to change. Nothing was spent, so nothing is
+// left behind: no machine row and no audit row for a thing that was not done.
+func TestARefusedTestMachineIsAConflictThatSaysWhyAndLeavesNothingBehind(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// arrange puts the provider in the state that makes a test refuse.
+		arrange func(h *harness, prov *store.Provider)
+		// want is a phrase the sentence must carry.
+		want string
+	}{
+		{"renting is switched off", func(h *harness, prov *store.Provider) {}, "provider.enabled"},
+		{"the provider is paused", func(h *harness, prov *store.Provider) {
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+			if err := h.st.SetProviderPaused(h.ctx, prov.ID, true, "the hypervisor is being patched"); err != nil {
+				h.t.Fatalf("SetProviderPaused: %v", err)
+			}
+		}, "the hypervisor is being patched"},
+		{"a test is already on its way", func(h *harness, prov *store.Provider) {
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+			h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", token: h.token("first", store.RoleOperator)}).
+				mustStatus(h.t, http.StatusAccepted, "the first test machine")
+		}, "already on its way"},
+		{"the provider has no room under its maximum", func(h *harness, prov *store.Provider) {
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+			prov.MaxMachines = 1
+			if err := h.st.UpdateProvider(h.ctx, prov); err != nil {
+				h.t.Fatalf("UpdateProvider: %v", err)
+			}
+			h.machine(prov, "zoomies-mach-occupant")
+		}, "no room for a test machine"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			operator, _ := h.user("operator", store.RoleOperator)
+			cookie := h.session(operator)
+			prov := h.provider("proxmox-lab")
+			tc.arrange(h, prov)
+
+			machinesBefore, err := h.st.ListMachinesForProvider(h.ctx, prov.ID)
+			if err != nil {
+				t.Fatalf("ListMachinesForProvider: %v", err)
+			}
+			_, auditedBefore, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"provider.test_machine"}}, store.Page{})
+			if err != nil {
+				t.Fatalf("ListAudit: %v", err)
+			}
+
+			resp := h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", cookie: cookie})
+			resp.mustStatus(t, http.StatusConflict, "start a test machine that cannot start")
+			if resp.errorCode(t) != codeConflict {
+				t.Errorf("the refusal's code is %q, want %q", resp.errorCode(t), codeConflict)
+			}
+			msg := resp.errorMessage(t)
+			if !strings.Contains(msg, tc.want) {
+				t.Errorf("the refusal %q does not say why (want it to carry %q)", msg, tc.want)
+			}
+			// The sentence is the reason alone: the sentinel that marks the kind of
+			// refusal is how the handler knows to answer 409, and not text for a person.
+			if strings.Contains(msg, controller.ErrTestMachineRefused.Error()) {
+				t.Errorf("the refusal still carries the marker the handler strips: %q", msg)
+			}
+
+			machinesAfter, err := h.st.ListMachinesForProvider(h.ctx, prov.ID)
+			if err != nil {
+				t.Fatalf("ListMachinesForProvider: %v", err)
+			}
+			if len(machinesAfter) != len(machinesBefore) {
+				t.Errorf("a refused test reserved a machine: %d before, %d after", len(machinesBefore), len(machinesAfter))
+			}
+			_, auditedAfter, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"provider.test_machine"}}, store.Page{})
+			if err != nil {
+				t.Fatalf("ListAudit: %v", err)
+			}
+			if auditedAfter != auditedBefore {
+				t.Errorf("a refused test was audited as if it had started: %d rows before, %d after", auditedBefore, auditedAfter)
+			}
+		})
+	}
+}
+
 // A preflight is the one call an operator can make against a hypervisor without
 // risking anything, and its answer is recorded so the warning the UI is showing
 // is quieted by a check run in a terminal.

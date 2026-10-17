@@ -811,6 +811,12 @@ func TestEditingAnMCPClientChangesWhereItMayReturn(t *testing.T) {
 	var c mcpClientResponse
 	created.into(t, &c)
 
+	// A connection made before the edit. Without one, "an edit ends no
+	// connection" compares the count of none with the count of none and holds
+	// whatever the edit does.
+	connected := pairFrom(t, h.exchange(c.ClientID,
+		h.approve(admin, requestFrom(t, h.authorize(c.ClientID, claudeReturn, nil)), store.RoleViewer), nil, nil))
+
 	r := h.do(request{method: http.MethodPatch, path: "/api/v1/mcp-clients/" + c.ID, cookie: admin,
 		body: map[string]any{"name": "Claude Code", "redirect_uris": []string{claudeReturn, "http://localhost:3118/callback"}}})
 	r.mustStatus(t, http.StatusOK, "updating a client")
@@ -822,8 +828,25 @@ func TestEditingAnMCPClientChangesWhereItMayReturn(t *testing.T) {
 	if after.ClientID != c.ClientID || after.Confidential != c.Confidential {
 		t.Error("an edit must leave the client ID and secrecy alone")
 	}
-	if after.Connections != c.Connections {
-		t.Errorf("an edit ends no connection, want %d, got %d", c.Connections, after.Connections)
+
+	// The connection is still counted, still listed, and still works: its access
+	// token is accepted on /mcp, and its refresh token is honoured and hands out a
+	// pair that works too.
+	if after.Connections != 1 {
+		t.Errorf("an edit ends no connection: the one made before it must still be counted, got %d", after.Connections)
+	}
+	var listed list[mcpConnectionResponse]
+	h.do(request{method: http.MethodGet, path: "/api/v1/mcp-connections", cookie: admin}).into(t, &listed)
+	if len(listed.Items) != 1 || listed.Items[0].ClientID != c.ID {
+		t.Errorf("the connection made before the edit must still be listed, got %+v", listed.Items)
+	}
+	if names := h.mcpToolNames(connected.AccessToken); !slices.Contains(names, "get_job") {
+		t.Errorf("the connection made before the edit must keep working, got %v", names)
+	}
+	renewed := pairFrom(t, h.form("/oauth/token",
+		url.Values{"grant_type": {"refresh_token"}, "refresh_token": {connected.RefreshToken}, "client_id": {c.ClientID}}, nil))
+	if names := h.mcpToolNames(renewed.AccessToken); !slices.Contains(names, "get_job") {
+		t.Errorf("a refresh after the edit must hand out a working pair, got %v", names)
 	}
 
 	// The refused address is now registered, so the authorise gets past the
