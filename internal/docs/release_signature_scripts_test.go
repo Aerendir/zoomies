@@ -102,16 +102,35 @@ func runBlock(t *testing.T, script string, env ...string) (stdout, stderr string
 // it of everything would refuse every version published before signing began,
 // and one that required it of nothing would let whoever replaces a binary delete
 // its signature.
+//
+// Whoever publishes a release also picks its name, so a name this rule cannot
+// read is held to a signature rather than excused from one: v2x.0.0 or a major
+// of twenty digits would otherwise be a way to publish a binary with a matching
+// checksums.txt and no signature, and have it run on a warning. The numbers are
+// never compared unless they are short enough to compare, because the shell's
+// [ answers one that overflows with an error status, which the callers read as
+// "no". Only dev is exempt: it is built from main, has no release to sign, and
+// is never held to a signature.
 func TestAReleaseHasToBeSignedFromV136OnAndNotBefore(t *testing.T) {
 	for tag, want := range map[string]string{
-		"v1.2.0": "no", "v1.3.0": "no", "v1.3.5": "no", "v0.9.9": "no", "v1.0.0": "no",
+		"v1.2.0": "no", "v1.3.0": "no", "v1.3.5": "no", "v0.9.9": "no", "v1.0.0": "no", "v1.0.0-RC3": "no",
 		"v1.3.6": "yes", "v1.3.6.1": "yes", "v1.3.7": "yes", "v1.3.10": "yes", "v1.4.0": "yes", "v2.0.0": "yes", "v1.3.6-rc1": "yes",
-		// Not a release tag at all, or not one this rule can read: no demand is made.
-		"dev": "no", "": "no", "v1.3": "no", "V1.3.7": "no", "latest": "no", "v1.x.7": "no",
+		"dev": "no",
+		// Not a release tag at all, or not one this rule can read.
+		"": "yes", "v1.3": "yes", "V1.3.7": "yes", "latest": "yes", "v1.x.7": "yes", "v1.3.x": "yes", "v2x.0.0": "yes",
+		// Numbers longer than can be compared safely, in each of the three places.
+		"v99999999999999999999.0.0": "yes", "v1.99999999999999999999.0": "yes", "v0.0.99999999999999999999": "yes", "v10000.0.0": "yes",
 	} {
-		out, _, _ := runBlock(t, `if signature_required "$TAG"; then echo yes; else echo no; fi`, "TAG="+tag)
-		if got := strings.TrimSpace(out); got != want {
-			t.Errorf("signature_required(%q) = %s, want %s", tag, got, want)
+		// The status is printed rather than the branch taken, so a comparison
+		// that errored (2) cannot pass for "not required" (1).
+		out, _, _ := runBlock(t, `status=0; signature_required "$TAG" || status=$?; echo "$status"`, "TAG="+tag)
+		got := strings.TrimSpace(out)
+		switch {
+		case got == "0" && want == "yes", got == "1" && want == "no":
+		case got == "0" || got == "1":
+			t.Errorf("signature_required(%q) exited %s, which says a signature is %s; want %s", tag, got, map[string]string{"0": "required", "1": "not required"}[got], want)
+		default:
+			t.Errorf("signature_required(%q) exited %q; it must answer 0 (required) or 1 (not required) and never fail", tag, got)
 		}
 	}
 }
