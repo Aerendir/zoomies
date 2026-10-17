@@ -387,6 +387,57 @@ func TestPressingAProvidersKillSwitchTwiceIsNotAnError(t *testing.T) {
 	}
 }
 
+// The kill switch is a scope an operator hands to something that watches the
+// bill, so that it can stop spending. Building a test machine is the one route
+// that shared it which clones and starts a billable machine, so a token that may
+// press the switch must not be one that can buy a machine with it.
+func TestATokenScopedToThePauseSwitchCannotBuildATestMachine(t *testing.T) {
+	h := newHarness(t)
+	prov := h.provider("proxmox-lab")
+	// Renting is on, so that a request the scope lets through would reach the
+	// machine loop and answer 202. With it off the refusal would be a 409 and the
+	// test would pass for the wrong reason.
+	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+	base := "/api/v1/providers/" + prov.ID
+	pauseOnly := h.token("on-call", store.RoleOperator, "providers:pause")
+
+	refused := h.do(request{method: http.MethodPost, path: base + "/test-machine", token: pauseOnly})
+	refused.mustStatus(t, http.StatusForbidden, "a token scoped to providers:pause building a test machine")
+	if msg := refused.errorMessage(t); !strings.Contains(msg, "providers:test") {
+		t.Errorf("the refusal must name the scope to add, providers:test, got %q", msg)
+	}
+	if machines, err := h.st.ListMachinesForProvider(h.ctx, prov.ID); err != nil || len(machines) != 0 {
+		t.Errorf("a refused request must not have reserved a machine, got %d (%v)", len(machines), err)
+	}
+
+	// What the scope was minted for is untouched: pressing the switch, and the two
+	// read-only calls that were always the operator's to make against the hypervisor.
+	for _, call := range []struct{ method, path string }{
+		{http.MethodPost, base + "/pause"},
+		{http.MethodPost, base + "/resume"},
+		{http.MethodPost, base + "/check"},
+		{http.MethodGet, base + "/discovery"},
+	} {
+		got := h.do(request{method: call.method, path: call.path, token: pauseOnly})
+		if got.status == http.StatusForbidden || got.status == http.StatusUnauthorized {
+			t.Errorf("%s %s with the pause scope was refused %d: %s", call.method, call.path, got.status, truncate(got.body))
+		}
+	}
+
+	// And an operator whose token carries no scopes, or the provider scopes
+	// whole, is still the person who builds one.
+	for name, token := range map[string]string{
+		"an operator with no scopes": h.token("operator", store.RoleOperator),
+		"providers:test":             h.token("tester", store.RoleOperator, "providers:test"),
+		"providers:*":                h.token("providers", store.RoleOperator, "providers:*"),
+	} {
+		resp := h.do(request{method: http.MethodPost, path: base + "/test-machine", token: token})
+		if resp.status != http.StatusAccepted && resp.status != http.StatusConflict {
+			t.Errorf("%s building a test machine: status %d, want it let through (202, or 409 once one is on its way)\nbody: %s", name, resp.status, truncate(resp.body))
+		}
+	}
+}
+
 // A preflight is the one call an operator can make against a hypervisor without
 // risking anything, and its answer is recorded so the warning the UI is showing
 // is quieted by a check run in a terminal.
