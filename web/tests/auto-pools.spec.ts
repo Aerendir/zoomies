@@ -26,6 +26,7 @@ import {
   documentWidth,
   goto,
   grid,
+  openFleetContext,
   openHostCard,
   useClassic,
 } from './support/fixtures';
@@ -901,6 +902,8 @@ test.describe('job size', () => {
     });
 
     await goto(page, '/jobs', 'Jobs');
+    // Mission Control folds the page's context away on a phone.
+    await openFleetContext(page);
     const panel = page.getByTestId('size-advice');
     await expect(panel).toContainText('Size labels and pins');
     // The count is on the closed summary, so the report is not found by chance,
