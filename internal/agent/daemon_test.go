@@ -1129,3 +1129,61 @@ func TestShutdownTaskWaitRemainsBounded(t *testing.T) {
 		}
 	})
 }
+
+// A credential the controller refuses in the one way nothing recovers from,
+// the host row gone or the token revoked, used to be a crash loop: the state
+// file said joined, so the join token beside it in the environment was never
+// read again. The refusal is final for those credentials, so the token this
+// host was handed is the way back, and Run spends it rather than leaving a
+// service to restart for ever against a row the controller no longer has.
+func TestAnAgentWhoseCredentialsTheControllerRefusesFallsBackToTheTokenItWasHanded(t *testing.T) {
+	a, tr, _, _ := newAgent(t, 1, func(o *Options) { o.FallbackJoinToken = "fallback-token" })
+	if err := a.Join(context.Background(), "join-token"); err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	tr.mu.Lock()
+	tr.beatErr = ErrHostGone
+	tr.joinResp = &JoinResponse{HostID: "host-2", AgentToken: "token-2", ControllerVersion: "test"}
+	tr.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := a.Run(ctx)
+	if !errors.Is(err, ErrHostGone) {
+		t.Fatalf("Run error = %v, want the second refusal's ErrHostGone", err)
+	}
+	if id := a.HostID(); id != "host-2" {
+		t.Fatalf("host id = %q, want the host the fallback join enrolled as, %q", id, "host-2")
+	}
+	tr.mu.Lock()
+	got := tr.joinReq.JoinToken
+	tr.mu.Unlock()
+	if got != "fallback-token" {
+		t.Fatalf("the fallback join offered %q, want the token this host was handed", got)
+	}
+}
+
+// The fallback is for a refusal that is final. A controller that merely cannot
+// be reached must not spend the host's join token, because the credentials it
+// already holds are the ones that will work when the controller comes back.
+func TestARefusedHeartbeatThatIsNotFinalKeepsTheSavedCredentials(t *testing.T) {
+	a, tr, _, _ := newAgent(t, 1, func(o *Options) { o.FallbackJoinToken = "fallback-token" })
+	if err := a.Join(context.Background(), "join-token"); err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	tr.mu.Lock()
+	tr.beatErr = errors.New("controller unreachable")
+	tr.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := a.Run(ctx); err != nil {
+		t.Fatalf("a transient heartbeat failure should end with the context, not %v", err)
+	}
+	tr.mu.Lock()
+	got := tr.joinReq.JoinToken
+	tr.mu.Unlock()
+	if got != "join-token" {
+		t.Fatalf("the agent re-joined with %q after a transient failure, whose saved credentials still work", got)
+	}
+}
