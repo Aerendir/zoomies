@@ -168,7 +168,10 @@ func runAgentDaemon(ctx context.Context, e *env, args []string) error {
 		HelperHost:         agent.LocalHelperHost,
 		// The token this host was handed is its way back from a refusal of the
 		// credentials it had saved: a machine's environment keeps it beside the
-		// unit, and a host nobody handed one has none to fall back on.
+		// unit, and a host nobody handed one has none to fall back on. The
+		// environment keeps it after it has been spent too, so the agent
+		// remembers, in the state file, which tokens it has used and offers each
+		// one only once.
 		FallbackJoinToken: token,
 	})
 	if err != nil {
