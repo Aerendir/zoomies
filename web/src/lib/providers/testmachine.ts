@@ -57,6 +57,21 @@ export function isTestMachine(machine: Machine): boolean {
   return machine.test === true;
 }
 
+/**
+ * Whether the controller would turn down another test because of this machine.
+ *
+ * It starts one at a time and counts a test as still there until its machine has
+ * been deleted, apart from one a failure or a quarantine left in place to be read
+ * (StartTestMachine in internal/controller/testmachine.go; keep the two in step).
+ * So a test that has passed is in the way while it is being released, and a
+ * button that offered the next one then would be offering a certain 409.
+ */
+export function blocksAnotherTest(machine: Machine): boolean {
+  return (
+    machine.state !== 'deleted' && machine.state !== 'failed' && machine.state !== 'quarantined'
+  );
+}
+
 /** The newest test machine in a list, or null when there is none. */
 export function latestTest(machines: readonly Machine[]): Machine | null {
   let best: Machine | null = null;

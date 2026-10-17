@@ -19,7 +19,7 @@
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import Panel from '$lib/components/Panel.svelte';
-  import { latestTest, stepStatusText, testProgress } from './testmachine';
+  import { blocksAnotherTest, latestTest, stepStatusText, testProgress } from './testmachine';
 
   interface Props {
     provider: Pick<Provider, 'id' | 'name' | 'max_machines' | 'owned' | 'held'>;
@@ -75,6 +75,9 @@
 
   const progress = $derived(shown ? testProgress(shown) : null);
   const running = $derived(progress?.outcome === 'running');
+  // The controller holds the next test off until this one's machine is deleted,
+  // which is after it has passed as well as while it runs.
+  const inTheWay = $derived(shown ? blocksAnotherTest(shown) : false);
   const refusal = $derived(
     !canOperate
       ? 'Running a test needs the operator role.'
@@ -151,18 +154,20 @@
   <div class="actions">
     <Button
       variant="secondary"
-      disabled={starting || running || refusal !== ''}
+      disabled={starting || inTheWay || refusal !== ''}
       onclick={() => void start()}
     >
       {starting
         ? 'Starting…'
         : running
           ? 'Test running…'
-          : shown
-            ? 'Run the test again'
-            : 'Run a test machine'}
+          : inTheWay
+            ? 'Releasing the test machine…'
+            : shown
+              ? 'Run the test again'
+              : 'Run a test machine'}
     </Button>
-    {#if refusal && !running}
+    {#if refusal && !inTheWay}
       <p class="note">{refusal}</p>
     {/if}
   </div>

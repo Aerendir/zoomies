@@ -1,13 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  blocksAnotherTest,
   isTestMachine,
   latestTest,
   stepStatusText,
   testProgress,
 } from '../src/lib/providers/testmachine.ts';
 import type { StepStatus } from '../src/lib/providers/testmachine.ts';
-import type { Machine } from '../src/lib/api/types.ts';
+import { MACHINE_STATES } from '../src/lib/api/types.ts';
+import type { Machine, MachineState } from '../src/lib/api/types.ts';
 
 function machine(over: Partial<Machine> & { phases?: string[] }): Machine {
   const { phases = ['planned'], ...rest } = over;
@@ -114,4 +116,48 @@ test('no two states share a word, so the words can stand in for the icons', () =
   const words = states.map(stepStatusText);
   assert.equal(new Set(words).size, states.length);
   assert.ok(words.every((word) => word.trim() !== ''));
+});
+
+// StartTestMachine (internal/controller/testmachine.go) turns a test down while
+// any test machine is neither deleted nor left in place by a failure or a
+// quarantine, so a test that has passed is still in the way while it is being
+// released and the click that offered the next one was a certain 409. Every
+// state is listed, so one added later has to be decided here as well.
+const TURNED_DOWN_WHILE: Record<MachineState, boolean> = {
+  planned: true,
+  creating: true,
+  starting: true,
+  bootstrapping: true,
+  enrolling: true,
+  ready: true,
+  draining: true,
+  deleting: true,
+  deleted: false,
+  failed: false,
+  quarantined: false,
+};
+
+test('a test machine blocks another test in exactly the states the controller refuses one', () => {
+  assert.deepEqual(Object.keys(TURNED_DOWN_WHILE).sort(), [...MACHINE_STATES].sort());
+  for (const state of MACHINE_STATES) {
+    assert.equal(blocksAnotherTest(machine({ state })), TURNED_DOWN_WHILE[state], state);
+  }
+});
+
+test('a test that has passed still blocks another until its machine has been deleted', () => {
+  const phases = ['planned', 'created', 'starting', 'bootstrapped', 'enrolled', 'ready'];
+  for (const state of ['ready', 'draining', 'deleting'] as const) {
+    const releasing = machine({ state, phases });
+    assert.equal(testProgress(releasing).outcome, 'passed', state);
+    assert.equal(blocksAnotherTest(releasing), true, state);
+  }
+  const gone = machine({ state: 'deleted', phases: [...phases, 'deleted'] });
+  assert.equal(testProgress(gone).outcome, 'passed');
+  assert.equal(blocksAnotherTest(gone), false);
+});
+
+test('a failed test is left in place to be read and does not stop the next one', () => {
+  const failed = machine({ state: 'failed', phases: ['planned', 'created', 'starting'] });
+  assert.equal(testProgress(failed).outcome, 'failed');
+  assert.equal(blocksAnotherTest(failed), false);
 });

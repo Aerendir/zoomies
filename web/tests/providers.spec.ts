@@ -1232,3 +1232,68 @@ test('the last test is still shown when the provider changes while it is being r
     await setRenting(page, false);
   }
 });
+
+/**
+ * The controller starts one test at a time and counts a test as still there
+ * until its machine has been deleted, so one that has passed is in the way while
+ * it is being released. The button used to offer the next test at once, and
+ * pressing it was a certain refusal.
+ */
+test('a test that has passed holds the button until its machine has been released', async ({
+  page,
+}) => {
+  await setRenting(page, true);
+  try {
+    await listTestMachine(
+      page,
+      testMachineRow('draining', [
+        'planned',
+        'created',
+        'starting',
+        'bootstrapped',
+        'enrolled',
+        'ready',
+        'draining',
+      ]),
+    );
+    await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+    const panel = testMachinePanel(page);
+    await expect(panel.getByTestId('test-machine-result')).toContainText(
+      'The test passed. The machine is being released.',
+    );
+    await expect(panel.getByRole('button')).toBeDisabled();
+    await expect(panel.getByRole('button')).toHaveText('Releasing the test machine…');
+  } finally {
+    await setRenting(page, false);
+  }
+});
+
+test('a test whose machine has been released can be run again', async ({ page }) => {
+  await setRenting(page, true);
+  try {
+    await listTestMachine(
+      page,
+      testMachineRow('deleted', [
+        'planned',
+        'created',
+        'starting',
+        'bootstrapped',
+        'enrolled',
+        'ready',
+        'draining',
+        'deleting',
+        'deleted',
+      ]),
+    );
+    await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+    const panel = testMachinePanel(page);
+    await expect(panel.getByTestId('test-machine-result')).toContainText(
+      'The test passed and its machine has been released.',
+    );
+    await expect(panel.getByRole('button', { name: 'Run the test again' })).toBeEnabled();
+  } finally {
+    await setRenting(page, false);
+  }
+});
