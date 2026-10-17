@@ -21,6 +21,12 @@ account to begin with.
   the grant. The full walk is in [Registration](#registration-a-complete-flow).
 - **Operator-issued bearer tokens** (the self-hosted REST interface): a
   long-lived token with explicit scopes, created by an operator.
+- In the auth.md vocabulary: `identity_assertion` and its ID-JAG and
+  verified-email forms are not enabled, `anonymous` is not enabled, and
+  `service_auth` is replaced by the consent ceremony above. The
+  `identity_types_supported` list is empty in both documents that carry it,
+  and nothing here issues a credential an agent can claim without its
+  person's own decision.
 
 ## What needs no credentials
 
@@ -70,17 +76,23 @@ self-issued credential.
    ```
 
    ```json
-   {"resource": "https://portal.zoomies.sh/api/admin/mcp",
+   {"resource": "https://zoomies.sh/",
     "authorization_servers": ["https://portal.zoomies.sh"],
     "scopes_supported": ["mcp:read"], "bearer_methods_supported": ["header"],
+    "resource_documentation": "https://zoomies.sh/auth.md",
     "agent_auth": {"skill": "https://portal.zoomies.sh/auth.md",
-                   "register_uri": "https://portal.zoomies.sh/oauth/register"}}
+                   "register_uri": "https://portal.zoomies.sh/oauth/register",
+                   "registration_methods": [{"type": "dynamic_client_registration",
+                                             "grant_types": ["authorization_code", "refresh_token"],
+                                             "consent": "a staff member approves the connection, after the second factor"}],
+                   "identity_types_supported": []}}
    ```
 
    The `agent_auth` block names the hosted service's own copy of this
-   walkthrough and its registration endpoint. The metadata pair is mirrored
-   here from the provider's own addresses; fetching them at
-   `portal.zoomies.sh` returns the same bytes.
+   walkthrough and its registration endpoint. The provider's two discovery
+   documents are mirrored here from its own addresses (the same bytes);
+   the resource metadata is this site's own, because the resource is the
+   site's to declare.
 
 2. **Register the client** (dynamic client registration, RFC 7591):
 

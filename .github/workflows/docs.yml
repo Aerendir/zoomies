@@ -176,6 +176,13 @@ jobs:
                   body = fh.read()
               assert skill["digest"] == "sha256:" + hashlib.sha256(body).hexdigest(), skill["name"]
 
+          prm = load(".well-known/oauth-protected-resource")
+          assert prm["resource"].startswith("https://zoomies.sh"), prm["resource"]
+          assert prm["authorization_servers"] == ["https://portal.zoomies.sh"]
+          assert prm["bearer_methods_supported"] == ["header"]
+          assert prm["agent_auth"]["skill"].startswith("https://portal.zoomies.sh")
+          assert prm["agent_auth"]["register_uri"].endswith("/oauth/register")
+          assert prm["agent_auth"]["identity_types_supported"] == []
           for name in ("ai-catalog.json", "poppy.json", "api-catalog.json"):
               load(".well-known/" + name) if name != "api-catalog.json" else load(name)
           catalog = load(".well-known/ai-catalog.json")
