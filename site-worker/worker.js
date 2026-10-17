@@ -9,13 +9,14 @@
 //
 // HTML stays the default. Only an explicit text/markdown entry in Accept gets
 // Markdown; anything else, including a browser's */*, is passed through to the
-// origin untouched.
+// origin with its body untouched.
 //
 // Every page answer also carries a Link header (RFC 8288) with the relations
 // an agent follows to the machine-readable resources: the API Catalog
 // (RFC 9727), the plain-text index, and the REST API's description and
 // documentation. GitHub Pages cannot set arbitrary response headers, so the
-// header is added here.
+// header is added here. So is Vary: Accept, on the HTML as on the Markdown,
+// because the choice between them is made here.
 
 const MARKDOWN_TYPE = "text/markdown";
 
