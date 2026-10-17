@@ -338,6 +338,10 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/{id}/pr-delay", s.handlePRDelay)
 			r.With(s.require(auth.ActionJobsCancel)).Post("/{id}/cancel", s.handleCancelJobWorkflow)
 			r.With(s.require(auth.ActionJobsRerun)).Post("/{id}/rerun", s.handleRerunJobWorkflow)
+			// The two halves of triage: mark a failure as read, and put it
+			// back in front of whoever looks next.
+			r.With(s.require(auth.ActionJobsAcknowledge)).Post("/{id}/acknowledge", s.handleAcknowledgeJob)
+			r.With(s.require(auth.ActionJobsAcknowledge)).Delete("/{id}/acknowledge", s.handleReopenJobAttention)
 		})
 
 		// Hosts and enrolment.

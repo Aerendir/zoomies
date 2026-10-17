@@ -21,6 +21,8 @@ func runJobs(ctx context.Context, e *env, args []string) error {
 		{"pr-delay", "<job-id>", "Observed required-check delay for this job's PR head", jobsPRDelay},
 		{"advice", "", "What a workflow's runs-on could say better, from what its jobs used", jobsAdvice},
 		{"rerun", "<job-id>", "Ask GitHub to run this run's failed jobs again", jobsRerun},
+		{"acknowledge", "<job-id>", "Mark a failed job as known, so the attention list stops asking", jobsAcknowledge},
+		{"reopen", "<job-id>", "Put an acknowledged failure back in front of whoever looks next", jobsReopen},
 	}, args)
 }
 
@@ -39,6 +41,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	until := fs.String("until", "", "only jobs queued before then")
 	unmatched := fs.Bool("unmatched", false, "only jobs no enabled pool claims; these will never run")
 	failed := fs.Bool("failed", false, "only jobs that went wrong: a failing conclusion, or a runner that stopped under the job")
+	attention := fs.Bool("attention", false, "only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt")
 	faulted := fs.Bool("ours", false, "only the failures this fleet caused, not the workflows' own")
 	theirs := fs.Bool("theirs", false, "only the failures the workflows caused, with nothing wrong on this side")
 	jobNames, versions, hostIDs := &exactList{}, &listValue{}, &listValue{}
@@ -54,6 +57,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 		"zoomies jobs list --repo acme/widgets --since 24h",
 		"zoomies jobs list --unmatched",
 		"zoomies jobs list --failed --since 1h",
+		"zoomies jobs list --attention",
 		"zoomies jobs list --ours --since 24h",
 		"zoomies jobs list --fault out_of_memory",
 		"zoomies jobs list --controller-version v1.3.3 --since 30d --output json --include-steps=false",
@@ -80,6 +84,9 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	}
 	if *failed {
 		q.Set("failed", "true")
+	}
+	if *attention {
+		q.Set("attention", "true")
 	}
 	if *faulted && *theirs {
 		return usagef("jobs list", "--ours and --theirs ask for opposite halves of the same list; pass one")
@@ -420,6 +427,78 @@ func jobsRerun(ctx context.Context, e *env, args []string) error {
 	if out.FaultDomain == "fleet" {
 		p.note("This job's failure was the fleet's rather than the workflow's.")
 	}
+	return nil
+}
+
+// jobsAcknowledge is `zoomies jobs acknowledge`: say a failure has been read,
+// so the failures needing attention stop asking about it. It is the CLI's half
+// of the triage the Jobs page's "Needs attention" view and the Overview's
+// failures panel write, and it changes nothing about the failure itself.
+func jobsAcknowledge(ctx context.Context, e *env, args []string) error {
+	fs := newFlagSet(e, "zoomies jobs acknowledge <job-id>",
+		"Mark a failed job as known, so the failures needing attention stop asking about it.\n\n"+
+			"It is not a resolution: the failure keeps its conclusion and its row in the\n"+
+			"failed view, and a re-run that passes is what settles it. `zoomies jobs reopen`\n"+
+			"takes the decision back.")
+	cf := registerClientFlags(fs, true)
+	fs.example("zoomies jobs acknowledge job_2fq8xk3m")
+	if err := fs.parse(args); err != nil {
+		return err
+	}
+	id, err := fs.oneArg("a job ID")
+	if err != nil {
+		return err
+	}
+	client, err := cf.client()
+	if err != nil {
+		return err
+	}
+	p, err := cf.printer(e)
+	if err != nil {
+		return err
+	}
+	raw, err := client.post(ctx, "/jobs/"+url.PathEscape(id)+"/acknowledge", nil, nil, nil)
+	if err != nil {
+		return err
+	}
+	if p.structured() {
+		return p.emit(raw)
+	}
+	p.note("Marked as known. The failure stays in the failed view; a re-run that passes is what settles it.")
+	return nil
+}
+
+// jobsReopen is `zoomies jobs reopen`: the undo for an acknowledgement, so a
+// failure put away by mistake asks for attention again.
+func jobsReopen(ctx context.Context, e *env, args []string) error {
+	fs := newFlagSet(e, "zoomies jobs reopen <job-id>",
+		"Put an acknowledged failure back in the failures needing attention.\n\n"+
+			"Nothing about the job changes; it is the undo for `zoomies jobs acknowledge`.")
+	cf := registerClientFlags(fs, true)
+	fs.example("zoomies jobs reopen job_2fq8xk3m")
+	if err := fs.parse(args); err != nil {
+		return err
+	}
+	id, err := fs.oneArg("a job ID")
+	if err != nil {
+		return err
+	}
+	client, err := cf.client()
+	if err != nil {
+		return err
+	}
+	p, err := cf.printer(e)
+	if err != nil {
+		return err
+	}
+	raw, err := client.del(ctx, "/jobs/"+url.PathEscape(id)+"/acknowledge", nil, nil)
+	if err != nil {
+		return err
+	}
+	if p.structured() {
+		return p.emit(raw)
+	}
+	p.note("Back in the failures needing attention.")
 	return nil
 }
 

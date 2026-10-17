@@ -730,6 +730,8 @@ Subcommands:
   pr-delay <job-id>                  Observed required-check delay for this job's PR head
   advice                             What a workflow's runs-on could say better, from what its jobs used
   rerun <job-id>                     Ask GitHub to run this run's failed jobs again
+  acknowledge <job-id>               Mark a failed job as known, so the attention list stops asking
+  reopen <job-id>                    Put an acknowledged failure back in front of whoever looks next
 
 Run "zoomies jobs <subcommand> --help" for the flags each one takes.
 ```
@@ -745,6 +747,7 @@ Usage:
   zoomies jobs list [filters]
 
 Flags:
+  --attention                only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt
   --before                   continue after the previous page: the cursor it printed, or the next field of --output json
   --ca-file                  PEM file holding the controller's certificate
   --conclusion               success, failure, cancelled or skipped (repeatable)
@@ -779,6 +782,7 @@ Examples:
   zoomies jobs list --repo acme/widgets --since 24h
   zoomies jobs list --unmatched
   zoomies jobs list --failed --since 1h
+  zoomies jobs list --attention
   zoomies jobs list --ours --since 24h
   zoomies jobs list --fault out_of_memory
   zoomies jobs list --controller-version v1.3.3 --since 30d --output json --include-steps=false
@@ -949,6 +953,56 @@ Flags:
 
 Examples:
   zoomies jobs rerun job_2fq8xk3m
+```
+
+#### zoomies jobs acknowledge
+
+Mark a failed job as known, so the attention list stops asking
+
+```text
+Mark a failed job as known, so the failures needing attention stop asking about it.
+
+It is not a resolution: the failure keeps its conclusion and its row in the
+failed view, and a re-run that passes is what settles it. `zoomies jobs reopen`
+takes the decision back.
+
+Usage:
+  zoomies jobs acknowledge <job-id>
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies jobs acknowledge job_2fq8xk3m
+```
+
+#### zoomies jobs reopen
+
+Put an acknowledged failure back in front of whoever looks next
+
+```text
+Put an acknowledged failure back in the failures needing attention.
+
+Nothing about the job changes; it is the undo for `zoomies jobs acknowledge`.
+
+Usage:
+  zoomies jobs reopen <job-id>
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies jobs reopen job_2fq8xk3m
 ```
 
 ### zoomies comparisons

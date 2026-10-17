@@ -57,9 +57,18 @@ function filters(
     failed: boolean;
     faulted: boolean;
     unmatched: boolean;
+    attention: boolean;
   }> = {},
 ) {
-  return { state: [], conclusion: [], failed: false, faulted: false, unmatched: false, ...over };
+  return {
+    state: [],
+    conclusion: [],
+    failed: false,
+    faulted: false,
+    unmatched: false,
+    attention: false,
+    ...over,
+  };
 }
 
 test('every view reads back as itself', () => {
@@ -78,7 +87,7 @@ test('no view leaves a status key set that another view owns', () => {
     const keys = Object.keys(view.filters).sort();
     assert.deepEqual(
       keys,
-      ['conclusion', 'failed', 'faulted', 'state', 'unmatched'],
+      ['attention', 'conclusion', 'failed', 'faulted', 'state', 'unmatched'],
       `${view.id} is partial`,
     );
   }
@@ -138,6 +147,20 @@ test('no view asks for unmatched, which the server reads as queued', () => {
   for (const view of JOB_VIEWS) {
     assert.equal(view.filters.unmatched, false, `${view.id} sets unmatched`);
   }
+});
+
+test('needs attention is one question, not the other status keys combined', () => {
+  // The attention view is the server's composite filter (failed, recent,
+  // unacknowledged and not superseded), and it deliberately sets none of the
+  // keys that would turn it into a client-side approximation of one half.
+  const attention = JOB_VIEWS.find((v) => v.id === 'attention');
+  assert.ok(attention, 'there is an attention view');
+  assert.equal(attention.filters.attention, true);
+  assert.equal(attention.filters.failed, false);
+  assert.deepEqual(attention.filters.state, []);
+  assert.equal(currentJobView(filters({ attention: true })), 'attention');
+  // A link asking for both is a question no button says, and the row says so.
+  assert.equal(currentJobView(filters({ attention: true, failed: true })), '');
 });
 
 test('every state the API knows is reachable from the row', () => {

@@ -631,6 +631,22 @@ const JOB_EVENTS: Record<JobEventKind, StatusMeta> = {
     "Zoomies asked GitHub to run this run's failed jobs again. They arrive as a new run attempt, so GitHub remains authoritative about what happens next.",
   ),
   oom_killed: OOM_KILLED,
+  acknowledged: meta(
+    'acknowledged',
+    'Acknowledged',
+    'idle',
+    'hollow',
+    CircleCheck,
+    'Somebody marked this failure as known, so the failures needing attention stopped asking about it. The failure itself is unchanged; a re-run that passes is what settles it.',
+  ),
+  reopened: meta(
+    'reopened',
+    'Reopened',
+    'pending',
+    'dashed',
+    IterationCcw,
+    'Somebody put this failure back in the list of failures needing attention after it had been acknowledged.',
+  ),
 };
 
 /**

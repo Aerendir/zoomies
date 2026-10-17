@@ -33,7 +33,7 @@ func explain(t *testing.T, s *Store, query string, args ...any) string {
 // that notices, rather than an operator with a slow Overview.
 func TestFaultedJobsAreReadFromTheirOwnIndex(t *testing.T) {
 	s := newTestStore(t)
-	where, args := jobWhere(JobFilter{FaultedOnly: true})
+	where, args := jobWhere(JobFilter{FaultedOnly: true}, s.Now())
 	for name, query := range map[string]string{
 		"the count": `SELECT COUNT(*) FROM jobs ` + where,
 		"the page":  `SELECT id FROM jobs ` + where + ` ORDER BY queued_at DESC, id ASC LIMIT 100`,

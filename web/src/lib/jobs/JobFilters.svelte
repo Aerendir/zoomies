@@ -48,6 +48,14 @@
      */
     faulted: boolean;
     /**
+     * The composite triage question: failures from the last week that nobody
+     * has acknowledged and that no later attempt has replaced. It is the
+     * server's own filter rather than a combination of the keys around it, so
+     * the button, the Overview's failures panel and the API cannot disagree
+     * about what is still owed.
+     */
+    attention: boolean;
+    /**
      * Show every job GitHub reported, not only the ones this fleet has a hand in.
      * Inverted on purpose: the default view is Zoomies' own jobs, so an absent
      * URL key means the default rather than "show everything".
@@ -71,6 +79,7 @@
     hosted: '',
     failed: false,
     faulted: false,
+    attention: false,
     all: false,
   };
 </script>

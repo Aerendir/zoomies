@@ -145,7 +145,7 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 		keys[i] = e
 	}
 
-	where, args := jobWhere(f)
+	where, args := jobWhere(f, s.Now())
 	scope := `state = 'completed'`
 	if where != "" {
 		scope += ` AND ` + strings.TrimPrefix(where, "WHERE ")

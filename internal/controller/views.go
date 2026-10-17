@@ -476,13 +476,20 @@ type JobView struct {
 	FaultKind store.FaultKind `json:"fault_kind,omitempty"`
 	// FaultFix is what to do about a fault of this kind, so a page showing the
 	// failure can show the remedy without keeping its own copy of the table.
-	FaultDomain string     `json:"fault_domain,omitempty"`
-	FaultFix    string     `json:"fault_fix,omitempty"`
-	QueuedAt    time.Time  `json:"queued_at"`
-	StartedAt   *time.Time `json:"started_at"`
-	CompletedAt *time.Time `json:"completed_at"`
-	QueueWaitMS int64      `json:"queue_wait_ms"`
-	DurationMS  int64      `json:"duration_ms"`
+	FaultDomain string `json:"fault_domain,omitempty"`
+	FaultFix    string `json:"fault_fix,omitempty"`
+	// AcknowledgedAt and AcknowledgedBy say when somebody marked this failure
+	// as known and who, by the name they go by. Both are absent on a failure
+	// nobody has triaged (the ordinary state) and on a job that did not
+	// fail. The Jobs page's attention view and the Overview's failures panel
+	// read them; the failed view and every count of failures ignore them.
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy string     `json:"acknowledged_by,omitempty"`
+	QueuedAt       time.Time  `json:"queued_at"`
+	StartedAt      *time.Time `json:"started_at"`
+	CompletedAt    *time.Time `json:"completed_at"`
+	QueueWaitMS    int64      `json:"queue_wait_ms"`
+	DurationMS     int64      `json:"duration_ms"`
 	// ControllerVersion and ControllerChannel are the controller build that
 	// claimed the job, AgentVersion the agent of the host that ran it, and
 	// HostID that host. Each is stamped once and never rewritten, and absent
@@ -633,6 +640,8 @@ func NewJobView(j *store.Job, poolName string) JobView {
 		FaultKind:      j.FaultKind,
 		FaultDomain:    j.FaultDomain(),
 		FaultFix:       j.FaultKind.Fix(),
+		AcknowledgedAt: j.AcknowledgedAt,
+		AcknowledgedBy: j.AcknowledgedBy,
 		QueuedAt:       j.QueuedAt,
 		StartedAt:      j.StartedAt,
 		CompletedAt:    j.CompletedAt,

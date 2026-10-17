@@ -1670,6 +1670,14 @@ type Job struct {
 	// counted rather than only read one at a time. It is set with RunnerFault
 	// and never without it; empty means the fleet has nothing to confess.
 	FaultKind FaultKind `json:"fault_kind,omitempty"`
+	// AcknowledgedAt is when somebody marked this failure as known, and
+	// AcknowledgedBy the name they went by. Nil is a failure waiting to be
+	// triaged: it is the one thing that keeps a job in the attention view
+	// after its queue time has stopped being recent, and clearing it brings
+	// the failure back. The name is a snapshot, as an audit row's actor name
+	// is, so a rename does not rewrite the record of who looked.
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy string     `json:"acknowledged_by,omitempty"`
 	// ControllerVersion, ControllerChannel, AgentVersion and HostID say which
 	// build ran the job and where, so that jobs can be compared across
 	// releases. They are stamped once by StampJobVersions -- the controller's
@@ -1863,6 +1871,15 @@ const (
 	// another one, with the sentence that says why. Only written while size
 	// routing is on or being watched.
 	JobEventSized JobEventKind = "sized"
+	// JobEventAcknowledged: somebody said they have seen this failure, so the
+	// attention view stops asking about it. It changes nothing about the
+	// failure itself, which keeps its conclusion and its place in history --
+	// which is why it is an entry here rather than a move of the job.
+	JobEventAcknowledged JobEventKind = "acknowledged"
+	// JobEventReopened: somebody took that acknowledgement back, so the
+	// failure asks for attention again. It exists so the timeline explains
+	// why a row returned to the list it had left.
+	JobEventReopened JobEventKind = "reopened"
 )
 
 // JobEvent is one entry in a job's timeline: what happened, who observed it,

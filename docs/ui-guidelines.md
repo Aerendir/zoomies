@@ -784,6 +784,16 @@ The one page that has to earn the second monitor.
   above are what the page is for, and a configuration warning somebody chose
   deliberately must not push the pools and the running jobs below the fold
   every day.
+* **Recent failures**: the failures nobody has read, newest first, with the
+  count in the panel's header and each row naming the repository, the workflow,
+  the job and the step or fault it stopped at. A row opens the job's own drawer,
+  and its **Mark as known** button takes the failure off the list, with the
+  toast carrying the undo and the drawer able to put it back. It is a panel
+  rather than a line like the problems summary, because each entry is a
+  separate job with a separate thing to do about it and each leaves when
+  somebody says they have seen it: the one question GitHub cannot answer is
+  which failures anybody has looked at, and a panel that showed every recent
+  failure for ever would stop being read.
 
 ### The problems drawer
 
@@ -1046,7 +1056,10 @@ sentence below, because none of them is true of a search that matched nothing
 (the dates are not a facet here; an empty window keeps its own advice to widen
 it); under the unmatched filter
 it is "no unmatched jobs", which is good news and says so; under the failed one
-it is "no failed jobs"; in the status views the page opens on it is "nothing is
+it is "no failed jobs"; under the attention view it is "no failure is waiting
+on you", which is the all-clear of the triage list and names what takes one off
+it (a re-run that passes, or somebody marking it known); in the status views
+the page opens on, it is "nothing is
 running right now" or "nothing is queued", each offering **Show every status**
 rather than a narrower filter, because the way out of a status view is the same
 page without it; with other runners included it is "no jobs recorded yet", which

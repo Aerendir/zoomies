@@ -16,7 +16,8 @@
 import { JOB_STATES, type JobState } from '../api/types';
 import { jobStatus, RUNNER_LOST, type StatusMeta } from '../status';
 
-export type JobView = 'running' | 'queued' | 'failed' | 'faulted' | 'finished' | 'all';
+export type JobView =
+  'attention' | 'running' | 'queued' | 'failed' | 'faulted' | 'finished' | 'all';
 
 /** The keys a view owns outright. Everything else on the page is orthogonal to it. */
 export interface JobStatusFilters {
@@ -26,6 +27,8 @@ export interface JobStatusFilters {
   /** The half of `failed` this fleet caused, rather than the workflows. */
   faulted: boolean;
   unmatched: boolean;
+  /** The composite question "which failures still want a person"; see JOB_VIEWS. */
+  attention: boolean;
 }
 
 export interface JobViewDef {
@@ -44,14 +47,30 @@ const NOTHING: JobStatusFilters = {
   failed: false,
   faulted: false,
   unmatched: false,
+  attention: false,
 };
 
 /**
- * The order is the lifecycle an operator reads left to right -- running, then
- * waiting, then what went wrong, then what is done -- with the way out on the
- * end. "All" is last because it is the widest, not because it is the default.
+ * The order starts with the question that has a person waiting (which
+ * failures nobody has dealt with), and then follows the lifecycle an operator
+ * reads left to right: running, then waiting, then what went wrong, then what
+ * is done, with the way out on the end. "All" is last because it is the widest,
+ * not because it is the default.
+ *
+ * "Needs attention" is not one value of one key like the rest: it is the
+ * server's composite question, failed and recent and unacknowledged and not
+ * replaced by a later attempt, kept in one place so the button, the Overview's
+ * failures panel and the API's own filter cannot disagree about what is still
+ * owed. Its button wears no status shape, because it is not a state a job is
+ * in: it is a question about a failure.
  */
 export const JOB_VIEWS: readonly JobViewDef[] = [
+  {
+    id: 'attention',
+    label: 'Needs attention',
+    hint: 'Failures from the last week that nobody has acknowledged and no later attempt has replaced. GitHub knows a job failed; it has no idea which failures anybody has read.',
+    filters: { ...NOTHING, attention: true },
+  },
   {
     id: 'running',
     label: 'Running',
@@ -144,7 +163,8 @@ export function currentJobView(value: JobStatusFilters): JobView | '' {
       sameSet(value.conclusion, view.filters.conclusion) &&
       value.failed === view.filters.failed &&
       value.faulted === view.filters.faulted &&
-      value.unmatched === view.filters.unmatched
+      value.unmatched === view.filters.unmatched &&
+      value.attention === view.filters.attention
     ) {
       return view.id;
     }
