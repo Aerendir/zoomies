@@ -1,9 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import type { Writable } from 'node:stream';
+import { setTimeout as delay } from 'node:timers/promises';
 import { BuildLog, formatBuildLog, RECONNECT_NOTICE } from '../src/lib/logs/build-log.ts';
 
 test('build output survives every chunk boundary without including runner diagnostics', () => {
@@ -157,3 +160,125 @@ test('the real entrypoint captures full masked console output and keeps the runn
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// How long a test waits for something the entrypoint should do at once. The
+// entrypoint takes milliseconds, so this is only ever spent when it is broken.
+const BOUND_MS = 10000;
+
+// Starts a copy of the shipped entrypoint against a fake run.sh in a scratch
+// directory, with the given awk first on its PATH if there is one. The fake may
+// read file descriptor 4, a pipe only the test writes to, which holds the
+// "runner" at a known point without a sleep or a poll.
+function startEntrypoint(runSh: string, awk?: string) {
+  const dir = mkdtempSync(join(tmpdir(), 'zoomies-build-log-'));
+  const script = readFileSync(
+    new URL('../../deploy/runner-entrypoint.sh', import.meta.url),
+    'utf8',
+  );
+  writeFileSync(
+    join(dir, 'entrypoint.sh'),
+    script.replace('cd /home/runner', 'cd "$TEST_RUNNER_HOME"'),
+  );
+  writeFileSync(join(dir, 'run.sh'), runSh, { mode: 0o700 });
+  writeFileSync(join(dir, 'docker'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  if (awk) symlinkSync(awk, join(dir, 'awk'));
+
+  const child = spawn('bash', [join(dir, 'entrypoint.sh')], {
+    env: {
+      PATH: `${dir}:${process.env.PATH}`,
+      TEST_RUNNER_HOME: dir,
+      ZOOMIES_JITCONFIG: 'test-only',
+    },
+    stdio: ['ignore', 'pipe', 'pipe', 'ignore', 'pipe'],
+    // Its own process group, so stop() takes the runner, the filter and anything
+    // a fake leaves behind with it.
+    detached: true,
+  });
+  const gate = child.stdio[4] as Writable;
+  // A runner that has already gone has nothing left to release.
+  gate.on('error', () => {});
+  let stdout = '';
+  let stderr = '';
+  child.stdout?.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk));
+  child.stderr?.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
+  const closed = once(child, 'close').then(([code]) => code as number | null);
+
+  return {
+    get stdout() {
+      return stdout;
+    },
+    get stderr() {
+      return stderr;
+    },
+    // Whether stdout holds text before the bound is up.
+    sees(text: string): Promise<boolean> {
+      const found = new Promise<boolean>((resolve) => {
+        const check = () => {
+          if (!stdout.includes(text)) return;
+          child.stdout?.off('data', check);
+          resolve(true);
+        };
+        // Registered after the listener that fills stdout, so it sees each chunk.
+        child.stdout?.on('data', check);
+        check();
+      });
+      return Promise.race([found, delay(BOUND_MS, false, { ref: false })]);
+    },
+    // Lets a fake runner that is waiting on file descriptor 4 carry on.
+    release() {
+      gate.write('go\n');
+    },
+    // The entrypoint's exit status, or undefined if it has not exited by the bound.
+    exit(): Promise<number | null | undefined> {
+      return Promise.race([closed, delay(BOUND_MS, undefined, { ref: false })]);
+    },
+    stop() {
+      try {
+        process.kill(-(child.pid ?? 0), 'SIGKILL');
+      } catch {
+        // Nothing left in the group.
+      }
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+// The awk the runner images carry is gawk, which hands a line on as it arrives.
+// mawk, the awk a Debian-family image starts with, waits for a large block of
+// input first, so there is nothing to ask of it here. Any other awk (BSD's,
+// busybox's) reads as gawk does and the machine's own will do.
+const gawk = spawnSync('sh', ['-c', 'command -v gawk'], { encoding: 'utf8' }).stdout.trim();
+const hostAwk = spawnSync('awk', ['-W', 'version'], { encoding: 'utf8', input: '' });
+const onlyMawk = !gawk && /^mawk/.test(`${hostAwk.stdout}${hostAwk.stderr}`);
+
+// The live build log is only live if a line leaves the container while the
+// runner is still running. With mawk as the filter's awk a quiet build showed
+// nothing until it ended, and the test above cannot see that: its runner exits
+// at once, and the end of the input flushes everything.
+test(
+  'the real entrypoint hands a build line on while the runner is still running',
+  { skip: onlyMawk && 'this machine has only mawk, which holds lines back; the images carry gawk' },
+  async () => {
+    const run = startEntrypoint(
+      '#!/usr/bin/env bash\n' +
+        "printf '%s\\n' '[WORKER 2026-10-17 03:39:53Z VERB JobServerQueue] Enqueue web console line queue: first line of the build'\n" +
+        // Holds here until the test has seen that line on the entrypoint's stdout.
+        'read -r -u 4 _ || exit 93\n' +
+        "printf '%s\\n' '[WORKER 2026-10-17 03:39:59Z VERB JobServerQueue] Enqueue web console line queue: second line of the build'\n" +
+        'exit 7\n',
+      gawk || undefined,
+    );
+    try {
+      assert.ok(
+        await run.sees('ZOOMIES_BUILD_LOG first line of the build\n'),
+        `the first build line was still held back ${BOUND_MS} ms into a runner that was waiting to be told it had been seen; stdout so far:\n${run.stdout}`,
+      );
+      run.release();
+      assert.equal(await run.exit(), 7, `stdout:\n${run.stdout}\nstderr:\n${run.stderr}`);
+      assert.match(run.stdout, /ZOOMIES_BUILD_LOG second line of the build\n/);
+      assert.match(run.stdout, /runner exited with status 7/);
+    } finally {
+      run.stop();
+    }
+  },
+);
