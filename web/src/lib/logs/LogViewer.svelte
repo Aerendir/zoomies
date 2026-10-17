@@ -48,16 +48,20 @@
   import Input from '$lib/components/Input.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Switch from '$lib/components/Switch.svelte';
+  import Tabs from '$lib/components/Tabs.svelte';
+  import { BuildLog, formatBuildLog } from './build-log';
 
   interface Props {
     /** The runner whose output to tail. */
     runnerId: string;
     /** Used in the accessible name and in the waiting-for-output line. */
     runnerName?: string;
+    /** Offer workflow output first, with diagnostics available in a second tab. */
+    buildOutput?: boolean;
     class?: string;
   }
 
-  let { runnerId, runnerName, class: className = '' }: Props = $props();
+  let { runnerId, runnerName, buildOutput = false, class: className = '' }: Props = $props();
 
   /** The scrollback the guidelines fix, and the cap on our own line mirror. */
   const SCROLLBACK = 100000;
@@ -88,6 +92,9 @@
   let host = $state<HTMLDivElement | null>(null);
   let probe = $state<HTMLSpanElement | null>(null);
   let searchField = $state<HTMLInputElement | null>(null);
+  let view = $state('build');
+  let captureSupported = $state(false);
+  const showingBuild = $derived(buildOutput && view === 'build');
 
   const uid = $props.id();
   const noteId = `${uid}-note`;
@@ -132,6 +139,8 @@
   let mirror: string[] = [];
   /** The last line so far, still waiting for its newline. */
   let partial = '';
+  let rawLineCount = 0;
+  const buildLog = new BuildLog(SCROLLBACK);
 
   /** Run something that moves the viewport without reading it as the operator scrolling. */
   function adjust(move: () => void): void {
@@ -240,15 +249,19 @@
     const batch = queue.join('');
     queue = [];
     if (!term) return;
+    const build = buildLog.push(batch);
+    captureSupported = buildLog.supported;
+    record(batch);
+    const text = showingBuild ? formatBuildLog(build) : batch;
+    if (!text) return;
     const target = term;
     // `write` is asynchronous: xterm parses on its own schedule, so scrolling
     // here would scroll to where the bottom was before this batch. The callback
     // runs once the batch is on the buffer, which is the only moment at which
     // "the bottom" means the end of what just arrived.
-    target.write(batch, () => {
+    target.write(text, () => {
       if (follow && term === target) adjust(() => target.scrollToBottom());
     });
-    record(batch);
   }
 
   /** Keep the mirror and the counters in step with what was just written. */
@@ -259,13 +272,40 @@
     cleared = false;
     for (const piece of pieces) mirror.push(piece.replace(/\r$/, ''));
     if (mirror.length > SCROLLBACK) mirror.splice(0, mirror.length - SCROLLBACK);
-    lineCount += pieces.length;
-    if (!follow) missedLines += pieces.length;
+    const previous = lineCount;
+    rawLineCount += pieces.length;
+    lineCount = showingBuild ? buildLog.lineCount : rawLineCount;
+    if (!follow) missedLines += lineCount - previous;
   }
 
   /** Everything the mirror holds, ready to be written into a fresh screen. */
   function replay(): string {
+    if (showingBuild) return formatBuildLog(buildLog.replay());
     return mirror.join('\n') + (mirror.length > 0 ? '\n' : '') + partial;
+  }
+
+  function selectView(next: string): void {
+    flush();
+    view = next;
+    lineCount = buildOutput && next === 'build' ? buildLog.lineCount : rawLineCount;
+    missedLines = 0;
+    query = '';
+    cleared = false;
+    matchCount = 0;
+    matchIndex = -1;
+    finder?.clearDecorations();
+    setWrap(wrap);
+  }
+
+  function saveBuildLog(): void {
+    const url = URL.createObjectURL(
+      new Blob([formatBuildLog(buildLog.replay(), false)], { type: 'text/plain' }),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(runnerName ?? runnerId).replace(/[^a-zA-Z0-9_.-]/g, '_')}-build.log`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   /** DECAWM. With it off a long line stops at the right edge instead of wrapping. */
@@ -321,6 +361,8 @@
   function clearScreen(): void {
     mirror = [];
     partial = '';
+    rawLineCount = 0;
+    if (showingBuild) buildLog.clear();
     lineCount = 0;
     missedLines = 0;
     cleared = true;
@@ -445,7 +487,9 @@
 
   const statusLabel = $derived(
     status === 'live'
-      ? 'Streaming'
+      ? showingBuild && lineCount === 0
+        ? 'Waiting for build output'
+        : 'Streaming'
       : status === 'starting'
         ? 'Connecting'
         : status === 'reconnecting'
@@ -635,6 +679,22 @@
 </script>
 
 <div class="viewer {className}">
+  {#if buildOutput}
+    <Tabs
+      label="Log source"
+      tabs={[
+        { id: 'build', label: 'Build log' },
+        { id: 'diagnostics', label: 'Runner diagnostics' },
+      ]}
+      value={view}
+      onchange={selectView}
+    />
+    <p class="source-note">
+      {showingBuild
+        ? 'Live workflow output, with secrets masked by the GitHub runner.'
+        : 'Startup, registration and worker messages for troubleshooting the runner.'}
+    </p>
+  {/if}
   <div class="toolbar">
     <div class="meter">
       <span class="status" data-status={status}>
@@ -689,24 +749,34 @@
       <div class="mode">
         <Switch bind:checked={wrap} label="Wrap" onchange={setWrap} />
       </div>
-      <Button
-        size="sm"
-        variant="ghost"
-        icon={Eraser}
-        help="Clear what is on screen. The log on the host is untouched."
-        onclick={clearScreen}
-      >
-        Clear
-      </Button>
-      <Button
-        size="sm"
-        variant="secondary"
-        icon={Download}
-        href={runnerLogsDownloadUrl(runnerId)}
-        help="Download the whole log as a text file"
-      >
-        Download
-      </Button>
+      {#if showingBuild}
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={Download}
+          disabled={lineCount === 0}
+          onclick={saveBuildLog}
+          help="Save the build output received in this view. Open GitHub for the complete archived log."
+          >Save log</Button
+        >
+      {:else}
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={Eraser}
+          help="Clear what is on screen. The log on the host is untouched."
+          onclick={clearScreen}>Clear</Button
+        >
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={Download}
+          href={runnerLogsDownloadUrl(runnerId)}
+          help="Download the whole log as a text file"
+        >
+          Download
+        </Button>
+      {/if}
     </div>
   </div>
 
@@ -715,7 +785,7 @@
       class="screen"
       bind:this={host}
       role="group"
-      aria-label="Log output for {runnerName ?? 'this runner'}"
+      aria-label="{showingBuild ? 'Build output' : 'Log output'} for {runnerName ?? 'this runner'}"
       aria-describedby={noteId}
     ></div>
     <span class="probe" bind:this={probe} aria-hidden="true"></span>
@@ -731,8 +801,14 @@
         {cleared
           ? 'Cleared. Anything the runner writes from now on appears here.'
           : status === 'ended'
-            ? 'This runner produced no output.'
-            : 'Waiting for output. Nothing has been written yet.'}
+            ? showingBuild
+              ? 'No build output was captured in this view. Open the job on GitHub for its full log.'
+              : 'This runner produced no output.'
+            : showingBuild
+              ? captureSupported
+                ? 'Waiting for the next workflow output. Build lines appear here as the job runs.'
+                : 'No build output received yet. Older or custom runner images may not support live capture. You can view the full job on GitHub.'
+              : 'Waiting for output. Nothing has been written yet.'}
       </p>
     {/if}
 
@@ -754,14 +830,18 @@
         <span>The log stream stopped. The runner or its host may have gone away.</span>
         <Button size="sm" variant="secondary" onclick={reconnect}>Reconnect</Button>
       {:else}
-        <span>The stream ended: {endedReason}. What is on screen is all there was.</span>
+        <span
+          >The stream ended: {endedReason}. {showingBuild
+            ? 'Open GitHub for the complete archived build log.'
+            : 'What is on screen is all there was.'}</span
+        >
       {/if}
     </p>
   {/if}
 
   <p class="sr-only" id={noteId}>
     Live log output is not announced as it arrives, because a screen reader cannot keep up with a
-    running job. Use the download button to read the whole log as a text file instead.
+    running job. Save or download the log to read it as a text file instead.
   </p>
   <p class="sr-only" aria-live="polite">{announcement}</p>
 </div>
@@ -788,6 +868,13 @@
     gap: var(--z-space-3);
     padding: var(--z-space-2) var(--z-space-3);
     border-bottom: var(--z-border-width) solid var(--z-border);
+  }
+  .source-note {
+    margin: 0;
+    padding: var(--z-space-2) var(--z-space-3);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+    line-height: var(--z-leading-xs);
   }
   .meter {
     display: flex;
@@ -853,6 +940,7 @@
     align-items: center;
     gap: var(--z-space-3);
     margin-left: auto;
+    flex-wrap: wrap;
   }
   .mode {
     font-size: var(--z-text-xs);
@@ -860,7 +948,7 @@
   .stage {
     position: relative;
     flex: 1;
-    min-height: 22rem;
+    min-height: 0;
     background: var(--z-surface-sunken);
   }
   .screen {
