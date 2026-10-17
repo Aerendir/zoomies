@@ -1173,3 +1173,62 @@ test('a failed test machine says which step failed in words, not only in its ico
     'Reported ready, not reached',
   ]);
 });
+
+/**
+ * The page replaces `provider` with a fresh object on every provider.updated
+ * frame, and the panel reads the last test once, when it opens. That read used to
+ * be cancelled by the replacement and never asked for again, so a test that had
+ * passed and been released showed nothing whenever a frame landed while the read
+ * was still out.
+ */
+test('the last test is still shown when the provider changes while it is being read', async ({
+  page,
+}) => {
+  const passed = testMachineRow('deleted', [
+    'planned',
+    'creating',
+    'created',
+    'starting',
+    'bootstrapped',
+    'enrolled',
+    'ready',
+    'draining',
+    'deleting',
+    'deleted',
+  ]);
+  // The read is held until the provider has changed under it.
+  let readAsked!: () => void;
+  const asked = new Promise<void>((resolve) => (readAsked = resolve));
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/api\/v1\/machines\?.*include_deleted=true/, async (route) => {
+    readAsked();
+    await released;
+    await route.fulfill({ json: { items: [passed], total: 1 } }).catch(() => {});
+  });
+
+  await setRenting(page, true);
+  try {
+    await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+    await asked;
+
+    // Pausing it sends a provider.updated frame, which replaces the page's provider.
+    const paused = await page.request.post(`/api/v1/providers/${FIXTURE.providerId}/pause`, {
+      data: { reason: 'a spec changing the provider under a read' },
+    });
+    expect(paused.ok()).toBeTruthy();
+    try {
+      // The panel has seen the new provider: its own note changes with it.
+      await expect(testMachinePanel(page)).toContainText('is paused');
+      release();
+      await expect(testMachinePanel(page).getByTestId('test-machine-result')).toContainText(
+        'The test passed and its machine has been released.',
+      );
+    } finally {
+      await page.request.post(`/api/v1/providers/${FIXTURE.providerId}/resume`);
+    }
+  } finally {
+    release();
+    await setRenting(page, false);
+  }
+});

@@ -12,7 +12,6 @@
   is a button an operator presses and never something that runs by itself.
 -->
 <script lang="ts">
-  import { untrack } from 'svelte';
   import { Check, CircleDashed, LoaderCircle, X } from '@lucide/svelte';
   import { listMachines, testProviderMachine } from '$lib/api/client';
   import type { Machine, Provider } from '$lib/api/types';
@@ -34,14 +33,18 @@
   /** The test machine as last seen, which outlives its row once it is released. */
   let remembered = $state<Machine | null>(null);
   let starting = $state(false);
-  let loadedFor = '';
+
+  // What the effect below is keyed on, and all it is keyed on. The page replaces
+  // `provider` with a fresh object on every provider.updated frame, and an effect
+  // that read `provider.id` itself ran again for each one: its cleanup aborted the
+  // read in flight, and the run that followed found it had already been asked for.
+  const providerId = $derived(provider.id ?? '');
 
   // The newest test the controller still has a row for, so the answer is still
   // here after a reload, and after the machine itself has been deleted.
   $effect(() => {
-    const id = provider.id ?? '';
-    if (id === '' || untrack(() => loadedFor) === id) return;
-    loadedFor = id;
+    const id = providerId;
+    if (id === '') return;
     remembered = null;
     const controller = new AbortController();
     void listMachines({ provider: id, include_deleted: true, limit: 50 }, controller.signal)
