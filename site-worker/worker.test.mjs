@@ -13,6 +13,7 @@ import worker, {
   wantsMarkdown,
 } from "./worker.js";
 
+const SITE = "zoomies.sh";
 const HTML = "<!doctype html><html><body><p>the page</p></body></html>";
 const MARKDOWN = "# The page\n\nIts body as Markdown.\n";
 
@@ -27,9 +28,12 @@ function originFor(paths, seen = []) {
   return async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url ?? input.href);
     seen.push(url.href);
-    // Keys are "/path" for this site's origin, or "host/path" for an
-    // upstream the mirror fetches by name.
-    const found = paths.get(url.host + url.pathname) ?? paths.get(url.pathname);
+    // Keys are "/path" for this site's origin, or "host/path" for any other
+    // host. A bare path never answers for another host: a worker that fetched
+    // the wrong host must find nothing there, not this site's file.
+    const found =
+      paths.get(url.host + url.pathname) ??
+      (url.host === SITE ? paths.get(url.pathname) : undefined);
     if (found === undefined) {
       return new Response(HTML, {
         status: 404,
@@ -94,11 +98,18 @@ test("the site root's markdown copy is served for the bare host", async () => {
   assert.equal(await response.text(), MARKDOWN);
 });
 
+// The page's Markdown copy is in the origin here, so a worker that chose it for
+// a browser would be seen doing so: with no copy to find, the same request
+// would be answered with the HTML whatever the worker decided.
 test("a browser's accept header gets the HTML the origin serves", async () => {
   const response = await handle(
     "https://zoomies.sh/quickstart/",
     new Map([
       ["/quickstart/", { type: "text/html; charset=utf-8", body: HTML }],
+      [
+        "/quickstart/index.md",
+        { type: "text/markdown; charset=utf-8", body: MARKDOWN },
+      ],
     ]),
     {
       headers: {
@@ -116,23 +127,48 @@ test("a browser's accept header gets the HTML the origin serves", async () => {
   assert.equal(await response.text(), HTML);
 });
 
+// The request has to carry the Accept header for this to test anything: the
+// RequestInit is {headers: {accept}}, and a bare {accept} is ignored, which
+// leaves a plain request that never reaches the copy's lookup at all.
 test("an address with no markdown copy falls back to the origin's answer", async () => {
-  const response = await handle("https://zoomies.sh/not-a-page/", new Map([]), {
-    accept: "text/markdown",
-  });
+  const seen = [];
+  const response = await handle(
+    "https://zoomies.sh/not-a-page/",
+    new Map([]),
+    { headers: { accept: "text/markdown" } },
+    seen,
+  );
 
+  assert.deepEqual(
+    seen,
+    [
+      "https://zoomies.sh/not-a-page/index.md",
+      "https://zoomies.sh/not-a-page/",
+    ],
+    "the worker should look for the copy, then fall back to the page itself",
+  );
   assert.equal(response.status, 404);
   assert.equal(
     response.headers.get("content-type"),
     "text/html; charset=utf-8",
   );
+  assert.equal(response.headers.get("x-markdown-tokens"), null);
+  assert.equal(await response.text(), HTML);
 });
 
+// A copy sits where the worker would look if it took the JSON for a page, so
+// a worker that did would answer with that and not the catalog.
 test("a file that is a format of its own is never replaced with markdown", async () => {
   const catalog = '{"version": 1}';
   const response = await handle(
     "https://zoomies.sh/catalog.json",
-    new Map([["/catalog.json", { type: "application/json", body: catalog }]]),
+    new Map([
+      ["/catalog.json", { type: "application/json", body: catalog }],
+      [
+        "/catalog.json/index.md",
+        { type: "text/markdown; charset=utf-8", body: MARKDOWN },
+      ],
+    ]),
     { headers: { accept: "text/markdown" } },
   );
 
@@ -201,7 +237,7 @@ for (const [name, address] of [
     );
 
     assert.deepEqual(
-      seen.filter((href) => new URL(href).host !== "zoomies.sh"),
+      seen.filter((href) => new URL(href).host !== SITE),
       [],
       "the worker fetched a host other than the site's",
     );
@@ -471,7 +507,7 @@ test("the authorization-server address serves the provider's own metadata docume
   const response = await handle(
     "https://zoomies.sh/.well-known/oauth-authorization-server",
     new Map([
-      ["/.well-known/oauth-authorization-server", { type: "application/json", body: asDoc }],
+      ["portal.zoomies.sh/.well-known/oauth-authorization-server", { type: "application/json", body: asDoc }],
     ]),
     {},
   );

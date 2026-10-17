@@ -77,9 +77,11 @@ _nav = None
 _sources: dict[str, tuple[object, str]] = {}
 
 # A page larger than this is not copied into llms-full.txt, only linked. The
-# narrative pages (quickstart, the FAQ, the comparisons) are well under it; the
-# generated references (every setting, every API route, every problem code)
-# are several times over, and one of them would crowd out the rest.
+# comparisons and the short explainers are well under it. The quickstart is
+# over it, as are many of the product pages, and the generated references
+# (every setting, every API route, every problem code) are several times over,
+# and one of them would crowd out the rest. What is left out is listed at the
+# end of the file with a link to its own copy.
 _FULL_PAGE_LIMIT = 15_000
 
 _comment = re.compile(r"<!--.*?-->", re.DOTALL)
