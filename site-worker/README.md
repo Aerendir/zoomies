@@ -18,7 +18,11 @@ Two things the origin cannot do itself, the worker does on the way through:
   `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`,
   byte for byte from `https://portal.zoomies.sh` and refetched on each
   request, so the site's identity document is always the one the issuer
-  serves.
+  serves. A portal that has no such document (404) leaves the origin's answer
+  standing; one that cannot be reached, does not answer within five seconds or
+  answers 429 or 5xx gets a `502` with `Cache-Control: no-store`, because the
+  origin's 404 is cached for hours and would turn an outage into "this domain
+  has no OAuth metadata".
 
 The copies it serves are the ones `hooks/seo.py` writes beside the built site,
 at every page's address plus `index.md` (the address the pages already declare

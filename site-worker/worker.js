@@ -182,14 +182,50 @@ const MIRRORS = [
     at: ["/.well-known/oauth-authorization-server"] },
 ];
 
+// How long the provider has to answer. The documents are small and nearly
+// static, so one that has not arrived in this long is not coming, and a client
+// waiting on discovery is better told so than held until the platform gives up.
+const MIRROR_TIMEOUT_MS = 5000;
+
+// What a client is told when the provider cannot be asked. It is not the
+// origin's 404: that says this site has no such document and is cached for
+// hours, so an outage at the provider would read as an absence long after the
+// provider came back.
+function providerUnavailable() {
+  return new Response(
+    "The identity provider at portal.zoomies.sh is not serving this document " +
+      "right now. Nothing was cached, so try again in a minute.\n",
+    {
+      status: 502,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+// The provider's document, null where the provider says it has none (the
+// origin's answer then stands), or a 502 where it could not be asked or did not
+// answer well: a refused connection, a timeout, a 429 or a 5xx.
 async function mirrorResponse(from) {
-  const upstream = await fetch(new URL(from, ISSUER_ORIGIN), {
-    headers: { accept: "application/json" },
-  });
-  if (!upstream.ok) {
-    return null;
+  let upstream;
+  let body;
+  try {
+    upstream = await fetch(new URL(from, ISSUER_ORIGIN), {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(MIRROR_TIMEOUT_MS),
+    });
+    if (upstream.status === 404) {
+      return null;
+    }
+    if (!upstream.ok) {
+      return providerUnavailable();
+    }
+    body = await upstream.text();
+  } catch {
+    return providerUnavailable();
   }
-  const body = await upstream.text();
   const headers = new Headers(upstream.headers);
   headers.set("content-type", "application/json");
   return new Response(body, { status: upstream.status, headers });

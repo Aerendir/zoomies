@@ -18,8 +18,13 @@ const MARKDOWN = "# The page\n\nIts body as Markdown.\n";
 
 // `seen` collects the address of every fetch the worker makes, so a test can
 // say which hosts it was sent to as well as what it answered.
+//
+// An entry may carry a `respond` function instead of a body, to behave the way
+// a body cannot: it receives the fetch's init and returns (or throws) the
+// answer, so a test can make an upstream refuse the connection or hang until
+// the worker's signal gives up on it.
 function originFor(paths, seen = []) {
-  return async (input) => {
+  return async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url ?? input.href);
     seen.push(url.href);
     // Keys are "/path" for this site's origin, or "host/path" for an
@@ -30,6 +35,9 @@ function originFor(paths, seen = []) {
         status: 404,
         headers: { "content-type": "text/html; charset=utf-8" },
       });
+    }
+    if (found.respond !== undefined) {
+      return found.respond(init);
     }
     return new Response(found.body, {
       status: found.status ?? 200,
@@ -422,15 +430,116 @@ test("a HEAD request for the discovery document answers with no body", async () 
   assert.equal(await response.text(), "");
 });
 
-test("when the provider cannot be reached, the origin's answer stands", async () => {
+test("when the provider has no such document, the origin's answer stands", async () => {
   const response = await handle(
     "https://zoomies.sh/.well-known/openid-configuration",
-    new Map([]),
+    new Map([
+      [
+        "portal.zoomies.sh/.well-known/openid-configuration",
+        { status: 404, type: "application/json", body: '{"error":"not_found"}' },
+      ],
+    ]),
     {},
   );
 
   assert.equal(response.status, 404);
   assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(await response.text(), HTML);
+});
+
+// A provider that cannot answer is not a provider with nothing to say. The
+// origin's own 404 for these addresses is cached for hours, so mistaking an
+// outage for an absence would tell every client that this domain has no OAuth
+// metadata, long after the portal came back.
+const MIRRORED = [
+  "/.well-known/openid-configuration",
+  "/.well-known/oauth-authorization-server",
+];
+const PROVIDER_DOWN = [
+  ["a refused connection", { respond: () => Promise.reject(new TypeError("fetch failed")) }],
+  // Only a 404 means "no such document". A provider that refuses this site's
+  // request (a firewall's 403, say) is a provider to fix, not an absence.
+  ["a 403", { status: 403, type: "text/html", body: "<h1>forbidden</h1>" }],
+  ["a 429", { status: 429, type: "text/plain", body: "slow down" }],
+  ["a 500", { status: 500, type: "text/plain", body: "oops" }],
+  ["a 502", { status: 502, type: "text/html", body: "<h1>bad gateway</h1>" }],
+  ["a 503", { status: 503, type: "text/plain", body: "busy" }],
+  ["a 504", { status: 504, type: "text/plain", body: "slow" }],
+];
+
+for (const address of MIRRORED) {
+  for (const [what, upstream] of PROVIDER_DOWN) {
+    test(`${what} from the provider is answered as unavailable and never cached (${address})`, async () => {
+      const response = await handle(
+        `https://zoomies.sh${address}`,
+        new Map([[`portal.zoomies.sh${address}`, upstream]]),
+        {},
+      );
+
+      assert.equal(response.status, 502);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.match(response.headers.get("content-type"), /^text\/plain/);
+      assert.match(await response.text(), /portal\.zoomies\.sh/);
+    });
+  }
+}
+
+test("a HEAD request for a discovery document the provider cannot serve gets the same refusal", async () => {
+  const response = await handle(
+    "https://zoomies.sh/.well-known/openid-configuration",
+    new Map([
+      [
+        "portal.zoomies.sh/.well-known/openid-configuration",
+        { status: 503, type: "text/plain", body: "busy" },
+      ],
+    ]),
+    { method: "HEAD" },
+  );
+
+  assert.equal(response.status, 502);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(await response.text(), "");
+});
+
+test("a provider that does not answer in time is reported, not waited for", async () => {
+  // The real timer runs for seconds. The test hands the worker a signal it can
+  // fire at once, and records what the worker asked for.
+  const timer = new AbortController();
+  const asked = [];
+  const previous = AbortSignal.timeout;
+  AbortSignal.timeout = (ms) => {
+    asked.push(ms);
+    return timer.signal;
+  };
+  let passed;
+  try {
+    const response = await handle(
+      "https://zoomies.sh/.well-known/oauth-authorization-server",
+      new Map([
+        [
+          "portal.zoomies.sh/.well-known/oauth-authorization-server",
+          {
+            // Never answers; settles only when the signal gives up on it.
+            respond: (init) =>
+              new Promise((_, reject) => {
+                passed = init.signal;
+                init.signal.addEventListener("abort", () => reject(init.signal.reason));
+                timer.abort(new DOMException("The operation timed out.", "TimeoutError"));
+              }),
+          },
+        ],
+      ]),
+      {},
+    );
+
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  } finally {
+    AbortSignal.timeout = previous;
+  }
+  assert.equal(passed, timer.signal, "the worker did not pass its timeout to the fetch");
+  assert.equal(asked.length, 1);
+  assert.ok(asked[0] > 0 && asked[0] <= 10_000, `${asked[0]} ms is not a few seconds`);
 });
 
 const PRM = JSON.stringify({
