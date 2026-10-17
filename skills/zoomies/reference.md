@@ -747,7 +747,7 @@ Usage:
   zoomies jobs list [filters]
 
 Flags:
-  --attention                only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt
+  --attention                only failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed
   --before                   continue after the previous page: the cursor it printed, or the next field of --output json
   --ca-file                  PEM file holding the controller's certificate
   --conclusion               success, failure, cancelled or skipped (repeatable)

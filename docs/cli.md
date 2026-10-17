@@ -272,7 +272,11 @@ The runners that exist right now.
 `--until`; each of which takes a duration (`24h`) or a date. `--unmatched`,
 `--failed` and `--attention` are the three questions worth a switch of their
 own; `--attention` is the one GitHub cannot answer at all: failures from the
-last week that nobody has acknowledged and no later attempt has replaced.
+last week that nobody has acknowledged, that no later attempt of the job, or
+later run of it on the same branch, has replaced, and that GitHub has not
+settled since. The controller asks GitHub about each such run in the
+background, and one whose PR is closed, whose PR has newer commits than the run
+or whose checks now pass leaves this list on its own, and stays in `--failed`.
 `jobs get <job-id>` shows one.
 
 `--ours` and `--theirs` split `--failed` by whose failure it was. GitHub records

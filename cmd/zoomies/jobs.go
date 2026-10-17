@@ -41,7 +41,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	until := fs.String("until", "", "only jobs queued before then")
 	unmatched := fs.Bool("unmatched", false, "only jobs no enabled pool claims; these will never run")
 	failed := fs.Bool("failed", false, "only jobs that went wrong: a failing conclusion, or a runner that stopped under the job")
-	attention := fs.Bool("attention", false, "only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt")
+	attention := fs.Bool("attention", false, "only failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed")
 	faulted := fs.Bool("ours", false, "only the failures this fleet caused, not the workflows' own")
 	theirs := fs.Bool("theirs", false, "only the failures the workflows caused, with nothing wrong on this side")
 	jobNames, versions, hostIDs := &exactList{}, &listValue{}, &listValue{}
