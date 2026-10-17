@@ -13,8 +13,13 @@ import (
 func TestExperimentCollectionPreservesFailuresAndCannotAssertFullCoverage(t *testing.T) {
 	h := newHarness(t)
 	inst := h.installationOn("acme/repo", store.TargetRepo)
+	// Each job is queued a second after the one before: the store keeps
+	// milliseconds and lists by queued time then id, so jobs queued together
+	// come back in the order of their random ids and the failure is first
+	// only some of the time.
+	queued := time.Now()
 	for i, outcome := range []string{"failure", "success", "cancelled"} {
-		_, err := h.st.UpsertJob(h.ctx, &store.Job{GitHubJobID: int64(100 + i), GitHubRunID: 10, RunAttempt: 1, InstallationID: inst.ID, Repo: inst.Target, QueuedAt: time.Now(), State: store.JobCompleted, Conclusion: outcome, JobName: "private workflow text"})
+		_, err := h.st.UpsertJob(h.ctx, &store.Job{GitHubJobID: int64(100 + i), GitHubRunID: 10, RunAttempt: 1, InstallationID: inst.ID, Repo: inst.Target, QueuedAt: queued.Add(time.Duration(i) * time.Second), State: store.JobCompleted, Conclusion: outcome, JobName: "private workflow text"})
 		if err != nil {
 			t.Fatal(err)
 		}
