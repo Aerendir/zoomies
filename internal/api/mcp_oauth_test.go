@@ -795,3 +795,52 @@ func TestSingleSignOnReturnsOnlyToTheConsentScreen(t *testing.T) {
 		}
 	}
 }
+
+// Editing the client an app is configured with is how a mis-registered
+// redirection is repaired: the consent screen refused the sign-in while the
+// collection of redirect URIs did not include the callback, and it grants it
+// once the edit lands, all without changing the client ID or secret the app
+// holds.
+func TestEditingAnMCPClientChangesWhereItMayReturn(t *testing.T) {
+	h := oauthHarness(t)
+	_, admin := h.user("ada", store.RoleAdmin)
+
+	created := h.do(request{method: http.MethodPost, path: "/api/v1/mcp-clients", cookie: admin,
+		body: map[string]any{"name": "Claude"}})
+	created.mustStatus(t, http.StatusCreated, "creating a client")
+	var c mcpClientResponse
+	created.into(t, &c)
+
+	r := h.do(request{method: http.MethodPatch, path: "/api/v1/mcp-clients/" + c.ID, cookie: admin,
+		body: map[string]any{"name": "Claude Code", "redirect_uris": []string{claudeReturn, "http://localhost:3118/callback"}}})
+	r.mustStatus(t, http.StatusOK, "updating a client")
+	var after mcpClientResponse
+	r.into(t, &after)
+	if after.Name != "Claude Code" || !slices.Contains(after.RedirectURIs, "http://localhost:3118/callback") {
+		t.Errorf("the edit must land, got %+v", after)
+	}
+	if after.ClientID != c.ClientID || after.Confidential != c.Confidential {
+		t.Error("an edit must leave the client ID and secrecy alone")
+	}
+	if after.Connections != c.Connections {
+		t.Errorf("an edit ends no connection, want %d, got %d", c.Connections, after.Connections)
+	}
+
+	// The refused address is now registered, so the authorise gets past the
+	// redirect check and waits for consent rather than bouncing.
+	reqID := requestFrom(t, h.authorize(c.ClientID, "http://localhost:3118/callback", nil))
+	if reqID == "" {
+		t.Fatal("the authorise must still be waiting for consent")
+	}
+	// An unknown client is not editable into existence.
+	if r := h.do(request{method: http.MethodPatch, path: "/api/v1/mcp-clients/oac_x", cookie: admin,
+		body: map[string]any{"name": "X"}}); r.status != http.StatusNotFound {
+		t.Errorf("editing a missing client must be 404, got %d", r.status)
+	}
+	// Editing a self-registered client refused with a reason naming it.
+	registered := h.registerClient(claudeReturn)
+	if r := h.do(request{method: http.MethodPatch, path: "/api/v1/mcp-clients/" + registered, cookie: admin,
+		body: map[string]any{"name": "X"}}); r.status != http.StatusUnprocessableEntity {
+		t.Errorf("editing a dynamic client must be 422, got %d", r.status)
+	}
+}

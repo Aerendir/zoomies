@@ -588,6 +588,34 @@ func (s *Server) handleCreateMCPClient(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, out)
 }
 
+func (s *Server) handleUpdateMCPClient(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name         string   `json:"name"`
+		RedirectURIs []string `json:"redirect_uris"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	c, err := s.auth.UpdateMCPClient(r.Context(), Identity(r.Context()), chiURLParam(r, "id"),
+		auth.NewMCPClient{Name: in.Name, RedirectURIs: in.RedirectURIs})
+	if errors.Is(err, auth.ErrInvalidInput) {
+		unprocessable(w, err.Error(), nil)
+		return
+	}
+	if err != nil {
+		s.fail(w, r, "updating an MCP client", err)
+		return
+	}
+	// An edited client keeps its connections, so the page it rerenders on
+	// should show them; a failed count is warned about and read as none,
+	// matching how the rotation handler treats the same number.
+	counts, cerr := s.ctrl.Store().CountOAuthGrantsByClient(r.Context())
+	if cerr != nil {
+		s.logger(r).Warn("could not count an MCP client's connections after updating it", "client", c.ID, "error", cerr)
+	}
+	writeJSON(w, http.StatusOK, newMCPClient(c, counts[c.ID]))
+}
+
 func (s *Server) handleRotateMCPClientSecret(w http.ResponseWriter, r *http.Request) {
 	id := chiURLParam(r, "id")
 	// Counted before the rotation, because once the old secret is gone the new

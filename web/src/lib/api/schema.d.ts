@@ -4480,7 +4480,11 @@ export interface paths {
         delete: operations["revokeMCPClient"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit an MCP client's name and redirect URIs
+         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended, and the client ID and secret stay as they were. Audited as `mcp_client.update`.
+         */
+        patch: operations["updateMCPClient"];
         trace?: never;
     };
     "/mcp-connections": {
@@ -19416,6 +19420,40 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    updateMCPClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @example Claude */
+                    name: string;
+                    redirect_uris?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPClient"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     listMCPConnections: {

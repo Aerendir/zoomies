@@ -6921,6 +6921,37 @@ paths:
 
   /mcp-clients/{id}:
     parameters: [{ $ref: "#/components/parameters/PathID" }]
+    patch:
+      operationId: updateMCPClient
+      tags: [admin]
+      summary: Edit an MCP client's name and redirect URIs
+      description: >-
+        Only a client an administrator created can be edited; a dynamic one owns its registration and
+        a metadata client's facts come from its document. Redirect URIs default to Claude's, as
+        creation does. Connections already made are not ended, and the client ID and secret stay as
+        they were. Audited as `mcp_client.update`.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, examples: ["Claude"] }
+                redirect_uris:
+                  type: array
+                  items: { type: string, examples: ["https://claude.ai/api/mcp/auth_callback"] }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MCPClient" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
     delete:
       operationId: revokeMCPClient
       tags: [admin]

@@ -253,6 +253,55 @@ func (s *Service) CreateMCPClient(ctx context.Context, actor *Identity, in NewMC
 	return c, secret, nil
 }
 
+// UpdateMCPClient stops one of the ways a redirect URI is mis-registered
+// needing a delete and a recreate, which would leave the app configured with a
+// client_id that the portal no longer knows. A client's secret has its own
+// rotation, and only a client an administrator created is editable, because a
+// dynamic one owns its registration and a metadata client's facts come from
+// its document. Redirect URIs default to Claude's, as creation does.
+func (s *Service) UpdateMCPClient(ctx context.Context, actor *Identity, id string, in NewMCPClient) (*store.OAuthClient, error) {
+	c, err := s.store.GetOAuthClient(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if c.Kind != store.OAuthClientAdmin {
+		return nil, Invalid("only a client an administrator created can be edited; %s is a %s client", c.Name, clientKindWord(c))
+	}
+	if c.Revoked() {
+		return nil, Invalid("%s has been revoked; create a new client instead", c.Name)
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, Invalid("a client needs a name; it is what people see on the consent screen")
+	}
+	if len(name) > 100 {
+		return nil, Invalid("a client name may be at most 100 characters")
+	}
+	uris := in.RedirectURIs
+	if len(uris) == 0 {
+		uris = []string{ClaudeCallback}
+	}
+	redirects, err := checkRedirectURIs(uris)
+	if err != nil {
+		var oe *OAuthError
+		if errors.As(err, &oe) {
+			return nil, Invalid("%s", oe.Description)
+		}
+		return nil, err
+	}
+	if err := s.store.UpdateOAuthAdminClient(ctx, id, name, redirects); err != nil {
+		return nil, fmt.Errorf("updating an MCP client: %w", err)
+	}
+	// The audit holds both ends, so a redirection somebody relied on can be
+	// read back from the log rather than reconstructed.
+	s.audit.Act(ctx, actor, "mcp_client.update", "mcp_client", id, map[string]any{
+		"name": name, "redirect_uris": []string(redirects), "was": map[string]any{
+			"name": c.Name, "redirect_uris": []string(c.RedirectURIs),
+		},
+	})
+	return s.store.GetOAuthClient(ctx, id)
+}
+
 // RotateMCPClientSecret replaces a confidential client's secret. The old one
 // stops working at once. Connections already made are not ended, but each one
 // fails its next refresh until the client is given the new secret, which is
