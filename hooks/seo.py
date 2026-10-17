@@ -28,7 +28,8 @@ from the repository rather than written by hand, so neither can go stale:
 * **The agent discovery documents**, the rest of what a machine reader asks
   for: ``/auth.md`` (copied from ``hooks/auth.md``), the MCP server card, the
   two product skills, each folder copied under ``agent-skills/`` with the
-  digest of its ``SKILL.md``, the ai-catalog index pointing at all of it, and a
+  digest of its ``SKILL.md``, the ai-catalog index pointing at all of it, the
+  ``did.json`` its host identifier resolves to, and a
   ``poppy.json``. Each names something that is really serving; where
   OAuth or A2A metadata is asked for, it stays with the deployments that run
   it and ``/auth.md`` links to the served one.
@@ -506,10 +507,20 @@ def _write_agent_discovery(config, site_url: str) -> None:
         }, fh, indent=2)
         fh.write("\n")
 
+    # The catalog names its host by a did:web identifier, which resolves to
+    # /.well-known/did.json on that domain. The document says who the DID is and
+    # nothing more: no keys and no services, because nothing here signs anything
+    # a key would be checked against. It exists so the identifier the catalog
+    # claims resolves, not to claim more.
+    host_did = "did:web:zoomies.sh"
+    with open(os.path.join(well, "did.json"), "w", encoding="utf-8") as fh:
+        json.dump({"@context": ["https://www.w3.org/ns/did/v1"], "id": host_did}, fh, indent=2)
+        fh.write("\n")
+
     with open(os.path.join(well, "ai-catalog.json"), "w", encoding="utf-8") as fh:
         json.dump({
             "specVersion": "1.0",
-            "host": {"displayName": "Zoomies", "identifier": "did:web:zoomies.sh"},
+            "host": {"displayName": "Zoomies", "identifier": host_did},
             "entries": [
                 {
                     "identifier": "urn:air:zoomies.sh:server:fleet-mcp",
@@ -526,7 +537,7 @@ def _write_agent_discovery(config, site_url: str) -> None:
                 {
                     "identifier": "urn:air:zoomies.sh:api:rest",
                     "displayName": "The Zoomies REST interface",
-                    "type": "application/yaml",
+                    "type": "text/html",
                     "url": f"{site_url}/api-surface/",
                     "representativeQueries": [
                         "which REST routes does the fleet controller expose",

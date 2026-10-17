@@ -210,6 +210,15 @@ jobs:
           for entry in catalog["entries"]:
               assert ("url" in entry) != ("data" in entry), entry["identifier"]
               assert 2 <= len(entry["representativeQueries"]) <= 5, entry["identifier"]
+              # The type is what the url serves, and a page is text/html
+              # whatever it is about: the REST entry once said application/yaml
+              # of the API documentation's page.
+              if entry.get("url", "").endswith("/"):
+                  assert entry["type"] == "text/html", entry["identifier"] + " is a page, not " + entry["type"]
+          # The host is named by a DID, and a DID that nothing resolves is a
+          # claim nothing backs. did:web:zoomies.sh is read from
+          # /.well-known/did.json.
+          assert load(".well-known/did.json")["id"] == catalog["host"]["identifier"], "did.json does not describe the catalog's host"
           poppy = load(".well-known/poppy.json")
           assert poppy["organization"]["domain"] == "zoomies.sh"
           assert poppy["protocol_version"]
