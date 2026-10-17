@@ -15042,6 +15042,15 @@ components:
             Whether the build came from a release. Only one that did is offered an update,
             because a build from main is usually ahead of the newest release and taking it
             there would be a downgrade.
+    UpdatesDevelopment:
+      type: object
+      required: [current, latest, state, checked_at]
+      description: Comparison with main for a stamped development build. Main may still be publishing to the dev channel.
+      properties:
+        current: { type: string, description: The commit in the running build. }
+        latest: { type: string, description: The last observed commit on main, or empty before a successful check. }
+        state: { type: string, enum: [unknown, current, available] }
+        checked_at: { type: [string, "null"], format: date-time }
     UpdatesRelease:
       type: object
       required: [tag, url, published_at]
@@ -15186,6 +15195,7 @@ components:
             `updates.soak` as the Settings page writes it. `auto` waits this long after a release is
             published; `manual` ignores it.
         running: { $ref: "#/components/schemas/UpdatesRunning" }
+        development: { $ref: "#/components/schemas/UpdatesDevelopment" }
         latest:
           description: >-
             The newest release that could be installed on this system, whether or not the build is

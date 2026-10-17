@@ -868,7 +868,15 @@ the one thing on the page that installs anything: the **Update** button for this
 controller. A host is updated from its own card on **Hosts**, or with every
 other host that is behind in a [rollout](#updating-every-host-that-is-behind).
 
-At the top is one line saying what the mode does about the newest release
+At the top, Installed build and release status labels the controller as
+Standard, Development or Custom. A stamped development build shows its commit,
+the latest checked commit on `main` and the check time. It distinguishes an
+unchecked build from matching commits and newer changes on `main`; it does not
+claim that a dev image has finished publishing. Administrators can choose
+**Check for updates** to ask the release source now. The header's Refresh
+control rereads the saved status.
+
+Standard releases then says what the mode does about the newest release
 that can be installed on this system (*Manual offers v1.3.2 and waits for a
 person to take it*, or *Auto would take v1.3.2 in 18 hours*) and under it the
 controller's own sentence for what happens next and why, exactly as the API
@@ -892,15 +900,14 @@ change them. The platform role gets the controls under them: the mode as a
 choice of Off, Manual or Auto, and the soak and check interval as the same rows
 the Configuration page shows. A value the environment is holding reads as
 pinned and cannot be changed here. Choosing Auto asks first, since it lets the
-controller restart itself without another request. Last is the
-build the controller is running and whether it came from a release. One built
+controller restart itself without another request. One built
 from `main` is offered the newest release as a replacement, with a warning in
 the confirmation that it may take the controller back to older code, since a
 build from `main` is usually ahead of the newest release. Auto never takes it:
 only a person pressing the button does.
 
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
 
 ## The status page
 

@@ -127,6 +127,14 @@ export function buildText(release: boolean): string {
     : 'Not from a release, so an update moves it onto the newest release';
 }
 
+/** A main-branch comparison is not proof that a dev image has finished publishing. */
+export function developmentStatus(dev: NonNullable<UpdatesStatus['development']>): string {
+  if (dev.state === 'current') return 'This dev build matches the latest checked commit on main.';
+  if (dev.state === 'available')
+    return 'Newer changes are on main. The dev build may still be publishing; check the installed commit after upgrading.';
+  return 'The latest dev build has not been confirmed. Check for updates before choosing a build.';
+}
+
 /**
  * Said when an update failed but the engine put the previous release back: the
  * host is on what it ran, which is a different thing to tell an operator from a

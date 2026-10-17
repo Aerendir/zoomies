@@ -895,6 +895,9 @@ export const importSettings = (body: Body<'importSettings'>) =>
 export const getUpdates = (signal?: AbortSignal) =>
   api.get<Result<'getUpdates'>>('/updates', { signal });
 
+/** Ask the release source now, rather than rereading the saved status (admin). */
+export const checkForUpdates = () => api.post<Result<'checkForUpdates'>>('/updates/check');
+
 /**
  * Ask the update helper to replace the controller's binary (platform). Without a tag it takes the
  * newest release that can be installed on this system. Answers 202 with the status, whose

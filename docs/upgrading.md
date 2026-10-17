@@ -54,15 +54,24 @@ services restart, so the UI briefly reconnects and reporting can be delayed.
 
 ### Update the controller from Settings
 
-1. In **Settings → Updates**, review the offered release and its release notes.
-2. Choose **Update to vX.Y.Z**, where the button names the available release,
+1. In **Settings → Updates**, check the installed build and choose **Check for
+   updates** to ask for the latest release information. Review the offered
+   standard release and its release notes.
+2. Choose **Review update to vX.Y.Z…**, where the button names the available release,
    and confirm that version.
 3. Leave the page open while the controller restarts. It follows the attempt
    and confirms success once the controller returns on the target release.
    A controller's embedded agent updates with it.
 
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
+The installed build is labelled Standard, Development or Custom. A development
+build shows its installed commit and the latest checked commit on `main`, with
+the check time. Matching `main` does not prove that a dev image has finished
+publishing. **Review dev upgrade…** opens the confirmation for the latest
+published dev build; when the commits match, the button says **Reinstall latest
+dev…**. Standard automatic updates continue to follow the configured update mode.
+
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
 
 ### Update hosts from the controller
 
