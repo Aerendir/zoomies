@@ -12,6 +12,13 @@ import (
 	"github.com/eyupio/zoomies/internal/store"
 )
 
+// maxReleaseName bounds a and b. Neither internal/version nor the jobs'
+// controller_version column bounds a release's name, so this is the bound the
+// installer holds a binary's reported version to, which is a few characters
+// for any real build. A longer name names no release this fleet stamped, and
+// would be carried into every sentence and label of the answer.
+const maxReleaseName = 128
+
 // defaultAnalysisSpan is the period an analysis reads when the caller names
 // none: a day is what "why was it slow today" means, and short enough that the
 // per-minute reads behind a finding stay small.
@@ -79,6 +86,8 @@ func (s *Server) answerAnalysis(w http.ResponseWriter, r *http.Request, doing st
 		notFound(w, fmt.Sprintf("there is no %s %s in this fleet; it may have been removed, or the id is wrong", missing.Kind, missing.ID))
 	case errors.Is(err, store.ErrNotFound):
 		notFound(w, err.Error())
+	case errors.Is(err, controller.ErrSinceNotPast):
+		badRequestField(w, "since", err.Error())
 	case errors.Is(err, controller.ErrSameRelease):
 		writeError(w, http.StatusBadRequest, errorEnvelope{Error: errorBody{
 			Code: codeAnalysisSameRelease, Message: err.Error(), Field: "a"}})
@@ -125,6 +134,12 @@ func (s *Server) handleAnalyseCompare(w http.ResponseWriter, r *http.Request) {
 	default:
 		badRequestField(w, "by", fmt.Sprintf("a comparison is by version or period, not %q", req.By))
 		return
+	}
+	for _, name := range []string{"a", "b"} {
+		if len(q.Get(name)) > maxReleaseName {
+			badRequestField(w, name, fmt.Sprintf("%s is longer than a release's name can be (%d bytes at most); name a release such as v1.3.2", name, maxReleaseName))
+			return
+		}
 	}
 	f, err := s.ctrl.AnalyseCompare(r.Context(), req)
 	s.answerAnalysis(w, r, "comparing", f, err)

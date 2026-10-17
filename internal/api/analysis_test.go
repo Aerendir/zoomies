@@ -156,6 +156,10 @@ func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) 
 			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "by=version"},
 		"a release named as b to a comparison by period": {query: analysisQuery(since, until, url.Values{"by": {"period"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "by=version"},
+		"an a longer than a release's name can be": {query: analysisQuery(since, until, url.Values{"a": {strings.Repeat("v", maxReleaseName+1)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "longer than a release's name can be"},
+		"a b longer than a release's name can be": {query: analysisQuery(since, until, url.Values{"b": {strings.Repeat("v", maxReleaseName+1)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "longer than a release's name can be"},
 		"the same release twice": {query: analysisQuery(since, until, url.Values{"a": {"v1.3.3"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeAnalysisSameRelease, field: "a", want: controller.ErrSameRelease},
 		"a fleet with no two releases": {query: analysisQuery(since, until, nil),
@@ -353,6 +357,29 @@ func TestAnAnalysisRefusesAWindowThatEndsBeforeItStarts(t *testing.T) {
 		}
 		if env.Error.Field != want {
 			t.Errorf("%s: the refusal is on %q; want %q: %s", name, env.Error.Field, want, env.Error.Message)
+		}
+	}
+}
+
+// A period that begins in the future holds nothing that has happened. The
+// route says so on since, in the controller's sentence, rather than answering
+// for an empty period as if it had been quiet.
+func TestAnAnalysisRefusesAPeriodThatBeginsAfterNow(t *testing.T) {
+	h := newHarness(t)
+	host := h.host("vm-1")
+	_, cookie := h.user("viewer", store.RoleViewer)
+	ahead := time.Now().UTC().Truncate(time.Second).Add(time.Hour)
+	for _, path := range []string{"queue-wait", "compare", "host-pressure", "startup-failures"} {
+		extra := url.Values{}
+		if path == "host-pressure" {
+			extra.Set("host_id", host.ID)
+		}
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/" + path + analysisQuery(ahead, ahead.Add(time.Hour), extra), cookie: cookie})
+		resp.mustStatus(t, http.StatusBadRequest, path+" over a period that begins after now")
+		var env errorEnvelope
+		resp.into(t, &env)
+		if env.Error.Field != "since" || env.Error.Message != controller.ErrSinceNotPast.Error() {
+			t.Errorf("%s: the refusal is %q on %q; want the controller's sentence on since", path, env.Error.Message, env.Error.Field)
 		}
 	}
 }

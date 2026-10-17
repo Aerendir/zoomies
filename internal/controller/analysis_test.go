@@ -501,6 +501,116 @@ func TestAnalyseOnAnUnknownPoolOrHostIsNotFound(t *testing.T) {
 	}
 }
 
+// A finding names a pool or host deleted since by its id, and a cut answer
+// tells its reader to pass pool_id or host_id to read the rest. Refusing that
+// id as one the fleet does not have would leave the rows it names unreadable.
+func TestNarrowingToAPoolOrHostDeletedSinceReadsWhatThePeriodHoldsOfIt(t *testing.T) {
+	f := newAnalysisFleet(t)
+	gone := f.pool("gone", nil)
+	host := f.host("vm-gone", "amd64")
+	for range 3 {
+		f.job(gone.ID, at(30), ran(at(40), at(50), "success"))
+	}
+	f.fail(f.runner(gone.ID, host.ID, at(10), nil), at(12), store.FaultImage)
+	if _, _, err := f.st.DeletePool(f.ctx, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.DeleteHost(f.ctx, host.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	q, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, gone.ID)
+	if err != nil {
+		t.Fatalf("queue wait narrowed to a pool deleted since: %v", err)
+	}
+	if q.Evidence.Jobs != 3 {
+		t.Errorf("queue wait read %d jobs, want the deleted pool's 3", q.Evidence.Jobs)
+	}
+	for name, ids := range map[string][2]string{"pool": {gone.ID, ""}, "host": {"", host.ID}} {
+		s, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, ids[0], ids[1])
+		if err != nil {
+			t.Fatalf("startup failures narrowed to a %s deleted since: %v", name, err)
+		}
+		if s.Evidence.Starts+s.Evidence.Unknown != 1 {
+			t.Errorf("startup failures narrowed to the %s read %+v, want its one start", name, s.Evidence)
+		}
+	}
+	// Outside the period that names them, they are not found again.
+	early := AnalysisWindow{Since: analysisPeriod.Since.Add(-24 * time.Hour), Until: analysisPeriod.Since.Add(-18 * time.Hour)}
+	if _, err := f.c.AnalyseQueueWait(f.ctx, early, gone.ID); !errors.As(err, new(NotFoundError)) {
+		t.Errorf("queue wait on the deleted pool in a period with none of its jobs: %v, want not found", err)
+	}
+	if _, err := f.c.AnalyseStartupFailures(f.ctx, early, "", host.ID); !errors.As(err, new(NotFoundError)) {
+		t.Errorf("startup failures on the deleted host in a period with none of its runners: %v, want not found", err)
+	}
+}
+
+// An until past now ends now. Read as asked, every job still waiting would
+// be counted as waiting through hours that have not happened, and the
+// answer would lead with that wait at full confidence: an operator asking
+// about today in whole days gets exactly that.
+func TestAnUntilPastNowIsReadAsNow(t *testing.T) {
+	f := newAnalysisFleet(t)
+	pool := f.pool("linux", nil)
+	host := f.host("vm-1", "amd64")
+	for i := range 6 {
+		f.job(pool.ID, at(345+i), nil)
+	}
+	samples(f, host.ID, 4, 0, 1, 2)
+	asked := AnalysisWindow{Since: analysisPeriod.Since, Until: analysisNow.Add(10 * time.Hour)}
+
+	q, err := f.c.AnalyseQueueWait(f.ctx, asked, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Waits of 15 down to 10 minutes, each to now.
+	if q.Evidence.WaitSeconds != 75*60 || !q.Until.Equal(analysisNow) {
+		t.Errorf("queue wait %ds to %v (%s), want 4500s to now", q.Evidence.WaitSeconds, q.Until, q.Summary)
+	}
+	h, err := f.c.AnalyseHostPressure(f.ctx, asked, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Evidence.ExpectedMinutes != 360 || !h.Until.Equal(analysisNow) {
+		t.Errorf("host pressure expects %d minutes to %v, want the 360 before now", h.Evidence.ExpectedMinutes, h.Until)
+	}
+	s, err := f.c.AnalyseStartupFailures(f.ctx, asked, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Until.Equal(analysisNow) {
+		t.Errorf("startup failures read to %v, want now", s.Until)
+	}
+	c, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: asked.Since, Until: asked.Until})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := c.Evidence.B; b.Label != "the last 6 hours" || !b.Until.Equal(analysisNow) {
+		t.Errorf("the later side is %q to %v, want the last 6 hours to now", b.Label, b.Until)
+	}
+}
+
+// A period that begins at or after now holds nothing that has happened, and
+// read anyway it would be a quiet period rather than an unread one.
+func TestAPeriodThatBeginsAtOrAfterNowIsRefused(t *testing.T) {
+	f := newAnalysisFleet(t)
+	host := f.host("vm-1", "amd64")
+	ahead := AnalysisWindow{Since: analysisNow, Until: analysisNow.Add(time.Hour)}
+	for name, call := range map[string]func() error{
+		"queue wait": func() error { _, err := f.c.AnalyseQueueWait(f.ctx, ahead, ""); return err },
+		"compare": func() error {
+			_, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: ahead.Since, Until: ahead.Until})
+			return err
+		},
+		"host pressure":    func() error { _, err := f.c.AnalyseHostPressure(f.ctx, ahead, host.ID); return err },
+		"startup failures": func() error { _, err := f.c.AnalyseStartupFailures(f.ctx, ahead, "", ""); return err },
+	} {
+		if err := call(); !errors.Is(err, ErrSinceNotPast) {
+			t.Errorf("%s: %v, want ErrSinceNotPast", name, err)
+		}
+	}
+}
+
 // release records n completed jobs of a release queued a minute apart from
 // first, each having waited a minute and run for five.
 func (f *analysisFleet) release(version string, first time.Time, n int) {
