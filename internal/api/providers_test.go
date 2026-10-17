@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -476,29 +477,33 @@ func TestAcceptingATestMachineAnswersWithThePlannedMachineAndAuditsIt(t *testing
 	}
 }
 
-// A test machine that cannot start says why, in a 409 whose sentence is the
-// controller's own and names what to change. Nothing was spent, so nothing is
-// left behind: no machine row and no audit row for a thing that was not done.
+// A test machine that cannot start says why, in a 409 that carries the
+// controller's own sentence and not the marker the handler uses to recognise a
+// refusal. Nothing was spent, so nothing is left behind: no machine row and no
+// audit row for a thing that was not done.
+//
+// The sentence is not worded here. Each case asks the controller what it says
+// about the state the case arranged, and that must reach the caller unchanged;
+// and the cases between them must reach different reasons, so an arrangement
+// that stopped doing what its name says cannot pass by repeating another's.
 func TestARefusedTestMachineIsAConflictThatSaysWhyAndLeavesNothingBehind(t *testing.T) {
-	for _, tc := range []struct {
+	cases := []struct {
 		name string
 		// arrange puts the provider in the state that makes a test refuse.
 		arrange func(h *harness, prov *store.Provider)
-		// want is a phrase the sentence must carry.
-		want string
 	}{
-		{"renting is switched off", func(h *harness, prov *store.Provider) {}, "provider.enabled"},
+		{"renting is switched off", func(h *harness, prov *store.Provider) {}},
 		{"the provider is paused", func(h *harness, prov *store.Provider) {
 			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
 			if err := h.st.SetProviderPaused(h.ctx, prov.ID, true, "the hypervisor is being patched"); err != nil {
 				h.t.Fatalf("SetProviderPaused: %v", err)
 			}
-		}, "the hypervisor is being patched"},
+		}},
 		{"a test is already on its way", func(h *harness, prov *store.Provider) {
 			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
 			h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", token: h.token("first", store.RoleOperator)}).
 				mustStatus(h.t, http.StatusAccepted, "the first test machine")
-		}, "already on its way"},
+		}},
 		{"the provider has no room under its maximum", func(h *harness, prov *store.Provider) {
 			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
 			prov.MaxMachines = 1
@@ -506,14 +511,29 @@ func TestARefusedTestMachineIsAConflictThatSaysWhyAndLeavesNothingBehind(t *test
 				h.t.Fatalf("UpdateProvider: %v", err)
 			}
 			h.machine(prov, "zoomies-mach-occupant")
-		}, "no room for a test machine"},
-	} {
+		}},
+	}
+	reasons := map[string]string{}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t)
 			operator, _ := h.user("operator", store.RoleOperator)
 			cookie := h.session(operator)
 			prov := h.provider("proxmox-lab")
 			tc.arrange(h, prov)
+
+			// What the controller says about this state. A refusal reserves
+			// nothing, so asking it directly changes nothing.
+			row, err := h.st.GetProvider(h.ctx, prov.ID)
+			if err != nil {
+				t.Fatalf("GetProvider: %v", err)
+			}
+			_, refusal := h.ctrl.StartTestMachine(h.ctx, row)
+			if !errors.Is(refusal, controller.ErrTestMachineRefused) {
+				t.Fatalf("the arrangement does not leave a test machine refused: %v", refusal)
+			}
+			sentence := strings.TrimPrefix(refusal.Error(), controller.ErrTestMachineRefused.Error()+": ")
+			reasons[tc.name] = sentence
 
 			machinesBefore, err := h.st.ListMachinesForProvider(h.ctx, prov.ID)
 			if err != nil {
@@ -529,14 +549,10 @@ func TestARefusedTestMachineIsAConflictThatSaysWhyAndLeavesNothingBehind(t *test
 			if resp.errorCode(t) != codeConflict {
 				t.Errorf("the refusal's code is %q, want %q", resp.errorCode(t), codeConflict)
 			}
-			msg := resp.errorMessage(t)
-			if !strings.Contains(msg, tc.want) {
-				t.Errorf("the refusal %q does not say why (want it to carry %q)", msg, tc.want)
-			}
-			// The sentence is the reason alone: the sentinel that marks the kind of
-			// refusal is how the handler knows to answer 409, and not text for a person.
-			if strings.Contains(msg, controller.ErrTestMachineRefused.Error()) {
-				t.Errorf("the refusal still carries the marker the handler strips: %q", msg)
+			// The reason alone: the marker is how the handler knows to answer 409,
+			// and is not text for a person.
+			if msg := resp.errorMessage(t); sentence == "" || msg != sentence {
+				t.Errorf("the refusal says %q, want the controller's own sentence %q", msg, sentence)
 			}
 
 			machinesAfter, err := h.st.ListMachinesForProvider(h.ctx, prov.ID)
@@ -554,6 +570,14 @@ func TestARefusedTestMachineIsAConflictThatSaysWhyAndLeavesNothingBehind(t *test
 				t.Errorf("a refused test was audited as if it had started: %d rows before, %d after", auditedBefore, auditedAfter)
 			}
 		})
+	}
+
+	different := map[string]bool{}
+	for _, sentence := range reasons {
+		different[sentence] = true
+	}
+	if len(different) != len(cases) {
+		t.Errorf("%d cases reached %d different reasons, so one no longer arranges what its name says: %v", len(cases), len(different), reasons)
 	}
 }
 
