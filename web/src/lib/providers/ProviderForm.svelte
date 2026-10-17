@@ -74,10 +74,12 @@
     emptyDraft,
     FIELD_LABELS,
     normaliseEndpoint,
+    savedNote,
     stepForField,
     STEP_FIELDS,
     suggestName,
     toProviderBody,
+    warmForMaximum,
     willRentNothing,
     WIZARD_STEPS,
   } from './draft';
@@ -559,9 +561,7 @@
           : await createProvider(payload);
       toasts.success(
         editing ? `Saved ${payload.name}` : `Added ${payload.name}`,
-        (payload.max_machines ?? 0) === 0
-          ? 'Nothing is rented yet: its ceiling is zero. Raise it when you are ready to spend.'
-          : 'Run the check before the first machine is built.',
+        savedNote(payload.max_machines ?? 0, payload.min_machines ?? 0),
       );
       ondone(saved);
     } catch (cause) {
@@ -1270,7 +1270,7 @@
         {/if}
         <Field
           label="Maximum machines"
-          hint="The ceiling: the most machines Zoomies will pay for at once. Zero rents nothing."
+          hint="The ceiling: the most machines Zoomies will pay for at once. Zero rents nothing, and keeps none warm."
           error={errors.max_machines}
           required
         >
@@ -1282,7 +1282,10 @@
               {invalid}
               type="number"
               min={0}
-              oninput={() => (limitsEdited = true)}
+              oninput={() => {
+                limitsEdited = true;
+                draft.min_machines = warmForMaximum(draft.max_machines, draft.min_machines);
+              }}
               onblur={() => touch('max_machines')}
             />
           {/snippet}

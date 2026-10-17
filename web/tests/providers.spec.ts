@@ -260,6 +260,41 @@ test.describe('with forced colours', () => {
 });
 
 /**
+ * Zero is how an operator says rent nothing, and the box under Maximum says so.
+ * The draft opens on one warm machine, which counts against the maximum, so a
+ * zero on its own was refused for the other box's figure: Next went grey and
+ * nothing said why until the Warm box was touched.
+ */
+test('typing zero in the maximum is one answer: the warm machine goes with it and Next stays on', async ({
+  page,
+}) => {
+  await goto(page, '/providers/new', 'Add a provider');
+  await page.getByRole('button', { name: 'Configure connection manually' }).click();
+  await page
+    .locator('ol.steps')
+    .getByRole('button', { name: /Limits/ })
+    .click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Limits' })).toBeVisible();
+
+  const maximum = page.getByRole('spinbutton', { name: /^Maximum machines/ });
+  const warm = page.getByRole('spinbutton', { name: /^Warm machines/ });
+  await expect(maximum).toHaveValue('2');
+  await expect(warm).toHaveValue('1');
+
+  await maximum.fill('0');
+  await expect(warm).toHaveValue('0');
+  await expect(next(page)).toBeEnabled();
+  await expect(page.getByText('No more than the maximum')).toHaveCount(0);
+
+  // Raised again, and a warm figure typed by hand: that one is the operator's,
+  // and a later maximum that is not zero does not move it.
+  await maximum.fill('5');
+  await warm.fill('2');
+  await maximum.fill('3');
+  await expect(warm).toHaveValue('2');
+});
+
+/**
  * The two answers that are wrong for reasons no browser could know.
  *
  * A name already taken is a fact about the fleet's other rows, and a VMID range
