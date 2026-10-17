@@ -135,13 +135,55 @@ func TestAReleaseHasToBeSignedFromV136OnAndNotBefore(t *testing.T) {
 	}
 }
 
+// unavailable ends a test that needs something this machine does not have. On a
+// person's own machine that is a skip, because nothing is wrong with it. CI sets
+// CI, and a CI machine that cannot run these tests is a gate that checks nothing
+// and reports green, so there it is a failure.
+func unavailable(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv("CI") != "" {
+		t.Fatalf(format+"; CI has to be able to run this test, or the signature checks pass by checking nothing", args...)
+	}
+	t.Skipf(format, args...)
+}
+
 func needOpenSSLForEd25519(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("openssl"); err != nil {
-		t.Skip("openssl is not installed, so a signature cannot be checked here")
+		unavailable(t, "openssl is not installed, so a signature cannot be checked here")
 	}
 	if out, _ := exec.Command("sh", "-c", "openssl pkeyutl -help 2>&1").Output(); !bytes.Contains(out, []byte("rawin")) {
-		t.Skip("this openssl predates 3.0 and cannot verify an Ed25519 signature one-shot")
+		unavailable(t, "this openssl predates 3.0 and cannot verify an Ed25519 signature one-shot")
+	}
+}
+
+// The verifier tests all begin with needOpenSSLForEd25519, so a CI runner image
+// that lost its openssl would have skipped every one of them and passed. The
+// helper runs in a copy of this test binary with nothing on its PATH, once as CI
+// and once as a person's machine.
+func TestTheSignatureTestsFailInCIAndSkipElsewhereWhenOpenSSLIsMissing(t *testing.T) {
+	if os.Getenv("ZOOMIES_TEST_WITHOUT_OPENSSL") != "" {
+		needOpenSSLForEd25519(t)
+		return
+	}
+	for _, tc := range []struct {
+		name, ci string
+		fails    bool
+	}{
+		{"CI", "true", true},
+		{"a person's machine", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=^TestTheSignatureTestsFailInCIAndSkipElsewhereWhenOpenSSLIsMissing$", "-test.v")
+			cmd.Env = []string{"PATH=" + t.TempDir(), "ZOOMIES_TEST_WITHOUT_OPENSSL=1", "CI=" + tc.ci}
+			out, err := cmd.CombinedOutput()
+			switch {
+			case tc.fails && (err == nil || !bytes.Contains(out, []byte("--- FAIL"))):
+				t.Errorf("with CI set and no openssl the helper did not fail (err %v):\n%s", err, out)
+			case !tc.fails && (err != nil || !bytes.Contains(out, []byte("--- SKIP"))):
+				t.Errorf("with CI unset and no openssl the helper did not skip (err %v):\n%s", err, out)
+			}
+		})
 	}
 }
 
@@ -295,7 +337,7 @@ func TestAHostThatCannotCheckASignatureSaysSoAndDoesNotCallItAMismatch(t *testin
 	for _, tool := range []string{"sed", "grep", "cat"} {
 		path, err := exec.LookPath(tool)
 		if err != nil {
-			t.Skipf("%s is not available to build a PATH without openssl", tool)
+			unavailable(t, "%s is not available to build a PATH without openssl", tool)
 		}
 		if err := os.Symlink(path, filepath.Join(bin, tool)); err != nil {
 			t.Fatal(err)
