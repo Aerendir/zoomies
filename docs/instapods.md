@@ -312,15 +312,39 @@ runner's log.
 
 ## Upgrading
 
-Change the version, then redeploy, controller first:
+Both pods update with one command, run in the pod's Terminal (or with
+`exec_command` from the InstaPods MCP):
 
 ```sh
-instapods env set zoomies-web ZOOMIES_VERSION=v1.2.4
-instapods git deploy zoomies-web -w
-
-instapods env set zoomies-worker ZOOMIES_VERSION=v1.2.4
-instapods git deploy zoomies-worker -w
+cd ~/app && sh deploy/instapods/update.sh
 ```
+
+It does what the dashboard's Deploy does, so it works on the worker, which has
+no Deploy button: it moves the checkout to the newest commit, downloads the
+release the pod's `ZOOMIES_VERSION` names (checked against the release's
+checksums), and restarts the app. Nothing is restarted when nothing changed, so
+a pod that is already current is left alone. The pod's role is read from its
+environment (a pod with `ZOOMIES_CONTROLLER_URL` is the worker); name it as
+`controller` or `agent` if that ever guesses wrong.
+
+Update the controller first, then the worker: an agent may be older than its
+controller, never newer.
+
+On the worker, the script stops without changing anything if a job is running,
+because the restart would fail it. Run it again when the job has finished, or
+pass `--force` to update anyway. To avoid the wait, drain the host first and
+uncordon it after:
+
+```sh
+zoomies hosts drain <host-id>       # before: no new work, and let what is running finish
+sh deploy/instapods/update.sh
+zoomies hosts uncordon <host-id>    # after: take work again
+```
+
+To pin a version, set `ZOOMIES_VERSION=v1.2.4` in the pod's environment
+(`instapods env set zoomies-web ZOOMIES_VERSION=v1.2.4`) before running the
+script. `dev` follows the newest build of `main`, which is right for a pod that
+shows the project's latest work and wrong for one you depend on.
 
 The first start of a new controller applies any schema migrations, and copies
 the database aside first. [There is no downgrade](upgrading.md#there-is-no-downgrade):
@@ -328,17 +352,30 @@ setting the old version back after a migration gives you a controller that
 refuses to start, so take a [backup](backup-and-restore.md) before a release you
 are unsure of.
 
-Drain the worker's host before redeploying the worker, and uncordon it after:
-the redeploy restarts the agent, and its runners are processes on the same
-pod.
+The script resets the checkout to the remote's commit, so a hand edit to a
+tracked file in `~/app` is discarded. The environment file, the database, the
+encryption key and the agent's credentials live outside the checkout and are
+never touched.
 
-```sh
-zoomies hosts drain <host-id>       # before: no new work, and let what is running finish
-zoomies hosts uncordon <host-id>    # after: take work again
+Update this way, or by redeploying, not from the controller's Updates page:
+nothing on a pod installed the update helper that page hands an update to.
+
+### Updating on a schedule
+
+Because an unchanged pod is left alone, the script is safe to run daily. Add it
+to the pod's crontab (`crontab -e`), the controller a little before the worker:
+
+```text
+# controller pod
+30 4 * * * cd ~/app && sh deploy/instapods/update.sh >> ~/update.log 2>&1
+# worker pod
+45 4 * * * cd ~/app && sh deploy/instapods/update.sh >> ~/update.log 2>&1
 ```
 
-Update by redeploying, not from the controller's Updates page: nothing on a
-pod installed the update helper that page hands an update to.
+A worker with a job running skips that night and tries the next. Be aware that
+on `dev` an unattended update takes whatever `main` last published, including a
+broken build; pin a release tag for anything you would not want to fix at
+breakfast.
 
 ## The zoomies.sh demo
 
