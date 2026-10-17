@@ -103,13 +103,25 @@ func (f unresolvedRepairRun) RepairPullForRun(context.Context, string, int64) (g
 	return github.RepairPull{Number: 313, HeadSHA: "old"}, f.err
 }
 
+// A closed PR reaches readiness the way GitHub's client reports it, as a
+// changed target with a code of its own, and not as an unsupported one: the
+// first is the answer to the question the person asked, and settles the failure
+// they asked about; the second is a PR nothing can repair, which settles
+// nothing. A fixture that gave a closed PR the second shape would pass whatever
+// the first branch did.
 func TestReadinessExplainsAClosedPRAndDistinguishesGitHubFailure(t *testing.T) {
+	closed := &github.RepairTargetChanged{Code: "closed", Message: "PR #313 is closed or merged. This failure no longer needs a PR repair."}
 	for _, tc := range []struct {
 		name, code, message string
 		err                 error
+		// settles is whether the failure the person asked about leaves the
+		// attention list because of the answer.
+		settles bool
 	}{
-		{"closed PR", "pull", "PR #313 is closed or merged.", fmt.Errorf("%w: PR #313 is closed or merged.", github.ErrRepairUnsupported)},
-		{"GitHub unavailable", "github", "GitHub could not resolve this repair target. Try checking readiness again.", errors.New("transport failed")},
+		{"closed PR", "closed", closed.Message, closed, true},
+		{"a newer commit", "superseded", "PR #313 has newer commits than this failed run.", &github.RepairTargetChanged{Code: "superseded", Message: "PR #313 has newer commits than this failed run."}, true},
+		{"an unsupported target", "pull", "an Eli repair needs an open PR on a non-default branch in this repository; forks are not writable", fmt.Errorf("%w: an Eli repair needs an open PR on a non-default branch in this repository; forks are not writable", github.ErrRepairUnsupported), false},
+		{"GitHub unavailable", "github", "GitHub could not resolve this repair target. Try checking readiness again.", errors.New("transport failed"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t)
@@ -126,16 +138,91 @@ func TestReadinessExplainsAClosedPRAndDistinguishesGitHubFailure(t *testing.T) {
 			if err := h.st.ConfirmEliIdentity(h.ctx, user.ID, 42, true); err != nil {
 				t.Fatal(err)
 			}
-			ready := h.c.EliReadiness(h.ctx, user.ID, inst.Target+"/repo", 0, 9)
+			repo := inst.Target + "/repo"
+			job := &store.Job{GitHubJobID: 1, GitHubRunID: 9, Repo: repo, State: store.JobCompleted, Conclusion: "failure", QueuedAt: h.st.Now().Add(-time.Hour)}
+			if _, err := h.st.UpsertJob(h.ctx, job); err != nil {
+				t.Fatal(err)
+			}
+
+			ready := h.c.EliReadiness(h.ctx, user.ID, repo, 0, 9)
 			if ready.Ready || ready.PullNumber != 313 {
 				t.Fatalf("readiness lost the blocked PR: %+v", ready)
 			}
+			found := false
 			for _, blocker := range ready.Blockers {
-				if blocker.Code == tc.code && blocker.Message == tc.message {
-					return
+				found = found || blocker.Code == tc.code && blocker.Message == tc.message
+			}
+			if !found {
+				t.Fatalf("missing actionable blocker: %+v", ready.Blockers)
+			}
+			_, left, err := h.st.ListJobs(h.ctx, store.JobFilter{AttentionOnly: true}, store.Page{})
+			if want := map[bool]int{true: 0, false: 1}[tc.settles]; err != nil || left != want {
+				t.Fatalf("%d failures still need attention (error %v), want %d: a changed target settles the failure it was asked about, and nothing else does", left, err, want)
+			}
+		})
+	}
+}
+
+// Asking whether a failed run can be repaired reads the PR's checks, and what
+// they say is also the answer to whether the failure still needs anybody: the
+// attention list is told, so it does not wait for the loop that checks GitHub
+// to find out what the person has just seen. Passed checks settle the failure.
+// Failed ones are an observation that undoes an earlier fix, and checks that
+// are still running or were cancelled say nothing either way, so an earlier fix
+// stands.
+func TestReadinessTellsTheAttentionListWhatItLearnedAboutTheFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// before is what was recorded about the run already, empty for nothing.
+		before, checks string
+		wantBlocker    string
+		// stays is whether the failure is still in the attention list afterwards.
+		stays bool
+	}{
+		{"checks have passed", "", "passed", "fixed", false},
+		{"checks are still failing", "", "failed", "", true},
+		{"checks are failing again after a fix", "fixed", "failed", "", true},
+		{"checks are pending after a fix", "fixed", "waiting", "checks_pending", false},
+		{"checks are pending with nothing known", "", "waiting", "checks_pending", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			inst := h.installation()
+			fake := attentionFake{repairFake: &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: tc.checks}}
+			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+			user := &store.User{Username: "owner", Role: store.RoleViewer}
+			if err := h.st.CreateUser(h.ctx, user); err != nil {
+				t.Fatal(err)
+			}
+			if err := h.st.SetEliIdentity(h.ctx, store.EliIdentity{UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := h.st.ConfirmEliIdentity(h.ctx, user.ID, 42, true); err != nil {
+				t.Fatal(err)
+			}
+			repo := inst.Target + "/repo"
+			job := &store.Job{GitHubJobID: 1, GitHubRunID: 9, Repo: repo, State: store.JobCompleted, Conclusion: "failure", QueuedAt: h.st.Now().Add(-time.Hour)}
+			if _, err := h.st.UpsertJob(h.ctx, job); err != nil {
+				t.Fatal(err)
+			}
+			if tc.before != "" {
+				if err := h.st.RecordJobAttentionRun(h.ctx, repo, 9, tc.before, h.st.Now(), true); err != nil {
+					t.Fatal(err)
 				}
 			}
-			t.Fatalf("missing actionable blocker: %+v", ready.Blockers)
+
+			ready := h.c.EliReadiness(h.ctx, user.ID, repo, 0, 9)
+			found := tc.wantBlocker == ""
+			for _, blocker := range ready.Blockers {
+				found = found || blocker.Code == tc.wantBlocker
+			}
+			if !found {
+				t.Fatalf("missing the %q blocker: %+v", tc.wantBlocker, ready.Blockers)
+			}
+			_, left, err := h.st.ListJobs(h.ctx, store.JobFilter{AttentionOnly: true}, store.Page{})
+			if want := map[bool]int{true: 1, false: 0}[tc.stays]; err != nil || left != want {
+				t.Fatalf("%d failures still need attention (error %v), want %d", left, err, want)
+			}
 		})
 	}
 }
