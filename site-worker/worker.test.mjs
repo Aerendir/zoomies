@@ -6,7 +6,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import worker, { markdownPath, tokenEstimate, wantsMarkdown } from "./worker.js";
+import worker, {
+  discoveryLinks,
+  markdownPath,
+  tokenEstimate,
+  wantsMarkdown,
+} from "./worker.js";
 
 const HTML = "<!doctype html><html><body><p>the page</p></body></html>";
 const MARKDOWN = "# The page\n\nIts body as Markdown.\n";
@@ -16,7 +21,10 @@ function originFor(paths) {
     const url = input instanceof URL ? input : new URL(input.url);
     const found = paths.get(url.pathname);
     if (found === undefined) {
-      return new Response(HTML, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
+      return new Response(HTML, {
+        status: 404,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
     }
     return new Response(found.body, {
       status: found.status ?? 200,
@@ -36,33 +44,62 @@ async function handle(url, paths, init = {}) {
 }
 
 test("a request that asks for markdown gets the page's copy", async () => {
-  const response = await handle("https://zoomies.sh/quickstart/", new Map([
-    ["/quickstart/index.md", { type: "text/markdown; charset=utf-8", body: MARKDOWN }],
-  ]), { headers: { accept: "text/markdown" } });
+  const response = await handle(
+    "https://zoomies.sh/quickstart/",
+    new Map([
+      [
+        "/quickstart/index.md",
+        { type: "text/markdown; charset=utf-8", body: MARKDOWN },
+      ],
+    ]),
+    { headers: { accept: "text/markdown" } },
+  );
 
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "text/markdown; charset=utf-8");
+  assert.equal(
+    response.headers.get("content-type"),
+    "text/markdown; charset=utf-8",
+  );
   assert.equal(response.headers.get("vary"), "Accept");
-  assert.equal(response.headers.get("x-markdown-tokens"), String(Math.ceil(MARKDOWN.length / 4)));
+  assert.equal(
+    response.headers.get("x-markdown-tokens"),
+    String(Math.ceil(MARKDOWN.length / 4)),
+  );
   assert.equal(await response.text(), MARKDOWN);
 });
 
 test("the site root's markdown copy is served for the bare host", async () => {
-  const response = await handle("https://zoomies.sh", new Map([
-    ["/index.md", { type: "text/markdown; charset=utf-8", body: MARKDOWN }],
-  ]), { headers: { accept: "text/markdown" } });
+  const response = await handle(
+    "https://zoomies.sh",
+    new Map([
+      ["/index.md", { type: "text/markdown; charset=utf-8", body: MARKDOWN }],
+    ]),
+    { headers: { accept: "text/markdown" } },
+  );
 
   assert.equal(response.status, 200);
   assert.equal(await response.text(), MARKDOWN);
 });
 
 test("a browser's accept header gets the HTML the origin serves", async () => {
-  const response = await handle("https://zoomies.sh/quickstart/", new Map([
-    ["/quickstart/", { type: "text/html; charset=utf-8", body: HTML }],
-  ]), { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" } });
+  const response = await handle(
+    "https://zoomies.sh/quickstart/",
+    new Map([
+      ["/quickstart/", { type: "text/html; charset=utf-8", body: HTML }],
+    ]),
+    {
+      headers: {
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    },
+  );
 
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(
+    response.headers.get("content-type"),
+    "text/html; charset=utf-8",
+  );
   assert.equal(await response.text(), HTML);
 });
 
@@ -72,14 +109,19 @@ test("an address with no markdown copy falls back to the origin's answer", async
   });
 
   assert.equal(response.status, 404);
-  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(
+    response.headers.get("content-type"),
+    "text/html; charset=utf-8",
+  );
 });
 
 test("a file that is a format of its own is never replaced with markdown", async () => {
   const catalog = '{"version": 1}';
-  const response = await handle("https://zoomies.sh/catalog.json", new Map([
-    ["/catalog.json", { type: "application/json", body: catalog }],
-  ]), { headers: { accept: "text/markdown" } });
+  const response = await handle(
+    "https://zoomies.sh/catalog.json",
+    new Map([["/catalog.json", { type: "application/json", body: catalog }]]),
+    { headers: { accept: "text/markdown" } },
+  );
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "application/json");
@@ -87,15 +129,25 @@ test("a file that is a format of its own is never replaced with markdown", async
 });
 
 test("a HEAD request for markdown answers with the headers and no body", async () => {
-  const response = await handle("https://zoomies.sh/quickstart/", new Map([
-    ["/quickstart/index.md", { type: "text/markdown; charset=utf-8", body: MARKDOWN }],
-  ]), {
-    headers: { accept: "text/markdown" },
-    method: "HEAD",
-  });
+  const response = await handle(
+    "https://zoomies.sh/quickstart/",
+    new Map([
+      [
+        "/quickstart/index.md",
+        { type: "text/markdown; charset=utf-8", body: MARKDOWN },
+      ],
+    ]),
+    {
+      headers: { accept: "text/markdown" },
+      method: "HEAD",
+    },
+  );
 
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "text/markdown; charset=utf-8");
+  assert.equal(
+    response.headers.get("content-type"),
+    "text/markdown; charset=utf-8",
+  );
   assert.equal(await response.text(), "");
 });
 
@@ -127,4 +179,85 @@ test("the token estimate rounds up the parts of a token", () => {
   assert.equal(tokenEstimate(""), 0);
   assert.equal(tokenEstimate("abcd"), 1);
   assert.equal(tokenEstimate("abcde"), 2);
+});
+
+test("the discovery links name all four relations a scanner looks for", () => {
+  const links = discoveryLinks();
+  for (const relation of [
+    "api-catalog",
+    "describedby",
+    "service-desc",
+    "service-doc",
+  ]) {
+    assert.match(links, new RegExp(`rel="${relation}"`), relation);
+  }
+});
+
+test("an HTML page answer carries the discovery links", async () => {
+  const response = await handle(
+    "https://zoomies.sh/",
+    new Map([["/", { type: "text/html; charset=utf-8", body: HTML }]]),
+    { headers: { accept: "text/html" } },
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("link"), /rel="api-catalog"/);
+  assert.match(response.headers.get("link"), /rel="service-desc"/);
+});
+
+test("a markdown copy carries the discovery links too", async () => {
+  const response = await handle(
+    "https://zoomies.sh/",
+    new Map([
+      ["/index.md", { type: "text/markdown; charset=utf-8", body: MARKDOWN }],
+    ]),
+    { headers: { accept: "text/markdown" } },
+  );
+
+  assert.match(response.headers.get("link"), /rel="describedby"/);
+});
+
+test("a file that is not a page wears no discovery links", async () => {
+  const response = await handle(
+    "https://zoomies.sh/install.sh",
+    new Map([
+      ["/install.sh", { type: "text/x-shellscript", body: "#!/bin/sh\n" }],
+    ]),
+    {},
+  );
+
+  assert.equal(response.headers.get("link"), null);
+});
+
+test("the well-known api-catalog address serves the RFC 9727 document", async () => {
+  const catalog = '{"linkset": []}';
+  const response = await handle(
+    "https://zoomies.sh/.well-known/api-catalog",
+    new Map([
+      ["/api-catalog.json", { type: "application/json", body: catalog }],
+    ]),
+    {},
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(
+    response.headers.get("content-type"),
+    'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+  );
+  assert.match(response.headers.get("link"), /rel="api-catalog"/);
+  assert.equal(await response.text(), catalog);
+});
+
+test("a HEAD request for the api-catalog answers with headers and no body", async () => {
+  const catalog = '{"linkset": []}';
+  const response = await handle(
+    "https://zoomies.sh/.well-known/api-catalog",
+    new Map([
+      ["/api-catalog.json", { type: "application/json", body: catalog }],
+    ]),
+    { method: "HEAD" },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "");
 });

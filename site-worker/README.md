@@ -5,6 +5,16 @@ with the page's Markdown copy, at `Content-Type: text/markdown`, with `Vary:
 Accept` and an `x-markdown-tokens` estimate. Every other request, including a
 browser's, is passed through to GitHub Pages untouched.
 
+Two things the origin cannot do itself, the worker does on the way through:
+
+* Every page answer carries a `Link` header (RFC 8288) with the relations an
+  agent follows: `api-catalog` to the API Catalog (RFC 9727), `describedby` to
+  `llms.txt`, and `service-desc` and `service-doc` to the REST API's OpenAPI
+  document and its human-facing page.
+* `/.well-known/api-catalog` is served from `api-catalog.json` at the origin,
+  with the `application/linkset+json` content type the RFC asks for. GitHub
+  Pages picks a content type from a file's extension and cannot set this one.
+
 The copies it serves are the ones `hooks/seo.py` writes beside the built site,
 at every page's address plus `index.md` (the address the pages already declare
 as their `rel="alternate"` link). Serving a copy is a lookup rather than an
@@ -42,6 +52,11 @@ machine. `.github/workflows/docs.yml` runs them on every site change.
       -H "Accept: text/markdown" | head -3
     curl -sI https://zoomies.sh/quickstart/ \
       -H "Accept: text/markdown" | grep -i "content-type"
+    curl -sI https://zoomies.sh/ | grep -i "^link"
+    curl -s https://zoomies.sh/.well-known/api-catalog
 
-The second command should say `text/markdown; charset=utf-8`. Browsers and
-crawlers that send no such header keep receiving the HTML, byte for byte.
+The second command should say `text/markdown; charset=utf-8`. The third should
+name all four relations (`api-catalog`, `describedby`, `service-desc` and
+`service-doc`). The fourth should be the linkset JSON. Browsers and crawlers
+that send no markdown header keep receiving the HTML, with only the `Link`
+header added.
