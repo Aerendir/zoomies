@@ -17,7 +17,7 @@
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import RepairHistory from '$lib/repairs/RepairHistory.svelte';
-  import RepairRequest from '$lib/repairs/RepairRequest.svelte';
+  import RepairJourney from '$lib/repairs/RepairJourney.svelte';
   import RepositoryPicker from '$lib/repairs/RepositoryPicker.svelte';
   import { heldLink, heldLinkMessage, type HeldLink } from '$lib/repairs/identity';
   import Button from '$lib/components/Button.svelte';
@@ -260,11 +260,16 @@
           No pending offers. Enable Ask me first for your repositories, or paste a PR link below.
         </p>{/if}
       {#key selectedOffer?.id ?? (retryTarget ? `${retryTarget.repo}:${retryTarget.pull}` : `${initialRepo}:${initialPull}:${initialRun}`)}
-        <RepairRequest
+        <RepairJourney
           repo={selectedOffer?.repo ?? retryTarget?.repo ?? initialRepo}
           pull={selectedOffer?.pull_number ?? retryTarget?.pull ?? initialPull}
-          run={initialRun}
+          run={selectedOffer || retryTarget ? 0 : initialRun}
           opportunity={selectedOffer?.id ?? ''}
+          onretry={(target) => {
+            selectedOffer = null;
+            retryTarget = target;
+            document.getElementById('eli-repairs-heading')?.scrollIntoView();
+          }}
           onsetup={() => {
             showSetup = true;
             const repo = selectedOffer?.repo ?? retryTarget?.repo ?? initialRepo;
