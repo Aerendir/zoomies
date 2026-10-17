@@ -70,7 +70,7 @@
       <button type="button" class="review" onclick={open}>Review</button>
     {:else}
       <p class="line quiet">
-        Nothing needs your attention.
+        No fleet problems need your attention.
         {#if dismissed.length > 0}
           <button type="button" class="review" onclick={open}>
             {pluralise(dismissed.length, 'problem')} dismissed

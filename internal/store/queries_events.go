@@ -1094,21 +1094,33 @@ func workflowFailedJobSQL() string {
 // failed view, and its run's own page still tells its story.
 const AttentionWindow = 7 * 24 * time.Hour
 
-// attentionJobSQL is the "still unresolved" half of the attention question: a
-// failure no later attempt of the same job has replaced. A re-run writes new
-// job rows under the same job name with a higher run attempt, and the latest
-// attempt is the one whose outcome matters: if it passed, the earlier
-// failure is settled; if it is still running, somebody is already on it; if it
-// failed too, the earlier row is history and the later one carries the
-// question. It names the jobs table unqualified, as jobWhere applies it, and
-// takes a job that never reported a run ID at face value rather than guessing
-// which run it belonged to.
+// attentionJobSQL keeps the unresolved inbox separate from failure history.
+// New attempts and runs replace the same job on a known branch; a cancelled,
+// skipped or neutral result is not evidence of a fix. GitHub observations can
+// also settle a run, but only failures older than that observation, so a new
+// failure is never hidden by a previous passing result. Missing run or branch
+// metadata is not a licence to guess which failure a newer job replaces.
 func attentionJobSQL() string {
+	return unreplacedJobSQL() + ` AND NOT EXISTS (
+		SELECT 1 FROM job_attention_runs a
+		WHERE a.repo = jobs.repo AND a.run_id = jobs.github_run_id
+			AND a.reason IN ('closed','superseded','fixed')
+			AND a.checked_at >= COALESCE(jobs.completed_at, jobs.queued_at))`
+}
+
+func unreplacedJobSQL() string {
 	return `NOT EXISTS (
 		SELECT 1 FROM jobs later
-		WHERE later.github_run_id = jobs.github_run_id AND later.github_run_id != 0
-			AND later.repo = jobs.repo AND later.job_name = jobs.job_name
-			AND later.run_attempt > jobs.run_attempt)`
+		WHERE later.repo = jobs.repo AND later.job_name = jobs.job_name
+			AND (later.state != 'completed' OR later.conclusion NOT IN ('cancelled','skipped','neutral')
+				OR later.runner_fault != '' OR later.fault_kind != '')
+			AND ((later.github_run_id = jobs.github_run_id AND later.github_run_id != 0
+				AND later.run_attempt > jobs.run_attempt)
+			OR (jobs.github_run_id != 0 AND later.github_run_id != 0
+				AND jobs.head_branch != '' AND jobs.workflow != ''
+				AND later.head_branch = jobs.head_branch AND later.workflow = jobs.workflow
+				AND later.github_run_id != jobs.github_run_id
+				AND later.queued_at > jobs.queued_at)))`
 }
 
 // StatsSince counts the jobs behind the Overview.

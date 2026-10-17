@@ -76,6 +76,9 @@
   /** What the checking stage names: the target as it was asked for. */
   let checkingLabel = $state('');
 
+  const changed = $derived(
+    ready?.blockers.find((blocker) => ['fixed', 'closed', 'superseded'].includes(blocker.code)),
+  );
   const setupNeeded = $derived(
     ready?.blockers.some((blocker) => ['identity', 'policy'].includes(blocker.code)) ?? false,
   );
@@ -85,6 +88,7 @@
   const tone = $derived(repair ? outcomeTone(stateOf(repair)) : 'neutral');
 
   const spoken = $derived.by(() => {
+    if (stage === 'blocked' && changed) return changed.message;
     switch (stage) {
       case 'checking':
         return 'Checking repair readiness.';
@@ -161,10 +165,18 @@
       onqueued?.();
       follow();
     } catch (cause) {
-      error =
-        cause instanceof ApiError
-          ? cause.message
-          : 'Could not start the repair. Check readiness again.';
+      if (cause instanceof ApiError && cause.isConflict) {
+        // Re-read a target that changed after review instead of leaving the
+        // stale repair offer active after the server refused it.
+        busy = false;
+        await review();
+        if (!changed) error = cause.message;
+      } else {
+        error =
+          cause instanceof ApiError
+            ? cause.message
+            : 'Could not start the repair. Check readiness again.';
+      }
     } finally {
       busy = false;
     }
@@ -265,7 +277,7 @@
 <section class="journey" aria-label="Repair process">
   <output class="sr-only" aria-live="polite">{spoken}</output>
 
-  {#if stage !== 'idle'}
+  {#if stage !== 'idle' && !changed}
     <ol class="steps" aria-label="Repair progress">
       {#each JOURNEY_STEPS as step (step.id)}
         {@const state = stepState(step.id, stage)}
@@ -312,6 +324,34 @@
   {:else if stage === 'checking'}
     <p role="status">Checking what Eli can do for <strong>{checkingLabel}</strong>.</p>
     <Skeleton lines={2} />
+  {:else if stage === 'blocked' && changed}
+    <section role="status" aria-label="Failure status changed" class="outcome">
+      <h4>
+        {changed.code === 'fixed'
+          ? 'Already fixed'
+          : changed.code === 'closed'
+            ? 'This PR is closed'
+            : 'A newer commit replaced this failure'}
+      </h4>
+      <p>{changed.message}</p>
+      <div class="actions">
+        <Button href="/">Back to overview</Button>
+        {#if repo && run > 0}
+          <Button href={`https://github.com/${repo}/actions/runs/${run}`} newTab
+            >View original run on GitHub</Button
+          >
+        {/if}
+        {#if changed.code === 'superseded' && ready?.pull_number}
+          <Button
+            onclick={() => {
+              url = `https://github.com/${ready?.repo}/pull/${ready?.pull_number}`;
+              void review();
+            }}>Check the current PR</Button
+          >
+        {/if}
+      </div>
+      <Button loading={busy} onclick={() => void review()}>Check status again</Button>
+    </section>
   {:else if stage === 'blocked' && ready}
     <h4>Not ready yet</h4>
     <ul class="blockers">
@@ -472,7 +512,7 @@
         >
           <Input
             id="repair-url"
-            readonly={!!opportunity}
+            readonly={!!opportunity || busy}
             bind:value={url}
             placeholder="https://github.com/owner/repo/pull/123"
           />

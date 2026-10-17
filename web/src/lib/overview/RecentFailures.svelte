@@ -63,6 +63,7 @@
   let total = $state(0);
   let loading = $state(true);
   let error = $state<unknown>(null);
+  let loadRevision = 0;
   /** The job whose acknowledgement is in flight, so its button cannot be pressed twice. */
   let acking = $state<string | null>(null);
   let selected = $state<Job | null>(null);
@@ -73,7 +74,12 @@
   // the operator role the API asks for and nobody below it.
   const canAcknowledge = $derived(session.can('operator'));
 
+  export async function reload(): Promise<void> {
+    await load(others);
+  }
+
   async function load(all: boolean, signal?: AbortSignal): Promise<void> {
+    const revision = ++loadRevision;
     try {
       const page = await listJobs(
         {
@@ -83,14 +89,15 @@
         },
         signal,
       );
+      if (signal?.aborted || revision !== loadRevision) return;
       jobs = page.items ?? [];
       total = page.total ?? jobs.length;
       error = null;
     } catch (cause) {
-      if (signal?.aborted) return;
+      if (signal?.aborted || revision !== loadRevision) return;
       error = cause;
     } finally {
-      if (!signal?.aborted) loading = false;
+      if (!signal?.aborted && revision === loadRevision) loading = false;
     }
   }
 
@@ -124,6 +131,12 @@
     if (pending !== null) clearTimeout(pending);
   });
 
+  // PR closures and check results can change on GitHub without a job event.
+  $effect(() => {
+    const timer = setInterval(() => void load(others), 30000);
+    return () => clearInterval(timer);
+  });
+
   // One reconciling fetch after a gap in the stream, as the panels around it
   // do: the replay buffer is finite.
   let previous: string | null = null;
@@ -144,6 +157,7 @@
     const before = jobs;
     const beforeTotal = total;
     acking = job.id;
+    ++loadRevision;
     jobs = jobs.filter((row) => row.id !== job.id);
     total = Math.max(0, beforeTotal - 1);
     try {
@@ -181,8 +195,8 @@
 <Panel
   title="Recent failures"
   description={others
-    ? 'Every failure from the last week that nobody has marked as known, wherever it ran.'
-    : 'Failures from the last week that nobody has marked as known, and no later attempt has replaced.'}
+    ? 'Unresolved failures from the last week, wherever they ran. Fixed, superseded and closed PR failures leave this list.'
+    : 'Unresolved failures from the last week. Fixed, superseded and closed PR failures leave this list.'}
   class={className}
   flush
 >
@@ -216,7 +230,7 @@
       icon={CircleCheck}
       compact
       title="No failure is waiting on you"
-      description="Nothing failed in the last week that nobody has marked as known and no later attempt has replaced. The Failed view keeps every failure in history, and a re-run that passes settles one."
+      description="No unresolved failure from the last week is waiting for review. The Failed view keeps the original runs, including fixed, superseded and acknowledged failures."
     />
   {:else}
     <ul class="rows">

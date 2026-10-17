@@ -784,16 +784,18 @@ The one page that has to earn the second monitor.
   above are what the page is for, and a configuration warning somebody chose
   deliberately must not push the pools and the running jobs below the fold
   every day.
-* **Recent failures**: the failures nobody has read, newest first, with the
+* **Recent failures**: unresolved failures nobody has acknowledged, newest first, with the
   count in the panel's header and each row naming the repository, the workflow,
   the job and the step or fault it stopped at. A row opens the job's own drawer,
   and its **Mark as known** button takes the failure off the list, with the
   toast carrying the undo and the drawer able to put it back. It is a panel
   rather than a line like the problems summary, because each entry is a
   separate job with a separate thing to do about it and each leaves when
-  somebody says they have seen it: the one question GitHub cannot answer is
-  which failures anybody has looked at, and a panel that showed every recent
-  failure for ever would stop being read. It shows a short glance of the newest
+  somebody acknowledges it or a newer run replaces it. Background GitHub checks
+  also remove fixed, superseded and closed PR failures; cancelled or skipped
+  results are not proof of a fix. An unavailable GitHub read never resolves a
+  failure. Opening a stale repair link explains what changed and offers the
+  appropriate next step instead of sending the reader into setup. It shows a short glance of the newest
   few with the whole count in the header, not the whole list, so it too leaves
   the pools and the running jobs above the fold of a laptop screen.
 

@@ -71,6 +71,7 @@
   // knows not to also claim that nothing needs attention, and the matrix
   // knows not to show a year of empty squares under a fleet's first steps.
   let setupPending = $state(false);
+  let failures = $state<RecentFailures | null>(null);
   const operational = $derived(visualStyle.choice === 'mission-control');
   const workPanels = $derived(
     operational ? ['pools', 'jobs', 'events'] : ['pools', 'events', 'jobs'],
@@ -123,7 +124,8 @@
   subtitle={(others
     ? 'What is happening across every runner GitHub reports on, this fleet\u2019s and everybody else\u2019s.'
     : 'What this fleet is doing right now.') + coverage}
-  onrefresh={() => Promise.all([fleet.reconcile(), activity?.reload()]).then(() => undefined)}
+  onrefresh={() =>
+    Promise.all([fleet.reconcile(), activity?.reload(), failures?.reload()]).then(() => undefined)}
 >
   <Switch label="Other runners" checked={others} onchange={(on) => (prefs.otherRunners = on)} />
 </PageHeader>
@@ -152,7 +154,7 @@
         <!-- Like the matrix, not the questions panel above it: a fleet that
              has never run a job has no failures, and the checklist is what
              the page is for until it has. -->
-        {#if !setupPending}<RecentFailures />{/if}
+        {#if !setupPending}<RecentFailures bind:this={failures} />{/if}
       {:else if section === 'repairs'}
         <RepairOffers />
       {:else if section === 'work'}

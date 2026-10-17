@@ -456,6 +456,23 @@ workflow edits disabled for a new policy. A personal provider is still required.
 Setup checks the same run again before offering the repair. Runs without an
 eligible open PR explain why they cannot be repaired.
 
+Recent failures is an inbox of unresolved work, rather than a history of red
+runs. Newer attempts and runs replace older failures of the same job and
+workflow on the same known branch. Cancelled or skipped checks do not count as
+a fix. Background checks remove failures when GitHub confirms a passing result,
+a newer PR head, or a closed or merged PR, without requiring personal Eli setup.
+GitHub errors leave the last known state intact; they never count as success.
+The Failed view keeps the original history and acknowledgements remain separate.
+
+A failure can change while somebody is looking at it. Readiness explains
+**Already fixed**, **This PR is closed**, or **A newer commit replaced this
+failure**, with a link to the original run and a way to check the current PR.
+Pending checks ask the reader to wait; unavailable GitHub checks offer a retry.
+Starting a repair checks again before using an attempt. If the target changed
+since review, the page replaces the stale offer with the current explanation.
+
+![A closed PR failure explains that a repair is no longer needed and offers the original GitHub run, the overview and a status recheck](screenshots/eli-stale-failure-mobile.png){ .zoomies-shot }
+
 The wizard below uses a sample failure; no real PR was changed.
 
 ![Eli repair setup for a sample failed run, with the repository's installation preselected and a single save action](screenshots/eli-failure-setup-dark.png){ .zoomies-shot }

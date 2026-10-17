@@ -231,3 +231,100 @@ test('a refused setup keeps the failure context and offers a retry without start
   await expect(page).toHaveURL(/repo=acme\/widgets&run=1234/);
   expect(model.repairs).toEqual([]);
 });
+
+for (const [code, heading, message] of [
+  ['fixed', 'Already fixed', 'The latest checks on this PR have passed. No repair is needed.'],
+  [
+    'closed',
+    'This PR is closed',
+    'PR #17 is closed or merged. This failure no longer needs a PR repair.',
+  ],
+  [
+    'superseded',
+    'A newer commit replaced this failure',
+    'PR #17 has newer commits than this failed run.',
+  ],
+] as const) {
+  test(`a ${code} failure explains the change without sending the user into setup`, async ({
+    page,
+  }) => {
+    const model = await mockFailure(page);
+    await page.route('**/api/v1/assistant/repairs/readiness?*', (route) =>
+      route.fulfill({ json: { ...ready, ready: false, blockers: [{ code, message }] } }),
+    );
+    await page.goto(`/repairs?repo=${repo}&run=1234`);
+    const status = page.getByRole('status', { name: 'Failure status changed' });
+    await expect(status.getByRole('heading', { name: heading })).toBeVisible();
+    await expect(status).toContainText(message);
+    await expect(status.getByRole('link', { name: 'View original run on GitHub' })).toHaveAttribute(
+      'href',
+      `https://github.com/${repo}/actions/runs/1234`,
+    );
+    await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Advanced repair setup' })).toHaveCount(0);
+    expect(model.repairs).toEqual([]);
+  });
+}
+
+test('a failure fixed between review and repair replaces the stale offer with its outcome', async ({
+  page,
+}) => {
+  const model = await mockFailure(page);
+  let fixed = false;
+  await page.route('**/api/v1/assistant/repairs/readiness?*', (route) =>
+    route.fulfill({
+      json: fixed
+        ? {
+            ...ready,
+            ready: false,
+            blockers: [
+              { code: 'fixed', message: 'The latest checks have passed. No repair is needed.' },
+            ],
+          }
+        : ready,
+    }),
+  );
+  await page.route(/\/api\/v1\/assistant\/repairs$/, (route) => {
+    if (route.request().method() !== 'POST') return route.fulfill({ json: { items: [] } });
+    fixed = true;
+    return route.fulfill({
+      status: 409,
+      json: { code: 'conflict', message: 'Checks passed since review. No repair was started.' },
+    });
+  });
+  await page.goto(`/repairs?repo=${repo}&run=1234`);
+  await page.getByRole('button', { name: 'Fix with Eli', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Already fixed' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+  expect(model.repairs).toEqual([]);
+});
+
+test('a GitHub outage offers a status retry and never claims the failure is fixed', async ({
+  page,
+}) => {
+  const model = await mockFailure(page);
+  await page.route('**/api/v1/assistant/repairs/readiness?*', (route) =>
+    route.fulfill({
+      json: {
+        ...ready,
+        ready: false,
+        blockers: [
+          {
+            code: 'github',
+            message:
+              'GitHub could not check whether this failure still needs fixing. Try checking readiness again.',
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto(`/repairs?repo=${repo}&run=1234`);
+  await expect(
+    page.getByText('GitHub could not check whether this failure still needs fixing.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Check readiness again' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Already fixed' })).toHaveCount(0);
+  expect(model.repairs).toEqual([]);
+});
