@@ -29,7 +29,7 @@ var (
 	shellQuoted    = regexp.MustCompile(`"[^"]*"|'[^']*'`)
 	shellKeywords  = map[string]bool{"if": true, "while": true, "until": true, "!": true, "time": true, "sudo": true, "then": true, "do": true, "else": true}
 	shellAssign    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
-	shellBoundary  = strings.NewReplacer("&&", ";", "||", ";", "$(", ";", "(", ";", "`", ";", "{", ";")
+	shellBoundary  = strings.NewReplacer("&&", ";", "||", ";", "|&", "|", "$(", ";", "(", ";", "`", ";", "{", ";")
 	// The patterns of a case arm are separated by pipes too: make|go) is not a
 	// pipeline.
 	shellCaseArm = regexp.MustCompile(`^\s*[^\s|()]+(?:\|[^\s|()]+)*\)`)
@@ -114,6 +114,7 @@ func TestThePipelineCheckSeesTheShapesThatHideAFailure(t *testing.T) {
 		{"a comment", "# make runner-bases | tee out.txt", false},
 		{"a pipeline from something that is not a build", "go list ./... | grep -v internal/api", false},
 		{"a pipeline that only reads", "git diff --name-only | grep -q workflows", false},
+		{"bash's pipe that takes standard error too", `echo "$value" |& tee out.txt`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := pipelinesThatCouldHideAFailure(tc.script); (len(got) > 0) != tc.bad {
