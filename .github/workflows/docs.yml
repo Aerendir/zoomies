@@ -184,6 +184,9 @@ jobs:
           poppy = load(".well-known/poppy.json")
           assert poppy["organization"]["domain"] == "zoomies.sh"
           assert poppy["protocol_version"]
+          api_catalog = load("api-catalog.json")
+          entry = api_catalog["linkset"][0]
+          assert entry["status"][0]["href"] == "https://demo.zoomies.sh/readyz", entry
           print("discovery documents ok")
           EOF
 
