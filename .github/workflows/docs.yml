@@ -155,7 +155,7 @@ jobs:
       - name: The agent discovery documents are well formed
         run: |
           python3 - <<'EOF'
-          import hashlib, json, re
+          import hashlib, json, os, re
 
           def load(path):
               with open("site/" + path, encoding="utf-8") as fh:
@@ -180,9 +180,18 @@ jobs:
           for skill in index["skills"]:
               assert re.fullmatch(r"[a-z0-9-]+", skill["name"]), skill["name"]
               assert skill["type"] == "skill-md" and skill["description"] and skill["url"]
-              with open("site/.well-known/agent-skills/" + skill["name"] + "/SKILL.md", "rb") as fh:
+              folder = "site/.well-known/agent-skills/" + skill["name"] + "/"
+              with open(folder + "SKILL.md", "rb") as fh:
                   body = fh.read()
               assert skill["digest"] == "sha256:" + hashlib.sha256(body).hexdigest(), skill["name"]
+              # A skill reads its siblings by relative link, so each link has
+              # to resolve beside the published SKILL.md. Published alone, the
+              # zoomies skill sent an agent to a 404 for its command reference.
+              for target in re.findall(r"\]\(([^)\s]+)\)", body.decode("utf-8")):
+                  if "://" in target or target.startswith(("#", "mailto:")):
+                      continue
+                  linked = os.path.normpath(folder + target.split("#")[0])
+                  assert linked.startswith(folder) and os.path.isfile(linked), skill["name"] + " links to " + target + ", which is not published beside its SKILL.md"
 
           # A .json name, because Pages types a file by its extension and
           # RFC 9728 requires application/json; the edge worker serves it at

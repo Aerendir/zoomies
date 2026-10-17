@@ -27,8 +27,8 @@ from the repository rather than written by hand, so neither can go stale:
 
 * **The agent discovery documents**, the rest of what a machine reader asks
   for: ``/auth.md`` (copied from ``hooks/auth.md``), the MCP server card, the
-  two product skills with their ``SKILL.md`` copies and digests under
-  ``agent-skills/``, the ai-catalog index pointing at all of it, and a
+  two product skills, each folder copied under ``agent-skills/`` with the
+  digest of its ``SKILL.md``, the ai-catalog index pointing at all of it, and a
   ``poppy.json``. Each names something that is really serving; where
   OAuth or A2A metadata is asked for, it stays with the deployments that run
   it and ``/auth.md`` links to the served one.
@@ -416,7 +416,8 @@ def _write_agent_discovery(config, site_url: str) -> None:
     """Write the discovery documents for what the product actually offers.
 
     Everything here names something a machine client can reach: the skills the
-    repository installs (copied byte for byte, with their digests), the MCP
+    repository installs (each folder copied byte for byte, with the digest of
+    its SKILL.md), the MCP
     interface the controller serves at /mcp with the demo instance standing in
     as the reachable example, and the index under which a registry can find
     all of it. The documents are written into .well-known/ here because mkdocs
@@ -439,13 +440,19 @@ def _write_agent_discovery(config, site_url: str) -> None:
 
     skills: list[dict] = []
     for name in ("zoomies", "zoomies-kennel"):
-        source = os.path.join(root, "skills", name, "SKILL.md")
-        with open(source, "rb") as fh:
+        folder = os.path.join(root, "skills", name)
+        with open(os.path.join(folder, "SKILL.md"), "rb") as fh:
             body = fh.read()
-        target = os.path.join(well, "agent-skills", name, "SKILL.md")
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "wb") as fh:
-            fh.write(body)
+        # The whole folder, not SKILL.md alone: the skill keeps its detail in
+        # files beside it and reads them by relative link, and those links
+        # answered 404 when only SKILL.md was published. The index still names
+        # SKILL.md, and its digest is of that file.
+        shutil.copytree(
+            folder,
+            os.path.join(well, "agent-skills", name),
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(".*", "__pycache__"),
+        )
         front = re.search(r"^description: (.+)$", body.decode("utf-8"), re.MULTILINE)
         if front is None:
             raise ValueError(f"skills/{name}/SKILL.md has no front-matter description for the discovery index")
