@@ -464,11 +464,13 @@ says to narrow `since`.
 
 A comparison with fewer than 30 jobs on either side ranks nothing and says the
 sample is too small, at low confidence. Cancelled and skipped jobs are left out
-of every figure, and the answer says so, which is why its counts can be lower
-than `job_stats` and the Usage page's **By release** table by exactly those
-jobs. A period side older than `retention.jobs` is read from the daily roll-up
-in whole UTC days, counts only, so it is compared on the fleet failure rate
-alone and the answer says its percentiles are unavailable. A release side has
+of every figure read from the job rows, and the answer says so, which is why its
+counts can be lower than `job_stats` and the Usage page's **By release** table by
+exactly those jobs. A period side older than `retention.jobs` is read from the
+daily roll-up in whole UTC days, counts only, so it is compared on the fleet
+failure rate alone and the answer says its percentiles are unavailable; the
+roll-up counts every job that ran here, cancelled ones included, and the
+confidence's reason says so. A release side has
 no such fallback, because the roll-up does not record which release ran a job:
 it compares the jobs still kept and says the earlier ones are gone. When a
 request cannot be answered (one release named twice, or a pool or host this
