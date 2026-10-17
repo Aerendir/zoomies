@@ -19,7 +19,15 @@
   import { hostSignals } from '$lib/insights/signals';
   import MetricGrid from '$lib/components/MetricGrid.svelte';
   import { tick } from 'svelte';
-  import { ChevronDown, ChevronRight, CircleArrowUp, Plus, Server } from '@lucide/svelte';
+  import {
+    ChevronDown,
+    ChevronRight,
+    ChevronsDownUp,
+    ChevronsUpDown,
+    CircleArrowUp,
+    Plus,
+    Server,
+  } from '@lucide/svelte';
   import {
     clearHostThrottle,
     listJoinTokens,
@@ -63,7 +71,13 @@
     type HealthFilter,
   } from '$lib/hosts/health-filter';
   import { slotsOf } from '$lib/hosts/slots';
-  import { EXPANDED_KEY, isIdList, setExpanded } from '$lib/hosts/card-fold';
+  import {
+    EXPANDED_KEY,
+    allExpanded,
+    isIdList,
+    setAllExpanded,
+    setExpanded,
+  } from '$lib/hosts/card-fold';
   import HostDeleteDialog from '$lib/hosts/HostDeleteDialog.svelte';
   import HostPriorityDialog from '$lib/hosts/HostPriorityDialog.svelte';
   import HostRenameDialog from '$lib/hosts/HostRenameDialog.svelte';
@@ -165,6 +179,31 @@
       openCards,
       host.id,
       open,
+      hosts.map((h) => h.id ?? ''),
+    );
+    remember(EXPANDED_KEY, openCards);
+  }
+
+  /*
+   * Every card at once. It acts on the cards on show and on no others: opening
+   * a card nobody can see would be a change made out of sight, and somebody who
+   * has narrowed the page and pressed "Collapse all" has said nothing about the
+   * hosts the filter took away. The button says which way it will go, so a card
+   * opened or closed by hand moves it too.
+   */
+  const shownIds = $derived(shown.map((h) => h.id).filter((id): id is string => Boolean(id)));
+  const allShownOpen = $derived(allExpanded(openCards, shownIds));
+  const toggleShownHelp = $derived.by(() => {
+    const verb = allShownOpen ? 'Close' : 'Open';
+    return shownIds.length === hosts.length
+      ? `${verb} the details of every host.`
+      : `${verb} the details of the ${shownIds.length} hosts shown. The others stay as they are.`;
+  });
+  function toggleShownCards(): void {
+    openCards = setAllExpanded(
+      openCards,
+      shownIds,
+      !allShownOpen,
       hosts.map((h) => h.id ?? ''),
     );
     remember(EXPANDED_KEY, openCards);
@@ -675,19 +714,36 @@
       {/if}
     </div>
     <h2 class="controls-heading">Host controls and configuration</h2>
-    <div class="filters" role="group" aria-label="Show hosts by OS health">
-      {#each HEALTH_FILTERS as option (option.value)}
-        <Tooltip bare text={option.title}>
-          <button
-            type="button"
-            class="filter"
-            id="hosts-health-{option.value}"
-            aria-pressed={filter === option.value}
-            onclick={() => chooseFilter(option.value)}
-            >{option.label} <span class="count">{counts[option.value]}</span></button
-          >
-        </Tooltip>
-      {/each}
+    <div class="toolbar">
+      <div class="filters" role="group" aria-label="Show hosts by OS health">
+        {#each HEALTH_FILTERS as option (option.value)}
+          <Tooltip bare text={option.title}>
+            <button
+              type="button"
+              class="filter"
+              id="hosts-health-{option.value}"
+              aria-pressed={filter === option.value}
+              onclick={() => chooseFilter(option.value)}
+              >{option.label} <span class="count">{counts[option.value]}</span></button
+            >
+          </Tooltip>
+        {/each}
+      </div>
+      <!-- Outside the group, which is a choice of what to show and not a control
+           over the cards. One button for both ways, so a keyboard user who
+           presses it keeps their place and the name says what the next press
+           does. Not offered for a page of one card: that card's own Details is
+           the whole of it, and a second button for the same press is noise. -->
+      {#if shownIds.length > 1}
+        <Button
+          variant="ghost"
+          size="sm"
+          class="expand-button"
+          icon={allShownOpen ? ChevronsDownUp : ChevronsUpDown}
+          help={toggleShownHelp}
+          onclick={toggleShownCards}>{allShownOpen ? 'Collapse all' : 'Expand all'}</Button
+        >
+      {/if}
     </div>
     <!--
       Always in the page, so that a screen reader hears the sentence appear in a
@@ -799,11 +855,22 @@
   .map-body {
     margin-top: var(--z-space-3);
   }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--z-space-2) var(--z-space-3);
+    margin-bottom: var(--z-space-3);
+  }
   .filters {
     display: flex;
     flex-wrap: wrap;
     gap: var(--z-space-2);
-    margin-bottom: var(--z-space-3);
+  }
+  /* At the end of the row whether it shares the row with the chips or has wrapped
+     onto a line of its own. */
+  .toolbar :global(.expand-button) {
+    margin-inline-start: auto;
   }
   .filter {
     display: inline-flex;
@@ -933,7 +1000,8 @@
     }
     /* A Button is 32px high at every width, and this one is opened with a
        thumb: it takes the touch height the chips beside it take. */
-    .map-toggle :global(.map-button) {
+    .map-toggle :global(.map-button),
+    .toolbar :global(.expand-button) {
       height: var(--z-control-touch);
     }
   }

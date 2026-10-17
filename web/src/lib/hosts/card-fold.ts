@@ -33,3 +33,31 @@ export function setExpanded(
   const kept = ids.filter((held) => held !== id && known.includes(held));
   return open ? [...kept, id] : kept;
 }
+
+/**
+ * Whether every card on show is open. No card on show is not "all open": the
+ * page offers to close what it can see, and with nothing to see it has nothing
+ * to offer.
+ */
+export function allExpanded(ids: readonly string[], shown: readonly string[]): boolean {
+  return shown.length > 0 && shown.every((id) => ids.includes(id));
+}
+
+/**
+ * The list after every card on show is opened or closed together. Only the
+ * cards on show are asked: somebody who narrowed the page to the hosts that need
+ * attention and pressed "Collapse all" has said nothing about the others, so a
+ * card the filter has taken off the page keeps whatever it had. Hosts that no
+ * longer exist are dropped on the way past, as setExpanded drops them, and the
+ * lists it is handed are left alone.
+ */
+export function setAllExpanded(
+  ids: readonly string[],
+  shown: readonly string[],
+  open: boolean,
+  known: readonly string[],
+): string[] {
+  const kept = ids.filter((held) => known.includes(held));
+  if (!open) return kept.filter((held) => !shown.includes(held));
+  return [...kept, ...shown.filter((id) => known.includes(id) && !kept.includes(id))];
+}
