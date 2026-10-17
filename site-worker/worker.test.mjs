@@ -286,19 +286,25 @@ test("the identity provider's discovery document is mirrored from the portal", a
   assert.equal(await response.text(), discovery);
 });
 
-test("the authorization-server address serves the same document", async () => {
-  const discovery = '{"issuer": "https://portal.zoomies.sh"}';
+test("the authorization-server address serves the provider's own metadata document", async () => {
+  const asDoc = JSON.stringify({
+    issuer: "https://portal.zoomies.sh",
+    token_endpoint: "https://portal.zoomies.sh/oauth/token",
+    agent_auth: { skill: "https://portal.zoomies.sh/auth.md", register_uri: "https://portal.zoomies.sh/oauth/register" },
+  });
   const response = await handle(
     "https://zoomies.sh/.well-known/oauth-authorization-server",
     new Map([
-      ["portal.zoomies.sh/.well-known/openid-configuration", { type: "application/json", body: discovery }],
+      ["/.well-known/oauth-authorization-server", { type: "application/json", body: asDoc }],
     ]),
     {},
   );
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "application/json");
-  assert.equal(await response.text(), discovery);
+  const served = JSON.parse(await response.text());
+  assert.notEqual(served.agent_auth, undefined);
+  assert.equal(served.token_endpoint, "https://portal.zoomies.sh/oauth/token");
 });
 
 test("a HEAD request for the discovery document answers with no body", async () => {
@@ -334,19 +340,10 @@ const PRM = JSON.stringify({
   agent_auth: { skill: "https://portal.zoomies.sh/auth.md", register_uri: "https://portal.zoomies.sh/oauth/register" },
 });
 
-test("the protected resource's metadata is mirrored at both of its addresses", async () => {
-  for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/admin/mcp"]) {
-    globalThis.fetch = async () => new Response(PRM, { status: 200, headers: { "content-type": "application/json" } });
-    const response = await worker.fetch(new Request("https://zoomies.sh" + path));
-    assert.equal(response.status, 200, path);
-    assert.equal(response.headers.get("content-type"), "application/json", path);
-    assert.equal(await response.text(), PRM, path);
-  }
-});
-
-test("a metadata path the hosted service cannot answer falls back to the origin's own 404", async () => {
-  globalThis.fetch = async () => new Response(HTML, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
-  const response = await worker.fetch(new Request("https://zoomies.sh/.well-known/oauth-protected-resource"));
-  assert.equal(response.status, 404);
-  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+test("the generated resource metadata passes through from the origin untouched", async () => {
+  const response = await handle("https://zoomies.sh/.well-known/oauth-protected-resource", new Map([
+    ["/.well-known/oauth-protected-resource", { type: "application/json", body: PRM }],
+  ]), { headers: { accept: "application/json" } });
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), PRM);
 });

@@ -551,6 +551,35 @@ def _write_agent_discovery(config, site_url: str) -> None:
         }, fh, indent=2)
         fh.write("\n")
 
+    # The resource metadata the site declares about itself (RFC 9728): the
+    # resource is this site, the authorization server is the hosted service's
+    # provider, and the agent_auth block is the same one the provider's
+    # metadata carries. The mirrors (site-worker/) serve the provider's two
+    # documents; this one is written here, because the resource is the site's
+    # to declare and a mirror's bytes must name the mirror's host.
+    portal = "https://portal.zoomies.sh"
+    with open(os.path.join(well, "oauth-protected-resource"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "resource": f"{site_url}/",
+            "authorization_servers": [portal],
+            "scopes_supported": ["mcp:read"],
+            "bearer_methods_supported": ["header"],
+            "resource_name": "Zoomies",
+            "resource_documentation": f"{site_url}/auth.md",
+            "agent_auth": {
+                "skill": f"{portal}/auth.md",
+                "register_uri": f"{portal}/oauth/register",
+                "registration_methods": [{
+                    "type": "dynamic_client_registration",
+                    "documented_at": f"{portal}/auth.md",
+                    "grant_types": ["authorization_code", "refresh_token"],
+                    "consent": "a staff member of the client's choosing approves the connection on the portal, after the second factor",
+                }],
+                "identity_types_supported": [],
+            },
+        }, fh, indent=2)
+        fh.write("\n")
+
     with open(os.path.join(well, "poppy.json"), "w", encoding="utf-8") as fh:
         json.dump({
             "protocol_version": "0.1",
