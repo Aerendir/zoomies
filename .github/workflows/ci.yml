@@ -131,6 +131,13 @@ jobs:
               web/package.json|web/package-lock.json) web=true; deploy=true; docs=true ;;
               # internal/docs reads the UI's source for the pages it names.
               web/*) web=true; docs=true ;;
+              # Prose is prose wherever it sits: a README in deploy/ or test/ is
+              # read by internal/docs and built into nothing. It has to come
+              # before the directory rules below, which send everything under
+              # them to an image build or an installer check. The UI's source
+              # is above it on purpose, because web/public is copied into the
+              # bundle whatever a file is called.
+              *.md) docs=true ;;
               # What the images are made of. The runner scripts are also read
               # by the installer job's shell checks, and every deploy/ file by
               # tests in internal/backend, internal/installer and internal/docs,
@@ -147,15 +154,24 @@ jobs:
               # The marketplace image's bootstrap is shell the installer job lints.
               deploy/marketplace/*.sh) deploy=true; installer=true; rest=true ;;
               deploy/*|docker-compose.yml|.dockerignore) deploy=true; rest=true ;;
-              # The check each built runner image is run through.
-              test/runner-image/*) deploy=true; installer=true ;;
+              # The check each built runner image is run through. It is read by
+              # internal/docs' whole-tree scans like every other file.
+              test/runner-image/*) deploy=true; installer=true; docs=true ;;
               # Shell the binary embeds, and the installer job lints.
               internal/proxmoxsetup/release_signature.sh) go=true; installer=true ;;
-              # The script people curl is checked by the install.sh job and
-              # exercised by the upgrade test. No Go test reads it, and no
-              # binary or image carries it: the site serves it, and the site's
-              # own workflow rebuilds when it changes.
-              install.sh|install.ps1|connect-proxmox.sh|test/install/*|test/upgrade/*) installer=true ;;
+              # The scripts people curl are checked by the install.sh job and
+              # exercised by the upgrade test, and internal/docs reads them: it
+              # holds install.sh's release key to the binary's and its verifier
+              # to the other scripts', and its whole-tree scans read every file,
+              # the checks under test/ included. No binary or image carries
+              # them (the site serves them, and the site's own workflow
+              # rebuilds when they change), so the docs shard is enough.
+              install.sh|install.ps1|test/install/*|test/upgrade/*) installer=true; docs=true ;;
+              # connect-proxmox.sh is also read by internal/proxmoxsetup, whose
+              # tests hold its signature check equal to the one the provider
+              # wizard's command carries. That package is in the rest shard,
+              # which carries internal/docs as well.
+              connect-proxmox.sh) installer=true; rest=true ;;
               # Shell that nothing else in CI runs: the package-cleanup scripts
               # delete from a registry on a schedule, the marketplace image's
               # bootstrap runs as root on a new machine (matched above, with the
@@ -169,7 +185,7 @@ jobs:
               # code, and internal/naming the image table; those two packages
               # are the docs shard, a minute rather than the hour the rest of
               # the suite takes. Nothing heavier runs.
-              docs/*|roadmap/*|overrides/*|hooks/*|mkdocs.yml|*.md|.github/*) docs=true ;;
+              docs/*|roadmap/*|overrides/*|hooks/*|mkdocs.yml|.github/*) docs=true ;;
               # Files that neither ship nor are read by a test.
               .gitignore|.gitattributes|.editorconfig|LICENSE|NOTICE|.claude/*|.devcontainer/*|nixpacks.toml) ;;
               # Everything else is Go, or something Go embeds.

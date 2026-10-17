@@ -89,8 +89,25 @@ func TestCIRunsOnlyWhatAChangeCanAffect(t *testing.T) {
 	}{
 		{"the README checks its own facts and nothing else", "push", []string{"README.md"},
 			map[string]string{"go": "false", "web": "false", "deploy": "false", "installer": "false", "shards": `["docs"]`, "publish": "false"}},
-		{"the install script is checked and upgraded through, not rebuilt into binaries or images", "push", []string{"install.sh"},
-			map[string]string{"go": "false", "deploy": "false", "installer": "true", "shards": "[]", "publish": "false"}},
+		// internal/docs holds install.sh's release key to the binary's and its
+		// verifier to the other scripts', and its whole-tree scans read every
+		// file, so a change to a script people curl runs that package.
+		{"the install script is checked and upgraded through, and read by the docs tests, not rebuilt into binaries or images", "push", []string{"install.sh"},
+			map[string]string{"go": "false", "deploy": "false", "installer": "true", "shards": `["docs"]`, "publish": "false"}},
+		{"the Windows installer is held to the same tests", "push", []string{"install.ps1"},
+			map[string]string{"go": "false", "deploy": "false", "installer": "true", "shards": `["docs"]`, "publish": "false"}},
+		{"the install and upgrade checks are shell the whole-tree scans read", "push", []string{"test/install/install-check.sh", "test/upgrade/upgrade-check.sh"},
+			map[string]string{"go": "false", "deploy": "false", "installer": "true", "shards": `["docs"]`, "publish": "false"}},
+		// internal/proxmoxsetup holds its signature check equal to the one the
+		// wizard's command carries, and that package is in the rest shard.
+		{"the Proxmox connector is run through the tests that hold its signature check to the others", "pull_request", []string{"connect-proxmox.sh"},
+			map[string]string{"go": "false", "deploy": "false", "installer": "true", "shards": `["rest"]`, "publish": "false"}},
+		{"a README next to the runner image check is prose, and builds no image", "push", []string{"test/runner-image/README.md"},
+			map[string]string{"go": "false", "deploy": "false", "installer": "false", "shards": `["docs"]`, "publish": "false"}},
+		{"the runner image check itself still builds the images and is read by the whole-tree scans", "pull_request", []string{"test/runner-image/check.sh"},
+			map[string]string{"go": "false", "deploy": "true", "installer": "true", "shards": `["docs"]`}},
+		{"a README in deploy/ is prose, and publishes nothing", "push", []string{"deploy/marketplace/README.md"},
+			map[string]string{"go": "false", "deploy": "false", "installer": "false", "shards": `["docs"]`, "publish": "false"}},
 		{"a file nothing reads runs nothing", "push", []string{"LICENSE", ".gitignore"},
 			map[string]string{"go": "false", "installer": "false", "shards": "[]", "publish": "false"}},
 		{"Go on main is the whole suite and a publish", "push", []string{"internal/store/queries.go"},
