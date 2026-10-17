@@ -200,12 +200,18 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 		if m.State.Pending() {
 			pending[p.ID]++
 			fleetPending++
-			credit[m.ID] = machineSlots(m, p)
+			// A test machine is a trial, not supply: it is released once it
+			// has proved the provider, so a queue must not be counted as
+			// covered by it. It still costs, and still counts against every
+			// ceiling above.
+			if !m.Test {
+				credit[m.ID] = machineSlots(m, p)
+			}
 		}
 		if m.Owns() || m.State.Pending() {
 			have[p.ID]++
 		}
-		if m.State.Offers() {
+		if m.State.Offers() && !m.Test {
 			offering[p.ID]++
 		}
 	}
@@ -611,7 +617,7 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 	// afterwards. The count is a ledger like slack: each grant spends one.
 	offering := map[string]int{}
 	for _, m := range machines {
-		if m.State.Offers() {
+		if m.State.Offers() && !m.Test {
 			offering[m.ProviderID]++
 		}
 	}
@@ -621,6 +627,11 @@ func drainable(s MachineSnapshot, byProvider map[string]*store.Provider, pools [
 		p := byProvider[m.ProviderID]
 		host := byHost[m.HostID]
 		if p == nil || host == nil || host.Retired || m.State != store.MachineReady || live[host.ID] > 0 {
+			continue
+		}
+		// A test machine is released by its own rule, the moment it has
+		// reported ready; the idle clock is not its business.
+		if m.Test {
 			continue
 		}
 		// The minimum is asked first, for a machine no pool can use as well:

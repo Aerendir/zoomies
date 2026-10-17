@@ -793,6 +793,13 @@ export const validateProvider = (
 export const checkProvider = (id: string) =>
   api.post<Result<'checkProvider'>>(`/providers/${enc(id)}/check`);
 
+/**
+ * Builds one real machine to prove the provider works. It is released as soon as
+ * it reports ready; follow it with the machine events.
+ */
+export const testProviderMachine = (id: string) =>
+  api.post<Result<'testProviderMachine'>>(`/providers/${enc(id)}/test-machine`);
+
 export const getProviderDiscovery = (id: string, signal?: AbortSignal) =>
   api.get<Result<'getProviderDiscovery'>>(`/providers/${enc(id)}/discovery`, { signal });
 

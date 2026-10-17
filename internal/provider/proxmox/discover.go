@@ -38,6 +38,7 @@ func Discover(ctx context.Context, c *Client) (provider.Discovery, error) {
 	for _, n := range nodes {
 		d.Nodes = append(d.Nodes, provider.Choice{
 			Value: n.Node, Label: n.Node, Consequence: describeNode(n),
+			CPUs: n.MaxCPU.Int(), MemoryMB: int64(n.MaxMem) >> 20,
 		})
 		if n.Online() {
 			online = append(online, n.Node)
@@ -196,6 +197,7 @@ func describeTemplates(guests []ClusterVM) []provider.Choice {
 			Value:       strconv.Itoa(g.VMID.Int()),
 			Label:       label,
 			Consequence: fmt.Sprintf("VMID %d on %s", g.VMID.Int(), g.Node),
+			CPUs:        g.MaxCPU.Int(), MemoryMB: int64(g.MaxMem) >> 20,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Value < out[j].Value })

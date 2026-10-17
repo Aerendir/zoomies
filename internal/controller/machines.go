@@ -795,7 +795,7 @@ func (c *Controller) reviveDraining(ctx context.Context, env *machineEnv, row *s
 		if taken >= pp.Create {
 			break
 		}
-		if m.ProviderID != row.ID || m.State != store.MachineDraining {
+		if m.ProviderID != row.ID || m.State != store.MachineDraining || m.Test {
 			continue
 		}
 		if slices.Contains(pp.Drain, m.ID) {
@@ -1433,6 +1433,10 @@ func (c *Controller) stepReady(ctx context.Context, env *machineEnv, m *store.Ma
 	if host == nil {
 		c.transitionMachine(ctx, env, m, store.MachineDraining,
 			"the host this machine enrolled as no longer exists, so the machine is being released")
+		return
+	}
+	if m.Test {
+		c.releaseTestMachine(ctx, env, m)
 		return
 	}
 	switch {
