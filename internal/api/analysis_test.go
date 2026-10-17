@@ -393,6 +393,34 @@ func TestAnAnalysisRefusesAPeriodThatBeginsAfterNow(t *testing.T) {
 	}
 }
 
+// An until past now ends now before the route works anything out from it. An
+// operator who asks about today up to tomorrow's midnight, as the CLI's
+// whole-day form invites, is answered for today: not refused on a since they
+// never sent, and not refused as too long for hours that have not happened.
+func TestAnAnalysisWindowEndingInTheFutureIsReadUpToNow(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("viewer", store.RoleViewer)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	for name, q := range map[string]string{
+		"no since, until two days out":          analysisQuery(time.Time{}, now.Add(48*time.Hour), nil),
+		"since at the limit, until an hour out": analysisQuery(now.Add(-90*24*time.Hour+time.Minute), now.Add(time.Hour), nil),
+	} {
+		before := time.Now()
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/queue-wait" + q, cookie: cookie})
+		after := time.Now()
+		resp.mustStatus(t, http.StatusOK, name)
+		var got struct{ Since, Until time.Time }
+		resp.into(t, &got)
+		if got.Until.Before(before.Add(-time.Second)) || got.Until.After(after) {
+			t.Errorf("%s: until is %v; want now, between %v and %v", name, got.Until, before, after)
+		}
+		if !got.Since.Before(got.Until) {
+			t.Errorf("%s: since %v is not before until %v", name, got.Since, got.Until)
+		}
+	}
+}
+
 // The job statistics share the analyses' bound, and keep their own noun and
 // their own week-long default.
 func TestTheJobStatisticsSayWhatTheyCoverWhenAWindowIsTooLong(t *testing.T) {

@@ -100,8 +100,8 @@ var ErrSinceNotPast = errors.New("since is not before now, and an analysis reads
 // read the clock at, or why it cannot read it: one that ends before it
 // starts, one that begins at or after now, and one longer than
 // limits.job_stats_window, which bounds every analysis as it bounds the job
-// statistics. The routes check the first and the last before calling; this
-// is the same rule for any other caller.
+// statistics. The routes check all three, on the same window clamped to now,
+// before calling; this is the same rule for any other caller.
 //
 // An until past now ends now. The hours after it have not happened, and read
 // as if they had, every job still waiting would be counted as waiting

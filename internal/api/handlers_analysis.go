@@ -43,6 +43,12 @@ func (s *Server) statsWindowFits(w http.ResponseWriter, since, until time.Time, 
 // analysisWindow is the period an analysis route reads: until defaults to now
 // and since to a day before it, never further back than the limit allows, so a
 // request that named nothing is never refused for a period it did not ask for.
+//
+// An until past now ends now here as it does in the controller, and before the
+// default and the span are worked out from it: otherwise an until two days out
+// would default since into the future and be refused on a field the caller
+// never sent, and a since at the limit would be refused as too long for hours
+// nobody reads.
 func (s *Server) analysisWindow(w http.ResponseWriter, r *http.Request) (controller.AnalysisWindow, bool) {
 	since, err := queryTime(r, "since")
 	if err != nil {
@@ -54,13 +60,18 @@ func (s *Server) analysisWindow(w http.ResponseWriter, r *http.Request) (control
 		badRequestField(w, "until", err.Error())
 		return controller.AnalysisWindow{}, false
 	}
-	out := controller.AnalysisWindow{Until: s.ctrl.Now()}
-	if until != nil {
+	now := s.ctrl.Now()
+	out := controller.AnalysisWindow{Until: now}
+	if until != nil && until.Before(now) {
 		out.Until = *until
 	}
 	out.Since = out.Until.Add(-min(defaultAnalysisSpan, s.cfg().Limits.JobStatsSpan()))
 	if since != nil {
 		out.Since = *since
+		if !out.Since.Before(now) {
+			badRequestField(w, "since", controller.ErrSinceNotPast.Error())
+			return controller.AnalysisWindow{}, false
+		}
 	}
 	if !s.statsWindowFits(w, out.Since, out.Until, "an analysis covers") {
 		return controller.AnalysisWindow{}, false
