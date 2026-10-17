@@ -30,6 +30,7 @@ func (c *Controller) refreshJobAttention(parent context.Context) {
 	defer cancel()
 	runs, err := c.st.JobAttentionRunsToCheck(ctx, 5)
 	if err != nil {
+		c.log.Warn("could not list the failed runs to check on GitHub", "error", err)
 		return
 	}
 	for _, run := range runs {
@@ -46,10 +47,13 @@ func (c *Controller) refreshJobAttention(parent context.Context) {
 			continue
 		}
 		if err := c.st.RecordJobAttentionRun(ctx, run.Repo, run.RunID, reason, checked, known); err != nil {
+			c.log.Warn("could not record what GitHub said about a failed run", "repo", run.Repo, "run", run.RunID, "error", err)
 			return
 		}
 	}
-	_ = c.st.PruneJobAttentionRuns(ctx)
+	if err := c.st.PruneJobAttentionRuns(ctx); err != nil {
+		c.log.Warn("could not prune the records of runs checked on GitHub", "error", err)
+	}
 }
 
 // jobAttentionOnGitHub says what GitHub now thinks of a failed run, and whether

@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,13 +20,19 @@ type attentionFake struct {
 	checksErr error
 	runState  github.WorkflowRunState
 	runErr    error
-	// asked, when set, counts the times GitHub was asked about a run.
+	// asked, when set, counts the times GitHub was asked about a run, and
+	// onAsk is called as it is, for a test that needs something to happen
+	// while the answer is on its way.
 	asked *int
+	onAsk func()
 }
 
 func (f attentionFake) GetWorkflowRun(context.Context, string, int64) (*github.WorkflowRunState, error) {
 	if f.asked != nil {
 		*f.asked++
+	}
+	if f.onAsk != nil {
+		f.onAsk()
 	}
 	return &f.runState, f.runErr
 }
@@ -261,5 +270,54 @@ func TestAttentionStandsDownFromAnInstallationGitHubRateLimits(t *testing.T) {
 	}
 	if got := due(); got != 0 {
 		t.Fatalf("%d runs are still due after both were answered", got)
+	}
+}
+
+// A loop that fails without a word cannot be told from one with nothing to do.
+// On a large database the query behind it outlived its deadline, and the
+// failures sat in the inbox, unchecked, with no line in any log to say why.
+// Each of its three steps says so at warn level when it fails, as the loops
+// beside it do.
+func TestTheAttentionLoopSaysWhyItCouldNotDoItsWork(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		// arrange makes the step fail: cancel is the context the tick runs in.
+		arrange func(cancel context.CancelFunc, fake *attentionFake)
+	}{
+		{"listing the runs", "could not list the failed runs to check on GitHub",
+			func(cancel context.CancelFunc, _ *attentionFake) { cancel() }},
+		{"recording the answer", "could not record what GitHub said about a failed run",
+			func(cancel context.CancelFunc, fake *attentionFake) { fake.onAsk = cancel }},
+		{"pruning what is no longer needed", "could not prune the records of runs checked on GitHub",
+			// A refusal for quota records nothing, so the tick reaches its last
+			// step with the context cancelled by then.
+			func(cancel context.CancelFunc, fake *attentionFake) {
+				fake.onAsk = cancel
+				fake.runErr = &github.RateLimitedError{ResetAt: time.Now().Add(time.Hour)}
+			}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			var logged bytes.Buffer
+			h.c.log = slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))
+			inst := h.installation()
+			job := &store.Job{GitHubJobID: 1, GitHubRunID: 9, Repo: inst.Target + "/repo", State: store.JobCompleted, Conclusion: "failure", QueuedAt: h.st.Now().Add(-time.Hour)}
+			if _, err := h.st.UpsertJob(h.ctx, job); err != nil {
+				t.Fatal(err)
+			}
+			fake := attentionFake{
+				repairFake: &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: "failed"},
+				runState:   github.WorkflowRunState{Status: "completed"},
+			}
+			ctx, cancel := context.WithCancel(h.ctx)
+			defer cancel()
+			tc.arrange(cancel, &fake)
+			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+
+			h.c.refreshJobAttention(ctx)
+			if !strings.Contains(logged.String(), "level=WARN") || !strings.Contains(logged.String(), tc.want) {
+				t.Fatalf("a tick whose step failed logged %q, want a warning that says %q", logged.String(), tc.want)
+			}
+		})
 	}
 }
