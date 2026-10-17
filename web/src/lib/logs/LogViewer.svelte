@@ -49,7 +49,7 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Switch from '$lib/components/Switch.svelte';
   import Tabs from '$lib/components/Tabs.svelte';
-  import { BuildLog, formatBuildLog } from './build-log';
+  import { BuildLog, formatBuildLog, RECONNECT_NOTICE } from './build-log';
 
   interface Props {
     /** The runner whose output to tail. */
@@ -395,8 +395,9 @@
       opens += 1;
       status = 'live';
       // A reconnect replays the backlog, so mark the seam rather than letting
-      // the same hundred lines appear twice with no explanation.
-      if (opens > 1) enqueue('\r\n\x1b[2m-- reconnected to the log stream --\x1b[0m\r\n');
+      // the same hundred lines appear twice with no explanation. The build log
+      // reads this line too, so its scrollback and the saved file carry the seam.
+      if (opens > 1) enqueue(RECONNECT_NOTICE);
       else announcement = 'Attached to the log stream.';
     });
 
