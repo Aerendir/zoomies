@@ -139,7 +139,10 @@ reachable from a job unless a pool's `docker_mode` says so.
 measures, which also sets the share a pool sized by its host gives each runner.
 A constant pins every deployment of the file to the same slot count however
 large the host is, so set a number only to hold this host below what it would
-take on its own. The installer's `.env` leaves it empty for the same reason.
+take on its own. The installer does not leave it empty: `zoomies init` measures
+the host and stores a number as the controller's `agent.capacity` setting before
+the container first starts, one runner per two of the cores it found (at least
+one) unless you gave it another.
 
 Every further host joins the same way it would on any other deployment:
 **Hosts → Add a host** hands you one line to paste on the new machine. [Adding
