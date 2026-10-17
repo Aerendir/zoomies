@@ -1,0 +1,20 @@
+# The edge of zoomies.sh: content negotiation for agents.
+#
+# GitHub Pages cannot read an Accept header, so a request that asks for
+# text/markdown is answered by worker.js, from the Markdown copies the docs
+# build writes beside every page. Deploying it needs the zone's DNS records for
+# the site proxied through Cloudflare and a token with Workers edit rights:
+#
+#     CLOUDFLARE_API_TOKEN=... npx wrangler deploy
+#
+# A Pro plan zone can instead enable Markdown for Agents in the zone's AI
+# Crawl Control, which converts the origin's HTML on the fly. The worker works
+# on every plan and serves the copies the documentation was written in.
+
+name = "zoomies-site"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+routes = [
+  { pattern = "zoomies.sh/*", zone_name = "zoomies.sh" },
+]
