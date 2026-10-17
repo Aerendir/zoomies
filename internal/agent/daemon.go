@@ -929,8 +929,12 @@ func (a *Agent) run(ctx context.Context) error {
 	// A host the controller has disowned has nothing left to flush: the last
 	// report would be sent on the credential that was just refused, and a run
 	// that is about to re-join must not tell systemd it is stopping on its way
-	// to starting.
-	if !refusedForGood(err) {
+	// to starting. What it admitted is still finished and its log streams still
+	// ended, since a host with no token to fall back on exits here, and exiting
+	// halfway through a create strands its sidecar.
+	if refusedForGood(err) {
+		a.drain(ctx)
+	} else {
 		a.shutdown(ctx)
 	}
 	return err
@@ -939,12 +943,7 @@ func (a *Agent) run(ctx context.Context) error {
 // shutdown finishes what is in flight and leaves the host's runners running.
 func (a *Agent) shutdown(ctx context.Context) {
 	a.notify.send("STOPPING=1")
-	a.log.Info("agent shutting down; runners on this host are left running")
-
-	if !a.waitForTasks(ctx, shutdownGrace) {
-		a.log.Warn("shutdown grace expired with lifecycle tasks still unfinished", "grace", shutdownGrace)
-	}
-	a.logs.stopAll()
+	a.drain(ctx)
 
 	// The controller cannot see this host again until it restarts, so the last
 	// thing the agent does is tell it what the runners looked like.
@@ -957,6 +956,17 @@ func (a *Agent) shutdown(ctx context.Context) {
 	if err := a.tr.ReportRunners(rctx, reports); err != nil {
 		a.log.Warn("could not flush a final runner report", "runners", len(reports), "error", err)
 	}
+}
+
+// drain waits for the lifecycle tasks the agent has admitted, within the
+// shutdown grace, and then ends its log streams. The runners are left running.
+func (a *Agent) drain(ctx context.Context) {
+	a.log.Info("agent shutting down; runners on this host are left running")
+
+	if !a.waitForTasks(ctx, shutdownGrace) {
+		a.log.Warn("shutdown grace expired with lifecycle tasks still unfinished", "grace", shutdownGrace)
+	}
+	a.logs.stopAll()
 }
 
 // heartbeatLoop keeps the host marked online and carries the agent's view of

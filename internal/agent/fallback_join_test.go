@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"slices"
@@ -304,6 +305,80 @@ func TestCancellingAHostThatIsBackingOffEndsTheWaitAtOnce(t *testing.T) {
 			}
 		default:
 			t.Fatal("a cancelled agent went on waiting out its backoff")
+		}
+	})
+}
+
+// A host with no join token to fall back on, which is the embedded agent and
+// every host nobody handed one, still ends its run when the controller refuses
+// it for good. What it must not do is end it with a create half done or a log
+// stream open: a stop finishes what the agent admitted first, and so does this.
+// The one thing it skips is the last report, which would travel on the
+// credential that was just refused.
+func TestARefusedHostWithNoJoinTokenStillDrainsItsTasksAndStopsItsLogs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		a, tr, b := startupAgent(t)
+		pr, pw := io.Pipe()
+		defer pw.Close()
+		b.fakeBackend.mu.Lock()
+		b.fakeBackend.logs = func() io.ReadCloser { return pr }
+		b.fakeBackend.mu.Unlock()
+		if err := a.Join(context.Background(), "join-token"); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- a.Run(context.Background()) }()
+
+		// A runner whose log somebody is watching...
+		tr.tasks <- []Task{createTask("create-1", "runner-1")}
+		synctest.Wait()
+		startupEntered(t, b, "runner-1")
+		b.finish <- nil
+		synctest.Wait()
+		tr.tasks <- []Task{{ID: "logs", Kind: TaskStreamLogs, RunnerID: "runner-1", StreamID: "stream-1"}}
+		synctest.Wait()
+		if s := tr.stream("stream-1"); s == nil || s.isClosed() {
+			t.Fatal("the log stream was not open before the refusal")
+		}
+
+		// ...and a create still in flight when the controller refuses the host.
+		tr.tasks <- []Task{createTask("create-2", "runner-2")}
+		synctest.Wait()
+		startupEntered(t, b, "runner-2")
+		for len(tr.reports) > 0 {
+			<-tr.reports
+		}
+		tr.mu.Lock()
+		tr.beatErr = ErrHostGone
+		tr.mu.Unlock()
+		time.Sleep(time.Minute)
+		synctest.Wait()
+		select {
+		case err := <-done:
+			b.finish <- nil
+			t.Fatalf("Run returned %v with a create unfinished", err)
+		default:
+		}
+
+		b.finish <- nil
+		synctest.Wait()
+		if err := <-done; !errors.Is(err, ErrHostGone) {
+			t.Fatalf("Run error = %v, want one wrapping ErrHostGone", err)
+		}
+		created := map[string]bool{}
+		for len(tr.results) > 0 {
+			if res := <-tr.results; res.OK && res.TaskID == "create-2" {
+				created[res.TaskID] = true
+			}
+		}
+		if !created["create-2"] {
+			t.Fatal("Run returned before the create it had admitted was reported")
+		}
+		if !tr.stream("stream-1").isClosed() {
+			t.Fatal("Run returned with a log stream still open")
+		}
+		if len(tr.reports) != 0 {
+			t.Fatalf("a final report was sent on the credential that had just been refused: %v", <-tr.reports)
 		}
 	})
 }
