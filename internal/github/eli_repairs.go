@@ -147,6 +147,7 @@ func (c *appClient) RepairPullForRun(ctx context.Context, repo string, run int64
 	}
 	var r struct {
 		HeadSHA        string `json:"head_sha"`
+		Event          string `json:"event"`
 		HeadRepository struct {
 			FullName string `json:"full_name"`
 		} `json:"head_repository"`
@@ -161,8 +162,14 @@ func (c *appClient) RepairPullForRun(ctx context.Context, repo string, run int64
 		return RepairPull{}, fmt.Errorf("%w: fork workflow runs are not writable", ErrRepairUnsupported)
 	}
 	// GitHub can omit the run's PR links, including after a PR is merged.
-	// Resolve by commit, never by a branch name that may have been reused.
+	// Resolve by commit, never by a branch name that may have been reused, and
+	// only for a run a PR started: the commit of a push, schedule or manual run
+	// on the default branch resolves to the PR whose merge made it, and that
+	// PR being closed would settle a failure that never belonged to it.
 	if len(r.Pulls) == 0 && r.HeadSHA != "" {
+		if r.Event != "pull_request" && r.Event != "pull_request_target" {
+			return RepairPull{}, fmt.Errorf("%w: the failed run was not started by a PR (its event is %q), so there is no PR to repair", ErrRepairUnsupported, r.Event)
+		}
 		if err := c.repairRequest(ctx, http.MethodGet, base+"/commits/"+url.PathEscape(r.HeadSHA)+"/pulls?per_page=2", nil, &r.Pulls); err != nil {
 			return RepairPull{}, err
 		}

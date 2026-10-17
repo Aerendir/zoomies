@@ -199,7 +199,7 @@ func TestRepairRunResolvesMissingPullLinksAndKeepsAdmissionChecks(t *testing.T) 
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/repos/acme/repo/actions/runs/9":
-					w.Write([]byte(`{"head_sha":"old","head_repository":{"full_name":"acme/repo"},"pull_requests":[]}`))
+					w.Write([]byte(`{"head_sha":"old","event":"pull_request","head_repository":{"full_name":"acme/repo"},"pull_requests":[]}`))
 				case "/repos/acme/repo/commits/old/pulls":
 					if r.URL.Query().Get("per_page") != "2" {
 						t.Error("commit lookup must be bounded and detect ambiguity")
@@ -221,5 +221,64 @@ func TestRepairRunResolvesMissingPullLinksAndKeepsAdmissionChecks(t *testing.T) 
 				t.Fatalf("pull %+v, error %v", p, err)
 			}
 		})
+	}
+}
+
+// A push, schedule or manual run on the default branch has no PR of its own,
+// but GitHub answers a commit lookup with the PR whose merge made that commit.
+// Taking that PR for the run's own settled the failure as "closed" on the next
+// tick, so the first red build on main after a merge left the attention list
+// without a word, with nobody having seen it. Only a run a PR started may be
+// resolved by commit, and the lookup is not even made for any other.
+func TestARunNoPRStartedIsNeverTakenForTheMergedPRThatMadeItsCommit(t *testing.T) {
+	for _, event := range []string{"push", "schedule", "workflow_dispatch", "merge_group"} {
+		t.Run(event, func(t *testing.T) {
+			c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/repos/acme/repo/actions/runs/9":
+					w.Write([]byte(`{"head_sha":"merge","head_branch":"main","event":"` + event + `","head_repository":{"full_name":"acme/repo"},"pull_requests":[]}`))
+				case "/repos/acme/repo/commits/merge/pulls":
+					t.Error("a run no PR started was looked up by commit")
+					w.Write([]byte(`[{"number":1}]`))
+				case "/repos/acme/repo/pulls/1":
+					w.Write([]byte(`{"number":1,"state":"closed","head":{"ref":"feature","sha":"prtip","repo":{"full_name":"acme/repo","default_branch":"main"}}}`))
+				default:
+					t.Errorf("unexpected request %s", r.URL)
+					http.NotFound(w, r)
+				}
+			})
+			_, err := c.RepairPullForRun(context.Background(), "acme/repo", 9)
+			var changed *RepairTargetChanged
+			if errors.As(err, &changed) {
+				t.Fatalf("a %s run was settled as %q: %s", event, changed.Code, changed.Message)
+			}
+			if !errors.Is(err, ErrRepairUnsupported) || !strings.Contains(err.Error(), "not started by a PR") {
+				t.Fatalf("error %v; want an unsupported target that says no PR started the run", err)
+			}
+		})
+	}
+}
+
+// The gate is on the lookup by commit, not on the event: a push to a PR's own
+// branch that GitHub links to the PR is that PR's run, and is resolved from
+// the link as before, closed PR and all.
+func TestAPushRunGitHubLinksToItsPRIsStillResolved(t *testing.T) {
+	c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/acme/repo/actions/runs/9":
+			w.Write([]byte(`{"head_sha":"old","head_branch":"feature","event":"push","head_repository":{"full_name":"acme/repo"},"pull_requests":[{"number":1}]}`))
+		case "/repos/acme/repo/pulls/1":
+			w.Write([]byte(strings.Replace(testPull, `"open"`, `"closed"`, 1)))
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			http.NotFound(w, r)
+		}
+	})
+	_, err := c.RepairPullForRun(context.Background(), "acme/repo", 9)
+	var changed *RepairTargetChanged
+	if !errors.As(err, &changed) || changed.Code != "closed" {
+		t.Fatalf("error %v; want the PR the run is linked to reported closed", err)
 	}
 }
