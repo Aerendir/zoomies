@@ -257,7 +257,9 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 		}
 	}
 	// The runners are stamped by the store's clock, so the window reaches a
-	// minute past now to hold them.
+	// minute past now to hold them. The controller reads an until past now as
+	// now, so each read ends at its own instant, and the route's is the one
+	// the controller's answer is compared at.
 	until := time.Now().UTC().Truncate(time.Second).Add(time.Minute)
 	since := until.Add(-time.Hour)
 
@@ -266,7 +268,14 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 	} {
 		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/startup-failures" + analysisQuery(since, until, extra), cookie: cookie})
 		resp.mustStatus(t, http.StatusOK, "the startup failures of "+name)
-		want, err := h.ctrl.AnalyseStartupFailures(h.ctx, controller.AnalysisWindow{Since: since, Until: until}, extra.Get("pool_id"), extra.Get("host_id"))
+		var read struct {
+			Until time.Time `json:"until"`
+		}
+		resp.into(t, &read)
+		if !read.Until.Before(until) || read.Until.After(time.Now()) {
+			t.Errorf("%s: the finding ends at %v, past the instant it was read", name, read.Until)
+		}
+		want, err := h.ctrl.AnalyseStartupFailures(h.ctx, controller.AnalysisWindow{Since: since, Until: read.Until}, extra.Get("pool_id"), extra.Get("host_id"))
 		if err != nil {
 			t.Fatal(err)
 		}
