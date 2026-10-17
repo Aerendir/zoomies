@@ -4,7 +4,7 @@ import { freshness } from '../src/lib/hosts/freshness.ts';
 import type { Host } from '../src/lib/api/types.ts';
 
 const now = Date.parse('2026-10-04T10:00:00Z');
-const summary = { counted: 3, warnings: 0, errors: 0, skipped: 0, suggestions: 0 };
+const summary = { counted: 3, warnings: 0, errors: 0, skipped: 0, suggestions: 0, accepted: 0 };
 function report(over: Record<string, unknown> = {}): Host['doctor'] {
   return {
     checked_at: new Date(now - 40_000).toISOString(),

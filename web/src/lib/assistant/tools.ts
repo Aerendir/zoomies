@@ -8,6 +8,7 @@ const LABELS: Record<string, string> = {
   list_problems: 'the problems',
   list_jobs: 'jobs',
   get_job: 'a job',
+  get_retained_comparison: 'a retained historical comparison',
   get_pr_delay: 'a PR’s observed required-check delay',
   job_stats: 'job statistics',
   list_runners: 'runners',
@@ -31,6 +32,8 @@ const LABELS: Record<string, string> = {
   host_samples: 'hosts minute by minute',
   runner_timeline: 'a runner’s timeline',
   list_workflow_runs: 'workflow runs',
+  list_elis_repairs: 'the repairs history',
+  get_eli_repair: 'a pull request’s repair',
 };
 
 export function toolLabel(name: string): string {

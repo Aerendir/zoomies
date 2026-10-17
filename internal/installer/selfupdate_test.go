@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/eyupio/zoomies/internal/releasekey"
 )
 
 // updateServer publishes one release whose asset is body, with a checksums file
@@ -35,6 +37,33 @@ func updateServer(t *testing.T, tag, body, sum string) *httptest.Server {
 }
 
 func sumOf(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
+
+// signedUpdateServer is updateServer with a detached signature over signed (the
+// text the signature is made over, which the checksums file need not match) and
+// the private key that signs it.
+func signedUpdateServer(t *testing.T, tag, body, sum, signed, private string) *httptest.Server {
+	t.Helper()
+	envelope, err := releasekey.Sign(private, []byte(signed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/latest", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/tag/"+tag, http.StatusFound)
+	})
+	mux.HandleFunc("/download/"+tag+"/zoomies_linux_amd64", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	})
+	mux.HandleFunc("/download/"+tag+"/checksums.txt", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(sum + "  zoomies_linux_amd64\n"))
+	})
+	mux.HandleFunc("/download/"+tag+"/checksums.txt.ed25519", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(envelope)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
 
 func updateFixture(t *testing.T, srv *httptest.Server, current string) (SelfUpdateOptions, string) {
 	t.Helper()
@@ -108,6 +137,119 @@ func TestACheckSaysANewerBuildExistsWithoutChangingAnything(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(bin); string(b) != "old" {
 		t.Fatalf("binary = %q", b)
+	}
+}
+
+// The checksums travel with the binary, so a key built into the running binary
+// is what makes them say who made the release. A signed release installs; one
+// signed by another key, one with no signature, and one whose checksums were
+// changed under a good signature do not.
+func TestASignedReleaseVerifiesAgainstTheBuiltInKey(t *testing.T) {
+	public, private, err := releasekey.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := "new build"
+	sum := sumOf(body)
+	srv := signedUpdateServer(t, "v1.4.0", body, sum, sum+"  zoomies_linux_amd64\n", private)
+	opts, bin := updateFixture(t, srv, "v1.3.0")
+	opts.ReleaseKey = public
+	res, err := SelfUpdate(context.Background(), opts)
+	if err != nil || !res.Updated || res.Tag != "v1.4.0" {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if b, _ := os.ReadFile(bin); string(b) != body {
+		t.Fatalf("binary = %q", b)
+	}
+}
+
+func TestAReleaseSignedByAnUntrustedKeyIsRefused(t *testing.T) {
+	trusted, _, _ := releasekey.Generate()
+	_, otherPrivate, _ := releasekey.Generate()
+	body := "new build"
+	sum := sumOf(body)
+	srv := signedUpdateServer(t, "v1.4.0", body, sum, sum+"  zoomies_linux_amd64\n", otherPrivate)
+	opts, bin := updateFixture(t, srv, "v1.3.0")
+	opts.ReleaseKey = trusted
+	_, err := SelfUpdate(context.Background(), opts)
+	if !errors.Is(err, ErrSignature) || !strings.Contains(err.Error(), "does not trust") {
+		t.Fatalf("err = %v", err)
+	}
+	if b, _ := os.ReadFile(bin); string(b) != "old" {
+		t.Fatalf("a release signed by another key replaced the binary: %q", b)
+	}
+}
+
+func TestAReleaseWithNoSignatureIsRefused(t *testing.T) {
+	trusted, _, _ := releasekey.Generate()
+	srv := updateServer(t, "v1.4.0", "new build", sumOf("new build"))
+	opts, bin := updateFixture(t, srv, "v1.3.0")
+	opts.ReleaseKey = trusted
+	_, err := SelfUpdate(context.Background(), opts)
+	if !errors.Is(err, ErrSignature) {
+		t.Fatalf("err = %v", err)
+	}
+	if b, _ := os.ReadFile(bin); string(b) != "old" {
+		t.Fatalf("binary = %q", b)
+	}
+}
+
+func TestAChecksumsFileChangedUnderAGoodSignatureIsRefused(t *testing.T) {
+	trusted, private, _ := releasekey.Generate()
+	body := "new build"
+	// The signature is over text that is not the checksums served, as a
+	// checksums file replaced after signing would be.
+	srv := signedUpdateServer(t, "v1.4.0", body, sumOf(body), "different text\n", private)
+	opts, _ := updateFixture(t, srv, "v1.3.0")
+	opts.ReleaseKey = trusted
+	if _, err := SelfUpdate(context.Background(), opts); !errors.Is(err, ErrSignature) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// A preview is only useful if it fails for the same reasons a real run would,
+// so it fetches, verifies, probes and pre-flights the release, and then leaves
+// the installed binary and its folder exactly as they were.
+func TestADryRunVerifiesTheReleaseWithoutInstallingIt(t *testing.T) {
+	srv := updateServer(t, "v1.4.0", "new build", sumOf("new build"))
+	opts, bin := updateFixture(t, srv, "v1.3.0")
+	preflighted := false
+	opts.Preflight = func(context.Context, string) error { preflighted = true; return nil }
+	opts.DryRun = true
+	res, err := SelfUpdate(context.Background(), opts)
+	if err != nil || !res.Newer || res.Updated || res.Tag != "v1.4.0" {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if !preflighted {
+		t.Fatal("the pre-flight did not run, so a preview could pass a release a real run would refuse")
+	}
+	if b, _ := os.ReadFile(bin); string(b) != "old" {
+		t.Fatalf("the installed binary was replaced: %q", b)
+	}
+	if _, err := os.Stat(bin + PreviousSuffix); !os.IsNotExist(err) {
+		t.Fatalf("a preview kept a previous binary: %v", err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(bin), ".zoomies-update-*")); len(left) != 0 {
+		t.Fatalf("a preview left its download behind: %v", left)
+	}
+}
+
+// A preview installs nothing, so it must not need to write beside the binary:
+// an operator previewing as a service account may not be able to.
+func TestADryRunStagesItsDownloadAwayFromTheInstalledBinary(t *testing.T) {
+	srv := updateServer(t, "v1.4.0", "new build", sumOf("new build"))
+	opts, bin := updateFixture(t, srv, "v1.3.0")
+	opts.DryRun = true
+	cand, _, err := FetchRelease(context.Background(), opts)
+	if err != nil || cand == nil {
+		t.Fatalf("cand=%+v err=%v", cand, err)
+	}
+	defer cand.Discard()
+	if filepath.Dir(cand.Path) == filepath.Dir(bin) {
+		t.Fatalf("the candidate was staged beside the installed binary: %s", cand.Path)
+	}
+	if _, err := os.Stat(cand.Path); err != nil {
+		t.Fatalf("the candidate is not where it was staged: %v", err)
 	}
 }
 

@@ -15,7 +15,7 @@
   import { listAudit, listAuditActions } from '$lib/api/client';
   import { events } from '$lib/api/sse';
   import type { AuditEvent } from '$lib/api/types';
-  import { formatAbsolute } from '$lib/format';
+  import { NO_VALUE, formatAbsolute } from '$lib/format';
   import { registerSearch } from '$lib/keys';
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
@@ -342,7 +342,7 @@
 {/snippet}
 
 {#snippet actionCell(row: AuditEvent)}
-  <span class="mono">{row.action || '--'}</span>
+  <span class="mono">{row.action || NO_VALUE}</span>
 {/snippet}
 
 {#snippet targetCell(row: AuditEvent)}
@@ -356,13 +356,13 @@
         <span class="mono gone">{row.target_id}</span>
       </Tooltip>
     {:else}
-      <span class="none">--</span>
+      <span class="none">{NO_VALUE}</span>
     {/if}
   </span>
 {/snippet}
 
 {#snippet ipCell(row: AuditEvent)}
-  {#if row.ip}<span class="mono">{row.ip}</span>{:else}<span class="none">--</span>{/if}
+  {#if row.ip}<span class="mono">{row.ip}</span>{:else}<span class="none">{NO_VALUE}</span>{/if}
 {/snippet}
 
 <PageHeader
@@ -476,7 +476,7 @@
         </dd>
 
         <dt>Action</dt>
-        <dd class="mono">{selected.action || '--'}</dd>
+        <dd class="mono">{selected.action || NO_VALUE}</dd>
 
         <dt>Target</dt>
         <dd>
@@ -484,7 +484,7 @@
           {#if targetHref(selected)}
             <a class="mono" href={targetHref(selected)}>{selected.target_id}</a>
           {:else}
-            <span class="mono">{selected.target_id || '--'}</span>
+            <span class="mono">{selected.target_id || NO_VALUE}</span>
           {/if}
         </dd>
 

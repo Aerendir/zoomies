@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/eyupio/zoomies/internal/prrepair"
 	"github.com/eyupio/zoomies/internal/store"
 	"net/http"
@@ -102,6 +103,11 @@ func TestRepairChecksIncludeLegacyStatusesAndWaitForAnyChecks(t *testing.T) {
 		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"success"}]}`, `{"total_count":1,"state":"pending"}`, "waiting"},
 		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"success"}]}`, `{"total_count":0,"state":"pending"}`, "passed"},
 		{`{"total_count":1,"check_runs":[{"status":"in_progress"}]}`, `{"total_count":1,"state":"success"}`, "waiting"},
+		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"cancelled"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
+		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"skipped"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
+		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"neutral"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
+		{`{"total_count":2,"check_runs":[{"status":"in_progress"},{"status":"completed","conclusion":"failure"}]}`, `{"total_count":0,"state":"pending"}`, "failed"},
+		{`{"total_count":2,"check_runs":[{"status":"completed","conclusion":"success"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
 	} {
 		t.Run(tc.want, func(t *testing.T) {
 			c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -170,3 +176,50 @@ func TestRepairSourceLeavesOutAFileItMayNotHaveAndNamesIt(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// GitHub omits PR links on some runs. Commit lookup must recover the PR
+// without admitting a closed PR, a fork or a different head.
+func TestRepairRunResolvesMissingPullLinksAndKeepsAdmissionChecks(t *testing.T) {
+	for _, tc := range []struct {
+		name, candidates, pull, message string
+	}{
+		{"open PR", `[{"number":1}]`, testPull, ""},
+		{"missing PR state", `[{"number":1}]`, strings.Replace(testPull, `"open"`, `""`, 1), "open PR"},
+		{"closed PR", `[{"number":1}]`, strings.Replace(testPull, `"open"`, `"closed"`, 1), "PR #1 is closed or merged"},
+		{"stale head", `[{"number":1}]`, strings.Replace(testPull, `"old"`, `"new"`, 1), "newer commits"},
+		{"no PR", `[]`, "", "single PR"},
+		{"ambiguous commit", `[{"number":1},{"number":2}]`, "", "single PR"},
+		{"fork PR", `[{"number":1}]`, strings.Replace(testPull, "acme/repo", "other/repo", 1), "forks"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("readiness wrote: %s", r.Method)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/repos/acme/repo/actions/runs/9":
+					w.Write([]byte(`{"head_sha":"old","head_repository":{"full_name":"acme/repo"},"pull_requests":[]}`))
+				case "/repos/acme/repo/commits/old/pulls":
+					if r.URL.Query().Get("per_page") != "2" {
+						t.Error("commit lookup must be bounded and detect ambiguity")
+					}
+					w.Write([]byte(tc.candidates))
+				case "/repos/acme/repo/pulls/1":
+					w.Write([]byte(tc.pull))
+				default:
+					t.Errorf("unexpected request %s", r.URL)
+					http.NotFound(w, r)
+				}
+			})
+			p, err := c.RepairPullForRun(context.Background(), "acme/repo", 9)
+			if tc.message != "" {
+				if !errors.Is(err, ErrRepairUnsupported) || !strings.Contains(err.Error(), tc.message) {
+					t.Fatalf("pull %+v, error %v; want %q", p, err, tc.message)
+				}
+			} else if err != nil || p.Number != 1 || p.HeadSHA != "old" {
+				t.Fatalf("pull %+v, error %v", p, err)
+			}
+		})
+	}
+}

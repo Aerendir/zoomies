@@ -91,7 +91,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--z-space-1);
-    padding: var(--z-space-5);
+    padding: var(--z-space-4);
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-md);
     background: var(--z-surface);
@@ -153,7 +153,11 @@
   .hint {
     font-size: var(--z-text-xs);
     color: var(--z-text-subtle);
-    white-space: nowrap;
+    /* Wraps only once it has a line to itself and still does not fit, which is
+       a phone's width; nowrap here ran the text out of the tile. */
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
   .spark {
     margin-left: auto;

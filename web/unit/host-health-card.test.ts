@@ -24,7 +24,14 @@ function host(results: DoctorResult[], over: Partial<DoctorReport> = {}) {
     container: false,
     reboot_pending: false,
     results,
-    summary: { counted: results.length, warnings: 0, errors: 0, skipped: 0, suggestions: 0 },
+    summary: {
+      counted: results.length,
+      warnings: 0,
+      errors: 0,
+      skipped: 0,
+      suggestions: 0,
+      accepted: 0,
+    },
     ...over,
   };
   return { id: 'host_1', doctor };

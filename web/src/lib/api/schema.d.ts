@@ -2346,6 +2346,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a failure as known
+         * @description Record that somebody has read this job's failure, so the attention list (`GET /jobs?attention=true`, the Jobs page's "Needs attention" view and the Overview's failures panel) stops asking about it. It is not a resolution: the failure keeps its conclusion on GitHub and its row here, and a re-run that passes is what settles it. A later attempt that fails is a new failure that has to be looked at on its own.
+         *     Only a job that failed can be acknowledged, and a second acknowledgement is a no-op: the first name and the first timeline entry are the person who actually looked. Returns the job in the shape `GET /jobs/{id}` returns, so a client can drop it into the same cache a `job.updated` frame goes into.
+         */
+        post: operations["acknowledgeJob"];
+        /**
+         * Put a failure back in the attention list
+         * @description Take an acknowledgement back, so the failure asks for attention again: the undo for a row marked as known by mistake. It changes nothing about the job or GitHub's record, and reopening one nobody had acknowledged is a no-op. Returns the job in the shape `GET /jobs/{id}` returns.
+         */
+        delete: operations["reopenJobAttention"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{id}/events": {
         parameters: {
             query?: never;
@@ -2555,6 +2583,29 @@ export interface paths {
          * @description A `size` label is the host's size class while `scheduler.size_routing` or `scheduler.auto_pools` is not `off`, and is refused with 422 unless it is `small`, `medium` or `large`; with both off it is an ordinary label. Refused with 409 when the reserve, the labels or the runner profile described would leave a pool that runs here today with no host in the fleet that could ever run it. The message names the pool and the limit -- a host minimum above a size the pool states, or a host standard below the floor of a pool that takes its size from the host; confirm=true saves it anyway, which is right when the pool is on its way out. Changing the capacity, the reserve or the runner profile lifts the host's throttle, as the operator answering the pressure that raised it.
          */
         patch: operations["updateHost"];
+        trace?: never;
+    };
+    "/hosts/{id}/priority-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-read what a host's specs rank it at
+         * @description Recomputes the host's placement priority from the specs its last report carried and pushes the event frame, so a card settles at once. The specs themselves are re-measured by every heartbeat, so an upgrade the host has had reaches here on its own after its next report; this is for settling the ranking and the card now.
+         */
+        post: operations["checkHostPriority"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/hosts/{id}/cordon": {
@@ -3185,6 +3236,29 @@ export interface paths {
          * @description Asks the provider what it would refuse, changing nothing there. The result is recorded on the row as well as returned, so a check run in a terminal quiets the warning the UI is showing. Audited, because it uses the credential.
          */
         post: operations["checkProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/providers/{id}/test-machine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build one machine to prove the provider works
+         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential.
+         */
+        post: operations["testProviderMachine"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3936,7 +4010,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Verify and link a user’s GitHub numeric identity */
+        /**
+         * Verify and link a user’s GitHub numeric identity
+         * @description The GitHub account is checked before anything is written: it must exist, own the numeric identity, and have write permission on the verification repository. An empty `github_login` removes the link instead of adding one. A link one GitHub account cannot serve two Zoomies users, so a link another user already holds comes back as 409 `assistant.identity_held`, with the holding account's name in the message and its user id in `detail`. Resending with `relink` moves the link: the holder loses it and the moved row lands unconfirmed, so the person it was moved to must allow provider use again before Eli repairs anything for them. History already on record stays with the account that asked for it. Moving a link is audited as `assistant.github_link` with `moved_from` naming the account that held it.
+         */
         put: operations["setEliIdentity"];
         post?: never;
         delete?: never;
@@ -3954,7 +4031,7 @@ export interface paths {
         };
         /**
          * List rented machines
-         * @description There is deliberately no POST. A machine exists because demand asked for one: one creation path means one accounting path, and a machine made by hand would be supply the reconciler would then decide to delete.
+         * @description There is deliberately no POST. A machine exists because demand asked for one: one creation path means one accounting path, and a machine made by hand would be supply the reconciler would then decide to delete. The one exception is a provider's test machine (`POST /providers/{id}/test-machine`), which goes through the same loop and ceilings, is never counted as supply, and is released once it is ready.
          */
         get: operations["listMachines"];
         put?: never;
@@ -4403,7 +4480,11 @@ export interface paths {
         delete: operations["revokeMCPClient"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit an MCP client's name and redirect URIs
+         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended, and the client ID and secret stay as they were. Audited as `mcp_client.update`.
+         */
+        patch: operations["updateMCPClient"];
         trace?: never;
     };
     "/mcp-connections": {
@@ -4463,6 +4544,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recovery/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect carried-over host recovery obligations */
+        get: operations["listRecoveryHosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recovery/hosts/{id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire an unreachable carried-over destination host record
+         * @description Requires the recovery fence, an offline carried-over host and confirmation of its exact ID. Retains history and records the actor and time. Revokes destination agent access and prevents re-enrolment of this record. Queues no task and cannot stop, erase or clean up an unreachable machine. Does not lift the fence or remove the host from another controller.
+         */
+        post: operations["retireRecoveryHost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recovery/unfence": {
         parameters: {
             query?: never;
@@ -4474,7 +4594,7 @@ export interface paths {
         put?: never;
         /**
          * Lift the recovery fence
-         * @description A person saying that a recovered fleet has been checked and may act on the world again. It is audited under its own action, because the audit log is where somebody later asks who decided that and when. Lifting an unfenced instance succeeds and changes nothing: two operators recovering one fleet will both press it.
+         * @description A person saying that a recovered fleet has been checked and may act on the world again. It is audited under its own action, because the audit log is where somebody later asks who decided that and when. Lifting an unfenced instance succeeds and changes nothing: two operators recovering one fleet will both press it. Refused while any carried-over host has neither freshly reconnected with valid credentials and passed health and protocol checks nor been explicitly retired.
          */
         post: operations["unfence"];
         delete?: never;
@@ -4546,6 +4666,93 @@ export interface paths {
          * @description Requires a drained, fenced source. All database records and fleet credentials travel under a disposable transfer key inside the encrypted archive. The source encryption key and configuration file do not travel. Stop the source controller before cutover and keep it stopped while the destination runs. Requires process operator authority.
          */
         post: operations["exportInstanceTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transfers/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a bounded complete-instance archive upload
+         * @description Upload ciphertext in chunks no larger than chunk_bytes, then request verification. Uploads belong to the creating identity, expire after 24 hours and do not survive a controller restart. At most two active uploads per identity and sixteen overall. This avoids reverse-proxy request-size limits; the existing multipart import remains available.
+         */
+        post: operations["createTransferUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transfers/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /** Read an upload offset and verification result */
+        get: operations["getTransferUpload"];
+        put?: never;
+        post?: never;
+        /** Discard an upload that is not being verified */
+        delete: operations["cancelTransferUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transfers/uploads/{id}/chunks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append a bounded archive chunk
+         * @description An identical replay is accepted, changed or out-of-order bytes are refused. A truncated request does not advance the offset. Read the upload after a lost response to discover the durable offset before retrying.
+         */
+        post: operations["uploadTransferChunk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transfers/uploads/{id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify and seal a completed archive in the background
+         * @description Returns immediately. Poll the upload until verified or failed. The passphrase is held only in memory while verifying; verification has a two-hour limit and removes uploaded ciphertext on completion. Repeated requests return the same job. Verification leaves live data unchanged; staging and applying remain separate.
+         */
+        post: operations["verifyTransferUpload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5604,7 +5811,7 @@ export interface components {
         ErrorEnvelope: {
             error: {
                 /** @enum {string} */
-                code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "analysis.same_release" | "analysis.too_few_releases" | "analysis.whole_days_only" | "internal";
+                code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "assistant.identity_held" | "analysis.same_release" | "analysis.too_few_releases" | "analysis.whole_days_only" | "internal";
                 /** @description Written for a person to read */
                 message: string;
                 /** @description The form field at fault, or on a `limit_reached` refusal the `limits.*` setting that refused. */
@@ -6155,6 +6362,8 @@ export interface components {
             tailcat_available?: boolean;
             /** @description True when authentication has been switched off in the configuration. */
             auth_disabled?: boolean;
+            /** @description True when this controller is running with the seeded demo fleet. */
+            demo?: boolean;
             /** @description True when `security.public_view` is on: a caller with no credential reads the fleet as a visitor, whose session has the kind `public`. False whenever authentication is switched off. */
             public_view?: boolean;
             oidc_enabled?: boolean;
@@ -7966,6 +8175,19 @@ export interface components {
                 [key: string]: number;
             };
         };
+        TransferUpload: {
+            id: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            offset: number;
+            /** Format: int64 */
+            chunk_bytes: number;
+            /** @enum {string} */
+            state: "uploading" | "verifying" | "verified" | "failed" | "cancelled";
+            backup?: components["schemas"]["Backup"];
+            error?: string;
+        };
         /** @description One backup, as the Backups tab lists it. The manifest's facts are lifted out flat. */
         Backup: {
             transfer?: components["schemas"]["TransferInfo"];
@@ -8499,6 +8721,13 @@ export interface components {
             fault_domain?: "fleet" | "workflow";
             /** @description What to do about a fault of this kind, in the words of the person who has to do it. Empty when there is nothing to do, which is different from not knowing. */
             fault_fix?: string;
+            /**
+             * Format: date-time
+             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Null on a failure nobody has triaged, which is the ordinary state.
+             */
+            acknowledged_at?: string | null;
+            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Empty when nobody has, and on an instance with authentication off, where there is no account behind the action. */
+            acknowledged_by?: string;
             /** Format: date-time */
             queued_at?: string;
             /** Format: date-time */
@@ -9308,10 +9537,10 @@ export interface components {
          */
         FaultKind: "host_lost" | "out_of_memory" | "out_of_disk" | "removed" | "image" | "registration" | "backend" | "backend_busy" | "container_conflict" | "config" | "runner_exited";
         /**
-         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits.
+         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits. `acknowledged` and `reopened` are the fleet's triage of a failure: somebody said they had read it, and somebody put it back in front of whoever looks next. Neither changes the job, which is why they are entries here rather than a move of the job.
          * @enum {string}
          */
-        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed";
+        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed" | "acknowledged" | "reopened";
         JobEvent: {
             id?: string;
             job_id?: string;
@@ -9784,7 +10013,25 @@ export interface components {
              */
             attempt_id: string;
         };
+        RecoveryHost: {
+            host_id: string;
+            name: string;
+            /** @enum {string} */
+            state: "awaiting_recovery" | "verified" | "retired";
+            /**
+             * Format: date-time
+             * @description Time recovery completed with this host freshly verified.
+             */
+            verified_at?: string;
+            /** Format: date-time */
+            retired_at?: string;
+            /** @description Identity that explicitly retired the destination record. */
+            retired_by?: string;
+        };
         Host: {
+            retired?: boolean;
+            /** @enum {string} */
+            recovery_state?: "awaiting_recovery" | "verified" | "retired";
             health_check?: components["schemas"]["HostHealthCheck"];
             doctor?: components["schemas"]["HostDoctorView"];
             usage?: components["schemas"]["HostUsage"];
@@ -9821,6 +10068,18 @@ export interface components {
             runner_profile?: components["schemas"]["RunnerProfile"];
             /** @description What a runner on this host is held to, with the fleet's settings standing in for every field the host leaves out, and where each figure came from. */
             effective_profile?: components["schemas"]["EffectiveProfile"];
+            /** @description Where this host stands in placement, on a 0..100 scale: placement prefers hosts with a higher one, whatever placement order would otherwise decide between them, and a pool's minimum of warm runners stands up through the same ranking. The number is the score the host's reported specs earn unless `priority_source` is `overridden`, in which case the operator has pinned it. */
+            priority?: number;
+            /**
+             * @description What set `priority`.
+             * @enum {string}
+             */
+            priority_source?: "computed" | "overridden";
+            /**
+             * @description The sentence the host card shows beside the priority: what the score came from, and what an override replaced.
+             * @example scored from 32 CPUs, 4.3 GHz of clock, 256 GB of memory, 6400 MT/s of memory speed, 1024 GB of disk, a ssd work directory, ahead of the 43 that would stand without it
+             */
+            priority_reason?: string;
             /** @description What can be said about this host in the terms a pool's `host_selector` asks in: the labels stored on it, and the automatic ones no label has taken the place of. Always present, and empty for a host with none. The `size` tag is listed only while `scheduler.size_routing` or `scheduler.auto_pools` is not `off`. */
             tags?: components["schemas"]["HostTag"][];
             /** @description The size class this host is in, and why. Absent until the controller has worked one out, which is never while both `scheduler.size_routing` and `scheduler.auto_pools` are `off`. */
@@ -9865,6 +10124,17 @@ export interface components {
             cpus?: number;
             /** Format: int64 */
             memory_mb?: number;
+            /** @description The fastest clock a processor reaches */
+            cpu_mhz?: number;
+            /** @description The memory modules' rated speed in MT/s as the machine's DMI table says it */
+            memory_mts?: number;
+            /**
+             * @description Whether the storage backing the work directory says it spins
+             * @enum {string}
+             */
+            disk_kind?: "ssd" | "hdd";
+            /** @description The operator's pin on placement */
+            priority_override?: number | null;
             /**
              * Format: int64
              * @description The filesystem holding the agent's work directory
@@ -9910,6 +10180,11 @@ export interface components {
              * @example dev
              */
             version_channel?: string;
+            /**
+             * @description The machine this host is, when Zoomies rented it, and absent for a host somebody installed. A rented machine is a clone of the template its provider builds from: it holds the agent that image carried, nothing can be run inside it by hand, and it is destroyed once it has been idle. It is therefore behind from the moment it joins, and `upgrade_command` is absent for it too; `upgrade_note` gives the way that does exist, which is preparing its provider's template again.
+             * @example mach_k3f9qz2mx7ab
+             */
+            machine_id?: string;
             cordoned?: boolean;
             /** @description The agent protocol this host reported speaking. Absent from an agent old enough not to send one, which is not the same as incompatible -- it is the one case the controller cannot judge. */
             protocol_version?: number;
@@ -9922,7 +10197,7 @@ export interface components {
              * @enum {string}
              */
             version_skew?: "behind" | "ahead" | "differs";
-            /** @description Copyable `sudo zoomies upgrade --mode agent --version <tag>` command for an older or different remote agent, targeting the controller's published release or dev channel. An operator runs it on the host. The controller asks the host's agent to update itself instead, with `POST /hosts/{id}/update`, only when `update.can_update` is true; for every other host this command is how it is upgraded. Absent for embedded, matching or newer agents, for unpublished controller builds, and for a Windows agent, which has no sudo and runs a service `zoomies upgrade` does not know; `upgrade_note` gives its steps by hand instead. Contains no credentials. */
+            /** @description Copyable `sudo zoomies upgrade --mode agent --version <tag>` command for an older or different remote agent, targeting the controller's published release or dev channel. An operator runs it on the host. The controller asks the host's agent to update itself instead, with `POST /hosts/{id}/update`, only when `update.can_update` is true; for every other host this command is how it is upgraded. Absent for embedded, matching or newer agents, for unpublished controller builds, for a machine Zoomies rents (see `machine_id`: no command can be run inside one), and for a Windows agent, which has no sudo and runs a service `zoomies upgrade` does not know; `upgrade_note` gives its steps by hand instead. Contains no credentials. */
             upgrade_command?: string;
             /** @description Controller build the upgrade is intended to match. */
             upgrade_version?: string;
@@ -10383,6 +10658,8 @@ export interface components {
             github_login: string;
             installation_id: string;
             repo: string;
+            /** @description Move this GitHub account's link to this user when another user already holds it: the confirmation the `assistant.identity_held` refusal asks for. Removing the holding row resets the moved link's confirmation, so the person using it must allow provider use again; what never moves is a repair already made, which is history under the account that asked for it. */
+            relink?: boolean;
         };
         EliRepairPolicy: {
             repo: string;
@@ -10570,6 +10847,13 @@ export interface components {
             label?: string;
             /** @description What picking it means */
             consequence?: string;
+            /** @description The processors a node has or a template gives */
+            cpus?: number;
+            /**
+             * Format: int64
+             * @description The memory in MiB a node has or a template gives
+             */
+            memory_mb?: number;
         };
         /** @description What a credential can actually see. A provider with no such concept leaves a list empty rather than inventing one. */
         ProviderDiscovery: {
@@ -10639,6 +10923,8 @@ export interface components {
             labels: {
                 [key: string]: string;
             };
+            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready */
+            test?: boolean;
             /**
              * @description The operation in flight
              * @enum {string}
@@ -11044,6 +11330,17 @@ export interface components {
             /** @description Whether the build came from a release. Only one that did is offered an update, because a build from main is usually ahead of the newest release and taking it there would be a downgrade. */
             release: boolean;
         };
+        /** @description Comparison with main for a stamped development build. Main may still be publishing to the dev channel. */
+        UpdatesDevelopment: {
+            /** @description The commit in the running build. */
+            current: string;
+            /** @description The last observed commit on main */
+            latest: string;
+            /** @enum {string} */
+            state: "unknown" | "current" | "available";
+            /** Format: date-time */
+            checked_at: string | null;
+        };
         UpdatesRelease: {
             /** @example v1.3.5 */
             tag: string;
@@ -11085,6 +11382,10 @@ export interface components {
              */
             upgrade_command: string;
         };
+        UpdatesSigning: {
+            /** @description One id per release signing key this build trusts, empty when none is compiled in. The keys themselves are not exposed; an id names one. An empty array means a release's checksums are taken on trust rather than held to a signature. */
+            keys: string[];
+        };
         UpdatesAttempt: {
             /** @example upd_k3fqz2mx7abcd */
             id: string;
@@ -11117,10 +11418,14 @@ export interface components {
             finished_at: string | null;
             /** @description Why it did not succeed, often the helper's own sentence. Empty when it succeeded or is still in flight. Only the `platform` role is given the text, which can name a folder on the controller's host; every other role is given a fixed sentence for the state in its place, and an empty string where there was nothing to say. */
             error: string;
+            /** @description The directory of the copy the engine took before it changed anything, so a page can offer a restore after a failed update. Empty when none was taken. Only the `platform` role is given it, because it names a folder on the controller's host. */
+            backup: string;
+            /** @description Whether the engine put the previous release back because the new one did not answer. The attempt is then a failure that was undone, not one left in place. */
+            rolled_back: boolean;
         };
         UpdateControllerRequest: {
             /**
-             * @description The release to take, such as `v1.3.5`. Left out, it is the newest release that can be installed on this system. A tag that is not of that form, is not in the list the controller last read, or is not newer than the running build is refused with `update.nothing_newer`.
+             * @description The release to take, such as `v1.3.5`, or `dev` for the latest development build. Left out, it is the newest release that can be installed on this system. DEV is an explicit manual choice and does not use the release list or soak. Other tags must name a newer release in the list the controller last read, or they are refused with `update.nothing_newer`.
              * @example v1.3.5
              */
             tag?: string;
@@ -11143,6 +11448,7 @@ export interface components {
             /** @description `updates.soak` as the Settings page writes it. `auto` waits this long after a release is published; `manual` ignores it. */
             soak: components["schemas"]["Duration"];
             running: components["schemas"]["UpdatesRunning"];
+            development?: components["schemas"]["UpdatesDevelopment"];
             /** @description The newest release that could be installed on this system, whether or not the build is behind it. Null while updating is off, until the list of releases has been read, and when nothing in it can be installed here. */
             latest: components["schemas"]["UpdatesRelease"] | null;
             /** @description What the mode would do about `latest`. Null whenever `latest` is. */
@@ -11155,6 +11461,9 @@ export interface components {
              */
             checked_at: string | null;
             helper: components["schemas"]["UpdatesHelper"];
+            signing?: components["schemas"]["UpdatesSigning"];
+            /** @description Whether a controller that does not come back is put back on the release it ran. True for a native service running the binary; false for a container, whose service is an image the upgrade does not keep the one before. */
+            rollback?: boolean;
             /** @description The controller's latest update attempt, in flight or ended, in every mode: one that was in flight when updating was switched off still ends, and says how. Null when it has never had one. */
             controller: components["schemas"]["UpdatesAttempt"] | null;
             /** @description The open rollout, or the last one that ended, so that a page can say how it went. Null when there has never been one. */
@@ -11627,6 +11936,139 @@ export interface components {
             /** Format: int64 */
             run_id: number;
         };
+        ExperimentRecordedGrantView: {
+            /** @enum {string} */
+            basis: "retained_job_granted_size_v1";
+            /** @enum {string} */
+            source: "pool" | "host" | "profile" | "reduced" | "history";
+            cpus: number | null;
+            /** Format: int64 */
+            memory_mb: number | null;
+        };
+        ExperimentRunnerRequestView: {
+            /** @enum {string} */
+            backend: "docker" | "podman" | "process";
+            /** @description Fingerprint of the dispatched image reference, not verified image identity. */
+            image_reference_sha256: string;
+            cpus: number | null;
+            /** Format: int64 */
+            memory_mb: number | null;
+            resource_source: string;
+            docker_mode: string;
+            cpu_typed: boolean;
+            memory_typed: boolean;
+        };
+        ExperimentRunnerObservationView: {
+            sha256: string;
+            /** Format: date-time */
+            issued_at: string;
+            /** Format: date-time */
+            received_at: string;
+            requested: components["schemas"]["ExperimentRunnerRequestView"];
+            /** @description Unverified agent-reported digest, never proof of image equivalence. */
+            image_digest: string | null;
+            /** @enum {string} */
+            digest_coverage: "reported" | "not_reported" | "unsupported";
+            /** Format: date-time */
+            agent_completed_at: string | null;
+            /** Format: date-time */
+            agent_container_started_at: string | null;
+        };
+        ExperimentRunnerEvidenceJob: {
+            /** @description Exact decimal identity, represented as text to avoid browser rounding. */
+            run_id: string;
+            /** Format: int64 */
+            attempt: number;
+            /** @description Exact decimal identity, represented as text to avoid browser rounding. */
+            github_job_id: string;
+            fleet_matched: boolean;
+            recorded_grant: components["schemas"]["ExperimentRecordedGrantView"] | null;
+            observation: components["schemas"]["ExperimentRunnerObservationView"] | null;
+        };
+        ExperimentRunnerEvidenceArm: {
+            /**
+             * Format: int64
+             * @description Jobs enumerated in selected attempts, including partial attempts; not proof of full workflow coverage.
+             */
+            selected_jobs: number;
+            /** Format: int64 */
+            matched_jobs: number;
+            /** Format: int64 */
+            recorded_grants: number;
+            /** Format: int64 */
+            runner_observations: number;
+            rows_omitted: boolean;
+            jobs: components["schemas"]["ExperimentRunnerEvidenceJob"][];
+        };
+        RootDependencies: {
+            /** @enum {string} */
+            version: "root-dependencies-v1";
+            /** @enum {string} */
+            basis: "root_uses_declarations";
+            source_sha256: string;
+            /** @enum {string} */
+            coverage: "enumerated" | "unsupported";
+            counts: components["schemas"]["RootDependencyCounts"] | null;
+            rows_omitted: boolean;
+            references: components["schemas"]["RootDependencyReference"][];
+        };
+        RootDependencyCounts: {
+            declarations: number;
+            commit_pins: number;
+            digest_pins: number;
+            floating: number;
+            local: number;
+            expressions: number;
+            unknown: number;
+        };
+        RootDependencyReference: {
+            job_index: number;
+            step_index: number;
+            line: number;
+            /** @enum {string} */
+            declaration: "job_workflow" | "step_action";
+            /** @enum {string} */
+            kind: "remote" | "docker" | "local" | "expression" | "unknown";
+            /** @enum {string} */
+            pin: "commit" | "digest" | "floating" | "unresolved";
+            reference_sha256: string;
+            revision: string | null;
+        };
+        ExperimentRootSourceView: {
+            /** @description Root uses declarations only. At most 50 reference rows across each arm, with full counts and omission flags. Absent on older controllers; literal pins do not prove resolution or execution. */
+            dependencies?: components["schemas"]["RootDependencies"] | null;
+            /** @enum {string} */
+            basis: "push_head_sha_root_file";
+            commit_sha: string;
+            blob_sha: string;
+            content_sha256: string;
+            bytes: number;
+        };
+        ExperimentWorkflowEvidenceAttempt: {
+            run_id: string;
+            attempt: number;
+            event: string | null;
+            workflow_path_sha256: string | null;
+            root_source: components["schemas"]["ExperimentRootSourceView"] | null;
+        };
+        ExperimentWorkflowEvidenceArm: {
+            selected_attempts: number;
+            root_sources: number;
+            rows_omitted: boolean;
+            attempts: components["schemas"]["ExperimentWorkflowEvidenceAttempt"][];
+        };
+        ExperimentWorkflowEvidence: {
+            /** @enum {string} */
+            version: "workflow-evidence-v1";
+            baseline: components["schemas"]["ExperimentWorkflowEvidenceArm"];
+            candidate: components["schemas"]["ExperimentWorkflowEvidenceArm"];
+        };
+        ExperimentRunnerEvidence: {
+            /** @enum {string} */
+            version: "runner-evidence-v1";
+            baseline: components["schemas"]["ExperimentRunnerEvidenceArm"];
+            candidate: components["schemas"]["ExperimentRunnerEvidenceArm"];
+        };
         ExperimentComparisonReport: {
             /** @enum {string} */
             execution_basis: "sum_of_all_github_job_elapsed_times";
@@ -11713,6 +12155,10 @@ export interface components {
             until: string;
         };
         RetainedExperimentComparison: {
+            /** @description Descriptive retained trigger, path fingerprint and root-file digests only. Missing facts remain null. No source text or filenames; no workflow equivalence or execution attestation. Absent on older controllers. */
+            workflow_evidence?: components["schemas"]["ExperimentWorkflowEvidence"];
+            /** @description Bounded descriptive view from validated retained inputs only. At most 100 job rows per arm; counts include omitted rows. Requested fields and agent claims do not establish applied limits or controlled equivalence. Absent on older controllers. */
+            runner_evidence?: components["schemas"]["ExperimentRunnerEvidence"];
             /** Format: date-time */
             created_at: string;
             id: string;
@@ -15389,6 +15835,8 @@ export interface operations {
                 managed?: boolean;
                 /** @description Only jobs that went wrong, on either side: a conclusion GitHub counts as a failure (failure, timed_out, startup_failure), or a runner of this fleet that stopped under the job -- including one GitHub still believes is running. */
                 failed?: boolean;
+                /** @description Only the failures that still want a person: failed, queued within the last week, acknowledged by nobody, and not replaced by a later attempt or run of the same job and workflow on the same known branch. Cancelled, skipped and neutral outcomes do not settle an earlier failure. Background GitHub checks also remove failures whose PR closed, whose head was superseded, or whose checks passed. Failed GitHub reads do not establish a resolution. This is the question behind the Jobs page's "Needs attention" view and the Overview's failures panel, asked as one parameter so a link into it cannot compose half of it. Acknowledging a job removes it from this list without changing the failure; a re-run that passes is what settles the failure itself. */
+                attention?: boolean;
                 /** @description Only the failures this fleet caused: the `failed` list narrowed to the jobs whose runner never started or stopped under them. This is the list to open when somebody says CI is flaky, because it is the half nobody else can fix. */
                 faulted?: boolean;
                 /** @description The other half: jobs GitHub failed with nothing wrong on this side. Sending this and `faulted` together is a 400, because they ask for opposite halves of one list. */
@@ -15562,6 +16010,57 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    acknowledgeJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job, with the acknowledgement recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    reopenJobAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job, with the acknowledgement cleared */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getJobEvents: {
         parameters: {
             query?: never;
@@ -15729,6 +16228,8 @@ export interface operations {
                 managed?: boolean;
                 /** @description Runs with a job that went wrong on either side */
                 failed?: boolean;
+                /** @description Runs with a failure that still wants a person; see the `attention` parameter of GET /jobs. */
+                attention?: boolean;
                 /** @description Runs with a failure this fleet caused. */
                 faulted?: boolean;
                 /** @description Runs GitHub failed with nothing wrong on this side. Sending this and `faulted` together is a 400. */
@@ -15980,6 +16481,10 @@ export interface operations {
                     reserve_memory_mb?: number;
                     /** Format: int64 */
                     reserve_disk_mb?: number;
+                    /** @description Where this host stands in placement. Leave the whole field out to change nothing; send `{ "override": null }` to hand the ranking back to the score the reported specs earn; send a number on the 0..100 scale to pin the host above every host with a lower one while its specs stay out of the decision. */
+                    priority?: {
+                        override: number | null;
+                    };
                     /** @description How big a runner is on this host. It replaces the whole profile: leave it out to change nothing, send `{}` to clear it so the host follows the fleet's settings again, and a field left out of a profile that is sent follows the fleet too. A size below a quarter of a core or 512 MB, a minimum above the standard, a ceiling below it, or a size the machine could never give once its reserve is held back is refused with the field named; a host that has reported nothing about itself has nothing to compare against, so its profile is saved and used once it does. */
                     runner_profile?: components["schemas"]["RunnerProfile"];
                 };
@@ -15997,6 +16502,30 @@ export interface operations {
             };
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    checkHostPriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Host"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     cordonHost: {
@@ -16970,6 +17499,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderCheck"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    testProviderMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Machine"];
                 };
             };
             404: components["responses"]["NotFound"];
@@ -18868,6 +19422,40 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    updateMCPClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @example Claude */
+                    name: string;
+                    redirect_uris?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPClient"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
     listMCPConnections: {
         parameters: {
             query?: never;
@@ -18930,6 +19518,72 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Recovery"];
                 };
+            };
+        };
+    };
+    listRecoveryHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every carried-over host, including retired records */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: components["schemas"]["RecoveryHost"][];
+                        total?: number;
+                    };
+                };
+            };
+        };
+    };
+    retireRecoveryHost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Must exactly match the path host ID. */
+                    confirm_host_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Retired destination host record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Host"];
+                };
+            };
+            /** @description Unknown host */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing confirmation or host is not eligible */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -19081,6 +19735,172 @@ export interface operations {
             };
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    createTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    size: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            /** @description Invalid upload request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current upload state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upload discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    uploadTransferChunk: {
+        parameters: {
+            query: {
+                offset: number;
+            };
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Chunk saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            /** @description Invalid upload request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Chunk exceeds 8 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    verifyTransferUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: password */
+                    passphrase: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Verification started or already requested */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferUpload"];
+                };
+            };
+            /** @description Invalid upload request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     importInstanceTransfer: {

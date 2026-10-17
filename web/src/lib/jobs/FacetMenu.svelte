@@ -92,7 +92,7 @@
   <div bind:this={trigger}>
     <Button
       size="sm"
-      variant={selected.length > 0 ? 'secondary' : 'ghost'}
+      variant="secondary"
       iconAfter={ChevronDown}
       {disabled}
       ariaExpanded={open}

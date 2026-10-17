@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   SECTIONS,
-  browserOverride,
   goto,
   nav,
   navEntry,
@@ -9,8 +8,6 @@ import {
   openAccountMenu,
   openSection,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 for (const theme of ['light', 'dark'] as const) {
   test(`tooltips escape clipped table cells and overlapping elements in ${theme} theme`, async ({
@@ -272,6 +269,7 @@ test.describe('the shared tooltip', () => {
     const more = nav(page).getByRole('button', { name: 'More' });
     await more.click();
     const tag = navMenu(page).locator('p.build');
+    const bubble = tag.locator('xpath=..').locator('.bubble');
     const box = await tag.boundingBox();
     expect(box, 'the build tag is in the sheet').not.toBeNull();
     const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
@@ -288,9 +286,10 @@ test.describe('the shared tooltip', () => {
     await expect(page.locator('.bubble', { hasText: 'development build' })).toHaveCount(0);
     await expect(page.locator('.bubble')).toHaveCount(0);
 
-    // A real move over it is a reach, and the wait starts then.
-    await page.mouse.move(x + 2, y + 1);
-    await expect(page.locator('.bubble', { hasText: 'build' })).toBeVisible();
+    // Move onto its current box: reopening the sheet must not make the old
+    // coordinates a few pixels short of the tag.
+    await tag.hover();
+    await expect(bubble).toBeVisible();
     // The first Escape is still the sheet's own once the bubble has gone.
     await page.keyboard.press('Escape');
     await expect(page.locator('.bubble')).toHaveCount(0);
@@ -393,6 +392,11 @@ test.describe('the shared tooltip', () => {
     });
     await navEntry(page, '/pools').hover();
     await expect(page.locator('.bubble:popover-open')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { __entrances: unknown[] }).__entrances.length),
+      )
+      .toBe(1);
     const [entrance] = await page.evaluate(
       () => (window as unknown as { __entrances: Array<Record<string, unknown>> }).__entrances,
     );

@@ -597,4 +597,12 @@ type Discovery struct {
 // Choice is one option in a guided form. Consequence is what picking it means,
 // because a list of identifiers with no consequences is a list somebody guesses
 // at.
-type Choice struct{ Value, Label, Consequence string }
+//
+// CPUs and MemoryMB are the size of the thing when it has one (a node's
+// hardware, a template's shape), as numbers so a form can do arithmetic with
+// them; Consequence says the same in words. Zero means unknown.
+type Choice struct {
+	Value, Label, Consequence string
+	CPUs                      int
+	MemoryMB                  int64
+}

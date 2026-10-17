@@ -17,8 +17,9 @@
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import RepairHistory from '$lib/repairs/RepairHistory.svelte';
-  import RepairRequest from '$lib/repairs/RepairRequest.svelte';
+  import RepairJourney from '$lib/repairs/RepairJourney.svelte';
   import RepositoryPicker from '$lib/repairs/RepositoryPicker.svelte';
+  import { heldLink, heldLinkMessage, type HeldLink } from '$lib/repairs/identity';
   import Button from '$lib/components/Button.svelte';
   import Field from '$lib/components/Field.svelte';
   import Input from '$lib/components/Input.svelte';
@@ -57,6 +58,10 @@
   let user = $state('');
   let login = $state('');
   let linkInstallation = $state('');
+  // A GitHub account one link may not serve two Zoomies accounts: after an
+  // instance move or a re-created account, the old account's row is the thing
+  // in the way, and this is the refusal the move button answers.
+  let linkHeld = $state<HeldLink | null>(null);
   let busy = $state(false);
   let error = $state('');
   const admin = $derived(session.can('admin'));
@@ -138,6 +143,46 @@
       busy = false;
     }
   }
+
+  /**
+   * A verification the server could not write. The held-link refusal becomes
+   * the card and its move button; everything else keeps the toast, because a
+   * name it cannot act on is just text.
+   */
+  async function linkIdentity(relink = false): Promise<void> {
+    if (busy) return;
+    busy = true;
+    linkHeld = null;
+    try {
+      await setEliIdentity({
+        user_id: user,
+        github_login: login.trim(),
+        repo: linkRepos[0] ?? '',
+        installation_id: linkInstallation,
+        relink,
+      });
+      offersReadAt = 0;
+      toasts.success(relink ? 'GitHub account link moved' : 'GitHub account linked');
+      await refresh();
+      await adminChoices();
+    } catch (cause) {
+      const held = heldLink(cause as { code?: string; detail?: string }, login, identities, users);
+      if (held) {
+        linkHeld = held;
+        toasts.error('GitHub account already linked', heldLinkMessage(held));
+      } else {
+        toasts.error(
+          'Could not complete that request',
+          cause instanceof ApiError ? cause.message : 'Please try again.',
+        );
+      }
+    } finally {
+      busy = false;
+    }
+  }
+
+  /** Moving the link is the same verification again, with the confirmation sent. */
+  const moveHeld = (): Promise<void> => linkIdentity(true);
   function editPolicy(p: Schemas['EliRepairPolicy']): void {
     selectedRepos = [p.repo];
     installation = p.installation_id;
@@ -214,13 +259,36 @@
       {:else}<p>
           No pending offers. Enable Ask me first for your repositories, or paste a PR link below.
         </p>{/if}
-      {#key selectedOffer?.id ?? (retryTarget ? `${retryTarget.repo}:${retryTarget.pull}` : 'manual')}
-        <RepairRequest
+      {#key selectedOffer?.id ?? (retryTarget ? `${retryTarget.repo}:${retryTarget.pull}` : `${initialRepo}:${initialPull}:${initialRun}`)}
+        <RepairJourney
           repo={selectedOffer?.repo ?? retryTarget?.repo ?? initialRepo}
           pull={selectedOffer?.pull_number ?? retryTarget?.pull ?? initialPull}
-          run={initialRun}
+          run={selectedOffer || retryTarget ? 0 : initialRun}
           opportunity={selectedOffer?.id ?? ''}
-          onsetup={() => (showSetup = true)}
+          onretry={(target) => {
+            selectedOffer = null;
+            retryTarget = target;
+            document.getElementById('eli-repairs-heading')?.scrollIntoView();
+          }}
+          onsetup={() => {
+            showSetup = true;
+            const repo = selectedOffer?.repo ?? retryTarget?.repo ?? initialRepo;
+            if (!repo) return;
+            const policy = policies.find((item) => item.repo.toLowerCase() === repo.toLowerCase());
+            if (policy) editPolicy(policy);
+            else {
+              selectedRepos = [repo];
+              const match =
+                installations.find((item) => item.target?.toLowerCase() === repo.toLowerCase()) ??
+                installations.find(
+                  (item) => item.target?.toLowerCase() === repo.split('/')[0]?.toLowerCase(),
+                );
+              installation = match?.id ?? '';
+            }
+            linkRepos = [repo];
+            linkInstallation = installation;
+            user = session.identity?.id ?? '';
+          }}
           onqueued={() => {
             offersReadAt = 0;
             void refresh();
@@ -361,19 +429,19 @@
           Verify that the selected person owns this GitHub account before linking it. Eli checks its
           numeric identity and repository write permission.
         </p>
+        {#if linkHeld}
+          <div class="held card">
+            <p>{heldLinkMessage(linkHeld)}</p>
+            <Button size="sm" disabled={busy || !user} onclick={() => void moveHeld()}
+              >Move the link to {users.find((u) => u.id === user)?.username ??
+                'this account'}</Button
+            >
+          </div>
+        {/if}
         <form
           onsubmit={(e) => {
             e.preventDefault();
-            void act(
-              () =>
-                setEliIdentity({
-                  user_id: user,
-                  github_login: login.trim(),
-                  repo: linkRepos[0] ?? '',
-                  installation_id: linkInstallation,
-                }),
-              'GitHub account linked',
-            );
+            void linkIdentity();
           }}
         >
           <div class="fields">
@@ -487,6 +555,15 @@
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-lg);
     background: var(--z-surface);
+  }
+  /* The held-link card is the move press's frame: it sits beside the fields
+     it acts on, and the danger edge is what makes "own link" and "held link"
+     read apart when both rows are on the page at once. */
+  .held.card {
+    border-color: var(--z-danger);
+  }
+  .held.card p {
+    margin: var(--z-space-1) 0 var(--z-space-3);
   }
   summary {
     cursor: pointer;

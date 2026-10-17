@@ -7,9 +7,9 @@
 # The helper's Go tests stand a fake in for the engine, so nothing there shows
 # the whole chain that runs when somebody presses Update: the helper reads the
 # request, runs the installed binary's own `zoomies upgrade` for the tag, the
-# engine downloads the release, checks it against checksums.txt, keeps the old
-# binary as zoomies.previous, puts the new one in place and restarts the unit,
-# and the helper writes result.json. This runs all of that, in a folder of its
+# engine downloads the release, checks it against checksums.txt and its
+# signature, keeps the old binary as zoomies.previous, puts the new one in place
+# and restarts the unit, and the helper writes result.json. This runs all of that, in a folder of its
 # own, and checks what is left:
 #
 #   * the installed binary is the release asked for, and zoomies.previous holds
@@ -91,6 +91,13 @@ new_sha=$(sha_of "$work/zoomies-$newer")
 printf 'not the release\n' > "$work/other"
 other_sha=$(sha_of "$work/other")
 
+# A release's checksums are signed, and the engine refuses one whose signature
+# no trusted key made. A real host trusts the key compiled into its binary; this
+# one mints a key of its own and hands it to the engine through the helper's
+# environment, so the check needs no copy of the owner's private key.
+"$work/zoomies-$older" release keygen --out "$work/key" > /dev/null
+release_key=$(cat "$work/key/release.pub")
+
 # lay_out <case> <checksum>: one host with the helper installed and a request
 # waiting, and a release host serving $newer with <checksum> for it. Each case
 # has a host of its own, because the helper allows one attempt in ten minutes
@@ -108,6 +115,9 @@ lay_out() {
 
     cp "$work/zoomies-$newer" "$case_dir/releases/download/$tag/$asset"
     printf '%s  %s\n' "$2" "$asset" > "$case_dir/releases/download/$tag/checksums.txt"
+    "$work/zoomies-$older" release sign --key-file "$work/key/release.key" \
+        "$case_dir/releases/download/$tag/checksums.txt" \
+        > "$case_dir/releases/download/$tag/checksums.txt.ed25519"
 
     # A native agent, as zoomies init leaves one: the record the engine reads
     # to know what it is upgrading, and an agent that needs no Docker.
@@ -145,6 +155,7 @@ answer() {
     if ! (cd "$root" &&
         PATH="$case_dir/fakebin:$PATH" \
         ZOOMIES_STATE_DIR="$case_dir/state" \
+        ZOOMIES_RELEASE_KEY="$release_key" \
         HELPER_CHECK_STATE_DIR="$case_dir/var/lib/zoomies-update" \
         HELPER_CHECK_TOP="$case_dir" \
         HELPER_CHECK_RELEASES="$case_dir/releases" \

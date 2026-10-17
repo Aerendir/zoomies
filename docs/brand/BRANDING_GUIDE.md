@@ -1,3 +1,9 @@
+---
+description: >-
+  The Zoomies branding guide: which logo to use on which background, clear
+  space, colour and the asset pack's contents.
+---
+
 # Zoomies branding guide v3.0
 
 The approved master is the running cocker spaniel inside a circular swish,

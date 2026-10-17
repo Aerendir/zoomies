@@ -30,6 +30,8 @@
   import { isCurrentSection, sectionsFor } from './sections';
   import BuildTag from './BuildTag.svelte';
   import { signIn, signOut } from './signout';
+  import { visualStyle } from '../state/ui-style.svelte';
+  import { UI_STYLE_OPTIONS, type UIStyle } from '../state/ui-style';
 
   interface Props {
     open?: boolean;
@@ -105,6 +107,16 @@
           value={theme.choice}
           label="Theme"
           onchange={(value) => theme.set(value as ThemeChoice)}
+        />
+      </div>
+
+      <div class="theme">
+        <span class="theme-label" aria-hidden="true">Visual style</span>
+        <Segmented
+          options={UI_STYLE_OPTIONS.map((option) => ({ ...option, name: option.description }))}
+          value={visualStyle.choice}
+          label="Visual style"
+          onchange={(value) => visualStyle.set(value as UIStyle)}
         />
       </div>
 

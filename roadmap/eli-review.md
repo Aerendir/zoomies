@@ -71,7 +71,7 @@ What it does not have:
    `get_catalog` wraps `GET /catalog` as an index by category, one entry by
    code, or one category with titles, and is on Eli's list.
 6. Comments and docs that described the chat before redaction and tools existed
-   were corrected, with the counts in `hand-off-ai.md` and the ZF-235 paragraph.
+   were corrected, with the counts in the ZF-235 paragraph.
 
 ## What competitors ship
 
@@ -202,7 +202,7 @@ Done with this review; see the defects above.
   unmatched label, an OOM job, a lost host, a pool at its minimum, a Kennel
   exposure finding) seeded into a `:memory:` store, questions with the expected
   tool calls and the facts an answer must contain, run against the fake provider
-  in CI and against a real provider by hand (`make eval-eli`). Report tool-choice
+  in CI and against a real provider by hand (`make test-eli-eval`). Report tool-choice
   accuracy and how often the model said it did not know when a tool had the
   answer. Until this exists nothing in track B can be ranked with confidence.
 * **Which tools the model reaches for**, aggregated from the audit rows that

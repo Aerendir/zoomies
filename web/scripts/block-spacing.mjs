@@ -12,6 +12,12 @@
 // it is kept, or make the optional part one string so there is no edge to trim.
 //
 // Run as `node scripts/block-spacing.mjs`; `npm run lint` does.
+//
+// Not type-checked: it walks the Svelte compiler's AST, which ships untyped, and
+// annotating every node would be a second description of that tree to keep right.
+// unit/block-spacing.test.ts is what pins what it finds.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from 'svelte/compiler';

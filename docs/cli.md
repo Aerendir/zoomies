@@ -269,8 +269,10 @@ The runners that exist right now.
 
 `jobs list` is job history newest first, filtered by `--repo`, `--workflow`,
 `--pool`, `--state`, `--conclusion`, `--q`, and a window with `--since` and
-`--until`; each of which takes a duration (`24h`) or a date. `--unmatched`
-and `--failed` are the two questions worth a switch of their own.
+`--until`; each of which takes a duration (`24h`) or a date. `--unmatched`,
+`--failed` and `--attention` are the three questions worth a switch of their
+own; `--attention` is the one GitHub cannot answer at all: failures from the
+last week that nobody has acknowledged and no later attempt has replaced.
 `jobs get <job-id>` shows one.
 
 `--ours` and `--theirs` split `--failed` by whose failure it was. GitHub records
@@ -283,7 +285,16 @@ matching everything.
 ```sh
 zoomies jobs list --ours --since 24h       # what this deployment broke today
 zoomies jobs list --fault out_of_memory    # and how much of it was memory
+zoomies jobs list --attention              # failures nobody has read yet
 ```
+
+A failure can be marked as read, which takes it off that attention list without
+changing anything about it: the failure keeps its conclusion and its row, and a
+re-run that passes is what settles it. `zoomies jobs acknowledge <job-id>` says
+somebody has looked, and `zoomies jobs reopen <job-id>` takes the decision back.
+It is the same fleet-wide record the Jobs page's "Needs attention" view and the
+Overview's failures panel write, so a failure acknowledged here stops asking on
+every screen.
 
 `--until` is not included in the window and `--since` is, so two windows cut at
 one instant share no job. `--job-name` matches a job's name exactly, where `-q`
@@ -328,10 +339,68 @@ zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets
 zoomies comparisons get cmp_01abc --installation ins_01abc --repo acme/widgets --output json
 ```
 
-JSON preserves the complete controller response. Replay makes one scoped read
+Capture and replay also show descriptive runner evidence: recorded assignment
+grants, dispatched requests, unverified agent digest/time claims and coverage counts.
+Missing dimensions and clocks remain unknown. Full enumeration counts include
+controller-omitted rows and may themselves be partial. These facts do not prove
+applied limits, image/configuration equivalence or experiment eligibility. Older
+controllers show evidence as unavailable; unsupported or inconsistent runner views
+stop human output before printing a report, with guidance to inspect JSON.
+
+Workflow evidence shows each exact run/attempt's trigger, path fingerprint and
+nullable root-file commit/blob/content digests and byte count. Full counters for
+selected attempts and root sources include omitted rows; every returned row is
+shown. Path
+fingerprints describe names, not content. Root digests describe collected bytes,
+not attested execution, reusable workflows/actions, inputs or test scope. Matching
+digests do not establish equivalent workloads. Missing older views remain unknown;
+unsupported or inconsistent human views fail before any report is printed. Both
+capture and replay use the same presenter and existing single HTTP request.
+
+JSON preserves the complete controller response, including future workflow fields
+and versions. Replay makes one scoped read
 without GitHub collection. Missing, expired or evicted history is unavailable;
 the command does not capture replacement evidence. Capture remains an explicitly
-initiated operator write through the [API](api-surface.md).
+initiated operator write through `comparisons capture` or the [API](api-surface.md).
+
+`comparisons capture --file selection.json` sends one explicit collection request.
+Use an identified operator account or a token with both `comparisons:write` and
+`jobs:read`. It reads selected GitHub attempts and retains shared repository
+evidence; it does not dispatch jobs or change runner configuration. `--file -`
+reads stdin. Input is one strict JSON request within 32 KiB, with no actor or
+evidence ID supplied by the caller. Exact run IDs remain 64-bit integers.
+
+```json
+{
+  "installation_id": "ins_01abc",
+  "repository": "acme/widgets",
+  "kind": "runner",
+  "hypothesis": "A larger runner reduces build latency",
+  "intended_delta": "Increase the runner resource size",
+  "since": "2026-10-12T00:00:00Z",
+  "until": "2026-10-13T00:00:00Z",
+  "baseline": [{"run_id": 123456, "attempt": 1}],
+  "candidate": [{"run_id": 123457, "attempt": 1}]
+}
+```
+
+Choose your own scope, exact attempts and window. Both arms need at least one
+attempt and together accept at most ten unique run/attempt pairs. Include failures.
+Workflow comparisons additionally require a retained exact `revision_delta_id`.
+The controller enforces its configured history window, authorisation and shared
+diagnostic admission/quota bounds. Unknown workloads and incomplete selection
+remain inconclusive.
+
+```sh
+zoomies comparisons capture --file selection.json --output json
+```
+
+The successful response is displayed directly, without a follow-up GET. JSON
+preserves the complete retained response. History is bounded and valid for 30 days.
+Never automatically retry capture: even a failed collection can consume the
+diagnostic allowance, and a lost response may have already retained evidence.
+Use a returned ID for scoped replay when available. Capture is a change command
+in the agent skill and is not offered as an MCP/Eli read-only tool.
 
 ### `zoomies why`
 
@@ -528,7 +597,9 @@ run it again, that is your call to make.
 | `hosts cordon <host-id>` | Stop scheduling new runners onto it. What it already has keeps running. |
 | `hosts uncordon <host-id>` | Let it accept runners again. |
 | `hosts drain <host-id> [--yes]` | Cordon it, then drain every runner on it, so it empties as its jobs finish. The order matters: draining an uncordoned host means the scheduler puts fresh runners on it while the old ones are still going. Each runner gets five minutes to finish what it is on; a longer job is stopped, which is what makes the host actually empty. A runner that is busy is only drained with `--yes`; without it that runner is refused and the host stays cordoned. |
-| `hosts delete <host-id>` | Forget it. Refused while it has live runners, unless `--force`. |
+| `hosts recovery` | Inspect carried-over runner hosts: `awaiting_recovery`, `verified` or `retired`. `--output json` and `--output yaml` include retirement actor and time, and the time recovery completed for verified hosts. See [complete instance recovery](backup-and-restore.md#resolve-carried-over-runner-hosts). |
+| `hosts retire <host-id> --confirm-host-id <host-id>` | While the imported fleet is fenced, an administrator can explicitly retire an unreachable carried-over destination record by repeating its exact ID. Retains history and usage, revokes destination agent access and prevents this record resuming work. Changes destination records only: it cannot stop, erase or clean up the remote machine, and does not lift the recovery fence. |
+| `hosts delete <host-id>` | Forget it. Refused while it has live runners, unless `--force`. Carried-over records awaiting recovery cannot be deleted even with `--force`; retire an unreachable record explicitly instead. Retired records remain for history. |
 | `hosts join-token create` | Mint a single-use join token: `--ttl` (`15m`), `--capacity` (`2`), `--labels`, `--controller`, `--os` (`linux`, `windows` or `all`). Shown once; only its hash is stored. |
 
 ### `zoomies updates`
@@ -715,7 +786,7 @@ again.
 | --- | --- |
 | `fleet_status` | Queued and running jobs, outcomes, queue wait and pool utilisation over a window. `GET /stats`. |
 | `list_problems` | Everything the controller thinks is wrong, with what to do. `GET /problems`. |
-| `list_jobs` | Jobs, with the same filters as `zoomies jobs list`: `failed`, `ours`, `theirs`, `unmatched`, `repo`, `since`, `until`, `job_name`, `hosted`, `controller_version` and `host_id`. Each job is a summary without its steps unless `include_steps` is set, and a full page carries `next` to pass back as `before`. |
+| `list_jobs` | Jobs, with the same filters as `zoomies jobs list`: `failed`, `attention`, `ours`, `theirs`, `unmatched`, `repo`, `since`, `until`, `job_name`, `hosted`, `controller_version` and `host_id`. Each job is a summary without its steps unless `include_steps` is set, and a full page carries `next` to pass back as `before`. |
 | `job_stats` | Completed jobs counted and timed over a window, grouped by up to two of `controller_version`, `day`, `host`, `pool`, `job_name` and `size`. `GET /jobs/stats`. |
 | `get_job` | One job, its timeline and the controller's explanation, as one document: the class of failure, how sure, the evidence, the catalog code and the next steps. The runner's last lines, and any evidence quoted from them, come in a second block announced as untrusted, the way a runner's log does. |
 | `get_runner_log` | The last lines of a runner's output, while the runner still exists. It asks the controller for just the end, holds what it returns to 256 KiB, and says so when it had to shorten it or could only read the start of a very long log. |
@@ -841,8 +912,8 @@ repository's `skills/` folder, which installs both.
 | --- | --- |
 | `zoomies demo [--port N] [--no-browser]` | Run a throwaway controller on this machine with a fleet already in it (two pools, hosts, runners and a morning's worth of jobs) and open it in your browser. Nobody has to sign in, because it listens on `127.0.0.1` only; GitHub is not involved, and nothing is asked of the outside world, including the daily check for a new release. Everything it writes is under a temporary directory that is deleted when you press Ctrl-C. Port 8080 where that is free and any free port where it is not; `--port` insists on the one you name. Whatever `ZOOMIES_*` variables this shell has are ignored for its duration, so a machine that already runs Zoomies is not disturbed. `install.sh --demo` is the same thing without installing the binary first. |
 | `zoomies init [--update-helper]` | Set this host up: how it runs, backend, listener, GitHub App and the first account. `--answers` takes a file and implies `--non-interactive`; `--print-answers` writes one out from an interactive run so the next host can be identical. On a systemd host it ends by asking, as a question of its own that defaults to no, whether to add the [update helper](security.md#what-the-agent-owns-on-a-host). The update helper runs `zoomies upgrade` as root for a validated request, so that the web UI can update this host (and on the controller's host, `zoomies updates apply` can too). Only the host's owner installs it, and `sudo zoomies updates helper remove` takes it away. `--yes` never answers it, `--update-helper` (or `update_helper: true` in the answer file) does without asking, and an unattended run skips it and prints `sudo zoomies updates helper install`. See [Upgrading](upgrading.md#adding-the-update-helper). |
-| `zoomies update [--check] [--yes \| --non-interactive] [--update-helper]` | Compatibility alias for `zoomies upgrade`; accepts the same flags. |
-| `zoomies upgrade [--check] [--yes \| --non-interactive] [--update-helper] [--version <tag>] [--no-download]` | Download the newest release binary, verify it against the release's `checksums.txt`, and apply it with matching images to an existing native, Compose or Docker deployment. Never downgrades; `--no-download` applies the binary already installed. Keeps configuration and credentials; `--check` changes nothing. What this release expects and the deployment lacks (the shared folder, its mount, a deleted Compose file) is added at a terminal once you agree, with `--yes` without asking, and never with `--non-interactive`. On a systemd host that has no [update helper](security.md#what-the-agent-owns-on-a-host) it also asks, as a question of its own that defaults to no, whether to add one. The update helper runs `zoomies upgrade` as root for a validated request, so that the web UI can update this host (and on the controller's host, `zoomies updates apply` can too). Only the host's owner installs it, and `sudo zoomies updates helper remove` takes it away. `--yes` never answers it, `--update-helper` does without asking, and `--non-interactive` skips it and prints `sudo zoomies updates helper install`. `install.sh --upgrade` does the same download first and takes `--update-helper` too. See [Upgrading](upgrading.md#what-a-release-adds-to-the-host). |
+| `zoomies update [--check] [--dry-run] [--no-backup] [--yes \| --non-interactive] [--update-helper]` | Compatibility alias for `zoomies upgrade`; accepts the same flags. |
+| `zoomies upgrade [--check] [--dry-run] [--no-backup] [--yes \| --non-interactive] [--update-helper] [--version <tag>] [--no-download] [--release-key <key>]` | Download the newest release binary and check it twice: the release's `checksums.txt` must carry a signature that verifies against a key this build trusts, and the binary must match those checksums. A release whose `checksums.txt.ed25519` is missing or does not verify is refused (see [Signing releases](upgrading.md#signing-releases)); `--release-key`, or `ZOOMIES_RELEASE_KEY`, names a different base64 public key to trust, for a mirror or a test. Then apply it with matching images to an existing native, Compose or Docker deployment. Never downgrades; `--no-download` applies the binary already installed. Keeps configuration and credentials; `--check` changes nothing and `--dry-run` downloads the release it would take and previews the whole run without changing anything. Before it changes anything it takes and verifies a copy of the database through the backup package and prints where it is; `--no-backup` goes without it. What this release expects and the deployment lacks (the shared folder, its mount, a deleted Compose file) is added at a terminal once you agree, with `--yes` without asking, and never with `--non-interactive`. On a systemd host that has no [update helper](security.md#what-the-agent-owns-on-a-host) it also asks, as a question of its own that defaults to no, whether to add one. The update helper runs `zoomies upgrade` as root for a validated request, so that the web UI can update this host (and on the controller's host, `zoomies updates apply` can too). Only the host's owner installs it, and `sudo zoomies updates helper remove` takes it away. `--yes` never answers it, `--update-helper` does without asking, and `--non-interactive` skips it and prints `sudo zoomies updates helper install`. `install.sh --upgrade` does the same download first and takes `--update-helper` too. See [Upgrading](upgrading.md#what-a-release-adds-to-the-host). |
 | `zoomies logs` | Show the latest 100 controller log lines for the recorded Compose or Docker deployment. Alias for `zoomies deployment logs`. |
 | `zoomies deployment <action>` | Operate the container deployment recorded by `zoomies init`, from the saved record so container names and Compose files are never guessed: `deployment status`, `deployment logs`, `deployment start`, `deployment stop`, `deployment restart`, `deployment update`, or `deployment down`. `deployment update` is a compatibility alias for the complete `zoomies upgrade` flow, including the binary download. `deployment down` keeps the database volume. `--config-dir` names the directory holding `deployment.json` when it is not `/etc/zoomies`. |
 | `zoomies uninstall` | Remove the service or container, the database, the encryption key and the configuration. A container deployment's data volume is kept unless you pass `--volumes` or answer yes, and so is the environment file that holds the key sealing it, the report names it, because a later install can only read the volume with that key. `--volumes` removes both. |
@@ -857,6 +928,9 @@ repository's `skills/` folder, which installs both.
 | `zoomies config set <key> <value>` | Store one setting in the fleet's database; the same thing the settings page does, for when the settings page is the thing that is broken. |
 | `zoomies config unset <key>` | Forget a stored setting, so the configuration file or the built-in default decides it again. |
 | `zoomies config import-env [file]` | Store every setting an environment file sets (standard input when no file is given) in one write, and name the variables that cannot live in the database. The installer runs it in a one-off container to put a controller's settings in its database; see [Settings that were in `.env`](upgrading.md#settings-that-were-in-env). |
+| `zoomies release keygen --out DIR` | Mint the release signing key pair, writing `release.pub` (public, commit it) and `release.key` (private, store it as the release secret and delete it). The private half is never printed. |
+| `zoomies release sign --key-file FILE [checksums]` | Write the detached signature over a release's `checksums.txt` to standard output, which is what the release workflow runs. Reads the checksums from standard input when no file is given. |
+| `zoomies release verify [--key KEY \| --key-file FILE] checksums sig` | Check a release's signature against a key, or against the key compiled into this binary. See [Signing releases](upgrading.md#signing-releases). |
 | `zoomies doctor [--verbose] [--json] [--tier safe\|aggressive\|dedicated] [--host <id>]` | Read host OS health, summary and recommendations. Exit 0/1/2 for no warnings/warnings/errors among every check in the tier you ran, so `--tier aggressive` exits 1 on an aggressive warning. The host's page, the problems and `zoomies hosts list` count only the safe tier and leave optional checks out, and count a pending reboot as a reboot rather than also as a warning, so the doctor's own warning count is one higher than theirs for that one check. A warning an operator has accepted on the controller (see [Accepting a check as deliberate](host-health.md#accepting-a-check-as-deliberate)) is left out of those counts and of the exit status of `--host`, and `--host` lists it under **Accepted**; a local run knows nothing of acceptances. There is no command to accept or revoke one: that is the host's page and the API. `--interactive` offers explicitly approved local fixes; `--watch --report-file PATH` runs the native read-only reporter. See [Host health and tuning](host-health.md). |
 | `zoomies tune [--dry-run] [--yes] [--tier safe\|aggressive] [--dedicated] [--only ids] [--skip ids] [--revert] [--force]` | Review and apply local OS tuning, or restore recorded previous values. Safe and per-item confirmation by default. Dedicated hosts require explicit confirmation. No reboot and no Docker restart while jobs can run. |
 | `zoomies healthcheck --url <url>` | Probe a controller's `/healthz`. Exit 0 when it answers. This is what the container image's `HEALTHCHECK` runs. |
@@ -918,3 +992,13 @@ explains cutover, destination operator access, and recovery checks.
 lock. Archive passphrases and new operator passwords are read from private
 files rather than command-line values. The archive opens only with its
 passphrase; neither endpoint retains it after preparation.
+
+The historical-comparison milestone includes root dependency inspection. It shows
+root `uses` declaration counts and literal pin classifications, not a resolved or
+executed dependency graph. Raw names, references and source text stay private.
+Unsupported or absent inspection is unknown; enumerated zero stays zero. REST/UI
+and CLI share a fifty-reference-row budget per arm with full counts and omission
+flags. MCP/Eli validates references then returns summaries with details explicitly
+omitted within its existing budgets. Matching metadata does not establish workload
+or configuration equivalence, causal improvement or savings. Controlled-experiment
+proof, dispatch and live model evaluation remain deferred.

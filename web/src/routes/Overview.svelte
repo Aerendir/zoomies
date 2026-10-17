@@ -1,7 +1,9 @@
 <!--
   The Overview: the one page that has to earn a place on a second monitor.
 
-  Reading order is deliberate. The activity matrix comes first: a year of the
+  Classic keeps its familiar history-first order. Mission Control moves problems,
+  failures and live metrics ahead of history without remounting those panels.
+  First-run guidance stays first in either style. In Classic the activity matrix comes first: a year of the
   fleet's days as one band of squares, the shape an operator recognises from a
   contribution graph, which says at a glance whether this week looks like last
   week. The four numbers under it say what the fleet is doing right now;
@@ -10,11 +12,15 @@
   operator watches when nothing is wrong -- where the capacity is going, and
   what has happened to the fleet lately -- and finally the work itself.
 
-  What needs a person is one line here rather than a full panel. The list it
-  summarises lives in the problems drawer, reachable from the top bar on every
-  page: a fleet whose deliberate configuration warnings pushed its pools and its
-  running jobs below the fold was answering "what is happening right now?" with
-  a month-old decision.
+  What needs a person comes in two shapes. The fleet's own problems are one
+  line here rather than a full panel: the list lives in the problems drawer,
+  reachable from the top bar on every page, and a fleet whose deliberate
+  configuration warnings pushed its pools and its running jobs below the fold
+  was answering "what is happening right now?" with a month-old decision. The
+  failures nobody has read are a short panel of their own, because each is a
+  separate job with a separate thing to do about it, and each leaves the panel
+  when somebody says they have seen it: the one question GitHub cannot answer
+  is which failures anybody has looked at.
 
   On a desktop the pools and the running jobs share the left-hand column and
   the events feed takes the right, cut to their height. The feed is the one
@@ -42,6 +48,7 @@
   only how an operator settles the question of whether they have.
 -->
 <script lang="ts">
+  import { visualStyle } from '$lib/state/ui-style.svelte';
   import RepairOffers from '$lib/repairs/RepairOffers.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -57,12 +64,23 @@
   import FleetMetrics from '$lib/overview/FleetMetrics.svelte';
   import PoolUtilisation from '$lib/overview/PoolUtilisation.svelte';
   import ProblemsSummary from '$lib/overview/ProblemsSummary.svelte';
+  import RecentFailures from '$lib/overview/RecentFailures.svelte';
   import EventsFeed from '$lib/overview/EventsFeed.svelte';
 
   // Raised by the checklist while it is on screen, so the problems summary
   // knows not to also claim that nothing needs attention, and the matrix
   // knows not to show a year of empty squares under a fleet's first steps.
   let setupPending = $state(false);
+  let failures = $state<RecentFailures | null>(null);
+  const operational = $derived(visualStyle.choice === 'mission-control');
+  const workPanels = $derived(
+    operational ? ['pools', 'jobs', 'events'] : ['pools', 'events', 'jobs'],
+  );
+  const sections = $derived(
+    operational
+      ? ['problems', 'failures', 'metrics', 'repairs', 'work', 'activity', 'capacity']
+      : ['activity', 'metrics', 'problems', 'failures', 'repairs', 'work', 'capacity'],
+  );
 
   // The matrix fetches its own year of history, so the page's refresh reaches
   // it by hand: the fleet cache's reconcile does not know it exists.
@@ -106,7 +124,8 @@
   subtitle={(others
     ? 'What is happening across every runner GitHub reports on, this fleet\u2019s and everybody else\u2019s.'
     : 'What this fleet is doing right now.') + coverage}
-  onrefresh={() => Promise.all([fleet.reconcile(), activity?.reload()]).then(() => undefined)}
+  onrefresh={() =>
+    Promise.all([fleet.reconcile(), activity?.reload(), failures?.reload()]).then(() => undefined)}
 >
   <Switch label="Other runners" checked={others} onchange={(on) => (prefs.otherRunners = on)} />
 </PageHeader>
@@ -124,26 +143,32 @@
          step, not confirmation that nothing is happening. It removes itself
          for good once a job has run here. -->
     <FirstRun onpending={(pending) => (setupPending = pending)} />
-    {#if !setupPending}<FleetActivity bind:this={activity} />{/if}
-    <FleetMetrics {loading} />
-    <ProblemsSummary {loading} {setupPending} />
-    <RepairOffers />
-    <div class="split">
-      <PoolUtilisation {loading} />
-      <div class="feed">
-        <EventsFeed {loading} />
-      </div>
-      <ActiveJobs />
-    </div>
-    <!-- The same chart the Hosts page draws, not a summary of it: an operator
-         who has learnt to read one should not meet a different picture of the
-         same machines here. A host's controls live on the Hosts page, so
-         "Manage" goes there. -->
-    {#if fleet.loaded}<HostCapacityMap
-        hosts={fleet.hosts}
-        page="overview"
-        onmanage={() => navigate('/hosts')}
-      />{/if}
+    {#each sections as section (section)}
+      {#if section === 'activity'}
+        {#if !setupPending}<FleetActivity bind:this={activity} />{/if}
+      {:else if section === 'metrics'}
+        <FleetMetrics {loading} {operational} />
+      {:else if section === 'problems'}
+        <ProblemsSummary {loading} {setupPending} />
+      {:else if section === 'failures'}
+        <!-- Like the matrix, not the questions panel above it: a fleet that
+             has never run a job has no failures, and the checklist is what
+             the page is for until it has. -->
+        {#if !setupPending}<RecentFailures bind:this={failures} />{/if}
+      {:else if section === 'repairs'}
+        <RepairOffers />
+      {:else if section === 'work'}
+        <div class="split">
+          {#each workPanels as panel (panel)}
+            {#if panel === 'pools'}<PoolUtilisation {loading} />
+            {:else if panel === 'jobs'}<ActiveJobs />
+            {:else}<div class="feed"><EventsFeed {loading} /></div>{/if}
+          {/each}
+        </div>
+      {:else if section === 'capacity' && fleet.loaded}
+        <HostCapacityMap hosts={fleet.hosts} page="overview" onmanage={() => navigate('/hosts')} />
+      {/if}
+    {/each}
   </div>
 {/if}
 
@@ -151,7 +176,7 @@
   .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--z-space-6);
+    gap: var(--z-space-3);
   }
   /*
     Two rows on the left -- the pools, then the running jobs, placed in source

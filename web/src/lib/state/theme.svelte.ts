@@ -4,8 +4,7 @@
  * `system` is the default and writes no attribute, so `prefers-color-scheme`
  * decides. An explicit choice writes `data-theme` on `<html>` and persists. The
  * inline script in index.html applies the stored value before first paint; this
- * module only keeps it in sync afterwards -- it deliberately does not repeat
- * that work.
+ * module keeps subsequent choices in sync.
  *
  * The one thing an attribute on `<html>` cannot reach is the browser's own
  * chrome, which reads `<meta name="theme-color">`. The two tags in index.html
@@ -38,10 +37,16 @@ const KEY = 'zoomies.theme';
  * keeps switching them with no JavaScript involved; an explicit choice pins one
  * tag on and the other off. `not all` is the standard way to say "never match".
  */
-function pinBrowserChrome(choice: ThemeChoice): void {
+export function syncBrowserChrome(choice: ThemeChoice): void {
+  const style =
+    document.documentElement.getAttribute('data-ui-style') === 'mission-control'
+      ? 'mission-control'
+      : 'classic';
   for (const which of ['light', 'dark'] as const) {
     const tag = document.querySelector(`meta[data-theme-colour="${which}"]`);
     if (!tag) continue;
+    const colour = tag.getAttribute(`data-${style}-colour`);
+    if (colour) tag.setAttribute('content', colour);
     tag.setAttribute(
       'media',
       choice === 'system'
@@ -64,9 +69,8 @@ class Theme {
 
   constructor() {
     this.#choice = stored();
-    // The stored choice was applied to <html> before first paint by the inline
-    // script, which cannot reach the meta tags; catch them up here.
-    if (typeof document !== 'undefined') pinBrowserChrome(this.#choice);
+    // Bootstrap and later choices use the same meta colours, including visual style.
+    if (typeof document !== 'undefined') syncBrowserChrome(this.#choice);
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
       const query = window.matchMedia('(prefers-color-scheme: dark)');
       this.#systemDark = query.matches;
@@ -97,7 +101,7 @@ class Theme {
       document.documentElement.setAttribute('data-theme', choice);
       storage.set(KEY, choice);
     }
-    pinBrowserChrome(choice);
+    syncBrowserChrome(choice);
   }
 
   /** light → dark → system → light. What the top bar's toggle does. */

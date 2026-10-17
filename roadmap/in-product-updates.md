@@ -1,8 +1,10 @@
 # ZF-232: updating Zoomies from the web UI
 
-**Status**: proposed. The owner approved the shape on 8 October 2026 and chose
-the update path ([decision 0011](decisions/0011-an-operator-may-let-zoomies-update-itself.md));
-this text is waiting for their review. Nothing is built.
+**Status**: delivered as ZF-232, `done` in [progress.md](progress.md). The
+owner approved the shape on 8 October 2026 and chose the update path
+([decision 0011](decisions/0011-an-operator-may-let-zoomies-update-itself.md)).
+What an operator sees today is in [upgrading.md](../docs/upgrading.md); this
+text is the design as it was approved, kept for the reasons behind it.
 
 An operator should not have to run `sudo zoomies upgrade` by hand on the
 controller and then on every agent host. Updating becomes a choice with three

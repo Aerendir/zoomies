@@ -7,15 +7,18 @@
   import RelativeTime from '$lib/components/RelativeTime.svelte';
   import RestartWait from './RestartWait.svelte';
   import { saveBlob } from './backups';
+  import { uploadInstanceArchive } from './transfer-upload';
   import { transferSteps, waitLabel, waitTone } from './transfer';
+  import { fleet } from '$lib/state/fleet.svelte';
   import { events } from '$lib/api/sse';
   import {
     ApiError,
     getTransferPreparation,
     prepareInstanceTransfer,
     cancelInstanceTransfer,
+    unfenceInstance,
     exportInstanceTransfer,
-    importInstanceTransfer,
+    cancelTransferUpload,
     stageRestore,
     applyRestore,
   } from '$lib/api/client';
@@ -31,6 +34,7 @@
   let sourceStopped = $state(false);
   let incoming = $state<Backup | null>(null);
   let uploaded = $state<number | null>(null);
+  let uploadReceipt = $state<Schemas['TransferUpload'] | null>(null);
   let restarting = $state(false);
 
   function describe(cause: unknown) {
@@ -97,6 +101,19 @@
       busy = false;
     }
   }
+  const fenced = $derived(fleet.problems.some((problem) => problem.code === 'recovery.fenced'));
+  async function liftFence() {
+    busy = true;
+    error = '';
+    try {
+      await unfenceInstance();
+      progress = await getTransferPreparation();
+    } catch (cause) {
+      describe(cause);
+    } finally {
+      busy = false;
+    }
+  }
   async function download() {
     busy = true;
     error = '';
@@ -118,8 +135,13 @@
     uploaded = 0;
     incoming = null;
     try {
-      incoming = await importInstanceTransfer(file, incomingPassphrase, (value) => {
-        uploaded = value;
+      if (uploadReceipt?.state === 'failed' || uploadReceipt?.state === 'cancelled') {
+        await cancelTransferUpload(uploadReceipt.id).catch(() => {});
+        uploadReceipt = null;
+      }
+      incoming = await uploadInstanceArchive(file, incomingPassphrase, uploadReceipt, (value) => {
+        uploadReceipt = value;
+        uploaded = value.offset / value.size;
       });
       incomingPassphrase = '';
     } catch (cause) {
@@ -151,6 +173,13 @@
     Keep your fleet configuration, history and credentials when moving to another controller. The
     destination keeps its own operator access and encryption key.
   </p>
+  {#if fenced}
+    <p role="status">
+      This instance is fenced. Once the migration has been abandoned or the destination is verified,
+      lift the fence so this controller can act again. Check that no destination is running first.
+    </p>
+    <Button variant="danger" onclick={() => void liftFence()} loading={busy}>Lift the fence</Button>
+  {/if}
   {#if restarting}
     <RestartWait reason="Importing the complete instance and keeping it fenced for verification." />
   {:else}
@@ -266,8 +295,13 @@
           accept=".zbk,.enc"
           disabled={busy}
           onchange={(event) => {
+            if (uploadReceipt && uploadReceipt.state !== 'verifying') {
+              void cancelTransferUpload(uploadReceipt.id).catch(() => {});
+            }
+            uploadReceipt = null;
             file = event.currentTarget.files?.[0] ?? null;
             incoming = null;
+            sourceStopped = false;
           }}
         />
         <Field label="Archive passphrase">
@@ -288,6 +322,9 @@
             value={uploaded}
             aria-label="Instance archive upload"
           ></progress>{/if}
+        {#if busy && uploadReceipt?.state === 'verifying'}
+          <p role="status">Archive uploaded. Verifying it for this controller…</p>
+        {/if}
         {#if incoming?.transfer}
           <p>
             Archive verified: {incoming.transfer.inventory.installations ?? 0} installations, {incoming

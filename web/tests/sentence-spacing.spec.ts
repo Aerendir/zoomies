@@ -8,9 +8,7 @@
  * fails when there is none.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 /**
  * A sentence as a pattern. The markup wraps long sentences across lines, so the

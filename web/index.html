@@ -106,12 +106,16 @@
     <meta
       name="theme-color"
       data-theme-colour="light"
+      data-classic-colour="#f6f7f9"
+      data-mission-control-colour="#f4f7fb"
       media="(prefers-color-scheme: light)"
       content="#f6f7f9"
     />
     <meta
       name="theme-color"
       data-theme-colour="dark"
+      data-classic-colour="#0a0b0d"
+      data-mission-control-colour="#090e18"
       media="(prefers-color-scheme: dark)"
       content="#0a0b0d"
     />
@@ -134,6 +138,24 @@
           if (t === 'dark' || t === 'light') {
             document.documentElement.setAttribute('data-theme', t);
           }
+          var style = localStorage.getItem('zoomies.ui-style');
+          if (style === 'mission-control') {
+            document.documentElement.setAttribute('data-ui-style', style);
+          } else {
+            style = 'classic';
+          }
+          document.querySelectorAll('meta[data-theme-colour]').forEach(function (tag) {
+            var which = tag.getAttribute('data-theme-colour');
+            tag.setAttribute('content', tag.getAttribute('data-' + style + '-colour'));
+            tag.setAttribute(
+              'media',
+              t === 'light' || t === 'dark'
+                ? t === which
+                  ? 'all'
+                  : 'not all'
+                : '(prefers-color-scheme: ' + which + ')',
+            );
+          });
           var n = localStorage.getItem('zoomies.nav.collapsed');
           // No choice recorded: a tablet-width window starts collapsed, as
           // the guidelines promise. A phone is excluded -- its navigation is a

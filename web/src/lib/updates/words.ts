@@ -14,6 +14,7 @@
  */
 import type { Host, Role, UpdatesStatus } from '../api/types';
 import { describeWindow, parseGoDuration, pluralise, toMillis } from '../format';
+import { shellQuote } from '../hosts/terminal';
 import type { RestartCopy } from '../settings/restart-copy';
 
 export type UpdateMode = UpdatesStatus['mode'];
@@ -124,6 +125,51 @@ export function buildText(release: boolean): string {
   return release
     ? 'From a release'
     : 'Not from a release, so an update moves it onto the newest release';
+}
+
+/** A main-branch comparison is not proof that a dev image has finished publishing. */
+export function developmentStatus(dev: NonNullable<UpdatesStatus['development']>): string {
+  if (dev.state === 'current') return 'This dev build matches the latest checked commit on main.';
+  if (dev.state === 'available')
+    return 'Newer changes are on main. The dev build may still be publishing; check the installed commit after upgrading.';
+  return 'The latest dev build has not been confirmed. Check for updates before choosing a build.';
+}
+
+/**
+ * Said when an update failed but the engine put the previous release back: the
+ * host is on what it ran, which is a different thing to tell an operator from a
+ * failure left in place.
+ */
+export function rollbackNote(rolledBack: boolean): string {
+  return rolledBack
+    ? 'The new release did not answer, so the previous release was put back and is running again.'
+    : '';
+}
+
+/**
+ * The restore command for the copy an upgrade took, or empty when none was.
+ *
+ * The directory is a path an operator configured, so it is quoted for a shell:
+ * this is text a person is told to run, and a path with a space or a shell
+ * character would otherwise be read as more than one argument.
+ */
+export function restoreCommand(backup: string): string {
+  return backup ? `zoomies restore ${shellQuote(backup)} --replace` : '';
+}
+
+/**
+ * Whether this build holds a release's checksums to a signature, and by which
+ * keys. No keys is a build from before a key was committed, which takes a
+ * release's checksums on trust rather than holding them to a signature.
+ */
+export function signingLine(keys: string[]): string {
+  if (keys.length === 0) {
+    return "No release key is built in, so a release's checksums are taken on trust.";
+  }
+  if (keys.length === 1) {
+    return `Releases are verified with key ${keys[0]}.`;
+  }
+  return `Releases are verified with ${keys.length} keys: ${keys.join(', ')}.`;
 }
 
 /**
@@ -313,6 +359,7 @@ export function confirmControllerUpdate(
   tag: string,
   running: string,
   release = true,
+  rollback = false,
 ): {
   title: string;
   description: string;
@@ -323,14 +370,23 @@ export function confirmControllerUpdate(
     title: 'Update the controller',
     description: `Update this controller from ${running} to ${tag}?`,
     consequences: [
-      ...(release
-        ? []
-        : [
-            'This build is not from a release. A build from main is usually ahead of the newest release, so this may take the controller back to older code.',
-          ]),
+      ...(tag === 'dev'
+        ? [
+            'DEV installs the latest development build from main. It may contain untested changes and is a moving channel.',
+          ]
+        : release
+          ? []
+          : [
+              'This build is not from a release. A build from main is usually ahead of the newest release, so this may take the controller back to older code.',
+            ]),
       'The controller restarts. This page loses its connection for a short while and finds it again by itself.',
       'Jobs that are running keep running.',
-      'If the release changes the database, a copy of it is kept first beside the database, and the last two copies are kept. A release that changes nothing there takes none.',
+      'A verified copy of the database is taken before anything changes. If the update fails, this page names the copy and the command that restores it.',
+      ...(rollback
+        ? [
+            'If the controller does not come back, and the release changed nothing in the database, the previous release is put back automatically.',
+          ]
+        : []),
     ],
     confirmLabel: `Update to ${tag}`,
   };

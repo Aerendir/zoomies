@@ -3,8 +3,8 @@
 
   The order of the page is the order of the questions: what state is it in and
   who owns it, what is it running, how did it get here, what is it made of, and
-  then the log -- which is where an operator spends the rest of their time, so
-  it gets the rest of the page.
+  then the job's build output. Runner diagnostics have their own view, because
+  worker debug messages do not explain a workflow's progress.
 
   Nothing here polls. The detail arrives once, and after that the runner's own
   SSE updates are merged into it, so the badge, the job and the resource figures
@@ -14,7 +14,7 @@
 <script lang="ts">
   import AskEli from '$lib/assistant/AskEli.svelte';
   import RunnerInsights from '$lib/insights/RunnerInsights.svelte';
-  import { CircleSlash, TriangleAlert, Trash2, Unplug } from '@lucide/svelte';
+  import { CircleSlash, ExternalLink, TriangleAlert, Trash2, Unplug } from '@lucide/svelte';
   import { ApiError, getRunner, getRunnerTimeline } from '$lib/api/client';
   import { events } from '$lib/api/sse';
   import type { RunnerDetail, TimelineEntry } from '$lib/api/types';
@@ -29,6 +29,7 @@
   import RelativeTime from '$lib/components/RelativeTime.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import LogViewer from '$lib/logs/LogViewer.svelte';
+  import JobSteps from '$lib/jobs/JobSteps.svelte';
   import RunnerConfirm from '$lib/runners/RunnerConfirm.svelte';
   import RunnerFacts from '$lib/runners/RunnerFacts.svelte';
   import MemoryBadgeCard from '$lib/runners/MemoryBadgeCard.svelte';
@@ -48,6 +49,7 @@
   let loading = $state(true);
   let error = $state<unknown>(null);
   let gone = $state(false);
+  let diagnosticsOpen = $state(false);
   /** Which runner and state the timeline on screen belongs to. */
   let timelineFor = '';
   /** Which runner the page is showing, so moving to another one starts clean. */
@@ -81,6 +83,7 @@
       showing = runnerId;
       runner = null;
       timeline = [];
+      diagnosticsOpen = false;
     }
     const controller = new AbortController();
     gone = false;
@@ -106,6 +109,12 @@
       }),
       events.subscribe('runner.deleted', (payload) => {
         if (payload.id === runnerId) gone = true;
+      }),
+      // Step updates need not change the runner's state, so they also arrive
+      // through the job's own events.
+      events.subscribe('job.updated', (job) => {
+        if (!runner || job.id !== runner.current_job_id) return;
+        runner = { ...runner, current_job: job };
       }),
     ];
     return () => {
@@ -145,11 +154,29 @@
   // `$state` rune, hence the name.)
   const liveState = $derived(fleet.runner(id)?.state ?? runner?.state);
   const terminal = $derived(liveState === 'removed' || liveState === 'failed');
+  const hasBuild = $derived(Boolean(runner?.current_job) || liveState === 'busy');
   const running = $derived(!runner?.finished_at);
   const failureMessage = $derived(liveState === 'failed' ? (runner?.message ?? '') : '');
   // What the memory valve has done and which folders are in memory, as the same
   // cards the badges open, so the page says what the tooltip says.
   const memoryCards = $derived(runner ? memoryBadges(runner, { quiet: true }) : []);
+
+  const noJobDescription = $derived.by(() => {
+    switch (liveState) {
+      case 'provisioning':
+        return 'The runner is starting. Job output will be available after GitHub assigns it a job.';
+      case 'registering':
+        return 'The runner is registering with GitHub. It has not accepted a job yet.';
+      case 'idle':
+        return 'The runner is waiting for GitHub to assign a job. There is no job output to show yet.';
+      case 'busy':
+        return 'The runner is busy, but GitHub has not reported its job details yet.';
+      case 'draining':
+        return 'The runner is draining and will not accept another job. No current job is reported.';
+      default:
+        return 'No current job is recorded for this runner. Check Workflows for previous jobs and their output.';
+    }
+  });
 
   const logsReason = $derived.by(() => {
     if (liveState === 'removed') {
@@ -413,36 +440,75 @@
     </div>
   </div>
 
-  <RunnerInsights poolId={runner.pool_id ?? ''} compact />
-  <section class="logs" aria-labelledby="runner-log-heading">
-    <div class="logs-head">
-      <h2 id="runner-log-heading">Log</h2>
-      <p>
-        {runner.logs_available === false
-          ? "A runner's output is relayed by the agent on its host, not read from the controller."
-          : `The container's output, relayed live by the agent on ${runner.host_name ?? 'its host'}.`}
-      </p>
-    </div>
-
-    {#if runner.logs_available === false}
-      <div class="unavailable">
-        <EmptyState icon={Unplug} title="The log cannot be read right now" description={logsReason}>
-          {#if liveState !== 'removed'}
-            <Button variant="secondary" href="/hosts">Check the hosts</Button>
+  <div class="output">
+    <Panel title="Job output" description="Build output streamed live from this runner.">
+      {#snippet actions()}
+        {#if runner?.current_job?.html_url}
+          <Button href={runner.current_job.html_url} newTab iconAfter={ExternalLink}
+            >Open on GitHub</Button
+          >
+        {/if}
+      {/snippet}
+      <div class="job-output">
+        {#if runner.current_job}
+          {#if (runner.current_job.steps ?? []).length > 0}
+            <details class="steps-summary">
+              <summary>Step summary</summary>
+              <JobSteps
+                steps={runner.current_job.steps ?? []}
+                failedStep={runner.current_job.failed_step ?? null}
+                running={runner.current_job.state === 'in_progress'}
+              />
+            </details>
+          {:else}
+            <p>GitHub has not reported any steps yet.</p>
           {/if}
-        </EmptyState>
+          {#if !runner.current_job.html_url}<p>
+              GitHub has not supplied an output link for this job yet.
+            </p>{/if}
+        {:else}
+          <p>{noJobDescription}</p>
+          {#if terminal}<div><Button href="/workflows">View workflows</Button></div>{/if}
+        {/if}
+        {#if hasBuild}
+          {#if runner.logs_available === false}
+            <EmptyState icon={Unplug} title="Live output is unavailable" description={logsReason} />
+          {:else}
+            {#key id}<div class="log-frame">
+                <LogViewer runnerId={id} runnerName={runner.name} buildOutput />
+              </div>{/key}
+          {/if}
+        {/if}
       </div>
-    {:else}
-      <!-- Keyed on the runner: this page stays mounted when the operator moves
-           from one runner to the next, and a terminal still tailing the old
-           one would be worse than a fresh one. -->
-      {#key id}
-        <div class="log-frame">
-          <LogViewer runnerId={id} runnerName={runner.name} />
-        </div>
-      {/key}
+    </Panel>
+    {#if !hasBuild}
+      <details class="diagnostics" bind:open={diagnosticsOpen}>
+        <summary>Runner diagnostics</summary>
+        <p class="diagnostics-note">
+          Raw startup, registration and worker messages for troubleshooting this runner. Workflow
+          step output is available on GitHub.
+        </p>
+        {#if diagnosticsOpen && runner.logs_available === false}
+          <div class="unavailable">
+            <EmptyState
+              icon={Unplug}
+              title="The log cannot be read right now"
+              description={logsReason}
+            >
+              {#if liveState !== 'removed'}<Button variant="secondary" href="/hosts"
+                  >Check the hosts</Button
+                >{/if}
+            </EmptyState>
+          </div>
+        {:else if diagnosticsOpen}
+          {#key id}<div class="log-frame">
+              <LogViewer runnerId={id} runnerName={runner.name} />
+            </div>{/key}
+        {/if}
+      </details>
     {/if}
-  </section>
+  </div>
+  <RunnerInsights poolId={runner.pool_id ?? ''} compact />
 {/if}
 
 <RunnerConfirm
@@ -535,28 +601,42 @@
   .log-skeleton {
     margin-top: var(--z-space-6);
   }
-  .logs {
+  .output {
     display: flex;
     flex-direction: column;
     gap: var(--z-space-3);
     margin-top: var(--z-space-6);
   }
-  .logs-head h2 {
-    margin: 0;
-    font-size: var(--z-text-lg);
-    line-height: var(--z-leading-lg);
-    font-weight: var(--z-weight-semibold);
-    color: var(--z-text);
+  .job-output {
+    display: flex;
+    flex-direction: column;
+    gap: var(--z-space-3);
+    min-width: 0;
   }
-  .logs-head p {
-    margin: var(--z-space-1) 0 0;
+  .job-output p,
+  .diagnostics-note {
+    margin: 0;
     font-size: var(--z-text-xs);
+    line-height: var(--z-leading-xs);
     color: var(--z-text-muted);
+  }
+  .diagnostics summary,
+  .steps-summary summary {
+    cursor: pointer;
+    font-size: var(--z-text-sm);
+    font-weight: var(--z-weight-medium);
+    color: var(--z-text-muted);
+  }
+  .steps-summary :global(.steps) {
+    margin-top: var(--z-space-3);
+  }
+  .diagnostics-note {
+    margin: var(--z-space-3) 0;
   }
   /* Tall enough to be worth reading, capped so the page never becomes one
      enormous terminal on a large monitor. */
   .log-frame {
-    height: clamp(24rem, 58vh, 52rem);
+    height: clamp(32rem, 65vh, 52rem);
     min-width: 0;
   }
   .unavailable {

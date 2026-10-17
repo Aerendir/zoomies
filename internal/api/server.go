@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/auth"
@@ -53,6 +54,9 @@ type Server struct {
 
 	// autopilot is what the loop that applies suggested changes remembers.
 	autopilot autopilotState
+
+	// bound is the address ListenAndServe's listener has, once it has one.
+	bound atomic.Pointer[string]
 
 	// key seals the GitHub App private keys and webhook secrets that arrive on
 	// the installations endpoints. It is loaded from the same configuration the
@@ -89,8 +93,9 @@ type Server struct {
 	cloudflare []*net.IPNet
 	manifests  *manifestStates
 
-	handler http.Handler
-	private privateConnections
+	handler   http.Handler
+	private   privateConnections
+	transfers transferUploads
 }
 
 // cfg is the configuration as it currently stands. It comes from the
@@ -135,7 +140,7 @@ func New(opts Options) (*Server, error) {
 	s.formTargets = manifestFormTargets(cfg.GitHub.APIBaseURL)
 	s.csp = contentSecurityPolicy(spa.inlineScriptHashes(), s.formTargets)
 
-	s.key, s.keyErr = loadKey(cfg)
+	s.key, s.keyErr = cfg.ResolveEncryptionKey()
 	if s.keyErr != nil {
 		// Not fatal: a controller with no installations yet is perfectly
 		// usable, and refusing to serve the UI would hide the message that
@@ -176,18 +181,6 @@ func New(opts Options) (*Server, error) {
 // to serve from a listener of the caller's own, which is what the tests and the
 // installer's health check do.
 func (s *Server) Handler() http.Handler { return s.handler }
-
-// loadKey resolves the instance encryption key from the same configuration the
-// controller was built with.
-func loadKey(cfg *config.Config) (*cryptox.Key, error) {
-	if raw := strings.TrimSpace(cfg.Security.EncryptionKey); raw != "" {
-		return cryptox.ParseKey(raw)
-	}
-	if path := strings.TrimSpace(cfg.Security.EncryptionKeyFile); path != "" {
-		return cryptox.LoadKeyFile(path)
-	}
-	return nil, cryptox.ErrNoKey
-}
 
 // parseTrustedProxies turns the configured CIDRs into networks, accepting a
 // bare address as a single host so an operator does not have to write /32.
@@ -260,6 +253,19 @@ func checkMountPaths(cfg *config.Config) error {
 // ordinary requests only.
 const shutdownGrace = 15 * time.Second
 
+// Addr is the address ListenAndServe is listening on, or "" until it has bound
+// one. It exists so that a caller can ask for port 0 and learn which port the
+// kernel chose, which is the only way to start a server on a free port without a
+// gap between finding the port and binding it: a test that found a free port,
+// closed it and bound it again lost that gap to another job's test on a busy
+// runner, and failed with "address already in use".
+func (s *Server) Addr() string {
+	if a := s.bound.Load(); a != nil {
+		return *a
+	}
+	return ""
+}
+
 // ListenAndServe serves until ctx is cancelled, then shuts down gracefully.
 //
 // It returns nil on a clean shutdown; anything else is a failure worth exiting
@@ -267,6 +273,7 @@ const shutdownGrace = 15 * time.Second
 // service manager that starts a dependent unit on READY=1 is not racing the
 // bind.
 func (s *Server) ListenAndServe(ctx context.Context) error {
+	defer s.stopTransferUploads()
 	defer s.closeTailcat()
 	if err := s.resumeTailcat(ctx, tailcatCheckInterval, tailcatHealthyInterval); err != nil {
 		return err
@@ -290,6 +297,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("api: cannot listen on %s: %w (another process may already be using that address; change server.bind)", s.cfg().Server.Bind, err)
 	}
+	bound := ln.Addr().String()
+	s.bound.Store(&bound)
 	scheme := "http"
 	if tlsCfg != nil {
 		ln = tls.NewListener(ln, tlsCfg)

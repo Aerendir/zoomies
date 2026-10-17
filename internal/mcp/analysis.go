@@ -385,8 +385,10 @@ func compareSide(name string, s analysis.CompareSide) string {
 	return b.String()
 }
 
-// figure is one side of a change, in its unit.
-func figure(v *float64, unit string) string {
+// ChangeFigure is one side of a change, in its unit: a duration in words, a rate
+// as a percentage, anything else as the plain number, and "unknown" for none. The
+// CLI prints with it too, so a person and an agent read the same figure.
+func ChangeFigure(v *float64, unit string) string {
 	switch {
 	case v == nil:
 		return "unknown"
@@ -421,7 +423,7 @@ var compareRenderer = renderer[analysis.CompareFinding]{
 	rows: func(f analysis.CompareFinding) []findingRow {
 		rows := make([]findingRow, 0, len(f.Evidence.Changes))
 		for _, c := range f.Evidence.Changes {
-			line := fmt.Sprintf("change %s %s: %s to %s", token(c.Measure), token(c.Direction), figure(c.From, c.Unit), figure(c.To, c.Unit))
+			line := fmt.Sprintf("change %s %s: %s to %s", token(c.Measure), token(c.Direction), ChangeFigure(c.From, c.Unit), ChangeFigure(c.To, c.Unit))
 			if c.Ratio != nil {
 				line += ", ratio " + strconv.FormatFloat(*c.Ratio, 'f', 2, 64)
 			}

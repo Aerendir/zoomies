@@ -181,8 +181,8 @@ test('a draft made from a pool and sent back says what the pool said', () => {
     ephemeral: true,
     host_selector: { arch: 'amd64' },
     runner_settings: { provision_timeout: '45m' },
-    cache: { enabled: true, scope: 'pool', source: '/var/cache/zoomies' },
-    cpu_burst: { mode: 'off' },
+    cache: { enabled: true, scope: 'pool', source: '/var/cache/zoomies', tools: false },
+    cpu_burst: { mode: 'off', size_for_ceiling: false },
     memory_burst: { mode: 'automatic', max_memory_mb: 24576, spill_mb: 2048 },
   } as Pool;
   const body = toPoolBody(draftFromPool(pool), { complete: true });

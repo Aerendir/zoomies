@@ -4,8 +4,7 @@ title: Zoomies
 social_title: "Zoomies: open-source self-hosted GitHub Actions runners"
 description: >-
   Run GitHub Actions on your own machines with fresh ephemeral runners, a live
-  web UI, Eli AI assistance and MCP tools for job diagnosis and optimisation.
-  Try the local demo or follow the first-job tutorial.
+  web UI and autoscaling. One Go binary, SQLite, no Kubernetes.
 hide:
   - navigation
   - toc
@@ -18,15 +17,16 @@ hide:
 # GitHub Actions runners <br><span class="quiet">on machines you own.</span>
 
 <p class="lede">
-Put your cloud VMs, office servers or home lab to work. Zoomies starts a fresh
-runner for each job, scales across your hosts and shows you what is happening
-in one live web UI. Ask Eli about your builds, or connect your own AI assistant
-through MCP. One binary, SQLite, no Kubernetes.
+Zoomies is a self-hosted GitHub Actions runner controller: one binary, SQLite,
+no Kubernetes. Put your cloud VMs, office servers or home lab to work. It starts
+a fresh runner for each job, scales across your hosts and shows you what is
+happening in one live web UI. Ask Eli about your builds, or connect your own AI
+assistant through MCP.
 </p>
 
 <p class="actions" markdown>
 [Run your first job :material-arrow-right:](quickstart.md){ .md-button .md-button--primary }
-[Try the demo](quickstart.md#just-looking){ .md-button }
+[Try the live demo](https://demo.zoomies.sh/){ .md-button }
 </p>
 
 <div class="zoomies-install" markdown>
@@ -37,7 +37,7 @@ curl -fsSL https://zoomies.sh/install.sh | sh
 
 </div>
 
-<p class="prereq" markdown="span">Start on Linux with Docker or Podman and a GitHub organisation or repository you administer. The local demo needs no GitHub credentials. [Read the installer first](quickstart.md#1-install).</p>
+<p class="prereq" markdown="span">Start on Linux with Docker or Podman and a GitHub organisation or repository you administer. Explore the live demo without signing in, or [run the local demo](quickstart.md#just-looking) without GitHub credentials. [Read the installer first](quickstart.md#1-install).</p>
 
 <p class="popular" markdown="span">[Meet Eli and MCP](#ask-your-fleet-understand-your-builds) [Documentation](start-here.md) [What it costs](costs.md)</p>
 
@@ -98,7 +98,7 @@ next. Its answer shows what it looked at.
 > “Why did this job fail, and what should I try next?”
 
 Use a local or hosted model you choose. Explore the built-in fixture provider
-in the demo, without an account or API key.
+in the [local demo](quickstart.md#just-looking), without an account or API key.
 
 [Meet Eli :material-arrow-right:](eli.md)
 </div>
@@ -126,7 +126,7 @@ watch GitHub's checks. Choose when repairs run and which provider pays; Eli
 never merges the PR. Chat itself diagnoses and advises without changing the
 fleet or repository.
 
-[Try Eli in the demo](quickstart.md#just-looking){ .md-button }
+[Try Eli in the local demo](quickstart.md#just-looking){ .md-button }
 [Troubleshoot jobs and improve builds](troubleshooting.md#investigate-jobs-with-eli-and-mcp){ .md-button }
 
 ## What you get

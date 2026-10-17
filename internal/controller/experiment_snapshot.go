@@ -36,6 +36,7 @@ func AssembleExperimentComparison(record ExperimentComparisonRecord, a, b *Exper
 		return nil, ErrExperimentEvidence
 	}
 	seenJobs := map[int64]bool{}
+	seenRunners := map[string]bool{}
 	for _, side := range []*ExperimentJoinedEvidence{a, b} {
 		if len(side.Attempts) < 1 || len(side.Attempts) > maxExperimentSelectedAttempts {
 			return nil, ErrExperimentEvidence
@@ -43,6 +44,12 @@ func AssembleExperimentComparison(record ExperimentComparisonRecord, a, b *Exper
 		for _, attempt := range side.Attempts {
 			if attempt.Remote == nil || len(attempt.Remote.Jobs) > 500 {
 				return nil, ErrExperimentEvidence
+			}
+			if err := validateExperimentRunnerCreations(side.InstallationID, attempt, seenRunners); err != nil {
+				return nil, err
+			}
+			if err := validateExperimentGrants(attempt); err != nil {
+				return nil, err
 			}
 			for _, job := range attempt.Remote.Jobs {
 				if seenJobs[job.ID] {

@@ -190,6 +190,17 @@ type Options struct {
 	// the controller shows as a helper not yet installed: the embedded agent,
 	// which is updated with its controller, and a test that is not about it.
 	HelperHost func() updates.HelperHost
+	// FallbackJoinToken is the credential this host falls back to when the
+	// controller refuses the credentials it had saved in the one way nothing
+	// recovers from: a host row somebody deleted, a database restored from
+	// before this host, or a template that was ever joined itself, which
+	// clones one identity into every machine made from it. Each leaves this
+	// host holding a token the controller will never accept again, and a
+	// service that restarts for ever is not a way out of that. The token is
+	// spent once, only after such a refusal, and never touches a credential
+	// that still works. Empty, for the embedded agent and every host nobody
+	// handed a token, it changes nothing.
+	FallbackJoinToken string
 }
 
 // Agent is the half of Zoomies that runs on a host with a container runtime. It
@@ -624,6 +635,9 @@ func (a *Agent) Join(ctx context.Context, joinToken string) error {
 		Arch:            m.Arch,
 		CPUs:            cpus,
 		MemoryMB:        memoryMB,
+		CPUMHz:          m.CPUMHz,
+		MemoryMTs:       m.MemoryMTs,
+		DiskKind:        m.DiskKind,
 		DiskTotalMB:     total,
 		DiskFreeMB:      free,
 		Version:         version.Version,
@@ -733,12 +747,38 @@ func (a *Agent) ensureCredentials() error {
 // Cancelling ctx is a graceful shutdown: no new tasks are started, in-flight
 // ones are finished, a last runner report is flushed, and the runners
 // themselves are left alone. Restarting an agent must never kill a job.
+//
+// A refusal of this host's saved credentials that nothing recovers from is the
+// one fatal error Run answers itself, when it holds a fallback join token: the
+// credential is spent and the loops start again, because a service that
+// restarts for ever against a row the controller no longer has is the failure
+// this host can least afford to wait a person out on.
 func (a *Agent) Run(ctx context.Context) error {
+	err := a.run(ctx)
+	if refusedForGood(err) && a.opts.FallbackJoinToken != "" {
+		if jerr := a.Join(ctx, a.opts.FallbackJoinToken); jerr != nil {
+			a.notify.close()
+			return errors.Join(err, fmt.Errorf(
+				"the controller refused this host's saved credentials, and the join token it was handed could not replace them: %w", jerr))
+		}
+		a.log.Info("the controller refused this host's saved credentials; it re-joined with the token it was handed")
+		err = a.run(ctx)
+	}
+	a.notify.close()
+	return err
+}
+
+// refusedForGood is the pair of answers that mean a credential is never coming
+// back: the host row is gone, or the token behind it was revoked. Every other
+// failure is a controller this host should keep asking.
+func refusedForGood(err error) bool {
+	return err != nil && (errors.Is(err, ErrHostGone) || errors.Is(err, ErrUnauthorized))
+}
+
+func (a *Agent) run(ctx context.Context) error {
 	if err := a.ensureCredentials(); err != nil {
 		return err
 	}
-
-	defer a.notify.close()
 
 	kinds := a.opts.Backends.Kinds()
 	slices.Sort(kinds)
@@ -801,7 +841,13 @@ func (a *Agent) Run(ctx context.Context) error {
 		cancel()
 	}
 	loops.Wait()
-	a.shutdown(ctx)
+	// A host the controller has disowned has nothing left to flush: the last
+	// report would be sent on the credential that was just refused, and a run
+	// that is about to re-join must not tell systemd it is stopping on its way
+	// to starting.
+	if !refusedForGood(err) {
+		a.shutdown(ctx)
+	}
 	return err
 }
 
@@ -874,6 +920,9 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		Version:           version.Version,
 		CPUs:              cpus,
 		MemoryMB:          memoryMB,
+		CPUMHz:            m.CPUMHz,
+		MemoryMTs:         m.MemoryMTs,
+		DiskKind:          m.DiskKind,
 		DiskTotalMB:       total,
 		DiskFreeMB:        free,
 		Backends:          infos,

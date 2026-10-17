@@ -42,10 +42,19 @@
 -->
 <script lang="ts">
   import Tooltip from '$lib/components/Tooltip.svelte';
+  import { Check } from '@lucide/svelte';
   import { readableJobText } from '$lib/jobs/name';
+  import { visualStyle } from '$lib/state/ui-style.svelte';
+  import { viewport } from '$lib/state/viewport.svelte';
   import JobsInsights from '$lib/insights/JobsInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
-  import { analyseQueueWait, getJobFacets, listJobs } from '$lib/api/client';
+  import {
+    acknowledgeJob,
+    analyseQueueWait,
+    getJobFacets,
+    listJobs,
+    reopenJobAttention,
+  } from '$lib/api/client';
   import { PROVISIONING_STATUSES, type Job, type QueueWaitFinding } from '$lib/api/types';
   import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
   import { router } from '$lib/router';
@@ -58,8 +67,10 @@
     wordFor,
   } from '$lib/insights/analysis';
   import { events } from '$lib/api/sse';
-  import { faultLabel, fleetFailed } from '$lib/faults';
-  import { formatDuration, formatNumber, formatPercent, pluralise } from '$lib/format';
+  import { session } from '$lib/state/session.svelte';
+  import { toasts } from '$lib/state/toasts.svelte';
+  import { fleetFailed } from '$lib/faults';
+  import { NO_VALUE, formatDuration, formatNumber, formatPercent, pluralise } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import {
     HOSTED,
@@ -76,6 +87,8 @@
   import Duration from '$lib/components/Duration.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
+  import RowActions from '$lib/components/RowActions.svelte';
+  import type { RowAction } from '$lib/components/RowActions.svelte';
   import StateCell from '$lib/components/StateCell.svelte';
   import { endOfMoment, startOfMoment } from '$lib/jobs/DateRange.svelte';
   import GitHubLink from '$lib/jobs/GitHubLink.svelte';
@@ -85,6 +98,7 @@
   import JobViewFilter from '$lib/jobs/JobViewFilter.svelte';
   import SizeAdvice from '$lib/jobs/SizeAdvice.svelte';
   import { classCell } from '$lib/jobs/size';
+  import { failureSummary } from '$lib/jobs/why';
   import UnmatchedNote from '$lib/jobs/UnmatchedNote.svelte';
   import { jobFilterState } from '$lib/jobs/filter-state.svelte';
   import LevelSwitch from '$lib/workflows/LevelSwitch.svelte';
@@ -96,6 +110,10 @@
    * lib/jobs/filter-state.svelte.ts.
    * --------------------------------------------------------------------- */
 
+  const operational = $derived(visualStyle.choice === 'mission-control');
+  const compact = $derived(operational && viewport.phone);
+  let contextExpanded = $state(false);
+  const layoutSections = $derived(compact ? ['records', 'context'] : ['context', 'records']);
   const filterState = jobFilterState();
   const filters = $derived(filterState.filters);
   const view = $derived(filterState.view);
@@ -253,19 +271,21 @@
       ? 'No jobs match these filters'
       : filters.unmatched
         ? 'No unmatched jobs'
-        : filters.faulted
-          ? 'This fleet has broken nothing'
-          : filters.failed
-            ? 'No failed jobs'
-            : view === 'running'
-              ? 'Nothing is running right now'
-              : view === 'queued'
-                ? 'Nothing is queued'
-                : view === 'finished'
-                  ? 'Nothing has finished yet'
-                  : filters.all
-                    ? 'No jobs recorded yet'
-                    : 'No jobs have run on this fleet',
+        : filters.attention
+          ? 'No failure is waiting on you'
+          : filters.faulted
+            ? 'This fleet has broken nothing'
+            : filters.failed
+              ? 'No failed jobs'
+              : view === 'running'
+                ? 'Nothing is running right now'
+                : view === 'queued'
+                  ? 'Nothing is queued'
+                  : view === 'finished'
+                    ? 'Nothing has finished yet'
+                    : filters.all
+                      ? 'No jobs recorded yet'
+                      : 'No jobs have run on this fleet',
   );
 
   const emptyDescription = $derived(
@@ -273,19 +293,21 @@
       ? 'Nothing fits the search and filters above. Clear filters returns to what is running now, and All shows every status.'
       : filters.unmatched
         ? 'Nothing is queued with labels no pool claims, which is how it should be. Jobs that already ran are not counted here however their labels read.'
-        : filters.faulted
-          ? "No runner here stopped under a job or failed to start one within these filters. Any failures in this period are the workflows' own. Widen the dates to look further back."
-          : filters.failed
-            ? 'Nothing GitHub reported as failed or timed out, and no runner here has stopped under a job. Widen the dates to look further back.'
-            : view === 'running'
-              ? 'No runner here is working on a job at this moment, which on a quiet fleet is the ordinary state. Queued shows what is waiting for one, and All shows everything this fleet has been asked to do.'
-              : view === 'queued'
-                ? 'Nothing is waiting for a runner, so the fleet is keeping up with what GitHub is asking of it. Running shows what is being worked on now, and the Queue holds anything removed from the queue rather than run.'
-                : view === 'finished'
-                  ? 'Nothing has ended within these filters. Running and Queued show the work still in hand, and All shows every status at once.'
-                  : filters.all
-                    ? 'Zoomies records a job the first time GitHub tells it about one, over a webhook delivery. If workflows are running and nothing appears here, the delivery is not arriving.'
-                    : 'This view shows jobs a pool claims or a runner here ran. Include other runners to see everything GitHub has reported, hosted runners included.',
+        : filters.attention
+          ? 'Nothing failed in the last week that nobody has acknowledged and no later attempt has replaced. The Failed view keeps every failure in history, and a re-run that passes settles one.'
+          : filters.faulted
+            ? "No runner here stopped under a job or failed to start one within these filters. Any failures in this period are the workflows' own. Widen the dates to look further back."
+            : filters.failed
+              ? 'Nothing GitHub reported as failed or timed out, and no runner here has stopped under a job. Widen the dates to look further back.'
+              : view === 'running'
+                ? 'No runner here is working on a job at this moment, which on a quiet fleet is the ordinary state. Queued shows what is waiting for one, and All shows everything this fleet has been asked to do.'
+                : view === 'queued'
+                  ? 'Nothing is waiting for a runner, so the fleet is keeping up with what GitHub is asking of it. Running shows what is being worked on now, and the Queue holds anything removed from the queue rather than run.'
+                  : view === 'finished'
+                    ? 'Nothing has ended within these filters. Running and Queued show the work still in hand, and All shows every status at once.'
+                    : filters.all
+                      ? 'Zoomies records a job the first time GitHub tells it about one, over a webhook delivery. If workflows are running and nothing appears here, the delivery is not arriving.'
+                      : 'This view shows jobs a pool claims or a runner here ran. Include other runners to see everything GitHub has reported, hosted runners included.',
   );
 
   /* -- the grid ---------------------------------------------------------------- */
@@ -309,6 +331,7 @@
         hosted: filters.hosted === 'false' ? false : undefined,
         failed: filters.failed ? true : undefined,
         faulted: filters.faulted ? true : undefined,
+        attention: filters.attention ? true : undefined,
         managed: filters.all ? undefined : true,
         limit: query.limit,
         offset: query.offset,
@@ -328,6 +351,66 @@
     drawerOpen = true;
   }
 
+  /** The job whose triage action is in flight, so its button cannot be pressed twice. */
+  let acking = $state<string | null>(null);
+
+  function subjectOf(job: Job): string {
+    return `${job.repo ?? 'this repository'} / ${readableJobText(job.job_name) || 'this job'}`;
+  }
+
+  /**
+   * The triage action on a row of the attention view: the same decision the
+   * Overview's failures panel and the drawer write, through the same route.
+   * Checking failures off as they are read is what this view is for, and a
+   * page that showed the work but made the operator open each drawer to act
+   * on it would be a list that refuses to be worked through.
+   */
+  function rowActions(job: Job): RowAction[] {
+    if (!filters.attention || !session.can('operator') || !job.id) return [];
+    return [
+      {
+        id: 'acknowledge',
+        label: 'Mark as known',
+        icon: Check,
+        disabled: acking === job.id,
+        onSelect: () => void acknowledge(job),
+      },
+    ];
+  }
+
+  /**
+   * Mark one failure as known, from its row. The row leaves on the next
+   * refetch, which the frame triggers; the toast is the undo, exactly as in
+   * the Overview's panel.
+   */
+  async function acknowledge(job: Job): Promise<void> {
+    if (!job.id || acking !== null) return;
+    acking = job.id;
+    try {
+      await acknowledgeJob(job.id);
+      liveKey += 1;
+      toasts.success(
+        'Marked as known',
+        'The failure stays in the failed view; a re-run that passes is what settles it.',
+        { label: 'Undo', run: () => void reopen(job) },
+      );
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not mark the failure as known');
+    } finally {
+      acking = null;
+    }
+  }
+
+  async function reopen(job: Job): Promise<void> {
+    if (!job.id) return;
+    try {
+      await reopenJobAttention(job.id);
+      liveKey += 1;
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not put the failure back');
+    }
+  }
+
   // A named function, not an inline arrow: the grid's fetch effect reads its
   // props, and a fresh function identity on every render would make it refetch
   // in response to its own results.
@@ -340,23 +423,14 @@
   }
 
   /**
-   * The one phrase a row has room for on a job that went wrong: the fleet's own
-   * category, or the step the workflow failed at.
-   *
-   * The category rather than "Runner lost" for every one of them, because the
-   * column is read down rather than across: nine rows saying the same two words
-   * say only that the fleet is unwell, and six saying "Out of memory" say what
-   * to do about it.
+   * The one phrase a row has room for on a job that went wrong comes from the
+   * shared helper, because the Overview's failures panel shows the same
+   * failure in the same words.
    */
-  function failedAt(job: Job): string {
-    if (fleetFailed(job)) return faultLabel(job.fault_kind) || 'Runner lost';
-    if (job.failed_step) return job.failed_step.name ?? `step ${job.failed_step.number ?? '?'}`;
-    return '';
-  }
 
   // The sortable ids are the column names the store understands: queued_at,
   // started_at, completed_at, repo, workflow, state, duration and queue_wait.
-  const columns = $derived<GridColumn<Job>[]>([
+  const baseColumns = $derived<GridColumn<Job>[]>([
     {
       id: 'state',
       header: 'State',
@@ -370,10 +444,21 @@
       },
       cell: stateCell,
     },
-    { id: 'failed_at', header: 'Failed at', priority: 'wide', value: failedAt, cell: failedAtCell },
+    {
+      id: 'failed_at',
+      header: 'Failed at',
+      priority: 'wide',
+      value: failureSummary,
+      cell: failedAtCell,
+    },
     { id: 'repo', header: 'Repository', sortable: true, value: (job) => job.repo ?? '' },
     { id: 'workflow', header: 'Workflow', sortable: true, value: (job) => job.workflow ?? '' },
-    { id: 'job_name', header: 'Job', value: (job) => readableJobText(job.job_name) },
+    {
+      id: 'job_name',
+      header: 'Job',
+      value: (job) => readableJobText(job.job_name),
+      cell: jobNameCell,
+    },
     {
       id: 'labels',
       header: 'Labels',
@@ -398,7 +483,7 @@
       help: 'Which class of host the job was put in, and where it ran when that was another.',
       priority: 'wide',
       hiddenByDefault: true,
-      value: (job) => classCell(job) || '--',
+      value: (job) => classCell(job) || NO_VALUE,
     },
     {
       id: 'runner',
@@ -412,7 +497,7 @@
       header: 'Controller version',
       priority: 'wide',
       hiddenByDefault: true,
-      value: (job) => job.controller_version ?? '--',
+      value: (job) => job.controller_version ?? NO_VALUE,
     },
     {
       id: 'queue_wait',
@@ -442,7 +527,46 @@
     },
     { id: 'link', header: 'Run', priority: 'wide', width: '5.5rem', align: 'end', cell: linkCell },
   ]);
+  const preferred = ['job_name', 'repo', 'state', 'queue_wait', 'duration'];
+  const shownColumns = $derived(
+    operational
+      ? [...baseColumns].sort(
+          (a, b) =>
+            (preferred.includes(a.id) ? preferred.indexOf(a.id) : preferred.length) -
+            (preferred.includes(b.id) ? preferred.indexOf(b.id) : preferred.length),
+        )
+      : baseColumns,
+  );
+  /*
+   * The triage action is a column rather than a row action on the whole grid,
+   * and only in the attention view: every other view is history, where "mark
+   * as known" is a decision about a failure somebody has gone looking for, not
+   * about the row in front of them. It is last so the columns an operator
+   * reads keep the places they have everywhere else.
+   */
+  const triageColumn: GridColumn<Job> = {
+    id: 'triage',
+    header: 'Triage',
+    width: '4.5rem',
+    align: 'end',
+    cell: triageCell,
+  };
+  const columns = $derived(filters.attention ? [...shownColumns, triageColumn] : shownColumns);
 </script>
+
+{#snippet jobNameCell(job: Job)}
+  {#if operational}
+    <button
+      class="job-inspect"
+      type="button"
+      aria-label="Inspect {readableJobText(job.job_name) || 'job'}"
+      onclick={(event) => {
+        event.stopPropagation();
+        open(job);
+      }}>{readableJobText(job.job_name)}</button
+    >
+  {:else}{readableJobText(job.job_name)}{/if}
+{/snippet}
 
 {#snippet stateCell(job: Job)}
   <span class="state">
@@ -469,14 +593,14 @@
 {#snippet failedAtCell(job: Job)}
   {#if fleetFailed(job)}
     <Tooltip bare text={job.runner_fault || job.fault_fix || ''}>
-      <span class="failed-at danger">{failedAt(job)}</span>
+      <span class="failed-at danger">{failureSummary(job)}</span>
     </Tooltip>
   {:else if job.failed_step}
     <Tooltip bare text="Step {job.failed_step.number}: {job.failed_step.name}">
       <span class="failed-at">{job.failed_step.name}</span>
     </Tooltip>
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 
@@ -500,7 +624,7 @@
       {job.runner_name || job.runner_id}
     </a>
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 
@@ -518,7 +642,7 @@
   {:else if job.duration_ms}
     {formatDuration(job.duration_ms)}
   {:else}
-    <span class="none">--</span>
+    <span class="none">{NO_VALUE}</span>
   {/if}
 {/snippet}
 
@@ -535,191 +659,251 @@
   />
 {/snippet}
 
+{#snippet triageCell(job: Job)}
+  <RowActions actions={rowActions(job)} subject={subjectOf(job)} />
+{/snippet}
+
 <PageHeader
   title="Jobs"
   subtitle={filters.all
     ? 'Every workflow job GitHub has told Zoomies about, whatever ran it.'
     : 'The workflow jobs this fleet claims, runs, or is waiting to run.'}
   onrefresh={refreshPage}
-/>
+  ><Button href="/comparisons" variant="secondary">Compare runs</Button></PageHeader
+>
 
-<JobsInsights others={filters.all} />
-<details class="activity-history">
-  <summary>Explore fleet activity over the last 24 hours</summary><FleetHistory
-    others={filters.all}
-  />
-</details>
-<SizeAdvice refresh={adviceKey} />
-<div class="content">
-  <div class="toolbar">
-    <JobViewFilter value={view} onchange={setView} />
-    <LevelSwitch level="jobs" />
-  </div>
-
-  <JobFilters
-    statusChips={view === ''}
-    value={filters}
-    {facets}
-    pools={fleet.pools}
-    hosts={fleet.hosts}
-    {labelOptions}
-    onchange={patch}
-    onclear={clearFilters}
-  />
-
-  {#if queuedShown}
-    <AnalysisCard
-      title="Why jobs waited"
-      finding={wait}
-      error={waitError}
-      loading={waitLoading}
-      scope={waitScope.scope}
-      note={waitScope.unapplied}
+{#each layoutSections as section (section)}
+  {#if section === 'context'}
+    <details
+      class="fleet-context"
+      class:compact
+      open={!compact || contextExpanded}
+      ontoggle={(event) => {
+        if (compact) contextExpanded = event.currentTarget.open;
+      }}
     >
-      {#if wait}
-        {@const ev = wait.evidence}
-        <dl class="facts">
-          <div>
-            <dt>Jobs</dt>
-            <dd class="figure">
-              {pluralise(ev.jobs, 'job')} queued, {formatNumber(ev.waited)} waited, {formatDuration(
-                ev.wait_seconds * 1000,
-              )} of waiting
-            </dd>
-          </div>
-          {#if !waitPool && ev.pools_cut > 0}
-            <div>
-              <dt>Pools</dt>
-              <dd>
-                {pluralise(ev.pools_cut, 'pool')} left out below and counted in the totals; filter to
-                one pool to read it whole.
-              </dd>
-            </div>
+      <summary hidden={!compact}>Fleet context and activity</summary>
+      {@render fleetContext()}
+    </details>
+  {:else}
+    <div class="content">
+      <div class="toolbar">
+        <JobViewFilter value={view} onchange={setView} />
+        <LevelSwitch level="jobs" />
+      </div>
+
+      <JobFilters
+        {compact}
+        statusChips={view === ''}
+        value={filters}
+        {facets}
+        pools={fleet.pools}
+        hosts={fleet.hosts}
+        {labelOptions}
+        onchange={patch}
+        onclear={clearFilters}
+      />
+
+      {#if queuedShown}
+        <AnalysisCard
+          title="Why jobs waited"
+          finding={wait}
+          error={waitError}
+          loading={waitLoading}
+          scope={waitScope.scope}
+          note={waitScope.unapplied}
+        >
+          {#if wait}
+            {@const ev = wait.evidence}
+            <dl class="facts">
+              <div>
+                <dt>Jobs</dt>
+                <dd class="figure">
+                  {pluralise(ev.jobs, 'job')} queued, {formatNumber(ev.waited)} waited, {formatDuration(
+                    ev.wait_seconds * 1000,
+                  )} of waiting
+                </dd>
+              </div>
+              {#if !waitPool && ev.pools_cut > 0}
+                <div>
+                  <dt>Pools</dt>
+                  <dd>
+                    {pluralise(ev.pools_cut, 'pool')} left out below and counted in the totals; filter
+                    to one pool to read it whole.
+                  </dd>
+                </div>
+              {/if}
+            </dl>
+            {#if ev.fleet.length}
+              <p class="rows-label" id="wait-causes">Where the wait went</p>
+              <ul class="rows" aria-labelledby="wait-causes">
+                {#each ev.fleet as c (c.cause)}
+                  <li>
+                    <span>{wordFor(CAUSE_WORDS, c.cause)}</span>
+                    <span class="figure muted"
+                      >{formatPercent(c.share)}, {formatDuration(c.seconds * 1000)}</span
+                    >
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+            {#if ev.pools.length > 1}
+              <p class="rows-label" id="wait-pools">By pool</p>
+              <ul class="rows" aria-labelledby="wait-pools">
+                {#each ev.pools as p (p.pool_id)}
+                  <li>
+                    {#if p.pool_id && !p.deleted}
+                      <a href="/pools/{p.pool_id}">{p.pool_name || p.pool_id}</a>
+                    {:else}
+                      <span>{p.pool_name || (p.pool_id ? p.pool_id : 'No pool claimed them')}</span>
+                    {/if}
+                    {#if p.deleted}<span class="muted">deleted since</span>{/if}
+                    <span class="figure muted"
+                      >{pluralise(p.jobs, 'job')}, {formatDuration(p.wait_seconds * 1000)} waiting{p.dominant
+                        ? `, most of it ${wordFor(CAUSE_WORDS, p.dominant).toLowerCase()}`
+                        : ''}</span
+                    >
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+            {#if longestWaits.length}
+              <p class="rows-label" id="wait-longest">Longest waits</p>
+              <ul class="rows" aria-labelledby="wait-longest">
+                {#each longestWaits as j (j.job_id)}
+                  <li>
+                    <span class="quoted">{jobWords(j) || j.job_id}</span>
+                    <span class="figure muted"
+                      >{formatDuration(j.wait_seconds * 1000)} in {j.pool}, {wordFor(
+                        CAUSE_WORDS,
+                        j.cause,
+                      ).toLowerCase()}</span
+                    >
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+            {#if ev.no_runner_record > 0}
+              <p class="evidence-note">
+                {pluralise(ev.no_runner_record, 'job')} waited past becoming eligible with no record of
+                its runner left, so that wait could not be split into startup and GitHub's hand-off.
+              </p>
+            {/if}
+            {#if ev.runner_kept > 0}
+              <p class="evidence-note">
+                {pluralise(ev.runner_kept, 'job')} waited on a runner its pool keeps between jobs, so
+                that wait could not be split either.
+              </p>
+            {/if}
+            {#if ev.jobs_truncated || ev.runners_truncated}
+              <p class="evidence-note">
+                A read stopped at its limit, so the newest records were read; a shorter period reads
+                all of them.
+              </p>
+            {/if}
           {/if}
-        </dl>
-        {#if ev.fleet.length}
-          <p class="rows-label" id="wait-causes">Where the wait went</p>
-          <ul class="rows" aria-labelledby="wait-causes">
-            {#each ev.fleet as c (c.cause)}
-              <li>
-                <span>{wordFor(CAUSE_WORDS, c.cause)}</span>
-                <span class="figure muted"
-                  >{formatPercent(c.share)}, {formatDuration(c.seconds * 1000)}</span
-                >
-              </li>
-            {/each}
-          </ul>
-        {/if}
-        {#if ev.pools.length > 1}
-          <p class="rows-label" id="wait-pools">By pool</p>
-          <ul class="rows" aria-labelledby="wait-pools">
-            {#each ev.pools as p (p.pool_id)}
-              <li>
-                {#if p.pool_id && !p.deleted}
-                  <a href="/pools/{p.pool_id}">{p.pool_name || p.pool_id}</a>
-                {:else}
-                  <span>{p.pool_name || (p.pool_id ? p.pool_id : 'No pool claimed them')}</span>
-                {/if}
-                {#if p.deleted}<span class="muted">deleted since</span>{/if}
-                <span class="figure muted"
-                  >{pluralise(p.jobs, 'job')}, {formatDuration(p.wait_seconds * 1000)} waiting{p.dominant
-                    ? `, most of it ${wordFor(CAUSE_WORDS, p.dominant).toLowerCase()}`
-                    : ''}</span
-                >
-              </li>
-            {/each}
-          </ul>
-        {/if}
-        {#if longestWaits.length}
-          <p class="rows-label" id="wait-longest">Longest waits</p>
-          <ul class="rows" aria-labelledby="wait-longest">
-            {#each longestWaits as j (j.job_id)}
-              <li>
-                <span class="quoted">{jobWords(j) || j.job_id}</span>
-                <span class="figure muted"
-                  >{formatDuration(j.wait_seconds * 1000)} in {j.pool}, {wordFor(
-                    CAUSE_WORDS,
-                    j.cause,
-                  ).toLowerCase()}</span
-                >
-              </li>
-            {/each}
-          </ul>
-        {/if}
-        {#if ev.no_runner_record > 0}
-          <p class="evidence-note">
-            {pluralise(ev.no_runner_record, 'job')} waited past becoming eligible with no record of its
-            runner left, so that wait could not be split into startup and GitHub's hand-off.
-          </p>
-        {/if}
-        {#if ev.runner_kept > 0}
-          <p class="evidence-note">
-            {pluralise(ev.runner_kept, 'job')} waited on a runner its pool keeps between jobs, so that
-            wait could not be split either.
-          </p>
-        {/if}
-        {#if ev.jobs_truncated || ev.runners_truncated}
-          <p class="evidence-note">
-            A read stopped at its limit, so the newest records were read; a shorter period reads all
-            of them.
-          </p>
-        {/if}
+        </AnalysisCard>
       {/if}
-    </AnalysisCard>
-  {/if}
 
-  {#if filters.unmatched && unmatchedOnPage > 0}
-    <UnmatchedNote count={unmatchedOnPage} />
-  {/if}
+      {#if filters.unmatched && unmatchedOnPage > 0}
+        <UnmatchedNote count={unmatchedOnPage} />
+      {/if}
 
-  <DataGrid
-    gridId="jobs"
-    label="Jobs"
-    {columns}
-    fetcher={fetchJobs}
-    {rowId}
-    {filters}
-    defaultSort="queued_at"
-    defaultOrder="desc"
-    noun="jobs"
-    {liveKey}
-    onopen={open}
-    onrows={takePage}
-    {emptyTitle}
-    {emptyDescription}
-  >
-    {#snippet emptyAction()}
-      {#if narrowed}
-        <Button variant="secondary" onclick={clearFilters}>Clear filters</Button>
-      {:else if view !== '' && view !== 'all'}
-        <!--
+      <DataGrid
+        gridId="jobs"
+        label="Jobs"
+        {columns}
+        fetcher={fetchJobs}
+        {rowId}
+        {filters}
+        defaultSort="queued_at"
+        defaultOrder="desc"
+        noun="jobs"
+        {liveKey}
+        onopen={open}
+        onrows={takePage}
+        {emptyTitle}
+        {emptyDescription}
+      >
+        {#snippet emptyAction()}
+          {#if narrowed}
+            <Button variant="secondary" onclick={clearFilters}>Clear filters</Button>
+          {:else if view !== '' && view !== 'all'}
+            <!--
           A narrowed status view that came back empty is the one case where the
           way out is not another filter but the same page without this one, so
           it is offered as a button rather than left to be found in the row.
         -->
-        <Button variant="secondary" onclick={() => setView('all')}>Show every status</Button>
-      {:else if !filters.unmatched}
-        {#if filters.all}
-          <Button variant="secondary" href="/installations">Check webhook delivery</Button>
-        {:else}
-          <Button variant="secondary" onclick={() => patch({ all: true })}>
-            Include other runners
-          </Button>
-        {/if}
-      {/if}
-    {/snippet}
-  </DataGrid>
+            <Button variant="secondary" onclick={() => setView('all')}>Show every status</Button>
+          {:else if !filters.unmatched}
+            {#if filters.all}
+              <Button variant="secondary" href="/installations">Check webhook delivery</Button>
+            {:else}
+              <Button variant="secondary" onclick={() => patch({ all: true })}>
+                Include other runners
+              </Button>
+            {/if}
+          {/if}
+        {/snippet}
+      </DataGrid>
 
-  <p class="footnote">
-    Sort by queue wait to find work that waited, or by duration to find work that took its time.
-    Both are sorted by the server, so the slowest job in the fleet is one click away rather than one
-    page away.
-  </p>
-</div>
+      <p class="footnote">
+        Sort by queue wait to find work that waited, or by duration to find work that took its time.
+        Both are sorted by the server, so the slowest job in the fleet is one click away rather than
+        one page away.
+      </p>
+    </div>
+  {/if}
+{/each}
 
+{#snippet fleetContext()}
+  <JobsInsights others={filters.all} />
+  <details class="activity-history">
+    <summary>Explore fleet activity over the last 24 hours</summary><FleetHistory
+      others={filters.all}
+    />
+  </details>
+  <SizeAdvice refresh={adviceKey} />
+{/snippet}
 <JobDrawer bind:open={drawerOpen} job={selected} onclose={() => (selected = null)} />
 
 <style>
+  .job-inspect {
+    text-align: left;
+    color: var(--z-accent);
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  @media (pointer: coarse) {
+    .job-inspect {
+      min-width: var(--z-control-touch);
+      min-height: var(--z-control-touch);
+    }
+    .fleet-context > summary {
+      min-height: var(--z-control-touch);
+    }
+  }
+
+  .fleet-context {
+    display: contents;
+  }
+  .fleet-context.compact {
+    display: block;
+    margin-block: var(--z-space-4);
+  }
+  .fleet-context > summary {
+    padding: var(--z-space-3);
+    color: var(--z-accent);
+    cursor: pointer;
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+  }
+  .fleet-context[open] > summary {
+    margin-bottom: var(--z-space-3);
+  }
+
   .activity-history {
     margin: var(--z-space-4) 0 var(--z-space-5);
   }

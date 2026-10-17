@@ -1,8 +1,11 @@
 import { dogPhase } from '../mascot/dog-motion';
 
-/** The gestures StandardStatusIcon draws; the last three hold a pose. */
+/** The gestures StandardStatusIcon draws. Every state keeps at least one
+ *  living motion, so a stalled runner never looks like a broken image; the
+ *  terminal three move slowly and sadly rather than freezing. */
 export type DogMotion =
-  'trot' | 'zoomies' | 'orbit' | 'wait' | 'sniff' | 'wave' | 'settle' | 'sad' | 'sleep' | 'puzzled';
+  'trot' | 'dash' | 'sit' | 'sniff' | 'wave' | 'strain' | 'settle' | 'low' | 'ghost' | 'scan';
+
 /** The glyph in the icon's corner, which stays when motion is off. */
 export type DogCue =
   | 'work'
@@ -33,20 +36,20 @@ const STATES = [
 export type StandardMotionState = (typeof STATES)[number];
 
 const MOTIONS: Record<StandardMotionState, { motion: DogMotion; cue: DogCue; duration: number }> = {
-  busy: { motion: 'trot', cue: 'work', duration: 2.8 },
-  zoomies: { motion: 'zoomies', cue: 'boost', duration: 2.2 },
-  maximum_zoomies: { motion: 'orbit', cue: 'maximum', duration: 1.6 },
-  idle: { motion: 'wait', cue: 'ready', duration: 6 },
+  busy: { motion: 'trot', cue: 'work', duration: 1.3 },
+  zoomies: { motion: 'dash', cue: 'boost', duration: 0.8 },
+  maximum_zoomies: { motion: 'dash', cue: 'maximum', duration: 0.5 },
+  idle: { motion: 'sit', cue: 'ready', duration: 6 },
   provisioning: { motion: 'sniff', cue: 'search', duration: 3.6 },
   registering: { motion: 'wave', cue: 'hello', duration: 3.2 },
-  throttled: { motion: 'wait', cue: 'pause', duration: 7 },
+  throttled: { motion: 'strain', cue: 'pause', duration: 2.2 },
   draining: { motion: 'settle', cue: 'rest', duration: 5 },
-  failed: { motion: 'sad', cue: 'error', duration: 1 },
-  removed: { motion: 'sleep', cue: 'gone', duration: 1 },
-  unknown: { motion: 'puzzled', cue: 'question', duration: 1 },
+  failed: { motion: 'low', cue: 'error', duration: 6.5 },
+  removed: { motion: 'ghost', cue: 'gone', duration: 5 },
+  unknown: { motion: 'scan', cue: 'question', duration: 5 },
 };
 
-/** Status cues survive reduced motion; failures never bounce like happy dogs. */
+/** Status cues survive reduced motion; failures move slowly, never happily. */
 export function standardMotion(state: string, seed: string) {
   const known = STATES.includes(state as StandardMotionState)
     ? (state as StandardMotionState)
@@ -61,6 +64,5 @@ export function standardMotion(state: string, seed: string) {
     // A negative delay starts each runner partway through its lap, so a page
     // of busy dogs never bobs in unison.
     phase: -phase * duration,
-    still: ['failed', 'removed', 'unknown'].includes(known),
   };
 }

@@ -127,12 +127,9 @@ test('a pool is found by its id, and a missing view finds nothing', () => {
  */
 test("a refusal shows the server's per-key reasons, and its message when there are none", () => {
   const pinned = 'ZOOMIES_PROVIDER_ENABLED is setting this in the environment.';
-  assert.equal(
-    refusalText('these settings could not be changed', [
-      { field: 'provider.enabled', message: pinned },
-    ]),
-    pinned,
-  );
+  // What the server sends names the key as well; the notice only reads the message.
+  const reasons = [{ field: 'provider.enabled', message: pinned }];
+  assert.equal(refusalText('these settings could not be changed', reasons), pinned);
   assert.equal(refusalText('that was refused', []), 'that was refused');
   assert.equal(refusalText('that was refused', undefined), 'that was refused');
 });

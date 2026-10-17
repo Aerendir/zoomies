@@ -34,6 +34,7 @@
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
   import {
+    NO_VALUE,
     formatAbsolute,
     formatDuration,
     formatNumber,
@@ -310,7 +311,7 @@
    * page is usually opened to settle.
    */
   function utilisation(executed: number, allocated: number | null): string {
-    if (allocated === null || allocated <= 0) return '--';
+    if (allocated === null || allocated <= 0) return NO_VALUE;
     return formatPercent(executed / allocated);
   }
 

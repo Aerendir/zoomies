@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "f8330a0",
+  "generated_from": "ba0c4267",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2669,6 +2669,20 @@
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
     },
     {
+      "id": "provider.machines_behind",
+      "kind": "problem",
+      "title": "provider.machines_behind",
+      "category": "reliability",
+      "severity": "warning",
+      "detection": "runtime",
+      "detects": "The machines this provider rents are not on the controller's release. A machine is cloned from the template this provider builds from, and Zoomies installs nothing of its own inside a rented machine, so the release a machine runs is the release that image carried when it was cloned. A whole provider's machines are behind together for that reason, which is why this is one entry for the provider rather than one per machine. A fleet whose controller is built from main lands every one of them here too, because two builds from main cannot be ordered against each other. Nothing is wrong meanwhile: they place work as normal.",
+      "fix": "Prepare the template this provider clones from again, from the controller's release, on the Proxmox node: **Providers → your provider → Prepare the template again** gives the command, and running it puts an image built from that release where the old one was, at the same template. The machines running now keep their release and are replaced as they go idle, so the machines built afterwards run the newer one. A template you prepared by hand is left alone by that command, so rebuild its image as [Keeping the runner's agent current](proxmox.md#keeping-the-runners-agent-current) describes.",
+      "verify": null,
+      "status_sentence": "Some machines the fleet rents are running a release other than its controller's.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
+    },
+    {
       "id": "provider.no_ceiling",
       "kind": "problem",
       "title": "provider.no_ceiling",
@@ -2830,7 +2844,7 @@
       "severity": "warning, or **error** with a machine mid-operation",
       "detection": "runtime",
       "detects": "The hypervisor could not be reached. This is never evidence about a resource: nothing is created, failed or deleted on the strength of it.",
-      "fix": "Check the endpoint, the network and the certificate. Machines already running are unaffected.",
+      "fix": "Check the endpoint, the network and the certificate. A provider reached through a private connection has no route to test; its message names the gateway machine, where the checks actually are, and says that both ends keep dialling. Machines already running are unaffected.",
       "verify": null,
       "status_sentence": "A machine provider cannot be reached, so no new machines can be added from it.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",

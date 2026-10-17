@@ -93,16 +93,19 @@ func TestHistorySizingPlacesAHeavyJobAwayFromTheSmallHost(t *testing.T) {
 		wantHistory string
 	}{
 		// Without history, and with history off, the fleet places exactly as
-		// it always did -- which is on the small host.
-		{"no history places as before", HistoryOn, 0, "a-small", ""},
-		{"history off places as before", HistoryOff, 5000, "a-small", ""},
-		// Shadow works the answer out and changes nothing.
-		{"shadow records and changes nothing", HistoryShadow, 5000, "a-small",
-			"shadow: history sizing would have held off a-small: jobs waiting need ~5.9 GB, it has 3 GB"},
+		// the spec score ranks it, which is on the big host: the small one is
+		// a quarter of the machine and history has no say in that.
+		{"no history places on the bigger machine", HistoryOn, 0, "b-big", ""},
+		{"history off places on the bigger machine", HistoryOff, 5000, "b-big", ""},
+		// Shadow works the answer out and changes nothing. With both hosts
+		// free the bigger machine takes the runner under the spec score, and
+		// nothing needed holding off, so shadow's record is empty too; the
+		// row that does trip it has its own test below.
+		{"shadow records and changes nothing", HistoryShadow, 5000, "b-big", ""},
 		{"on holds the small host off", HistoryOn, 5000, "b-big",
 			"placed for the jobs waiting, which need ~5.9 GB and ~2 CPU; held off a-small: jobs waiting need ~5.9 GB, it has 3 GB"},
 		// A light job fits both, so nothing is held off.
-		{"a light job goes where it always went", HistoryOn, 500, "a-small", "placed for the jobs waiting, which need ~1 GB and ~2 CPU"},
+		{"a light job goes where the spec score ranks it", HistoryOn, 500, "b-big", "placed for the jobs waiting, which need ~1 GB and ~2 CPU"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, _ := historyFleet(t, tc.mode, tc.peakMB)
@@ -131,6 +134,28 @@ func TestShadowHistorySizingChangesNoAction(t *testing.T) {
 	shadow, _ := historyFleet(t, HistoryShadow, 5000)
 	if a, b := Decide(off).Actions, Decide(shadow).Actions; !reflect.DeepEqual(a, b) {
 		t.Fatalf("shadow changed the plan:\noff    %+v\nshadow %+v", a, b)
+	}
+}
+
+// Shadow's one visible act is a sentence, and it is written only where the
+// plain plan's host would have been held off: a fleet whose higher-scoring
+// host is full sends the runner to the small one, and shadow says what the
+// need did and does nothing about it.
+func TestShadowHistorySizingSaysWhatThePlainPlanWouldHaveDone(t *testing.T) {
+	s, _ := historyFleet(t, HistoryShadow, 5000)
+	for _, h := range s.Hosts {
+		if h.ID == "b-big" {
+			h.Capacity = 1 // full with the busy runner it already has
+		}
+	}
+	pp := only(t, Decide(s))
+	creates := actionsOf(pp.Actions, ActionCreate)
+	if len(creates) != 1 || creates[0].HostID != "a-small" {
+		t.Fatalf("creates = %+v, want one that started on the small host", creates)
+	}
+	want := "shadow: history sizing would have held off a-small: jobs waiting need ~5.9 GB, it has 3 GB"
+	if pp.History != want {
+		t.Fatalf("History = %q, want %q", pp.History, want)
 	}
 }
 
@@ -205,8 +230,8 @@ func TestAJobNoHostCanEverFitIsReportedAndDoesNotBlockThePool(t *testing.T) {
 	s, _ := historyFleet(t, HistoryOn, 64*1024)
 	pp := only(t, Decide(s))
 	creates := actionsOf(pp.Actions, ActionCreate)
-	if len(creates) != 1 || creates[0].HostID != "a-small" {
-		t.Fatalf("creates = %+v, want one placed as before", creates)
+	if len(creates) != 1 || creates[0].HostID != "b-big" {
+		t.Fatalf("creates = %+v, want one placed where the spec score ranks", creates)
 	}
 	if !strings.Contains(pp.HistoryUnfit, "no host that can run the pool has that much to give") {
 		t.Fatalf("HistoryUnfit = %q", pp.HistoryUnfit)

@@ -104,7 +104,7 @@ func getUsage(ctx context.Context, c API, raw json.RawMessage) ([]Content, error
 // setUsageWindow is setWindow with the names the usage route takes.
 func setUsageWindow(q url.Values, since, until string) error {
 	for key, raw := range map[string]string{"from": since, "to": until} {
-		when, err := parseWhen(raw)
+		when, err := ParseWhen(raw)
 		if err != nil {
 			return fmt.Errorf("%s %q: %w", key, raw, err)
 		}

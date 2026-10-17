@@ -26,16 +26,14 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import type { UpdatesStatus } from '../src/lib/api/types';
 import {
-  browserOverride,
-  documentWidth,
   expectNoReload,
   goto,
   pageHeading,
   plantMarker,
   reload,
+  expectNoSidewaysScroll,
+  signedInAs,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 const PAGE = '/settings/updates';
 const HOUR = 3_600_000;
@@ -45,20 +43,10 @@ const MINUTE = 60_000;
 const SEEDED_REASON =
   'Available: v1.3.2 is newer than the v1.3.0 running now; manual mode waits for someone to update.';
 
-const take = (page: Page) =>
-  page.getByRole('region', { name: 'What an update would take', exact: true });
+const take = (page: Page) => page.getByRole('region', { name: 'Standard releases', exact: true });
 const mode = (page: Page) => page.getByRole('region', { name: 'Update mode', exact: true });
 const controller = (page: Page) =>
   page.getByRole('region', { name: 'This controller', exact: true });
-
-/** How far the page can be scrolled sideways, which must be nowhere. */
-async function expectNoSidewaysScroll(page: Page, where: string): Promise<void> {
-  const { scrollWidth, clientWidth } = await documentWidth(page);
-  expect(
-    scrollWidth,
-    `${where} is ${scrollWidth}px wide in a ${clientWidth}px window, so the page scrolls sideways`,
-  ).toBeLessThanOrEqual(clientWidth);
-}
 
 /**
  * Answer the page's request for the status with a document of the test's own.
@@ -176,10 +164,9 @@ test('choosing auto asks first, and cancelling leaves the mode as it was', async
   );
 });
 
-// The Update button is the platform role's, and it is the only control that acts.
-// What the page must still never offer is a way to install, apply or restart by
-// any other route, or to choose a release it was not shown.
-test("the buttons are Refresh and the platform role's Update, and nothing installs or applies", async ({
+// Both update buttons name their destination; neither installs or applies anything
+// without confirmation in the controller.
+test('the page offers the shown release and DEV, with no install or apply route', async ({
   page,
 }) => {
   await goto(page, PAGE, 'Updates');
@@ -187,11 +174,14 @@ test("the buttons are Refresh and the platform role's Update, and nothing instal
 
   const main = page.getByRole('main');
   await expect(main.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
-  await expect(main.getByRole('button', { name: 'Update to v1.3.2', exact: true })).toBeVisible();
-  const controllerPanel = main.getByRole('region', { name: 'Update this controller', exact: true });
   await expect(
-    controllerPanel.getByRole('button', { name: /install|apply|upgrade|restart/i }),
-  ).toHaveCount(0);
+    main.getByRole('button', { name: 'Review update to v1.3.2…', exact: true }),
+  ).toBeVisible();
+  const controllerPanel = main.getByRole('region', { name: 'Update this controller', exact: true });
+  await expect(controllerPanel.getByRole('button')).toHaveCount(2);
+  await expect(
+    controllerPanel.getByRole('button', { name: 'Review dev upgrade…', exact: true }),
+  ).toBeVisible();
   await expect(
     controllerPanel.getByRole('link', { name: /update now|install|apply|upgrade|restart/i }),
   ).toHaveCount(0);
@@ -563,7 +553,7 @@ test('the notice that a newer release exists opens this page from the problems d
 const update = (page: Page) =>
   page.getByRole('region', { name: 'Update this controller', exact: true });
 const updateButton = (page: Page) =>
-  update(page).getByRole('button', { name: 'Update to v1.3.2', exact: true });
+  update(page).getByRole('button', { name: 'Review update to v1.3.2…', exact: true });
 const confirmation = (page: Page) =>
   page.getByRole('dialog', { name: 'Update the controller', exact: true });
 /** The attempt's own block, named by its title: "Updating to v1.3.2", "Updated to …". */
@@ -646,6 +636,58 @@ function updatable(controller: UpdatesStatus['controller'] = null): UpdatesStatu
   };
 }
 
+test('a dev build starts unchecked and a release check updates its status without installing', async ({
+  page,
+}) => {
+  const starts = countStarts(page);
+  let checks = 0;
+  const status: UpdatesStatus = {
+    ...updatable(),
+    running: { version: 'main-sha-abc1234', release: false },
+    development: { current: 'abc1234', latest: '', state: 'unknown', checked_at: null },
+  };
+  await serve(page, () => status);
+  await page.route('**/api/v1/updates/check', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    checks += 1;
+    status.development = {
+      current: 'abc1234',
+      latest: 'abc1234fffffffffffffffffffffffffffffffff',
+      state: 'current',
+      checked_at: new Date().toISOString(),
+    };
+    await route.fulfill({ json: status });
+  });
+  await goto(page, PAGE, 'Updates');
+  const installed = page.getByRole('region', { name: 'Installed build and release status' });
+  await expect(installed).toContainText('Development (dev)');
+  await expect(installed).toContainText('The latest dev build has not been confirmed.');
+  await installed.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  await expect(installed).toContainText('matches the latest checked commit on main');
+  await expect(update(page).getByRole('button', { name: 'Reinstall latest dev…' })).toBeVisible();
+  expect(checks).toBe(1);
+  expect(starts()).toBe(0);
+  await expectNoSidewaysScroll(page, 'the dev build status and commit details');
+});
+
+test('newer main changes are distinguished from a published dev build', async ({ page }) => {
+  await serve(page, () => ({
+    ...updatable(),
+    running: { version: 'main-sha-abc1234', release: false },
+    development: {
+      current: 'abc1234',
+      latest: 'def5678fffffffffffffffffffffffffffffffff',
+      state: 'available',
+      checked_at: new Date().toISOString(),
+    },
+  }));
+  await goto(page, PAGE, 'Updates');
+  const installed = page.getByRole('region', { name: 'Installed build and release status' });
+  await expect(installed).toContainText('The dev build may still be publishing');
+  await expect(update(page).getByRole('button', { name: 'Review dev upgrade…' })).toBeVisible();
+  await expectNoSidewaysScroll(page, 'the dev build with newer changes on main');
+});
+
 /** An attempt from 1.3.0 to v1.3.2, as the controller sends one. */
 function attemptIn(
   state: 'requested' | 'succeeded' | 'failed' | 'timed_out' | 'cancelled',
@@ -660,22 +702,9 @@ function attemptIn(
     requested_at: new Date(Date.now() - 4 * MINUTE).toISOString(),
     finished_at: state === 'requested' ? null : new Date(Date.now() - MINUTE).toISOString(),
     error,
+    backup: '',
+    rolled_back: false,
   };
-}
-
-/** Sign in as a role below the platform one: the server here has authentication off, the page is told otherwise. */
-async function signedInAs(page: Page, role: 'viewer' | 'operator' | 'admin'): Promise<void> {
-  await page.route('**/api/v1/meta', async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as Record<string, unknown>;
-    return route.fulfill({
-      response,
-      json: { ...body, auth_disabled: false, bootstrap_required: false },
-    });
-  });
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: { kind: 'token', id: 'tok_pretend', name: 'a token', role } }),
-  );
 }
 
 /** Count what the page sends to start an update. */
@@ -707,9 +736,8 @@ test('the platform role is offered the button, and the confirmation says what th
   await expect(dialog).toContainText('The controller restarts.');
   await expect(dialog).toContainText('Jobs that are running keep running.');
   await expect(dialog).toContainText(
-    'If the release changes the database, a copy of it is kept first beside the database',
+    'A verified copy of the database is taken before anything changes.',
   );
-  await expect(dialog).toContainText('A release that changes nothing there takes none.');
   await expect(dialog.getByRole('button', { name: 'Update to v1.3.2', exact: true })).toBeVisible();
 
   await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -750,7 +778,7 @@ test('an administrator sees no Update button, and is told the platform role is n
   await expect(take(page)).toContainText('Available');
 
   await expect(update(page)).toContainText('Updating the controller needs the platform role.');
-  await expect(page.getByRole('button', { name: /^Update to/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Review update to/ })).toHaveCount(0);
   await expect(update(page).getByRole('button')).toHaveCount(0);
   expect(starts()).toBe(0);
 });
@@ -872,6 +900,8 @@ test('the build changing to the release asked for is shown as the update done', 
 });
 
 test('an attempt the controller closed as succeeded is shown as done', async ({ page }) => {
+  // A live event would replace this test's status with the real fixture's release.
+  await page.route('**/api/v1/events**', (route) => route.abort());
   await serve(page, () => ({
     ...updatable(attemptIn('succeeded')),
     running: { version: '1.3.2', release: true },
@@ -882,7 +912,7 @@ test('an attempt the controller closed as succeeded is shown as done', async ({ 
   const done = attemptBlock(page, 'Updated to v1.3.2');
   await expect(done).toContainText('Updated');
   await expect(done).toContainText('runs 1.3.2 now');
-  await expect(update(page).getByRole('button')).toHaveCount(0);
+  await expect(updateButton(page)).toHaveCount(0);
   await expect(update(page)).toContainText('No newer release is on offer');
 });
 
@@ -933,7 +963,7 @@ test('with no helper there is no button, and the page says how to install one', 
   await expect(
     update(page).getByRole('button', { name: 'Copy the install command' }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Update to/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Review update to/ })).toHaveCount(0);
 });
 
 test('where the helper can never be installed the page says why, with the upgrade command and nothing to install', async ({
@@ -961,7 +991,7 @@ test('where the helper can never be installed the page says why, with the upgrad
   await expect(update(page).getByRole('button', { name: 'Copy the install command' })).toHaveCount(
     0,
   );
-  await expect(page.getByRole('button', { name: /^Update to/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Review update to/ })).toHaveCount(0);
 });
 
 test("a refusal to start is shown where the button was, in the controller's words", async ({
@@ -1242,4 +1272,42 @@ test('nothing scrolls sideways at 360px with a halted rollout', async ({ page })
   await goto(page, PAGE, 'Updates');
   await expect(hostsRollout(page)).toContainText('Halted');
   await expectNoSidewaysScroll(page, 'the Updates page with a halted rollout');
+});
+
+// Whether a download is held to a signature tells an operator whether their
+// build verifies releases at all, so the page says it and names the key.
+test('the controller panel names the release key this build trusts', async ({ page }) => {
+  await serve(page, () => ({ ...updatable(), signing: { keys: ['0123456789abcdef'] } }));
+  await quiet(page);
+  await goto(page, PAGE, 'Updates');
+  await expect(controller(page)).toContainText('Releases are verified with key 0123456789abcdef.');
+});
+
+test('the controller panel says a build with no release key takes the checksums on trust', async ({
+  page,
+}) => {
+  await serve(page, () => ({ ...updatable(), signing: { keys: [] } }));
+  await quiet(page);
+  await goto(page, PAGE, 'Updates');
+  await expect(controller(page)).toContainText('taken on trust');
+});
+
+// A failed update that was rolled back is a different thing to tell an operator
+// from one left in place, and the copy taken before the change is named so they
+// can restore it.
+test('a rolled-back attempt says so and names the copy to restore from', async ({ page }) => {
+  await serve(page, () =>
+    updatable({
+      ...attemptIn('failed', 'the controller did not answer in 30m'),
+      backup: '/var/lib/zoomies/backups/zoomies-20260101-000000',
+      rolled_back: true,
+    }),
+  );
+  await quiet(page);
+  await goto(page, PAGE, 'Updates');
+  const panel = page.getByRole('region', { name: 'Update this controller', exact: true });
+  await expect(panel).toContainText('the previous release was put back');
+  await expect(panel).toContainText(
+    'zoomies restore /var/lib/zoomies/backups/zoomies-20260101-000000 --replace',
+  );
 });

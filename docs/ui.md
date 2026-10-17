@@ -680,7 +680,9 @@ in view while reading the answer; **What Eli looked at** shows the tools behind 
 
 Fleet lookups require the provider's **Let Eli read this fleet** switch and
 use your own permissions. Chat advises; [PR repairs](#eli-repairs) take an
-explicit request into a change on an existing PR branch. The image below uses
+explicit request into a change on an existing PR branch, and the same switch
+lets Eli read one's history: is one running, what stuck it, whether asking for
+another now would be refused. Starting one is still the repairs page's press. The image below uses
 the demo model, which turns the lookup into a readable summary of jobs, runners,
 host health, recent outcomes and queue waits, with a next step based on those
 figures. It needs no credentials. A configured model supports fuller investigation.
@@ -866,7 +868,15 @@ the one thing on the page that installs anything: the **Update** button for this
 controller. A host is updated from its own card on **Hosts**, or with every
 other host that is behind in a [rollout](#updating-every-host-that-is-behind).
 
-At the top is one line saying what the mode does about the newest release
+At the top, Installed build and release status labels the controller as
+Standard, Development or Custom. A stamped development build shows its commit,
+the latest checked commit on `main` and the check time. It distinguishes an
+unchecked build from matching commits and newer changes on `main`; it does not
+claim that a dev image has finished publishing. Administrators can choose
+**Check for updates** to ask the release source now. The header's Refresh
+control rereads the saved status.
+
+Standard releases then says what the mode does about the newest release
 that can be installed on this system (*Manual offers v1.3.2 and waits for a
 person to take it*, or *Auto would take v1.3.2 in 18 hours*) and under it the
 controller's own sentence for what happens next and why, exactly as the API
@@ -890,15 +900,14 @@ change them. The platform role gets the controls under them: the mode as a
 choice of Off, Manual or Auto, and the soak and check interval as the same rows
 the Configuration page shows. A value the environment is holding reads as
 pinned and cannot be changed here. Choosing Auto asks first, since it lets the
-controller restart itself without another request. Last is the
-build the controller is running and whether it came from a release. One built
+controller restart itself without another request. One built
 from `main` is offered the newest release as a replacement, with a warning in
 the confirmation that it may take the controller back to older code, since a
 build from `main` is usually ahead of the newest release. Auto never takes it:
 only a person pressing the button does.
 
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
 
 ## The status page
 
@@ -1009,3 +1018,22 @@ Pool priority and an explicit Run now preference can defer ordinary work.
 This is an order for provisioning capacity. GitHub chooses which compatible job
 an available runner actually executes. Open a queue row for its current waiting
 explanation, including explicit paused/deleted demand.
+
+
+Historical comparison reports show recorded workflow evidence beside runner facts.
+Expand each run attempt for the retained trigger, path fingerprint and root-file
+commit/content digests. Missing sources remain unknown, including unsupported
+triggers and older captures. Root-file coverage excludes reusable workflows,
+actions, inputs and test scope and does not attest execution or matched workloads.
+Raw workflow filenames and source text are not returned. Digest details wrap on
+mobile; exact run IDs remain decimal strings in this view.
+
+The historical-comparison milestone includes root dependency inspection. It shows
+root `uses` declaration counts and literal pin classifications, not a resolved or
+executed dependency graph. Raw names, references and source text stay private.
+Unsupported or absent inspection is unknown; enumerated zero stays zero. REST/UI
+and CLI share a fifty-reference-row budget per arm with full counts and omission
+flags. MCP/Eli validates references then returns summaries with details explicitly
+omitted within its existing budgets. Matching metadata does not establish workload
+or configuration equivalence, causal improvement or savings. Controlled-experiment
+proof, dispatch and live model evaluation remain deferred.

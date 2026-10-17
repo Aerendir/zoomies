@@ -15,9 +15,7 @@
  * and the advice differs; a held job is not this fleet's fault at all.
  */
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 /**
  * The fixture's two stuck runners, by the ids the seed fixes so a test can go

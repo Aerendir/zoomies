@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import test from 'node:test';
 import * as format from '../src/lib/format.ts';
 
@@ -21,23 +21,32 @@ test('the formatters and the pages agree on one marker for a missing value', () 
   }
 });
 
-const PAGES = [
-  'lib/usage/UsageInsights.svelte',
-  'lib/insights/JobsInsights.svelte',
-  'lib/insights/RunnerInsights.svelte',
-  'lib/insights/PoolPressure.svelte',
-  'lib/insights/FigureRows.svelte',
-  'lib/insights/ReadingCard.svelte',
-  'lib/insights/HostCapacityMap.svelte',
-  'routes/Queue.svelte',
-  'routes/Hosts.svelte',
-];
-
-for (const page of PAGES) {
-  test(`${page} writes a missing value with the shared marker, not a dash of its own`, () => {
-    const source = readFileSync(join(lib, page), 'utf8');
-    // A dash standing alone as a value: a string literal of one, or one
-    // between tags. Dashes inside a sentence and number ranges are prose.
-    assert.doesNotMatch(source, /(['"`])[—–]\1|>[—–]</);
+// The first version of this guard named nine pages, and the next page to write
+// a dash of its own was the tenth: two host-health views did exactly that. So it
+// reads every source file, not the ones somebody remembered.
+function sources(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return sources(path);
+    return /\.(svelte|ts)$/.test(entry.name) ? [path] : [];
   });
 }
+
+// A dash standing alone as a value: a string literal of one, or one between
+// tags, written as the shared marker's two hyphens or as an en or em dash.
+// Dashes inside a sentence, number ranges and a quoted "--" in a comment are
+// prose, so a double-quoted pair is only caught as an attribute value.
+const LONE_DASH = /(['"`])[\u2014\u2013]\1|(?<![\w$"])'--'|="--"|>--<|>[\u2014\u2013]</;
+
+test('no source file writes a missing value with a dash of its own', () => {
+  const offenders: string[] = [];
+  for (const file of sources(lib)) {
+    if (file === join(lib, 'lib', 'format.ts')) continue;
+    readFileSync(file, 'utf8')
+      .split('\n')
+      .forEach((line, i) => {
+        if (LONE_DASH.test(line)) offenders.push(`${relative(lib, file)}:${i + 1}`);
+      });
+  }
+  assert.deepEqual(offenders, [], 'import NO_VALUE from format.ts instead of spelling the marker');
+});

@@ -12,16 +12,7 @@
  * standard.
  */
 import { expect, test, type Page } from '@playwright/test';
-import {
-  browserOverride,
-  FIXTURE,
-  focusIsInMain,
-  goto,
-  isFocused,
-  shiftTabTo,
-} from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, focusIsInMain, goto, isFocused, shiftTabTo } from './support/fixtures';
 
 // Every page in the navigation. It used to be four of the ten, which meant the
 // audit of "every button has an accessible name" was an audit of the four

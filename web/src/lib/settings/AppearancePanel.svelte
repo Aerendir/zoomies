@@ -24,6 +24,8 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Switch from '$lib/components/Switch.svelte';
+  import { visualStyle } from '$lib/state/ui-style.svelte';
+  import VisualStylePicker from './VisualStylePicker.svelte';
 
   /*
     What a grid does with a row on a phone. Both layouts exist because they
@@ -45,10 +47,11 @@
 
 <PageHeader
   title="Appearance"
-  subtitle="Theme, logo style and navigation stay in this browser. Table widths and column order follow your signed-in account."
+  subtitle="Visual style, theme, logo style and navigation stay in this browser. Table widths and column order follow your signed-in account."
 />
 
 <div class="settings">
+  <VisualStylePicker />
   <div class="setting">
     <div class="text">
       <p class="label" id="theme-label">Theme</p>
@@ -127,13 +130,18 @@
       <p class="label">Tables on a phone</p>
       <p class="description">
         Rows keeps the table a desktop shows, scrolling sideways to the columns that do not fit.
-        Cards give every value a line of its own. Each grid carries the same choice above its rows,
-        and a grid told there keeps it whatever this says.
+        Cards give every value a line of its own. With no saved choice, Mission Control grids start
+        as Cards and Classic as Rows. Each grid carries the same choice above its rows, and a grid
+        told there keeps it whatever this says.
       </p>
     </div>
     <Segmented
       options={GRID_VIEWS}
-      value={prefs.gridView}
+      value={prefs.gridViewChosen
+        ? prefs.gridView
+        : visualStyle.choice === 'mission-control'
+          ? 'cards'
+          : 'rows'}
       label="Tables on a phone"
       onchange={(value) => (prefs.gridView = value as GridView)}
     />
@@ -142,9 +150,9 @@
 
 <p class="note">
   Relative times refresh every {seconds} seconds and carry the exact timestamp in their tooltip. Animation
-  follows the operating system's reduced-motion setting. There is one density, tuned for a dense grid
-  at 13px; how many rows a page shows is set at the foot of each grid and remembered per table. Drag a
-  column heading to move it, or its right edge to resize it; both controls also work with arrow keys.
+  follows the operating system's reduced-motion setting. Classic uses compact type; Mission Control gives
+  it more room. How many rows a page shows is set at the foot of each grid and remembered per table. Drag
+  a column heading to move it, or its right edge to resize it; both controls also work with arrow keys.
 </p>
 
 <style>

@@ -9,16 +9,14 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   dataRows,
+  facetTrigger,
   FIXTURE,
   goto,
   grid,
   pageHeading,
   rowCount,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 const runs = (page: Page) => grid(page, 'Workflow runs');
 
@@ -47,6 +45,40 @@ test('the page lists one row per run and opens on what is running', async ({ pag
   await page.getByRole('switch', { name: 'Include other runners' }).click();
   await expect(rowCount(page)).toContainText(`of ${FIXTURE.totalRuns} runs`);
   await expect(page).toHaveURL(/[?&]all=true/);
+});
+
+test('the filters are one row of same-height controls, with the switches on a line of their own', async ({
+  page,
+}) => {
+  // On a wide page the menus once stacked into a single column beside the
+  // search. Every control was right on its own, so only the line they sat on
+  // showed it: the menus must share the search's row, and the switches must
+  // start beneath it.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await goto(page, '/workflows', 'Workflows');
+  const search = await page.getByRole('searchbox', { name: 'Search jobs' }).boundingBox();
+  const menus = await Promise.all(
+    ['Repository', 'Workflow', 'Pool', 'Label', 'Outcome'].map((label) =>
+      facetTrigger(page, label).boundingBox(),
+    ),
+  );
+  const unmatched = await page.getByRole('switch', { name: 'Unmatched only' }).boundingBox();
+  if (!search || !unmatched) throw new Error('the search and the switches are on the page');
+
+  for (const menu of menus) {
+    if (!menu) throw new Error('every menu is on the page');
+    expect(Math.abs(menu.y - search.y), 'a menu shares the search row').toBeLessThan(2);
+    expect(
+      Math.abs(menu.height - search.height),
+      'a menu is the height of the search',
+    ).toBeLessThan(2);
+    expect(menu.x, 'a menu sits beside the search, not under it').toBeGreaterThan(
+      search.x + search.width,
+    );
+  }
+  expect(unmatched.y, 'the switches start on a line of their own').toBeGreaterThan(
+    search.y + search.height,
+  );
 });
 
 test('a run opens in place to the jobs inside it, and closes again from the keyboard', async ({

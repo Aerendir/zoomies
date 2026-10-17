@@ -243,6 +243,9 @@ func (c *Controller) Stats(ctx context.Context, window time.Duration) (*Stats, e
 	}
 	now := c.Now()
 	for _, h := range hosts {
+		if h.Retired {
+			continue
+		}
 		out.Hosts.Total++
 		if h.Healthy(now) {
 			out.Hosts.Healthy++

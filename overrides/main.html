@@ -37,6 +37,9 @@
 {% block htmltitle %}
   {% if page and page.is_homepage and page.meta and page.meta.social_title %}
     <title>{{ page.meta.social_title }}</title>
+  {% elif page and not page.is_homepage and page.title and config.site_name in (page.meta.title or page.title) %}
+    {# The theme appends the site's name; a title that already says it does not need it twice. #}
+    <title>{{ page.meta.title or page.title }}</title>
   {% else %}
     {{ super() }}
   {% endif %}
@@ -51,7 +54,8 @@
   {% set page_title = (page.meta.title if page and page.meta and page.meta.title else (page.title if page else none)) %}
   {% set title = config.site_name %}
   {% if page_title and not page.is_homepage %}
-    {% set title = page_title ~ " - " ~ config.site_name %}
+    {# A title that already names the product does not repeat it: "Zoomies vs Cirun - Zoomies" spends a fifth of its length on one word. #}
+    {% set title = page_title if config.site_name in page_title else page_title ~ " - " ~ config.site_name %}
   {% endif %}
   {#
     A page may name the title it wants to be shared under. The home page needs
@@ -94,6 +98,20 @@
   <meta property="og:title" content="{{ title }}" />
   <meta property="og:description" content="{{ description | striptags | trim }}" />
   <meta property="og:url" content="{{ canonical }}" />
+  {#
+    The page as Markdown, for an assistant that would rather read the source
+    than the theme. hooks/seo.py writes the copy beside the page, and a 404
+    has no page and so no copy.
+  #}
+  {% if page and page.file %}<link rel="alternate" type="text/markdown" href="{{ canonical }}index.md" />{% endif %}
+  {#
+    RFC 9727's api-catalog link relation and the ai-catalog index it names,
+    for a reader that parses a page's head rather than its Link headers. The
+    api-catalog well-known document and the header the site worker adds come
+    from the same generated files as these.
+  #}
+  <link rel="api-catalog" href="/.well-known/api-catalog" />
+  <link rel="ai-catalog" href="/.well-known/ai-catalog.json" />
   <meta property="og:image" content="{{ image }}" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
@@ -153,16 +171,23 @@
           ],
           "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
           "isAccessibleForFree": true,
-          "author": {
-            "@type": "Organization",
-            "name": "Zoomies contributors",
-            "url": "{{ config.repo_url }}"
-          },
+          "author": { "@id": "{{ config.site_url }}#org" },
+          "publisher": { "@id": "{{ config.site_url }}#org" },
           "keywords": "self-hosted GitHub Actions runner, ephemeral runners, autoscaling CI runners, GitHub Actions runner controller, self-hosted CI"
+        },
+        {
+          "@type": "Organization",
+          "@id": "{{ config.site_url }}#org",
+          "name": "Zoomies",
+          "legalName": "Zoomies contributors",
+          "url": "{{ config.site_url }}",
+          "logo": "{{ config.site_url }}brand/github-avatar.png",
+          "sameAs": ["{{ config.repo_url }}"]
         },
         {
           "@type": "WebSite",
           "@id": "{{ config.site_url }}#website",
+          "publisher": { "@id": "{{ config.site_url }}#org" },
           "url": "{{ config.site_url }}",
           "name": "{{ config.site_name }}",
           "description": {{ description | striptags | trim | tojson }},
@@ -186,6 +211,12 @@
     breadcrumb is read out of the navigation rather than the URL, so a page
     moved between sections in mkdocs.yml moves here too.
   #}
+  {#
+    The home page's @graph is the only place the entities are defined, and a
+    crawler reads one page at a time: an @id that points at another page's
+    graph resolves to nothing. So each article carries a small copy of what it
+    names, with the same @id so a consumer that does merge them can.
+  #}
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -196,13 +227,10 @@
       "inLanguage": "en-GB",
       {% if modified %}"dateModified": "{{ modified }}",{% endif %}
       "image": "{{ image }}",
-      "isPartOf": { "@type": "WebSite", "@id": "{{ config.site_url }}#website" },
-      "about": { "@type": "SoftwareApplication", "@id": "{{ config.site_url }}#software" },
-      "author": {
-        "@type": "Organization",
-        "name": "Zoomies contributors",
-        "url": "{{ config.repo_url }}"
-      },
+      "isPartOf": { "@type": "WebSite", "@id": "{{ config.site_url }}#website", "name": "{{ config.site_name }}", "url": "{{ config.site_url }}" },
+      "about": { "@type": "SoftwareApplication", "@id": "{{ config.site_url }}#software", "name": "Zoomies", "url": "{{ config.site_url }}" },
+      "author": { "@type": "Organization", "@id": "{{ config.site_url }}#org", "name": "Zoomies", "url": "{{ config.site_url }}", "sameAs": ["{{ config.repo_url }}"] },
+      "publisher": { "@type": "Organization", "@id": "{{ config.site_url }}#org", "name": "Zoomies", "url": "{{ config.site_url }}", "sameAs": ["{{ config.repo_url }}"] },
       "license": "https://www.gnu.org/licenses/agpl-3.0.html"
     }
   </script>
@@ -219,6 +247,37 @@
         , { "@type": "ListItem", "position": {{ linked_ancestors | length + 2 }}, "name": {{ page_title | tojson }}, "item": "{{ canonical }}" }
       ]
     }
-  </script>
+   </script>
   {% endif %}
+
+  <script>
+    // WebMCP (draft): the tool an agentified browser finds on this page. The
+    // page is Markdown underneath (hooks/seo.py writes the copy the theme's
+    // alternate link above names), so a registrant that would rather read the
+    // source than the theme asks for one identical thing, and the browser
+    // Agent can fetch it from where it already sits. registerTool and
+    // modelContext exist only in browsers that have the API: without one the
+    // script is a no-op, so a person's browser does nothing different.
+    (function () {
+      if (document.modelContext || navigator.modelContext) {
+        var context = document.modelContext || navigator.modelContext;
+        var copy = document.querySelector('link[rel="alternate"][type="text/markdown"]');
+        if (copy) {
+          var address = copy.getAttribute("href");
+          context.registerTool({
+            name: "read_page_as_markdown",
+            description: "The current page as the Markdown source it was written in, without the site's navigation, footer or icons",
+            inputSchema: { type: "object", properties: {} },
+            execute: async function () {
+              var response = await fetch(address);
+              if (!response.ok) {
+                throw new Error("the Markdown copy answered " + response.status);
+              }
+              return await response.text();
+            },
+          }).catch(function () {});
+        }
+      }
+    })();
+  </script>
 {% endblock %}

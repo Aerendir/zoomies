@@ -54,6 +54,7 @@ type HostFields = Pick<
   | 'upgrade_command'
   | 'upgrade_note'
   | 'embedded'
+  | 'machine_id'
   | 'created_at'
   | 'last_heartbeat'
 >;
@@ -93,6 +94,17 @@ export function noReport(i: { host: HostFields; now: number; canOperate: boolean
     const tail: NoReport['tail'] = joinedRecently(host.created_at, now) ? 'joined-late' : null;
     const base = { kind: 'release' as const, description, tail };
     if (!canOperate) {
+      // A machine Zoomies rents is not updated on the host, by anybody: its
+      // agent is the one its provider's template carried, and the way to a
+      // newer one is that template.
+      if (host.machine_id) {
+        return {
+          ...NONE,
+          ...base,
+          detail:
+            'This is a machine Zoomies rents, cloned from its provider’s template, so its agent is the one that image carried. Ask an administrator to prepare that template again from the controller’s release: the machines built afterwards carry it, and this one is replaced as it goes idle.',
+        };
+      }
       return {
         ...NONE,
         ...base,

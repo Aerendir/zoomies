@@ -14,19 +14,17 @@ operable without a shell on either side) while the self-hosted product it
 already is keeps getting better. The ordered delivery plan in section 10
 supersedes all earlier ordering.
 
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) is a finished code-review
-record, and [roadmap/source/](roadmap/source/) contains historical inputs.
-They explain why work existed, but neither may add, reorder or authorise
-current work. [roadmap/progress.md](roadmap/progress.md) is the corresponding
-status/evidence record: it records delivery of packages defined here but does
-not define a competing plan. New or changed delivery work belongs in this
-file first.
+[roadmap/source/](roadmap/source/) contains historical inputs. It explains why
+work existed, but it may not add, reorder or authorise current work.
+[roadmap/progress.md](roadmap/progress.md) is the corresponding status/evidence
+record: it records delivery of packages defined here but does not define a
+competing plan. New or changed delivery work belongs in this file first.
 
 ## 1. Where it stands
 
 Zoomies is stable in real use. Three full releases shipped in a week
 (`v1.0.0` on 13 September, `V1.1.0` on 15 September and `v1.2.0` on 18
-September, which is what `:latest` resolves to now) and since 18 September
+September, the last of the three) and since 18 September
 this repository's own CI, CodeQL, fuzzing and release set-up jobs run on a
 Zoomies fleet (`zoomies-linux-x64`) through the build under test, with only
 the arm64 and Windows legs left on GitHub's runners, and, since 19 September,
@@ -1559,10 +1557,16 @@ redaction of the conversation and every tool result, personal providers for
 any signed-in person, the subscription kinds (Claude Code, Codex, Copilot,
 administrators only and never with tools), PR repairs from a `/eli fix`
 comment or an opt-in automatic policy, and the shared mention matcher that is
-ZF-239's first slice; `hand-off-ai.md` has the record. Still open: per-person
-limits and data classes (the rest of 7c), mutate tools behind the confirmation
-card (7d), stored conversations, slash shortcuts and context chips (7e),
-deterministic Kennel fixes (7f), step-up (7h) and autonomy (7i).
+ZF-239's first slice. A later pass added the repairs history to that loop as
+the two read tools it was missing (`list_elis_repairs`, `get_eli_repair`),
+which is how the assistant in the chat can say why a repair is stuck, while
+the request, the accept, the clear and the policy stay off the surface: a
+repair spends an attempt and pushes to a pull request, and that press is a
+person's at the repairs page; [the ZF-235 plan](roadmap/plans/2026-10-09-zf-235e-eli.md)
+has the record. Still open: per-person limits and data classes (the rest of
+7c), mutate tools behind the confirmation card (7d), stored conversations,
+slash shortcuts and context chips (7e), deterministic Kennel fixes (7f),
+step-up (7h) and autonomy (7i).
 [roadmap/eli-review.md](roadmap/eli-review.md) reviews what was built against
 what competitors ship and says what to do next.
 
@@ -1739,7 +1743,18 @@ request to continue the Eli enhancement stack. Track E2 in the live handoff.
 **Why:** a period correlation does not establish matched workloads for a
 configuration experiment. Keep ZF-241's period/release finding separate.
 
-**Do:** begin with a pure, bounded eligibility snapshot of operator-selected
+**Milestone scope, owner agreed 14 October 2026:** close E2 at descriptive historical
+comparison after dependency inspection reaches REST/UI, CLI and bounded MCP/Eli
+summaries. This milestone includes explicit capture, immutable replay, separate
+measurements, coverage/unknowns and runner/root-workflow/declaration provenance.
+Controlled experiment eligibility, transitive dependency resolution, inputs/test
+scope, configuration equivalence, cache/host attestation, fair complete cohorts,
+workflow dispatch, allocated cost attribution and live model evaluation remain
+deferred. Do not keep extending E2 automatically; next implement an E3 optimisation
+preview with honest inconclusive verification where evidence is incomplete.
+
+**Original broader scope (deferred beyond this milestone):** begin with a pure,
+bounded eligibility snapshot of operator-selected
 existing attempts. Retain the hypothesis, initiating user, repository, evidence
 identifier, revisions, exact intended delta, inputs, test scope, image/resource
 identity, cache/host observations, window and fixed rule version. Keep failed
@@ -1762,8 +1777,63 @@ Dispatch and publication are later, separately authorised work.
 [observed snapshot assembly](roadmap/plans/2026-10-13-eli-comparison-snapshot.md),
 [retention and offline replay](roadmap/plans/2026-10-13-eli-comparison-retention.md),
 [capture/replay API](roadmap/plans/2026-10-13-eli-comparison-api.md),
-[CLI replay](roadmap/plans/2026-10-13-eli-comparison-cli.md).
-No new dependency, store query, route, model call, dispatch or publication.
+[CLI replay](roadmap/plans/2026-10-13-eli-comparison-cli.md),
+[MCP/Eli replay](roadmap/plans/2026-10-13-eli-comparison-mcp.md),
+[web capture and inspection](roadmap/plans/2026-10-13-eli-comparison-web.md),
+[CLI capture](roadmap/plans/2026-10-13-eli-comparison-cli-capture.md),
+[recorded grant provenance](roadmap/plans/2026-10-13-eli-comparison-grant-provenance.md),
+[runner observation foundation](roadmap/plans/2026-10-13-eli-runner-observation-foundation.md),
+[runner result integration](roadmap/plans/2026-10-13-eli-runner-observation-results.md),
+[private runner observation joins](roadmap/plans/2026-10-13-eli-comparison-runner-observations.md),
+[web runner evidence inspection](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-web.md),
+[bounded MCP/Eli runner evidence](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-mcp.md),
+[CLI runner evidence](roadmap/plans/2026-10-13-eli-comparison-runner-evidence-cli.md),
+[private trigger/workflow context](roadmap/plans/2026-10-13-eli-comparison-trigger-provenance.md),
+[push root-workflow source digests](roadmap/plans/2026-10-13-eli-comparison-workflow-source.md),
+[web workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-web.md),
+[bounded MCP/Eli workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-mcp.md),
+[CLI workflow evidence](roadmap/plans/2026-10-13-eli-comparison-workflow-evidence-cli.md),
+[private root dependency inventory](roadmap/plans/2026-10-13-eli-comparison-workflow-dependencies.md),
+[descriptive comparison milestone](roadmap/plans/2026-10-14-eli-e2-descriptive-comparison-milestone.md).
+The owner prioritised the web UI before CLI capture on 13 October 2026.
+These slices include bounded local retention and capture/replay routes. No new
+dependency, model call, dispatch or publication is introduced. Historical workload/
+configuration/cache evidence and complete selection remain outstanding, so current
+observed reports stay inconclusive.
+
+### ZF-244: preview a reviewed checkout optimisation
+
+**Classification: new; M; started 14 October at the owner's request to continue E3.**
+
+**Why:** a healthy workflow can spend time fetching history it does not need.
+E2 descriptive measurements do not establish that a proposed change saves time.
+Keep optimisation proposals separate from failed-PR repair and require an exact
+reviewable edit before publication or experiment execution.
+
+**First slice:** a deterministic supplied-evidence checkout-depth preview. Reduce
+an explicit literal full-history fetch to one commit only for a pinned checkout
+step, with matching head/source/position timing evidence and explicitly reviewed
+repository/downstream history needs. Reuse the bounded workflow parser and repair
+preimage checks; preserve unrelated source bytes, comments, modes and line endings.
+Refuse unknown history needs, unsupported YAML, source overrides, stale evidence
+and disabled source/edit policy. Verification remains inconclusive.
+
+This pure foundation is not a runtime route or a complete E3 delivery. Next wire
+separately authorised bounded source/evidence admission, preview retention and web
+inspection, preserving the owner's web-first priority. Then implement explicit
+approval and reconciled draft publication with fresh head/policy checks. Keep
+experiment dispatch separate. No model or source call is introduced in the core.
+
+**Acceptance:** exact preview and currentness refusal for one supported change;
+subsequent scoped web preview, draft PR, linked explanation and honest E2 result.
+Passing CI alone cannot establish improvement. Publication never merges.
+
+Depends on ZF-242 and ZF-243's descriptive milestone. Size M.
+[Preview foundation](roadmap/plans/2026-10-14-eli-e3-checkout-preview.md),
+[private retention/replay](roadmap/plans/2026-10-14-eli-e3-preview-retention.md),
+[admitted checkout evidence](roadmap/plans/2026-10-14-eli-e3-checkout-evidence.md).
+The preview foundation merged in #1021 and private retention in #1022.
+Admitted evidence precedes the web surface; source-bearing history needs its own authorisation boundary.
 
 ## 9. Kept for the day somebody asks
 
@@ -1843,7 +1913,10 @@ round trip between different encryption keys preserves history and usable
 team credentials, source operator access cannot authenticate at the new
 controller, destination access works after restart, failures leave the source
 and live destination intact, and restored machine proofs remain unverified.
-See [the transfer design](roadmap/instance-transfer.md). The owner requested
+The browser import uses bounded upload chunks and polls background verification
+so a reverse proxy need not accept the whole archive in one request or wait for
+its authentication and re-sealing. The single-request import remains available
+for direct API clients. See [the transfer design](roadmap/instance-transfer.md). The owner requested
 this work on 9 October 2026; it is the next implementation priority.
 
 ### ZF-238: a Windows host joins with one pasted command
@@ -1901,7 +1974,8 @@ every package in section 8 was re-read on 19 September against the code.
 | 19 | ZF-240 the fleet as it moves, over MCP, implemented, 12 October | One call answers what changed; a second with the cursor blocks until a seeded event; Eli's three scenarios hold and the three reads for whoever runs the fleet are left off its list |
 | 20 | ZF-241 the analyses | Each seeded cause is named as dominant at high confidence; a small sample is said to be small; the card and the tool show one answer |
 | 21 | ZF-242 PR required-check delay, starting with its independent pure core | Pinned heads and coverage survive every surface; missing/ambiguous checks stay visible; no merge-readiness claim |
-| 22 | ZF-243 selected historical comparison | Matched workloads and retained attempts; separate latency, consumption and reliability; incomplete evidence stays inconclusive |
+| 22 | ZF-243 selected historical comparison | Descriptive milestone merged; controlled-experiment proof deferred, incomplete evidence stays inconclusive |
+| 23 | ZF-244 reviewed checkout optimisation | Pure supplied-evidence preview first, then scoped web inspection and separately approved draft publication; no verified savings without measurements |
 | - | ZF-239 slices 3 to 5, the relay itself | After the owner's answers and a ruling on delivery rule 15 |
 | - | ZF-215, ZF-212, ZF-403's rotation, and section 9 | When a fleet asks |
 

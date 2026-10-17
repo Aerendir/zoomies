@@ -4,6 +4,7 @@ import {
   attemptIsOpen,
   attemptWords,
   buildText,
+  developmentStatus,
   confirmControllerUpdate,
   confirmRollout,
   controllerOffer,
@@ -313,6 +314,8 @@ function attempt(state: ControllerAttempt['state'], error = ''): ControllerAttem
     requested_at: '2026-10-08T11:00:00Z',
     finished_at: state === 'requested' ? null : '2026-10-08T11:05:00Z',
     error,
+    backup: '',
+    rolled_back: false,
   };
 }
 
@@ -528,9 +531,18 @@ test('the confirmation names the release and says what the restart does to jobs 
   const lines = words.consequences.join('\n');
   assert.match(lines, /The controller restarts\./);
   assert.match(lines, /Jobs that are running keep running\./);
-  assert.match(lines, /If the release changes the database, a copy of it is kept first/);
-  assert.match(lines, /A release that changes nothing there takes none\./);
+  assert.match(lines, /A verified copy of the database is taken before anything changes\./);
   assert.doesNotMatch(`${words.description}\n${lines}`, /\u2014| -- /);
+});
+
+// A native controller is put back on the release it ran when the new one does not
+// answer, and the confirmation says so before the press; a container is not, and
+// nothing promises it is.
+test('the confirmation states the rollback only where it applies', () => {
+  const native = confirmControllerUpdate('v1.3.2', '1.3.0', true, true).consequences.join('\n');
+  assert.match(native, /the previous release is put back automatically/);
+  const container = confirmControllerUpdate('v1.3.2', '1.3.0', true, false).consequences.join('\n');
+  assert.doesNotMatch(container, /put back automatically/);
 });
 
 test('a build that is not from a release is warned that the update may take it back', () => {
@@ -735,4 +747,24 @@ test('nothing a rollout says carries an em dash or its stand-in', () => {
     const words = rolloutWords(rollout({ state, halted_reason: '' }));
     assert.doesNotMatch(JSON.stringify(words), /\u2014| -- /, state);
   }
+});
+
+test('DEV confirmation identifies the moving development channel without a release downgrade warning', () => {
+  const words = confirmControllerUpdate('dev', 'main-sha-abc1234', false);
+  assert.match(words.description, /to dev/);
+  assert.ok(words.consequences.some((line) => line.includes('moving channel')));
+  assert.ok(!words.consequences.some((line) => line.includes('older code')));
+});
+
+test('development status distinguishes main from a published dev image', () => {
+  const dev = { current: 'abc1234', latest: '', state: 'unknown' as const, checked_at: null };
+  assert.match(developmentStatus(dev), /has not been confirmed/);
+  assert.match(
+    developmentStatus({ ...dev, latest: 'abc1234', state: 'current' }),
+    /matches the latest checked commit/,
+  );
+  assert.match(
+    developmentStatus({ ...dev, latest: 'def5678', state: 'available' }),
+    /may still be publishing/,
+  );
 });

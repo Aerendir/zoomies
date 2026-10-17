@@ -26,3 +26,29 @@ Scoped guidance for the UI, read in addition to the root [AGENTS.md](../AGENTS.m
   [docs/api-surface.md](../docs/api-surface.md).
 - Playwright specs in `web/tests/` run against the real binary, including
   accessibility and mobile passes.
+- `npm run check` type-checks `web/unit/` as well (`tsconfig.unit.json`). The unit
+  tests run on Node with types stripped, so a fixture that has fallen behind the
+  API's shape would otherwise go on passing; build a fixture to the generated
+  type and do not cast it.
+
+### The component gallery
+
+`web/gallery.html` plus `web/src/gallery/` is a development-only page that
+renders the real components in the states a healthy fleet never shows: disabled
+and refused controls, `aria-disabled` reasons, focus rings, skeletons, empty
+and error states, every status shape, drawers and all four data-grid states. It
+is its own Vite entry, so `vite build` never builds it and the embedded UI never
+contains it; do not add it to the router or link it from the app.
+
+Open it with `make gallery` (or `npm run dev`) and browse to
+`http://127.0.0.1:5173/gallery.html?style=mission-control&mode=dark`. The
+style and colour mode come from the query string, so a combination is
+something a capture or a test can name, and neither is written to the
+browser's real preferences. `web/tests/gallery.spec.ts` runs every combination
+against a Vite dev server (`tests/support/serve-gallery.mjs`), and
+`make screenshots-gallery` refreshes the captures in
+`design/theme-review/gallery/`.
+
+When a primitive gains a state, add it here before adding a route that can
+reach it. Do not create a second copy of a component for the gallery: it
+imports from `$lib/components` and nothing else is acceptable.

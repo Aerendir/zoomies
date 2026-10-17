@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/github"
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 const maxExperimentRemoteAttempts = 10
@@ -21,8 +22,13 @@ func (e *ExperimentAdmissionError) Error() string { return ErrExperimentAdmissio
 func (e *ExperimentAdmissionError) Unwrap() error { return ErrExperimentAdmission }
 
 type ExperimentMatchedJob struct {
-	GitHubJobID int64  `json:"github_job_id"`
-	FleetJobID  string `json:"fleet_job_id"`
+	RunnerCreation *store.RunnerCreationObservation `json:"runner_creation,omitempty"`
+	RunnerID       string                           `json:"runner_id,omitempty"`
+	PoolID         string                           `json:"pool_id,omitempty"`
+	HostID         string                           `json:"host_id,omitempty"`
+	RecordedGrant  *ExperimentRecordedGrant         `json:"recorded_grant,omitempty"`
+	GitHubJobID    int64                            `json:"github_job_id"`
+	FleetJobID     string                           `json:"fleet_job_id"`
 }
 
 type ExperimentJoinedAttempt struct {
@@ -108,7 +114,7 @@ func (c *Controller) CollectExperimentEvidence(ctx context.Context, installation
 }
 
 func validateExperimentRemote(e *github.ExperimentAttemptEvidence, repo string, s ExperimentAttemptSelection) error {
-	if e == nil || e.Repository != repo || e.RunID != s.RunID || e.Attempt != s.Attempt || e.WorkflowID <= 0 || len(e.Jobs) > 500 || (e.JobsCoverage != "complete" && e.JobsCoverage != "partial") || !experimentStatus(e.Status) || !experimentConclusion(e.Conclusion) {
+	if e == nil || !github.ValidExperimentAttemptContext(e.Event, e.WorkflowPath) || !github.ValidExperimentWorkflowSource(e) || e.Repository != repo || e.RunID != s.RunID || e.Attempt != s.Attempt || e.WorkflowID <= 0 || len(e.Jobs) > 500 || (e.JobsCoverage != "complete" && e.JobsCoverage != "partial") || !experimentStatus(e.Status) || !experimentConclusion(e.Conclusion) {
 		return ErrExperimentEvidence
 	}
 	if len(e.HeadSHA) != 40 && len(e.HeadSHA) != 64 {
@@ -153,7 +159,7 @@ func joinExperimentAttempt(remote *github.ExperimentAttemptEvidence, retained Ex
 	for _, j := range remote.Jobs {
 		row, ok := local[j.ID]
 		if ok && row.HeadSHA == remote.HeadSHA {
-			r.MatchedJobs = append(r.MatchedJobs, ExperimentMatchedJob{GitHubJobID: j.ID, FleetJobID: row.JobID})
+			r.MatchedJobs = append(r.MatchedJobs, ExperimentMatchedJob{RunnerCreation: cloneExperimentRunnerCreation(row.RunnerCreation), RunnerID: row.RunnerID, PoolID: row.PoolID, HostID: row.HostID, GitHubJobID: j.ID, FleetJobID: row.JobID, RecordedGrant: cloneExperimentGrant(row.RecordedGrant)})
 			delete(local, j.ID)
 		} else {
 			r.MissingJobIDs = append(r.MissingJobIDs, j.ID)

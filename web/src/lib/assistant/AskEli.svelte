@@ -6,7 +6,7 @@
   import { eli } from './eli.svelte';
   import type { EliContext } from './prompts';
 
-  let { context }: { context: EliContext } = $props();
+  let { context, onask }: { context: EliContext; onask?: () => void } = $props();
   /* A page with several of these (every problem has one) would otherwise
      wiggle them all on the same beat, which reads as a glitch rather than a
      greeting. Each takes one of three beats from its own id. */
@@ -21,7 +21,10 @@
     icon={Dog}
     class="ask-eli beat-{beat}"
     help="Share these displayed details with Eli and ask for guidance"
-    onclick={() => eli.ask(context)}>Ask Eli</Button
+    onclick={() => {
+      onask?.();
+      eli.ask(context);
+    }}>Ask Eli</Button
   >
 {/if}
 

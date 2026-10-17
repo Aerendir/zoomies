@@ -13,15 +13,7 @@
  * altered is a change every later spec runs against.
  */
 import { expect, test, type Page } from '@playwright/test';
-import {
-  browserOverride,
-  goto,
-  openHostCapacityMap,
-  openSection,
-  reload,
-} from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, openHostCapacityMap, openSection, reload } from './support/fixtures';
 
 /** One setting's row, found by the name a person reads rather than its key. */
 const row = (page: Page, label: string) =>

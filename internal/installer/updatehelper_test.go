@@ -37,7 +37,7 @@ type helperHost struct {
 
 func newHelperHost(t *testing.T, installed string) *helperHost {
 	t.Helper()
-	base := t.TempDir()
+	base := privateTempDir(t)
 	dir := filepath.Join(base, "update")
 	if err := os.Mkdir(dir, 0o750); err != nil {
 		t.Fatal(err)
@@ -766,7 +766,7 @@ type pointerHost struct {
 
 func newPointerHost(t *testing.T) *pointerHost {
 	t.Helper()
-	base := t.TempDir()
+	base := privateTempDir(t)
 	p := &pointerHost{base: base, stateDir: filepath.Join(base, "zoomies-update")}
 	for _, d := range []string{p.stateDir, filepath.Join(base, "opt"), filepath.Join(base, "opt", "bin"), filepath.Join(base, "etc")} {
 		mustDo(t, os.Mkdir(d, 0o700))
@@ -911,5 +911,30 @@ func TestReadingRootsPointerNeverMakesTheStateDirectory(t *testing.T) {
 	}
 	if _, err := os.Lstat(missing); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("reading the pointer made the state directory (%v)", err)
+	}
+}
+
+// The engine writes a line or two for the helper alone, under a marker: the
+// copy it took and whether it rolled back. The helper reads them out of the log
+// an operator reads, so the words a person sees stay prose.
+func TestTheHelperTakesTheBackupAndRollbackOutOfTheEngineOutput(t *testing.T) {
+	// A copy's directory can hold a space: the value is the whole rest of the
+	// line, not the next word.
+	input := "Backed up the database as zoomies-20260101-000000 and verified it\n" +
+		engineResultMarker + "backup=/var/lib/zoomies/my backups/zoomies-20260101-000000\n" +
+		"still starting\n" +
+		engineResultMarker + "rolled_back=true\n"
+	logTail, backup, rolledBack := parseEngineResult(input)
+	if backup != "/var/lib/zoomies/my backups/zoomies-20260101-000000" {
+		t.Fatalf("backup = %q", backup)
+	}
+	if !rolledBack {
+		t.Fatal("a rolled-back run was not read as one")
+	}
+	if strings.Contains(logTail, engineResultMarker) {
+		t.Fatalf("the marker is still in the log an operator reads: %q", logTail)
+	}
+	if !strings.Contains(logTail, "still starting") {
+		t.Fatalf("the prose was dropped: %q", logTail)
 	}
 }

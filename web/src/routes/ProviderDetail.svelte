@@ -52,6 +52,9 @@
   import PoolsTab from '$lib/providers/PoolsTab.svelte';
   import RentingNotice from '$lib/providers/RentingNotice.svelte';
   import CheckFindings from '$lib/providers/CheckFindings.svelte';
+  import PrivateConnection from '$lib/providers/PrivateConnection.svelte';
+  import TemplateAgent from '$lib/providers/TemplateAgent.svelte';
+  import TestMachine from '$lib/providers/TestMachine.svelte';
   import ProviderForm from '$lib/providers/ProviderForm.svelte';
 
   const id = $derived(router.params.id ?? '');
@@ -376,6 +379,12 @@
         <CheckFindings findings={shownCheck.findings} />
       </Panel>
     {/if}
+
+    <PrivateConnection provider={p} check={shownCheck} />
+
+    <TemplateAgent provider={p} {canAdmin} />
+
+    <TestMachine provider={p} {machines} {canOperate} />
 
     <RentingNotice {renting} {canAdmin} onchanged={refreshRenting} />
 

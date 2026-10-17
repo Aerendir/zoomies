@@ -9,6 +9,7 @@ const problem = (over: Partial<Problem> = {}): Problem => ({
   title: 'pool zoomies-linux-x64 has 21 jobs waiting and nowhere to run them',
   target_kind: 'pool',
   target_id: 'pool_x64',
+  audience: 'fleet',
   ...over,
 });
 

@@ -63,8 +63,10 @@ Zoomies is built with, and the UI is built with Node, which the preset does
 not have.
 
 **Build** downloads a published release for the pod's architecture into
-`~/zoomies/bin`, checks it against the release's `checksums.txt` exactly as
-the installer does, and refuses a binary that does not match. It skips the
+`~/zoomies/bin`, checks the release's `checksums.txt` against the release
+signing key and the binary against those checksums, and refuses a binary that
+does not match (a release from v1.3.6 up must also carry a signature, which
+[Upgrading](upgrading.md#signing-releases) explains). It skips the
 download when the binary already there is the one the release lists. On the
 worker it also installs the libraries the GitHub Actions runner loads
 (`libicu74`, `libkrb5-3`, `zlib1g`, `libssl3t64`, `liblttng-ust1t64`) when
@@ -340,8 +342,8 @@ pod installed the update helper that page hands an update to.
 
 ## The zoomies.sh demo
 
-The project's public demo, planned for `demo.zoomies.sh` and not running yet,
-is this guide with these choices: the web pod on Build with
+The project's [public demo](https://demo.zoomies.sh/) follows this guide with
+these choices: the web pod on Build with
 `ZOOMIES_PUBLIC_VIEW=true` and `ZOOMIES_VERSION=dev`, `demo.zoomies.sh` as its
 domain from before GitHub is connected, and a worker on Grow taking the jobs
 of a demo organisation whose public repositories run scheduled workflows only,

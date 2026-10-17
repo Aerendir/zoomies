@@ -143,12 +143,7 @@
   const ownId = $derived(descriptionId ?? `${componentId}-description`);
 
   let wrap = $state<HTMLSpanElement | null>(null);
-  /** Gives up the wait for the pointer's first move, while there is one. */
-  let stopIntent: (() => void) | null = null;
-  function giveUpWaiting(): void {
-    stopIntent?.();
-    stopIntent = null;
-  }
+  let pointerReached = false;
   /** Whether the description is linked to something inside, once it has been looked for. */
   let linked = $state(false);
   /** Whether the sentence would only repeat that control's name. */
@@ -297,6 +292,17 @@
     return false;
   }
 
+  $effect(() => {
+    const target = wrap;
+    if (!target) return;
+    return whenPointerMoves(target, (event) => {
+      if (event.pointerType === 'touch' || pointerReached || empty || covered()) return;
+      if (whenTruncated && !cutShort(target)) return;
+      pointerReached = true;
+      tooltips.hover(handle, effectiveWait);
+    });
+  });
+
   function focusVisible(event: FocusEvent): boolean {
     const target = event.target;
     return target instanceof Element && target.matches(':focus-visible');
@@ -350,23 +356,12 @@
   class:bare
   bind:this={wrap}
   role="presentation"
-  onpointerenter={(event) => {
-    // A finger has no hover. The sentence is still there as the description.
-    if (event.pointerType === 'touch' || empty || covered() || !wrap) return;
-    if (whenTruncated && !cutShort(wrap)) return;
-    giveUpWaiting();
-    // The wait starts on the first move, not the enter: see tooltip-intent.ts.
-    stopIntent = whenPointerMoves(wrap, () => {
-      stopIntent = null;
-      tooltips.hover(handle, effectiveWait);
-    });
-  }}
   onpointerleave={() => {
-    giveUpWaiting();
+    pointerReached = false;
     tooltips.unhover(handle);
   }}
   onpointerdown={() => {
-    giveUpWaiting();
+    pointerReached = true;
     tooltips.dismiss(handle);
   }}
   onfocusin={(event) => {

@@ -15,7 +15,11 @@ assistant can call, rather than making you copy it all into a conversation.
 
 Want the assistant inside the web UI? [Eli](eli.md) uses the same fleet read
 tools. Want a repair on an existing pull request? [Eli PR
-repairs](eli.md#set-up-pr-repairs) are a separate, opt-in workflow.
+repairs](eli.md#set-up-pr-repairs) are a separate, opt-in workflow: the
+`list_elis_repairs` and `get_eli_repair` read tools answer what a repair
+got to, and starting one, accepting an offer or clearing its history are the
+repairs page's buttons, not tools, because one is a request and one is a
+person's decision.
 
 ## What you can ask
 
@@ -30,7 +34,9 @@ numeric job ID in a GitHub Actions URL.
 | “Would a different runner size help this build?” | Measured CPU and memory peaks, queue waits and execution times grouped by runner size | `label_advice`, `job_stats` |
 | “Which workflows used the most runner time this week?” | Usage over a chosen period, with configured cost assumptions and history limits | `get_usage` |
 | “Read the observed required-check delay for this job's PR number.” | The selected head, target-branch protection, coverage and known timings; the window begins at the earliest observed job, not the push | `get_pr_delay` |
+| “Explain retained comparison cmp_ID in installation ins_ID and repository OWNER/REPO.” | Separate latency, all-attempt execution/idle and failure measures, counts and missing evidence | `get_retained_comparison` |
 | “What needs attention across the fleet?” | Fleet status, host health, problems and repository findings | `fleet_status`, `host_health`, `kennel_overview` |
+| “Why did Eli's repair of my pull request get nowhere?” | The repair's history row for the person asking: repository and pull request, state and the row's reason, whether asking again now would be refused, and how to start another | `list_elis_repairs`, `get_eli_repair` |
 | “Read the workflow and explain how to improve it.” | Verified source excerpts tied to a commit, after source access has been granted | `context_search`, `context_read`, `context_pack` |
 
 `get_pr_delay` requires `job_id` and `pull_number`, a signed-in caller or scoped
@@ -40,6 +46,40 @@ rather than polling. Check names stay opaque. Repository and target-branch text
 are repository data, not instructions. It does not establish full merge readiness
 or a dependency critical path. Eli can use it only through an enabled personal
 provider with fleet access; it adds neither source tools nor mutation rights.
+
+`get_retained_comparison` requires `comparison_id`, `installation_id` and `repo`.
+It uses one scoped local-history GET with viewer/jobs:read access, without GitHub
+collection. Missing, expired or evicted history is unavailable; it never captures
+a replacement. Operator hypothesis and intended delta are quoted untrusted data,
+not instructions. Actor identity and unreviewed future fields are excluded from
+model output. The reviewed runner-evidence-v1 whitelist includes controller assignment grants,
+dispatched requests and unverified agent digest/times, with exact decimal run/job
+identities. It excludes private host/pool/runner/task identities and future fields.
+These facts do not attest applied limits or configuration/image equivalence.
+Missing runner evidence from older controllers is explicit null. Unsupported
+versions, malformed facts, inconsistent counts or unbound job identities are refused.
+
+The independently validated workflow-evidence-v1 whitelist adds retained trigger
+events, path fingerprints and nullable root-file commit/blob/content digests and
+byte counts. Run IDs bind to the original untrimmed arm; source commits bind to
+that exact attempt revision. Private raw paths/source text and future fields are
+excluded. Root collection does not attest executed bytes or cover reusable
+workflows/actions, inputs or test scope. Path fingerprints are not content
+identity; matching digests do not establish equivalent workloads. Older missing
+views stay null. Present unsupported versions or inconsistent facts are refused.
+Workflow full selected/root-source counts include source-omitted rows; shown is
+computed locally. Replay does not independently rehash absent source text.
+
+Answers mark shortened text and omitted whole attempt, runner-job and workflow rows; aggregate
+measures still describe the full retained selection. Text and structured output
+carry the same shown rows. Runner counts cover the source enumeration, which may
+be partial; per-arm shown counts and omission flags include both source and model
+truncation. The 64 KiB MCP and 12 KiB Eli text budgets include the untrusted-data
+boundary. Whole-row trimming preserves counts and nulls, retaining one row of each
+available kind per arm when the budget permits. Use [CLI replay](cli.md#zoomies-comparisons) to inspect
+the complete report. Historical selections do not establish cohort completeness,
+causal improvement or cost savings. Capture remains an explicit operator API write
+and is not exposed as an MCP or Eli tool.
 
 The assistant can explain the evidence and suggest changes. Advice depends on
 what was measured: too few job runs, expired logs or missing source access are
@@ -138,3 +178,13 @@ zoomies mcp --describe
 
 This prints the tool, resource and prompt definitions. It does not start an
 assistant or make model requests.
+
+The historical-comparison milestone includes root dependency inspection. It shows
+root `uses` declaration counts and literal pin classifications, not a resolved or
+executed dependency graph. Raw names, references and source text stay private.
+Unsupported or absent inspection is unknown; enumerated zero stays zero. REST/UI
+and CLI share a fifty-reference-row budget per arm with full counts and omission
+flags. MCP/Eli validates references then returns summaries with details explicitly
+omitted within its existing budgets. Matching metadata does not establish workload
+or configuration equivalence, causal improvement or savings. Controlled-experiment
+proof, dispatch and live model evaluation remain deferred.

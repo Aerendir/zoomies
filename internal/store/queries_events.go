@@ -26,12 +26,12 @@ const jobInsertCols = `id, github_job_id, github_run_id, repo, workflow, job_nam
 const jobCols = jobInsertCols + `, peak_cpus, peak_memory_mb, oom_killed,
 	granted_cpus, granted_memory_mb, granted_source,
 	size_class, size_reason, size_basis, size_floor_mb, routed_class, routed_note, ran_class,
-	cpu_periods, cpu_throttled_periods, output_tail, scratch_peaks`
+	cpu_periods, cpu_throttled_periods, output_tail, scratch_peaks, acknowledged_at, acknowledged_by`
 
 func scanJob(sc interface{ Scan(...any) error }) (*Job, error) {
 	var j Job
 	var queued int64
-	var started, completed, eligible, cancelRequested sql.NullInt64
+	var started, completed, eligible, cancelRequested, acknowledged sql.NullInt64
 	var matched, oomKilled int
 	var controllerVersion, controllerChannel, agentVersion, hostID sql.NullString
 	err := sc.Scan(&j.ID, &j.GitHubJobID, &j.GitHubRunID, &j.Repo, &j.Workflow, &j.JobName,
@@ -42,7 +42,8 @@ func scanJob(sc interface{ Scan(...any) error }) (*Job, error) {
 		&j.PeakCPUs, &j.PeakMemoryMB, &oomKilled,
 		&j.GrantedCPUs, &j.GrantedMemoryMB, &j.GrantedSource,
 		&j.SizeClass, &j.SizeReason, &j.SizeBasis, &j.SizeFloorMB, &j.RoutedClass, &j.RoutedNote, &j.RanClass,
-		&j.CPUPeriods, &j.CPUThrottledPeriods, &j.OutputTail, &j.ScratchPeaks)
+		&j.CPUPeriods, &j.CPUThrottledPeriods, &j.OutputTail, &j.ScratchPeaks,
+		&acknowledged, &j.AcknowledgedBy)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +52,7 @@ func scanJob(sc interface{ Scan(...any) error }) (*Job, error) {
 	j.QueuedAt = at(queued)
 	j.StartedAt, j.CompletedAt, j.EligibleAt = atp(started), atp(completed), atp(eligible)
 	j.CancelRequestedAt = atp(cancelRequested)
+	j.AcknowledgedAt = atp(acknowledged)
 	j.Matched = matched == 1
 	j.OOMKilled = oomKilled == 1
 	return &j, nil
@@ -521,6 +523,12 @@ type JobFilter struct {
 	// job whose runner died while GitHub still thinks it is running is
 	// included -- that is the case an operator most wants to find.
 	FailedOnly bool
+	// AttentionOnly keeps the failures that still want a person: recent,
+	// not superseded by a later attempt of the same job, and not yet
+	// acknowledged. It is the whole question behind the Jobs page's "Needs
+	// attention" view and the Overview's failures panel, answered in one
+	// place so the two cannot disagree about what is still owed.
+	AttentionOnly bool
 	// FaultedOnly keeps only the jobs whose runner stopped under them. This is
 	// the fleet's own failure rate, as distinct from the workflows'.
 	FaultedOnly bool
@@ -553,7 +561,7 @@ var jobSortCols = map[string]string{
 
 // ListJobs returns a filtered page of jobs and the matching total.
 func (s *Store) ListJobs(ctx context.Context, f JobFilter, p Page) ([]*Job, int, error) {
-	where, args := jobWhere(f)
+	where, args := jobWhere(f, s.Now())
 	var total int
 	if err := s.read.QueryRowContext(ctx, `SELECT COUNT(*) FROM jobs `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -622,7 +630,7 @@ func ParseJobCursor(token string) (JobCursor, error) {
 // The page is read one row long. A next cursor that promised a page it could
 // not fill would send a caller round once more for nothing.
 func (s *Store) ListJobsAfter(ctx context.Context, f JobFilter, after *JobCursor, limit int) ([]*Job, int, *JobCursor, error) {
-	where, args := jobWhere(f)
+	where, args := jobWhere(f, s.Now())
 	var total int
 	if err := s.read.QueryRowContext(ctx, `SELECT COUNT(*) FROM jobs `+where, args...).Scan(&total); err != nil {
 		return nil, 0, nil, err
@@ -663,7 +671,7 @@ func (s *Store) ListJobsAfter(ctx context.Context, f JobFilter, after *JobCursor
 	return out, total, next, nil
 }
 
-func jobWhere(f JobFilter) (string, []any) {
+func jobWhere(f JobFilter, now time.Time) (string, []any) {
 	var cond []string
 	var args []any
 	inClause := func(col string, vals []string) {
@@ -784,6 +792,15 @@ func jobWhere(f JobFilter) (string, []any) {
 		cond = append(cond, workflowFailedJobSQL())
 	case f.FailedOnly:
 		cond = append(cond, failedJobSQL())
+	}
+	if f.AttentionOnly {
+		// The three halves of "still wants a person", together rather than
+		// as separate filters a caller could compose wrongly: the failure
+		// itself, nobody having said they have seen it, and nothing newer
+		// having replaced it. The window is read from the store's clock, so
+		// a test's injected one decides what "recent" means.
+		cond = append(cond, failedJobSQL(), `acknowledged_at IS NULL`, attentionJobSQL(), `queued_at >= ?`)
+		args = append(args, ms(now.Add(-AttentionWindow)))
 	}
 	if f.Cancelling != nil {
 		if *f.Cancelling {
@@ -1068,6 +1085,42 @@ func fleetFailedJobSQL() string { return `(runner_fault != '' OR fault_kind != '
 
 func workflowFailedJobSQL() string {
 	return `(NOT ` + fleetFailedJobSQL() + ` AND ` + failedConclusionSQL() + `)`
+}
+
+// AttentionWindow is how recent a failure has to be to still ask for a person.
+// A week is long enough to survive a weekend or a short holiday and short
+// enough that an inbox nobody has ever emptied does not open on a year of
+// history. A failure older than this is not forgotten: it is still in the
+// failed view, and its run's own page still tells its story.
+const AttentionWindow = 7 * 24 * time.Hour
+
+// attentionJobSQL keeps the unresolved inbox separate from failure history.
+// New attempts and runs replace the same job on a known branch; a cancelled,
+// skipped or neutral result is not evidence of a fix. GitHub observations can
+// also settle a run, but only failures older than that observation, so a new
+// failure is never hidden by a previous passing result. Missing run or branch
+// metadata is not a licence to guess which failure a newer job replaces.
+func attentionJobSQL() string {
+	return unreplacedJobSQL() + ` AND NOT EXISTS (
+		SELECT 1 FROM job_attention_runs a
+		WHERE a.repo = jobs.repo AND a.run_id = jobs.github_run_id
+			AND a.reason IN ('closed','superseded','fixed')
+			AND a.checked_at >= COALESCE(jobs.completed_at, jobs.queued_at))`
+}
+
+func unreplacedJobSQL() string {
+	return `NOT EXISTS (
+		SELECT 1 FROM jobs later
+		WHERE later.repo = jobs.repo AND later.job_name = jobs.job_name
+			AND (later.state != 'completed' OR later.conclusion NOT IN ('cancelled','skipped','neutral')
+				OR later.runner_fault != '' OR later.fault_kind != '')
+			AND ((later.github_run_id = jobs.github_run_id AND later.github_run_id != 0
+				AND later.run_attempt > jobs.run_attempt)
+			OR (jobs.github_run_id != 0 AND later.github_run_id != 0
+				AND jobs.head_branch != '' AND jobs.workflow != ''
+				AND later.head_branch = jobs.head_branch AND later.workflow = jobs.workflow
+				AND later.github_run_id != jobs.github_run_id
+				AND later.queued_at > jobs.queued_at)))`
 }
 
 // StatsSince counts the jobs behind the Overview.

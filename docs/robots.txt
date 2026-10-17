@@ -1,6 +1,24 @@
 # zoomies.sh is meant to be found. Everything here is public documentation.
 User-agent: *
+Content-Signal: ai-train=yes, search=yes, ai-input=yes
 Allow: /
+
+# The content signals say how a fetched page may be used once it has been
+# fetched (https://contentsignals.org/): if a signal is yes, collecting content
+# for that use is welcome; if it is no, it is not; and a use no signal names is
+# neither granted nor refused here.
+#
+# search: building a search index and providing search results (hyperlinks and
+#     short excerpts). It does not cover AI-generated search summaries.
+# ai-input: inputting content into one or more AI models, for retrieval
+#     augmented generation, grounding or real-time answers.
+# ai-train: training or fine-tuning AI models.
+#
+# The preference is yes for all three because it is the licence's own answer:
+# the documentation is published under the AGPL-3.0 of the repository it is
+# built from, so reading, quoting, indexing and training on it are uses that
+# licence already grants, on the conditions it sets. The site also publishes
+# llms.txt and a Markdown copy of every page for exactly these readers.
 
 # llms.txt is the same table of contents in one plain-text file, for an
 # assistant that would rather read the site than crawl it. It is generated at

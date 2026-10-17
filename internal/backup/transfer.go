@@ -49,7 +49,7 @@ func WriteTransfer(ctx context.Context, st *store.Store, cfg *config.Config, pas
 	if err := st.TransferReady(ctx); err != nil {
 		return err
 	}
-	source, err := ConfiguredKey(cfg)
+	source, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func ReadTransfer(ctx context.Context, cfg *config.Config, root string, r io.Rea
 	if from.Fingerprint() != entry.Manifest.Key.Fingerprint {
 		return nil, errors.New("the transfer key does not match the snapshot")
 	}
-	to, err := ConfiguredKey(cfg)
+	to, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ func prepareTransferRestore(ctx context.Context, cfg *config.Config, entryDir st
 	if m.Transfer == nil || m.Transfer.Version != TransferVersion || !m.Transfer.Prepared {
 		return "", nil, errors.New("upload and prepare the portable snapshot for this destination first")
 	}
-	key, err := ConfiguredKey(cfg)
+	key, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		return "", nil, err
 	}
@@ -346,6 +346,9 @@ func prepareTransferRestore(ctx context.Context, cfg *config.Config, entryDir st
 	}
 	if err == nil {
 		_, err = st.MarkMachinesUnverified(ctx)
+	}
+	if err == nil {
+		err = st.MarkTransferredHosts(ctx)
 	}
 	cerr := st.Close()
 	if err == nil {

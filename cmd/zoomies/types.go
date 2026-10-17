@@ -462,6 +462,8 @@ type backendInfo struct {
 }
 
 type hostItem struct {
+	RecoveryState string `json:"recovery_state"`
+	Retired       bool   `json:"retired"`
 	ID            string `json:"id"`
 	Name          string `json:"name"`
 	Address       string `json:"address"`

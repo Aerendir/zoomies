@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/eyupio/zoomies/internal/config"
+	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates"
 	"github.com/eyupio/zoomies/internal/version"
@@ -40,6 +41,9 @@ type UpdatesView struct {
 	// Soak is updates.soak as the Settings page writes it. manual ignores it.
 	Soak    string         `json:"soak"`
 	Running UpdatesRunning `json:"running"`
+	// Development compares the stamped build with main. It does not claim
+	// that main's image has finished publishing to the dev channel.
+	Development *UpdatesDevelopment `json:"development,omitempty"`
 	// Latest is the newest release that could be installed on this system,
 	// whether or not the running build is behind it.
 	Latest *UpdatesRelease `json:"latest"`
@@ -56,6 +60,15 @@ type UpdatesView struct {
 	// Helper says whether this controller can update itself, and if not, how a
 	// person with root on its host makes it able to, or why nobody can.
 	Helper UpdatesHelper `json:"helper"`
+	// Signing says whether this build holds a release's checksums to a signature,
+	// and the ids of the keys it trusts. No keys means it takes the checksums on
+	// trust, which is what a build from before a key was committed does.
+	Signing UpdatesSigning `json:"signing"`
+	// Rollback says a controller that does not come back is put back on the
+	// release it ran, which is a native service running the binary. A container's
+	// service is its image, which the upgrade does not keep the one before, so
+	// this is false there.
+	Rollback bool `json:"rollback"`
 	// Controller is this controller's latest update attempt, open or ended, and
 	// null when it has never had one.
 	Controller *UpdatesAttempt `json:"controller"`
@@ -99,6 +112,15 @@ type UpdatesHelper struct {
 	UpgradeCommand string `json:"upgrade_command"`
 }
 
+// UpdatesSigning is the release signing key state of the running build, so a
+// page can say whether a download is held to a signature and by which keys.
+type UpdatesSigning struct {
+	// Keys is one id per trusted release key, empty when none is compiled in.
+	// The keys themselves are not exposed here: an id names one, which is all a
+	// page needs to say what this build trusts.
+	Keys []string `json:"keys"`
+}
+
 // UpdatesAttempt is one request to update, and how it ended.
 type UpdatesAttempt struct {
 	ID string `json:"id"`
@@ -117,6 +139,14 @@ type UpdatesAttempt struct {
 	// otherwise. Below the platform role it is a fixed sentence for the state (see
 	// For), because the text can name a folder on the controller's host.
 	Error string `json:"error"`
+	// Backup is the copy the engine took before it changed anything, for a page
+	// to offer a restore from after a failed update. It names a folder on the
+	// controller's host, so below the platform role it is empty (see For).
+	Backup string `json:"backup"`
+	// RolledBack says the engine put the previous release back because the new one
+	// did not answer, so the attempt is a failure that was undone rather than one
+	// left in place.
+	RolledBack bool `json:"rolled_back"`
 }
 
 // UpdatesRunning is the build being updated, as it reports itself: a release
@@ -127,6 +157,30 @@ type UpdatesRunning struct {
 	// ahead of the newest release, so only one that did can be offered an update
 	// without it being a downgrade.
 	Release bool `json:"release"`
+}
+
+type UpdatesDevelopment struct {
+	Current   string     `json:"current"`
+	Latest    string     `json:"latest"`
+	State     string     `json:"state"`
+	CheckedAt *time.Time `json:"checked_at"`
+}
+
+func (c *Controller) developmentView(running string) *UpdatesDevelopment {
+	commit, ok := developmentCommit(running)
+	if !ok {
+		return nil
+	}
+	v := &UpdatesDevelopment{Current: commit, State: "unknown"}
+	if latest := c.latestDevelopment(); latest != nil {
+		v.Latest, v.State = latest.SHA, "available"
+		at := latest.At.UTC()
+		v.CheckedAt = &at
+		if strings.HasPrefix(latest.SHA, commit) {
+			v.State = "current"
+		}
+	}
+	return v
 }
 
 // UpdatesRelease is a release on offer.
@@ -166,6 +220,10 @@ func (v UpdatesView) For(platform bool) UpdatesView {
 	}
 	attempt := *v.Controller
 	attempt.Error = withheldAttemptError(attempt.State)
+	// The copy's directory is a path on the controller's host, so it is withheld
+	// with the error. RolledBack is a fact about what happened, not a path, and
+	// stays.
+	attempt.Backup = ""
 	v.Controller = &attempt
 	return v
 }
@@ -192,10 +250,16 @@ func (c *Controller) UpdatesView(ctx context.Context) (*UpdatesView, error) {
 	_, fromRelease := version.Release(version.Version)
 	probe := c.probeUpdateHelper()
 	view := &UpdatesView{
-		Mode:    string(mode),
-		Soak:    config.TidyDuration(cfg.Soak),
-		Running: UpdatesRunning{Version: version.Version, Release: fromRelease},
-		Helper:  probe.view,
+		Mode:        string(mode),
+		Soak:        config.TidyDuration(cfg.Soak),
+		Running:     UpdatesRunning{Version: version.Version, Release: fromRelease},
+		Development: c.developmentView(version.Version),
+		Helper:      probe.view,
+		Signing:     UpdatesSigning{Keys: releasekey.IDs(releasekey.Default)},
+		// A native service runs the binary the upgrade keeps beside it, so the
+		// previous release can be put back; a container's service is an image,
+		// which the upgrade does not keep the one before.
+		Rollback: !c.helperHostFacts().InContainer,
 	}
 	pic, err := c.updatesSnapshot(ctx, cfg, probe)
 	if err != nil {
@@ -308,7 +372,7 @@ func (c *Controller) rolloutView(pic *updatesPicture) *UpdatesRollout {
 		if done[h.ID] || (len(r.HostIDs) > 0 && !slices.Contains(r.HostIDs, h.ID)) {
 			continue
 		}
-		if can, _, _ := hostCanSelfUpdate(h, r.Target, c.hostHelperUnsupported(h), pic.snap.Mode); can {
+		if can, _, _ := hostCanSelfUpdate(h, r.Target, c.hostHelperUnsupported(h), pic.snap.Mode, c.rentedHost(h.ID)); can {
 			out.Total++
 		}
 	}
@@ -320,6 +384,7 @@ func attemptView(a store.UpdateAttempt) *UpdatesAttempt {
 	out := &UpdatesAttempt{
 		ID: a.ID, State: a.State, From: a.FromVersion, To: a.ToVersion, Trigger: a.Trigger,
 		RequestedAt: a.RequestedAt.UTC(), Error: withoutDirectionControls(a.Error),
+		Backup: withoutDirectionControls(a.Backup), RolledBack: a.RolledBack,
 	}
 	if a.FinishedAt != nil {
 		at := a.FinishedAt.UTC()

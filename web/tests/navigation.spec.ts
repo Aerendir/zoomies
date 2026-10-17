@@ -10,7 +10,6 @@
  */
 import { expect, test } from '@playwright/test';
 import {
-  browserOverride,
   chooseTheme,
   clearStoredPreferences,
   expectCurrentSection,
@@ -25,8 +24,6 @@ import {
   sectionHeading,
   sectionLanding,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 // These run in both projects: the phone's navigation is a bar at the bottom
 // rather than a column at the side, but every one of these is a question about
@@ -300,10 +297,14 @@ test('an upgrade under an open tab reloads even just after another failure', asy
   });
 
   // The chunk is gone, the way an upgrade leaves it, until the tab reloads.
-  let served = false;
+  let reloaded = false;
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      reloaded = true;
+    }
+  });
   await page.route(/\/assets\/Hosts\.[^/]*\.js$/, async (route) => {
-    if (!served) {
-      served = true;
+    if (!reloaded) {
       await route.fulfill({ status: 404, body: 'not found' });
       return;
     }

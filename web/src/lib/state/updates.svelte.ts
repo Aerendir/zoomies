@@ -15,6 +15,7 @@
  */
 import {
   cancelRollout,
+  checkForUpdates,
   getUpdates,
   resumeRollout,
   startHostRollout,
@@ -110,6 +111,10 @@ class Updates {
    */
   refresh(): Promise<void> {
     return this.#reads.refresh();
+  }
+
+  check(): Promise<void> {
+    return this.#reads.act(checkForUpdates);
   }
 
   /** Take a frame from the stream, which is the newest thing there is. */

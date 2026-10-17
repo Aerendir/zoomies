@@ -10,9 +10,7 @@
  * fleet, and the keyboard reaches it too.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto, pageHeading, SECTIONS, sectionHeading } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, pageHeading, SECTIONS, sectionHeading } from './support/fixtures';
 
 /** The one control. Named, not guessed at: every page must call it this. */
 function refreshButton(page: Page) {

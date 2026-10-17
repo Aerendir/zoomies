@@ -73,6 +73,11 @@ const (
 	SourceScheduled    = "scheduled"
 	SourceUploaded     = "uploaded"
 	SourcePreMigration = "pre-migration"
+	// SourceUpgrade is the copy an upgrade takes before it changes anything.
+	// It is its own source so a list can tell an operator's own copies from
+	// the fleet's, and so retention treats it as one of the fleet's own
+	// copies rather than as a file somebody carried here.
+	SourceUpgrade = "upgrade"
 	// SourceFetched is a copy pulled back out of a remote. It is its own
 	// source rather than "uploaded" because the two are answers to different
 	// questions on the day they matter: an uploaded backup is one a person
@@ -395,27 +400,19 @@ func buildManifest(ctx context.Context, cfg *config.Config, dbPath, dest string,
 // A backup with no secrets in it needs no key, and saying so is better than an
 // empty fingerprint that reads like a failure.
 func describeKey(cfg *config.Config, dest string, includeKey bool, m *Manifest) error {
-	if len(m.Secrets) == 0 && strings.TrimSpace(cfg.Security.EncryptionKey) == "" &&
-		strings.TrimSpace(cfg.Security.EncryptionKeyFile) == "" {
+	origin, path := cfg.EncryptionKeyOrigin()
+	if len(m.Secrets) == 0 && origin == config.KeyNone {
 		m.Key.From = "none: nothing in this database is sealed"
 		return nil
 	}
 
-	var (
-		key  *cryptox.Key
-		err  error
-		path string
-	)
-	switch {
-	case strings.TrimSpace(cfg.Security.EncryptionKey) != "":
-		key, err = cryptox.ParseKey(cfg.Security.EncryptionKey)
+	if origin == config.KeyFromValue {
 		m.Key.From = "the environment or zoomies.yaml"
-	default:
-		path = strings.TrimSpace(cfg.Security.EncryptionKeyFile)
-		key, err = cryptox.LoadKeyFile(path)
+	} else {
 		m.Key.From = "security.encryption_key_file"
 		m.Key.SourcePath = path
 	}
+	key, err := cfg.ResolveEncryptionKey()
 	if err != nil {
 		// A backup of a database whose key cannot be read is still worth
 		// taking, and is exactly the moment to say the key is missing.

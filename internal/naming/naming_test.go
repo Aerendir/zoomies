@@ -149,7 +149,7 @@ func TestSlug(t *testing.T) {
 	}
 }
 
-func TestPoolAndHostNames(t *testing.T) {
+func TestPoolNames(t *testing.T) {
 	spec := Spec{CPUs: 16, OS: OSUbuntu, Version: "24.04", Arch: ArchAMD64}
 	if got, want := PoolName(spec), "zoomies-16vcpu-ubuntu-2404"; got != want {
 		t.Errorf("PoolName = %q, want %q", got, want)
@@ -157,9 +157,6 @@ func TestPoolAndHostNames(t *testing.T) {
 	// A pool's name is its shape, so a stray suffix must not survive into one.
 	if got := PoolName(spec.WithSuffix("build01")); got != "zoomies-16vcpu-ubuntu-2404" {
 		t.Errorf("PoolName kept a suffix: %q", got)
-	}
-	if got, want := HostName(spec, "build01.fleet.example.com"), "zoomies-16vcpu-ubuntu-2404-build01"; got != want {
-		t.Errorf("HostName = %q, want %q", got, want)
 	}
 }
 

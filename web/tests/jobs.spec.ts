@@ -15,7 +15,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   cellUnder,
   columnTexts,
   dataRows,
@@ -25,8 +24,6 @@ import {
   grid,
   rowCount,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 /**
  * What formatDuration produces: "820ms", "9.4s", "35m 00s", "2h 05m". Not
@@ -774,4 +771,49 @@ test('a job from before sizes were recorded shows no size rather than a blank on
   const drawer = page.getByRole('dialog');
   await expect(drawer.getByTestId('job-controller-version')).toBeVisible();
   await expect(drawer.getByTestId('job-granted-size')).toHaveCount(0);
+});
+
+/*
+ * The one question GitHub cannot answer: which failures has anybody looked at.
+ * "Failed" is a fact the server derives; "read" is a decision, and it is the
+ * fleet's rather than one reader's, so one person marking a failure as known
+ * stops it being news to everybody. The view, the Overview's panel and the
+ * drawer write the same record through the same route, and both directions are
+ * reversible: an acknowledgement nobody can take back is one people learn not
+ * to make.
+ */
+test('a failure can be marked as known and put back, from the row or the drawer', async ({
+  page,
+}) => {
+  await goto(page, '/jobs?attention=true', 'Jobs');
+  await expect(
+    statusFilter(page).getByRole('button', { name: 'Needs attention', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+
+  const rows = dataRows(jobs(page));
+  await expect(rows.first()).toBeVisible();
+  const before = await rows.count();
+  expect(before, 'the fixture has failures nobody has read').toBeGreaterThan(0);
+
+  // The row's own action: the failure leaves the list, and the toast is the
+  // undo.
+  await rows
+    .first()
+    .getByRole('button', { name: /^Mark as known/ })
+    .click();
+  await expect(rows).toHaveCount(before - 1);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(rows).toHaveCount(before);
+
+  // The drawer writes the same record and says so, and can put it back.
+  await rows.first().click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole('button', { name: 'Mark as known' }).click();
+  await expect(drawer.getByText('Known', { exact: true })).toBeVisible();
+  await expect(drawer.getByTestId('job-acknowledged')).toContainText('auth-disabled');
+  await drawer.getByRole('button', { name: 'Needs attention again' }).click();
+  await expect(drawer.getByText('Known', { exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(rows).toHaveCount(before);
 });

@@ -151,8 +151,9 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
   };
   if (options.signal) init.signal = options.signal;
   if (options.body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    init.body = JSON.stringify(options.body);
+    headers['Content-Type'] =
+      options.body instanceof Blob ? 'application/octet-stream' : 'application/json';
+    init.body = options.body instanceof Blob ? options.body : JSON.stringify(options.body);
   }
 
   let response: Response;
@@ -470,9 +471,6 @@ export const listJobs = (query?: Query<'listJobs'>, signal?: AbortSignal) =>
 export const getJobStats = (query?: Query<'getJobStats'>, signal?: AbortSignal) =>
   api.get<Result<'getJobStats'>>('/jobs/stats', { query, signal });
 
-export const getJob = (id: string, signal?: AbortSignal) =>
-  api.get<Result<'getJob'>>(`/jobs/${enc(id)}`, { signal });
-
 export const getJobFacets = (signal?: AbortSignal) =>
   api.get<Result<'getJobFacets'>>('/jobs/facets', { signal });
 
@@ -523,6 +521,18 @@ export const controlWorkflowRunProvisioning = (body: Body<'controlWorkflowRunPro
 export const rerunJobWorkflow = (id: string) =>
   api.post<Result<'rerunJobWorkflow'>>(`/jobs/${enc(id)}/rerun`, {});
 
+/**
+ * Mark a failed job as known, so the attention list stops asking about it. It
+ * is not a resolution: the failure keeps its row and its conclusion, and the
+ * answer is that job's GET shape.
+ */
+export const acknowledgeJob = (id: string) =>
+  api.post<Result<'acknowledgeJob'>>(`/jobs/${enc(id)}/acknowledge`, {});
+
+/** Put an acknowledged failure back in front of whoever looks next. */
+export const reopenJobAttention = (id: string) =>
+  api.del<Result<'reopenJobAttention'>>(`/jobs/${enc(id)}/acknowledge`);
+
 /* -- hosts ---------------------------------------------------------------- */
 
 export const listHosts = (signal?: AbortSignal) =>
@@ -542,6 +552,12 @@ export const cordonHost = (id: string, body: Body<'cordonHost'>) =>
 /** Ask the host's agent to run its read-only OS checks once. Answers 202 with the host, not the report. */
 export const checkHostHealth = (id: string) =>
   api.post<Result<'checkHostHealth'>>(`/hosts/${enc(id)}/health-check`);
+/**
+ * Re-read what the host's specs rank it at, republishing the card. Answers 200
+ * with the host, whose `priority` holds the recomputed figure.
+ */
+export const checkHostPriority = (id: string) =>
+  api.post<Result<'checkHostPriority'>>(`/hosts/${enc(id)}/priority-check`);
 /**
  * Ask the host's agent to have its update helper take it to the controller's release (admin).
  * Takes no body. Answers 202 with the host, whose `update` holds the attempt just opened.
@@ -574,9 +590,6 @@ export const deleteJoinToken = (id: string) =>
 
 export const listInstallations = (signal?: AbortSignal) =>
   api.get<Result<'listInstallations'>>('/installations', { signal });
-
-export const getInstallation = (id: string, signal?: AbortSignal) =>
-  api.get<Result<'getInstallation'>>(`/installations/${enc(id)}`, { signal });
 
 export const createInstallation = (body: Body<'createInstallation'>) =>
   api.post<Result<'createInstallation'>>('/installations', { body });
@@ -696,6 +709,9 @@ export const listMCPClients = (signal?: AbortSignal) =>
 export const createMCPClient = (body: Body<'createMCPClient'>) =>
   api.post<Result<'createMCPClient'>>('/mcp-clients', { body });
 
+export const updateMCPClient = (id: string, body: Body<'updateMCPClient'>) =>
+  api.patch<Result<'updateMCPClient'>>(`/mcp-clients/${enc(id)}`, { body });
+
 export const rotateMCPClientSecret = (id: string) =>
   api.post<Result<'rotateMCPClientSecret'>>(`/mcp-clients/${enc(id)}/secret`, {});
 
@@ -812,6 +828,13 @@ export const validateProvider = (
 export const checkProvider = (id: string) =>
   api.post<Result<'checkProvider'>>(`/providers/${enc(id)}/check`);
 
+/**
+ * Builds one real machine to prove the provider works. It is released as soon as
+ * it reports ready; follow it with the machine events.
+ */
+export const testProviderMachine = (id: string) =>
+  api.post<Result<'testProviderMachine'>>(`/providers/${enc(id)}/test-machine`);
+
 export const getProviderDiscovery = (id: string, signal?: AbortSignal) =>
   api.get<Result<'getProviderDiscovery'>>(`/providers/${enc(id)}/discovery`, { signal });
 
@@ -895,8 +918,8 @@ export const importSettings = (body: Body<'importSettings'>) =>
 export const getUpdates = (signal?: AbortSignal) =>
   api.get<Result<'getUpdates'>>('/updates', { signal });
 
-/** Ask GitHub for the release list now (admin). Answers the status once it has been read. */
-export const checkForUpdates = () => api.post<Result<'checkForUpdates'>>('/updates/check', {});
+/** Ask the release source now, rather than rereading the saved status (admin). */
+export const checkForUpdates = () => api.post<Result<'checkForUpdates'>>('/updates/check');
 
 /**
  * Ask the update helper to replace the controller's binary (platform). Without a tag it takes the
@@ -930,9 +953,6 @@ export const listBackups = (signal?: AbortSignal) =>
   api.get<Result<'listBackups'>>('/backups', { signal });
 
 export const takeBackup = () => api.post<Result<'takeBackup'>>('/backups', {});
-
-export const getBackup = (id: string, signal?: AbortSignal) =>
-  api.get<Result<'getBackup'>>(`/backups/${enc(id)}`, { signal });
 
 export const deleteBackup = (id: string) => api.del<Result<'deleteBackup'>>(`/backups/${enc(id)}`);
 
@@ -1006,6 +1026,7 @@ export const prepareInstanceTransfer = () =>
   api.post<Result<'prepareInstanceTransfer'>>('/transfers/preparation', {});
 export const cancelInstanceTransfer = () =>
   api.del<Result<'cancelInstanceTransfer'>>('/transfers/preparation');
+export const unfenceInstance = () => api.post<Result<'unfence'>>('/recovery/unfence', {});
 export const exportInstanceTransfer = (passphrase: string) =>
   downloadEncryptedArchive('/transfers/export', passphrase);
 
@@ -1047,13 +1068,21 @@ export function uploadBackup(
 ): Promise<Result<'uploadBackup'>> {
   return uploadArchive('/backups/upload', file, passphrase, onProgress);
 }
-export function importInstanceTransfer(
-  file: File,
-  passphrase: string,
-  onProgress?: (fraction: number) => void,
-): Promise<Result<'importInstanceTransfer'>> {
-  return uploadArchive('/transfers/import', file, passphrase, onProgress);
-}
+export const createTransferUpload = (size: number) =>
+  api.post<Result<'createTransferUpload'>>('/transfers/uploads', { body: { size } });
+export const getTransferUpload = (id: string) =>
+  api.get<Result<'getTransferUpload'>>(`/transfers/uploads/${enc(id)}`);
+export const uploadTransferChunk = (id: string, offset: number, body: Blob) =>
+  api.post<Result<'uploadTransferChunk'>>(`/transfers/uploads/${enc(id)}/chunks`, {
+    body,
+    query: { offset },
+  });
+export const verifyTransferUpload = (id: string, passphrase: string) =>
+  api.post<Result<'verifyTransferUpload'>>(`/transfers/uploads/${enc(id)}/verify`, {
+    body: { passphrase },
+  });
+export const cancelTransferUpload = (id: string) => api.del(`/transfers/uploads/${enc(id)}`);
+
 function uploadArchive(
   path: string,
   file: File,
@@ -1391,3 +1420,17 @@ export const listEliOpportunities = () =>
   api.get<Result<'listEliOpportunities'>>('/assistant/repairs/opportunities');
 export const actEliOpportunity = (id: string, body: Body<'actEliOpportunity'>) =>
   api.post<Result<'actEliOpportunity'>>(`/assistant/repairs/opportunities/${enc(id)}`, { body });
+
+/** Capture changes shared history; replay never collects GitHub evidence. */
+export const captureComparison = (body: import('./types').ComparisonCaptureRequest) =>
+  api.post<import('./types').RetainedComparison>('/comparisons', { body });
+export const getComparison = (
+  id: string,
+  installation: string,
+  repo: string,
+  signal?: AbortSignal,
+) =>
+  api.get<import('./types').RetainedComparison>('/comparisons/' + encodeURIComponent(id), {
+    query: { installation_id: installation, repo },
+    signal,
+  });

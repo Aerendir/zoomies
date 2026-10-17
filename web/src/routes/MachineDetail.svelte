@@ -13,8 +13,8 @@
   pressed.
 -->
 <script lang="ts">
-  import { CircleSlash, Trash2 } from '@lucide/svelte';
-  import { deleteMachine, drainMachine, getMachine } from '$lib/api/client';
+  import { CircleSlash, Trash2, Unplug } from '@lucide/svelte';
+  import { deleteMachine, drainMachine, getMachine, releaseMachine } from '$lib/api/client';
   import { events } from '$lib/api/sse';
   import type { Machine } from '$lib/api/types';
   import { pluralise } from '$lib/format';
@@ -46,6 +46,8 @@
   let reload = $state(0);
   let showing = '';
   let deleteOpen = $state(false);
+  let releaseOpen = $state(false);
+  let releasing = $state(false);
 
   $effect(() => {
     const machineId = id;
@@ -123,6 +125,30 @@
       return false;
     }
   }
+
+  // Forget the row without touching the resource. It is the only act left on a
+  // quarantined machine, whose resource may belong to somebody else, and the
+  // controller's own sentence sends the operator here to do it. The page has to
+  // leave afterwards: the row it was showing no longer exists.
+  async function release(): Promise<boolean> {
+    const m = machine;
+    if (!m?.id || !m.name) return true;
+    releasing = true;
+    try {
+      await releaseMachine(m.id, { name: m.name });
+      toasts.success(
+        `Released ${m.name}`,
+        'The row is forgotten and nothing at the provider was touched.',
+      );
+      router.navigate(m.provider_id ? `/providers/${m.provider_id}` : '/providers');
+      return true;
+    } catch (cause) {
+      toasts.fromError(cause, `${m.name} was not released`);
+      return false;
+    } finally {
+      releasing = false;
+    }
+  }
 </script>
 
 {#if loading && !machine}
@@ -158,7 +184,12 @@
     {#if m.state === 'ready'}
       <Button icon={CircleSlash} disabled={!canOperate} onclick={() => void drain()}>Drain</Button>
     {/if}
-    {#if canAdmin && m.state !== 'deleted'}
+    {#if canAdmin && m.state === 'quarantined'}
+      <!-- Nothing can delete a quarantined machine: its resource may belong to
+           somebody else. The controller's own sentence tells the operator to
+           release the row, so the button that does it is the one offered. -->
+      <Button variant="danger" icon={Unplug} onclick={() => (releaseOpen = true)}>Release</Button>
+    {:else if canAdmin && m.state !== 'deleted'}
       <Button variant="danger" icon={Trash2} onclick={() => (deleteOpen = true)}>Delete</Button>
     {/if}
   </PageHeader>
@@ -341,6 +372,23 @@
       'Nothing rebuilds it. A pool with work will ask for a new machine instead.',
     ]}
     onconfirm={remove}
+  />
+
+  <ConfirmDialog
+    bind:open={releaseOpen}
+    title="Release this machine"
+    name={m.name}
+    requireName
+    tone="danger"
+    confirmLabel="Release it"
+    busy={releasing}
+    description="Zoomies stops tracking this machine. Nothing at the provider is touched."
+    consequences={[
+      'The row is removed from this fleet, along with its accounting.',
+      'Anything that does exist at the provider stays exactly where it is, and stays your bill.',
+      'Nothing here will ever delete it afterwards, because nothing will remember it.',
+    ]}
+    onconfirm={release}
   />
 {/if}
 

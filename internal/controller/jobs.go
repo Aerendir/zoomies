@@ -345,6 +345,80 @@ func (c *Controller) askGitHubToRerun(ctx context.Context, j *store.Job, trigger
 	return nil
 }
 
+// AcknowledgeJob records that somebody has read this job's failure and does
+// not need it in the attention list again, and ReopenJobAttention takes that
+// decision back. They are the two halves of triage: the first says "known",
+// the second says "no, this still wants a person".
+//
+// An acknowledgement is not a resolution and does not pretend to be one. The
+// failure keeps its conclusion on GitHub and its row here; a later attempt
+// that passes is what settles it, and a later attempt that fails is a new
+// failure somebody has to look at on its own. What the acknowledgement buys
+// is that the attention list (the Overview's failures panel and the Jobs
+// page's "Needs attention" view, which share one definition) stops asking
+// about something a person has already read, which is the difference between
+// a list of what is wrong and a list of what is new.
+//
+// Only a job that failed can be acknowledged: there is nothing to triage
+// about one that is still running, and marking it would take it out of the
+// attention list before it has an outcome to be out of the list for.
+func (c *Controller) AcknowledgeJob(ctx context.Context, jobID, by string) (*store.Job, error) {
+	j, err := c.st.GetJob(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if !j.Failed() {
+		return nil, ErrJobDidNotFail
+	}
+	updated, recorded, err := c.st.AcknowledgeJob(ctx, jobID, by)
+	if err != nil {
+		return nil, err
+	}
+	if recorded {
+		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
+			JobID: updated.ID, Kind: store.JobEventAcknowledged, Source: sourceController,
+			Message: actorName(by) + " marked this failure as known; the attention list stops asking about it, and a re-run that passes is what settles it",
+			At:      c.Now(),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	c.publishJob(ctx, updated)
+	return updated, nil
+}
+
+// ReopenJobAttention puts an acknowledged failure back in front of whoever
+// looks next. It is the undo for a row put away by mistake, and it is
+// deliberately as easy as the acknowledgement: a triage decision nobody can
+// take back is one people learn not to make.
+func (c *Controller) ReopenJobAttention(ctx context.Context, jobID, by string) (*store.Job, error) {
+	updated, removed, err := c.st.ClearJobAcknowledgement(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if removed {
+		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
+			JobID: updated.ID, Kind: store.JobEventReopened, Source: sourceController,
+			Message: actorName(by) + " put this failure back in the failures needing attention",
+			At:      c.Now(),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	c.publishJob(ctx, updated)
+	return updated, nil
+}
+
+// actorName is who a timeline sentence credits, given the name an account goes
+// by. An instance with authentication off has no account behind an action, and
+// a name that is not there must not become an empty subject.
+func actorName(by string) string {
+	if by = strings.TrimSpace(by); by == "" {
+		return "an operator"
+	}
+	return by
+}
+
 // A job's timeline is the answer to "what happened to my job?", told in the
 // order it happened and in sentences an operator can read without knowing how
 // Zoomies works. The jobs row holds the current truth; the timeline holds how

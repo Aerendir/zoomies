@@ -31,11 +31,33 @@ access enabled for your provider, start from **Ask Eli** on the relevant page:
 | Choose a runner size | “Does the measured CPU and memory use support a different size for this workflow?” |
 | Investigate a slow build | “Separate queue wait, startup and execution time before suggesting an optimisation.” |
 | Understand a fleet problem | “Explain this problem code, the affected resources and the proposed remedy.” |
+| Follow a PR repair, in the same account | “Why is my latest repair on this pull request stuck?” or “Did Eli start a repair on the PR I asked about?” |
 
 The answer shows which tools Eli used. It can advise from job history, failure
 explanations and available runner logs, but chat does not apply changes or read
 repository source. [Troubleshooting](troubleshooting.md#investigate-jobs-with-eli-and-mcp)
 takes a diagnosis into a fix or measured optimisation.
+
+Use **Compare runs** from Job history to capture and inspect a historical
+comparison. Capture requires an operator and saves shared repository evidence;
+it does not dispatch jobs or change runners. Select exact GitHub run attempts,
+including failures, describe the intended change and choose the observation
+window. Existing reports open through a scoped shareable link and need only
+reader access. Missing history stays unavailable rather than triggering a new
+capture. The page keeps unknown timings distinct from measured zero and shows
+separate latency, consumption and reliability, sample coverage and inconclusive
+reasons. Inspect each arm's identities and attempt rows before drawing conclusions.
+
+For a retained historical comparison, give Eli the `cmp_` ID, installation ID and
+repository. Its read-only tool explains separate measurements and missing evidence
+without collecting GitHub data or capturing a replacement. Operator text remains
+untrusted evidence. It reports shortened text or omitted rows explicitly, with
+aggregates still based on the full selection. Actor identity is excluded from this
+tool's model output. Retained workflow facts include trigger events, path
+fingerprints and nullable root-file digests, without raw filenames or source text.
+Root-file coverage does not attest execution or establish equivalence of
+dependencies, inputs, test scope or workloads. Full counts include omitted rows; missing facts
+remain unknown. See [the MCP contract](mcp.md#what-you-can-ask) for limits.
 
 For an existing PR with failed checks, [PR repairs](#set-up-pr-repairs) are a
 separate opt-in: Eli can read bounded source, publish a change to the PR branch
@@ -161,7 +183,11 @@ sides' durations, queue waits, startups, failure rates and OOM kill rates, measu
 by measure), whether a host fails when it is busy (its failures, OOM kills and slow
 startups placed against that minute's load and memory), and which host or pool keeps
 failing to start runners (how many of its starts failed, since when, at which stage
-and with which fault, and its last failed runner's message).
+and with which fault, and its last failed runner's message). Its own
+[PR repairs](#set-up-pr-repairs) it reads through the same toolbox: the page
+first, each row's repository, pull request, state and reason, then one pull
+request's newest repair by name, with the one thing that can change from where
+the row stands.
 The job names and failure messages these quote are written by workflows and hosts,
 and reach Eli set apart as untrusted, never as instructions. Host pressure names the
 jobs only when the person asking can read jobs; otherwise it says the names were
@@ -207,6 +233,13 @@ it says.
 Eli does not get the tools that change the fleet, and it does not get the ones that
 read a repository's source. It reads as the person asking, through the same routes
 and the same permissions, so it can see nothing that person could not.
+
+Those two repair reads are the feature's whole presence in the toolbox. Asking
+again costs an attempt from the repository's and your own budget and pushes to
+the pull request with your provider behind it, so starting a repair, accepting
+an offer, clearing the history and setting a repository's policy are not tools:
+they are the presses a person makes at the repairs page, and a model asked for
+one says so rather than doing it.
 
 ## What is sent
 
@@ -330,6 +363,11 @@ verdict to break the build on.
 
 * **No answer.** Add an enabled personal provider in **Settings, Eli AI Assistant**, and tick the one you want as your default when you have several.
 * **"Eli cannot see this fleet through ..."** The provider's fleet switch is off.
+* **"already linked to" on Verify and link.** The same GitHub account is linked
+  to another Zoomies user, the usual state after an instance move or a
+  re-created account. The page names the holder; **Move the link** transfers it
+  and resets the confirmation, so whoever the link moved to allows provider use
+  again. The holding account can also be unlinked from the list under the form.
 * **A provider error.** The text says what the provider answered; **Test** on its
   card sends one short prompt and says which part failed. A model that does not
   support tools answers without them, and says it could not look.
@@ -410,7 +448,40 @@ you spend another attempt, while a passed repair still needs normal PR review.
 ![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
 ![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
-1. Open **Eli repairs** from the navigation, or **Review a repair with Eli**
+From **Recent failures**, click the failure summary to inspect its failed step,
+explanation and timeline, or choose **Fix with Eli**. The repair page keeps the
+repository and failed run, finds the associated PR and checks readiness without
+invoking a model. Missing account or repository setup opens a wizard for that
+failure. It reuses existing settings; an administrator can link their own GitHub
+account and enable manual repairs in one save, with five attempts per day and
+workflow edits disabled for a new policy. A personal provider is still required.
+Setup checks the same run again before offering the repair. Runs without an
+eligible open PR explain why they cannot be repaired.
+
+Recent failures is an inbox of unresolved work, rather than a history of red
+runs. Newer attempts and runs replace older failures of the same job and
+workflow on the same known branch. Cancelled or skipped checks do not count as
+a fix. Background checks remove failures when GitHub confirms a passing result,
+a newer PR head, or a closed or merged PR, without requiring personal Eli setup.
+GitHub errors leave the last known state intact; they never count as success.
+The Failed view keeps the original history and acknowledgements remain separate.
+
+A failure can change while somebody is looking at it. Readiness explains
+**Already fixed**, **This PR is closed**, or **A newer commit replaced this
+failure**, with a link to the original run and a way to check the current PR.
+Pending checks ask the reader to wait; unavailable GitHub checks offer a retry.
+Starting a repair checks again before using an attempt. If the target changed
+since review, the page replaces the stale offer with the current explanation.
+
+![A closed PR failure explains that a repair is no longer needed and offers the original GitHub run, the overview and a status recheck](screenshots/eli-stale-failure-mobile.png){ .zoomies-shot }
+
+The wizard below uses a sample failure; no real PR was changed.
+
+![Eli repair setup for a sample failed run, with the repository's installation preselected and a single save action](screenshots/eli-failure-setup-dark.png){ .zoomies-shot }
+
+For advanced setup across repositories:
+
+1. Open **Eli repairs** from the navigation, or **Fix with Eli**
    beside a failed job. Paste a PR link to check readiness without invoking a model.
 2. In **Repository repair policies**, choose a GitHub installation, search its
    repositories and select the ones to enable together. Owner and installation
@@ -427,8 +498,17 @@ you spend another attempt, while a passed repair still needs normal PR review.
    request repairs using my provider** and adds an enabled personal provider.
    Administrators cannot give that consent on their behalf. Changing the link
    clears consent; repository selection does not create another identity link.
+
+   One GitHub account may serve only one Zoomies user. After an instance move
+   or when the account was re-created, the same GitHub account can still be
+   linked to the old user, and the refused verification says so by name. The
+   **Move the link** press answers it: the holding account loses the link, the
+   moved link lands unconfirmed so the person it was moved to allows provider
+   use again, and the move is written to the audit log with the account it was
+   taken from. History the old account asked for stays with that account; a
+   move is a link, not a takeover of its record.
 6. Return to the original PR and check readiness again. Review the payer, model,
-   workflow permission and remaining allowance before choosing **Repair with Eli**.
+   workflow permission and remaining allowance before choosing **Fix with Eli**.
 
 Ask me first groups failed jobs into one persistent offer per PR head. The
 Overview shows available offers; Eli repairs lets you review or dismiss them.

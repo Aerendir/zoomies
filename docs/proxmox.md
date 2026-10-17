@@ -16,7 +16,7 @@ the machine again once it has been idle long enough.
 Two settings on each provider decide how much it keeps running between bursts.
 **Idle timeout** (default 15 minutes) is how long a machine's host must have had
 no runner on it before the machine is deleted; `0` deletes it as soon as nothing
-needs it. **Minimum machines** (default 0) is a floor: the provider buys up to
+needs it. **Warm machines** (`min_machines`; the wizard suggests 1, and the API and terminal default to 0) is a floor: the provider buys up to
 that many with no work waiting, so the first job finds a machine already up, and
 never deletes an idle machine below it. A minimum counts against the provider's
 maximum, so it cannot be set higher, and a provider that is disabled, paused or
@@ -209,6 +209,47 @@ Zoomies never installs an operating system, applies updates, or reboots a
 machine it rents. If the image needs patching, rebuild the template: machines
 are disposable, which is what makes that cheap.
 
+### Keeping the runner's agent current
+
+The agent inside a machine is the one the template carried when the machine was
+cloned. Zoomies installs nothing of its own in a rented machine, so that image is
+the whole of what a machine runs, and a controller that has moved on to a newer
+release leaves every machine it has rented behind. There is no command to run
+inside one to catch it up either: nobody logs into a clone, and a machine is
+destroyed once it has been idle. Preparing the template again is what changes
+what the machines built next will run.
+
+* **A template Zoomies prepared** records the release it was prepared from, in
+  the guest's description beside the marker Zoomies wrote when it made it.
+  **Prepare the template again** on the provider's page gives the command to run
+  on the Proxmox node: it prepares an image from the release this controller
+  runs and puts it in place of the template's disk, at the same VMID and the same
+  name, so the provider row that points at it needs no change and no machine is
+  touched. Run it on the node the template lives on: a template on another node
+  is left alone, and the command says which node to run it on instead.
+
+  The disk it replaced is left unattached rather than deleted. The command names
+  the slot it moved to, and it is yours to remove once the machines built from
+  the new image have proved it:
+
+  ```sh
+  qm set 9100 --delete unused0
+  ```
+
+  A machine being built at that moment may fail and be retried; nothing else is
+  affected, because a clone has its own copy of the disk.
+* **A template you prepared by hand** is left exactly as it is found. It carries
+  no marker, so nothing Zoomies has can tell what is in it or prepare it again:
+  rebuild the image as [above](#preparing-the-template) when its release moves
+  on.
+
+Either way, the machines running now keep the release they were cloned with and
+are replaced as they go idle, so a fleet catches up over the next while rather
+than at the moment the template changes. A controller built from main is the
+awkward case on both sides: two builds from main cannot be ordered against each
+other, so Zoomies cannot tell a machine's build from the controller's and says so
+instead of guessing which is newer.
+
 ## The provider
 
 **Providers → Add provider → Proxmox VE → Generate setup command**.
@@ -222,7 +263,8 @@ run it, so you can read what it does before you run it. **Show the full command*
 reveals the same setup written out step by step, for a Proxmox host that cannot
 reach zoomies.sh.
 
-The command downloads and verifies a separate Zoomies binary, detects the local
+The command downloads a separate Zoomies binary, holds the release's checksums to
+the release signing key and the binary to those checksums, detects the local
 API certificate, creates a dedicated Proxmox user and privilege-separated token,
 and installs a persistent Tailcat gateway to the local API on port 8006. It sends
 the connection back over the controller's private Tailcat listener using a
@@ -231,7 +273,15 @@ sealed in the controller database and never returned to the browser.
 
 An existing Zoomies runner agent keeps its binary, service, state and registration.
 The provider has its own service, `zoomies-proxmox-<controller-key>.service`, and
-state under `/var/lib/zoomies-proxmox/<controller-key>`. Running a new setup command
+state under `/var/lib/zoomies-proxmox/<controller-key>`. The service is installed
+with `Restart=always` and its start rate limit off, because it is the thing that
+reconnects: a boot that beats the machine's own internet, a relay interruption, a
+crash and a manual kill all end the process, and in every one of them the service
+manager brings the private connection back on its own within seconds. On the
+controller's side, the provider keeps dialling through its sealed gateway address;
+a gateway that has restarted is answered again on the next provider call, and
+`provider.unreachable` in the problems list clears by itself once the connection
+returns. Running a new setup command
 for the same controller reuses the saved token and gateway identity. It does not
 join the machine as another runner host. Interrupted setup can be retried; a lost
 controller response is acknowledged when the identical connection is sent again.
@@ -269,8 +319,17 @@ stops, says why and saves nothing, so a provider that could not work never appea
 
 Choose the storage and network for clones on the Placement step. Choices
 come from the cluster; anything with one answer is already selected. Review the
-machine shape and limits, then save. The initial maximum is zero, so connecting a
-provider does not create runner VMs. The setup callback reports QEMU templates,
+machine shape and limits, then save. The limits step opens on a recommendation
+worked out from the nodes you chose and the size of the template's machine: as
+many machines as the nodes hold after keeping a fifth of each node's memory for
+Proxmox, up to a first ceiling of eight, with one kept warm so the first job
+after a quiet spell does not wait for a clone. The sentence beside it says where
+the figures came from, and **Use recommendation** puts them back after you have
+typed your own. A cluster that does not report the size of its nodes gets two
+and one instead. Nothing is created by saving: machines are rented when a pool
+has work with nowhere to run, and the warm machine is bought on the next pass.
+Run a test machine from the provider's page (below) to see one build and join
+before a job depends on it. The setup callback reports QEMU templates,
 with their VMIDs and nodes. The Zoomies template's VMID and node are preselected
 even when the cluster has other templates. The script prints these identifiers at
 completion. Interrupted template imports can be retried; setup resumes only a VM
@@ -290,7 +349,8 @@ that alternative.
 | Bridge | The network bridge the machine attaches to. It must reach the controller. |
 | VMID range | The block of identifiers Zoomies may allocate from, and nothing else may. |
 | Machine shape | CPUs, memory and disk for each machine, and the labels, capacity and backend the host will report. |
-| Maximum machines | How many this provider may run at once. |
+| Maximum machines | How many this provider may run at once. The wizard recommends a figure from the nodes' size. |
+| Warm machines | The fewest kept running when nothing is waiting. The wizard recommends one. |
 
 The same form is one line in a terminal, for a machine with no browser or a
 setup somebody wants to keep in a script:
@@ -329,6 +389,29 @@ A machine's shape is one shape per provider. If you want two sizes, make two
 providers: a pool asks for the machine it fits, and having one row mean two
 different machines makes the accounting ambiguous in exactly the place it has
 to be exact.
+
+## Proving it works: the test machine
+
+**Check** asks Proxmox what it would refuse and changes nothing. It cannot tell
+you that a machine really clones, boots, installs its agent and joins the fleet,
+and those are the steps a first job would find broken. **Test machine**, on the
+provider's page, builds one real machine and watches it go through each:
+
+1. cloned from the template,
+2. powered on,
+3. agent installed,
+4. enrolled as a host,
+5. reported ready.
+
+The machine is released as soon as it reports ready, so it is paid for for a few
+minutes. A test that fails stops at the step that did not happen and shows what
+the machine itself said; the machine is left in place so that can be read, and
+the page offers the release. A test machine is the one machine you ask for by
+hand, so it is held to the rules every machine is: it counts against the
+provider's maximum and the fleet's, it is refused while renting is off or the
+provider is paused, disabled or standing down, and only one runs at a time. It
+never counts towards the warm minimum and is never drained for being idle.
+Starting one needs the operator role and is audited as `provider.test_machine`.
 
 ## Which pools use a provider
 

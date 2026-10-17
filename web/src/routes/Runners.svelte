@@ -25,7 +25,14 @@
     type RunnerState,
     type StartupFailuresFinding,
   } from '$lib/api/types';
-  import { formatAbsolute, formatBytes, formatNumber, formatPercent, pluralise } from '$lib/format';
+  import {
+    NO_VALUE,
+    formatAbsolute,
+    formatBytes,
+    formatNumber,
+    formatPercent,
+    pluralise,
+  } from '$lib/format';
   import { faultLabel } from '$lib/faults';
   import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
   import {
@@ -403,7 +410,7 @@
         align: 'end',
         width: '6rem',
         value: (row) =>
-          row.cpu_percent === undefined ? '--' : formatPercent((row.cpu_percent ?? 0) / 100, 0),
+          row.cpu_percent === undefined ? NO_VALUE : formatPercent((row.cpu_percent ?? 0) / 100, 0),
       },
       {
         id: 'memory',
@@ -417,7 +424,7 @@
         // native title -- which would open over them -- is turned off by the wrap
         // flag, and the cell keeps itself on one line.
         wrap: true,
-        value: (row) => (row.memory_bytes === undefined ? '--' : formatBytes(row.memory_bytes)),
+        value: (row) => (row.memory_bytes === undefined ? NO_VALUE : formatBytes(row.memory_bytes)),
         cell: memoryCell,
       },
     ];
@@ -453,7 +460,7 @@
        its event lands; the figure is the row's, like the CPU beside it. -->
   <span class="memory-cell">
     <span class="used">
-      {runner.memory_bytes === undefined ? '--' : formatBytes(runner.memory_bytes)}
+      {runner.memory_bytes === undefined ? NO_VALUE : formatBytes(runner.memory_bytes)}
     </span>
     <RunnerMemoryBadges runner={fleet.runner(runner.id) ?? runner} wrap />
   </span>
@@ -480,7 +487,7 @@
       </a>
     </Tooltip>
   {:else}
-    <span class="quiet">--</span>
+    <span class="quiet">{NO_VALUE}</span>
   {/if}
 {/snippet}
 
@@ -500,7 +507,7 @@
       </span>
     </span>
   {:else}
-    <span class="quiet">--</span>
+    <span class="quiet">{NO_VALUE}</span>
   {/if}
 {/snippet}
 

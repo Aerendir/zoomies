@@ -95,7 +95,7 @@ func enum(description string, values ...string) map[string]any {
 // handful rather than one tool per route: an agent given every route in the
 // API, admin ones included, chooses worse and costs more to run.
 func tools() []*tool {
-	return append(append(append(append(append(append(append(append(append(append(append(contextTools(), prDelayTools()...), noteTools()...), kennelTools()...), catalogTools()...), usageTools()...), providerTools()...), configTools()...), adminConfigTools()...), windowTools()...), analysisTools()...), []*tool{
+	return append(append(append(append(append(append(append(append(append(append(append(append(append(contextTools(), comparisonTools()...), prDelayTools()...), noteTools()...), kennelTools()...), catalogTools()...), usageTools()...), providerTools()...), configTools()...), adminConfigTools()...), windowTools()...), analysisTools()...), repairTools()...), []*tool{
 		{
 			Name:  "fleet_status",
 			Title: "Fleet status",
@@ -138,7 +138,7 @@ func tools() []*tool {
 			Name:  "list_jobs",
 			Title: "List jobs",
 			Description: "Workflow jobs this fleet has seen, newest first, with their pool, runner, queue wait, duration and outcome. " +
-				"Use failed to find what went wrong, and ours or theirs to split failures the fleet caused from the workflows' own. " +
+				"Use failed to find what went wrong, ours or theirs to split failures the fleet caused from the workflows' own, and attention to find the failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt. " +
 				"Each job is a one-line summary without its steps unless include_steps is true; get_job has the steps. " +
 				"A full page carries a next value: pass it back as before to read the next page, until next is absent. " +
 				"For counts and percentiles over a period, use job_stats rather than paging through jobs.",
@@ -149,6 +149,7 @@ func tools() []*tool {
 				"state":              enum("only jobs in this state", "waiting", "queued", "in_progress", "completed"),
 				"conclusion":         enum("only jobs that finished this way", "success", "failure", "cancelled", "skipped"),
 				"failed":             boolean("only jobs that went wrong: a failing conclusion, or a runner that stopped under the job"),
+				"attention":          boolean("only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt of the same job"),
 				"ours":               boolean("only failures this fleet caused"),
 				"theirs":             boolean("only failures the workflow caused, with nothing wrong on the fleet's side"),
 				"unmatched":          boolean("only queued jobs no enabled pool claims; these will never run"),
@@ -359,6 +360,7 @@ func listJobs(ctx context.Context, c API, raw json.RawMessage) ([]Content, error
 		State             string `json:"state"`
 		Conclusion        string `json:"conclusion"`
 		Failed            bool   `json:"failed"`
+		Attention         bool   `json:"attention"`
 		Ours              bool   `json:"ours"`
 		Theirs            bool   `json:"theirs"`
 		Unmatched         bool   `json:"unmatched"`
@@ -387,7 +389,7 @@ func listJobs(ctx context.Context, c API, raw json.RawMessage) ([]Content, error
 			q.Set(key, v)
 		}
 	}
-	for key, v := range map[string]bool{"failed": a.Failed, "faulted": a.Ours, "workflow_failed": a.Theirs, "unmatched": a.Unmatched} {
+	for key, v := range map[string]bool{"failed": a.Failed, "attention": a.Attention, "faulted": a.Ours, "workflow_failed": a.Theirs, "unmatched": a.Unmatched} {
 		if v {
 			q.Set(key, "true")
 		}
@@ -444,7 +446,7 @@ func setWindow(q url.Values, since, until string) error {
 		if raw == "" {
 			continue
 		}
-		when, err := parseWhen(raw)
+		when, err := ParseWhen(raw)
 		if err != nil {
 			return fmt.Errorf("%s %q: %w", key, raw, err)
 		}
@@ -819,50 +821,6 @@ func jsonContent(body []byte) []Content {
 func notFound(err error) bool {
 	var se StatusError
 	return errors.As(err, &se) && se.HTTPStatus() == http.StatusNotFound
-}
-
-// parseWhen accepts either a duration ago ("24h") or an absolute RFC 3339
-// timestamp, because both are what people reach for and neither is surprising.
-// It is the CLI's `--since` rule, so an agent and an operator mean the same
-// thing by the same words.
-func parseWhen(raw string) (time.Time, error) {
-	raw = strings.TrimSpace(raw)
-	if d, ok := parseAgo(raw); ok {
-		return time.Now().Add(-d), nil
-	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
-		if t, err := time.Parse(layout, raw); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("not a duration like 24h or 30d nor a timestamp like 2026-01-30 or 2026-01-30T12:00:00Z")
-}
-
-// parseAgo reads how long ago: a Go duration such as 90m or 24h, or whole days
-// or weeks as 30d and 2w, because release comparisons are made in those and
-// Go's own parser stops at hours.
-func parseAgo(raw string) (time.Duration, bool) {
-	if n, unit := len(raw)-1, time.Duration(0); n > 0 {
-		switch raw[n] {
-		case 'd':
-			unit = 24 * time.Hour
-		case 'w':
-			unit = 7 * 24 * time.Hour
-		}
-		if unit != 0 {
-			if days, err := strconv.Atoi(raw[:n]); err == nil {
-				return time.Duration(max(days, -days)) * unit, true
-			}
-		}
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, false
-	}
-	if d < 0 {
-		d = -d
-	}
-	return d, true
 }
 
 // lastLines returns the last n lines of s and how many lines s held.

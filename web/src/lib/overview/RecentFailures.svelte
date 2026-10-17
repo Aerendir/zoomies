@@ -1,0 +1,411 @@
+<!--
+  The failures nobody has dealt with, which is the first question an operator
+  arrives with: what went wrong that I do not know about yet.
+
+  GitHub answers "what failed"; it cannot answer "and have you read it". Zoomies
+  can, because a failure can be marked as known here, and it does, because a
+  panel that showed every recent failure for ever would stop being read: by the
+  third day the same red row is wallpaper, and the failure that is actually new
+  is somewhere under it. The three halves of the question live on the server in
+  one filter (failed, recent, acknowledged by nobody, not replaced by a later
+  attempt), so this panel, the Jobs page's "Needs attention" view and anything
+  else that asks cannot disagree about what is still owed.
+
+  Marking as known is not resolving. The failure keeps its row, its conclusion
+  and its place in the failed view; what stops is this panel asking. A re-run
+  that passes settles it, a re-run that fails is a new failure somebody has to
+  look at again, and the toast that announces the acknowledgement carries the
+  undo, so a row put away by mistake is one click from coming back.
+
+  Where it ran is the page's own switch: a failure on somebody else's runner is
+  in the repositories this fleet watches, but it is not the fleet's to fix, so
+  the panel shows this fleet's own by default like the running-jobs panel
+  beside it.
+-->
+<script lang="ts">
+  import { Check, CircleCheck } from '@lucide/svelte';
+  import { acknowledgeJob, listJobs, reopenJobAttention } from '$lib/api/client';
+  import { events } from '$lib/api/sse';
+  import type { Job } from '$lib/api/types';
+  import { fleetFailed } from '$lib/faults';
+  import { formatNumber } from '$lib/format';
+  import { readableJobText } from '$lib/jobs/name';
+  import { failureSummary } from '$lib/jobs/why';
+  import { fleet } from '$lib/state/fleet.svelte';
+  import { prefs } from '$lib/state/prefs.svelte';
+  import { session } from '$lib/state/session.svelte';
+  import { toasts } from '$lib/state/toasts.svelte';
+  import Badge from '$lib/components/Badge.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import EmptyState from '$lib/components/EmptyState.svelte';
+  import ErrorState from '$lib/components/ErrorState.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import JobDrawer from '$lib/jobs/JobDrawer.svelte';
+  import Panel from '$lib/components/Panel.svelte';
+  import RelativeTime from '$lib/components/RelativeTime.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
+
+  interface Props {
+    class?: string;
+  }
+
+  let { class: className = '' }: Props = $props();
+
+  /**
+   * A glance with the count, not the list: the Jobs page's view is for the whole
+   * of it. Kept short on purpose, because the panel sits above the pools and
+   * the Overview's own rule is that nothing needing a person pushes the fleet
+   * below the fold of a 1440x900 laptop.
+   */
+  const SHOWN = 2;
+
+  let jobs = $state.raw<Job[]>([]);
+  let total = $state(0);
+  let loading = $state(true);
+  let error = $state<unknown>(null);
+  let loadRevision = 0;
+  /** The job whose acknowledgement is in flight, so its button cannot be pressed twice. */
+  let acking = $state<string | null>(null);
+  let selected = $state<Job | null>(null);
+  let drawerOpen = $state(false);
+
+  const others = $derived(prefs.otherRunners);
+  // Marking a failure as known is the fleet's, not one reader's, so it takes
+  // the operator role the API asks for and nobody below it.
+  const canAcknowledge = $derived(session.can('operator'));
+
+  export async function reload(): Promise<void> {
+    await load(others);
+  }
+
+  async function load(all: boolean, signal?: AbortSignal): Promise<void> {
+    const revision = ++loadRevision;
+    try {
+      const page = await listJobs(
+        {
+          attention: true,
+          managed: all ? undefined : true,
+          limit: SHOWN,
+        },
+        signal,
+      );
+      if (signal?.aborted || revision !== loadRevision) return;
+      jobs = page.items ?? [];
+      total = page.total ?? jobs.length;
+      error = null;
+    } catch (cause) {
+      if (signal?.aborted || revision !== loadRevision) return;
+      error = cause;
+    } finally {
+      if (!signal?.aborted && revision === loadRevision) loading = false;
+    }
+  }
+
+  $effect(() => {
+    const all = others;
+    const controller = new AbortController();
+    void load(all, controller.signal);
+    return () => controller.abort();
+  });
+
+  // The stream says a job changed; whether that adds, settles or removes a
+  // failure is the server's composite question, so the panel asks again --
+  // at most once a second, because a busy fleet completes jobs in bursts and
+  // every one of them is a frame.
+  let pending: ReturnType<typeof setTimeout> | null = null;
+  function schedule(): void {
+    if (pending !== null) return;
+    pending = setTimeout(() => {
+      pending = null;
+      void load(others);
+    }, 1000);
+  }
+
+  $effect(() =>
+    events.subscribe('job.updated', (job) => {
+      if (selected && job.id === selected.id) selected = job;
+      schedule();
+    }),
+  );
+  $effect(() => () => {
+    if (pending !== null) clearTimeout(pending);
+  });
+
+  // PR closures and check results can change on GitHub without a job event.
+  $effect(() => {
+    const timer = setInterval(() => void load(others), 30000);
+    return () => clearInterval(timer);
+  });
+
+  // One reconciling fetch after a gap in the stream, as the panels around it
+  // do: the replay buffer is finite.
+  let previous: string | null = null;
+  $effect(() => {
+    const status = fleet.connection;
+    if (previous !== null && previous !== 'live' && status === 'live') void load(others);
+    previous = status;
+  });
+
+  /**
+   * Mark one failure as known. The row leaves at once, because the answer is
+   * certain, and comes back with the list as it really is if the request is
+   * refused: a triage list that lagged a second behind the button would be
+   * pressed twice.
+   */
+  async function acknowledge(job: Job): Promise<void> {
+    if (!job.id || acking !== null) return;
+    const before = jobs;
+    const beforeTotal = total;
+    acking = job.id;
+    ++loadRevision;
+    jobs = jobs.filter((row) => row.id !== job.id);
+    total = Math.max(0, beforeTotal - 1);
+    try {
+      await acknowledgeJob(job.id);
+      toasts.success(
+        'Marked as known',
+        'The failure stays in the failed view; a re-run that passes is what settles it.',
+        { label: 'Undo', run: () => void reopen(job) },
+      );
+    } catch (cause) {
+      jobs = before;
+      total = beforeTotal;
+      toasts.fromError(cause, 'Could not mark the failure as known');
+    } finally {
+      acking = null;
+    }
+  }
+
+  async function reopen(job: Job): Promise<void> {
+    if (!job.id) return;
+    try {
+      await reopenJobAttention(job.id);
+      await load(others);
+    } catch (cause) {
+      toasts.fromError(cause, 'Could not put the failure back');
+    }
+  }
+
+  function open(job: Job): void {
+    selected = job;
+    drawerOpen = true;
+  }
+</script>
+
+<Panel
+  title="Recent failures"
+  description={others
+    ? 'Unresolved failures from the last week, wherever they ran. Fixed, superseded and closed PR failures leave this list.'
+    : 'Unresolved failures from the last week. Fixed, superseded and closed PR failures leave this list.'}
+  class={className}
+  flush
+>
+  {#snippet actions()}
+    {#if !loading && total > 0}
+      <Badge tone="danger" label="{formatNumber(total)} to look at" dot={false} />
+    {/if}
+  {/snippet}
+
+  {#if error}
+    <div class="pad">
+      <ErrorState
+        {error}
+        compact
+        title="The recent failures could not be loaded"
+        onretry={() => void load(others)}
+      />
+    </div>
+  {:else if loading}
+    <p class="sr-only">Loading recent failures.</p>
+    <ul class="rows" aria-hidden="true">
+      {#each [0, 1, 2] as row (row)}
+        <li class="row">
+          <div class="what"><Skeleton width="60%" height="var(--z-text-base)" /></div>
+          <div class="elapsed"><Skeleton width="3rem" height="var(--z-text-xs)" /></div>
+        </li>
+      {/each}
+    </ul>
+  {:else if jobs.length === 0}
+    <EmptyState
+      icon={CircleCheck}
+      compact
+      title="No failure is waiting on you"
+      description="No unresolved failure from the last week is waiting for review. The Failed view keeps the original runs, including fixed, superseded and acknowledged failures."
+    />
+  {:else}
+    <ul class="rows">
+      {#each jobs as job (job.id)}
+        <li class="row">
+          <button
+            class="what"
+            type="button"
+            aria-label="Inspect {readableJobText(job.job_name) || 'this failure'}"
+            onclick={() => open(job)}
+          >
+            <span class="title">
+              <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
+              <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
+            </span>
+            <span class="detail">
+              {#if readableJobText(job.job_name)}<span class="job-name"
+                  >{readableJobText(job.job_name)}</span
+                >{/if}
+              {#if failureSummary(job)}
+                <span class="reason" class:danger={fleetFailed(job)}>{failureSummary(job)}</span>
+              {/if}
+            </span>
+            <span class="inspect">View failure details</span>
+          </button>
+          <p class="elapsed">
+            <span class="sr-only">Failed </span>
+            <RelativeTime value={job.completed_at ?? job.queued_at} />
+          </p>
+          <div class="act">
+            {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}
+              <Button
+                size="sm"
+                href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
+                >Fix with Eli</Button
+              >
+            {/if}
+            {#if canAcknowledge}
+              <IconButton
+                icon={Check}
+                label="Mark this failure as known"
+                help="Takes it off the failures needing attention without changing the failure."
+                size="sm"
+                disabled={acking === job.id}
+                onclick={() => void acknowledge(job)}
+              />
+            {/if}
+          </div>
+        </li>
+      {/each}
+    </ul>
+    {#if total > jobs.length}
+      <p class="more">
+        <a href="/jobs?attention=true"
+          >and {formatNumber(total - jobs.length)} more on the jobs page</a
+        >
+      </p>
+    {/if}
+  {/if}
+</Panel>
+
+<JobDrawer bind:open={drawerOpen} job={selected} onclose={() => (selected = null)} />
+
+<style>
+  .pad {
+    padding: var(--z-space-4) var(--z-space-5);
+  }
+  .rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(5rem, auto) auto;
+    align-items: center;
+    gap: var(--z-space-4);
+    padding: var(--z-space-3) var(--z-space-5);
+    border-bottom: var(--z-border-width) solid var(--z-border);
+  }
+  .row:last-child {
+    border-bottom: 0;
+  }
+  .what {
+    min-width: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--z-radius-sm);
+  }
+  .inspect {
+    display: block;
+    margin-top: var(--z-space-1);
+    color: var(--z-accent);
+    font-size: var(--z-text-xs);
+  }
+  .what:hover .inspect {
+    text-decoration: underline;
+  }
+  .title {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--z-space-1) var(--z-space-2);
+    padding: 0;
+    color: var(--z-text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .what:hover .workflow,
+  .what:hover .repo {
+    color: var(--z-accent);
+    text-decoration: underline;
+  }
+  .repo {
+    font-size: var(--z-text-xs);
+    color: var(--z-text-muted);
+    overflow-wrap: anywhere;
+  }
+  .workflow {
+    font-size: var(--z-text-base);
+    font-weight: var(--z-weight-medium);
+    overflow-wrap: anywhere;
+  }
+  .detail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--z-space-1) var(--z-space-2);
+    margin: var(--z-space-1) 0 0;
+    font-size: var(--z-text-xs);
+    color: var(--z-text-subtle);
+  }
+  .job-name {
+    overflow-wrap: anywhere;
+  }
+  .reason {
+    overflow-wrap: anywhere;
+  }
+  .reason.danger {
+    color: var(--z-danger);
+    font-weight: var(--z-weight-medium);
+  }
+  .elapsed {
+    margin: 0;
+    justify-self: end;
+    font-size: var(--z-text-xs);
+    color: var(--z-text-muted);
+    white-space: nowrap;
+  }
+  .act {
+    display: flex;
+    align-items: center;
+    gap: var(--z-space-2);
+    justify-self: end;
+  }
+  .more {
+    margin: 0;
+    padding: var(--z-space-3) var(--z-space-5);
+    border-top: var(--z-border-width) solid var(--z-border);
+    font-size: var(--z-text-xs);
+  }
+  .more a {
+    color: var(--z-accent);
+  }
+  @media (max-width: 768px) {
+    .row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--z-space-1) var(--z-space-3);
+    }
+    .what {
+      grid-column: 1 / -1;
+    }
+    .elapsed {
+      justify-self: start;
+    }
+  }
+</style>

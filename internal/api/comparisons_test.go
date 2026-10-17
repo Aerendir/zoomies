@@ -13,6 +13,7 @@ import (
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/github"
+	"github.com/eyupio/zoomies/internal/kennel/workflow"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -28,6 +29,7 @@ func (f *comparisonAPIFactory) For(ctx context.Context, inst *store.Installation
 }
 
 type comparisonAPIReader struct {
+	workflowSource bool
 	github.Client
 	at                time.Time
 	calls, quotaCalls atomic.Int32
@@ -45,7 +47,20 @@ func (f *comparisonAPIReader) ReadExperimentAttempt(_ context.Context, repo stri
 		return nil, f.err
 	}
 	end := f.at.Add(time.Minute)
-	return &github.ExperimentAttemptEvidence{Repository: repo, RunID: run, Attempt: attempt, HeadSHA: strings.Repeat("a", 40), WorkflowID: 20, Status: "completed", Conclusion: "failure", RunStartedAt: &f.at, UpdatedAt: &end, JobsCoverage: "complete", Jobs: []github.ExperimentAttemptJob{{ID: run + 100, Status: "completed", Conclusion: "failure", StartedAt: &f.at, CompletedAt: &end}}}, nil
+	out := &github.ExperimentAttemptEvidence{Repository: repo, RunID: run, Attempt: attempt, HeadSHA: strings.Repeat("a", 40), WorkflowID: 20, Status: "completed", Conclusion: "failure", RunStartedAt: &f.at, UpdatedAt: &end, JobsCoverage: "complete", Jobs: []github.ExperimentAttemptJob{{ID: run + 100, Status: "completed", Conclusion: "failure", StartedAt: &f.at, CompletedAt: &end}}}
+	if f.workflowSource {
+		out.Event = "workflow_dispatch"
+		if run == 10 {
+			out.Event = "push"
+			out.WorkflowPath = ".github/workflows/private-root.yml"
+			out.WorkflowSource = &github.ExperimentWorkflowSource{Version: "workflow-source-v1", Basis: "push_head_sha_root_file", CommitSHA: out.HeadSHA, Path: out.WorkflowPath, BlobSHA: strings.Repeat("b", 40), ContentSHA256: strings.Repeat("c", 64), Bytes: 100}
+			data := []byte("jobs: {private_job: {steps: [{uses: private_owner/private_repo@main}]}}")
+			out.WorkflowSource.Dependencies = workflow.InspectDependencies(data)
+			out.WorkflowSource.ContentSHA256 = out.WorkflowSource.Dependencies.SourceSHA256
+			out.WorkflowSource.Bytes = len(data)
+		}
+	}
+	return out, nil
 }
 func comparisonAPIHarness(t *testing.T, opts ...func(*config.Config)) (*harness, string, *comparisonAPIReader, map[string]any) {
 	t.Helper()
@@ -168,5 +183,119 @@ func TestComparisonAPIMetadataMovementReturnsAConflict(t *testing.T) {
 	h.do(request{method: http.MethodPost, path: "/api/v1/comparisons", token: token, body: body}).mustStatus(t, 409, "moving attempt")
 	if f.calls.Load() != 1 || auditCount(t, h, "comparison.evidence_retained") != 0 {
 		t.Fatal("moving attempt was retried or retained")
+	}
+}
+
+func TestComparisonAPIProjectsRecordedGrantsWithoutPromotingEquivalenceOrRefreshingThem(t *testing.T) {
+	h, inst, reader, body := comparisonAPIHarness(t)
+	installation, err := h.st.GetInstallation(h.ctx, inst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := h.pool(installation, "runner-evidence")
+	host := h.host("runner-evidence-host")
+	runner := h.runner(pool, host, store.RunnerProvisioning)
+	for _, run := range []int64{10, 11} {
+		input := &store.Job{GitHubJobID: run + 100, GitHubRunID: run, RunAttempt: 1, Repo: "acme/repo", InstallationID: inst, HeadSHA: strings.Repeat("a", 40), QueuedAt: reader.at, State: store.JobCompleted, Conclusion: "failure"}
+		if run == 10 {
+			input.RunnerID, input.PoolID, input.HostID = runner.ID, pool.ID, host.ID
+		}
+		j, err := h.st.UpsertJob(h.ctx, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.st.StampJobGranted(h.ctx, j.ID, 2, 8192, store.AllocationFromPool); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cpu := 2.0
+	if _, err := h.st.PutRunnerCreationObservation(h.ctx, inst, &store.RunnerCreationObservationData{Version: store.RunnerCreationObservationVersion, RunnerID: runner.ID, HostID: host.ID, PoolID: pool.ID, TaskID: "task_fixture", IssuedAt: reader.at, Issued: store.IssuedRunnerConfiguration{Backend: store.BackendDocker, CPUs: &cpu, DockerMode: store.DockerNone}, Reported: store.ReportedRunnerCreation{DigestCoverage: "unsupported"}}); err != nil {
+		t.Fatal(err)
+	}
+	token := h.token("operator", store.RoleOperator, "jobs:read", "comparisons:write")
+	captured := h.do(request{method: http.MethodPost, path: "/api/v1/comparisons", token: token, body: body})
+	captured.mustStatus(t, 201, "capture recorded grants")
+	var saved controller.RetainedExperimentComparison
+	if err := json.Unmarshal(captured.body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	row, err := h.st.GetComparisonEvidence(h.ctx, inst, "acme/repo", saved.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		Baseline  *controller.ExperimentJoinedEvidence `json:"baseline"`
+		Candidate *controller.ExperimentJoinedEvidence `json:"candidate"`
+	}
+	if err := json.Unmarshal(row.Payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	for _, side := range []*controller.ExperimentJoinedEvidence{envelope.Baseline, envelope.Candidate} {
+		if side == nil || len(side.Attempts) != 1 || len(side.Attempts[0].MatchedJobs) != 1 {
+			t.Fatal("grant not joined to pinned job")
+		}
+		g := side.Attempts[0].MatchedJobs[0].RecordedGrant
+		if g == nil || g.CPUs == nil || *g.CPUs != 2 || g.MemoryMB == nil || *g.MemoryMB != 8192 {
+			t.Fatal("grant not durably retained")
+		}
+	}
+	if saved.RunnerEvidence == nil || saved.RunnerEvidence.Baseline.RecordedGrants != 1 || saved.RunnerEvidence.Baseline.RunnerObservations != 1 || *saved.RunnerEvidence.Baseline.Jobs[0].RecordedGrant.CPUs != 2 || saved.Report.Snapshot.Baseline.ResourceID != "" || saved.Report.Measurement.Eligibility.State != "inconclusive" {
+		t.Fatal("private grant promoted public equivalence")
+	}
+	spec := loadSpec(t)
+	project := saved.RunnerEvidence
+	for _, check := range []struct {
+		name  string
+		value any
+	}{
+		{"ExperimentRunnerEvidence", project}, {"ExperimentRunnerEvidenceArm", project.Baseline}, {"ExperimentRunnerEvidenceJob", project.Baseline.Jobs[0]}, {"ExperimentRecordedGrantView", project.Baseline.Jobs[0].RecordedGrant}, {"ExperimentRunnerObservationView", project.Baseline.Jobs[0].Observation}, {"ExperimentRunnerRequestView", project.Baseline.Jobs[0].Observation.Requested},
+	} {
+		payload, err := json.Marshal(check.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertShape(t, spec, check.name, payload)
+	}
+	if strings.Contains(string(captured.body), "task_fixture") || strings.Contains(string(captured.body), runner.ID) || strings.Contains(string(captured.body), host.ID) {
+		t.Fatal("private runner identity leaked")
+	}
+	if err := h.st.DeleteRunner(h.ctx, runner.ID); err != nil {
+		t.Fatal(err)
+	}
+	replay := h.do(request{method: http.MethodGet, path: fmt.Sprintf("/api/v1/comparisons/%s?installation_id=%s&repo=acme/repo", saved.ID, inst), token: token})
+	replay.mustStatus(t, 200, "offline replay")
+	if string(replay.body) != string(captured.body) || reader.calls.Load() != 2 || reader.quotaCalls.Load() != 1 {
+		t.Fatal("replay changed evidence or collection budget")
+	}
+	assertShape(t, loadSpec(t), "RetainedExperimentComparison", captured.body)
+}
+
+func TestComparisonAPIProjectsRetainedWorkflowFactsWithoutReadingCurrentSource(t *testing.T) {
+	h, inst, reader, body := comparisonAPIHarness(t)
+	reader.workflowSource = true
+	token := h.token("operator", store.RoleOperator, "jobs:read", "comparisons:write")
+	capture := h.do(request{method: http.MethodPost, path: "/api/v1/comparisons", token: token, body: body})
+	capture.mustStatus(t, 201, "capture workflow facts")
+	var saved controller.RetainedExperimentComparison
+	if err := json.Unmarshal(capture.body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	v := saved.WorkflowEvidence
+	if v == nil || v.Baseline.RootSources != 1 || v.Candidate.RootSources != 0 || v.Candidate.Attempts[0].RootSource != nil || saved.Report.Snapshot.Baseline.WorkflowRevision != "" || saved.Report.Measurement.Eligibility.State != "inconclusive" {
+		t.Fatalf("workflow facts promoted or lost: %+v", saved)
+	}
+	if strings.Contains(string(capture.body), "private-root") || strings.Contains(string(capture.body), `"workflow_path":`) {
+		t.Fatal("private path leaked")
+	}
+	if v.Baseline.Attempts[0].RootSource.Dependencies == nil || *v.Baseline.Attempts[0].RootSource.Dependencies.Counts.Floating != 1 || strings.Contains(string(capture.body), "private_owner") {
+		t.Fatal("dependency inspection lost or raw names leaked")
+	}
+	assertShape(t, loadSpec(t), "RetainedExperimentComparison", capture.body)
+	reader.workflowSource = false
+	viewer := h.token("viewer", store.RoleViewer, "jobs:read")
+	replay := h.do(request{method: http.MethodGet, path: "/api/v1/comparisons/" + saved.ID + "?installation_id=" + inst + "&repo=acme%2Frepo", token: viewer})
+	replay.mustStatus(t, 200, "replay workflow facts")
+	if string(capture.body) != string(replay.body) || reader.calls.Load() != 2 || reader.quotaCalls.Load() != 1 {
+		t.Fatal("replay enriched or recollected workflow facts")
 	}
 }

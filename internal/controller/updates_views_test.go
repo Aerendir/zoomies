@@ -12,9 +12,28 @@ import (
 
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/events"
+	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates"
 )
+
+func TestDevelopmentStatusSeparatesUncheckedCurrentAndNewerMainBuilds(t *testing.T) {
+	h := newHarness(t)
+	if got := h.c.developmentView("1.3.7"); got != nil {
+		t.Fatalf("a standard release has development status: %+v", got)
+	}
+	if got := h.c.developmentView("main-sha-abc1234"); got.State != "unknown" || got.CheckedAt != nil {
+		t.Fatalf("an unchecked build was called current: %+v", got)
+	}
+	h.c.development = &developmentState{SHA: "abc1234fffffffffffffffffffffffff", At: h.c.Now()}
+	if got := h.c.developmentView("main-sha-abc1234"); got.State != "current" || got.CheckedAt == nil {
+		t.Fatalf("matching main: %+v", got)
+	}
+	h.c.development = &developmentState{SHA: "def5678fffffffffffffffffffffffff", At: h.c.Now()}
+	if got := h.c.developmentView("main-sha-abc1234"); got.State != "available" || got.Current != "abc1234" {
+		t.Fatalf("newer main: %+v", got)
+	}
+}
 
 // readTheList makes the controller read a release list the way the background
 // pass does, so the status is tested against what that check records and not
@@ -397,6 +416,58 @@ func TestTheSoakIsWrittenAsTheSettingsPageWritesIt(t *testing.T) {
 	}
 }
 
+// The status says whether this build holds a release's checksums to a
+// signature, and by which key ids, so a page can show it without the key
+// itself ever leaving the binary.
+func TestTheStatusNamesTheReleaseKeysThisBuildTrusts(t *testing.T) {
+	public, _, err := releasekey.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := releasekey.Default
+	releasekey.Default = public
+	t.Cleanup(func() { releasekey.Default = old })
+
+	h := newHarness(t)
+	withVersion(t, "1.3.0")
+	keys := h.status().Signing.Keys
+	parsed, err := releasekey.ParsePublic(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 1 || keys[0] != parsed.ID {
+		t.Fatalf("keys = %v, want [%s]", keys, parsed.ID)
+	}
+}
+
+func TestTheStatusSaysABuildWithNoReleaseKeyVerifiesNothing(t *testing.T) {
+	old := releasekey.Default
+	releasekey.Default = ""
+	t.Cleanup(func() { releasekey.Default = old })
+
+	h := newHarness(t)
+	withVersion(t, "1.3.0")
+	if keys := h.status().Signing.Keys; len(keys) != 0 {
+		t.Fatalf("keys = %v, want none", keys)
+	}
+}
+
+// Whether a controller that does not come back is put back is a fact about how
+// it runs: a native service runs the binary the upgrade keeps beside it, a
+// container's service is an image. The status says which, so the confirmation
+// can promise the rollback only where it applies.
+func TestTheStatusSaysWhetherAControllerThatFailsIsPutBack(t *testing.T) {
+	withHelperHost(t, updates.HelperHost{GOOS: "linux", Systemd: true})
+	h := newHarness(t)
+	if !h.status().Rollback {
+		t.Fatal("a native controller is put back and the status should say so")
+	}
+	withHelperHost(t, updates.HelperHost{GOOS: "linux", InContainer: true, RunsRunners: true})
+	if h.status().Rollback {
+		t.Fatal("a container controller is not put back and the status should not promise it")
+	}
+}
+
 // The document says every field is always present, so a client reads a missing
 // release as null and never has to ask whether the key is there.
 func TestTheStatusAlwaysCarriesEveryFieldAndIsNullWhereThereIsNothing(t *testing.T) {
@@ -411,7 +482,7 @@ func TestTheStatusAlwaysCarriesEveryFieldAndIsNullWhereThereIsNothing(t *testing
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		t.Fatalf("the status is not a JSON object: %v", err)
 	}
-	for _, key := range []string{"mode", "soak", "running", "latest", "target", "reason", "checked_at", "helper", "controller", "rollout"} {
+	for _, key := range []string{"mode", "soak", "running", "latest", "target", "reason", "checked_at", "helper", "signing", "rollback", "controller", "rollout"} {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("the status has no %q: %s", key, raw)
 		}
@@ -421,8 +492,8 @@ func TestTheStatusAlwaysCarriesEveryFieldAndIsNullWhereThereIsNothing(t *testing
 			t.Errorf("%s = %s, want null while there is nothing to name", key, got)
 		}
 	}
-	if len(fields) != 10 {
-		t.Errorf("the status has %d fields, want the ten the document lists: %s", len(fields), raw)
+	if len(fields) != 12 {
+		t.Errorf("the status has %d fields, want the twelve the document lists: %s", len(fields), raw)
 	}
 }
 

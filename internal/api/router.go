@@ -110,6 +110,11 @@ func (s *Server) routes() http.Handler {
 		r.Use(s.authenticate)
 		r.With(s.require(auth.ActionBackupsWrite)).Post("/api/v1/backups/upload", s.handleUploadBackup)
 		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/import", s.handleImportTransfer)
+		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/uploads", s.handleCreateTransferUpload)
+		r.With(s.require(auth.ActionBackupsRestore)).Get("/api/v1/transfers/uploads/{id}", s.handleGetTransferUpload)
+		r.With(s.require(auth.ActionBackupsRestore)).Delete("/api/v1/transfers/uploads/{id}", s.handleCancelTransferUpload)
+		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/uploads/{id}/chunks", s.handleTransferChunk)
+		r.With(s.require(auth.ActionBackupsRestore)).Post("/api/v1/transfers/uploads/{id}/verify", s.handleVerifyTransferUpload)
 		// An installation archive is history rather than a request, and the
 		// handler bounds it itself for the same reason.
 		r.With(s.require(auth.ActionInstallationsWrite)).Post("/api/v1/installations/import", s.handleImportInstallation)
@@ -333,6 +338,10 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/{id}/pr-delay", s.handlePRDelay)
 			r.With(s.require(auth.ActionJobsCancel)).Post("/{id}/cancel", s.handleCancelJobWorkflow)
 			r.With(s.require(auth.ActionJobsRerun)).Post("/{id}/rerun", s.handleRerunJobWorkflow)
+			// The two halves of triage: mark a failure as read, and put it
+			// back in front of whoever looks next.
+			r.With(s.require(auth.ActionJobsAcknowledge)).Post("/{id}/acknowledge", s.handleAcknowledgeJob)
+			r.With(s.require(auth.ActionJobsAcknowledge)).Delete("/{id}/acknowledge", s.handleReopenJobAttention)
 		})
 
 		// Hosts and enrolment.
@@ -344,6 +353,10 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionHostsWrite)).Patch("/{id}", s.handleUpdateHost)
 			r.With(s.require(auth.ActionHostsCordon)).Post("/{id}/cordon", s.handleCordonHost)
 			r.With(s.require(auth.ActionHostsWrite)).Post("/{id}/throttle/clear", s.handleClearHostThrottle)
+			// Re-read what the host's last report ranked it at, forcing the
+			// frame so the page settles at once. The specs themselves are
+			// remeasured by every heartbeat.
+			r.With(s.require(auth.ActionHostsWrite)).Post("/{id}/priority-check", s.handleRecheckPriority)
 			// Named for the decision and not for the report, so a route that serves
 			// the report itself has the name /doctor to itself.
 			r.With(s.require(auth.ActionHostsCheck)).Post("/{id}/health-check", s.handleCheckHost)
@@ -404,6 +417,7 @@ func (s *Server) apiRoutes() chi.Router {
 			// the hypervisor, and both change nothing there, so they are the
 			// operator's to run rather than the admin's.
 			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/check", s.handleCheckProvider)
+			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/test-machine", s.handleTestProviderMachine)
 			r.With(s.require(auth.ActionProvidersPause)).Get("/{id}/discovery", s.handleProviderDiscovery)
 			// The orphan review is admin because its one act is destructive
 			// and because it names resources this fleet does not own.
@@ -537,6 +551,7 @@ func (s *Server) apiRoutes() chi.Router {
 		r.Route("/mcp-clients", func(r chi.Router) {
 			r.With(s.require(auth.ActionMCPClientsRead)).Get("/", s.handleListMCPClients)
 			r.With(s.require(auth.ActionMCPClientsWrite)).Post("/", s.handleCreateMCPClient)
+			r.With(s.require(auth.ActionMCPClientsWrite)).Patch("/{id}", s.handleUpdateMCPClient)
 			r.With(s.require(auth.ActionMCPClientsWrite)).Post("/{id}/secret", s.handleRotateMCPClientSecret)
 			r.With(s.require(auth.ActionMCPClientsWrite)).Delete("/{id}", s.handleRevokeMCPClient)
 		})
@@ -552,6 +567,8 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionTokensOwn)).Post("/purge", s.handlePurgeTokens)
 			r.With(s.require(auth.ActionTokensOwn)).Delete("/{id}", s.handleRevokeToken)
 		})
+		r.With(s.require(auth.ActionHostsRead)).Get("/recovery/hosts", s.handleRecoveryHosts)
+		r.With(s.require(auth.ActionHostsDelete)).Post("/recovery/hosts/{id}/retire", s.handleRetireRecoveryHost)
 		// Recovery: the fence a restore sets, and the one act that lifts it.
 		r.With(s.require(auth.ActionStatsRead)).Get("/recovery", s.handleGetRecovery)
 		r.With(s.require(auth.ActionRecoveryWrite)).Post("/recovery/unfence", s.handleUnfence)

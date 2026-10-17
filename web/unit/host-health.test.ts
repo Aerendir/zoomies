@@ -19,7 +19,7 @@ const now = Date.parse('2026-10-04T10:00:00Z');
  * host-health Playwright spec, which sends results to the real binary.
  */
 function summaryOf(results: DoctorResult[], reboot: boolean): DoctorReport['summary'] {
-  const out = { counted: 0, warnings: 0, errors: 0, skipped: 0, suggestions: 0 };
+  const out = { counted: 0, warnings: 0, errors: 0, skipped: 0, suggestions: 0, accepted: 0 };
   for (const r of results) {
     // A pending reboot is counted once, as the reboot.
     if (reboot && r.id === 'kernel.pending' && r.status === 'warn') continue;
@@ -192,7 +192,7 @@ test("the pill says the controller's count, not its own tally of the rows", () =
     result('docker.logs', 'warn'),
     result('disk.space', 'warn'),
   ]);
-  r.summary = { counted: 3, warnings: 1, errors: 0, skipped: 0, suggestions: 0 };
+  r.summary = { counted: 3, warnings: 1, errors: 0, skipped: 0, suggestions: 0, accepted: 0 };
   const s = healthSummary(r, now);
   assert.equal(s.label, '1 warning');
   assert.equal(s.warnings, 1);

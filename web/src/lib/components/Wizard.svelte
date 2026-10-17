@@ -6,6 +6,12 @@
   A pool is not one. Its settings have no order an operator has to follow, so
   the pool editor is one page of sections that can each be reached in a tap; see
   "The pool editor" in docs/ui-guidelines.md.
+
+  `jumpable` makes each stage in the list a button that goes straight to that
+  stage, for a form whose answers can be given in any order and are all checked
+  again at the end (the provider form: its review step names every answer still
+  wrong, and sends the operator to the first one). Off, the list is only a
+  picture of where you are, and the flow stays a sequence.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -24,6 +30,8 @@
     /** False while the current step is invalid; the Next button waits. */
     canAdvance?: boolean;
     busy?: boolean;
+    /** Whether a stage in the list can be clicked to go straight to it. */
+    jumpable?: boolean;
     nextLabel?: string;
     backLabel?: string;
     finishLabel?: string;
@@ -41,6 +49,7 @@
     current = $bindable(0),
     canAdvance = true,
     busy = false,
+    jumpable = false,
     nextLabel = 'Next',
     backLabel = 'Back',
     finishLabel = 'Create',
@@ -74,20 +83,44 @@
     onback?.();
     current -= 1;
   }
+
+  /**
+   * Go to a stage by its place in the list. Leaving a stage runs the same hook
+   * Next or Back would, so whatever that stage marks as seen is marked here too.
+   * Deliberately not gated on `canAdvance`: the stage being left may be invalid,
+   * and the operator is allowed to look elsewhere. The final check still is.
+   */
+  async function jump(index: number): Promise<void> {
+    if (busy || index === current || index < 0 || index >= steps.length) return;
+    if (index > current) await onnext?.();
+    else onback?.();
+    current = index;
+  }
 </script>
+
+{#snippet stage(s: WizardStep, i: number)}
+  <span class="marker" aria-hidden="true">
+    {#if i < current}<Check size={12} />{:else}{i + 1}{/if}
+  </span>
+  <span class="step-text">
+    <span class="step-title" aria-current={i === current ? 'step' : undefined}>{s.title}</span>
+    {#if s.description}<span class="step-description">{s.description}</span>{/if}
+  </span>
+{/snippet}
 
 <div class="wizard {className}">
   <ol class="steps">
     {#each steps as s, i (s.id)}
       <li class:done={i < current} class:active={i === current}>
-        <span class="marker" aria-hidden="true">
-          {#if i < current}<Check size={12} />{:else}{i + 1}{/if}
-        </span>
-        <span class="step-text">
-          <span class="step-title" aria-current={i === current ? 'step' : undefined}>{s.title}</span
-          >
-          {#if s.description}<span class="step-description">{s.description}</span>{/if}
-        </span>
+        {#if jumpable}
+          <button type="button" class="step-link" disabled={busy} onclick={() => jump(i)}>
+            {@render stage(s, i)}
+          </button>
+        {:else}
+          <div class="step-link">
+            {@render stage(s, i)}
+          </div>
+        {/if}
       </li>
     {/each}
   </ol>
@@ -128,10 +161,32 @@
     padding: 0;
     list-style: none;
   }
-  .steps li {
+  .step-link {
     display: flex;
     align-items: flex-start;
     gap: var(--z-space-3);
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--z-radius-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+  }
+  button.step-link {
+    cursor: pointer;
+  }
+  button.step-link:hover .step-title {
+    color: var(--z-text);
+  }
+  button.step-link:focus-visible {
+    outline: none;
+    box-shadow: var(--z-focus-ring);
+  }
+  button.step-link:disabled {
+    cursor: default;
   }
   .marker {
     flex: none;

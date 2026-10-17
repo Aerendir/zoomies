@@ -46,10 +46,10 @@ node 22.23.3 - amd64 sha256:1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd43
 node 22.23.3 - arm64 sha256:5ced2d48d1d7198739b7f86804de0171aefb6823b684b12341d3321afc3cb0b2 https://nodejs.org/dist/v22.23.3/node-v22.23.3-linux-arm64.tar.gz
 node 24.21.0 - amd64 sha256:6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz
 node 24.21.0 - arm64 sha256:724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5 https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.gz
-go 1.27.1 - amd64 sha256:63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445 https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
-go 1.27.1 - arm64 sha256:3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec https://go.dev/dl/go1.27.1.linux-arm64.tar.gz
-go 1.26.8 - amd64 sha256:d0f743b33e8d8945e6b1f432edd15785c70507121d6e2a723b21285eddf8b57b https://go.dev/dl/go1.26.8.linux-amd64.tar.gz
-go 1.26.8 - arm64 sha256:211ffced9dcb9633a55eac6364816ec0ddd951389a740e88fa8b3337971bdda0 https://go.dev/dl/go1.26.8.linux-arm64.tar.gz
+go 1.27.2 - amd64 sha256:ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5 https://go.dev/dl/go1.27.2.linux-amd64.tar.gz
+go 1.27.2 - arm64 sha256:94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8 https://go.dev/dl/go1.27.2.linux-arm64.tar.gz
+go 1.26.9 - amd64 sha256:42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d https://go.dev/dl/go1.26.9.linux-amd64.tar.gz
+go 1.26.9 - arm64 sha256:4a97373d49fcacdcf3694fea368a500b00ee3e963974f3e7514132717632f052 https://go.dev/dl/go1.26.9.linux-arm64.tar.gz
 java 17.0.20-101 - amd64 sha256:3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz
 java 17.0.20-101 - arm64 sha256:457b57af8f9c93ec39080bb8c764f559dc8c89a6da1a39d718a400b7890d3e41 https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.20.1_1.tar.gz
 java 21.0.12-101.0.LTS - amd64 sha256:ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94 https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz
@@ -61,7 +61,7 @@ dotnet 8.0.425 - arm64 sha512:84a4d017d74d7aa842e981679d1b044e6be1f35b9b2b214021
 dotnet 10.0.401 - amd64 sha512:51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-x64.tar.gz
 dotnet 10.0.401 - arm64 sha512:58ace73ced6b4360754689a686bdfb8a317f4da6cb8bb416dbc7d0ba9f47e43e3c09f5eb1f1a1cfaacbd10df9558da4882bf2a5e195d6ab56a02c1f9f76102ed https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-arm64.tar.gz
 maven 3.10.0 - - sha512:908b1501bfb420bf7c8affb855534a9c407fd6099367bfb9f2f2dcb8e9799102bffb84518cde74c679bd76870247c6528683abdd620581bffa90f95d92d175aa https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.10.0/apache-maven-3.10.0-bin.tar.gz
-gradle 9.8.0 - - sha256:bafd5ce9cfaea0fbccfdc8439a1ac42fbd4cd9c89dc9a988228d8a2639a58e6c https://services.gradle.org/distributions/gradle-9.8.0-bin.zip
+gradle 9.8.1 - - sha256:dce76f55f8e251a3a1f130eb120f30b3d271de2b76c9b0729d316b5a1b6dc01f https://services.gradle.org/distributions/gradle-9.8.1-bin.zip
 rustup 1.29.1 - amd64 sha256:dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71 https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init
 rustup 1.29.1 - arm64 sha256:15f6e4ce9f583b929c996c91562bad6d4454f3281de858b02cdfdef615fac433 https://static.rust-lang.org/rustup/archive/1.29.1/aarch64-unknown-linux-gnu/rustup-init
 rust 1.99.0 - - - -

@@ -232,12 +232,22 @@ test('nesting is bounded, so a hostile answer cannot grow the tree without limit
   assert.ok(emphasis.length > 0);
 });
 
+// This is a guard against a parse that grows faster than its input, on three
+// shapes of hostile answer. It counts the CPU this process spends, not the wall
+// clock: a busy machine stretches the wall clock to several times the work, and
+// this failed at 5.5 s on a loaded runner when the same parse takes 1.2 s alone,
+// while the CPU time stays within a small factor (measured: 1.4 s alone, 2.4 s
+// with three times as many busy loops as cores). A linear parser has more than
+// three times that to spare, and a quadratic one would miss the bound by orders
+// of magnitude.
 test('a very long answer is parsed in time', () => {
-  const started = Date.now();
+  const before = process.cpuUsage();
   parseMarkdown('word *emph* `code` [l](https://e.com) '.repeat(20_000));
   parseMarkdown('**a '.repeat(5_000));
   parseMarkdown('| a | b |\n|--|--|\n'.concat('| 1 | 2 |\n'.repeat(5_000)));
-  assert.ok(Date.now() - started < 5_000, 'took too long');
+  const spent = process.cpuUsage(before);
+  const cpuMs = (spent.user + spent.system) / 1000;
+  assert.ok(cpuMs < 8_000, `took ${Math.round(cpuMs)} ms of CPU`);
 });
 
 test('an empty or blank answer is no blocks', () => {

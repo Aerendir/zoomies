@@ -14,9 +14,7 @@
  * that it did before asserting what it did not do.
  */
 import { expect, test, type Dialog, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto } from './support/fixtures';
 
 /** Collected rather than dismissed quietly: a dialog here is the bug. */
 function watchForDialogs(page: Page): Dialog[] {
@@ -96,6 +94,9 @@ test("a runner's output cannot retitle the page or clear it", async ({ page }) =
   });
 
   await goto(page, `/runners/${FIXTURE.busyRunnerId}`, FIXTURE.busyRunner);
+  // Busy runners open in Build log mode, but these unmarked events belong to
+  // the diagnostics view whose line counter reports raw log output.
+  await page.getByRole('tab', { name: 'Runner diagnostics' }).click();
   await expect(page.getByRole('switch', { name: 'Follow' })).toBeVisible();
   const titleBefore = await page.title();
 

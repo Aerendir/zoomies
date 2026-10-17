@@ -27,8 +27,8 @@ import (
 // renaming one re-applies its DDL on every existing database, which fails or
 // worse. And a new file takes the next unused numeric prefix, alone: two files
 // sharing a prefix sort on what follows the underscore, which is a fact about
-// spelling and not about the order the schema needs. Two such pairs already
-// shipped (0005 and 0006) and stay as they are, because of the first rule.
+// spelling and not about the order the schema needs. Pairs which already shipped stay as they are, because of the first rule.
+// migrations_test.go records those exceptions and refuses another file in a pair.
 //
 //go:embed migrations/*.sql
 var migrationFS embed.FS
@@ -47,6 +47,14 @@ var ErrConflict = errors.New("already exists")
 var (
 	ErrEliRepoBudget   = fmt.Errorf("this repository has used its repair attempts for the last 24 hours: %w", ErrConflict)
 	ErrEliPersonBudget = fmt.Errorf("this person has used their repair attempts for the last 24 hours: %w", ErrConflict)
+
+	// ErrEliIdentityHeld says the GitHub account being linked is already linked
+	// to another Zoomies user, a row the old link's owner still holds after an
+	// instance move or a re-created account. It is an ErrConflict, so a caller
+	// that cares only that the write was refused still matches; it exists so
+	// the API can offer moving the link (RelinkEliIdentity) instead of letting
+	// the driver's constraint sentence reach the page.
+	ErrEliIdentityHeld = fmt.Errorf("this GitHub account is already linked to another Zoomies user: %w", ErrConflict)
 )
 
 // EliPersonDailyLimit is how many repairs one person may ask for in a rolling 24

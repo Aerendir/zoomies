@@ -30,6 +30,36 @@ function host(over: Record<string, unknown> = {}, update: Partial<HostUpdateBloc
     ...over,
   };
 }
+test('a machine Zoomies rents is offered no update, however it is doing', () => {
+  // It is behind from the moment it joins, and the update row is where a card
+  // would promise a button: there is nowhere to run a command inside a clone,
+  // and the way to change what it runs is its provider's template, which the
+  // card's own guidance and the provider's page name.
+  const words = hostUpdateWords(
+    host(
+      { machine_id: 'mach_1' },
+      { state: 'none', can_update: false, reason: 'It is a machine.' },
+    ),
+  );
+  assert.equal(words, null);
+  // Even while an attempt is open, which cannot happen for one and must not
+  // draw anything if it somehow did.
+  assert.equal(hostUpdateWords(host({ machine_id: 'mach_1' }, { state: 'requested' })), null);
+});
+
+test('behind means the template for a machine, and the agent for a host somebody owns', () => {
+  const owned = skewFact('behind');
+  const rented = skewFact('behind', true);
+  assert.equal(owned?.label, 'Behind');
+  assert.equal(rented?.label, 'Behind');
+  assert.match(owned?.hint ?? '', /upgrade it when convenient/);
+  assert.doesNotMatch(rented?.hint ?? '', /upgrade it when convenient/);
+  assert.match(rented?.hint ?? '', /template/);
+  assert.match(rented?.hint ?? '', /replaced as it goes idle/);
+  // The other two answers are about the two builds and are the same either way.
+  assert.equal(skewFact('ahead', true)?.hint, skewFact('ahead')?.hint);
+  assert.equal(skewFact('differs', true)?.hint, skewFact('differs')?.hint);
+});
 
 test('a host that is behind and can be updated is offered the button, and its state is not a status colour', () => {
   const words = hostUpdateWords(host());

@@ -614,7 +614,7 @@ var registry = buildRegistry([]Setting{
 	{
 		Key: "scheduler.host_order", Label: "Host placement order", Env: "ZOOMIES_HOST_ORDER", Kind: KindEnum, Scope: ScopeInstance, Live: true,
 		Choices: []string{"headroom", "largest_standard", "best_fit"},
-		Summary: "Which host a runner prefers when several can take it. Headroom picks the host with the most CPU and memory left afterwards, which spreads work. Largest standard picks the host whose runner of this pool is biggest, which suits a mixed fleet sized by runner profile. Best fit picks the host with the least left, filling one before starting the next. Only hosts that already fit are ever compared.",
+		Summary: "Which host a runner prefers once the spec score has decided. Headroom picks the host with the most CPU and memory left afterwards, which spreads work. Largest standard picks the host whose runner of this pool is biggest, which suits a mixed fleet sized by runner profile. Best fit picks the host with the least left, filling one before starting the next. Hosts are ranked first by their reported specs (and any operator's pin), so the order chooses between hosts that score the same.",
 	},
 	{
 		Key: "scheduler.history_sizing", Label: "Size from job history", Env: "ZOOMIES_HISTORY_SIZING", Kind: KindEnum, Scope: ScopeInstance, Live: true,

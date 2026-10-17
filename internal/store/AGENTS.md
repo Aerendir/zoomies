@@ -14,8 +14,10 @@ Scoped guidance for the store, read in addition to the root [AGENTS.md](../../AG
 * **Sentinel errors** from the store: `ErrNotFound`, `ErrConflict`,
   `ErrInvalidTransition`, `ErrInvalidArtifact` for an assistant-written note
   that breaks a note's rules, `ErrInvalidKennelEvaluation` for a Kennel Club
-  document or waiver the store will not keep, `ErrInvalidComparisonEvidence` for malformed retained comparison evidence or
-  actor metadata, `ErrKennelUntracked` for an
+  document or waiver the store will not keep, `ErrInvalidRunnerCreationObservation` for malformed bounded runner-creation provenance,
+  `ErrInvalidComparisonEvidence` for malformed retained comparison evidence or
+  actor metadata, `ErrInvalidOptimisationPreview` for bounded private optimisation
+  preview records or actor metadata, `ErrKennelUntracked` for an
   evaluation that arrives after its repository was told not to be tracked,
   `ErrJoinTokenUsed` / `ErrJoinTokenExpired` for the two ways a join token that
   exists is still refused, and `ErrRolloutNotRunning` for a rollout's step

@@ -11,8 +11,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && vite build --mode status",
-    "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json --threshold warning",
+    "check": "svelte-check --tsconfig ./tsconfig.json --threshold warning && svelte-check --tsconfig ./tsconfig.unit.json --threshold warning",
     "lint": "prettier --check . && eslint . && node scripts/block-spacing.mjs",
     "format": "prettier --write .",
     "generate:api": "openapi-typescript ../api/openapi.yaml -o src/lib/api/schema.d.ts",
@@ -20,9 +19,8 @@
     "test:unit": "node --import ./unit/register.mjs --test unit/*.test.ts"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.54.0",
-    "@tanstack/svelte-table": "^9.2.8",
-    "@tanstack/table-core": "^9.2.4",
+    "@lucide/svelte": "^1.56.0",
+    "@tanstack/svelte-table": "^9.3.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.19.0",
@@ -40,13 +38,13 @@
     "eslint-plugin-svelte": "^3.23.1",
     "globals": "^17.13.0",
     "openapi-typescript": "^7.13.0",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.6",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.71.1",
+    "typescript-eslint": "^8.71.2",
     "vite": "^8.3.4"
   },
   "overrides": {

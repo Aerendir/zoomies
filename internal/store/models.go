@@ -1089,7 +1089,9 @@ func (p *Pool) Dangerous() []string {
 
 // Host is an agent process and the machine it runs on.
 type Host struct {
-	Doctor HostDoctor `json:"doctor,omitempty"`
+	RecoveryRequired bool       `json:"-"`
+	Retired          bool       `json:"retired"`
+	Doctor           HostDoctor `json:"doctor,omitempty"`
 	// DoctorBodyAt is when the stored report body was written, which is older
 	// than Doctor.CheckedAt once reports that said nothing new have arrived. The
 	// controller rewrites a body no later than doctorBodyMaxAge after this.
@@ -1127,9 +1129,19 @@ type Host struct {
 	Arch      string `json:"arch"`
 	// CPUs and MemoryMB are the machine's size, reported by the agent. They
 	// are what the host's canonical name and the Hosts page say out loud.
-	CPUs     int       `json:"cpus,omitempty"`
-	MemoryMB int64     `json:"memory_mb,omitempty"`
-	Usage    HostUsage `json:"usage,omitempty"`
+	CPUs     int   `json:"cpus,omitempty"`
+	MemoryMB int64 `json:"memory_mb,omitempty"`
+	// CPUMHz, MemoryMTs and DiskKind are the speed figures beside the size
+	// ones, measured the same agent-reported way: the fastest processor
+	// clock, the memory modules' rated rate, and whether the storage backing
+	// the work directory says it spins. Every one is best-effort, so a zero
+	// or an empty kind is "not measured", which is what constrains nothing:
+	// the priority scoring drops an unmeasured axis rather than ranking a
+	// quiet machine slowest in it.
+	CPUMHz    int       `json:"cpu_mhz,omitempty"`
+	MemoryMTs int       `json:"memory_mts,omitempty"`
+	DiskKind  string    `json:"disk_kind,omitempty"`
+	Usage     HostUsage `json:"usage,omitempty"`
 	// Throttle is the controller's answer to a host that its measurements say
 	// is overwhelmed: how far it has stepped the host's admission and its
 	// runners' CPU quotas down, and why. It is the controller's alone -- a
@@ -1165,6 +1177,13 @@ type Host struct {
 	// -- every host until somebody sets one -- changes nothing about how the
 	// host is sized.
 	RunnerProfile RunnerProfile `json:"runner_profile,omitzero"`
+	// PriorityOverride is the operator's answer to where this host stands in
+	// placement, on the 0..100 scale the scheduler's spec score uses.
+	// It is theirs alone, written through PatchHost and by no heartbeat, and
+	// nil -- every host until somebody sets one -- leaves the spec score in
+	// force: an override of 100 puts the host ahead of everything and a nil
+	// back to the score the machine itself earns.
+	PriorityOverride *int `json:"priority_override,omitempty"`
 	// SizeClass is the class the controller holds this host in, worked out
 	// from its allocatable CPU and memory while size routing or automatic
 	// pools are on, and empty otherwise. It is the controller's alone, written
@@ -1261,13 +1280,27 @@ func (h *Host) Spec() naming.Spec {
 // that says nothing.
 func (h *Host) CanonicalName() string { return h.Spec().String() }
 
+// SpecDiskSpeed turns the storage kind into the 0..1 the priority scoring
+// ranks a host by: a spinning disk is measurably slower than what replaces
+// it. An empty kind is unmeasured, and the scoring drops an unmeasured axis
+// rather than ranking a quiet machine half way.
+func (h *Host) SpecDiskSpeed() float64 {
+	switch h.DiskKind {
+	case "ssd":
+		return 1
+	case "hdd":
+		return 0
+	}
+	return 0
+}
+
 // HeartbeatTimeout is how long a host may go silent before it is considered
 // unhealthy. It is three times the agent's default heartbeat interval.
 const HeartbeatTimeout = 90 * time.Second
 
 // Healthy reports whether the agent has checked in recently enough.
 func (h *Host) Healthy(now time.Time) bool {
-	return now.Sub(h.LastHeartbeat) < HeartbeatTimeout
+	return !h.Retired && now.Sub(h.LastHeartbeat) < HeartbeatTimeout
 }
 
 // Available reports whether the scheduler may place a new runner here.
@@ -1371,6 +1404,9 @@ func (h *Host) SelectorValue(key string) string {
 // configured capacity would say, and that is the number the scheduler and the
 // Hosts page both have to use, or the page promises slots the pass refuses.
 func (h *Host) Free() int {
+	if h.Retired {
+		return 0
+	}
 	if n := h.EffectiveCapacity() - h.ActiveRunners; n > 0 {
 		return n
 	}
@@ -1634,6 +1670,14 @@ type Job struct {
 	// counted rather than only read one at a time. It is set with RunnerFault
 	// and never without it; empty means the fleet has nothing to confess.
 	FaultKind FaultKind `json:"fault_kind,omitempty"`
+	// AcknowledgedAt is when somebody marked this failure as known, and
+	// AcknowledgedBy the name they went by. Nil is a failure waiting to be
+	// triaged: it is the one thing that keeps a job in the attention view
+	// after its queue time has stopped being recent, and clearing it brings
+	// the failure back. The name is a snapshot, as an audit row's actor name
+	// is, so a rename does not rewrite the record of who looked.
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy string     `json:"acknowledged_by,omitempty"`
 	// ControllerVersion, ControllerChannel, AgentVersion and HostID say which
 	// build ran the job and where, so that jobs can be compared across
 	// releases. They are stamped once by StampJobVersions -- the controller's
@@ -1827,6 +1871,15 @@ const (
 	// another one, with the sentence that says why. Only written while size
 	// routing is on or being watched.
 	JobEventSized JobEventKind = "sized"
+	// JobEventAcknowledged: somebody said they have seen this failure, so the
+	// attention view stops asking about it. It changes nothing about the
+	// failure itself, which keeps its conclusion and its place in history --
+	// which is why it is an entry here rather than a move of the job.
+	JobEventAcknowledged JobEventKind = "acknowledged"
+	// JobEventReopened: somebody took that acknowledgement back, so the
+	// failure asks for attention again. It exists so the timeline explains
+	// why a row returned to the list it had left.
+	JobEventReopened JobEventKind = "reopened"
 )
 
 // JobEvent is one entry in a job's timeline: what happened, who observed it,

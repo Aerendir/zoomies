@@ -434,7 +434,7 @@ func TestTheNewestRunsShortcutAnswersExactlyWhatSummingEveryJobWould(t *testing.
 	}
 
 	slow := func(f JobFilter, p Page) ([]*WorkflowRun, int) {
-		from, args := workflowRunsFrom(f)
+		from, args := workflowRunsFrom(f, s.Now())
 		var total int
 		if err := s.read.QueryRowContext(ctx, `SELECT COUNT(*) `+from, args...).Scan(&total); err != nil {
 			t.Fatal(err)

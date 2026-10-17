@@ -10,9 +10,7 @@
  * and pressing it changes nothing about what the page says.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, FIXTURE, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { FIXTURE, goto } from './support/fixtures';
 
 test.beforeEach(async ({ page }) => {
   await goto(page, '/', 'Overview');
@@ -1015,4 +1013,56 @@ test('a fleet that has run jobs is never announced its first one while its count
   // it is seeded with finished twenty minutes before the start, which is then
   // yesterday. CI failed on exactly that, on the test and on its retry.
   await expect(page.getByRole('region', { name: 'Finish setting up' })).toHaveCount(0);
+});
+
+/*
+ * The question GitHub cannot answer, on the page an operator leaves open:
+ * which failures has anybody read. The panel lists the failures from the last
+ * week that nobody has acknowledged and no later attempt has replaced, its
+ * header carries the whole count rather than the five rows, and a row opens
+ * the job's own drawer where the same decision can be taken and taken back.
+ */
+test('recent failures says which failures nobody has read, and links to the rest', async ({
+  page,
+}) => {
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  await expect(failures).toBeVisible();
+  // The badge is the whole list, not the rows: it appears once the fetch has
+  // landed and the panel is not empty.
+  const count = failures.getByText(/\d+ to look at/);
+  await expect(count).toBeVisible();
+  const rows = failures.getByRole('listitem');
+  await expect(rows.first()).toBeVisible();
+
+  // A row is a job, not a page away: it opens the failure's own drawer.
+  await rows
+    .first()
+    .getByRole('button', { name: /^Inspect/ })
+    .click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+
+  // The panel's own action and the toast's undo: the fastest way to clear a
+  // failure that has been read, from the page the operator is already on.
+  const before = await rows.count();
+  await rows.first().getByRole('button', { name: 'Mark this failure as known' }).click();
+  await expect(rows).toHaveCount(before - 1);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(rows).toHaveCount(before);
+
+  // What does not fit is one link away, carrying the same question with it.
+  const total = Number((await count.textContent())?.match(/\d+/)?.[0] ?? '0');
+  const more = failures.getByRole('link', { name: /more on the jobs page/ });
+  if (total > (await rows.count())) {
+    await expect(more).toBeVisible();
+    await more.click();
+    await expect(page).toHaveURL(/[?&]attention=true/);
+    await expect(
+      page.getByRole('button', { name: 'Needs attention', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+  } else {
+    await expect(more).toHaveCount(0);
+  }
 });

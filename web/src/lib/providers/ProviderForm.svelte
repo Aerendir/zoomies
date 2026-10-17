@@ -64,6 +64,7 @@
   import LabelMapEditor from '$lib/hosts/LabelMapEditor.svelte';
   import { fleet } from '$lib/state/fleet.svelte';
   import { poolMatchesSelector } from './pairing';
+  import { machineSize, recommendLimits } from './recommend';
   import {
     applyDiscovery,
     applySettingDefaults,
@@ -294,6 +295,46 @@
   const clientErrors = $derived(draftErrors(draft, specs, { editing }));
   const body = $derived(toProviderBody(draft));
   const nothingRented = $derived(willRentNothing(draft));
+
+  // The limits step opens on what the cluster can hold, not on zero, which
+  // rents nothing and so is no answer to "how many machines". Only until the
+  // operator types a figure of their own: after that the suggestion is offered
+  // beside the box and never put back.
+  let limitsEdited = $state(false);
+  const recommendation = $derived.by(() => {
+    if (editing || draft.kind !== 'proxmox' || !discovery) return null;
+    const chosen = settingValue('nodes')
+      .split(',')
+      .map((node) => node.trim())
+      .filter((node) => node !== '');
+    const nodes = (discovery.nodes ?? []).filter(
+      (node) => chosen.length === 0 || chosen.includes(node.value),
+    );
+    const template = (discovery.templates ?? []).find(
+      (item) => item.value === settingValue('template_id'),
+    );
+    return recommendLimits(
+      nodes,
+      machineSize({ cpus: draft.machine_cpus, memoryMb: draft.machine_memory_mb }, template),
+    );
+  });
+  $effect(() => {
+    const rec = recommendation;
+    if (!rec || limitsEdited) return;
+    draft.max_machines = String(rec.max);
+    draft.min_machines = String(rec.min);
+  });
+  const recommendationApplied = $derived(
+    recommendation !== null &&
+      draft.max_machines === String(recommendation.max) &&
+      draft.min_machines === String(recommendation.min),
+  );
+  function useRecommendation(): void {
+    if (!recommendation) return;
+    draft.max_machines = String(recommendation.max);
+    draft.min_machines = String(recommendation.min);
+    limitsEdited = false;
+  }
   /** The host the credential is being asked about, for the sentences below. */
   const endpointHost = $derived.by(() => {
     try {
@@ -842,6 +883,7 @@
   bind:current
   {canAdvance}
   busy={submitting}
+  jumpable
   finishLabel={editing ? 'Save changes' : 'Add provider'}
   cancelLabel="Cancel"
   onnext={() => touchStep(current)}
@@ -1208,9 +1250,27 @@
             <summary>Advanced machine settings</summary>{@render machineShape()}
           </details>
         {/if}
+        {#if recommendation}
+          <div class="note recommendation" data-testid="provider-limits-recommendation">
+            <p>
+              <strong
+                >Recommended: up to {pluralise(recommendation.max, 'machine')}, {recommendation.min}
+                kept warm.</strong
+              >
+              {recommendation.reason}
+            </p>
+            {#if recommendationApplied}
+              <p>These are the recommended figures.</p>
+            {:else}
+              <Button size="sm" variant="secondary" onclick={useRecommendation}>
+                Use recommendation
+              </Button>
+            {/if}
+          </div>
+        {/if}
         <Field
           label="Maximum machines"
-          hint="The ceiling. Zero rents nothing, which is what a provider starts at."
+          hint="The ceiling: the most machines Zoomies will pay for at once. Zero rents nothing."
           error={errors.max_machines}
           required
         >
@@ -1222,14 +1282,15 @@
               {invalid}
               type="number"
               min={0}
+              oninput={() => (limitsEdited = true)}
               onblur={() => touch('max_machines')}
             />
           {/snippet}
         </Field>
 
         <Field
-          label="Minimum machines"
-          hint="Kept running even when nothing is waiting, so the first job after a quiet spell does not wait for a clone. They are paid for while idle, and count against the maximum. Zero keeps none."
+          label="Warm machines"
+          hint="The fewest machines kept running even when nothing is waiting, so the first job after a quiet spell does not wait for a clone. They are paid for while idle, and count against the maximum. Zero keeps none, and every first job waits."
           error={errors.min_machines}
         >
           {#snippet children({ id, describedBy, invalid })}
@@ -1240,6 +1301,7 @@
               {invalid}
               type="number"
               min={0}
+              oninput={() => (limitsEdited = true)}
               onblur={() => touch('min_machines')}
             />
           {/snippet}
@@ -1372,7 +1434,8 @@
             {#if verdict.valid}
               <p class="note ok">
                 The controller accepts this. Nothing has been created: adding it stores the
-                configuration, and the check afterwards is what asks the provider itself.
+                configuration, and the check afterwards is what asks the provider itself. Run a test
+                machine from its page to prove one builds and joins.
               </p>
             {:else}
               <p class="note bad">
@@ -1551,6 +1614,15 @@
     font-size: var(--z-text-xs);
     line-height: var(--z-leading-xs);
     color: var(--z-text-muted);
+  }
+  .note.recommendation {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--z-space-2);
+  }
+  .note.recommendation p {
+    margin: 0;
   }
   .note.ok {
     border-color: var(--z-idle-border);

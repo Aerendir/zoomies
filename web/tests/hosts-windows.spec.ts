@@ -1,7 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, goto } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto } from './support/fixtures';
 
 const LINUX =
   "curl -fsSL https://zoomies.sh/install.sh | sh -s -- --mode agent --controller 'https://zoomies.example.com' --join-token 'zoojoin_fixture_only'";

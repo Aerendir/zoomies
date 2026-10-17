@@ -26,7 +26,7 @@ test('only work still in progress moves, and each glyph moves its own way', () =
   // being held back sags, so the three CPU states are told apart by how they
   // move and not only by which way their line points.
   const moving = [LoaderCircle, Activity, Handshake, Hourglass, TrendingUp, Zap, TrendingDown].map(
-    offMotion,
+    (icon) => offMotion(icon),
   );
   assert.deepEqual(moving, ['spin', 'trace', 'breathe', 'turn', 'lift', 'buzz', 'sag']);
 });
@@ -45,4 +45,12 @@ test('whatever is waiting or finished holds still', () => {
     CircleMinus,
   ])
     assert.equal(offMotion(icon), 'none');
+});
+
+test('a busy glyph missing from the map falls back to motion, not stillness', () => {
+  // A new in-progress glyph nobody mapped yet must not look finished; a
+  // waiting or finished one should stay calm, so only the busy tone falls back.
+  assert.equal(offMotion(CircleDot, 'busy'), 'breathe');
+  assert.equal(offMotion(CircleDot), 'none');
+  assert.equal(offMotion(CircleDot, 'idle'), 'none');
 });

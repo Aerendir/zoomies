@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { browserOverride, goto, openHostCapacityMap } from './support/fixtures';
-
-test.use(browserOverride);
+import { goto, openHostCapacityMap } from './support/fixtures';
 
 test('runner queue context uses fleet totals and links to provisioning controls', async ({
   page,

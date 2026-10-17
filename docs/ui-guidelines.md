@@ -19,6 +19,79 @@ from here rather than inventing values.
 
 ## 1. Design tokens
 
+### Visual style and colour mode
+
+![Mission Control visual-style selection](screenshots/mission-control/appearance-dark.webp)
+
+
+Settings, Appearance offers **Classic** (the default) and **Mission Control**.
+Classic retains the compact neutral palette. Mission Control uses navy surfaces
+in dark mode, cool light surfaces in light mode, and slightly larger type.
+Runner Blue remains the interactive accent; cyan still means running work.
+Both styles follow the independent System, Light or Dark colour-mode choice.
+The phone's More menu offers the same two style choices.
+
+Visual style stays in this browser under `zoomies.ui-style` and is applied before
+first paint, including sign-in and the first-account form. Missing or unknown
+values retain Classic. Reset visual style to Classic clears only that choice.
+The separate public `/status` document retains Classic.
+
+Selecting a style updates root tokens without replacing the route or its state.
+It preserves the original Zoomies artwork and logo treatment, Eli, dog/paw
+animations, Off/Cute/Standard vocabulary, reduced motion, navigation and saved
+phone-table layouts. Log viewers refresh their canvas palette and type without
+clearing output. No fleet setting or API call is needed to change style.
+
+Mission Control's Overview keeps first-run guidance first, then current issues
+and four live metrics before pools, active jobs and history. Startup and
+registration timings remain available in an expandable section. Classic retains
+its history-first layout. On a Mission Control phone, Jobs puts search, status
+and records before supplementary analytics; Filters and Fleet context expand
+without clearing the URL filters.
+
+A grid with no saved phone-layout choice starts as Cards in Mission Control
+and Rows in Classic. A saved per-grid view wins over a saved global view, and
+both win over the style default. Existing saved Rows values are preserved,
+including values older versions may have written automatically. Changing a
+logo or vocabulary does not record an unchosen global table default. Saved
+column order and widths take precedence over the new Jobs default order.
+
+
+Mission Control colour values live in the `--z-mission-*` tokens. Preview cards
+use those same tokens, so their light/dark previews agree with the selected
+style. Normal and secondary text, accent text and filled-button text meet
+4.5:1 across its surfaces; meaningful control edges meet 3:1. The contrast tests
+cover both palettes, including hovered surfaces and accent-subtle backgrounds.
+
+The style is checked in the states a healthy fleet never shows, not only the
+populated happy path. Each is a capture from the real binary with the seeded
+fleet's responses stubbed just enough to reach it, in Mission Control with
+Classic beside it:
+
+- [First run](screenshots/mission-control/overview-first-run-dark.webp) keeps the
+  setup checklist first.
+- [Loading](screenshots/mission-control/overview-loading-dark.webp) puts
+  skeletons where the figures have not arrived.
+- [A failed fetch](screenshots/mission-control/overview-error-dark.webp) says the
+  fleet could not be read and offers a retry, rather than showing a stale figure
+  as though it were current.
+- [An empty pool list](screenshots/mission-control/pools-empty-dark.webp) and
+  [a filter that matches nothing](screenshots/mission-control/jobs-no-results-dark.webp)
+  are separate states, each with its own next step.
+
+A headless browser cannot raise a soft keyboard, so the assistant sheet's
+keyboard behaviour is covered by the browser suite rather than photographed.
+
+Primitives are reviewed in the development-only component gallery
+(`web/gallery.html`, served by `make gallery`), which renders the real
+components in every state above, in four style and mode combinations. That is
+not a product page: it is never built into the binary and never linked from
+the navigation. Its captures live under `design/theme-review/gallery` and are
+refreshed with `make screenshots-gallery`; `web/tests/gallery.spec.ts` checks
+all four combinations, the refusal reasons, focus rings, live status contrast
+and the phone width.
+
+
 Logo backdrops are chosen in Settings, Appearance and saved in this browser.
 Orbital haze is the default for new, missing or unrecognised preferences.
 Starlight, Pearl veil, White square and White circle are the other choices. Every
@@ -59,7 +132,10 @@ went: extra CPU gives its trend line two quick hops, maximum CPU shakes its
 bolt harder as it fills with charge and then flashes, and CPU being held back
 tugs its line down and drags it slowly back up. Everything waiting or finished
 holds still, so a page of idle runners is a calm one and a failure never draws
-the eye by moving, and reduced motion stops all of it. **An icon names a state, never an action**: the
+the eye by moving, and reduced motion stops all of it. A glyph the motion map
+does not know holds still too, unless the state's tone is the busy one, in
+which case it falls back to the quiet breathe: a new in-progress glyph nobody
+mapped yet must not look finished. **An icon names a state, never an action**: the
 Queue's Run now, Pause, Resume and Delete carry Zap, Pause, Play and the bin,
 Re-run a turning arrow, and the Runners page's Drain the slashed circle, so a
 status drawn with one of them beside those buttons reads as something to press.
@@ -82,25 +158,35 @@ One glyph also means one thing wherever it appears:
 | `IterationCcw` | another attempt asked for | a re-run requested on a job's timeline |
 | `Zap`, `TrendingUp`, `TrendingDown` | CPU lent at maximum, lent, taken back | elastic CPU on a busy or idle runner |
 
-Standard is the same `Dog` icon as Eli's avatar with two `PawPrint` marks
-under it, in one SVG per runner, moved by CSS alone: each state's gesture is a
-set of keyframes for those marks, so there is no drawing to keep. Busy runners
-trot on alternating paws, extra zoomies scoot from side to side, and maximum
-zoomies chase a faster circle, both leaving paw prints. Idle dogs look patiently
-around, provisioning dogs sniff along a trail, registering dogs wave a paw,
-throttled dogs wait, and draining dogs settle down. Failed dogs hang their
-heads, removed dogs lie low and unknown dogs tilt their heads; these three
-states stay still. The glyph in the corner is the cue, and it is the icon Off
-draws for the same state (`Activity`, `CircleDot`, `Hourglass`, `CircleX` and
-so on, with `TrendingUp` and `Zap` for the two boost levels), so one glyph
+Standard is the Lucide dog face, two `PawPrint` marks under it and the state's
+cue glyph in the corner, in one SVG per runner, moved by CSS alone: each
+state's gesture is a set of keyframes for those marks, so there is no drawing
+to keep beyond the face's own eye and mouth variants. Busy runners trot while
+the paw prints step underneath them, extra zoomies dash from side to side with
+speed lines and dust, and maximum zoomies dash faster with dashed streaks and a
+charge flash, both leaving trail prints. Idle dogs sit, blink and tap a paw,
+provisioning dogs dip down to sniff the paw prints as a scent rises,
+registering dogs wave a paw print under a ripple ring, throttled dogs strain
+against a taut leash, and draining dogs sink and settle as their paws fade.
+Failed dogs hold their heads low with downcast eyes and one slow sigh, removed
+dogs fade as dashed ghosts, and unknown dogs rock with glancing eyes; these
+three move slowly and sadly rather than freezing, so a stalled runner never
+reads as a broken image. The glyph in the corner is the cue, and it is the icon
+Off draws for the same state (`Activity`, `CircleDot`, `Hourglass`, `CircleX`
+and so on, with `TrendingUp` and `Zap` for the two boost levels), so one glyph
 keeps one meaning across the styles; throttled, which Off has no glyph for,
 wears a `Turtle` rather than a pause, since pause is a button on the Queue.
-Labels, colours and tooltips keep their existing status meaning.
+Labels, colours and tooltips keep their existing status meaning. Below 28px the
+accents and mouths step aside and pose, eyes and the state's colour carry the
+state.
 
 Each runner ID seeds its timing so rows and workflow packs do not move together.
 Reduced motion disables every animation while retaining the expression and cue.
 The existing reserved avatar size and workflow pack widths are preserved.
-Cute keeps its existing illustrations and palette; Off keeps plain status icons.
+Cute keeps its palette and gains a pose per state: posture, ears, eyes, mouth
+and brows are chosen per state, the collar tag and props borrow the status
+tone, and below 32px the props and fine detail step aside so posture, ears and
+tone carry the state. Off keeps plain status icons.
 
 All tokens live in exactly one place: `web/src/lib/styles/tokens.css`, declared
 as CSS custom properties on `:root` and overridden under `[data-theme="dark"]`.
@@ -698,6 +784,20 @@ The one page that has to earn the second monitor.
   above are what the page is for, and a configuration warning somebody chose
   deliberately must not push the pools and the running jobs below the fold
   every day.
+* **Recent failures**: unresolved failures nobody has acknowledged, newest first, with the
+  count in the panel's header and each row naming the repository, the workflow,
+  the job and the step or fault it stopped at. A row opens the job's own drawer,
+  and its **Mark as known** button takes the failure off the list, with the
+  toast carrying the undo and the drawer able to put it back. It is a panel
+  rather than a line like the problems summary, because each entry is a
+  separate job with a separate thing to do about it and each leaves when
+  somebody acknowledges it or a newer run replaces it. Background GitHub checks
+  also remove fixed, superseded and closed PR failures; cancelled or skipped
+  results are not proof of a fix. An unavailable GitHub read never resolves a
+  failure. Opening a stale repair link explains what changed and offers the
+  appropriate next step instead of sending the reader into setup. It shows a short glance of the newest
+  few with the whole count in the header, not the whole list, so it too leaves
+  the pools and the running jobs above the fold of a laptop screen.
 
 ### The problems drawer
 
@@ -784,9 +884,23 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 | `HostMemoryPool` | `lib/hosts/`. The memory a host may lend, as a figure and a bar drawn against the whole machine, so segments compare between hosts of different sizes; the ledger it was worked out from, line by line, is the card behind it. The figure and bar are one button, so the ledger opens on focus and a tap as well as on hover |
 | `MemoryBar` | `lib/runners/`. A runner's memory as one bar: guaranteed, lent, swap (hatched, so it cannot be mistaken for the solid fill where colour is lost) and a tick at the ceiling. `aria-hidden`: the figures beside it carry the meaning |
 | `RunnerTimeline` | `lib/runners/`. One row per state with how long the runner stayed there, reconstructed from the four timestamps a runner row carries -- and it says so, rather than letting an operator read it as an audit trail |
-| `Wizard` | a flow of steps that is genuinely a sequence; the AI Context setup, the provider form, the migration; on a phone its footer stays pinned above the bottom bar. A pool is not one: see [the pool editor](#the-pool-editor) |
+| `Wizard` | a flow of steps that is genuinely a sequence; the AI Context setup, the provider form, the migration; on a phone its footer stays pinned above the bottom bar. The provider form also sets `jumpable`, so each stage in the list is a button that goes straight to it. A pool is not one: see [the pool editor](#the-pool-editor) |
 
 ### The log viewer
+
+Runner details open on **Build log**, the workflow's console output after the
+GitHub runner has masked secrets. **Runner diagnostics** keeps startup and worker
+messages separate. Switching tabs reuses the stream and preserves both buffers.
+The step summary reflects GitHub's latest report; it does not claim to update
+after every step. Save log exports the build output received in this view,
+and the GitHub link opens the complete archived job log.
+
+Live build capture requires the updated stock runner entrypoint. It extracts
+the runner's masked `JobServerQueue` console trace before GitHub truncates long
+lines; other verbose traces are discarded before entering the relay. Older,
+native and custom runners without this capture show an explicit waiting message
+and the GitHub link. This live feed is best effort, not an archive: relay limits
+still apply, and output is unavailable after the container is removed.
 
 100k lines without jank is a hard requirement. xterm.js with the canvas/WebGL
 addon handles the rendering; the constraints on our side are:
@@ -960,7 +1074,10 @@ sentence below, because none of them is true of a search that matched nothing
 (the dates are not a facet here; an empty window keeps its own advice to widen
 it); under the unmatched filter
 it is "no unmatched jobs", which is good news and says so; under the failed one
-it is "no failed jobs"; in the status views the page opens on it is "nothing is
+it is "no failed jobs"; under the attention view it is "no failure is waiting
+on you", which is the all-clear of the triage list and names what takes one off
+it (a re-run that passes, or somebody marking it known); in the status views
+the page opens on, it is "nothing is
 running right now" or "nothing is queued", each offering **Show every status**
 rather than a narrower filter, because the way out of a status view is the same
 page without it; with other runners included it is "no jobs recorded yet", which
@@ -1344,6 +1461,10 @@ the old one is worse than one that is uniformly a release behind. If a shot
 needs the fixture to show something new, change the fixture in
 `internal/controller/seed.go` rather than the image; that is the fleet the
 Playwright suite asserts on, so the picture and the tests stay honest together.
+
+The component gallery is a separate capture set: it is not a product page, so
+it never goes in this folder or in the docs gallery. `make screenshots-gallery`
+refreshes `design/theme-review/gallery/`; see the README beside those files.
 
 ### Eli's contextual assistant
 

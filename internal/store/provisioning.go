@@ -17,7 +17,7 @@ var ErrProvisioningSelectionTooLarge = errors.New("more than 5000 items match; n
 func (s *Store) ProvisioningSelection(ctx context.Context, f JobFilter) ([]string, error) {
 	f.States = []JobState{JobQueued}
 	f.ManagedOnly = true
-	where, args := jobWhere(f)
+	where, args := jobWhere(f, s.Now())
 	rows, err := s.read.QueryContext(ctx, "SELECT id FROM jobs "+where+" ORDER BY queued_at, id LIMIT ?", append(args, MaxProvisioningSelection+1)...)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func (s *Store) ProvisioningCounts(ctx context.Context, f JobFilter) (map[string
 	f.States = []JobState{JobQueued}
 	f.ManagedOnly = true
 	f.Provisioning = nil
-	where, args := jobWhere(f)
+	where, args := jobWhere(f, s.Now())
 	rows, err := s.read.QueryContext(ctx, "SELECT CASE WHEN provisioning != '' THEN provisioning WHEN provision_now=1 THEN 'expedited' ELSE 'ready' END,COUNT(*) FROM jobs "+where+" GROUP BY 1", args...)
 	if err != nil {
 		return nil, err

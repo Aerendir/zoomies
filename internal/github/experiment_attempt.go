@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	gh "github.com/google/go-github/v88/github"
 )
@@ -17,11 +19,15 @@ type ExperimentAttemptReader interface {
 
 var _ ExperimentAttemptReader = (*appClient)(nil)
 
-const ExperimentAttemptMaximumRequests = 7
+const ExperimentAttemptMaximumRequests = 8
 
 var ErrExperimentAttemptChanged = errors.New("github: comparison attempt changed during collection; refresh its evidence")
 
 type ExperimentAttemptEvidence struct {
+	WorkflowSource *ExperimentWorkflowSource `json:"workflow_source,omitempty"`
+	// These are descriptive attempt metadata, not workflow contents or inputs.
+	Event        string                 `json:"event,omitempty"`
+	WorkflowPath string                 `json:"workflow_path,omitempty"`
 	Repository   string                 `json:"repository"`
 	RunID        int64                  `json:"run_id"`
 	Attempt      int                    `json:"attempt"`
@@ -66,7 +72,7 @@ func (c *appClient) ReadExperimentAttempt(ctx context.Context, repo string, runI
 		if err != nil {
 			return nil, bounded.fail("read comparison workflow attempt", resp, err)
 		}
-		if r == nil || r.GetID() != runID || r.GetRunAttempt() != attempt || r.GetRepository().GetFullName() != repo || !validDelaySHA(r.GetHeadSHA()) || r.GetWorkflowID() <= 0 {
+		if r == nil || r.GetID() != runID || r.GetRunAttempt() != attempt || r.GetRepository().GetFullName() != repo || !validDelaySHA(r.GetHeadSHA()) || r.GetWorkflowID() <= 0 || !ValidExperimentAttemptContext(r.GetEvent(), r.GetPath()) {
 			return nil, fmt.Errorf("github: comparison attempt has incomplete or inconsistent identity")
 		}
 		return r, nil
@@ -82,7 +88,7 @@ func (c *appClient) ReadExperimentAttempt(ctx context.Context, repo string, runI
 		v := t.Time
 		return &v
 	}
-	out := &ExperimentAttemptEvidence{Repository: repo, RunID: runID, Attempt: attempt, HeadSHA: initial.GetHeadSHA(), WorkflowID: initial.GetWorkflowID(), Status: initial.GetStatus(), Conclusion: initial.GetConclusion(), RunStartedAt: stamp(initial.RunStartedAt), UpdatedAt: stamp(initial.UpdatedAt), JobsCoverage: "partial", Jobs: []ExperimentAttemptJob{}}
+	out := &ExperimentAttemptEvidence{Event: initial.GetEvent(), WorkflowPath: initial.GetPath(), Repository: repo, RunID: runID, Attempt: attempt, HeadSHA: initial.GetHeadSHA(), WorkflowID: initial.GetWorkflowID(), Status: initial.GetStatus(), Conclusion: initial.GetConclusion(), RunStartedAt: stamp(initial.RunStartedAt), UpdatedAt: stamp(initial.UpdatedAt), JobsCoverage: "partial", Jobs: []ExperimentAttemptJob{}}
 	complete := initial.GetStatus() == "completed" && initial.GetConclusion() != "" && out.UpdatedAt != nil
 	total := -1
 	seen := map[int64]bool{}
@@ -131,6 +137,10 @@ func (c *appClient) ReadExperimentAttempt(ctx context.Context, repo string, runI
 			break
 		}
 	}
+	out.WorkflowSource, err = bounded.readExperimentSource(ctx, owner, name, out)
+	if err != nil {
+		return nil, err
+	}
 	final, err := read()
 	if err != nil {
 		return nil, err
@@ -141,11 +151,31 @@ func (c *appClient) ReadExperimentAttempt(ctx context.Context, repo string, runI
 		}
 		return a.Time.Equal(b.Time)
 	}
-	if final.GetHeadSHA() != out.HeadSHA || final.GetWorkflowID() != out.WorkflowID || final.GetStatus() != out.Status || final.GetConclusion() != out.Conclusion || !sameStamp(initial.UpdatedAt, final.UpdatedAt) || !sameStamp(initial.RunStartedAt, final.RunStartedAt) {
+	if final.GetEvent() != out.Event || final.GetPath() != out.WorkflowPath || final.GetHeadSHA() != out.HeadSHA || final.GetWorkflowID() != out.WorkflowID || final.GetStatus() != out.Status || final.GetConclusion() != out.Conclusion || !sameStamp(initial.UpdatedAt, final.UpdatedAt) || !sameStamp(initial.RunStartedAt, final.RunStartedAt) {
 		return nil, ErrExperimentAttemptChanged
 	}
 	if complete && ended && total == len(out.Jobs) {
 		out.JobsCoverage = "complete"
 	}
 	return out, nil
+}
+
+// ValidExperimentAttemptContext bounds optional, untrusted metadata before it is
+// retained. A path is opaque: it is never resolved as a file, URL or source ref.
+// Empty fields remain unknown, including in evidence captured before this slice.
+func ValidExperimentAttemptContext(event, workflowPath string) bool {
+	if len(event) > 64 || len(workflowPath) > 1024 || !utf8.ValidString(workflowPath) {
+		return false
+	}
+	for _, c := range event {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	for _, c := range workflowPath {
+		if unicode.IsControl(c) {
+			return false
+		}
+	}
+	return true
 }

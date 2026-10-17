@@ -1,7 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, dataRows, goto, grid } from './support/fixtures';
-
-test.use(browserOverride);
+import { dataRows, goto, grid } from './support/fixtures';
 
 async function openJob(page: Page) {
   await goto(page, '/jobs', 'Jobs');

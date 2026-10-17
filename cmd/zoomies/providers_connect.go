@@ -22,6 +22,7 @@ import (
 	"github.com/eyupio/zoomies/internal/gateway"
 	"github.com/eyupio/zoomies/internal/provider/proxmox"
 	"github.com/eyupio/zoomies/internal/proxmoxsetup"
+	"github.com/eyupio/zoomies/internal/version"
 	"github.com/tailscale/tailcat"
 )
 
@@ -163,7 +164,17 @@ func providersConnectProxmox(ctx context.Context, e *env, args []string) error {
 	if err := os.Rename(binaryPath+".new", binaryPath); err != nil {
 		return err
 	}
-	unit := "[Unit]\nDescription=Zoomies Proxmox private API connection\nWants=network-online.target\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=" + binaryPath + " gateway --target 127.0.0.1:8006 --state-dir " + dir + " --quiet\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n"
+	// Restart=always with the start rate limit off, because this unit is how
+	// a provider machine reconnects: a boot that beats its own internet, a
+	// relay outage, a crash and a manual kill all end the process, and in
+	// none of them does anything but the service manager bring the private
+	// connection back. on-failure would leave a clean exit alone, and the
+	// default limit of five restarts would give up on a network that stays
+	// down for a minute; either leaves every row pointing at a gateway
+	// nothing keeps running.
+	unit := "[Unit]\nDescription=Zoomies Proxmox private API connection\nWants=network-online.target\nAfter=network-online.target\nStartLimitIntervalSec=0\n\n" +
+		"[Service]\nType=simple\nExecStart=" + binaryPath + " gateway --target 127.0.0.1:8006 --state-dir " + dir + " --quiet\n" +
+		"Restart=always\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=multi-user.target\n"
 	if err := os.WriteFile(filepath.Join("/etc/systemd/system", unitName), []byte(unit), 0644); err != nil {
 		return err
 	}
@@ -172,13 +183,17 @@ func providersConnectProxmox(ctx context.Context, e *env, args []string) error {
 			return fmt.Errorf("proxmox setup: cannot start the private provider connection; check systemctl status %s and retry", unitName)
 		}
 	}
-	fmt.Fprintln(e.out, "Preparing the Zoomies runner template if it is missing; the first image build can take several minutes...")
+	fmt.Fprintln(e.out, "Preparing the Zoomies runner template; an image built from nothing can take several minutes...")
 	nodeName, err := os.ReadFile("/etc/hostname")
 	if err != nil {
 		return err
 	}
 	node := strings.Split(strings.TrimSpace(string(nodeName)), ".")[0]
-	conn.Templates, err = proxmoxsetup.EnsureTemplate(ctx, h, dir, binaryPath, node, key)
+	// The build the image carries is this binary's, which is the release the
+	// setup command just downloaded and the one the machines cloned from the
+	// template will run. It is also what the template records, so that a setup
+	// command run here after the controller has moved on prepares it again.
+	conn.Templates, err = proxmoxsetup.EnsureTemplate(ctx, h, dir, binaryPath, node, key, version.Version, e.out)
 	if err != nil {
 		return err
 	}
@@ -238,7 +253,11 @@ func providersConnectProxmox(ctx context.Context, e *env, args []string) error {
 	}
 	fmt.Fprintln(e.out, "Proxmox connected. Return to Zoomies to choose the VM template and capacity.")
 	for _, template := range conn.Templates {
-		fmt.Fprintf(e.out, "Template VMID %d: %s (node %s)\n", template.VMID, template.Name, template.Node)
+		if template.Agent == "" {
+			fmt.Fprintf(e.out, "Template VMID %d: %s (node %s)\n", template.VMID, template.Name, template.Node)
+			continue
+		}
+		fmt.Fprintf(e.out, "Template VMID %d: %s (node %s) carries %s\n", template.VMID, template.Name, template.Node, template.Agent)
 	}
 	return nil
 }

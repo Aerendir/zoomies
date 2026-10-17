@@ -184,17 +184,14 @@ func (s *Store) TransferInventory(ctx context.Context) (map[string]int64, error)
 	return out, nil
 }
 
-// TransferDestinationEmpty permits authentication bootstrap, but never merging
-// another fleet's records with the incoming database.
+// TransferDestinationEmpty permits authentication bootstrap and accounts, but
+// never merging another fleet's records with the incoming database.
 func (s *Store) TransferDestinationEmpty(ctx context.Context) error {
-	var users int
-	if err := s.read.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE role<>?`, Roles()[len(Roles())-1]).Scan(&users); err != nil {
-		return err
-	}
-	if users > 0 {
-		return fmt.Errorf("destination already holds team accounts; import into an empty instance")
-	}
-
+	// Team accounts alone do not make a destination live: the import replaces
+	// the user table with the source's, and refusing on them stranded
+	// destinations that had only been signed in to (or retried after an
+	// interrupted import) with no way to finish. Fleet records below are what
+	// an import must never overwrite.
 	for _, table := range []string{"installations", "pools", "hosts", "providers", "machines", "jobs", "runners", "runner_sessions", "usage_daily", "usage_capacity_samples", "installation_daily", "ai_context_repositories"} {
 		var n int
 		if err := s.read.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+quoteTransferIdentifier(table)).Scan(&n); err != nil {

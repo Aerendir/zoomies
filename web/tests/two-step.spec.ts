@@ -13,11 +13,10 @@
  */
 import { createHmac } from 'node:crypto';
 import { test, expect, type Page } from '@playwright/test';
-import { browserOverride, setupToken } from './support/fixtures';
+import { setupToken } from './support/fixtures';
 
 const ADMIN = { username: 'ada', password: 'correct horse battery staple' };
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 /** The six digits an authenticator app shows for this key at this moment. */

@@ -54,15 +54,24 @@ services restart, so the UI briefly reconnects and reporting can be delayed.
 
 ### Update the controller from Settings
 
-1. In **Settings → Updates**, review the offered release and its release notes.
-2. Choose **Update to vX.Y.Z**, where the button names the available release,
+1. In **Settings → Updates**, check the installed build and choose **Check for
+   updates** to ask for the latest release information. Review the offered
+   standard release and its release notes.
+2. Choose **Review update to vX.Y.Z…**, where the button names the available release,
    and confirm that version.
 3. Leave the page open while the controller restarts. It follows the attempt
    and confirms success once the controller returns on the target release.
    A controller's embedded agent updates with it.
 
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
-![Settings → Updates in manual mode: a newer release is available and waits for a person, with the release linked to its notes, when it was published and when the list was last read; the Update to v1.3.2 button for this controller; and the mode and the soak, each with a sentence of what it does](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
+The installed build is labelled Standard, Development or Custom. A development
+build shows its installed commit and the latest checked commit on `main`, with
+the check time. Matching `main` does not prove that a dev image has finished
+publishing. **Review dev upgrade…** opens the confirmation for the latest
+published dev build; when the commits match, the button says **Reinstall latest
+dev…**. Standard automatic updates continue to follow the configured update mode.
+
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
+![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
 
 ### Update hosts from the controller
 
@@ -83,6 +92,14 @@ the PowerShell installer from their card. Use those instructions rather than
 a newer release chosen independently of the controller.
 [Host update details](#updating-hosts-and-rollouts)
 cover ordering, retries and version confirmation.
+
+A **machine Zoomies rents** is not updated here, and its card says so rather than
+offering a command nobody can run. Its agent is the one the provider's template
+carried when the machine was cloned, so the way to a newer one is that template:
+the provider's page has **Prepare the template again**, and the entry the provider
+raises in the problems list names the machines it affects.
+[Proxmox VE](proxmox.md#keeping-the-runners-agent-current) describes what that
+command does and what happens to the machines already running.
 
 ![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-dark.webp#only-dark){ .zoomies-shot }
 ![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-light.webp#only-light){ .zoomies-shot }
@@ -128,8 +145,20 @@ sudo zoomies upgrade
 ```
 
 Use `sudo zoomies upgrade --check` to inspect the deployment without changing
-it. `--version vX.Y.Z` targets a specific release, and `--no-download` applies
-the executable already installed. A remote agent's card provides the command
+it. `sudo zoomies upgrade --dry-run` goes further: it downloads and verifies
+the release it would install, prints the deployment review the real run shows
+(the shared folder, mounts, files and settings it would offer), then prints
+what the binary half would do (replace the binary and keep the running one as
+`zoomies.previous`). It changes nothing, and it stages its download away from
+the installed binary, so it needs no write access to `/usr/local/bin`.
+Use `--check` when you only want to know whether this deployment is sound;
+use `--dry-run` when you want to see the upgrade itself before agreeing to it.
+`--version vX.Y.Z` targets a specific release, and `--no-download` applies the
+executable already installed. Before it changes anything, an upgrade takes and
+verifies a copy of the controller's database through the same backup package
+the schedule uses, and prints the copy's name and the command that restores it;
+`--no-backup` goes without it for an operator who keeps their own copies or
+whose database is elsewhere. A remote agent's card provides the command
 pinned to its controller's release.
 
 It checks the existing deployment, downloads and verifies the new binary,
@@ -237,9 +266,11 @@ is asked through its own health check, run in it straight away; a native
 service through `/healthz` on the listener its settings name. The wait lasts up
 to thirty minutes. If the controller stops during it, or is still starting at
 the end, the upgrade exits with an error that says which and points at its
-logs. It does **not** roll back then: the new release may already have migrated
-the database, which the old one cannot open. An agent serves nothing to ask, so
-an agent's upgrade does not wait.
+logs. A **native** controller that does not answer is then rolled back by
+itself, unless the upgrade migrated the database; [rolling
+back](#rolling-back-by-hand) has the rule. A container deployment's service is its
+image, which the upgrade does not keep the one before, so it is not rolled back
+by itself. An agent serves nothing to ask, so an agent's upgrade does not wait.
 
 A failed image pull stops before a restart. If a replacement container cannot
 start, the upgrade attempts to restore the previous container or Compose image.
@@ -306,7 +337,9 @@ the new image up with, so an unattended upgrade stops before it changes
 anything and says so. `--check` lists what the real run will offer and adds
 none of it.
 
-`zoomies upgrade --check` checks the existing deployment without modifying it.
+`zoomies upgrade --check` checks the existing deployment without modifying it,
+and `zoomies upgrade --dry-run` downloads the release it would take and previews
+the whole run without changing anything.
 `zoomies update` is a compatibility alias and accepts the same flags. Both commands
 fetch the newest release (or the rolling `dev` build, for a host running one),
 verify its checksum, replace the installed binary and carry on in the new one,
@@ -553,9 +586,16 @@ it.
 
 ### Rolling back by hand
 
-There is no automatic rollback, because migrations are one-way ([there is no
-downgrade](#there-is-no-downgrade)). What an update leaves makes one by hand
-possible:
+A **native controller** that does not answer after an upgrade is rolled back by
+itself: if the upgrade ran no migration, the previous release is put back over
+the installed binary, the service restarts on it, and the upgrade reports that
+it failed and the previous release is running again. A migration is the one
+thing that stops this, because migrations are one-way ([there is no
+downgrade](#there-is-no-downgrade)): a release that migrated the database is
+left in place, and the upgrade names the pre-migration copy to restore. A
+container deployment's service is its image, which an upgrade does not keep the
+one before, so it is not rolled back by itself. What an update leaves makes the
+rest possible by hand:
 
 * **The binary it replaced**, kept beside the installed one as
   `zoomies.previous` (`/usr/local/bin/zoomies.previous` on a default install).
@@ -1094,6 +1134,79 @@ with the certificate and transparency-log entry that say who signed it.
 the DSSE envelope that SLSA tooling and the OpenSSF Scorecard recognise as
 provenance. Both describe every binary in the release; neither is needed to
 install, and `install.sh` checks neither.
+
+### Signing releases
+
+The checksums file travels with the binary, so on its own it says only that a
+download was not corrupted on the way, not who made it. A **detached
+signature** over `checksums.txt`, checked against a public key compiled into
+the running binary, says the release is this project's. `zoomies upgrade`
+refuses a release whose `checksums.txt.ed25519` is missing or does not verify,
+and `zoomies release verify` checks one by hand:
+
+```sh
+zoomies release verify dist/checksums.txt dist/checksums.txt.ed25519
+```
+
+The key is minted once, by the owner:
+
+1. Mint a pair. The private half is a credential and is written to a file,
+   never printed:
+
+   ```sh
+   zoomies release keygen --out ./release-key
+   ```
+
+2. Commit the public half, the line in `release.pub`, into `internal/releasekey/default.go`
+   as `Default` and into `RELEASE_KEY` in `install.sh`, so every binary and the
+   installer trust the same key; a test fails when the two differ.
+3. Store the private half, `release.key`, as the repository secret
+   `RELEASE_SIGNING_KEY`, and delete it from the machine.
+
+Settings, Updates says which keys the running build trusts, or that it holds
+none and takes the checksums on trust, so an operator can tell at a glance
+whether a download was held to a signature. `install.sh` checks the signature
+too, as far as it can: with a key built in and `openssl` on the host, a
+download whose signature does not match the key is refused, and without either
+it installs on the checksum alone and says so. It is the one-line installer, so
+that is best effort rather than a hard requirement; `zoomies upgrade` holds a
+running fleet to the signature in full.
+
+The Proxmox connector (`connect-proxmox.sh`, and the full command the provider
+wizard shows for a host that cannot reach zoomies.sh) and the InstaPods build
+script hold their downloads to the same key, and run what they download, the
+first as root. They add one rule. Releases before v1.3.6.1 were never signed, so
+there is nothing to check on those and they are taken on their checksum with a
+warning; but a release from v1.3.6 up is refused when its signature is missing,
+cannot be read, or cannot be checked because the host has no `openssl` of 3.0 or
+later, because a script that only warned would run whatever was left after
+somebody deleted the signature. A signature that is there and does not match
+refuses in every case. `install.sh` keeps its best-effort rule for now.
+
+`release.yml` signs
+`checksums.txt` after it builds, verifies the signature
+against the committed key, and attaches `checksums.txt.ed25519` to the release.
+A release cut without the secret fails rather than publishing unsigned, and a
+tag cut before the public key is committed fails too. A `dev` build, which is
+whatever `main` built last, has no release to sign and is not held to a
+signature.
+
+To rotate, `Default` carries more than one key, one per line, for one release:
+that transition release is signed with the old key (still the secret) and its
+binary trusts both, so an instance running an older binary still accepts it and
+one running the transition binary accepts the next release, signed with the new
+key. `zoomies release verify` says which key a signature names. Ed25519 is the
+standard library's; nothing new is depended on. `install.sh`, `connect-proxmox.sh`
+and `deploy/instapods/fetch.sh` carry the same set in their `RELEASE_KEY`, one key
+per line, and accept a signature from any key in it; a test in `internal/docs`
+keeps each of them equal to `Default`, so a rotation edits all four together.
+
+To hold one download to a different key, for a mirror or a test that builds its
+own, pass the base64 public key to `zoomies upgrade --release-key`, or set
+`ZOOMIES_RELEASE_KEY`. The flag wins over the environment
+variable, and the environment variable wins over the keys compiled into the
+binary. With none of the three, nothing is held to a signature, and the download
+says so once.
 
 Every image says what it is without being started, in the standard OCI labels,
 `org.opencontainers.image.version`, `.revision` and `.created`. That includes

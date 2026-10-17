@@ -10,6 +10,9 @@ fleet of them, safely, for months, is a different job. This page lists what
 that job involves, says plainly which parts Zoomies handles and which it leaves
 to you, and is honest about when renting runners is the better choice.
 
+New to the idea? [What self-hosted runners are](what-are-self-hosted-runners.md)
+explains the terms first.
+
 *Last checked: 9 October 2026. The pricing facts below need refreshing if
 GitHub's pricing changes.*
 

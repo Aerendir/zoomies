@@ -13,6 +13,12 @@
     /** Hide the visible label; the accessible name still comes from `label`. */
     hideLabel?: boolean;
     /**
+     * `sm` is for a switch that sits in a row of small controls, such as a
+     * filter bar: the label takes the control text size and the pill is
+     * centred on the line rather than hung from the top of a description.
+     */
+    size?: 'sm' | 'md';
+    /**
      * By default the label presses the switch. Off, only the pill does, and
      * the label still names it for a screen reader.
      */
@@ -30,6 +36,7 @@
     describedBy,
     hideLabel = false,
     labelToggles = true,
+    size = 'md',
     onchange,
     class: className = '',
   }: Props = $props();
@@ -46,7 +53,7 @@
   }
 </script>
 
-<div class="row {className}">
+<div class="row {className}" class:sm={size === 'sm'}>
   <button
     {id}
     type="button"
@@ -78,6 +85,10 @@
     display: flex;
     align-items: flex-start;
     gap: var(--z-space-3);
+  }
+  .row.sm {
+    align-items: center;
+    gap: var(--z-space-2);
   }
   .track {
     flex: none;
@@ -140,6 +151,14 @@
   .name {
     font-size: var(--z-text-base);
     color: var(--z-text);
+  }
+  .sm label,
+  .sm .name {
+    font-size: var(--z-text-sm);
+    white-space: nowrap;
+  }
+  .sm .track {
+    margin-top: 0;
   }
   label {
     cursor: pointer;

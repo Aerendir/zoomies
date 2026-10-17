@@ -10,7 +10,6 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
-  browserOverride,
   cellUnder,
   dataRows,
   FIXTURE,
@@ -21,8 +20,6 @@ import {
   rowCount,
   waitForRows,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 /**
  * Every state badge the grid can draw, from web/src/lib/status.ts, in the plain

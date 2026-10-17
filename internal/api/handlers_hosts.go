@@ -94,6 +94,19 @@ type hostUpdateRequest struct {
 	// follows the fleet's setting too -- it is the whole profile that is
 	// replaced, not the fields that were mentioned.
 	RunnerProfile *store.RunnerProfile `json:"runner_profile"`
+	// Priority replaces how the fleet ranks this host in placement. Sending a
+	// number pins the host above every host with a lower one, however well or
+	// badly its specs would score; sending null hands the ranking back to the
+	// score the specs earn. Leaving the field out changes nothing. The inner
+	// pointer is what makes the null sayable alongside both of those.
+	Priority *hostPriorityEdit `json:"priority"`
+}
+
+// hostPriorityEdit is the body of a host's priority edit: an absent outer
+// field leaves the priority alone, an object with override null clears the
+// pin, and an object with a number sets it.
+type hostPriorityEdit struct {
+	Override *int `json:"override"`
 }
 
 // handleUpdateHost changes a host's name, capacity, labels, reserve or runner profile.
@@ -194,6 +207,12 @@ func (s *Server) applyHostUpdate(w http.ResponseWriter, r *http.Request, id stri
 	if req.RunnerProfile != nil {
 		fields = append(fields, validateRunnerProfile(h, *req.RunnerProfile)...)
 	}
+	if req.Priority != nil && req.Priority.Override != nil {
+		switch o := *req.Priority.Override; {
+		case o < 0 || o > 100:
+			fields = append(fields, fieldError{"priority", fmt.Sprintf("%d is outside the 0..100 scale placement ranks hosts on; null hands the ranking back to the specs", o)})
+		}
+	}
 	if len(fields) > 0 {
 		unprocessable(w, "this host cannot be changed as described", fields)
 		return
@@ -241,6 +260,10 @@ func (s *Server) applyHostUpdate(w http.ResponseWriter, r *http.Request, id stri
 		Name: req.Name, Capacity: req.Capacity, ReserveCPUs: req.ReserveCPUs,
 		ReserveMemoryMB: req.ReserveMemoryMB, ReserveDiskMB: req.ReserveDiskMB,
 		RunnerProfile: req.RunnerProfile,
+	}
+	if req.Priority != nil {
+		changes.ClearPriorityOverride = req.Priority.Override == nil
+		changes.PriorityOverride = req.Priority.Override
 	}
 	if req.Labels != nil {
 		labels := store.StringMap(*req.Labels)
@@ -408,6 +431,27 @@ func (s *Server) handleCheckHost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, s.ctrl.HostView(&h).For(isPlatform(r)))
 }
 
+// handleRecheckPriority answers POST /api/v1/hosts/{id}/priority-check.
+//
+// The priority is re-read from the specs the last report carried; the specs
+// themselves are re-measured by every heartbeat, so an upgrade the host has
+// had shows up on its own after its next beat, and this is for an operator
+// who has just had one and wants the ranking and the card settled now.
+// The answer is the host, whose priority block carries the recomputed
+// figure.
+func (s *Server) handleRecheckPriority(w http.ResponseWriter, r *http.Request) {
+	id := chiURLParam(r, "id")
+	h, err := s.ctrl.RecheckHostPriority(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, "re-checking the host's priority", err)
+		return
+	}
+	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "host.priority_checked", "host", id, map[string]any{
+		"name": h.Name, "priority": s.ctrl.HostView(&h).Priority,
+	})
+	writeJSON(w, http.StatusOK, s.ctrl.HostView(&h).For(isPlatform(r)))
+}
+
 // handleRequestHostUpdate answers POST /api/v1/hosts/{id}/update: ask the host's
 // agent to have its update helper take it to this controller's release.
 //
@@ -458,6 +502,10 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	h, err := s.ctrl.Store().GetHost(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, "reading the host", err)
+		return
+	}
+	if h.RecoveryRequired {
+		conflict(w, "carried-over host records are retained for recovery and history; retire an unreachable record through recovery instead")
 		return
 	}
 	if !force {

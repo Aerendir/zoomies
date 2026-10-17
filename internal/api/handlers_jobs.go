@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -137,6 +138,51 @@ func (s *Server) handleRerunJobWorkflow(w http.ResponseWriter, r *http.Request) 
 		"repo": j.Repo, "run_id": j.GitHubRunID, "fault_domain": j.FaultDomain(), "fault_kind": string(j.FaultKind),
 	})
 	writeJSON(w, http.StatusAccepted, rerunJobResponse{Accepted: true, RunID: j.GitHubRunID, FaultDomain: j.FaultDomain()})
+}
+
+// handleAcknowledgeJob answers POST /api/v1/jobs/{id}/acknowledge: somebody has
+// read this failure and the attention list should stop asking about it. The
+// job comes back in its GET shape, so the caller can drop it into the same
+// cache a job.updated frame goes into.
+func (s *Server) handleAcknowledgeJob(w http.ResponseWriter, r *http.Request) {
+	j, err := s.ctrl.AcknowledgeJob(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
+	if err != nil {
+		if errors.Is(err, controller.ErrJobDidNotFail) {
+			conflict(w, err.Error()+"; only a failure waits for triage, so there is nothing to mark as known")
+			return
+		}
+		s.fail(w, r, "acknowledging the job's failure", err)
+		return
+	}
+	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.acknowledged", "job", j.ID, map[string]any{
+		"repo": j.Repo, "run_id": j.GitHubRunID,
+	})
+	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
+}
+
+// handleReopenJobAttention answers DELETE /api/v1/jobs/{id}/acknowledge: put a
+// failure somebody has read back in front of whoever looks next, which is the
+// undo for a row acknowledged by mistake.
+func (s *Server) handleReopenJobAttention(w http.ResponseWriter, r *http.Request) {
+	j, err := s.ctrl.ReopenJobAttention(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
+	if err != nil {
+		s.fail(w, r, "putting the job's failure back in the attention list", err)
+		return
+	}
+	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.reopened", "job", j.ID, map[string]any{
+		"repo": j.Repo, "run_id": j.GitHubRunID,
+	})
+	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
+}
+
+// requestingActor is the name a timeline entry credits, empty when the route
+// has no authenticated caller (an instance with authentication off). The
+// controller reads an empty name as "an operator".
+func requestingActor(ctx context.Context) string {
+	if id := Identity(ctx); id != nil {
+		return id.Name
+	}
+	return ""
 }
 
 // jobResponse is one workflow job as Zoomies observed it.
@@ -374,13 +420,20 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "reading the job", err)
 		return
 	}
+	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
+}
+
+// jobViewFor renders one job in the shape GET /api/v1/jobs/{id} returns, with
+// its pool named. The name is a second read, and only for a job a pool
+// claimed; one nothing claimed is rendered without one.
+func (s *Server) jobViewFor(ctx context.Context, j *store.Job) controller.JobView {
 	poolName := ""
 	if j.PoolID != "" {
-		if p, perr := s.ctrl.Store().GetPool(r.Context(), j.PoolID); perr == nil {
+		if p, err := s.ctrl.Store().GetPool(ctx, j.PoolID); err == nil {
 			poolName = p.Name
 		}
 	}
-	writeJSON(w, http.StatusOK, controller.NewJobView(j, poolName))
+	return controller.NewJobView(j, poolName)
 }
 
 // jobEventResponse is one entry of a job's timeline. The store's record is the
@@ -526,6 +579,14 @@ func parseJobFilter(w http.ResponseWriter, r *http.Request) (store.JobFilter, bo
 	}
 	if failed := queryBoolPtr(r, "failed"); failed != nil {
 		filter.FailedOnly = *failed
+	}
+	// The composite question the Jobs page's "Needs attention" view and the
+	// Overview's failures panel both ask: failed, recent, unacknowledged, and
+	// not replaced by a later attempt. It is one parameter rather than four so
+	// a link into it cannot compose half the question, and `attention=false`
+	// reads as no filter, like every other switch here.
+	if attention := queryBoolPtr(r, "attention"); attention != nil {
+		filter.AttentionOnly = *attention
 	}
 	if faulted := queryBoolPtr(r, "faulted"); faulted != nil {
 		filter.FaultedOnly = *faulted

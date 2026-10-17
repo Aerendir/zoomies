@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eyupio/zoomies/internal/mcp"
 )
 
 // runJobs is `zoomies jobs ...`.
@@ -19,6 +21,8 @@ func runJobs(ctx context.Context, e *env, args []string) error {
 		{"pr-delay", "<job-id>", "Observed required-check delay for this job's PR head", jobsPRDelay},
 		{"advice", "", "What a workflow's runs-on could say better, from what its jobs used", jobsAdvice},
 		{"rerun", "<job-id>", "Ask GitHub to run this run's failed jobs again", jobsRerun},
+		{"acknowledge", "<job-id>", "Mark a failed job as known, so the attention list stops asking", jobsAcknowledge},
+		{"reopen", "<job-id>", "Put an acknowledged failure back in front of whoever looks next", jobsReopen},
 	}, args)
 }
 
@@ -37,6 +41,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	until := fs.String("until", "", "only jobs queued before then")
 	unmatched := fs.Bool("unmatched", false, "only jobs no enabled pool claims; these will never run")
 	failed := fs.Bool("failed", false, "only jobs that went wrong: a failing conclusion, or a runner that stopped under the job")
+	attention := fs.Bool("attention", false, "only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt")
 	faulted := fs.Bool("ours", false, "only the failures this fleet caused, not the workflows' own")
 	theirs := fs.Bool("theirs", false, "only the failures the workflows caused, with nothing wrong on this side")
 	jobNames, versions, hostIDs := &exactList{}, &listValue{}, &listValue{}
@@ -52,6 +57,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 		"zoomies jobs list --repo acme/widgets --since 24h",
 		"zoomies jobs list --unmatched",
 		"zoomies jobs list --failed --since 1h",
+		"zoomies jobs list --attention",
 		"zoomies jobs list --ours --since 24h",
 		"zoomies jobs list --fault out_of_memory",
 		"zoomies jobs list --controller-version v1.3.3 --since 30d --output json --include-steps=false",
@@ -79,6 +85,9 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	if *failed {
 		q.Set("failed", "true")
 	}
+	if *attention {
+		q.Set("attention", "true")
+	}
 	if *faulted && *theirs {
 		return usagef("jobs list", "--ours and --theirs ask for opposite halves of the same list; pass one")
 	}
@@ -102,7 +111,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 		if raw == "" {
 			continue
 		}
-		when, err := parseWhen(raw)
+		when, err := mcp.ParseWhen(raw)
 		if err != nil {
 			return usagef("jobs list", "--%s %q: %v", flagName, raw, err)
 		}
@@ -382,49 +391,6 @@ func attempt(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
-// parseWhen accepts either a duration ago ("24h") or an absolute RFC 3339
-// timestamp, because both are what people reach for and neither is surprising.
-func parseWhen(raw string) (time.Time, error) {
-	raw = strings.TrimSpace(raw)
-	if d, ok := parseAgo(raw); ok {
-		return time.Now().Add(-d), nil
-	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
-		if t, err := time.Parse(layout, raw); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("not a duration like 24h or 30d nor a timestamp like 2026-01-30 or 2026-01-30T12:00:00Z")
-}
-
-// parseAgo reads how long ago: a Go duration such as 90m or 24h, or whole days
-// or weeks as 30d and 2w, because release comparisons are made in those and
-// Go's own parser stops at hours.
-func parseAgo(raw string) (time.Duration, bool) {
-	if n := len(raw) - 1; n > 0 {
-		var unit time.Duration
-		switch raw[n] {
-		case 'd':
-			unit = 24 * time.Hour
-		case 'w':
-			unit = 7 * 24 * time.Hour
-		}
-		if unit != 0 {
-			if count, err := strconv.Atoi(raw[:n]); err == nil {
-				return time.Duration(max(count, -count)) * unit, true
-			}
-		}
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, false
-	}
-	if d < 0 {
-		d = -d
-	}
-	return d, true
-}
-
 // jobsRerun is the remedy for a job the fleet broke, at the terminal.
 func jobsRerun(ctx context.Context, e *env, args []string) error {
 	fs := newFlagSet(e, "zoomies jobs rerun <job-id>",
@@ -461,6 +427,78 @@ func jobsRerun(ctx context.Context, e *env, args []string) error {
 	if out.FaultDomain == "fleet" {
 		p.note("This job's failure was the fleet's rather than the workflow's.")
 	}
+	return nil
+}
+
+// jobsAcknowledge is `zoomies jobs acknowledge`: say a failure has been read,
+// so the failures needing attention stop asking about it. It is the CLI's half
+// of the triage the Jobs page's "Needs attention" view and the Overview's
+// failures panel write, and it changes nothing about the failure itself.
+func jobsAcknowledge(ctx context.Context, e *env, args []string) error {
+	fs := newFlagSet(e, "zoomies jobs acknowledge <job-id>",
+		"Mark a failed job as known, so the failures needing attention stop asking about it.\n\n"+
+			"It is not a resolution: the failure keeps its conclusion and its row in the\n"+
+			"failed view, and a re-run that passes is what settles it. `zoomies jobs reopen`\n"+
+			"takes the decision back.")
+	cf := registerClientFlags(fs, true)
+	fs.example("zoomies jobs acknowledge job_2fq8xk3m")
+	if err := fs.parse(args); err != nil {
+		return err
+	}
+	id, err := fs.oneArg("a job ID")
+	if err != nil {
+		return err
+	}
+	client, err := cf.client()
+	if err != nil {
+		return err
+	}
+	p, err := cf.printer(e)
+	if err != nil {
+		return err
+	}
+	raw, err := client.post(ctx, "/jobs/"+url.PathEscape(id)+"/acknowledge", nil, nil, nil)
+	if err != nil {
+		return err
+	}
+	if p.structured() {
+		return p.emit(raw)
+	}
+	p.note("Marked as known. The failure stays in the failed view; a re-run that passes is what settles it.")
+	return nil
+}
+
+// jobsReopen is `zoomies jobs reopen`: the undo for an acknowledgement, so a
+// failure put away by mistake asks for attention again.
+func jobsReopen(ctx context.Context, e *env, args []string) error {
+	fs := newFlagSet(e, "zoomies jobs reopen <job-id>",
+		"Put an acknowledged failure back in the failures needing attention.\n\n"+
+			"Nothing about the job changes; it is the undo for `zoomies jobs acknowledge`.")
+	cf := registerClientFlags(fs, true)
+	fs.example("zoomies jobs reopen job_2fq8xk3m")
+	if err := fs.parse(args); err != nil {
+		return err
+	}
+	id, err := fs.oneArg("a job ID")
+	if err != nil {
+		return err
+	}
+	client, err := cf.client()
+	if err != nil {
+		return err
+	}
+	p, err := cf.printer(e)
+	if err != nil {
+		return err
+	}
+	raw, err := client.del(ctx, "/jobs/"+url.PathEscape(id)+"/acknowledge", nil, nil)
+	if err != nil {
+		return err
+	}
+	if p.structured() {
+		return p.emit(raw)
+	}
+	p.note("Back in the failures needing attention.")
 	return nil
 }
 
@@ -553,7 +591,7 @@ func jobsStats(ctx context.Context, e *env, args []string) error {
 		if raw == "" {
 			continue
 		}
-		when, err := parseWhen(raw)
+		when, err := mcp.ParseWhen(raw)
 		if err != nil {
 			return usagef("jobs stats", "--%s %q: %v", flagName, raw, err)
 		}

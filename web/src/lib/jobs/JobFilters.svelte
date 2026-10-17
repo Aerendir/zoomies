@@ -48,6 +48,14 @@
      */
     faulted: boolean;
     /**
+     * The composite triage question: failures from the last week that nobody
+     * has acknowledged and that no later attempt has replaced. It is the
+     * server's own filter rather than a combination of the keys around it, so
+     * the button, the Overview's failures panel and the API cannot disagree
+     * about what is still owed.
+     */
+    attention: boolean;
+    /**
      * Show every job GitHub reported, not only the ones this fleet has a hand in.
      * Inverted on purpose: the default view is Zoomies' own jobs, so an absent
      * URL key means the default rather than "show everything".
@@ -71,6 +79,7 @@
     hosted: '',
     failed: false,
     faulted: false,
+    attention: false,
     all: false,
   };
 </script>
@@ -95,12 +104,14 @@
   import type { FilterChip } from '$lib/components/FilterBar.svelte';
   import Input from '$lib/components/Input.svelte';
   import Switch from '$lib/components/Switch.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import DateRange from './DateRange.svelte';
   import FacetMenu from './FacetMenu.svelte';
   import type { FacetOption } from './FacetMenu.svelte';
 
   interface Props {
     queue?: boolean;
+    compact?: boolean;
     /**
      * Whether the status filters in force are worth a chip.
      *
@@ -125,6 +136,7 @@
 
   let {
     queue = false,
+    compact = false,
     statusChips = true,
     value,
     facets,
@@ -135,6 +147,7 @@
     onclear,
   }: Props = $props();
 
+  let expanded = $state(false);
   let searchElement = $state<HTMLInputElement | null>(null);
 
   // `/` focuses this page's search rather than opening the palette.
@@ -288,7 +301,13 @@
   ]);
 </script>
 
-<FilterBar {chips} onclear={chips.length > 0 ? onclear : undefined}>
+<!--
+  The search is the one control a phone keeps in view. Everywhere else it is the
+  first item of the controls, on the same row as the menus, so the whole filter
+  set reads as one bar. The disclosure is open on a wide screen and collapsible
+  on a phone, which is the only difference between the two.
+-->
+{#snippet search()}
   <div class="search">
     <Input
       bind:element={searchElement}
@@ -301,7 +320,39 @@
       oninput={(event) => onchange({ q: (event.currentTarget as HTMLInputElement).value })}
     />
   </div>
+{/snippet}
 
+<FilterBar {chips} onclear={chips.length > 0 ? onclear : undefined}>
+  {#if compact}
+    {@render search()}
+  {/if}
+
+  <details
+    class="advanced"
+    class:compact
+    open={!compact || expanded}
+    ontoggle={(event) => {
+      if (compact) expanded = event.currentTarget.open;
+    }}
+  >
+    <summary hidden={!compact}>Filters ({chips.filter((chip) => chip.id !== 'q').length})</summary>
+    <div class="advanced-controls">
+      {#if !compact}
+        {@render search()}
+      {/if}
+      {@render controls()}
+    </div>
+  </details>
+</FilterBar>
+
+<!--
+  The menus, then the scope: which runs or jobs, and when, and which of the
+  three yes-or-no narrowings apply. Everything in the first group is the same
+  small control, so the row reads as one set of choices; the second group sits
+  on its own line because it answers a different question (when, and whether to
+  widen), and a line break says so better than a gap would.
+-->
+{#snippet controls()}
   <FacetMenu
     label="Repository"
     options={repoOptions}
@@ -355,42 +406,113 @@
     />
   {/if}
 
-  <DateRange
-    since={value.since}
-    until={value.until}
-    {withTime}
-    label="Queued between"
-    onchange={(next) => onchange(next)}
-  />
-
-  <Switch
-    label="Unmatched only"
-    description="Queued jobs no enabled pool claims"
-    checked={value.unmatched}
-    onchange={(on) => onchange({ unmatched: on })}
-  />
-
-  {#if !queue}
-    <Switch
-      label="Failed only"
-      description="Failing conclusions, and runners that stopped under a job"
-      checked={value.failed}
-      onchange={(on) => onchange({ failed: on })}
+  <div class="scope">
+    <DateRange
+      since={value.since}
+      until={value.until}
+      {withTime}
+      label="Queued between"
+      onchange={(next) => onchange(next)}
     />
 
-    <Switch
-      label="Include other runners"
-      description="Also show jobs GitHub ran without this fleet"
-      checked={value.all}
-      onchange={(on) => onchange({ all: on })}
-    />
-  {/if}
-</FilterBar>
+    <!-- The description is the switch's help, on hover and focus, and is still
+         linked to it for assistive technology: it lives in the tooltip, not
+         under the label, so a row of switches stays a row. -->
+    <Tooltip bare text="Queued jobs no enabled pool claims">
+      <Switch
+        size="sm"
+        label="Unmatched only"
+        checked={value.unmatched}
+        onchange={(on) => onchange({ unmatched: on })}
+      />
+    </Tooltip>
+
+    {#if !queue}
+      <Tooltip bare text="Failing conclusions, and runners that stopped under a job">
+        <Switch
+          size="sm"
+          label="Failed only"
+          checked={value.failed}
+          onchange={(on) => onchange({ failed: on })}
+        />
+      </Tooltip>
+
+      <Tooltip bare text="Also show jobs GitHub ran without this fleet">
+        <Switch
+          size="sm"
+          label="Include other runners"
+          checked={value.all}
+          onchange={(on) => onchange({ all: on })}
+        />
+      </Tooltip>
+    {/if}
+  </div>
+{/snippet}
 
 <style>
+  /*
+    The disclosure is a plain full-width block, and the controls inside it are
+    one wrapping row. They used to be laid out with display: contents, which
+    browsers do not reliably pass through a details element: on a wide page the
+    menus stacked into one column beside the search.
+  */
+  .advanced {
+    display: block;
+    width: 100%;
+  }
+  .advanced-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-2);
+  }
+  .compact[open] .advanced-controls {
+    margin-top: var(--z-space-3);
+  }
   .search {
-    min-width: 260px;
-    flex: 1 1 260px;
-    max-width: 380px;
+    flex: 1 1 240px;
+    min-width: 200px;
+    max-width: 360px;
+  }
+  /* On a tablet or phone the search has a line to itself, so its placeholder is
+     readable and the menus below it wrap in whole rows, as the Usage page's
+     controls do. */
+  @media (max-width: 768px) {
+    .search {
+      flex-basis: 100%;
+      max-width: none;
+    }
+  }
+  /* The second line: when, and the narrowings that are not menus. It takes the
+     whole row, so it always starts on its own line under the menus. */
+  .scope {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--z-space-3);
+  }
+
+  /* Phones collapse the menus behind "Filters (n)"; the search stays above it. */
+  summary[hidden] {
+    display: none;
+  }
+  summary {
+    display: inline-flex;
+    align-items: center;
+    height: var(--z-space-6);
+    padding: 0 var(--z-space-2);
+    cursor: pointer;
+    color: var(--z-accent);
+    font-size: var(--z-text-sm);
+    border: var(--z-border-width) solid var(--z-border-strong);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+  }
+
+  @media (pointer: coarse) {
+    summary {
+      min-height: var(--z-control-touch);
+    }
   }
 </style>

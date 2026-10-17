@@ -373,6 +373,14 @@ failed job in the run, and the panel says so before you press it.
 does the same thing without waiting for a person, for the fleet's own
 failures only and bounded by `scheduler.auto_rerun_limit`. It is off by
 default, because it spends the installation's GitHub minutes without asking.
+
+None of that answers the other half of the question, which is whether anybody
+has read the failure. The Overview's **Recent failures** lists what failed in
+the last week that nobody has marked as known and no later attempt has
+replaced, with the whole count in its header; the Jobs page's **Needs
+attention** view is the same list with room for the rest. Marking a failure as
+known takes it off that list without changing anything about it, a re-run that
+passes settles it, and either decision can be taken back.
 When it fires, the job's timeline says so, marked *via recovery*.
 
 **On the Overview**, the failure badge reads "11 failed, 9 ours" rather than

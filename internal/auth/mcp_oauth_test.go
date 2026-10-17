@@ -603,3 +603,69 @@ func TestChangingThePasswordOrSigningOutElsewhereEndsMCPConnections(t *testing.T
 		})
 	}
 }
+
+// An edit rescues an app configured with a client_id whose registered redirect
+// does not match what the client sends, without a delete and a recreate that
+// would leave the app pointing at an ID the portal no longer knows. Only what
+// an administrator created is editable, and the live client after the edit is
+// what the token endpoint will see on that app's next sign-in.
+func TestEditingAnMCPClientChangesItsNameAndRedirects(t *testing.T) {
+	s, st, _ := newService(t)
+	ctx := t.Context()
+	admin := &Identity{Kind: KindUser, ID: "usr_admin", Name: "admin", Role: store.RoleAdmin}
+	c, secret, err := s.CreateMCPClient(ctx, admin, NewMCPClient{
+		Name: "Claude", RedirectURIs: []string{ClaudeCallback}, Confidential: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret == "" {
+		t.Fatal("a confidential client must come with a secret")
+	}
+
+	after, err := s.UpdateMCPClient(ctx, admin, c.ID, NewMCPClient{
+		Name: "Claude Code", RedirectURIs: []string{"http://localhost:3118/callback"},
+	})
+	if err != nil {
+		t.Fatalf("editing an admin client: %v", err)
+	}
+	if after.Name != "Claude Code" {
+		t.Errorf("name after the edit: %q", after.Name)
+	}
+	if len(after.RedirectURIs) != 1 || after.RedirectURIs[0] != "http://localhost:3118/callback" {
+		t.Errorf("redirects after the edit: %v", after.RedirectURIs)
+	}
+	// The identity the app holds is not disturbed by an edit: only a rotate
+	// invalidates the secret it was given.
+	if !after.Confidential() || after.SecretPrefix != c.SecretPrefix {
+		t.Error("an edit must leave the client's secret alone")
+	}
+
+	// The audit carries both ends, so an app that starts failing can have its
+	// old redirection read back from the log.
+	rows, _, err := st.ListAudit(ctx, store.AuditFilter{Actions: []string{"mcp_client.update"}}, store.Page{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || !strings.Contains(rows[0].After, "localhost:3118") || !strings.Contains(rows[0].After, ClaudeCallback) {
+		t.Errorf("want one mcp_client.update row naming both redirections, got %+v", rows)
+	}
+
+	// Only a client an administrator created is editable: a dynamic one owns
+	// its registration, and a revoked one has nothing left to grant.
+	if err := s.RevokeMCPClient(ctx, admin, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateMCPClient(ctx, admin, c.ID, NewMCPClient{Name: "Again"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("editing a revoked client: %v", err)
+	}
+	registered, err := s.RegisterClient(ctx, testPolicy, ClientRegistration{
+		ClientName: "Self", RedirectURIs: []string{ClaudeCallback},
+	}, "203.0.113.9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateMCPClient(ctx, admin, registered.ID, NewMCPClient{Name: "Again"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("editing a dynamic client: %v", err)
+	}
+}

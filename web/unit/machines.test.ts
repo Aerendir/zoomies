@@ -409,12 +409,18 @@ test('a draft holds its numbers as strings, so an empty box and a deliberate zer
   // here would turn "not filled in" into a deliberate zero, and
   // `max_machines: 0` is the setting that rents nothing.
   const draft = emptyDraft();
-  assert.equal(draft.max_machines, '0', 'the safe default is a deliberate zero');
+  assert.equal(draft.max_machines, '2', 'a new draft opens on a small ceiling, not on zero');
+  assert.equal(draft.min_machines, '1', 'with one machine kept warm');
+  assert.equal(
+    toProviderBody({ ...draft, max_machines: '' }).max_machines,
+    0,
+    'a blank box is zero',
+  );
   assert.equal(draft.cost_per_machine_hour, '', 'and an unset price is not a free one');
   assert.equal(typeof draft.max_machines, 'string');
   assert.equal(typeof draft.cost_per_machine_hour, 'string');
 
-  assert.equal(toProviderBody(draft).max_machines, 0);
+  assert.equal(toProviderBody(draft).max_machines, 2);
   assert.equal(
     'cost_per_machine_hour' in toProviderBody(draft),
     false,
@@ -450,7 +456,11 @@ test('a provider round-trips through a draft and back, without ever carrying its
     idle_timeout_ms: 900_000,
     cost_per_machine_hour: 0.08,
     enabled: true,
-  } as Provider;
+    credentials_configured: true,
+    paused: false,
+    machines: {},
+    owned: 0,
+  };
 
   const draft = draftFromProvider(provider);
   assert.equal(draft.credential, '', 'never populated from a provider that already exists');
@@ -776,9 +786,10 @@ test('the idle timeout is a Go duration, or nothing', () => {
 });
 
 test('a provider that would rent nothing says so as a note beside the setting, not as an error', () => {
-  // Saving a provider with a ceiling of zero is a legal answer and the default
-  // one -- the operator is meant to connect it first and raise it deliberately.
-  assert.match(willRentNothing(emptyDraft()), /ceiling is zero/);
+  // A ceiling of zero is still a legal answer, now only a deliberate one: a new
+  // draft opens on a small ceiling, because zero is no answer to "how many".
+  assert.match(willRentNothing({ ...emptyDraft(), max_machines: '0' }), /ceiling is zero/);
+  assert.equal(willRentNothing(emptyDraft()), '');
   assert.match(willRentNothing({ ...emptyDraft(), enabled: false }), /switched off/);
   assert.equal(willRentNothing({ ...emptyDraft(), max_machines: '3' }), '');
   assert.equal(draftErrors({ ...valid(), max_machines: '0' }, []).max_machines, undefined);

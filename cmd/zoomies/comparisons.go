@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strconv"
@@ -11,13 +12,14 @@ import (
 )
 
 func runComparisons(ctx context.Context, e *env, args []string) error {
-	return runGroup(ctx, e, "comparisons", "Replay retained historical comparison evidence.", []*subcommand{
+	return runGroup(ctx, e, "comparisons", "Capture and replay selected historical comparison evidence.", []*subcommand{
+		{"capture", "--file FILE", "Explicitly collect and retain selected attempt evidence", comparisonsCapture},
 		{"get", "<comparison-id>", "Read an immutable report in its installation and repository", comparisonsGet},
 	}, args)
 }
 
 func comparisonsGet(ctx context.Context, e *env, args []string) error {
-	fs := newFlagSet(e, "zoomies comparisons get <comparison-id> --installation ID --repo OWNER/REPO", "Replay a retained report without GitHub collection or new capture. Requires viewer/jobs:read. Missing, expired or evicted history is unavailable; capture must be explicitly initiated through the API.")
+	fs := newFlagSet(e, "zoomies comparisons get <comparison-id> --installation ID --repo OWNER/REPO", "Replay a retained report without GitHub collection or new capture. Requires viewer/jobs:read. Missing, expired or evicted history is unavailable; capture must be explicitly initiated with comparisons capture or through the API.")
 	cf := registerClientFlags(fs, true)
 	installation := fs.String("installation", "", "installation ID owning the retained evidence (required)")
 	repo := fs.String("repo", "", "repository owning the retained evidence, OWNER/REPO (required)")
@@ -52,28 +54,30 @@ func comparisonsGet(ctx context.Context, e *env, args []string) error {
 	if err != nil {
 		return err
 	}
-	var out struct {
-		ID        string `json:"id"`
-		SHA256    string `json:"sha256"`
-		CreatedAt string `json:"created_at"`
-		Report    *struct {
-			WindowBasis    string                         `json:"window_basis"`
-			ExecutionBasis string                         `json:"execution_basis"`
-			Snapshot       analysis.ExperimentSnapshot    `json:"snapshot"`
-			Measurement    analysis.ExperimentMeasurement `json:"measurement"`
-		} `json:"report"`
-	}
+	var out comparisonItem
 	raw, err := client.get(ctx, "/comparisons/"+url.PathEscape(id), url.Values{"installation_id": {*installation}, "repo": {*repo}}, &out)
 	if err != nil {
 		return err
 	}
-	if out.ID != id || out.Report == nil || out.Report.Snapshot.Repository != *repo || out.Report.Snapshot.EvidenceID != id || out.Report.Snapshot.RuleVersion != analysis.ExperimentRuleVersion || out.Report.Measurement.Version != analysis.ExperimentMeasureVersion || out.Report.Measurement.Eligibility.RuleVersion != analysis.ExperimentRuleVersion || (out.Report.Measurement.Eligibility.State != "eligible" && out.Report.Measurement.Eligibility.State != "inconclusive") {
+	return presentComparison(p, raw, &out, id, *repo)
+}
+
+func presentComparison(p *printer, raw []byte, out *comparisonItem, id, repo string) error {
+	if out.ID != id || out.Report == nil || out.Report.Snapshot.Repository != repo || out.Report.Snapshot.EvidenceID != id || out.Report.Snapshot.RuleVersion != analysis.ExperimentRuleVersion || out.Report.Measurement.Version != analysis.ExperimentMeasureVersion || out.Report.Measurement.Eligibility.RuleVersion != analysis.ExperimentRuleVersion || (out.Report.Measurement.Eligibility.State != "eligible" && out.Report.Measurement.Eligibility.State != "inconclusive") {
 		return errors.New("this controller returned an unsupported or inconsistent retained comparison; check the controller version and evidence scope")
 	}
 	if p.structured() {
 		return p.emit(raw)
 	}
 	r := out.Report
+	runners, err := parseCLIRunnerEvidence(out.RunnerEvidence, r.Snapshot.Baseline, r.Snapshot.Candidate)
+	if err != nil {
+		return err
+	}
+	workflows, err := parseCLIWorkflowEvidence(out.WorkflowEvidence, r.Snapshot.Baseline, r.Snapshot.Candidate)
+	if err != nil {
+		return err
+	}
 	m := r.Measurement
 	p.keyValues([][2]string{{"comparison", plain(out.ID)}, {"repository", plain(r.Snapshot.Repository)}, {"created", plain(out.CreatedAt)}, {"sha256", plain(out.SHA256)}, {"eligibility", plain(m.Eligibility.State)}, {"window basis", plain(r.WindowBasis)}, {"execution basis", plain(r.ExecutionBasis)}, {"latency change", plain(m.LatencyChange)}, {"execution mean change", plain(m.ExecutionChange)}, {"allocated idle mean change", plain(m.AllocatedIdleChange)}, {"failure rate change", plain(m.FailureChange)}})
 	counts := [][]string{}
@@ -93,6 +97,8 @@ func comparisonsGet(ctx context.Context, e *env, args []string) error {
 		p.note("Inconclusive evidence: %s", plain(reason))
 	}
 	p.note("Selected attempts do not establish cohort completeness, causal improvement or cost savings. Execution sums all GitHub job elapsed times; unknown is not zero.")
+	printCLIRunnerEvidence(p, runners)
+	printCLIWorkflowEvidence(p, workflows)
 	return nil
 }
 
@@ -105,4 +111,18 @@ func comparisonMillis(v *int64) string {
 		return "invalid"
 	}
 	return strconv.FormatInt(*v, 10) + "ms"
+}
+
+type comparisonItem struct {
+	WorkflowEvidence json.RawMessage `json:"workflow_evidence"`
+	RunnerEvidence   json.RawMessage `json:"runner_evidence"`
+	ID               string          `json:"id"`
+	SHA256           string          `json:"sha256"`
+	CreatedAt        string          `json:"created_at"`
+	Report           *struct {
+		WindowBasis    string                         `json:"window_basis"`
+		ExecutionBasis string                         `json:"execution_basis"`
+		Snapshot       analysis.ExperimentSnapshot    `json:"snapshot"`
+		Measurement    analysis.ExperimentMeasurement `json:"measurement"`
+	} `json:"report"`
 }

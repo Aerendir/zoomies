@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { browserOverride, documentWidth, goto } from './support/fixtures';
+import { documentWidth, goto, signedInAs } from './support/fixtures';
 import { FakeAgent, check, enrolAgent, type Check } from './support/fake-agent';
-test.use(browserOverride);
 
 // The page the operator presses "Check now" on, against a host that really
 // enrols, heartbeats, polls and answers over the agent API. The seeded embedded
@@ -209,20 +208,6 @@ test('a host that does not advertise host-check has the button off, with the rea
     { features: [] },
   );
 });
-
-async function signedInAs(page: Page, role: 'viewer' | 'operator'): Promise<void> {
-  await page.route('**/api/v1/meta', async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as Record<string, unknown>;
-    return route.fulfill({
-      response,
-      json: { ...body, auth_disabled: false, bootstrap_required: false },
-    });
-  });
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: { kind: 'token', id: 'tok_pretend', name: 'a token', role } }),
-  );
-}
 
 // Asking spends a host's CPU, so a viewer is never offered it; they are told why.
 test('a viewer sees no button and is told the operator role is needed', async ({ page }) => {

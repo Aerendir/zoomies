@@ -20,10 +20,12 @@ type experimentRetainedEnvelope struct {
 }
 
 type RetainedExperimentComparison struct {
-	ID        string                      `json:"id"`
-	SHA256    string                      `json:"sha256"`
-	CreatedAt time.Time                   `json:"created_at"`
-	Report    *ExperimentComparisonReport `json:"report"`
+	WorkflowEvidence *ExperimentWorkflowEvidence `json:"workflow_evidence,omitempty"`
+	RunnerEvidence   *ExperimentRunnerEvidence   `json:"runner_evidence,omitempty"`
+	ID               string                      `json:"id"`
+	SHA256           string                      `json:"sha256"`
+	CreatedAt        time.Time                   `json:"created_at"`
+	Report           *ExperimentComparisonReport `json:"report"`
 }
 
 // RetainExperimentComparison requires an authenticated, authorised actor from
@@ -48,7 +50,7 @@ func (c *Controller) RetainExperimentComparison(ctx context.Context, actor *stor
 	if err := c.st.PutComparisonEvidence(ctx, row, actor); err != nil {
 		return nil, err
 	}
-	return &RetainedExperimentComparison{ID: row.ID, SHA256: row.SHA256, CreatedAt: row.CreatedAt, Report: report}, nil
+	return &RetainedExperimentComparison{ID: row.ID, SHA256: row.SHA256, CreatedAt: row.CreatedAt, Report: report, RunnerEvidence: experimentRunnerView(a, b), WorkflowEvidence: experimentWorkflowView(a, b)}, nil
 }
 
 // ReplayExperimentComparison reads only retained evidence. Its digest checks
@@ -90,7 +92,7 @@ func (c *Controller) ReplayExperimentComparison(ctx context.Context, installatio
 	if !bytes.Equal(oldJSON, newJSON) {
 		return nil, ErrExperimentEvidence
 	}
-	return &RetainedExperimentComparison{ID: row.ID, SHA256: row.SHA256, CreatedAt: row.CreatedAt, Report: recomputed}, nil
+	return &RetainedExperimentComparison{ID: row.ID, SHA256: row.SHA256, CreatedAt: row.CreatedAt, Report: recomputed, RunnerEvidence: experimentRunnerView(envelope.Baseline, envelope.Candidate), WorkflowEvidence: experimentWorkflowView(envelope.Baseline, envelope.Candidate)}, nil
 }
 
 // CaptureExperimentComparison admits both arms as one bounded diagnostic.

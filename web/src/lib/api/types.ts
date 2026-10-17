@@ -389,3 +389,6 @@ export type KennelCatalogueEntry = Schemas['KennelCatalogueEntry'];
 export type UpdatesStatus = Schemas['UpdatesStatus'];
 
 export type KennelGuidancePreview = Schemas['KennelGuidancePreview'];
+
+export type ComparisonCaptureRequest = Schemas['ComparisonCaptureRequest'];
+export type RetainedComparison = Schemas['RetainedExperimentComparison'];

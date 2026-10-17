@@ -10,12 +10,11 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { test, expect, type Page } from '@playwright/test';
-import { browserOverride, setupToken } from './support/fixtures';
+import { setupToken } from './support/fixtures';
 
 const ADMIN = { username: 'ada', password: 'correct horse battery staple' };
 const CALLBACK = 'https://claude.ai/api/mcp/auth_callback';
 
-test.use(browserOverride);
 test.describe.configure({ mode: 'serial' });
 
 async function signIn(page: Page): Promise<void> {
@@ -256,4 +255,30 @@ test('rotating a client secret asks first, then shows the new secret once', asyn
   await expect(shown).toBeVisible();
   await expect(shown).toContainText('zoocs_');
   await expect(shown).not.toContainText(first);
+});
+
+// Editing a client's name and redirect URIs repairs a sign-in the consent
+// screen refuses, without a delete and a recreate that would leave the app
+// configured with a client ID the portal no longer knows.
+test('editing an MCP client adds a redirect the app can then sign in through', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/settings/mcp-clients');
+  await page.getByRole('button', { name: 'Create a client' }).click();
+  const created = page.getByRole('dialog', { name: 'Create an MCP client' });
+  await created.getByLabel('Name').fill('Local app');
+  await created.getByRole('button', { name: 'Create client' }).click();
+  await page
+    .getByRole('dialog', { name: 'Local app' })
+    .getByRole('button', { name: 'Done' })
+    .click();
+
+  const row = page.getByRole('row', { name: /Local app/ });
+  await row.getByRole('button', { name: 'Edit' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit MCP client' });
+  await expect(edit.getByLabel('Name')).toHaveValue('Local app');
+  await expect(edit.getByLabel('Redirect URIs')).toHaveValue(CALLBACK);
+  await edit.getByLabel('Redirect URIs').fill(`${CALLBACK}\nhttp://localhost:3118/callback`);
+  await edit.getByRole('button', { name: 'Save changes' }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByRole('row', { name: 'Local app' })).toBeVisible();
 });

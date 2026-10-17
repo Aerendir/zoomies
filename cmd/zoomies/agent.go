@@ -166,6 +166,10 @@ func runAgentDaemon(ctx context.Context, e *env, args []string) error {
 		Logger:             log,
 		UpdateDir:          agentUpdateDir(cfg.Path()),
 		HelperHost:         agent.LocalHelperHost,
+		// The token this host was handed is its way back from a refusal of the
+		// credentials it had saved: a machine's environment keeps it beside the
+		// unit, and a host nobody handed one has none to fall back on.
+		FallbackJoinToken: token,
 	})
 	if err != nil {
 		return err

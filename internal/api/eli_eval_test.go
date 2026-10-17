@@ -434,7 +434,7 @@ func eliScenarios() []eliScenario {
 			mustShow:   []string{"the runner image could not be pulled or would not start", "fault image"},
 			fenced:     []string{"startup_failures"},
 		},
-	}, prDelayEliScenarios()...)
+	}, append(prDelayEliScenarios(), comparisonEliScenarios()...)...)
 }
 
 // eliJobs numbers the scenarios' ordinary jobs, so a seed that writes a

@@ -56,43 +56,33 @@ export function attachTip(el: HTMLElement, tip: AttachedTip): () => void {
   const described = (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
   el.setAttribute('aria-describedby', [...described, description.id].join(' '));
 
-  let stopIntent: (() => void) | null = null;
-  const giveUpWaiting = () => {
-    stopIntent?.();
-    stopIntent = null;
-  };
-  const onEnter = (event: PointerEvent) => {
+  let pointerReached = false;
+  const stopIntent = whenPointerMoves(el, (event) => {
     // A finger has no hover; the sentence is still the description.
-    if (event.pointerType === 'touch') return;
-    giveUpWaiting();
-    // The wait starts on the first move, not the enter: see tooltip-intent.ts.
-    stopIntent = whenPointerMoves(el, () => {
-      stopIntent = null;
-      tooltips.hover(handle, tip.wait);
-    });
-  };
+    if (event.pointerType === 'touch' || pointerReached) return;
+    pointerReached = true;
+    tooltips.hover(handle, tip.wait);
+  });
   const onLeave = () => {
-    giveUpWaiting();
+    pointerReached = false;
     tooltips.unhover(handle);
   };
   // A press inside the wait means the help is not wanted, and must not arrive late.
   const onPress = () => {
-    giveUpWaiting();
+    pointerReached = true;
     tooltips.dismiss(handle);
   };
   const onFocus = () => {
     if (!focusWasPlaced() && el.matches(':focus-visible')) tooltips.focus(handle);
   };
   const onBlur = () => tooltips.blur(handle);
-  el.addEventListener('pointerenter', onEnter);
   el.addEventListener('pointerleave', onLeave);
   el.addEventListener('pointerdown', onPress);
   el.addEventListener('focus', onFocus);
   el.addEventListener('blur', onBlur);
 
   return () => {
-    giveUpWaiting();
-    el.removeEventListener('pointerenter', onEnter);
+    stopIntent();
     el.removeEventListener('pointerleave', onLeave);
     el.removeEventListener('pointerdown', onPress);
     el.removeEventListener('focus', onFocus);

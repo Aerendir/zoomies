@@ -93,6 +93,7 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 			}
 		}
 	}
+	checked := c.st.Now()
 	var pr github.RepairPull
 	if run > 0 {
 		pr, err = client.RepairPullForRun(ctx, repo, run)
@@ -102,12 +103,46 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 		block("pull", "Choose an open pull request or paste its GitHub URL.")
 		return out
 	}
-	if err != nil {
-		block("pull", "Choose an open PR in this repository at its current head; forks cannot be repaired.")
-		return out
-	}
 	out.PullNumber = pr.Number
 	out.HeadSHA = pr.HeadSHA
+	if err != nil {
+		var changed *github.RepairTargetChanged
+		if errors.As(err, &changed) {
+			// A changed target is the answer to the person's original question,
+			// even when their provider or repository setup is also incomplete.
+			out.Blockers = []EliBlocker{{Code: changed.Code, Message: changed.Message}}
+			if run > 0 {
+				_ = c.st.RecordJobAttentionRun(ctx, repo, run, changed.Code, checked, true)
+			}
+		} else if errors.Is(err, github.ErrRepairUnsupported) {
+			message := strings.TrimPrefix(err.Error(), github.ErrRepairUnsupported.Error()+": ")
+			if message == github.ErrRepairUnsupported.Error() {
+				message = "Choose an open PR in this repository at its current head; forks cannot be repaired."
+			}
+			block("pull", message)
+		} else {
+			block("github", "GitHub could not resolve this repair target. Try checking readiness again.")
+		}
+		return out
+	}
+	state, err := client.RepairChecks(ctx, repo, pr.HeadSHA)
+	if err != nil {
+		block("github", "GitHub could not check whether this failure still needs fixing. Try checking readiness again.")
+		return out
+	}
+	if state == "passed" {
+		if run > 0 {
+			_ = c.st.RecordJobAttentionRun(ctx, repo, run, "fixed", checked, true)
+		}
+		out.Blockers = []EliBlocker{{Code: "fixed", Message: "The latest checks on this PR have passed. This failure has already been fixed; no repair is needed."}}
+		return out
+	}
+	if run > 0 {
+		_ = c.st.RecordJobAttentionRun(ctx, repo, run, "", checked, state == "failed")
+	}
+	if state != "failed" {
+		block("checks_pending", "No current failed check is available to repair. Checks may still be running, cancelled or skipped. Check the PR on GitHub, then check readiness again.")
+	}
 	info, err := raw.Probe(ctx)
 	if err != nil {
 		block("permissions", "GitHub App permissions could not be checked.")

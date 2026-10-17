@@ -11,9 +11,9 @@
   let {
     status,
     seed = '',
-  }: { status: Pick<StatusMeta, 'icon' | 'colour' | 'subtle' | 'border'>; seed?: string } =
+  }: { status: Pick<StatusMeta, 'icon' | 'colour' | 'subtle' | 'border' | 'tone'>; seed?: string } =
     $props();
-  const motion = $derived(offMotion(status.icon));
+  const motion = $derived(offMotion(status.icon, status.tone));
 </script>
 
 <span
@@ -85,12 +85,16 @@
     animation-delay: calc(var(--phase) * -1.8s);
   }
   [data-motion='sag'] :global(.standard-icon) {
-    animation: sag 4s ease-in-out infinite;
-    animation-delay: calc(var(--phase) * -4s);
+    animation: sag 4.2s ease-in-out infinite;
+    animation-delay: calc(var(--phase) * -4.2s);
   }
   [data-motion='trace'] :global(.standard-icon) {
     opacity: 0.4;
   }
+  /* The pulse's dash numbers are tuned to the Activity glyph's path length at
+     this stroke width: the Lucide components cannot take a per-path
+     pathLength, so trace stays Activity's motion alone and the numbers live
+     here, beside the keyframe that depends on them. */
   .off-status-icon :global(.trace-pulse) {
     position: absolute;
     stroke-dasharray: 9 60;
@@ -102,9 +106,15 @@
       transform: rotate(360deg);
     }
   }
+  /* A quiet scale rather than the old opacity dim, which read as a disabled
+     control; being accepted should look alive, not greyed out. */
   @keyframes breathe {
+    0%,
+    100% {
+      transform: scale(1) translateY(0);
+    }
     50% {
-      opacity: 0.55;
+      transform: scale(1.06) translateY(-0.3px);
     }
   }
   @keyframes turn {
@@ -132,76 +142,64 @@
       transform: translateY(-1.5px);
     }
   }
-  /* The shake grows with the charge, one step a frame, so the bolt reads as
-     winding up rather than merely trembling; the flash at the top is the
-     only moment it leaves its footprint, and it is back inside it a tenth
-     of a second later. */
+  /* The shake grows with the charge and the flash is capped just above the
+     glyph's own weight, so the bolt reads as winding up rather than merely
+     trembling, without ever leaving the tile's visual weight behind. */
   @keyframes buzz {
     0%,
     100% {
       transform: translate(0, 0) rotate(0);
       fill-opacity: 0;
     }
-    8% {
-      transform: translate(-0.2px, 0.1px) rotate(-1.5deg);
-      fill-opacity: 0.06;
+    15% {
+      transform: translate(-0.4px, 0.2px) rotate(-2deg);
+      fill-opacity: 0.1;
     }
-    16% {
-      transform: translate(0.2px, -0.1px) rotate(1.5deg);
-      fill-opacity: 0.12;
+    30% {
+      transform: translate(0.5px, -0.2px) rotate(2.5deg);
+      fill-opacity: 0.2;
     }
-    24% {
-      transform: translate(-0.4px, 0.2px) rotate(-2.5deg);
-      fill-opacity: 0.18;
-    }
-    32% {
-      transform: translate(0.4px, -0.2px) rotate(2.5deg);
-      fill-opacity: 0.24;
-    }
-    40% {
-      transform: translate(-0.6px, 0.3px) rotate(-3.5deg);
+    45% {
+      transform: translate(-0.7px, 0.3px) rotate(-3.5deg);
       fill-opacity: 0.3;
     }
-    48% {
-      transform: translate(0.6px, -0.3px) rotate(3.5deg);
-      fill-opacity: 0.36;
-    }
-    56% {
-      transform: translate(-0.8px, 0.4px) rotate(-4.5deg);
+    60% {
+      transform: translate(0.9px, -0.4px) rotate(4.5deg);
       fill-opacity: 0.42;
     }
-    64% {
-      transform: translate(0.8px, -0.4px) rotate(4.5deg);
-      fill-opacity: 0.48;
-    }
     70% {
-      transform: translate(-1px, 0.5px) rotate(-5.5deg);
-      fill-opacity: 0.54;
+      transform: translate(-1px, 0.4px) rotate(-5deg);
+      fill-opacity: 0.52;
     }
-    76% {
-      transform: translate(1px, -0.5px) rotate(5.5deg);
-      fill-opacity: 0.6;
-    }
-    82% {
-      transform: translate(0, 0) rotate(0) scale(1.2);
-      fill-opacity: 0.7;
+    80% {
+      transform: translate(0, 0) rotate(0) scale(1.12);
+      fill-opacity: 0.62;
     }
     90% {
       transform: translate(0, 0) rotate(0) scale(1);
-      fill-opacity: 0.1;
+      fill-opacity: 0.08;
     }
   }
+  /* Held back is not the mirror of extra: the line is tugged down and held
+     there before it drags itself back up, slowly, with a small overshoot, so
+     its tempo contrasts with the trend line's quick hops. */
   @keyframes sag {
     0%,
-    50%,
+    8% {
+      transform: translateY(0) rotate(0);
+    }
+    32% {
+      transform: translateY(2.4px) rotate(4deg);
+    }
+    48% {
+      transform: translateY(2.2px) rotate(3.5deg);
+    }
+    82% {
+      transform: translateY(-0.6px) rotate(-1deg);
+    }
+    92%,
     100% {
-      transform: translateY(0);
-    }
-    62% {
-      transform: translateY(2px);
-    }
-    78% {
-      transform: translateY(1.5px);
+      transform: translateY(0) rotate(0);
     }
   }
   /* Lucide draws the trace from right to left, so the offset has to grow for

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,8 +16,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/backup"
+	"github.com/eyupio/zoomies/internal/releasekey"
 	"github.com/eyupio/zoomies/internal/version"
 )
+
+// ErrSignature is a release whose checksums are not signed by a key this build
+// trusts, or whose signature does not verify. Nothing is downloaded or
+// installed after it: the checksums travel with the binary, so on their own
+// they say nothing about who made either.
+var ErrSignature = errors.New("the release is not signed by a trusted release key")
 
 // SelfUpdateEnv, when set, stops `zoomies upgrade` fetching a binary. install.sh
 // sets it because it has just installed one, and the re-executed process sets
@@ -41,10 +50,22 @@ type SelfUpdateOptions struct {
 	Client  *http.Client
 	// Check only says what would change.
 	Check bool
+	// DryRun says what a real run would do and installs nothing: the release
+	// is still fetched, verified and probed, and the pre-flight still runs, so
+	// a preview fails for the same reasons an update would. It takes no lock,
+	// replaces no binary and keeps no previous one, so nothing beside the
+	// installed binary is changed.
+	DryRun bool
 	// Preflight, when set, is asked about the downloaded file after it has been
 	// verified and before it replaces anything. An error stops the update with
 	// the installed binary untouched.
 	Preflight func(ctx context.Context, candidate string) error
+	// ReleaseKey is the set of public keys a release's checksums signature is
+	// held to, one base64 key per line, so more than one is trusted while a key
+	// is rotated. Empty is no key: the checksums are taken on trust, and the
+	// download says so. A dev build, which is whatever main built last and has
+	// no release to sign, is not held to a signature either.
+	ReleaseKey string
 
 	goos, goarch string
 	run          commandRunner
@@ -107,6 +128,12 @@ func SelfUpdate(ctx context.Context, opts SelfUpdateOptions) (SelfUpdateResult, 
 			return res, fmt.Errorf("the downloaded %s does not accept this deployment, so the installed binary was left in place: %w", cand.Tag, err)
 		}
 	}
+	// The preview has done everything a real run does up to the swap, and the
+	// caller reads res to say what would happen. res.Updated stays false: no
+	// binary was replaced.
+	if opts.DryRun {
+		return res, nil
+	}
 	if err := cand.Install(opts); err != nil {
 		return res, err
 	}
@@ -159,11 +186,14 @@ func FetchRelease(ctx context.Context, opts SelfUpdateOptions) (*Candidate, Self
 	if err != nil {
 		return nil, res, fmt.Errorf("could not fetch the checksums for %s, so no binary was downloaded: %w", tag, err)
 	}
+	if err := opts.verifyChecksums(ctx, tag, sums); err != nil {
+		return nil, res, err
+	}
 	want := checksumFor(sums, asset)
 	if want == "" {
 		return nil, res, fmt.Errorf("the checksums for %s have no entry for %s, so no binary was downloaded", tag, asset)
 	}
-	have, err := fileSHA256(opts.BinaryPath)
+	have, err := backup.FileSHA256(opts.BinaryPath)
 	if err != nil {
 		return nil, res, fmt.Errorf("read the installed binary: %w", err)
 	}
@@ -174,7 +204,14 @@ func FetchRelease(ctx context.Context, opts SelfUpdateOptions) (*Candidate, Self
 	if opts.Check {
 		return nil, res, nil
 	}
+	// A preview installs nothing, so its download need not be on the same
+	// filesystem as the binary, and an operator previewing as a service
+	// account may not be able to write beside it. It goes to the temporary
+	// directory instead, which is why --dry-run never touches /usr/local/bin.
 	dir := filepath.Dir(opts.BinaryPath)
+	if opts.DryRun {
+		dir = ""
+	}
 	tmp, err := os.CreateTemp(dir, ".zoomies-update-*")
 	if err != nil {
 		return nil, res, fmt.Errorf("cannot write to %s: %w; run the upgrade as root (sudo zoomies upgrade), or use install.sh --upgrade --prefix for another directory", dir, err)
@@ -248,6 +285,25 @@ func (c *Candidate) Install(opts SelfUpdateOptions) error {
 	return nil
 }
 
+// restorePreviousBinary puts the binary kept beside the installed one back in
+// its place, through a staging file and a rename so the path is never half
+// written. It is what an upgrade rolls back to when the new release does not
+// answer and ran no migration.
+func restorePreviousBinary(binary string) error {
+	previous := binary + PreviousSuffix
+	staged := binary + ".rollback"
+	_ = os.Remove(staged)
+	if err := copyBinary(previous, staged); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("reading the previous binary %s: %w", previous, err)
+	}
+	if err := os.Rename(staged, binary); err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("putting %s back: %w", binary, err)
+	}
+	return nil
+}
+
 // copyBinary copies src to dst with src's mode. It is only the fallback for a
 // filesystem that cannot hard-link, so it does not try to be atomic: dst is a
 // staging name that Install renames or removes.
@@ -286,6 +342,32 @@ func (c *Candidate) Discard() {
 		return
 	}
 	_ = os.Remove(c.Path)
+}
+
+// verifyChecksums holds a release's checksums.txt to the release key, when one
+// is built in, before any digest in it is trusted. The checksums travel with
+// the binary, so without this they say only that a download was not corrupted
+// on the way, not who made it.
+func (o *SelfUpdateOptions) verifyChecksums(ctx context.Context, tag, sums string) error {
+	keys := strings.TrimSpace(o.ReleaseKey)
+	if keys == "" {
+		fmt.Fprintf(o.Out, "This build has no release key built in, so %s is not held to a signature; its checksums are taken on trust (docs/release-signing.md).\n", tag)
+		return nil
+	}
+	if tag == "dev" {
+		// dev is whatever main built last: a moving build with no release to
+		// sign, so there is no signature to hold it to.
+		return nil
+	}
+	sigAsset := "checksums.txt" + releasekey.SigSuffix
+	sig, err := o.fetchText(ctx, o.BaseURL+"/download/"+tag+"/"+sigAsset)
+	if err != nil {
+		return fmt.Errorf("%w: %s carries no %s: %w. Nothing was downloaded", ErrSignature, tag, sigAsset, err)
+	}
+	if err := releasekey.Verify(keys, []byte(sums), []byte(sig)); err != nil {
+		return fmt.Errorf("%w: %v. Nothing was downloaded; do not install this release, and report it if it happens twice", ErrSignature, err)
+	}
+	return nil
 }
 
 // target is the tag to follow: the one asked for, the rolling dev build for a
@@ -396,19 +478,6 @@ func redact(u string) string {
 		return p.String()
 	}
 	return u
-}
-
-func fileSHA256(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // checksumFor finds an asset's hash in a `sha256sum` style file.

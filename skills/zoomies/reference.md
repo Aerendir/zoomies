@@ -730,6 +730,8 @@ Subcommands:
   pr-delay <job-id>                  Observed required-check delay for this job's PR head
   advice                             What a workflow's runs-on could say better, from what its jobs used
   rerun <job-id>                     Ask GitHub to run this run's failed jobs again
+  acknowledge <job-id>               Mark a failed job as known, so the attention list stops asking
+  reopen <job-id>                    Put an acknowledged failure back in front of whoever looks next
 
 Run "zoomies jobs <subcommand> --help" for the flags each one takes.
 ```
@@ -745,6 +747,7 @@ Usage:
   zoomies jobs list [filters]
 
 Flags:
+  --attention                only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt
   --before                   continue after the previous page: the cursor it printed, or the next field of --output json
   --ca-file                  PEM file holding the controller's certificate
   --conclusion               success, failure, cancelled or skipped (repeatable)
@@ -779,6 +782,7 @@ Examples:
   zoomies jobs list --repo acme/widgets --since 24h
   zoomies jobs list --unmatched
   zoomies jobs list --failed --since 1h
+  zoomies jobs list --attention
   zoomies jobs list --ours --since 24h
   zoomies jobs list --fault out_of_memory
   zoomies jobs list --controller-version v1.3.3 --since 30d --output json --include-steps=false
@@ -951,20 +955,95 @@ Examples:
   zoomies jobs rerun job_2fq8xk3m
 ```
 
-### zoomies comparisons
+#### zoomies jobs acknowledge
 
-Replay retained historical comparison evidence
+Mark a failed job as known, so the attention list stops asking
 
 ```text
-Replay retained historical comparison evidence.
+Mark a failed job as known, so the failures needing attention stop asking about it.
+
+It is not a resolution: the failure keeps its conclusion and its row in the
+failed view, and a re-run that passes is what settles it. `zoomies jobs reopen`
+takes the decision back.
+
+Usage:
+  zoomies jobs acknowledge <job-id>
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies jobs acknowledge job_2fq8xk3m
+```
+
+#### zoomies jobs reopen
+
+Put an acknowledged failure back in front of whoever looks next
+
+```text
+Put an acknowledged failure back in the failures needing attention.
+
+Nothing about the job changes; it is the undo for `zoomies jobs acknowledge`.
+
+Usage:
+  zoomies jobs reopen <job-id>
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies jobs reopen job_2fq8xk3m
+```
+
+### zoomies comparisons
+
+Capture and replay historical comparison evidence
+
+```text
+Capture and replay selected historical comparison evidence.
 
 Usage:
   zoomies comparisons <subcommand> [flags]
 
 Subcommands:
+  capture --file FILE                Explicitly collect and retain selected attempt evidence
   get <comparison-id>                Read an immutable report in its installation and repository
 
 Run "zoomies comparisons <subcommand> --help" for the flags each one takes.
+```
+
+#### zoomies comparisons capture
+
+Explicitly collect and retain selected attempt evidence
+
+```text
+Explicitly read selected GitHub attempts and retain shared comparison evidence. Requires an identified operator and comparisons:write plus jobs:read token scopes. This changes bounded shared history, not jobs or runners. Never automatically retry a capture; collection may consume the installation's diagnostic allowance even on failure. Unknown workload/cache/host evidence remains inconclusive.
+
+Usage:
+  zoomies comparisons capture --file FILE
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --file                     one documented comparison request as JSON, at most 32 KiB; - reads stdin (required)
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+
+Examples:
+  zoomies comparisons capture --file selection.json
+  zoomies comparisons capture --file selection.json --output json
 ```
 
 #### zoomies comparisons get
@@ -972,7 +1051,7 @@ Run "zoomies comparisons <subcommand> --help" for the flags each one takes.
 Read an immutable report in its installation and repository
 
 ```text
-Replay a retained report without GitHub collection or new capture. Requires viewer/jobs:read. Missing, expired or evicted history is unavailable; capture must be explicitly initiated through the API.
+Replay a retained report without GitHub collection or new capture. Requires viewer/jobs:read. Missing, expired or evicted history is unavailable; capture must be explicitly initiated with comparisons capture or through the API.
 
 Usage:
   zoomies comparisons get <comparison-id> --installation ID --repo OWNER/REPO
@@ -1438,6 +1517,8 @@ Subcommands:
   cordon <host-id>                   Keep its runners, accept no new ones
   drain <host-id>                    Cordon it, then drain every runner on it
   uncordon <host-id>                 Let it accept new runners again
+  recovery                           Inspect carried-over hosts awaiting recovery
+  retire <host-id>                   Retire an unreachable carried-over destination record
   delete <host-id>                   Forget a host; refused while it still has runners
   join-token create                  Mint a token that enrols a new host
 
@@ -1567,6 +1648,44 @@ Usage:
 
 Flags:
   --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+```
+
+#### zoomies hosts recovery
+
+Inspect carried-over hosts awaiting recovery
+
+```text
+Inspect carried-over hosts: awaiting_recovery, verified or retired.
+
+Usage:
+  zoomies hosts recovery
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --insecure                 do not verify the controller's certificate
+  --output=table             table, json or yaml
+  --timeout=30s              how long to wait for one request
+  --token                    an API token (or ZOOMIES_TOKEN)
+  --url                      the controller, e.g. https://zoomies.example.com (or ZOOMIES_URL)
+```
+
+#### zoomies hosts retire
+
+Retire an unreachable carried-over destination record
+
+```text
+Retire an unreachable carried-over host record while fenced. This changes destination records only and cannot clean up the machine.
+
+Usage:
+  zoomies hosts retire <host-id> --confirm-host-id <host-id>
+
+Flags:
+  --ca-file                  PEM file holding the controller's certificate
+  --confirm-host-id          repeat the exact host ID to confirm destination-only retirement
   --insecure                 do not verify the controller's certificate
   --timeout=30s              how long to wait for one request
   --token                    an API token (or ZOOMIES_TOKEN)
@@ -2739,12 +2858,15 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
+  --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
   --runtime                  docker or podman; empty uses the saved deployment
   --update-helper            add the update helper without asking, so that the web UI can update this host; --yes never does
   --version                  target a published tag such as v1.4.0, or dev
@@ -2753,6 +2875,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```
@@ -2771,12 +2894,15 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
+  --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
   --runtime                  docker or podman; empty uses the saved deployment
   --update-helper            add the update helper without asking, so that the web UI can update this host; --yes never does
   --version                  target a published tag such as v1.4.0, or dev
@@ -2785,6 +2911,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```
@@ -2933,12 +3060,15 @@ Flags:
   --check                    check the deployment without changing or restarting anything
   --config-dir               directory containing zoomies.yaml and deployment.json
   --docker-host              the existing container runtime endpoint
+  --dry-run                  download and verify the newest release and say what an upgrade would do, changing nothing
   --image                    replacement image for a custom container deployment
   --installed-binary         the binary path used by the existing service
   --mode                     select agent, controller or single; empty detects installed services
   --no-animation             skip the short branded terminal splash
+  --no-backup                go without the verified copy of the database the upgrade takes before it changes anything
   --no-download              apply the binary that is already installed; do not look for a newer one
   --non-interactive          never prompt; optional deployment changes require --yes
+  --release-key              the release public key to trust, overriding the one built in (base64; docs/upgrading.md)
   --runtime                  docker or podman; empty uses the saved deployment
   --update-helper            add the update helper without asking, so that the web UI can update this host; --yes never does
   --version                  target a published tag such as v1.4.0, or dev
@@ -2947,6 +3077,7 @@ Flags:
 Examples:
   sudo zoomies upgrade
   zoomies upgrade --check
+  zoomies upgrade --dry-run
   sudo zoomies upgrade --yes
   sudo zoomies upgrade --mode agent --version v1.4.0
 ```
@@ -3312,6 +3443,77 @@ Flags:
 Examples:
   zoomies config import-env /opt/zoomies/.env
   zoomies config import-env < .env
+```
+
+### zoomies release
+
+Mint, sign and verify the release signing key
+
+```text
+The release signing key a download is held to (docs/upgrading.md).
+
+Usage:
+  zoomies release <subcommand> [flags]
+
+Subcommands:
+  keygen --out DIR                   Mint the release signing key pair
+  sign [checksums]                   Write the detached signature for a release's checksums
+  verify checksums sig               Check a release's signature against a key
+
+Run "zoomies release <subcommand> --help" for the flags each one takes.
+```
+
+#### zoomies release keygen
+
+Mint the release signing key pair
+
+```text
+Mint the release signing key pair.
+
+Usage:
+  zoomies release keygen --out DIR
+
+Flags:
+  --out                      directory to write release.pub and release.key into
+
+Examples:
+  zoomies release keygen --out ./release-key
+```
+
+#### zoomies release sign
+
+Write the detached signature for a release's checksums
+
+```text
+Write the detached signature for a release's checksums.
+
+Usage:
+  zoomies release sign --key-file FILE [checksums]
+
+Flags:
+  --key                      the base64 private key itself; prefer --key-file, since a flag's value is in the process list
+  --key-file                 a file holding the base64 private key; - reads it from standard input
+
+Examples:
+  zoomies release sign --key-file release.key dist/checksums.txt > dist/checksums.txt.ed25519
+```
+
+#### zoomies release verify
+
+Check a release's signature against a key
+
+```text
+Check a release's signature against a key.
+
+Usage:
+  zoomies release verify [--key KEY | --key-file FILE] checksums sig
+
+Flags:
+  --key                      the base64 public key to check against; empty uses the key compiled into this binary
+  --key-file                 a file holding the base64 public key to check against
+
+Examples:
+  zoomies release verify --key-file release.pub dist/checksums.txt dist/checksums.txt.ed25519
 ```
 
 ### zoomies tune

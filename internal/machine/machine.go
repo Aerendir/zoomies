@@ -44,6 +44,20 @@ type Facts struct {
 	// would size every pool wrong.
 	CPUs     int
 	MemoryMB int64
+	// CPUMHz is the fastest clock a processor runs at, and MemoryMTs the
+	// memory modules' rated figure, both in their own devices' units. The
+	// controller scores a host's placement priority from them beside CPUs and
+	// MemoryMB, so a beefier machine is offered work before a slower one of
+	// the same shape. Every probe behind them is best-effort: a zero is
+	// "not measured", which is what constrains nothing rather than what
+	// scores lowest.
+	CPUMHz    int
+	MemoryMTs int
+	// DiskKind is the work filesystem's storage, "ssd" or "hdd" as the device
+	// reports itself. A spinning disk is the one speed difference the kernel
+	// will say out loud, and it is the axis a sector order matters on most.
+	// Empty when nothing could answer, and read like a zero above.
+	DiskKind string
 }
 
 // Spec renders the machine in the naming grammar's terms, so that a host can
@@ -83,6 +97,10 @@ func detect(root string) Facts {
 	default:
 		m.Distro, m.OSVersion = readOSRelease(filepath.Join(root, "etc", "os-release"))
 		m.MemoryMB = readMemTotalMB(filepath.Join(root, "proc", "meminfo"))
+		m.CPUMHz = maxCPUFreq(filepath.Join(root, "proc", "cpuinfo"),
+			filepath.Join(root, "sys", "devices", "system", "cpu", "cpu0", "cpufreq", "cpuinfo_max_freq"))
+		m.MemoryMTs = memorySpeedMTs()
+		m.DiskKind = rootDiskKind(filepath.Join(root, "proc", "mounts"), root)
 	}
 	// A cgroup limit is the real ceiling when there is one. The compose
 	// deployment runs the controller's embedded agent in a container, so this
@@ -184,6 +202,125 @@ func cgroupMemoryMB(root string) int64 {
 		return 0
 	}
 	return bytes / (1024 * 1024)
+}
+
+// maxCPUFreq is the fastest clock any processor runs at, in megahertz.
+//
+// cpufreq's cpuinfo_max_freq is the figure that says what a core can reach;
+// it is in kilohertz, and the cpufreq driver carries it where it is loaded.
+// Where it is not, /proc/cpuinfo's per-processor "cpu MHz" is the closest
+// available answer, though on some tokens it is the moment's frequency rather
+// than the rated ceiling. Either is better than scoring every machine
+// identical for a figure nobody asked.
+func maxCPUFreq(cpuinfoPath, cpufreqPath string) int {
+	if b, err := os.ReadFile(cpufreqPath); err == nil {
+		if f, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64); err == nil && f > 0 {
+			return int(f / 1000) // kHz to MHz
+		}
+	}
+	b, err := os.ReadFile(cpuinfoPath)
+	if err != nil {
+		return 0
+	}
+	best := 0.0
+	for _, line := range strings.Split(string(b), "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "cpu MHz")
+		if !ok {
+			continue
+		}
+		_, freq, _ := strings.Cut(strings.TrimSpace(rest), ":")
+		f, err := strconv.ParseFloat(strings.TrimSpace(freq), 64)
+		if err == nil && f > best {
+			best = f
+		}
+	}
+	return int(best)
+}
+
+// memorySpeedMTs asks the machine's DMI table what the memory modules were
+// sold able to do. dmidecode reads it and normally needs root, so this is a
+// probe with a short timeout that is allowed to come back empty: memory speed
+// scoring nothing on a host that will not disclose it is the honest
+// alternative to guessing one.
+func memorySpeedMTs() int {
+	return parseMemorySpeed(runProbe("dmidecode", "-t", "17"))
+}
+
+// parseMemorySpeed reads the first rated speed out of dmidecode's table
+// output, accepting either MT/s or its MHz spelling, and rejecting the "Other"
+// and "Unknown" words that appear where a number was promised.
+func parseMemorySpeed(out string) int {
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, "Speed") || strings.Contains(line, "Serial") {
+			continue
+		}
+		fields := strings.Fields(line)
+		for i, f := range fields[:len(fields)-1] {
+			v, err := strconv.Atoi(f)
+			if err != nil || v <= 0 {
+				continue
+			}
+			switch {
+			case fields[i+1] == "MT/s":
+				return v
+			case fields[i+1] == "MHz":
+				// DDR's data rate is twice the MHz the older spelling reports.
+				return v / 2
+			}
+		}
+	}
+	return 0
+}
+
+// rootDiskKind is whether the device backing this agent's work says it spins:
+// "hdd" or "ssd". NVMe and SATA SSD both answer rotational=0. A device the
+// kernel will not describe loses nothing, like every probe here.
+func rootDiskKind(mountsPath, root string) string {
+	b, err := os.ReadFile(mountsPath)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || !strings.HasPrefix(fields[0], "/dev/") {
+			continue
+		}
+		// The mount has to be the root this agent's work lives under. A
+		// probing test or a sandbox hangs its /proc off a prefix, and mount
+		// points beyond it are other filesystems the work never touches.
+		if mount := fields[1]; root != "/" {
+			remote, ok := strings.CutPrefix(mount, root)
+			if !ok || remote != "" {
+				continue
+			}
+		} else if mount != "/" {
+			continue
+		}
+		// Walk to the whole-disk node: the queue belongs to it, not to a
+		// partition, and the two spellings a mount can carry (sda3 for SATA,
+		// nvme0n1p3 for NVMe) reach it differently. Nothing that matches is
+		// reported rather than guessed from another disk.
+		dev := strings.TrimPrefix(fields[0], "/dev/")
+		for {
+			if out, err := os.ReadFile(filepath.Join(root, "sys", "block", dev, "queue", "rotational")); err == nil {
+				if strings.TrimSpace(string(out)) == "1" {
+					return "hdd"
+				}
+				return "ssd"
+			}
+			d := strings.TrimRight(dev, "0123456789")
+			if d == "" {
+				return ""
+			}
+			d = strings.TrimSuffix(d, "p")
+			if d == dev {
+				return ""
+			}
+			dev = d
+		}
+	}
+	return ""
 }
 
 // macOSVersion asks sw_vers, because macOS has no os-release. It is only ever

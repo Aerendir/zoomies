@@ -889,3 +889,45 @@ func TestALoopbackEndpointExplainsWhyItCannotBeVerified(t *testing.T) {
 		t.Errorf("remedy for a named node is wrong: %q", remedy)
 	}
 }
+
+// A failure of the private connection is not a fact about the endpoint: the
+// cluster was never asked anything. The message must say what did fail, and
+// the remedy must send the operator to the machine the gateway runs beside,
+// not to an address no route reaches and not to a switch that hands the API
+// token to whatever is on the path.
+func TestAPrivateConnectionFailureReadsAsATunnelAndNotAnAddress(t *testing.T) {
+	endpoint := "https://elitedesk-node1:8006"
+	private := fmt.Errorf("opening the tunnel failed: %w", provider.ErrPrivateConnection)
+
+	msg := unreachable(endpoint, private)
+	if strings.Contains(msg, "could not be reached") {
+		t.Errorf("the message reads as a dead address: %q", msg)
+	}
+	if !strings.Contains(msg, "private connection") || !strings.Contains(msg, "gateway") {
+		t.Errorf("the message does not name the connection that failed: %q", msg)
+	}
+
+	remedy := unreachableRemedy(endpoint, private)
+	for _, want := range []string{
+		"clears on its own", "systemctl status 'zoomies-proxmox-*'", "journalctl -u 'zoomies-proxmox-*'",
+		"outbound HTTPS", "127.0.0.1:8006", "reinstalled",
+	} {
+		if !strings.Contains(remedy, want) {
+			t.Errorf("remedy does not mention %q: %q", want, remedy)
+		}
+	}
+	for _, banned := range []string{"insecure_skip_verify", "check the endpoint"} {
+		if strings.Contains(remedy, banned) {
+			t.Errorf("remedy sends the operator to the wrong layer with %q: %q", banned, remedy)
+		}
+	}
+
+	// Whatever the prose, the classification that decides what happens next
+	// must stay the unreachable kind nothing is created or deleted upon.
+	if provider.KindOf(private) != provider.FailureUnreachable {
+		t.Errorf("KindOf = %q, want unreachable", provider.KindOf(private))
+	}
+	if !provider.Retryable(private) {
+		t.Error("a private-connection failure stopped being retryable")
+	}
+}

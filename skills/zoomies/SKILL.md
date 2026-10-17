@@ -91,10 +91,11 @@ These change nothing. Run them as the question needs.
 * `zoomies runners list`, `zoomies runners get`, `zoomies runners logs`
 * `zoomies problems list`
 * `zoomies events recent` (with `--wait` it holds a request for the next change, for 25 seconds at most, and changes nothing)
+* `zoomies comparisons get`
 * `zoomies jobs list`, `zoomies jobs stats`, `zoomies jobs get`, `zoomies jobs why`, `zoomies jobs advice`, `zoomies jobs pr-delay`
 * `zoomies analyse queue-wait`, `zoomies analyse compare`, `zoomies analyse host-pressure`, `zoomies analyse startup-failures`
 * `zoomies size-pins list`
-* `zoomies hosts list`
+* `zoomies hosts list`, `zoomies hosts recovery`
 * `zoomies updates status`
 * `zoomies providers list`, `zoomies providers kinds`, `zoomies providers check`, `zoomies providers machines`, `zoomies providers orphans`
 * `zoomies installations list`
@@ -105,6 +106,7 @@ These change nothing. Run them as the question needs.
 * `zoomies doctor`, `zoomies healthcheck`, `zoomies logs`
 * `zoomies deployment status`, `zoomies deployment logs`
 * `zoomies kennel overview`, `zoomies kennel repositories`, `zoomies kennel repository`, `zoomies kennel checks`, `zoomies kennel check` (it reads a checkout on this machine and sends nothing unless `--controller` names a repository to read from the controller)
+* `zoomies release verify` (it checks a downloaded release's signature against the key compiled into this binary, and changes nothing)
 
 ### Changes: show the command, wait for a yes
 
@@ -121,10 +123,11 @@ minutes.
 * `zoomies pools export` (it writes a file in the working directory unless told `--file -`), `zoomies pools create`, `zoomies pools edit`, `zoomies pools delete`, `zoomies pools enable`, `zoomies pools disable`, `zoomies pools prewarm`, `zoomies pools import`
 * `zoomies runners drain`, `zoomies runners delete`
 * `zoomies problems apply`
-* `zoomies jobs rerun`
+* `zoomies comparisons capture` (collects GitHub evidence and changes bounded shared history; never automatically retry)
+* `zoomies jobs rerun`, `zoomies jobs acknowledge`, `zoomies jobs reopen` (the last two change what the fleet reports as still needing attention, not the failure itself)
 * `zoomies kennel recheck`
 * `zoomies size-pins set`, `zoomies size-pins delete`
-* `zoomies hosts edit`, `zoomies hosts cordon`, `zoomies hosts drain`, `zoomies hosts uncordon`, `zoomies hosts delete`, `zoomies hosts join-token`
+* `zoomies hosts edit`, `zoomies hosts cordon`, `zoomies hosts drain`, `zoomies hosts uncordon`, `zoomies hosts delete`, `zoomies hosts retire`, `zoomies hosts join-token`
 * `zoomies updates check`, `zoomies updates apply`, `zoomies updates resume`, `zoomies updates cancel`
 * `zoomies providers connect-proxmox`, `zoomies providers add`, `zoomies providers edit`, `zoomies providers pause`, `zoomies providers resume`
 * `zoomies installations verify`
@@ -134,6 +137,7 @@ minutes.
 * `zoomies mcp-clients create`, `zoomies mcp-clients rotate-secret`, `zoomies mcp-clients revoke`
 * `zoomies config set`, `zoomies config unset`, `zoomies config import-env`
 * `zoomies transfer prepare`, `zoomies transfer cancel`, `zoomies transfer export`
+* `zoomies release keygen`, `zoomies release sign` (the first mints a key pair and writes both halves to files, one of them a credential; the second signs a checksums file with a private key)
 * `zoomies tune`
 
 Some MCP tools are not offered until the controller has been told to offer

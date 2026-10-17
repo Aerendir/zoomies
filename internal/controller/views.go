@@ -81,6 +81,8 @@ func doctorView(r *hosttune.Report) *DoctorView {
 
 // HostView is one agent host and the room it has left.
 type HostView struct {
+	RecoveryState string `json:"recovery_state,omitempty"`
+	Retired       bool   `json:"retired"`
 	// HealthCheck is the last "Check now" asked of this host's agent, in memory
 	// only and omitted when there is nothing to say: no request, or one old
 	// enough that the page has no use for it.
@@ -128,6 +130,13 @@ type HostView struct {
 	// it lets an operator edit.
 	RunnerProfile    *store.RunnerProfile `json:"runner_profile,omitempty"`
 	EffectiveProfile EffectiveProfileView `json:"effective_profile"`
+	// Priority is where this host stands in placement, and PrioritySource
+	// whether the operators' own number or the score the specs earn (see
+	// scheduler.HostPriority, which the scheduler's placement reads the same
+	// way). PriorityReason is the sentence the card shows beside it.
+	Priority       int    `json:"priority"`
+	PrioritySource string `json:"priority_source"`
+	PriorityReason string `json:"priority_reason"`
 	// Tags are what can be said about this host in the terms a pool's host
 	// selector asks in: the labels stored on it, and the automatic ones no label
 	// has taken the place of, each marked as which it is. SizeClass is the class
@@ -218,6 +227,14 @@ type HostView struct {
 	CanonicalName  string `json:"canonical_name,omitempty"`
 	Version        string `json:"version,omitempty"`
 	VersionChannel string `json:"version_channel,omitempty"`
+	// MachineID is the machine this host is, when Zoomies rented it, and empty
+	// for a host somebody installed. It is the one fact a card needs to tell a
+	// rented machine from a host with an owner: a machine holds no shell
+	// anybody can reach, it is destroyed once it has been idle, and the
+	// machine that replaces it is cloned from the template its provider builds
+	// from, so "upgrade the agent" and "run this on the host" are advice nobody
+	// can carry out for one. The provider's own problem names that template.
+	MachineID string `json:"machine_id,omitempty"`
 	// Features is what the agent advertises it can do, and ElasticCPU the one
 	// answer a pool cares about: whether a runner placed here can be lent CPU
 	// at all. Rendered as a flag rather than left for the browser to find in
@@ -269,7 +286,10 @@ type HostView struct {
 // rendered as the bare list they are, and nothing is invented about the
 // backends it never reported on.
 func (c *Controller) HostView(h *store.Host) HostView {
+	priority := scheduler.HostPriority(h)
 	out := HostView{
+		RecoveryState: h.RecoveryState(c.Now()),
+		Retired:       h.Retired,
 		// Judged, not raw: the page, the problems and the metrics must read one
 		// answer about what counts.
 		Doctor:             doctorView(h.JudgedDoctor(c.Now())),
@@ -284,6 +304,9 @@ func (c *Controller) HostView(h *store.Host) HostView {
 		Free:               h.Free(),
 		EffectiveCapacity:  h.EffectiveCapacity(),
 		EffectiveProfile:   EffectiveProfile(h, c.cfg().Runners),
+		Priority:           priority.Score,
+		PrioritySource:     string(priority.Source),
+		PriorityReason:     scheduler.HostPriorityReason(h),
 		Tags:               emptySlice(scheduler.HostTags(h, c.tracksClasses())),
 		SizeClass:          c.hostSizeClassView(h),
 		AutoPool:           c.hostAutoPoolView(h),
@@ -322,7 +345,9 @@ func (c *Controller) HostView(h *store.Host) HostView {
 		LastHeartbeat:      h.LastHeartbeat,
 		CreatedAt:          h.CreatedAt,
 	}
-	out.UpgradeCommand, out.UpgradeVersion, out.UpgradeNote = hostUpgrade(h, version.Version)
+	rented := c.rentedHost(h.ID)
+	out.MachineID = rented.MachineID
+	out.UpgradeCommand, out.UpgradeVersion, out.UpgradeNote = hostUpgrade(h, version.Version, rented)
 	out.Update = c.hostUpdateView(h)
 	if !h.Usage.SampledAt.IsZero() {
 		usage := h.Usage
@@ -451,13 +476,20 @@ type JobView struct {
 	FaultKind store.FaultKind `json:"fault_kind,omitempty"`
 	// FaultFix is what to do about a fault of this kind, so a page showing the
 	// failure can show the remedy without keeping its own copy of the table.
-	FaultDomain string     `json:"fault_domain,omitempty"`
-	FaultFix    string     `json:"fault_fix,omitempty"`
-	QueuedAt    time.Time  `json:"queued_at"`
-	StartedAt   *time.Time `json:"started_at"`
-	CompletedAt *time.Time `json:"completed_at"`
-	QueueWaitMS int64      `json:"queue_wait_ms"`
-	DurationMS  int64      `json:"duration_ms"`
+	FaultDomain string `json:"fault_domain,omitempty"`
+	FaultFix    string `json:"fault_fix,omitempty"`
+	// AcknowledgedAt and AcknowledgedBy say when somebody marked this failure
+	// as known and who, by the name they go by. Both are absent on a failure
+	// nobody has triaged (the ordinary state) and on a job that did not
+	// fail. The Jobs page's attention view and the Overview's failures panel
+	// read them; the failed view and every count of failures ignore them.
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy string     `json:"acknowledged_by,omitempty"`
+	QueuedAt       time.Time  `json:"queued_at"`
+	StartedAt      *time.Time `json:"started_at"`
+	CompletedAt    *time.Time `json:"completed_at"`
+	QueueWaitMS    int64      `json:"queue_wait_ms"`
+	DurationMS     int64      `json:"duration_ms"`
 	// ControllerVersion and ControllerChannel are the controller build that
 	// claimed the job, AgentVersion the agent of the host that ran it, and
 	// HostID that host. Each is stamped once and never rewritten, and absent
@@ -608,6 +640,8 @@ func NewJobView(j *store.Job, poolName string) JobView {
 		FaultKind:      j.FaultKind,
 		FaultDomain:    j.FaultDomain(),
 		FaultFix:       j.FaultKind.Fix(),
+		AcknowledgedAt: j.AcknowledgedAt,
+		AcknowledgedBy: j.AcknowledgedBy,
 		QueuedAt:       j.QueuedAt,
 		StartedAt:      j.StartedAt,
 		CompletedAt:    j.CompletedAt,
@@ -1925,6 +1959,10 @@ type MachineView struct {
 	HostName string            `json:"host_name,omitempty"`
 	Capacity int               `json:"capacity,omitempty"`
 	Labels   map[string]string `json:"labels"`
+	// Test is true for the machine an operator asked for to prove the
+	// provider works. It is released when it reports ready, and the page reads
+	// the provider's test from it.
+	Test bool `json:"test,omitempty"`
 
 	// Operation and OperationHandle are what an operator pastes into the
 	// provider's own task log when they want to see the other half of a step
@@ -2010,6 +2048,7 @@ func (r *MachineRenderer) View(m *store.Machine) MachineView {
 		ResourceZone:        m.ResourceZone,
 		ResourceID:          m.ResourceID,
 		Address:             m.Address,
+		Test:                m.Test,
 		OwnerFingerprint:    m.OwnerFingerprint,
 		OwnershipVerifiedAt: m.OwnershipVerifiedAt,
 		OwnershipError:      m.OwnershipError,

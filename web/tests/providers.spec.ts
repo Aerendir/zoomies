@@ -14,7 +14,6 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import {
-  browserOverride,
   expectNoReload,
   FIXTURE,
   goto,
@@ -24,8 +23,6 @@ import {
   reload,
   waitForRows,
 } from './support/fixtures';
-
-test.use(browserOverride);
 
 /** The seeded provider's card, by the name its heading gives it. */
 function providerCard(page: Page) {
@@ -207,6 +204,34 @@ test("the wizard is rendered from the driver's schema, with the driver's own def
   await advanced.click();
   await expect(page.getByLabel('Resource pool')).toBeVisible();
   await expect(page.getByLabel('Full clone')).toBeVisible();
+});
+
+/**
+ * The stages are the way to a section, not only a picture of where you are.
+ *
+ * Clicking one goes straight there in either direction, without filling in the
+ * stages between, and the answers are still checked when the operator adds the
+ * provider. The stage list is a list of buttons here, which is what makes the
+ * stage reachable from a keyboard and announced as one.
+ */
+test('a provider wizard stage can be clicked to jump straight to that stage', async ({ page }) => {
+  await goto(page, '/providers/new', 'Add a provider');
+  await page.getByRole('button', { name: 'Configure connection manually' }).click();
+  const steps = page.locator('ol.steps');
+  await expect(steps.getByRole('button', { name: /Limits/ })).toBeVisible();
+
+  // Forward, past two stages nobody has filled in.
+  await steps.getByRole('button', { name: /Limits/ }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Limits' })).toBeVisible();
+  await expect(page.getByText('Step 4 of 5')).toBeVisible();
+
+  // Back, to the first stage, which is where the connection is made.
+  await steps.getByRole('button', { name: /Connect/ }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeVisible();
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+
+  // The current stage is named as such, and is not a button that does nothing.
+  await expect(steps.getByText('Connect', { exact: true })).toHaveAttribute('aria-current', 'step');
 });
 
 /**
@@ -485,6 +510,78 @@ test('forgetting a machine needs its name typed, and nothing is forgotten withou
   expect(released[0]).toContain('/machines/mach_ghost02/release');
 });
 
+/**
+ * A quarantined machine can never be deleted, forced or not: nothing has proved
+ * the resource is ours, so destroying it could destroy somebody else's. The
+ * controller's own sentence sends the operator to release the row, so the
+ * button that does it has to be on the page the sentence is read on, and it has
+ * to ask for the name before it forgets anything.
+ *
+ * The quarantined row is delivered in the response. The demo provider is an
+ * address that answers nothing, so no machine in the fixture can reach this
+ * state for real.
+ */
+test('a quarantined machine offers release where it cannot be deleted, and needs its name typed', async ({
+  page,
+}) => {
+  const complaint =
+    "this machine's delete was issued 15m 10s ago and demo-pve has not confirmed the resource is gone. " +
+    "Nothing further has been attempted: check the provider's console, then either release this row, " +
+    'which forgets the resource without touching it, or delete the resource by hand.';
+  await page.route(new RegExp(`/api/v1/machines/${FIXTURE.readyMachineId}$`), async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      json: {
+        ...body,
+        state: 'quarantined',
+        ownership_error: complaint,
+        safe_to_delete: false,
+        safe_to_delete_why: complaint,
+      },
+    });
+  });
+  const released: string[] = [];
+  await page.route(
+    new RegExp(`/api/v1/machines/${FIXTURE.readyMachineId}/release$`),
+    async (route) => {
+      released.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 204 });
+    },
+  );
+
+  await goto(page, `/machines/${FIXTURE.readyMachineId}`, FIXTURE.readyMachine);
+
+  // The sentence and the button are on the same page, and the button is the one
+  // that does what the sentence says: a quarantine is never deleted from here.
+  await expect(page.getByRole('region', { name: 'Where it is' })).toContainText(
+    'either release this row',
+  );
+  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Release', exact: true }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Release this machine' });
+  await expect(dialog).toContainText('Nothing at the provider is touched.');
+  const confirm = dialog.getByRole('button', { name: 'Release it' });
+  await expect(confirm).toBeDisabled();
+
+  // A near miss is still a miss: the name is the one guard on forgetting a row
+  // whose resource may belong to somebody else.
+  const typed = dialog.getByRole('textbox', {
+    name: `Type ${FIXTURE.readyMachine} to confirm`,
+  });
+  await typed.fill('zoomies-mach-demo');
+  await expect(confirm).toBeDisabled();
+  await confirm.click({ force: true });
+  expect(released, 'nothing was released without the name').toHaveLength(0);
+
+  await typed.fill(FIXTURE.readyMachine);
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect.poll(() => released).toHaveLength(1);
+  expect(released[0]).toContain(FIXTURE.readyMachine);
+});
+
 test('a machine says where it is and how long each phase of getting there took', async ({
   page,
 }) => {
@@ -615,6 +712,45 @@ test('the Providers page leads to the wizard, and a machine leads back to its pr
   await goto(page, `/machines/${FIXTURE.readyMachineId}`, FIXTURE.readyMachine);
   await page.getByRole('link', { name: FIXTURE.provider }).first().click();
   await expect(pageHeading(page, FIXTURE.provider)).toBeVisible();
+});
+
+test('preparing a template again is one command for the node, and says what it leaves alone', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/provider-setups', (route) =>
+    route.fulfill({
+      status: 201,
+      json: {
+        id: 'pvs_refresh',
+        expires_at: new Date(Date.now() + 3600000).toISOString(),
+        ready: false,
+        command: 'sudo zoomies providers connect-proxmox --token test-capability',
+        short_command:
+          'curl -fsSL https://zoomies.sh/connect-proxmox.sh | sudo sh -s -- --token test-capability',
+      },
+    }),
+  );
+  await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+  // The panel leads with what a machine's agent actually is, because that is
+  // the fact the action follows from: an image, not a host anybody can log into.
+  await expect(page.getByText(/cloned from one template/)).toBeVisible();
+  await expect(page.getByText(/installs nothing of its own inside a machine/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Prepare the template again' }).click();
+  // The two-line command the wizard shows leads; the whole script is one
+  // disclosure away, as it is there.
+  await expect(page.getByText('connect-proxmox.sh | sudo sh', { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Copy the prepare-template command' }),
+  ).toBeVisible();
+  // And what it does, in the order an operator needs it: the same template, the
+  // machines already running left alone, the disk that was replaced, and not
+  // following the wizard it invites.
+  await expect(page.getByText(/same VMID and the same name/)).toBeVisible();
+  await expect(page.getByText(/replaced as they go idle/)).toBeVisible();
+  await expect(page.getByText(/--delete unused0/)).toBeVisible();
+  await expect(page.getByText(/Do not add a provider afterwards/)).toBeVisible();
 });
 
 test('a private connection is offered only where the controller can make one, and asks for the gateway address', async ({

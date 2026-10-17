@@ -37,7 +37,7 @@ function result(id: string, status: DoctorResult['status']): DoctorResult {
  * with a real controller is the host-health Playwright spec's to prove.
  */
 function summaryOf(results: DoctorResult[], reboot: boolean): DoctorReport['summary'] {
-  const out = { counted: 0, warnings: 0, errors: 0, skipped: 0, suggestions: 0 };
+  const out = { counted: 0, warnings: 0, errors: 0, skipped: 0, suggestions: 0, accepted: 0 };
   for (const r of results) {
     if (reboot && r.id === 'kernel.pending' && r.status === 'warn') continue;
     out.counted++;

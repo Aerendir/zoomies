@@ -594,6 +594,24 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		return
 	}
 	r.HeadSHA = pull.HeadSHA
+	stillNeeded := func() bool {
+		state, err := client.RepairChecks(ctx, r.Repo, pull.HeadSHA)
+		if err != nil {
+			fail("GitHub could not confirm whether this failure still needs fixing. No branch was changed.")
+			return false
+		}
+		if state == "passed" {
+			r.State = "superseded"
+			r.Message = "The latest checks have already passed. No repair commit is needed and no branch was changed."
+			_ = c.persistEliRepair(ctx, r)
+			c.repairNotice(ctx, client, r, r.Message)
+			return false
+		}
+		return true
+	}
+	if !stillNeeded() {
+		return
+	}
 	var provider *store.AssistantProvider
 	if r.Trigger == "mention" {
 		actor, err := client.RepairActor(ctx, r.Repo, r.GitHubLogin)
@@ -719,6 +737,9 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 	}
 	if !c.mayAct() || c.transferDraining.Load() || ctx.Err() != nil {
 		fail("The repair stopped before publication.")
+		return
+	}
+	if !stillNeeded() {
 		return
 	}
 	r.Details.Stage = "publish"
@@ -855,10 +876,24 @@ func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo st
 	}
 	pr, err := client.RepairPull(ctx, repo, pull)
 	if err != nil {
+		var changed *github.RepairTargetChanged
+		if errors.As(err, &changed) {
+			return nil, changed
+		}
 		return nil, store.ErrConflict
 	}
 	if expectedHead != "" && pr.HeadSHA != expectedHead {
-		return nil, fmt.Errorf("%w: the PR has a newer commit; review it before requesting a repair", store.ErrConflict)
+		return nil, &github.RepairTargetChanged{Code: "superseded", Message: "The PR has a newer commit since you reviewed this failure. No repair was started and no attempt was used. Check the current PR before requesting a repair."}
+	}
+	state, err := client.RepairChecks(ctx, repo, pr.HeadSHA)
+	if err != nil {
+		return nil, fmt.Errorf("could not recheck the PR's current checks: %w", err)
+	}
+	if state == "passed" {
+		return nil, &github.RepairTargetChanged{Code: "fixed", Message: "The latest checks have passed since you reviewed this failure. No repair was started and no attempt was used."}
+	}
+	if state != "failed" {
+		return nil, &github.RepairTargetChanged{Code: "checks_pending", Message: "There are no current failed checks to repair. No repair was started and no attempt was used. Wait for the checks, then review again."}
 	}
 	provider, err := c.personalChatProvider(ctx, "", userID)
 	if err != nil {

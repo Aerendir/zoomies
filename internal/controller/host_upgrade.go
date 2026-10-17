@@ -10,7 +10,15 @@ import (
 
 // hostUpgrade tells the operator how to align a remote host. An ahead agent
 // needs its controller upgraded, never a command that silently downgrades it.
-func hostUpgrade(host *store.Host, controllerVersion string) (command, target, note string) {
+//
+// rented is the machine this host is, when Zoomies rents it. A machine gets no
+// command, because there is nowhere to run one: nobody logs into a clone, it
+// is destroyed once it has been idle, and the machine that replaces it is
+// cloned from the template its provider builds from. What an operator does
+// instead is prepare that template again, which is where the machine's agent
+// comes from, and the sentence says so rather than offering a command that
+// would be run on a host that is about to stop existing.
+func hostUpgrade(host *store.Host, controllerVersion string, rented rentedHost) (command, target, note string) {
 	if host.Embedded {
 		return "", "", ""
 	}
@@ -19,7 +27,21 @@ func hostUpgrade(host *store.Host, controllerVersion string) (command, target, n
 		return "", "", ""
 	}
 	if skew == version.SkewAhead {
+		if rented.rented() {
+			return "", "", "This machine runs an agent newer than this controller, which is the direction nothing is tested in. Prepare " +
+				"its provider's template from a newer release, or upgrade this controller."
+		}
 		return "", "", "This agent is newer than the controller. Upgrade the controller first."
+	}
+	if rented.rented() {
+		// The tag is what a setup command would prepare the template from,
+		// and it is what the operator has to type; a build that is neither a
+		// release nor one from main has none, and says so.
+		tag, ok := version.InstallTag(controllerVersion)
+		if !ok {
+			return "", "", rentedMachineAdvice(rented, "")
+		}
+		return "", "", rentedMachineAdvice(rented, tag)
 	}
 	tag, ok := version.InstallTag(controllerVersion)
 	if !ok {
@@ -43,4 +65,27 @@ func hostUpgrade(host *store.Host, controllerVersion string) (command, target, n
 		note += " The dev channel moves with main, so it may contain a newer build than this controller."
 	}
 	return command, controllerVersion, note
+}
+
+// rentedMachineAdvice is what an operator does about a machine this fleet rents
+// that runs an older agent than its controller: the card's sentence and the
+// note under it, and the provider's problem, all say this one thing, so that
+// the three cannot drift apart.
+//
+// It names no command, and that is the point. A machine is created by Zoomies,
+// holds no shell anybody can reach, and is destroyed when it goes idle, so
+// every command that updates an agent elsewhere has nobody to run it: the way
+// to change what a machine runs is the image it was cloned from.
+//
+// build is the release an operator would prepare the template from, which is
+// this controller's own tag, and empty when this controller is a build no
+// release carries.
+func rentedMachineAdvice(rented rentedHost, build string) string {
+	what := "This is a machine " + rented.Provider() + " rents, and its agent is the one its provider's template carried when the " +
+		"machine was cloned. Zoomies installs nothing of its own inside a rented machine, so nothing updates it in place: it is deleted " +
+		"once it has been idle, and the machine that replaces it is cloned from that same template."
+	if build == "" {
+		return what + " This controller runs a build no release carries, so prepare the template from a release."
+	}
+	return what + " Prepare that template again from " + build + ", and the machines built afterwards carry it."
 }

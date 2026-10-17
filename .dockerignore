@@ -31,6 +31,16 @@ README.md
 *.md
 !deploy/*.md
 
+# Planning, design review, the site's build hooks and theme, the coding-agent
+# skill and the end-to-end harnesses. Everything the Go build embeds is under
+# internal/, and the runner image copies only deploy/runner-*.sh.
+roadmap
+design
+hooks
+overrides
+skills
+test
+
 # Editors and OS
 .DS_Store
 .idea
