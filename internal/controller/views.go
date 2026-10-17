@@ -1950,6 +1950,10 @@ type MachineView struct {
 	HostName string            `json:"host_name,omitempty"`
 	Capacity int               `json:"capacity,omitempty"`
 	Labels   map[string]string `json:"labels"`
+	// Test is true for the machine an operator asked for to prove the
+	// provider works. It is released when it reports ready, and the page reads
+	// the provider's test from it.
+	Test bool `json:"test,omitempty"`
 
 	// Operation and OperationHandle are what an operator pastes into the
 	// provider's own task log when they want to see the other half of a step
@@ -2035,6 +2039,7 @@ func (r *MachineRenderer) View(m *store.Machine) MachineView {
 		ResourceZone:        m.ResourceZone,
 		ResourceID:          m.ResourceID,
 		Address:             m.Address,
+		Test:                m.Test,
 		OwnerFingerprint:    m.OwnerFingerprint,
 		OwnershipVerifiedAt: m.OwnershipVerifiedAt,
 		OwnershipError:      m.OwnershipError,

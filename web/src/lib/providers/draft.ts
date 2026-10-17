@@ -112,7 +112,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   machine_platform: 'Operating system',
   machine_labels: 'Machine labels',
   max_machines: 'Maximum machines',
-  min_machines: 'Minimum machines',
+  min_machines: 'Warm machines',
   max_creates_in_flight: 'Machines built at once',
   idle_timeout: 'Idle timeout',
   cost_per_machine_hour: 'Cost per machine-hour',
@@ -211,11 +211,13 @@ export function emptyDraft(): ProviderDraft {
     machine_os: '',
     machine_os_version: '',
     machine_arch: '',
-    // Zero rents nothing, which is the safe default and the one an operator
-    // has to change on purpose before any money is spent.
-    max_machines: '0',
-    // None kept, which is what every provider did before there was a minimum.
-    min_machines: '0',
+    // A small start rather than zero, which rents nothing and is no answer to
+    // "how many machines". The Proxmox wizard replaces both with what the
+    // cluster can hold once it has been asked (`recommend.ts`); this is what a
+    // driver that cannot be asked, and the manual path, open on.
+    max_machines: '2',
+    // One kept warm, so the first job after a quiet spell does not wait for a clone.
+    min_machines: '1',
     max_creates_in_flight: '1',
     idle_timeout: '15m',
     cost_per_machine_hour: '',

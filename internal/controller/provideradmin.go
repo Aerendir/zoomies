@@ -341,6 +341,11 @@ type ProviderChoiceView struct {
 	Value       string `json:"value"`
 	Label       string `json:"label,omitempty"`
 	Consequence string `json:"consequence,omitempty"`
+	// CPUs and MemoryMB are the size of a node's hardware or a template's
+	// shape, for the limits step's arithmetic. Absent when the provider did
+	// not say.
+	CPUs     int   `json:"cpus,omitempty"`
+	MemoryMB int64 `json:"memory_mb,omitempty"`
 }
 
 // DiscoverProvider asks a provider what this credential can see, so the form
@@ -425,7 +430,7 @@ func discoveryView(got provider.Discovery) ProviderDiscoveryView {
 func choiceViews(in []provider.Choice) []ProviderChoiceView {
 	out := make([]ProviderChoiceView, 0, len(in))
 	for _, c := range in {
-		out = append(out, ProviderChoiceView{Value: c.Value, Label: c.Label, Consequence: c.Consequence})
+		out = append(out, ProviderChoiceView{Value: c.Value, Label: c.Label, Consequence: c.Consequence, CPUs: c.CPUs, MemoryMB: c.MemoryMB})
 	}
 	return out
 }

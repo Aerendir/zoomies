@@ -861,6 +861,33 @@ func (s *Server) handleCheckProvider(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
+// handleTestProviderMachine answers POST /api/v1/providers/{id}/test-machine:
+// it reserves one machine to prove the provider works end to end. Everything
+// after the reservation is the machine loop's, so the answer is the planned
+// machine and the page follows it over the event stream.
+//
+// Audited because it spends money and uses the credential.
+func (s *Server) handleTestProviderMachine(w http.ResponseWriter, r *http.Request) {
+	row, err := s.ctrl.Store().GetProvider(r.Context(), chiURLParam(r, "id"))
+	if err != nil {
+		s.fail(w, r, "reading the provider", err)
+		return
+	}
+	m, err := s.ctrl.StartTestMachine(r.Context(), row)
+	if err != nil {
+		if errors.Is(err, controller.ErrTestMachineRefused) {
+			conflict(w, strings.TrimPrefix(err.Error(), controller.ErrTestMachineRefused.Error()+": "))
+			return
+		}
+		s.providerFailed(w, r, "starting a test machine", err)
+		return
+	}
+	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "provider.test_machine", "provider", row.ID, map[string]any{
+		"name": row.Name, "machine": m.ID,
+	})
+	writeJSON(w, http.StatusAccepted, s.machineView(r, m))
+}
+
 // handleProviderDiscovery answers GET /api/v1/providers/{id}/discovery: the
 // nodes, storages, bridges and templates this credential can actually see, so
 // the form offers a menu rather than asking somebody to go and look an

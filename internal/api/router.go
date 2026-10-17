@@ -413,6 +413,7 @@ func (s *Server) apiRoutes() chi.Router {
 			// the hypervisor, and both change nothing there, so they are the
 			// operator's to run rather than the admin's.
 			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/check", s.handleCheckProvider)
+			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/test-machine", s.handleTestProviderMachine)
 			r.With(s.require(auth.ActionProvidersPause)).Get("/{id}/discovery", s.handleProviderDiscovery)
 			// The orphan review is admin because its one act is destructive
 			// and because it names resources this fleet does not own.

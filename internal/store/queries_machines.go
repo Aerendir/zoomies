@@ -24,7 +24,7 @@ const machineCols = `id, provider_id, name, state, message, pool_id,
 	attempts, next_attempt_at, provider_error, bootstrap_error,
 	created_at, updated_at, reservation_expires_at, create_started_at, created_ok_at,
 	started_at, bootstrapped_at, enrolled_at, ready_at, idle_since, draining_at,
-	delete_started_at, deleted_at`
+	delete_started_at, deleted_at, is_test`
 
 // nullText renders an optional foreign key. pool_id and host_id are the two
 // columns that point at rows an operator can delete, so both are real SQL NULLs
@@ -40,7 +40,7 @@ func nullText(s string) any {
 func scanMachine(sc interface{ Scan(...any) error }) (*Machine, error) {
 	var m Machine
 	var poolID, hostID sql.NullString
-	var unknown int
+	var unknown, isTest int
 	var created, updated int64
 	var verified, nextAttempt, opStarted, opDeadline sql.NullInt64
 	var reservation, createStarted, createdOK, started, bootstrapped sql.NullInt64
@@ -53,10 +53,11 @@ func scanMachine(sc interface{ Scan(...any) error }) (*Machine, error) {
 		&m.Attempts, &nextAttempt, &m.ProviderError, &m.BootstrapError,
 		&created, &updated, &reservation, &createStarted, &createdOK,
 		&started, &bootstrapped, &enrolled, &ready, &idle, &draining,
-		&deleteStarted, &deleted)
+		&deleteStarted, &deleted, &isTest)
 	if err != nil {
 		return nil, err
 	}
+	m.Test = isTest == 1
 	m.PoolID, m.HostID = poolID.String, hostID.String
 	m.OpOutcomeUnknown = unknown == 1
 	m.CreatedAt, m.UpdatedAt = at(created), at(updated)
@@ -89,7 +90,7 @@ func (s *Store) CreateMachine(ctx context.Context, m *Machine) error {
 	now := s.Now()
 	m.CreatedAt, m.UpdatedAt = now, now
 	_, err := s.exec(ctx, `INSERT INTO machines (`+machineCols+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ID, m.ProviderID, m.Name, string(m.State), m.Message, nullText(m.PoolID),
 		m.OwnerControllerID, m.OwnerFingerprint, m.ResourceZone, m.ResourceID,
 		m.ResourceDetail, m.Address, msp(m.OwnershipVerifiedAt), m.OwnershipError,
@@ -100,7 +101,7 @@ func (s *Store) CreateMachine(ctx context.Context, m *Machine) error {
 		ms(m.CreatedAt), ms(m.UpdatedAt), msp(m.ReservationExpiresAt), msp(m.CreateStartedAt),
 		msp(m.CreatedOKAt), msp(m.StartedAt), msp(m.BootstrappedAt), msp(m.EnrolledAt),
 		msp(m.ReadyAt), msp(m.IdleSince), msp(m.DrainingAt), msp(m.DeleteStartedAt),
-		msp(m.DeletedAt))
+		msp(m.DeletedAt), boolInt(m.Test))
 	return wrapWrite(err)
 }
 

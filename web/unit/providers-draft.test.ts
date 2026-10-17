@@ -109,5 +109,6 @@ test('a ready Proxmox setup supplies the connection without sending secrets', ()
   assert.equal(body.setup_id, 'pvs_ready');
   assert.equal(body.credential, undefined);
   assert.equal(body.tailcat_address, undefined);
-  assert.equal(body.max_machines, 0);
+  assert.equal(body.max_machines, 2);
+  assert.equal(body.min_machines, 1);
 });

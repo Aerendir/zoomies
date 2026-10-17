@@ -304,6 +304,10 @@ type Machine struct {
 	JoinTokenID string    `json:"join_token_id,omitempty"`
 	Capacity    int       `json:"capacity,omitempty"`
 	Labels      StringMap `json:"labels,omitempty"`
+	// Test marks a machine an operator asked for to prove the provider works.
+	// It is the one machine that is not demand's: it is not kept warm, it is
+	// released once it reports ready, and a failed one stays for inspection.
+	Test bool `json:"test,omitempty"`
 
 	// The operation in flight, if any. OpHandle is the provider's own handle
 	// for the call -- a task id -- and is what recovery asks about after a

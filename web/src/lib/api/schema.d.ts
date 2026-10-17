@@ -3214,6 +3214,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/providers/{id}/test-machine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build one machine to prove the provider works
+         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential.
+         */
+        post: operations["testProviderMachine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/providers/{id}/discovery": {
         parameters: {
             query?: never;
@@ -3980,7 +4003,7 @@ export interface paths {
         };
         /**
          * List rented machines
-         * @description There is deliberately no POST. A machine exists because demand asked for one: one creation path means one accounting path, and a machine made by hand would be supply the reconciler would then decide to delete.
+         * @description There is deliberately no POST. A machine exists because demand asked for one: one creation path means one accounting path, and a machine made by hand would be supply the reconciler would then decide to delete. The one exception is a provider's test machine (`POST /providers/{id}/test-machine`), which goes through the same loop and ceilings, is never counted as supply, and is released once it is ready.
          */
         get: operations["listMachines"];
         put?: never;
@@ -10785,6 +10808,13 @@ export interface components {
             label?: string;
             /** @description What picking it means */
             consequence?: string;
+            /** @description The processors a node has or a template gives */
+            cpus?: number;
+            /**
+             * Format: int64
+             * @description The memory in MiB a node has or a template gives
+             */
+            memory_mb?: number;
         };
         /** @description What a credential can actually see. A provider with no such concept leaves a list empty rather than inventing one. */
         ProviderDiscovery: {
@@ -10854,6 +10884,8 @@ export interface components {
             labels: {
                 [key: string]: string;
             };
+            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready */
+            test?: boolean;
             /**
              * @description The operation in flight
              * @enum {string}
@@ -17361,6 +17393,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderCheck"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    testProviderMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Machine"];
                 };
             };
             404: components["responses"]["NotFound"];
