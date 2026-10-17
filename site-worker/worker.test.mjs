@@ -16,9 +16,12 @@ import worker, {
 const HTML = "<!doctype html><html><body><p>the page</p></body></html>";
 const MARKDOWN = "# The page\n\nIts body as Markdown.\n";
 
-function originFor(paths) {
+// `seen` collects the address of every fetch the worker makes, so a test can
+// say which hosts it was sent to as well as what it answered.
+function originFor(paths, seen = []) {
   return async (input) => {
-    const url = input instanceof URL ? input : new URL(input.url);
+    const url = new URL(typeof input === "string" ? input : input.url ?? input.href);
+    seen.push(url.href);
     // Keys are "/path" for this site's origin, or "host/path" for an
     // upstream the mirror fetches by name.
     const found = paths.get(url.host + url.pathname) ?? paths.get(url.pathname);
@@ -35,9 +38,9 @@ function originFor(paths) {
   };
 }
 
-async function handle(url, paths, init = {}) {
+async function handle(url, paths, init = {}, seen = []) {
   const previous = globalThis.fetch;
-  globalThis.fetch = originFor(new Map([...paths]));
+  globalThis.fetch = originFor(new Map([...paths]), seen);
   try {
     return await worker.fetch(new Request(url, init));
   } finally {
@@ -153,6 +156,101 @@ test("a HEAD request for markdown answers with the headers and no body", async (
   assert.equal(await response.text(), "");
 });
 
+// A path that begins with two slashes (and "/\", which the URL parser reads the
+// same way) is a reference to another host once it is resolved against the
+// site: "//attacker.example/p/index.md" names attacker.example. The worker
+// builds the address of a page's Markdown copy from the request path, so
+// without a guard anyone could point it at a server of their own and have this
+// site hand back that server's status, body and headers as zoomies.sh.
+const ATTACKER = "attacker.example";
+const ATTACKER_COPY = {
+  body: "# owned\n",
+  headers: {
+    "content-type": "text/markdown",
+    "set-cookie": "session=attacker; Domain=zoomies.sh; Path=/",
+    "content-security-policy": "default-src *",
+  },
+};
+
+for (const [name, address] of [
+  ["two slashes", `https://zoomies.sh//${ATTACKER}/p/`],
+  ["a slash and a backslash", `https://zoomies.sh/\\${ATTACKER}/p/`],
+  ["three slashes", `https://zoomies.sh///${ATTACKER}/p/`],
+  ["dot segments that collapse to two slashes", `https://zoomies.sh/a/..//${ATTACKER}/p/`],
+  ["two slashes and no closing slash", `https://zoomies.sh//${ATTACKER}/p`],
+  ["two slashes and an .html name", `https://zoomies.sh//${ATTACKER}/p.html`],
+]) {
+  test(`a request path of ${name} never sends the worker to another host`, async () => {
+    const seen = [];
+    const response = await handle(
+      address,
+      new Map([
+        [`${ATTACKER}/p/index.md`, ATTACKER_COPY],
+        [`${ATTACKER}/p.md`, ATTACKER_COPY],
+      ]),
+      { headers: { accept: "text/markdown" } },
+      seen,
+    );
+
+    assert.deepEqual(
+      seen.filter((href) => new URL(href).host !== "zoomies.sh"),
+      [],
+      "the worker fetched a host other than the site's",
+    );
+    // The origin's own answer for an address it does not have.
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.notEqual(await response.text(), ATTACKER_COPY.body);
+  });
+}
+
+// Even from the site's own origin, a copy is relayed with a short list of
+// headers rather than all of them: a cookie, a content security policy or a
+// CORS grant that came from whatever answered the fetch must never be set on
+// zoomies.sh by this worker.
+test("a markdown copy is answered with only the headers the worker means to relay", async () => {
+  const response = await handle(
+    "https://zoomies.sh/quickstart/",
+    new Map([
+      [
+        "/quickstart/index.md",
+        {
+          body: MARKDOWN,
+          headers: {
+            "content-type": "text/markdown; charset=utf-8",
+            "cache-control": "max-age=600",
+            etag: '"5f3a"',
+            "last-modified": "Tue, 13 Oct 2026 09:00:00 GMT",
+            "set-cookie": "session=1; Domain=zoomies.sh; Path=/",
+            "content-security-policy": "default-src 'none'",
+            "access-control-allow-origin": "https://attacker.example",
+            "access-control-allow-credentials": "true",
+            "x-served-by": "cache-lhr-1",
+          },
+        },
+      ],
+    ]),
+    { headers: { accept: "text/markdown" } },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "max-age=600");
+  assert.equal(response.headers.get("etag"), '"5f3a"');
+  assert.equal(
+    response.headers.get("last-modified"),
+    "Tue, 13 Oct 2026 09:00:00 GMT",
+  );
+  for (const name of [
+    "set-cookie",
+    "content-security-policy",
+    "access-control-allow-origin",
+    "access-control-allow-credentials",
+    "x-served-by",
+  ]) {
+    assert.equal(response.headers.get(name), null, `${name} was relayed`);
+  }
+});
+
 test("markdown is refused only when an entry's quality refuses it", () => {
   assert.equal(wantsMarkdown("text/markdown"), true);
   assert.equal(wantsMarkdown("TEXT/Markdown"), true);
@@ -175,6 +273,9 @@ test("the copy's address follows the built site's shape", () => {
   assert.equal(markdownPath("/install.sh"), null);
   assert.equal(markdownPath("/screenshots/ui.webp"), null);
   assert.equal(markdownPath("/llms.txt"), null);
+  // Not a path on this site at all: resolved against it, it names another host.
+  assert.equal(markdownPath("//attacker.example/p/"), null);
+  assert.equal(markdownPath("///attacker.example/p"), null);
 });
 
 test("the token estimate rounds up the parts of a token", () => {

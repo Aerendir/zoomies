@@ -65,8 +65,13 @@ export function wantsMarkdown(accept) {
 
 // The Markdown copy's address, or null where the URL is a file of its own
 // kind: an image, the catalog's JSON, a script. Those are not pages, and no
-// copy of them exists to find.
+// copy of them exists to find. Nor is a pathname that begins with two slashes
+// (the URL parser also reads "/\" that way): resolved against the site it names
+// another host.
 export function markdownPath(pathname) {
+  if (pathname.startsWith("//")) {
+    return null;
+  }
   if (pathname.endsWith("/")) {
     return pathname + "index.md";
   }
@@ -75,6 +80,40 @@ export function markdownPath(pathname) {
     return pathname.endsWith(".html") ? pathname.replace(/\.html$/, ".md") : null;
   }
   return pathname + "/index.md";
+}
+
+// The address of a file on this site, or null when the path would leave it.
+//
+// The path comes from the request, so it is the requester's to choose, and
+// "//host/p" resolved against an origin is a reference to host, not a path on
+// the origin: new URL(path, origin) would send the worker to any server the
+// requester names and have it answer with that server's reply. Concatenation
+// cannot change the authority, and the parse that follows is the check that
+// it did not.
+function onThisSite(origin, path) {
+  if (path.startsWith("//")) {
+    return null;
+  }
+  const address = origin + path;
+  return new URL(address).origin === origin ? address : null;
+}
+
+// The headers of a fetched answer that a response built here may carry. The
+// body is re-sent as this site's own, so the cookies, policies and CORS grants
+// of whatever answered the fetch are not the worker's to pass on; what is left
+// is what lets a cache and a conditional request treat the copy as the file it
+// is.
+const RELAYED_HEADERS = ["cache-control", "etag", "last-modified"];
+
+function relayedHeaders(upstream) {
+  const headers = new Headers();
+  for (const name of RELAYED_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value !== null) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
 }
 
 // The Markdown copy as a response, or null when this address has none, in
@@ -88,7 +127,11 @@ async function markdownResponse(request, url) {
   if (path === null) {
     return null;
   }
-  const copy = await fetch(new URL(path, url.origin), {
+  const target = onThisSite(url.origin, path);
+  if (target === null) {
+    return null;
+  }
+  const copy = await fetch(target, {
     headers: { accept: MARKDOWN_TYPE },
     redirect: "follow",
   });
@@ -96,7 +139,7 @@ async function markdownResponse(request, url) {
     return null;
   }
   const body = await copy.text();
-  const headers = new Headers(copy.headers);
+  const headers = relayedHeaders(copy);
   headers.set("content-type", MARKDOWN_TYPE + "; charset=utf-8");
   headers.set("vary", "Accept");
   headers.set("x-markdown-tokens", String(tokenEstimate(body)));
