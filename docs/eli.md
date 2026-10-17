@@ -456,6 +456,10 @@ workflow edits disabled for a new policy. A personal provider is still required.
 Setup checks the same run again before offering the repair. Runs without an
 eligible open PR explain why they cannot be repaired.
 
+The wizard below uses a sample failure; no real PR was changed.
+
+![Eli repair setup for a sample failed run, with the repository's installation preselected and a single save action](screenshots/eli-failure-setup-dark.png){ .zoomies-shot }
+
 For advanced setup across repositories:
 
 1. Open **Eli repairs** from the navigation, or **Fix with Eli**
