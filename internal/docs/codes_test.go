@@ -130,6 +130,27 @@ func codesIn(t *testing.T, path string) []string {
 	return out
 }
 
+// notProblemCodes are the `Code:` values the scan finds that are not problem
+// codes, each with the reason. The scan reads every `Code:` string in the
+// controller's sources whatever type it sits in, so a different vocabulary that
+// happens to call its field Code is counted as a problem until it is named here.
+//
+// These three are the repair readiness reasons: why a failed run needs no
+// repair, or cannot be repaired yet. They reach the repair journey and the
+// job-attention record, never the problems drawer or the startup output, and
+// they carry no severity, which every problem does. A row for one would publish
+// "fixed" as a problem through the catalogue, the MCP server and the site.
+//
+// Naming a code here is a decision, not a shortcut: anything an operator is
+// shown as a problem belongs in docs/problem-codes.md, and
+// TestNoExemptionOutlivesItsCode fails on an entry that nothing raises any more
+// or that has since gained a row.
+var notProblemCodes = map[string]string{
+	"fixed":          "the PR's latest checks have passed since the failure was shown, so there is nothing to repair",
+	"superseded":     "the PR has a newer commit than the failed run, so the failure is out of date",
+	"checks_pending": "no current check has failed yet, so there is nothing to repair until the checks finish",
+}
+
 // Every problem code an operator can be shown has a row explaining it.
 //
 // The code is the stable half of a problem -- it is what somebody searches
@@ -152,6 +173,9 @@ func TestEveryProblemCodeIsDocumented(t *testing.T) {
 				continue
 			}
 			seen[code] = true
+			if _, exempt := notProblemCodes[code]; exempt {
+				continue
+			}
 			// Backticked, so a code that only appears inside a sentence
 			// about something else does not count as documented.
 			if !strings.Contains(text, "`"+code+"`") {
@@ -161,7 +185,10 @@ func TestEveryProblemCodeIsDocumented(t *testing.T) {
 	}
 
 	if len(missing) > 0 {
-		t.Errorf("these problem codes are raised but have no row in docs/problem-codes.md:\n  %s",
+		t.Errorf("these problem codes are raised but have no row in docs/problem-codes.md:\n  %s\n"+
+			"Add a row for each one an operator is shown. A Code that belongs to some other "+
+			"vocabulary and never reaches the problems drawer or the startup output is named "+
+			"in notProblemCodes, with the reason, instead.",
 			strings.Join(missing, "\n  "))
 	}
 	if len(seen) == 0 {
@@ -206,6 +233,43 @@ func TestTheReferenceDescribesNoCodeThatIsGone(t *testing.T) {
 	if len(stale) > 0 {
 		t.Errorf("docs/problem-codes.md documents codes nothing raises any more:\n  %s",
 			strings.Join(stale, "\n  "))
+	}
+}
+
+// And the exemptions are held to the same standard as the rows.
+//
+// An entry whose code nothing raises any more would go on excusing whatever
+// next uses the word, and one that has gained a row is both excused and
+// documented, which is a decision somebody should take in one place.
+func TestNoExemptionOutlivesItsCode(t *testing.T) {
+	page, err := os.ReadFile(reference)
+	if err != nil {
+		t.Fatalf("reading %s: %v", filepath.Clean(reference), err)
+	}
+	text := string(page)
+
+	raised := map[string]bool{}
+	for _, source := range problemSources(t) {
+		for _, code := range codesIn(t, source) {
+			raised[code] = true
+		}
+	}
+
+	exempt := make([]string, 0, len(notProblemCodes))
+	for code := range notProblemCodes {
+		exempt = append(exempt, code)
+	}
+	sort.Strings(exempt)
+
+	for _, code := range exempt {
+		switch {
+		case strings.TrimSpace(notProblemCodes[code]) == "":
+			t.Errorf("notProblemCodes excuses %q without saying why; give the reason or remove the entry", code)
+		case !raised[code]:
+			t.Errorf("notProblemCodes excuses %q, which nothing raises any more; remove the entry", code)
+		case strings.Contains(text, "\n| `"+code+"`"):
+			t.Errorf("notProblemCodes excuses %q, which docs/problem-codes.md now documents as a problem; keep the row or the exemption, not both", code)
+		}
 	}
 }
 
