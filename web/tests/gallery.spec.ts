@@ -173,10 +173,10 @@ test.describe('every style and mode combination', () => {
   }
 });
 
-test('an unknown style and mode fall back to Classic and System', async ({ page }) => {
+test('an unknown style and mode fall back to Mission Control and System', async ({ page }) => {
   await open(page, 'neon', 'twilight');
   const root = page.locator('html');
-  expect(await root.getAttribute('data-ui-style')).toBeNull();
+  await expect(root).toHaveAttribute('data-ui-style', 'mission-control');
   expect(await root.getAttribute('data-theme')).toBeNull();
 });
 

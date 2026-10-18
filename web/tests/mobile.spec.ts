@@ -23,6 +23,7 @@ import {
   openNavMenu,
   pageHeading,
   PRIMARY_SECTIONS,
+  useClassic,
   SECTIONS,
   sectionHeading,
   expectNoSidewaysScroll,
@@ -929,6 +930,8 @@ function layout(page: Page, choice: 'Cards' | 'Rows'): Locator {
 }
 
 test('a grid can be read as cards instead of rows, and remembers which', async ({ page }) => {
+  // Mission Control starts a fresh phone grid as Cards; this walks from Rows.
+  await useClassic(page);
   await goto(page, '/runners', 'Runners');
   const rows = dataRows(grid(page, 'Runners'));
   await expect(rows.first()).toBeVisible();

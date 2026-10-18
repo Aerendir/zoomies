@@ -235,6 +235,10 @@ test('a fleet that has done nothing says so in dashes, and blames no filter', as
   // started a single runner, and it was the first thing a new operator read in
   // the row meant to judge the fleet by. "--" is what every other empty value
   // in the product says.
+  //
+  // Mission Control, the default, folds the startup and registration timings
+  // into a disclosure under the headline tiles, so open it before reading them.
+  await page.locator('details.performance summary').click();
   for (const name of [/^Median queue wait/, /^Runner startup/, /^Registration/]) {
     const tile = page.getByRole('link', { name });
     await expect(tile).toBeVisible();
@@ -500,6 +504,10 @@ test('the lockup sits on a rounded Zoomies Black stage in both themes', async ({
   // around the lockup and nothing more: the column it sits in, and the pitch
   // under it, are a surface like the form's, so their text follows the theme
   // rather than being fixed white (which the light theme would put on white).
+  //
+  // Dark is the default, so this follows the operating system on purpose: the
+  // test switches themes by emulating the system's setting.
+  await page.addInitScript(() => localStorage.setItem('zoomies.theme', 'system'));
   const ground = (selector: string) =>
     page.locator(selector).evaluate((start) => {
       let el: Element | null = start;
