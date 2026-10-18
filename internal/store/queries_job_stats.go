@@ -175,7 +175,7 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 		return m
 	}
 
-	rows, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, COUNT(*), MIN(q),
+	rows, err := s.texts.query(ctx, base+`SELECT k1, k2, COUNT(*), MIN(q),
 		SUM(CASE WHEN conclusion = 'success' AND runner_fault = '' THEN 1 ELSE 0 END),
 		SUM(CASE WHEN `+failedJobSQL()+` THEN 1 ELSE 0 END),
 		SUM(CASE WHEN conclusion IN ('cancelled','skipped') AND runner_fault = '' THEN 1 ELSE 0 END),
@@ -202,7 +202,7 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 		return nil, err
 	}
 
-	kinds, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, COALESCE(NULLIF(fault_kind, ''), 'unclassified'), COUNT(*)
+	kinds, err := s.texts.query(ctx, base+`SELECT k1, k2, COALESCE(NULLIF(fault_kind, ''), 'unclassified'), COUNT(*)
 		FROM base WHERE `+fleetFailedJobSQL()+` GROUP BY 1, 2, 3`, args...)
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 		return nil, err
 	}
 
-	peaks, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, MAX(pc), MAX(pm), SUM(oom), COUNT(pm), MAX(prm), MAX(pdm),
+	peaks, err := s.texts.query(ctx, base+`SELECT k1, k2, MAX(pc), MAX(pm), SUM(oom), COUNT(pm), MAX(prm), MAX(pdm),
 		SUM(CASE WHEN prm > 0 AND pdm > 0 THEN 1 ELSE 0 END) FROM base GROUP BY k1, k2`, args...)
 	if err != nil {
 		return nil, err
@@ -263,7 +263,7 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 		{"startup", func(g *JobStatsGroup) *JobPercentiles { return &g.Startup }},
 	} {
 		// col is one of the three literals above, never caller input.
-		pr, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, MAX(n),
+		pr, err := s.texts.query(ctx, base+`SELECT k1, k2, MAX(n),
 			MAX(CASE WHEN rn = CAST((n - 1) * 0.5 + 0.5 AS INTEGER) + 1 THEN v END),
 			MAX(CASE WHEN rn = CAST((n - 1) * 0.95 + 0.5 AS INTEGER) + 1 THEN v END)
 			FROM (SELECT k1, k2, `+m.col+` AS v,

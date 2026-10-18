@@ -121,6 +121,9 @@ type Store struct {
 	// rstmts and wstmts hold the prepared statements of the hot queries, one set
 	// for each pool; see hot.go.
 	rstmts, wstmts *stmtCache
+	// texts holds the prepared statements of the few queries built from the shape of
+	// what they are asked, on the reading pool; see text_stmts.go.
+	texts *textStmts
 	// writes, when set, is told how long each write waited for wmu and how
 	// long it then held it; see ObserveWrites.
 	writes atomic.Pointer[WriteObserver]
@@ -265,7 +268,7 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 	}
 
 	s := &Store{read: read, write: write, path: opts.Path, now: opts.Now, readOnly: opts.ReadOnly,
-		rstmts: newStmtCache(read), wstmts: newStmtCache(write)}
+		rstmts: newStmtCache(read), wstmts: newStmtCache(write), texts: newTextStmts(read)}
 	if opts.ReadOnly {
 		// Not migrating is the point, so the ledger check that migrate would
 		// have made is made here instead: a caller reading a database from a
@@ -306,6 +309,7 @@ func (s *Store) Close() error {
 	var errs []error
 	s.rstmts.close()
 	s.wstmts.close()
+	s.texts.close()
 	if s.read != nil {
 		errs = append(errs, s.read.Close())
 	}
