@@ -387,3 +387,78 @@ test('withheld job names are skipped, and the step that says so is shown', async
   // No row of separators standing where names would be.
   for (const text of await events.allTextContents()) expect(text).not.toMatch(/·\s*·/);
 });
+
+/**
+ * A public view's visitor, as comparisons.spec.ts makes one: the controller
+ * answers as it does with authentication off, and the page is told the view is
+ * public and the session is a visitor's.
+ */
+async function asVisitor(page: Page): Promise<void> {
+  await page.route('**/api/v1/meta', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.auth_disabled = false;
+    body.bootstrap_required = false;
+    body.public_view = true;
+    await route.fulfill({ response, json: body });
+  });
+  await page.route('**/api/v1/auth/session', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.role = 'viewer';
+    body.kind = 'public';
+    await route.fulfill({ response, json: body });
+  });
+}
+
+// Every analysis route refuses a public view's visitor before it reads anything
+// (internal/api/router.go), and the product's rule for what the API refuses a
+// visitor is to neither offer it nor ask for it (sections.ts, RepairOffers).
+// Without that, every page a visitor may open drew a card whose only content was
+// "sign in to do this", after a request certain to be refused.
+test("a public view's visitor gets no analysis card and no analysis request", async ({ page }) => {
+  const hosts = (await page.request.get('/api/v1/hosts').then((r) => r.json())) as {
+    items: { id: string; name: string }[];
+  };
+  const host = hosts.items.find((h) => h.name === FIXTURE.machineHost)!;
+  await asVisitor(page);
+  const asked: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/v1/analysis/')) asked.push(request.url());
+  });
+  // Each page's own read is the proof the page has mounted and run its effects:
+  // a card's request, were it made, is issued in the same pass and before it.
+  const pages = [
+    {
+      path: '/jobs?state=queued',
+      heading: 'Jobs',
+      title: 'Why jobs waited',
+      read: '/api/v1/jobs?',
+    },
+    {
+      path: '/usage',
+      heading: 'Usage',
+      title: 'What got worse and what got better',
+      read: '/api/v1/jobs/stats',
+    },
+    {
+      path: `/hosts/${host.id}`,
+      heading: FIXTURE.machineHost,
+      title: 'Whether its failures came under pressure',
+      read: `/api/v1/hosts/${host.id}`,
+    },
+    {
+      path: '/runners?state=failed',
+      heading: 'Runners',
+      title: 'What keeps failing to start',
+      read: '/api/v1/runners?',
+    },
+  ];
+  for (const p of pages) {
+    const read = page.waitForResponse((response) => response.url().includes(p.read));
+    await goto(page, p.path, p.heading);
+    await read;
+    await expect(card(page, p.title), `${p.path} for a visitor`).toHaveCount(0);
+  }
+  expect(asked, 'the analysis routes a visitor asked').toEqual([]);
+});

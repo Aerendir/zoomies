@@ -33,6 +33,7 @@
   import type { CompareFinding, Usage, UsageGrouping } from '$lib/api/types';
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
+  import { session } from '$lib/state/session.svelte';
   import {
     NO_VALUE,
     formatAbsolute,
@@ -197,8 +198,12 @@
   let compareLoading = $state(false);
   const compareFrom = $derived(query.from);
   const compareTo = $derived(query.to);
+  // Not for a public view's visitor, whom the route refuses before it reads
+  // anything (lib/shell/sections.ts says why a refused thing is not offered).
+  const compareShown = $derived(!session.visitor);
 
   $effect(() => {
+    if (!compareShown) return;
     const period =
       compareFrom && compareTo ? analysisWindow(compareFrom, compareTo, Date.now()) : null;
     const controller = new AbortController();
@@ -562,95 +567,97 @@
      with no job still has a plain answer to give here, and the release table's
      own request may fail on its own, for a window over the server's limit. -->
 <ReleaseTable from={query.from} to={query.to} />
-<div class="compare">
-  <AnalysisCard
-    title="What got worse and what got better"
-    finding={compare}
-    error={compareError}
-    loading={compareLoading}
-  >
-    {#if compare}
-      {@const ev = compare.evidence}
-      {#each [{ side: ev.a, name: 'Earlier' }, { side: ev.b, name: 'Later' }] as { side, name } (name)}
-        <dl class="facts" aria-label="{name}: {side.label}">
-          <div>
-            <dt>{name}</dt>
-            <dd>
-              {side.label}, {formatAbsolute(side.since)} to {formatAbsolute(side.until)}
-            </dd>
-          </div>
-          <div>
-            <dt>Jobs</dt>
-            <dd class="figure">
-              {#if side.counts_only}
-                {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.fleet_failed)} lost
-                to the fleet
-              {:else}
-                {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.failed)} failed, {formatNumber(
-                  side.figures.fleet_failed,
-                )} lost to the fleet, {formatNumber(side.figures.oom_killed)} OOM killed
-              {/if}
-            </dd>
-          </div>
-          {#if side.counts_only}
+{#if compareShown}
+  <div class="compare">
+    <AnalysisCard
+      title="What got worse and what got better"
+      finding={compare}
+      error={compareError}
+      loading={compareLoading}
+    >
+      {#if compare}
+        {@const ev = compare.evidence}
+        {#each [{ side: ev.a, name: 'Earlier' }, { side: ev.b, name: 'Later' }] as { side, name } (name)}
+          <dl class="facts" aria-label="{name}: {side.label}">
             <div>
-              <dt>Read from</dt>
+              <dt>{name}</dt>
               <dd>
-                The daily roll-up, in whole UTC days, which keeps counts and no outcomes or times.
+                {side.label}, {formatAbsolute(side.since)} to {formatAbsolute(side.until)}
               </dd>
             </div>
-          {/if}
-          {#if side.jobs_gone_before}
             <div>
-              <dt>Gone before</dt>
-              <dd>
-                {formatAbsolute(side.jobs_gone_before)}: older jobs are past retention.jobs, and no
-                roll-up records which release ran them.
+              <dt>Jobs</dt>
+              <dd class="figure">
+                {#if side.counts_only}
+                  {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.fleet_failed)} lost
+                  to the fleet
+                {:else}
+                  {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.failed)} failed, {formatNumber(
+                    side.figures.fleet_failed,
+                  )} lost to the fleet, {formatNumber(side.figures.oom_killed)} OOM killed
+                {/if}
               </dd>
             </div>
-          {/if}
-          {#if side.no_record_before}
-            <div>
-              <dt>No counts before</dt>
-              <dd>{formatAbsolute(side.no_record_before)}</dd>
-            </div>
-          {/if}
-          <!-- Only a roll-up side ends early for want of a midnight; a release's
+            {#if side.counts_only}
+              <div>
+                <dt>Read from</dt>
+                <dd>
+                  The daily roll-up, in whole UTC days, which keeps counts and no outcomes or times.
+                </dd>
+              </div>
+            {/if}
+            {#if side.jobs_gone_before}
+              <div>
+                <dt>Gone before</dt>
+                <dd>
+                  {formatAbsolute(side.jobs_gone_before)}: older jobs are past retention.jobs, and
+                  no roll-up records which release ran them.
+                </dd>
+              </div>
+            {/if}
+            {#if side.no_record_before}
+              <div>
+                <dt>No counts before</dt>
+                <dd>{formatAbsolute(side.no_record_before)}</dd>
+              </div>
+            {/if}
+            <!-- Only a roll-up side ends early for want of a midnight; a release's
                side ends at its last job, which its own dates above already say. -->
-          {#if side.counts_only && side.asked_until !== side.until}
-            <div>
-              <dt>Asked until</dt>
-              <dd>
-                {formatAbsolute(side.asked_until)}, read to {formatAbsolute(side.until)}
-              </dd>
-            </div>
-          {/if}
-        </dl>
-      {/each}
-      {#if ev.percentiles_unavailable}
-        <p class="evidence-note">
-          No time was compared: a side came from the daily roll-up, which keeps counts only.
-        </p>
+            {#if side.counts_only && side.asked_until !== side.until}
+              <div>
+                <dt>Asked until</dt>
+                <dd>
+                  {formatAbsolute(side.asked_until)}, read to {formatAbsolute(side.until)}
+                </dd>
+              </div>
+            {/if}
+          </dl>
+        {/each}
+        {#if ev.percentiles_unavailable}
+          <p class="evidence-note">
+            No time was compared: a side came from the daily roll-up, which keeps counts only.
+          </p>
+        {/if}
+        {#if ev.changes.length}
+          <p class="rows-label" id="compare-changes">Measure by measure</p>
+          <ul class="rows" aria-labelledby="compare-changes">
+            {#each ev.changes as c (c.measure)}
+              <li>
+                <span>{wordFor(MEASURE_WORDS, c.measure)}</span>
+                <span class="figure muted"
+                  >{changeFigure(c.from, c.unit)} to {changeFigure(c.to, c.unit)}, {wordFor(
+                    DIRECTION_WORDS,
+                    c.direction,
+                  )}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {/if}
-      {#if ev.changes.length}
-        <p class="rows-label" id="compare-changes">Measure by measure</p>
-        <ul class="rows" aria-labelledby="compare-changes">
-          {#each ev.changes as c (c.measure)}
-            <li>
-              <span>{wordFor(MEASURE_WORDS, c.measure)}</span>
-              <span class="figure muted"
-                >{changeFigure(c.from, c.unit)} to {changeFigure(c.to, c.unit)}, {wordFor(
-                  DIRECTION_WORDS,
-                  c.direction,
-                )}</span
-              >
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    {/if}
-  </AnalysisCard>
-</div>
+    </AnalysisCard>
+  </div>
+{/if}
 
 <style>
   .compare {

@@ -99,7 +99,9 @@
    * narrowed to.
    * ------------------------------------------------------------------------ */
 
-  const failedShown = $derived(states.includes('failed'));
+  // Not for a public view's visitor, whom the route refuses before it reads
+  // anything (lib/shell/sections.ts says why a refused thing is not offered).
+  const failedShown = $derived(!session.visitor && states.includes('failed'));
   let startup = $state.raw<StartupFailuresFinding | null>(null);
   let startupError = $state<{ message: string; refused: boolean } | null>(null);
   let startupLoading = $state(false);

@@ -414,8 +414,12 @@
   let pressureError = $state<{ message: string; refused: boolean } | null>(null);
   let pressureLoading = $state(false);
   let pressureKey = $state(0);
+  // Not for a public view's visitor, whom the route refuses before it reads
+  // anything (lib/shell/sections.ts says why a refused thing is not offered).
+  const pressureShown = $derived(!session.visitor);
 
   $effect(() => {
+    if (!pressureShown) return;
     const hostId = id;
     void pressureKey;
     const controller = new AbortController();
@@ -581,7 +585,7 @@
   <div class="health-content">
     {@render nextPanel()}
     {@render updatePanel()}
-    {@render pressureCard()}
+    {#if pressureShown}{@render pressureCard()}{/if}
     {#if missing}
       <Panel title="No health report yet" description={missing.description}>
         <p>
@@ -617,7 +621,7 @@
     <!-- First, so that a phone meets the action before a long list of findings. -->
     {@render nextPanel()}
     {@render updatePanel()}
-    {@render pressureCard()}
+    {#if pressureShown}{@render pressureCard()}{/if}
     <Panel title="Latest host report" description={summary.hint}>
       <p>{reportOrigin(report)} · Checked <RelativeTime value={report.checked_at} /></p>
       {#if changeLog.length}

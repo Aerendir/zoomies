@@ -185,8 +185,13 @@
   // still the queue somebody is asking about, and the card then says it does
   // not apply the narrowing (below). The UI itself never writes such an
   // address: the "Unmatched only" switch clears the state.
+  //
+  // Never for a public view's visitor: the route refuses one before it reads
+  // anything, and a card that can only say "sign in to do this" is one more
+  // thing a visitor learns to distrust (lib/shell/sections.ts).
   const queuedShown = $derived(
-    view === 'queued' || (filters.state.length === 1 && filters.state[0] === 'queued'),
+    !session.visitor &&
+      (view === 'queued' || (filters.state.length === 1 && filters.state[0] === 'queued')),
   );
   const waitPool = $derived(filters.pool_id.length === 1 ? filters.pool_id[0] : undefined);
   // Primitives, so a change to a filter the analysis does not read (a
