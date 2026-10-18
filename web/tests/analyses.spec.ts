@@ -328,7 +328,9 @@ async function askedByTheCard(page: Page, title: string): Promise<string> {
     asked.push(body.messages[0]!.content);
     await route.continue();
   });
-  await card(page, title).getByRole('button', { name: 'Ask Eli' }).click();
+  const ask = card(page, title).getByRole('button', { name: 'Ask Eli' });
+  await expect(ask, `the card "${title}" offers Ask Eli`).toBeVisible();
+  await ask.click();
   await expect.poll(() => asked.length, 'the prompt Eli was sent').toBeGreaterThan(0);
   return asked[0]!;
 }
@@ -502,6 +504,115 @@ test('Refresh on Usage asks for the comparison again, once, whatever the range',
     await page.waitForTimeout(600);
     expect(requests.length, `${address} after Refresh, once`).toBe(2);
   }
+});
+
+/** The demo's pools and hosts, for the tests that narrow a card to one. */
+async function fleetOf(page: Page) {
+  const get = async <T>(path: string) =>
+    ((await page.request.get(path).then((r) => r.json())) as { items: T[] }).items;
+  return {
+    pools: await get<{ id: string; name: string }>('/api/v1/pools'),
+    hosts: await get<{ id: string; name: string }>('/api/v1/hosts'),
+  };
+}
+
+// What a card asks of the route is not what its summary shows: the tests that
+// read a summary bind it to the route by asking again with the request the page
+// sent, so a parameter that went missing from both was invisible, and the page
+// went on showing an answer, for the whole fleet, under a heading that named
+// one pool. These read the query string the page sent.
+test('the Queued card asks about the one pool the list is narrowed to, and none for several', async ({
+  page,
+}) => {
+  const { pools } = await fleetOf(page);
+  const a = pools.find((p) => p.name === FIXTURE.linuxPool)!;
+  const b = pools.find((p) => p.name === FIXTURE.armPool)!;
+  const requests = watchAnalysis(page, 'queue-wait');
+  await goto(page, `/jobs?state=queued&pool_id=${a.id}`, 'Jobs');
+  await expectOneAnswer(page, 'Why jobs waited', requests);
+  expect(new URL(requests.at(-1)!).searchParams.getAll('pool_id')).toEqual([a.id]);
+  // The route reads one pool or none, so two pools are the fleet, which the
+  // card says in its scope, and nothing is sent.
+  requests.length = 0;
+  await goto(page, `/jobs?state=queued&pool_id=${a.id}&pool_id=${b.id}`, 'Jobs');
+  await expectOneAnswer(page, 'Why jobs waited', requests);
+  expect(new URL(requests.at(-1)!).searchParams.has('pool_id')).toBe(false);
+});
+
+test('the failed runners card asks about the pool and the host the list is narrowed to', async ({
+  page,
+}) => {
+  const { pools, hosts } = await fleetOf(page);
+  const pool = pools.find((p) => p.name === FIXTURE.linuxPool)!;
+  const host = hosts.find((h) => h.name === FIXTURE.machineHost)!;
+  const requests = watchAnalysis(page, 'startup-failures');
+  await goto(page, `/runners?state=failed&pool_id=${pool.id}&host_id=${host.id}`, 'Runners');
+  await expectOneAnswer(page, 'What keeps failing to start', requests);
+  const query = new URL(requests.at(-1)!).searchParams;
+  expect(query.get('pool_id')).toBe(pool.id);
+  expect(query.get('host_id')).toBe(host.id);
+  // And nothing it was not narrowed to.
+  requests.length = 0;
+  await goto(page, '/runners?state=failed', 'Runners');
+  await expectOneAnswer(page, 'What keeps failing to start', requests);
+  const fleetWide = new URL(requests.at(-1)!).searchParams;
+  expect([fleetWide.has('pool_id'), fleetWide.has('host_id')]).toEqual([false, false]);
+});
+
+/**
+ * The page's one Refresh asks a card again, once. Pressed after the card has
+ * its first answer, so the extra request is the press and not the opening.
+ */
+async function expectRefreshAsksOnce(
+  page: Page,
+  address: string,
+  heading: string,
+  route: string,
+  title: string,
+): Promise<void> {
+  const requests = watchAnalysis(page, route);
+  await goto(page, address, heading);
+  await expect.poll(() => requests.length, `${address} on opening`).toBe(1);
+  await expect(card(page, title).locator('[aria-busy]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect.poll(() => requests.length, `${address} after Refresh`).toBe(2);
+  // Not a third, from the key and a second trigger each asking.
+  await page.waitForTimeout(600);
+  expect(requests.length, `${address} after Refresh, once`).toBe(2);
+}
+
+// Refresh is one gesture for the page, and the grids and tables it re-reads
+// move on to a new moment while a card that is not wired to it keeps the one
+// the page was opened at. Nothing failed when it was not: the card only grew
+// older than what was beside it.
+test('Refresh on the Queued view asks why jobs waited again, once', async ({ page }) => {
+  await expectRefreshAsksOnce(page, '/jobs?state=queued', 'Jobs', 'queue-wait', 'Why jobs waited');
+});
+
+test('Refresh on the failed runners asks what keeps failing to start again, once', async ({
+  page,
+}) => {
+  await expectRefreshAsksOnce(
+    page,
+    '/runners?state=failed',
+    'Runners',
+    'startup-failures',
+    'What keeps failing to start',
+  );
+});
+
+test("Refresh on a host's page asks whether its failures came under pressure again, once", async ({
+  page,
+}) => {
+  const { hosts } = await fleetOf(page);
+  const host = hosts.find((h) => h.name === FIXTURE.machineHost)!;
+  await expectRefreshAsksOnce(
+    page,
+    `/hosts/${host.id}`,
+    FIXTURE.machineHost,
+    'host-pressure',
+    'Whether its failures came under pressure',
+  );
 });
 
 test("a host's page says whether its failures came under pressure", async ({ page }) => {
