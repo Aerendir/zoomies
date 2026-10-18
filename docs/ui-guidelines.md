@@ -799,7 +799,9 @@ The one page that has to earn the second monitor.
   failure. Opening a stale repair link explains what changed and offers the
   appropriate next step instead of sending the reader into setup. It shows a short glance of the newest
   few with the whole count in the header, not the whole list, so it too leaves
-  the pools and the running jobs above the fold of a laptop screen.
+  the pools and the running jobs above the fold of a laptop screen. When
+  nothing is owed it drops to one quiet line with a link to the Failed view:
+  an empty card would spend the same height saying nothing.
 
 ### The problems drawer
 
