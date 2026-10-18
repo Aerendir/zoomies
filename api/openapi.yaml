@@ -6936,8 +6936,11 @@ paths:
       description: >-
         Only a client an administrator created can be edited; a dynamic one owns its registration and
         a metadata client's facts come from its document. Redirect URIs default to Claude's, as
-        creation does. Connections already made are not ended, and the client ID and secret stay as
-        they were. Audited as `mcp_client.update`.
+        creation does. Connections already made are not ended and keep working, and the client ID and
+        secret stay as they were. Removing a redirect URI does reach what has not finished yet: a
+        sign-in still waiting for consent, and an authorisation code not yet exchanged, are refused
+        when the address they carry is no longer one of the client's, and the person is told to start
+        the connection again. Audited as `mcp_client.update`.
       x-zoomies-role: admin
       requestBody:
         required: true
@@ -6958,7 +6961,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MCPClient" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
     delete:
       operationId: revokeMCPClient

@@ -4482,7 +4482,7 @@ export interface paths {
         head?: never;
         /**
          * Edit an MCP client's name and redirect URIs
-         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended, and the client ID and secret stay as they were. Audited as `mcp_client.update`.
+         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended and keep working, and the client ID and secret stay as they were. Removing a redirect URI does reach what has not finished yet: a sign-in still waiting for consent, and an authorisation code not yet exchanged, are refused when the address they carry is no longer one of the client's, and the person is told to start the connection again. Audited as `mcp_client.update`.
          */
         patch: operations["updateMCPClient"];
         trace?: never;
@@ -19452,7 +19452,6 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
         };
     };
