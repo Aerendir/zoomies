@@ -9,6 +9,7 @@
  * something that explains itself instead of a blank screen.
  */
 import { expect, test } from '@playwright/test';
+import { keptCase, mockRepairApi, repairRow } from './support/repairs';
 import {
   chooseTheme,
   clearStoredPreferences,
@@ -357,5 +358,27 @@ test('the navigation says which build of Zoomies is running', async ({ page }) =
     await expect(build).toContainText(
       meta.version_channel?.startsWith('v') ? meta.version_channel : meta.commit.slice(0, 7),
     );
+  }
+});
+
+// Eli repairs is one entry in the navigation and four pages: the hub, the repair
+// page, setup, and one repair. Each lives under the one path, so the entry stays lit
+// on all of them and the person always knows which section they are in.
+test('Eli repairs stays lit on the repair page, the setup page and an attempt', async ({
+  page,
+}) => {
+  await mockRepairApi(page, {
+    attempts: {
+      'rep-1': repairRow({ id: 'rep-1', details: { case: keptCase() } }),
+    },
+  });
+  for (const [path, heading] of [
+    ['/repairs', 'Eli repairs'],
+    ['/repairs/new?repo=acme%2Fsite&run=9', 'Repair a failed check'],
+    ['/repairs/setup', 'Repair setup'],
+    ['/repairs/rep-1', 'Retry transient 502s'],
+  ] as const) {
+    await goto(page, path, heading);
+    await expectCurrentSection(page, '/repairs');
   }
 });

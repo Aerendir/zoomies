@@ -28,6 +28,15 @@ import {
   sectionHeading,
   expectNoSidewaysScroll,
 } from './support/fixtures';
+import {
+  failedJob,
+  keptCase,
+  mockRepairWorld,
+  offerRow,
+  readiness,
+  REPAIR_PAGES,
+  repairRow,
+} from './support/repairs';
 
 test.skip(({ isMobile }) => !isMobile, 'the phone layout, in the Pixel 7 project');
 
@@ -1092,4 +1101,165 @@ test('fleet activity is read by touch', async ({ page }) => {
     );
   }
   await expectNoSidewaysScroll(page, 'the Runners page with fleet activity open');
+});
+
+/*
+ * The Eli repair pages on a phone. Somebody looking at what Eli has been doing from
+ * a phone is a stated requirement, and these pages are built from many small parts
+ * (chips, steps, tables of model calls, a very long branch name), each of which is
+ * a way to push the page past the edge. They are checked at the two widths a phone
+ * can be, in the widest state each page has: the hub with the boxes showing, the
+ * repair page and the attempt with a job opened and its error output read.
+ */
+async function widestState(page: Page, path: string): Promise<void> {
+  if (path === '/repairs') {
+    await page
+      .getByRole('region', { name: 'History' })
+      .getByRole('button', { name: 'Select', exact: true })
+      .click();
+  } else if (path !== '/repairs/rep-run') {
+    // A job that is the only one is open already, and clicking it again would shut it.
+    const job = page.locator('details.job').first();
+    if (!(await job.evaluate((el) => (el as HTMLDetailsElement).open)))
+      await job.locator('summary').first().click();
+    await expect(
+      page.locator('pre').getByText(/^(client_test.go:88: got 1, want 3|Error: x+)$/),
+    ).toBeVisible();
+  }
+}
+
+test('the Eli repair pages stay inside the screen at 375 and 360px', async ({ page }) => {
+  test.slow();
+  await mockRepairWorld(page);
+
+  for (const width of [375, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const { path, heading, ready } of REPAIR_PAGES.filter((p) => p.stubbed)) {
+      await goto(page, path, heading);
+      await expect(ready(page)).toBeVisible();
+      await expectNoSidewaysScroll(page, `${path} at ${width}px`);
+      await widestState(page, path);
+      await expectNoSidewaysScroll(page, `${path} at ${width}px, opened out`);
+    }
+  }
+});
+
+test('a title, a branch and a job with nowhere to break stay inside the screen on the repair pages', async ({
+  page,
+}) => {
+  test.slow();
+  // Hyphens and slashes are places a browser may break a line, so these have none.
+  const long = `Name${'x'.repeat(170)}End`;
+  const branch = `Branch${'y'.repeat(170)}End`;
+  const kept = keptCase({
+    pull_title: long,
+    branch,
+    jobs: [
+      {
+        name: long,
+        step: long,
+        url: 'https://github.com/acme/widgets/actions/runs/482/job/9001',
+      },
+    ],
+  });
+  await mockRepairWorld(page, {
+    jobs: [
+      failedJob({
+        job_name: long,
+        head_branch: branch,
+        failed_step: { number: 7, name: long, status: 'completed', conclusion: 'failure' },
+      }),
+    ],
+    offers: [offerRow({ title: long })],
+    readiness: readiness({
+      pull: {
+        number: 17,
+        title: long,
+        author: 'dana',
+        branch,
+        base: 'main',
+        url: 'https://github.com/acme/widgets/pull/17',
+        open: true,
+      },
+    }),
+    repairs: [
+      repairRow({ id: 'rep-run', state: 'working', details: { stage: 'prepare_fix', case: kept } }),
+      repairRow({
+        id: 'rep-done',
+        state: 'failed',
+        message: `Error: ${'x'.repeat(400)}`,
+        details: { stage: 'prepare_fix', failure_code: 'unsupported_fix', case: kept },
+      }),
+    ],
+    attempts: {
+      'rep-run': repairRow({
+        id: 'rep-run',
+        state: 'working',
+        details: { stage: 'prepare_fix', case: kept },
+      }),
+      'rep-done': repairRow({
+        id: 'rep-done',
+        state: 'failed',
+        message: `Error: ${'x'.repeat(400)}`,
+        details: { stage: 'prepare_fix', failure_code: 'unsupported_fix', case: kept },
+      }),
+    },
+    errorOutput: { '9001': { lines: [`Error: ${'x'.repeat(400)}`] } },
+  });
+
+  for (const width of [375, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const { path, heading, ready } of REPAIR_PAGES.filter((p) => p.stubbed)) {
+      // The page is named by what its pull request is called, which is the long name here.
+      await goto(page, path, path === '/repairs' ? heading : /./);
+      await expect(ready(page)).toBeVisible();
+      await expectNoSidewaysScroll(page, `${path} at ${width}px with long names`);
+      await widestState(page, path);
+      await expectNoSidewaysScroll(page, `${path} at ${width}px with long names, opened out`);
+    }
+  }
+});
+
+test('every text control on the Eli repair pages is at least 16px', async ({ page }) => {
+  // The rule the guidelines give in section 1.2: Mobile Safari zooms the page
+  // whenever a focused control's text is under 16px. The history's filters, the
+  // note a repair is started with and the setup forms are all fields.
+  const smallControls = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('input, select, textarea'))
+        .filter((el) => {
+          const type = el.getAttribute('type');
+          if (type === 'checkbox' || type === 'radio' || type === 'range' || type === 'hidden')
+            return false;
+          if (!(el as HTMLElement).offsetParent && el.getClientRects().length === 0) return false;
+          return Number.parseFloat(getComputedStyle(el).fontSize) < 16;
+        })
+        .map((el) => `${el.tagName.toLowerCase()}[${el.getAttribute('aria-label') ?? el.id}]`),
+    );
+
+  await mockRepairWorld(page);
+  let audited = 0;
+  for (const { path, heading, ready } of REPAIR_PAGES.filter((p) => p.stubbed)) {
+    await goto(page, path, heading);
+    await expect(ready(page)).toBeVisible();
+    audited += await page.locator('input, select, textarea').count();
+    expect(await smallControls(), `${path}: every text control is 16px or more`).toEqual([]);
+  }
+  // The setup forms are the real controller's.
+  await page.unrouteAll();
+  await goto(page, '/repairs/setup', 'Repair setup');
+  await expect(page.getByRole('heading', { name: 'Your GitHub account' })).toBeVisible();
+  audited += await page.locator('input, select, textarea').count();
+  expect(await smallControls(), '/repairs/setup: every text control is 16px or more').toEqual([]);
+  // An audit that found nothing to audit passes for the wrong reason.
+  expect(audited, 'no text control was found on any page').toBeGreaterThan(0);
+});
+
+test('the setup page stays inside the screen at 375 and 360px', async ({ page }) => {
+  for (const width of [375, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await goto(page, '/repairs/setup', 'Repair setup');
+    await expect(page.getByRole('heading', { name: 'Your GitHub account' })).toBeVisible();
+    await expectNoSidewaysScroll(page, `/repairs/setup at ${width}px`);
+  }
 });

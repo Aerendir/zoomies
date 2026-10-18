@@ -13,6 +13,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { FIXTURE, focusIsInMain, goto, isFocused, shiftTabTo } from './support/fixtures';
+import { mockRepairWorld, REPAIR_PAGES } from './support/repairs';
 
 // Every page in the navigation. It used to be four of the ten, which meant the
 // audit of "every button has an accessible name" was an audit of the four
@@ -590,3 +591,76 @@ test('a pool editor section opens and shuts from the keyboard', async ({ page })
   await expect(row).toHaveAttribute('aria-expanded', 'false');
   await expect(row).toBeFocused();
 });
+
+/*
+ * The Eli repair pages. Somebody reaches them with a failure waiting, often from a
+ * phone, so they are held to the rules the pages in the navigation are: the
+ * landmarks, a name on every control, a tab order that is the document order, and
+ * the two that these pages are most likely to get wrong because they are built
+ * from many small parts: headings that step down one level at a time, and
+ * definition lists that hold only terms and their descriptions.
+ *
+ * They are audited with their content on, against a stubbed controller, so a page
+ * is audited and not its empty state. Setup is the exception: it is a form over
+ * the real controller's installations and is audited against it.
+ */
+for (const { path, heading, stubbed, ready } of REPAIR_PAGES) {
+  test(`${path.split('?')[0]} can be used by a screen reader and a keyboard`, async ({ page }) => {
+    if (stubbed) await mockRepairWorld(page);
+    await goto(page, path, heading);
+    await expect(ready(page)).toBeVisible();
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole('main')).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
+    await expect(
+      page.getByRole('button', { name: /^$/ }),
+      `${path}: buttons are named`,
+    ).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^$/ }), `${path}: links are named`).toHaveCount(0);
+
+    const audit = await page.evaluate(() => {
+      const main = document.querySelector('main')!;
+      // A heading may be the same level as the one before it or any level above,
+      // and may go one level down; skipping a level leaves a reader's outline with a hole.
+      let previous = 0;
+      const skipped: string[] = [];
+      for (const h of Array.from(main.querySelectorAll('h1, h2, h3, h4, h5, h6'))) {
+        const level = Number(h.tagName.slice(1));
+        if (previous > 0 && level > previous + 1)
+          skipped.push(`h${previous} to h${level}: ${h.textContent?.trim().slice(0, 60)}`);
+        previous = level;
+      }
+      const allowed = new Set(['DT', 'DD', 'SCRIPT', 'TEMPLATE']);
+      const lists = Array.from(document.querySelectorAll('dl'));
+      const badLists = lists.flatMap((list) =>
+        Array.from(list.children)
+          .filter((child) => !allowed.has(child.tagName))
+          .map((child) => `<${child.tagName.toLowerCase()} class="${child.className}">`),
+      );
+      const positive = Array.from(document.querySelectorAll('[tabindex]'))
+        .filter((element) => Number(element.getAttribute('tabindex')) > 0)
+        .map((element) => element.outerHTML.slice(0, 100));
+      const images = Array.from(document.querySelectorAll('img'))
+        .filter(
+          (image) =>
+            image.getAttribute('alt') === null && image.closest('[aria-hidden="true"]') === null,
+        )
+        .map((image) => image.outerHTML.slice(0, 100));
+      const unlabelled = Array.from(document.querySelectorAll('svg[role="img"], [role="img"]'))
+        .filter(
+          (node) =>
+            (node.getAttribute('aria-label') ?? '').trim() === '' &&
+            node.getAttribute('aria-hidden') !== 'true' &&
+            node.closest('[aria-hidden="true"]') === null,
+        )
+        .map((node) => node.outerHTML.slice(0, 100));
+      return { skipped, badLists, positive, images, unlabelled };
+    });
+    expect(audit.skipped, `${path}: headings step down one level at a time`).toEqual([]);
+    expect(audit.badLists, `${path}: a definition list holds only dt and dd`).toEqual([]);
+    expect(audit.positive, `${path}: the tab order is the document order`).toEqual([]);
+    expect(audit.images, `${path}: images carry alt text or are marked decorative`).toEqual([]);
+    expect(audit.unlabelled, `${path}: every image role says what it shows`).toEqual([]);
+  });
+}

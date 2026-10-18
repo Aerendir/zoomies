@@ -387,10 +387,11 @@ test('no horizontal scroll on a phone with very long names, and the sections sta
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 800 });
-  const long = `a-very-long-name-${'with-no-break-points-'.repeat(6)}end`;
+  // Hyphens and slashes are places a browser may break a line, so this has none.
+  const long = `Name${'x'.repeat(170)}End`;
   await mockRepairApi(page, {
     settings: linkedAs('dana'),
-    jobs: [failedJob({ job_name: long, head_branch: `fix/${long}` })],
+    jobs: [failedJob({ job_name: long, head_branch: long })],
     offers: [offerRow({ title: long })],
     repairs: [
       running(),
@@ -401,7 +402,7 @@ test('no horizontal scroll on a phone with very long names, and the sections sta
         details: {
           case: keptCase({
             pull_title: long,
-            branch: `fix/${long}`,
+            branch: long,
             jobs: [{ name: long, step: long }],
           }),
         },

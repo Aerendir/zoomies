@@ -406,3 +406,104 @@ export function linkedAs(login: string, confirmed = true): Schemas['EliRepairSet
     policies: [],
   };
 }
+
+/**
+ * A controller with something on every Eli repair page: an offer, a repair that
+ * is running and one that has finished, the failed jobs of a run and a log for
+ * one of them. The accessibility, phone and hostile-input specs audit the pages
+ * against it, so what they audit is each page with its content on and not its
+ * empty state.
+ */
+export async function mockRepairWorld(page: Page, over: Partial<RepairApiState> = {}) {
+  const case_ = keptCase();
+  const running = repairRow({
+    id: 'rep-run',
+    state: 'working',
+    created_at: new Date(Date.now() - 63_000).toISOString(),
+    updated_at: new Date(Date.now() - 2000).toISOString(),
+    details: { stage: 'prepare_fix', model: 'my-model', source_bytes: 38_912, case: case_ },
+  });
+  const done = repairRow({
+    id: 'rep-done',
+    state: 'failed',
+    message: 'Eli could not produce a supported fix.',
+    details: {
+      stage: 'prepare_fix',
+      failure_code: 'unsupported_fix',
+      model: 'my-model',
+      source_bytes: 38_912,
+      case: case_,
+      steps: [
+        {
+          input_tokens: 21_400,
+          output_tokens: 1800,
+          usage_reported: true,
+          request_bytes: 80_312,
+          elapsed_ms: 41_000,
+        },
+        {
+          input_tokens: 0,
+          output_tokens: 0,
+          usage_reported: false,
+          request_bytes: 91_234,
+          elapsed_ms: 9000,
+        },
+      ],
+    },
+  });
+  return mockRepairApi(page, {
+    role: 'admin',
+    settings: linkedAs('dana'),
+    jobs: [failedJob(), lintJob()],
+    offers: [offerRow()],
+    repairs: [running, done],
+    attempts: { 'rep-run': running, 'rep-done': done },
+    errorOutput: {
+      '9001': {
+        lines: ['--- FAIL: TestRegistryRetries (0.31s)', 'client_test.go:88: got 1, want 3'],
+      },
+    },
+    ...over,
+  });
+}
+
+/**
+ * The pages of the Eli repairs experience, for the specs that audit every one.
+ * `ready` is what proves a page has its content and is not still reading it, and
+ * `stubbed` says whether the page is audited against `mockRepairWorld` or
+ * against the real controller the other pages are audited against.
+ */
+export const REPAIR_PAGES = [
+  {
+    path: '/repairs',
+    heading: 'Eli repairs',
+    stubbed: true,
+    ready: (page: Page) =>
+      page.getByRole('region', { name: 'History' }).getByRole('article').first(),
+  },
+  {
+    // A run nothing is repairing: arriving on one that is moves the page to that repair.
+    path: '/repairs/new?repo=acme%2Fsite&run=9',
+    heading: 'Repair a failed check',
+    stubbed: true,
+    ready: (page: Page) => page.getByRole('region', { name: 'What failed' }),
+  },
+  {
+    path: '/repairs/rep-run',
+    heading: 'Retry transient 502s',
+    stubbed: true,
+    ready: (page: Page) => page.getByRole('region', { name: 'Progress' }),
+  },
+  {
+    path: '/repairs/rep-done',
+    heading: 'Retry transient 502s',
+    stubbed: true,
+    ready: (page: Page) => page.getByRole('region', { name: 'What to try next' }),
+  },
+  {
+    path: '/repairs/setup',
+    heading: 'Repair setup',
+    stubbed: false,
+    ready: (page: Page) => page.getByRole('heading', { name: 'Your GitHub account' }),
+  },
+] as const;

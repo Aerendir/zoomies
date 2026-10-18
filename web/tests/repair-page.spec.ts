@@ -164,6 +164,10 @@ test('a run with no recorded jobs still explains itself', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'What failed' })).toContainText(
     'Zoomies has no record of the jobs',
   );
+  // Nothing is known to have failed, so the card does not count zero of it in red.
+  await expect(page.getByRole('region', { name: 'What failed' })).not.toContainText(
+    '0 failed jobs',
+  );
   await expect(page.getByRole('heading', { name: 'Fix write access first' })).toBeVisible();
 });
 

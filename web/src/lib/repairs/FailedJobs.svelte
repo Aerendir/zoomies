@@ -83,7 +83,7 @@
 
 <Panel title="What failed" {description}>
   {#snippet actions()}
-    <Badge tone="danger" label={pluralise(jobs.length, 'failed job')} />
+    {#if jobs.length}<Badge tone="danger" label={pluralise(jobs.length, 'failed job')} />{/if}
   {/snippet}
 
   {#if jobs.length === 0}

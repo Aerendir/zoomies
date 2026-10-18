@@ -189,7 +189,8 @@
     list-style: none;
   }
   /* A job and its step share a chip, and the step drops under the name when the column
-     is narrow. A name breaks only when it cannot fit on a line of its own. */
+     is narrow, because the chip wraps rather than squeezing the name. A name breaks
+     inside a word only when the word cannot fit on a line of its own. */
   .chip {
     display: inline-flex;
     flex-wrap: wrap;
@@ -203,7 +204,7 @@
     background: var(--z-surface-sunken);
     font-size: var(--z-text-sm);
     font-weight: var(--z-weight-medium);
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
   }
   .muted {
     color: var(--z-text-muted);
