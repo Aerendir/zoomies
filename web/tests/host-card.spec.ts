@@ -893,6 +893,46 @@ test('the button says whose cards it acts on when a filter has narrowed the page
   );
 });
 
+test('the page says beside the button how many cards it acts on once a filter has narrowed them', async ({
+  page,
+  isMobile,
+}) => {
+  // The tooltip says it too, but a phone has no hover, and "Collapse all" that
+  // leaves cards open out of sight is a surprise on the page's own terms.
+  await reshape(page, BUILDER, (host) => ({ ...host, doctor: cleanReport() }));
+  await goto(page, '/hosts', 'Hosts');
+  await settle(page);
+  const hint = page.getByText(/^Acts on the \d+ hosts shown$/);
+  await expect(hint, 'every card is on show, so there is nothing to say').toHaveCount(0);
+
+  await page
+    .getByRole('group', { name: 'Show hosts by OS health' })
+    .getByRole('button', { name: /^No report \d+$/ })
+    .click();
+  await expect(hint).toHaveText('Acts on the 2 hosts shown');
+  if (isMobile) {
+    const box = await expandAll(page).boundingBox();
+    expect(box!.height, 'the button is still tall enough to hit').toBeGreaterThanOrEqual(44);
+  }
+  // From the narrowest phone to a wide desktop the hint and the button stay in
+  // the window, and the page does not scroll sideways for them. The page as a
+  // whole is judged from 360: the top bar is ten pixels wider than a 320px window
+  // while the stream these specs silence reads as reconnecting, whatever the
+  // Hosts page holds.
+  for (const width of [320, 360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const part of [hint, expandAll(page)]) {
+      const box = await part.boundingBox();
+      expect(box!.x, `starts inside a ${width}px window`).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width, `ends inside a ${width}px window`).toBeLessThanOrEqual(width);
+    }
+    if (width >= 360) await expectNoSidewaysScroll(page, `the filtered page at ${width}px`);
+  }
+
+  await page.getByRole('button', { name: /^All \d+$/ }).click();
+  await expect(hint, 'with every card on show again, it is gone').toHaveCount(0);
+});
+
 test('a page with one card has no Expand all, because that card has its own button', async ({
   page,
 }) => {
