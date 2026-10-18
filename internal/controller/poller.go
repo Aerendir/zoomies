@@ -215,6 +215,15 @@ func (c *Controller) discoverJobs(ctx context.Context) {
 // the scheduler for. A job found already running is handed to
 // ingestStartedJob, which wakes it itself.
 func (c *Controller) ingestQueuedJobs(ctx context.Context, polled *store.Installation, jobs []github.QueuedJob) (int, error) {
+	return c.ingestQueuedJobsWith(ctx, polled, jobs, newRepoOwners(func(ctx context.Context, repo string) (string, bool) {
+		return c.owningInstallation(ctx, repo, polled)
+	}))
+}
+
+// ingestQueuedJobsWith is ingestQueuedJobs with the answers to which
+// installation covers a repository in the caller's hands: they are asked for
+// once for each repository a sweep meets, not once for each of its jobs.
+func (c *Controller) ingestQueuedJobsWith(ctx context.Context, polled *store.Installation, jobs []github.QueuedJob, owners *repoOwners) (int, error) {
 	if len(jobs) == 0 {
 		return 0, nil
 	}
@@ -241,7 +250,7 @@ func (c *Controller) ingestQueuedJobs(ctx context.Context, polled *store.Install
 			JobName:        q.JobName,
 			Labels:         store.NormalizeLabels(q.Labels),
 			State:          store.JobQueued,
-			InstallationID: c.owningInstallation(ctx, q.Repo, polled),
+			InstallationID: owners.of(ctx, q.Repo),
 			RunnerName:     q.RunnerName,
 			HTMLURL:        q.HTMLURL,
 			QueuedAt:       q.QueuedAt,
@@ -388,15 +397,54 @@ func (c *Controller) holdGitHub(id string, until time.Time) {
 // owningInstallation is the installation covering a repository, with a
 // fallback for the caller that already knows one. A lookup failure is not
 // worth abandoning an ingest over: the poller's own installation is a worse
-// answer than the repository's and a much better one than none.
-func (c *Controller) owningInstallation(ctx context.Context, repo string, fallback *store.Installation) string {
-	if owner, err := c.st.FindInstallationByTarget(ctx, repo); err == nil {
-		return owner.ID
-	} else if !errors.Is(err, store.ErrNotFound) {
-		c.log.Warn("could not resolve the installation covering a polled repository",
-			"repo", repo, "error", err)
+// answer than the repository's and a much better one than none. The answer is
+// settled unless the lookup failed: a repository nothing covers is settled, as
+// the fallback, and a failed read is not.
+func (c *Controller) owningInstallation(ctx context.Context, repo string, fallback *store.Installation) (id string, settled bool) {
+	owner, err := c.st.FindInstallationByTarget(ctx, repo)
+	switch {
+	case err == nil:
+		return owner.ID, true
+	case errors.Is(err, store.ErrNotFound):
+		return installationID(fallback), true
 	}
-	return installationID(fallback)
+	c.log.Warn("could not resolve the installation covering a polled repository",
+		"repo", repo, "error", err)
+	return installationID(fallback), false
+}
+
+// repoOwners remembers which installation covers each repository for the length
+// of one sweep. A sweep meets many jobs and few repositories, and asking the
+// store for every job was a query parsed afresh each time: 13% of a sweep over a
+// hundred known jobs in a profile. Which installation covers a repository does not
+// change in the milliseconds a sweep takes, and the next sweep builds its own, so
+// an installation added in between is the next one's answer.
+//
+// Only an answer is kept. A lookup that failed for a reason other than there
+// being no installation says nothing about the repository, so the repository's
+// next job asks again, as it did before. Repositories are told apart as they are
+// written; the store folds their case, and the cost of not folding it here is one
+// more question. It is for one goroutine, which is how a sweep runs.
+type repoOwners struct {
+	resolve func(ctx context.Context, repo string) (id string, settled bool)
+	byRepo  map[string]string
+}
+
+func newRepoOwners(resolve func(ctx context.Context, repo string) (id string, settled bool)) *repoOwners {
+	return &repoOwners{resolve: resolve, byRepo: map[string]string{}}
+}
+
+// of is the installation covering repo, asking resolve only the first time it
+// gives an answer worth keeping.
+func (o *repoOwners) of(ctx context.Context, repo string) string {
+	if id, ok := o.byRepo[repo]; ok {
+		return id
+	}
+	id, settled := o.resolve(ctx, repo)
+	if settled {
+		o.byRepo[repo] = id
+	}
+	return id
 }
 
 // A healthy stream of unrelated webhooks does not prove every completion was

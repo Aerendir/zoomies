@@ -350,6 +350,11 @@ func (c *Controller) apply(ctx context.Context, snap scheduler.Snapshot, plan sc
 			}
 		}
 	}
+	// Every pool's observation goes in together, after the loop: the fleet's
+	// size would otherwise be the number of writes a pass makes, each taking the
+	// writer for a transaction of its own (a quarter of a quiet pass at a
+	// hundred pools, in a profile). Each keeps the moment it was made.
+	capacity := make([]store.UsageCapacitySample, 0, len(plan.Pools))
 	for _, pp := range plan.Pools {
 		if pools[pp.PoolID] == nil {
 			continue
@@ -358,9 +363,10 @@ func (c *Controller) apply(ctx context.Context, snap scheduler.Snapshot, plan sc
 			c.recordScaling(ctx, pp, n.created, n.drained)
 		}
 		c.noteBlocked(pp)
-		if err := c.st.RecordUsageCapacity(ctx, pp.PoolID, c.Now(), pp.BlockedAtCapacity); err != nil {
-			c.log.Error("could not record usage capacity", "pool", pp.PoolID, "error", err)
-		}
+		capacity = append(capacity, store.UsageCapacitySample{PoolID: pp.PoolID, At: c.Now(), Blocked: pp.BlockedAtCapacity})
+	}
+	if err := c.st.RecordUsageCapacityBatch(ctx, capacity); err != nil {
+		c.log.Error("could not record usage capacity", "pools", len(capacity), "error", err)
 	}
 }
 

@@ -68,6 +68,31 @@ func (s *Store) UpsertJob(ctx context.Context, j *Job) (*Job, error) {
 	return out, err
 }
 
+// The statements a job's arrival runs, on every webhook delivery and for every
+// job a poller sweep meets: see hot.go.
+var (
+	jobByGitHubIDQuery = hot(`SELECT ` + jobCols + ` FROM jobs WHERE github_job_id = ?`)
+	jobByIDQuery       = hot(`SELECT ` + jobCols + ` FROM jobs WHERE id = ?`)
+	insertJobQuery     = hot(`INSERT INTO jobs (` + jobInsertCols + `)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+	updateJobQuery = hot(`UPDATE jobs SET github_run_id=?, repo=?, workflow=?,
+		job_name=?, labels=?, state=?, conclusion=?, installation_id=?, pool_id=?,
+		runner_id=?, runner_name=?, html_url=?, started_at=?, completed_at=?, matched=?,
+		eligible_at=?, head_branch=?, head_sha=?, run_attempt=?, run_number=?, steps=?,
+		runner_fault=?, fault_kind=?, queued_at=? WHERE id=?`)
+	stampJobVersionsQuery = hot(`UPDATE jobs SET
+		controller_version = COALESCE(controller_version, NULLIF(?1, '')),
+		controller_channel = COALESCE(controller_channel, NULLIF(?2, '')),
+		agent_version      = COALESCE(agent_version,      NULLIF(?3, '')),
+		host_id            = COALESCE(host_id,            NULLIF(?4, ''))
+		WHERE id = ?5`)
+	insertJobEventQuery  = hot(`INSERT INTO job_events (` + jobEventCols + `) VALUES (?,?,?,?,?,?,?,?)`)
+	runNumberForRunQuery = hot(`SELECT run_number FROM jobs WHERE github_run_id = ? AND run_number != 0 LIMIT 1`)
+	insertDeliveryQuery  = hot(`INSERT INTO webhook_deliveries
+		(id, delivery_id, event, action, repo, status, error, installation_id, received_at)
+		VALUES (?,?,?,?,?,?,?,?,?)`)
+)
+
 // ApplyJob is UpsertJob that also says what changed.
 //
 // The change is worked out inside the write transaction, against the row as it
@@ -78,7 +103,7 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 	var out *Job
 	var change JobChange
 	err := s.tx(ctx, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE github_job_id = ?`, j.GitHubJobID)
+		row := s.hotTx(tx).QueryRow(ctx, jobByGitHubIDQuery, j.GitHubJobID)
 		existing, err := scanJob(row)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -95,8 +120,7 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 				now := s.Now()
 				j.EligibleAt = &now
 			}
-			_, err := tx.ExecContext(ctx, `INSERT INTO jobs (`+jobInsertCols+`)
-				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			_, err := s.hotTx(tx).Exec(ctx, insertJobQuery,
 				j.ID, j.GitHubJobID, j.GitHubRunID, j.Repo, j.Workflow, j.JobName, j.Labels,
 				string(j.State), j.Conclusion, j.InstallationID, j.PoolID, j.RunnerID,
 				j.RunnerName, j.HTMLURL, ms(j.QueuedAt), msp(j.StartedAt), msp(j.CompletedAt),
@@ -191,11 +215,7 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 			merged.EligibleAt = &now
 		}
 
-		_, err = tx.ExecContext(ctx, `UPDATE jobs SET github_run_id=?, repo=?, workflow=?,
-			job_name=?, labels=?, state=?, conclusion=?, installation_id=?, pool_id=?,
-			runner_id=?, runner_name=?, html_url=?, started_at=?, completed_at=?, matched=?,
-			eligible_at=?, head_branch=?, head_sha=?, run_attempt=?, run_number=?, steps=?,
-			runner_fault=?, fault_kind=?, queued_at=? WHERE id=?`,
+		_, err = s.hotTx(tx).Exec(ctx, updateJobQuery,
 			merged.GitHubRunID, merged.Repo, merged.Workflow, merged.JobName, merged.Labels,
 			string(merged.State), merged.Conclusion, merged.InstallationID, merged.PoolID,
 			merged.RunnerID, merged.RunnerName, merged.HTMLURL, msp(merged.StartedAt),
@@ -239,15 +259,11 @@ type JobVersions struct {
 func (s *Store) StampJobVersions(ctx context.Context, jobID string, v JobVersions) (*Job, error) {
 	var out *Job
 	err := s.tx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `UPDATE jobs SET
-			controller_version = COALESCE(controller_version, NULLIF(?1, '')),
-			controller_channel = COALESCE(controller_channel, NULLIF(?2, '')),
-			agent_version      = COALESCE(agent_version,      NULLIF(?3, '')),
-			host_id            = COALESCE(host_id,            NULLIF(?4, ''))
-			WHERE id = ?5`, v.ControllerVersion, v.ControllerChannel, v.AgentVersion, v.HostID, jobID); err != nil {
+		if _, err := s.hotTx(tx).Exec(ctx, stampJobVersionsQuery,
+			v.ControllerVersion, v.ControllerChannel, v.AgentVersion, v.HostID, jobID); err != nil {
 			return err
 		}
-		j, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE id = ?`, jobID))
+		j, err := scanJob(s.hotTx(tx).QueryRow(ctx, jobByIDQuery, jobID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 		}
@@ -274,7 +290,7 @@ func (s *Store) StampJobGranted(ctx context.Context, jobID string, cpus float64,
 				return err
 			}
 		}
-		j, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE id = ?`, jobID))
+		j, err := scanJob(s.hotTx(tx).QueryRow(ctx, jobByIDQuery, jobID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 		}
@@ -314,7 +330,7 @@ func (s *Store) SetJobRunnerFault(ctx context.Context, jobID, fault string, kind
 		if n, err := res.RowsAffected(); err == nil && n > 0 {
 			recorded = true
 		}
-		j, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE id = ?`, jobID))
+		j, err := scanJob(s.hotTx(tx).QueryRow(ctx, jobByIDQuery, jobID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 		}
@@ -338,7 +354,7 @@ func (s *Store) AppendJobEvent(ctx context.Context, e *JobEvent) error {
 	if e.At.IsZero() {
 		e.At = s.Now()
 	}
-	_, err := s.exec(ctx, `INSERT INTO job_events (`+jobEventCols+`) VALUES (?,?,?,?,?,?,?,?)`,
+	_, err := s.execHot(ctx, insertJobEventQuery,
 		e.ID, e.JobID, ms(e.At), string(e.Kind), e.Source, e.Message, e.RunnerID, e.RunnerName)
 	return err
 }
@@ -411,8 +427,7 @@ func (s *Store) RunNumberForRun(ctx context.Context, runID int64) (int64, error)
 		return 0, ErrNotFound
 	}
 	var n int64
-	err := s.read.QueryRowContext(ctx,
-		`SELECT run_number FROM jobs WHERE github_run_id = ? AND run_number != 0 LIMIT 1`, runID).Scan(&n)
+	err := s.hotRead().QueryRow(ctx, runNumberForRunQuery, runID).Scan(&n)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
 	}
@@ -852,6 +867,9 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 	return "WHERE " + strings.Join(cond, " AND "), args
 }
 
+var listQueuedJobsQuery = hot(`SELECT ` + jobCols + ` FROM jobs
+	WHERE ` + queuedJobSQL("jobs") + ` ORDER BY queued_at`)
+
 // ListQueuedJobs returns jobs still waiting for a runner here, oldest first.
 // This is the scheduler's demand signal, and the source of every figure that
 // answers "how much work is waiting?": the Overview's tiles and pool bars, the
@@ -863,8 +881,7 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 // retires jobs GitHub stopped talking about wants the rows regardless of what
 // an operator did with them, and asks for them with ListStaleQueuedJobs.
 func (s *Store) ListQueuedJobs(ctx context.Context) ([]*Job, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+jobCols+` FROM jobs
-		WHERE `+queuedJobSQL("jobs")+` ORDER BY queued_at`)
+	rows, err := s.hotRead().Query(ctx, listQueuedJobsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -1501,9 +1518,7 @@ func (s *Store) RecordDelivery(ctx context.Context, d *WebhookDelivery) error {
 	if d.ReceivedAt.IsZero() {
 		d.ReceivedAt = s.Now()
 	}
-	_, err := s.exec(ctx, `INSERT INTO webhook_deliveries
-		(id, delivery_id, event, action, repo, status, error, installation_id, received_at)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
+	_, err := s.execHot(ctx, insertDeliveryQuery,
 		d.ID, d.DeliveryID, d.Event, d.Action, d.Repo, d.Status, d.Error,
 		d.InstallationID, ms(d.ReceivedAt))
 	return err

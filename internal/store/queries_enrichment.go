@@ -11,8 +11,10 @@ type Enrichment struct {
 	Generation   int64
 }
 
+var queueEnrichmentQuery = hot(`INSERT INTO control_enrichment(kind,target) VALUES (?,?) ON CONFLICT(kind,target) DO UPDATE SET generation=generation+1`)
+
 func (s *Store) QueueEnrichment(ctx context.Context, kind, target string) error {
-	_, err := s.exec(ctx, `INSERT INTO control_enrichment(kind,target) VALUES (?,?) ON CONFLICT(kind,target) DO UPDATE SET generation=generation+1`, kind, target)
+	_, err := s.execHot(ctx, queueEnrichmentQuery, kind, target)
 	return err
 }
 
