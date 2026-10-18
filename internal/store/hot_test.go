@@ -434,6 +434,40 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 			_, err := s.EliRepairPolicies(ctx)
 			must(err)
 		}},
+		// What a reconcile pass reads. ListHosts' third query, the acceptances of
+		// the hosts it found, is built around their ids and is not hot.
+		{"ListPools", 1, func(int) {
+			_, err := s.ListPools(ctx)
+			must(err)
+		}},
+		{"ListHosts", 2, func(int) {
+			_, err := s.ListHosts(ctx)
+			must(err)
+		}},
+		{"ListInstallations", 1, func(int) {
+			_, err := s.ListInstallations(ctx)
+			must(err)
+		}},
+		{"ListQueuedJobs", 1, func(int) {
+			_, err := s.ListQueuedJobs(ctx)
+			must(err)
+		}},
+		{"SchedulingRunners", 1, func(int) {
+			_, err := s.SchedulingRunners(ctx)
+			must(err)
+		}},
+		{"PendingHostCleanup", 1, func(int) {
+			_, err := s.PendingHostCleanup(ctx, "", 10, time.Now())
+			must(err)
+		}},
+		{"LastProvisioned", 1, func(int) {
+			_, err := s.LastProvisioned(ctx)
+			must(err)
+		}},
+		{"RepositoryJobCounts", 1, func(int) {
+			_, _, err := s.RepositoryJobCounts(ctx)
+			must(err)
+		}},
 	} {
 		t.Run(op.name, func(t *testing.T) {
 			// Twice to warm up: a statement first run in a transaction is prepared

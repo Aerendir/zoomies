@@ -42,10 +42,12 @@ func (s *Store) StartupEstimates(ctx context.Context, since time.Time) ([]Startu
 	return out, rows.Err()
 }
 
+var schedulingRunnersQuery = hot(`SELECT ` + runnerCols + ` FROM runners WHERE state!='removed' ORDER BY created_at`)
+
 // One snapshot query replaces one read per pool, retaining failed rows because
 // backoff and cleanup still need them. The state filter is intentionally intact.
 func (s *Store) SchedulingRunners(ctx context.Context) (map[string][]*Runner, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+runnerCols+` FROM runners WHERE state!='removed' ORDER BY created_at`)
+	rows, err := s.hotRead().Query(ctx, schedulingRunnersQuery)
 	if err != nil {
 		return nil, err
 	}

@@ -376,11 +376,13 @@ func min64(a, b int64) int64 {
 	return b
 }
 
+var repositoryJobCountsQuery = hot(`SELECT pool_id || char(0) || repo, state, COUNT(*) FROM jobs WHERE state IN ('queued','in_progress') GROUP BY pool_id,repo,state`)
+
 // RepositoryJobCounts returns the live workload split used by repository
 // concurrency policy. It deliberately includes unmatched jobs in queued.
 func (s *Store) RepositoryJobCounts(ctx context.Context) (active, queued map[string]int, err error) {
 	active, queued = map[string]int{}, map[string]int{}
-	rows, err := s.read.QueryContext(ctx, `SELECT pool_id || char(0) || repo, state, COUNT(*) FROM jobs WHERE state IN ('queued','in_progress') GROUP BY pool_id,repo,state`)
+	rows, err := s.hotRead().Query(ctx, repositoryJobCountsQuery)
 	if err != nil {
 		return nil, nil, err
 	}

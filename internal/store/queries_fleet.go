@@ -120,9 +120,11 @@ func (s *Store) FindInstallationByTarget(ctx context.Context, repoFullName strin
 	return i, err
 }
 
+var listInstallationsQuery = hot(`SELECT ` + installationCols + ` FROM installations ORDER BY created_at`)
+
 // ListInstallations returns every installation, oldest first.
 func (s *Store) ListInstallations(ctx context.Context) ([]*Installation, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+installationCols+` FROM installations ORDER BY created_at`)
+	rows, err := s.hotRead().Query(ctx, listInstallationsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -390,9 +392,11 @@ func (s *Store) CountHosts(ctx context.Context) (int, error) {
 	return n, err
 }
 
+var listPoolsQuery = hot(`SELECT ` + poolCols + ` FROM pools ORDER BY name`)
+
 // ListPools returns all pools ordered by name.
 func (s *Store) ListPools(ctx context.Context) ([]*Pool, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+poolCols+` FROM pools ORDER BY name`)
+	rows, err := s.hotRead().Query(ctx, listPoolsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -807,8 +811,10 @@ type hostRunnerCounts struct {
 const countRunnersByHostSQL = `SELECT host_id, COUNT(*), SUM(allocated_cpus <= 0) FROM runners
 	WHERE state NOT IN ('removed','failed') GROUP BY host_id`
 
+var countRunnersByHostQuery = hot(countRunnersByHostSQL)
+
 func (s *Store) countRunnersByHost(ctx context.Context) (map[string]hostRunnerCounts, error) {
-	rows, err := s.read.QueryContext(ctx, countRunnersByHostSQL)
+	rows, err := s.hotRead().Query(ctx, countRunnersByHostQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -825,9 +831,11 @@ func (s *Store) countRunnersByHost(ctx context.Context) (map[string]hostRunnerCo
 	return out, rows.Err()
 }
 
+var listHostsQuery = hot(`SELECT ` + hostReadCols + ` FROM hosts ORDER BY embedded DESC, name`)
+
 // ListHosts returns every host, with live runner counts.
 func (s *Store) ListHosts(ctx context.Context) ([]*Host, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+hostReadCols+` FROM hosts ORDER BY embedded DESC, name`)
+	rows, err := s.hotRead().Query(ctx, listHostsQuery)
 	if err != nil {
 		return nil, err
 	}

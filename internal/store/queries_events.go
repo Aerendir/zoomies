@@ -853,6 +853,9 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 	return "WHERE " + strings.Join(cond, " AND "), args
 }
 
+var listQueuedJobsQuery = hot(`SELECT ` + jobCols + ` FROM jobs
+	WHERE ` + queuedJobSQL("jobs") + ` ORDER BY queued_at`)
+
 // ListQueuedJobs returns jobs still waiting for a runner here, oldest first.
 // This is the scheduler's demand signal, and the source of every figure that
 // answers "how much work is waiting?": the Overview's tiles and pool bars, the
@@ -864,8 +867,7 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 // retires jobs GitHub stopped talking about wants the rows regardless of what
 // an operator did with them, and asks for them with ListStaleQueuedJobs.
 func (s *Store) ListQueuedJobs(ctx context.Context) ([]*Job, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+jobCols+` FROM jobs
-		WHERE `+queuedJobSQL("jobs")+` ORDER BY queued_at`)
+	rows, err := s.hotRead().Query(ctx, listQueuedJobsQuery)
 	if err != nil {
 		return nil, err
 	}
