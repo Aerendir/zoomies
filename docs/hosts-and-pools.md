@@ -1015,7 +1015,9 @@ say:
 ![The Runner sizes dialog for a host, scrolled to In-memory folders, where its owner sets the size each folder is asked for on the machine and a ceiling, or falls back to disk as a temporary fix.](screenshots/host-runner-sizes-dark.webp#only-dark){ .zoomies-shot }
 ![The Runner sizes dialog for a host, scrolled to In-memory folders, where its owner sets the size each folder is asked for on the machine and a ceiling, or falls back to disk as a temporary fix.](screenshots/host-runner-sizes-light.webp#only-light){ .zoomies-shot }
 
-Set them under **Runner sizes** in the host card's **Details**, with
+Set them in the host's runner sizes (*Set runner sizes* in its menu, or **Edit**
+on the **Runner sizes** block under the card's **Details**, which a host has once
+it has a profile), with
 `zoomies hosts edit <host> --tmpfs-work-mb 16384` (also `--tmpfs-tmp-mb`,
 `--tmpfs-docker-mb` and `--tmpfs-max-mb`), `--tmpfs-off` for the tactical
 fallback, or with
