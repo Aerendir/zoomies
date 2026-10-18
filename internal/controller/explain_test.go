@@ -10,7 +10,7 @@ import (
 )
 
 // seedRunner puts one runner of a pool on a host, in a state.
-func (h *harness) seedRunner(t *testing.T, pool *store.Pool, host *store.Host, state store.RunnerState) *store.Runner {
+func (h *harness) seedRunner(t testing.TB, pool *store.Pool, host *store.Host, state store.RunnerState) *store.Runner {
 	t.Helper()
 	r := &store.Runner{
 		PoolID: pool.ID, HostID: host.ID,

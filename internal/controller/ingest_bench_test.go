@@ -213,11 +213,11 @@ func BenchmarkIngestQueuedJobs(b *testing.B) {
 }
 
 // BenchmarkReconcile is one pass of the reconcile loop over a fleet with
-// nothing to do: pools and hosts, no runners and no queue. It is the steady
-// cost of a controller that is simply running, since the loop makes this pass
-// on every tick whether or not anything has happened, and it includes the
-// derived figures (the stats, the problems list, the host views) that follow
-// every pass.
+// nothing to do. It is the steady cost of a controller that is simply running,
+// since the loop makes this pass on every tick whether or not anything has
+// happened, and it includes the derived figures (the stats, the problems list,
+// the host views) that follow every pass. Quiet is pools and hosts with no
+// runners and no queue; warm is the same fleet with a runner idle in every pool.
 func BenchmarkReconcile(b *testing.B) {
 	b.Run("quiet", func(b *testing.B) {
 		for _, n := range []int{4, 20, 100} {
@@ -239,6 +239,51 @@ func BenchmarkReconcile(b *testing.B) {
 					if err := h.c.Reconcile(h.ctx); err != nil {
 						b.Fatal(err)
 					}
+				}
+			})
+		}
+	})
+
+	// A fleet at rest is not always an empty one. A pool that keeps a runner warm has
+	// its row read, its host charged for it and its slot counted on every pass, none
+	// of which the fleet above ever does. Here every pool has one runner idle, on the
+	// hosts in turn, and the pass is one that leaves them all alone.
+	b.Run("warm", func(b *testing.B) {
+		for _, n := range []int{4, 20, 100} {
+			b.Run(fmt.Sprintf("pools=%d", n), func(b *testing.B) {
+				h := newHarness(b)
+				_, pools := benchPools(h, n)
+				hosts := make([]*store.Host, max(n/2, 1))
+				for i := range hosts {
+					hosts[i] = h.host(fmt.Sprintf("vm-%03d", i))
+				}
+				for i, p := range pools {
+					h.seedRunner(b, p, hosts[i%len(hosts)], store.RunnerIdle)
+				}
+				if err := h.c.Reconcile(h.ctx); err != nil {
+					b.Fatalf("Reconcile: %v", err)
+				}
+				atRest := func() bool {
+					rs := h.runners()
+					for _, r := range rs {
+						if r.State != store.RunnerIdle {
+							return false
+						}
+					}
+					return len(rs) == n
+				}
+				if !atRest() {
+					b.Fatalf("a fleet with a runner idle in each of %d pools and nothing queued did not stay at rest", n)
+				}
+
+				b.ReportAllocs()
+				for b.Loop() {
+					if err := h.c.Reconcile(h.ctx); err != nil {
+						b.Fatal(err)
+					}
+				}
+				if !atRest() {
+					b.Fatal("the passes timed changed the fleet they were timing")
 				}
 			})
 		}
