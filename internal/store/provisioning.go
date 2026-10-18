@@ -122,10 +122,12 @@ func (s *Store) MarkCancelRequested(ctx context.Context, ids []string, at time.T
 	return changed, err
 }
 
+var lastProvisionedQuery = hot("SELECT pool_id, MAX(created_at) FROM runners GROUP BY pool_id")
+
 // LastProvisioned includes removed runners so quick jobs and restarts do not
 // reset a pool's place in the fairness rotation.
 func (s *Store) LastProvisioned(ctx context.Context) (map[string]time.Time, error) {
-	rows, err := s.read.QueryContext(ctx, "SELECT pool_id, MAX(created_at) FROM runners GROUP BY pool_id")
+	rows, err := s.hotRead().Query(ctx, lastProvisionedQuery)
 	if err != nil {
 		return nil, err
 	}

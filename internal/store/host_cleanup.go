@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+var pendingHostCleanupQuery = hot(`SELECT ` + runnerCols + ` FROM runners
+	WHERE id > ? AND state IN ('removed', 'failed') AND host_removed_at IS NULL
+	AND (host_cleanup_error != '' OR EXISTS
+		(SELECT 1 FROM jobs WHERE jobs.runner_id=runners.id AND jobs.state='completed')
+		OR COALESCE(finished_at, created_at) < ?)
+	AND NOT EXISTS (SELECT 1 FROM jobs WHERE jobs.runner_id=runners.id AND jobs.state='in_progress')
+	ORDER BY id LIMIT ?`)
+
 // PendingHostCleanup recovers removal intent from completed jobs, failed host
 // removals, and finished runners nobody has confirmed gone since before
 // unconfirmedBefore. A keyset cursor prevents offline hosts starving later rows.
@@ -19,13 +27,7 @@ import (
 // The grace is the caller's, and outlasts the agent's own removal window so
 // that a container kept for its logs is not taken early.
 func (s *Store) PendingHostCleanup(ctx context.Context, afterID string, limit int, unconfirmedBefore time.Time) ([]*Runner, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+runnerCols+` FROM runners
-		WHERE id > ? AND state IN ('removed', 'failed') AND host_removed_at IS NULL
-		AND (host_cleanup_error != '' OR EXISTS
-			(SELECT 1 FROM jobs WHERE jobs.runner_id=runners.id AND jobs.state='completed')
-			OR COALESCE(finished_at, created_at) < ?)
-		AND NOT EXISTS (SELECT 1 FROM jobs WHERE jobs.runner_id=runners.id AND jobs.state='in_progress')
-		ORDER BY id LIMIT ?`, afterID, ms(unconfirmedBefore), min(max(limit, 1), 200))
+	rows, err := s.hotRead().Query(ctx, pendingHostCleanupQuery, afterID, ms(unconfirmedBefore), min(max(limit, 1), 200))
 	if err != nil {
 		return nil, err
 	}

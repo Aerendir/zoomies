@@ -172,8 +172,11 @@ func (s *Store) SetEliRepairPolicy(ctx context.Context, p EliRepairPolicy) error
  ON CONFLICT(repo) DO UPDATE SET installation_id=excluded.installation_id,provider_id=excluded.provider_id,enabled=excluded.enabled,automatic=excluded.automatic,ask_first=excluded.ask_first,allow_workflows=excluded.allow_workflows,daily_limit=excluded.daily_limit,updated_at=excluded.updated_at`, p.Repo, p.InstallationID, p.ProviderID, boolInt(p.Enabled), boolInt(p.Automatic), boolInt(p.AskFirst), boolInt(p.AllowWorkflows), p.DailyLimit, ms(s.Now()))
 	return wrapWrite(err)
 }
+
+var eliRepairPoliciesQuery = hot(`SELECT repo,installation_id,COALESCE(provider_id,''),enabled,automatic,ask_first,allow_workflows,daily_limit FROM eli_repair_policies ORDER BY repo`)
+
 func (s *Store) EliRepairPolicies(ctx context.Context) ([]EliRepairPolicy, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT repo,installation_id,COALESCE(provider_id,''),enabled,automatic,ask_first,allow_workflows,daily_limit FROM eli_repair_policies ORDER BY repo`)
+	rows, err := s.hotRead().Query(ctx, eliRepairPoliciesQuery)
 	if err != nil {
 		return nil, err
 	}
