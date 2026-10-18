@@ -238,7 +238,7 @@ for (const style of ['classic', 'mission-control'] as const) {
     test.setTimeout(120_000);
     await page.addInitScript((style) => {
       localStorage.setItem('zoomies.theme', 'dark');
-      if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', 'mission-control');
+      localStorage.setItem('zoomies.ui-style', style);
     }, style);
     const routes = [
       ['/', 'Overview'],
@@ -250,6 +250,11 @@ for (const style of ['classic', 'mission-control'] as const) {
       await page.setViewportSize({ width, height: 900 });
       for (const [path, heading] of routes) {
         await goto(page, path, heading);
+        // The test is about this style, so the page has to be in it: an empty
+        // browser is Mission Control, and a run that stored nothing for Classic
+        // measured Mission Control twice.
+        if (style === 'classic') await expect(root(page)).not.toHaveAttribute('data-ui-style');
+        else await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
         await expect
           .poll(
             () => page.evaluate(() => document.documentElement.scrollWidth),
