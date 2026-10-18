@@ -989,3 +989,27 @@ test('and with a filter on it hands focus to the filter that is on', async ({ pa
   await expect(expandAll(page)).toHaveCount(0);
   await expect(chip).toBeFocused();
 });
+
+test('a host that joins after Expand all arrives closed, and the button offers Expand all again', async ({
+  page,
+}) => {
+  // Expand all opens the cards that are on the page when it is pressed and is not
+  // a mode: the page remembers which hosts were open, and a host it has not met is
+  // closed like any other. R asks for the hosts again, as a host joining would.
+  const LATE = 'demo-late-1';
+  let joined = false;
+  await rewriteHosts(page, (hosts) =>
+    joined ? [...hosts, { ...hosts[0], id: 'host_late', name: LATE }] : hosts,
+  );
+  await goto(page, '/hosts', 'Hosts');
+  await settle(page);
+  await expandAll(page).click();
+  await expect(collapseAll(page)).toBeVisible();
+
+  joined = true;
+  await page.keyboard.press('r');
+  await expect(toggle(page, LATE)).toHaveAttribute('aria-expanded', 'false');
+  await expect(expandAll(page)).toBeVisible();
+  for (const name of FLEET)
+    await expect(toggle(page, name)).toHaveAttribute('aria-expanded', 'true');
+});

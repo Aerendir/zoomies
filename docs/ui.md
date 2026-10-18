@@ -588,9 +588,10 @@ on sight, and forgets a host that no longer exists.
 
 **Expand all**, at the end of the row of filters, opens every card on the page at
 once, and becomes **Collapse all** when they are all open, so a card opened or
-closed by hand turns it over too. With a filter on, it acts on the hosts the
-filter shows and leaves the others as they were, and a line beside it says how
-many that is (**Acts on the 2 hosts shown**). A page with one card does not
+closed by hand turns it over too. A host that joins later arrives closed, and the
+button then offers **Expand all** again. With a filter on, it acts on the hosts
+the filter shows and leaves the others as they were, and a line beside it says
+how many that is (**Acts on the 2 hosts shown**). A page with one card does not
 have it, because that card's **Details** button is the whole of it.
 
 Under **Details**, **Agent connected** describes the heartbeat. Recent **CPU usage**,
