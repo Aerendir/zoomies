@@ -231,6 +231,31 @@ test('the unmatched filter is named', () => {
   assert.equal(queueWaitScope({ ...none, unmatched: false }, (x) => x).unapplied, null);
 });
 
+// GitHub reports every job in an installed repository, so the list leaves
+// another vendor's jobs out until "Include other runners" is on, and the
+// analysis leaves them out always: they are that vendor's to run, never time
+// a pool should have claimed them in. With the switch on the list holds jobs
+// the card does not, which is the one thing a reader comparing the two would
+// not guess, so the card says it.
+test('the Include other runners switch is named when it is on, and only then', () => {
+  const none = { pool_id: [], repo: [], workflow: [], host_id: [], label: [], q: '' };
+  const said =
+    "The list's Include other runners switch is not applied here: this analysis leaves out the jobs another vendor's runners ran.";
+  assert.deepEqual(
+    queueWaitScope({ ...none, all: true }, (x) => x),
+    {
+      scope: 'Every pool',
+      unapplied: said,
+    },
+  );
+  assert.equal(queueWaitScope({ ...none, all: false }, (x) => x).unapplied, null);
+  // Beside a filter it names both, each in its own sentence.
+  assert.equal(
+    queueWaitScope({ ...none, repo: ['acme/api'], all: true }, (x) => x).unapplied,
+    `The list's repository filter is not applied here: this analysis reads every pool, or one pool. ${said}`,
+  );
+});
+
 // A period card names its scope and its period above the summary; a
 // comparison names each side's own dates instead of the period asked for,
 // and that cancelled and skipped jobs were left out, both visible without

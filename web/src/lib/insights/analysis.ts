@@ -86,6 +86,8 @@ export interface QueueListFilters {
   provisioning?: readonly string[];
   /** Unmatched, when an address keeps the list queued with it on. */
   unmatched?: boolean;
+  /** "Include other runners": the list holds jobs another vendor's runners ran. */
+  all?: boolean;
 }
 
 /**
@@ -95,6 +97,10 @@ export interface QueueListFilters {
  * repository would read as that repository's, and could send an operator to
  * raise the wrong pool's ceiling. So the card says its scope, and names the
  * filters it leaves out rather than borrowing their meaning.
+ *
+ * The switch for other runners is the odd one out. The list leaves another
+ * vendor's jobs out until it is on, and the analysis leaves them out always,
+ * so it is named only when on, when the list holds jobs the card does not.
  */
 export function queueWaitScope(
   f: QueueListFilters,
@@ -111,11 +117,17 @@ export function queueWaitScope(
     f.provisioning?.length ? 'provisioning' : '',
     f.unmatched ? 'unmatched' : '',
   ].filter((w) => w !== '');
+  const sentences = [
+    left.length
+      ? `The list's ${joinWords(left)} ${left.length === 1 ? 'filter is' : 'filters are'} not applied here: this analysis reads every pool, or one pool.`
+      : '',
+    f.all
+      ? "The list's Include other runners switch is not applied here: this analysis leaves out the jobs another vendor's runners ran."
+      : '',
+  ].filter((s) => s !== '');
   return {
     scope: one ? `Pool ${poolName(one)}` : 'Every pool',
-    unapplied: left.length
-      ? `The list's ${joinWords(left)} ${left.length === 1 ? 'filter is' : 'filters are'} not applied here: this analysis reads every pool, or one pool.`
-      : null,
+    unapplied: sentences.length ? sentences.join(' ') : null,
   };
 }
 

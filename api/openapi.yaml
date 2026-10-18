@@ -902,7 +902,10 @@ paths:
       x-zoomies-role: viewer
       description: >-
         Every second the jobs queued in the period waited, each put down to exactly one
-        cause, for the fleet or for one pool. Needs a signed-in caller or a token with
+        cause, for the fleet or for one pool. Only the jobs this fleet has a hand in are
+        read: one whose labels all name another vendor's runners, and that no pool here
+        claimed and no runner here ran, is left out, as the Jobs page's default view
+        leaves it out. Needs a signed-in caller or a token with
         `jobs:read`; a public view's visitor is refused before anything is read.
       parameters:
         - $ref: "#/components/parameters/AnalysisSince"

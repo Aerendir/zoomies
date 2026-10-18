@@ -387,7 +387,9 @@ tiles count, and a chip above the grid says so where a filter is in force.
 On *Queued*, a **Why jobs waited** card puts the wait of the jobs queued in the
 page's dates (the last day when none are set) down to its causes, for every
 pool or for the one pool the list is narrowed to, and names any of the list's
-other filters it does not apply. It sits above the grid, and below it on a
+other filters it does not apply. Like the list, it leaves out the jobs another
+vendor's runners ran; with **Include other runners** on, it says the list holds
+jobs it does not. It sits above the grid, and below it on a
 Mission Control phone, and it is the answer
 [`zoomies analyse queue-wait`](cli.md#zoomies-analyse) prints.
 

@@ -434,8 +434,10 @@ call them:
   (`no_room`) or no room while a host that could run the pool was throttled
   (`throttled`), runners starting (`runner_startup`), GitHub's own delay once
   the runner was ready (`github_delay`), or `unattributed`, time the fleet
-  keeps no record to explain. It answers for the fleet and for each pool, with
-  each pool's longest waits by job; `pool_id` narrows it to one pool.
+  keeps no record to explain. It reads the jobs this fleet has a hand in, so a
+  job another vendor's runners ran is never one of them. It answers for the
+  fleet and for each pool, with each pool's longest waits by job; `pool_id`
+  narrows it to one pool.
 * `compare_periods` says what got worse and what got better: by version (the
   default) between two releases' jobs, the two newest to complete a job in the
   period unless `a` and `b` name them, or by period between the period and the

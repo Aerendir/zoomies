@@ -216,7 +216,12 @@ func (c *Controller) queueWaitSnapshot(ctx context.Context, w AnalysisWindow, po
 	byID := poolsByID(pools)
 	// Queued in the period, not active in it: the wait is not clamped at
 	// Since, so a job queued before it would bring its earlier wait along.
-	jobs, more, err := c.st.JobWaits(ctx, store.JobWaitFilter{Since: w.Since, Until: w.Until, PoolID: poolID}, analysis.MaxReadJobs)
+	//
+	// Only the jobs this fleet has a hand in, the Jobs page's own default: a
+	// vendor's job nothing here claims is not time a pool should have claimed
+	// it in, and the finding would otherwise name it as such and tell an
+	// operator to change a pool's labels to fit a vendor's.
+	jobs, more, err := c.st.JobWaits(ctx, store.JobWaitFilter{Since: w.Since, Until: w.Until, PoolID: poolID, ManagedOnly: true}, analysis.MaxReadJobs)
 	if err != nil {
 		return snap, fmt.Errorf("reading job waits: %w", err)
 	}

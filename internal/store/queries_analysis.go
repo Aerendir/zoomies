@@ -61,6 +61,14 @@ type JobWaitFilter struct {
 	// is this morning's failure: read by queue time it would belong to no
 	// period at all.
 	ByActivity bool
+	// ManagedOnly keeps the jobs this controller has a hand in, as JobFilter's
+	// ManagedOnly does and by the same predicate. GitHub reports every job in
+	// an installed repository, and one whose labels all name another vendor's
+	// runners is that vendor's to run: read for the queue wait it was "no pool
+	// claimed it" while still queued, or seconds nothing here explains once it
+	// had started, and on a busy installation it took up the read's limit
+	// before this fleet's own jobs did.
+	ManagedOnly bool
 }
 
 // JobWait is one job as the queue-wait breakdown and host pressure need it:
@@ -122,6 +130,9 @@ func jobWaitsQuery(f JobWaitFilter, limit int) (string, []any) {
 	if f.HostID != "" {
 		cond = append(cond, `j.host_id = ?`)
 		args = append(args, f.HostID)
+	}
+	if f.ManagedOnly {
+		cond = append(cond, managedJobSQL("j"))
 	}
 	first := func(kind JobEventKind) string {
 		return `(SELECT MIN(e.at) FROM job_events e WHERE e.job_id = j.id AND e.kind = '` + string(kind) + `')`

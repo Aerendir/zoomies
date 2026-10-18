@@ -456,6 +456,56 @@ func TestAJobOnADeletedPoolIsNamedByItsIDNotDropped(t *testing.T) {
 	}
 }
 
+// A job whose labels all name another vendor's runners is not this fleet's to
+// run and never will be (store/hosted.go): the Jobs page's default view, the
+// Overview and the usage figures all leave it out. Counted here, a hosted job
+// still queued at the period's end was put down to "no pool claimed it", with a
+// step telling the operator to change a pool's labels to fit a vendor's, and
+// one that started on the vendor's machine was seconds of "nothing on record
+// explains it". Both are somebody else's wait, and the 5,000 jobs a read may
+// hold are spent on them first on a busy installation.
+func TestAVendorsJobIsNeverPutDownToNoPoolClaimingIt(t *testing.T) {
+	f := newAnalysisFleet(t)
+	pool := f.pool("linux", nil)
+	for range 6 {
+		f.job(pool.ID, at(30), ran(at(31), at(50), "success"))
+	}
+	vendor := func(labels ...string) func(*store.Job) {
+		return func(j *store.Job) { j.Labels = store.StringSlice(labels) }
+	}
+	// Still queued at the period's end, and it will be run by the vendor.
+	stuck := f.job("", at(300), vendor("blacksmith-4vcpu-ubuntu-2404"))
+	// Run by GitHub's own machines after twenty seconds.
+	hosted := f.job("", at(100), func(j *store.Job) {
+		vendor("ubuntu-latest")(j)
+		ran(at(100).Add(20*time.Second), at(110), "success")(j)
+	})
+	// A job nothing claims and nobody else hosts: this fleet's to see.
+	own := f.job("", at(340), vendor("self-hosted", "linux", "gpu"))
+
+	got, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Evidence.Jobs != 7 {
+		t.Errorf("read %d jobs, want the 6 the pool claimed and the one nobody did", got.Evidence.Jobs)
+	}
+	i := slices.IndexFunc(got.Evidence.Pools, func(p analysis.PoolWait) bool { return p.PoolID == "" })
+	if i < 0 {
+		t.Fatalf("pools %+v leave out the job nothing claimed", got.Evidence.Pools)
+	}
+	if row := got.Evidence.Pools[i]; row.Jobs != 1 || row.WaitSeconds != 20*60 {
+		t.Errorf("the unclaimed row = %+v, want only %s's twenty minutes", row, own.ID)
+	}
+	for _, p := range got.Evidence.Pools {
+		for _, w := range p.Longest {
+			if w.JobID == stuck.ID || w.JobID == hosted.ID {
+				t.Errorf("the vendor's job %s is among the longest waits: %+v", w.JobID, w)
+			}
+		}
+	}
+}
+
 // A pool or host the fleet does not have is not found, and says which it
 // was and its id, so the route can tell the reader without reading the
 // error's text, and errors.Is still finds store.ErrNotFound.

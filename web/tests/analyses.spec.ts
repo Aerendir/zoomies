@@ -135,6 +135,52 @@ test('the Queued card names the unmatched filter it does not apply', async ({ pa
   await expect(found.getByText("The list's unmatched filter is not applied here")).toBeVisible();
 });
 
+// GitHub reports every job in an installed repository, and the list leaves out
+// the ones another vendor's runners ran unless "Include other runners" is on:
+// they are that vendor's to run, never time a pool should have claimed them in.
+// The demo has three on a hosted-runner vendor, one of them still queued, so a
+// card that read them would count more jobs than the list lists, and say a
+// pool had not claimed a job no pool here ever could.
+test('the Queued card counts the jobs the list lists, and none of another vendor’s', async ({
+  page,
+}) => {
+  const requests = watchAnalysis(page, 'queue-wait');
+  await goto(page, '/jobs?state=queued', 'Jobs');
+  await expectOneAnswer(page, 'Why jobs waited', requests);
+  // The card's own period, which the list is asked about in the same words.
+  const asked = new URL(requests.at(-1)!).searchParams;
+  const until = asked.get('until')!;
+  const since = new Date(Date.parse(until) - 24 * 3600 * 1000).toISOString();
+  const total = async (narrowing: string): Promise<number> => {
+    const url = `/api/v1/jobs?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&limit=1${narrowing}`;
+    return ((await page.request.get(url).then((r) => r.json())) as { total: number }).total;
+  };
+  const listed = await total('&managed=true');
+  expect(await total(''), 'the demo has jobs on a vendor’s runners to leave out').toBeGreaterThan(
+    listed,
+  );
+
+  const found = card(page, 'Why jobs waited');
+  await found.getByText('Evidence', { exact: true }).click();
+  const line = (await found.getByText(/^[\d,]+ jobs? queued, /).textContent()) ?? '';
+  const counted = /^([\d,]+) jobs?/.exec(line.trim())?.[1] ?? '';
+  expect(Number(counted.replace(/,/g, '')), `the job count in "${line}"`).toBe(listed);
+  // The switch is off, so the card has nothing to say about it.
+  await expect(found.getByText('Include other runners')).toHaveCount(0);
+});
+
+test('the Queued card names the Include other runners switch when it is on', async ({ page }) => {
+  await goto(page, '/jobs?state=queued&all=true', 'Jobs');
+  const found = card(page, 'Why jobs waited');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  // With the switch on the list holds jobs the card does not read.
+  await expect(
+    found.getByText(
+      "The list's Include other runners switch is not applied here: this analysis leaves out the jobs another vendor's runners ran.",
+    ),
+  ).toBeVisible();
+});
+
 test("the Queued card reads the list's own dates", async ({ page }) => {
   const requests = watchAnalysis(page, 'queue-wait');
   const day = (back: number) =>
