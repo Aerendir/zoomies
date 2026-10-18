@@ -172,6 +172,22 @@ export function findingDescription(
 }
 
 /**
+ * The refusals whose own sentence names a remedy the page has no control for,
+ * said instead in terms of what the page does have. Too few releases tells a
+ * caller to name the releases with a and b, to widen the period, or to compare
+ * by period; the Usage card asks by version with no a and b and never compares
+ * periods, so two of the three are not on the page and the third is its range.
+ * A Map, since a code is whatever the server sent and a plain object would
+ * answer "constructor".
+ */
+const SAID_ON_THE_PAGE = new Map([
+  [
+    'analysis.too_few_releases',
+    'Fewer than two releases completed a job in this range, so there is no pair to compare; widen the range.',
+  ],
+]);
+
+/**
  * What a card shows when its analysis was not given, and whether that is a
  * refusal. A 4xx is the route declining a question it understood (a period
  * over limits.job_stats_window, too few releases to compare), in its own
@@ -181,7 +197,12 @@ export function findingDescription(
  * its request ID in `detail`, so the card says which request to quote.
  */
 export function refusalOf(cause: unknown): { message: string; refused: boolean } {
-  const c = (cause ?? {}) as { status?: unknown; message?: unknown; detail?: unknown };
+  const c = (cause ?? {}) as {
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+    detail?: unknown;
+  };
   const status = typeof c.status === 'number' ? c.status : undefined;
   const raw =
     typeof c.message === 'string' && c.message.trim()
@@ -192,10 +213,10 @@ export function refusalOf(cause: unknown): { message: string; refused: boolean }
     const said = raw.replace(supportHint(), '').trim();
     return { message: `${sentence(said)} ${supportHint(id)}`, refused: false };
   }
-  return {
-    message: sentence(raw),
-    refused: status !== undefined && status >= 400 && status < 500,
-  };
+  const refused = status !== undefined && status >= 400 && status < 500;
+  const onThePage =
+    refused && typeof c.code === 'string' ? SAID_ON_THE_PAGE.get(c.code) : undefined;
+  return { message: onThePage ?? sentence(raw), refused };
 }
 
 /** What the card hands Eli: the fields every finding shares. */

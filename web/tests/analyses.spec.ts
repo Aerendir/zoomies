@@ -410,6 +410,32 @@ test('Usage compares releases beside its table, as the route does', async ({ pag
   await expectAccessible(page, title);
 });
 
+test('Usage says too few releases in terms of its own range', async ({ page }) => {
+  // The route's refusal for a range in which fewer than two releases ran a job
+  // (the demo gives it for the last hour), byte for byte as it sends it today.
+  // Its sentence sends a caller to the a and b parameters and to comparing by
+  // period, and the card has neither; on a day with one release it is the
+  // ordinary answer, so a reader who follows the wrong remedy has nowhere to go.
+  await page.route('**/api/v1/analysis/compare**', (route) =>
+    route.fulfill({
+      status: 409,
+      json: {
+        error: {
+          code: 'analysis.too_few_releases',
+          message:
+            'fewer than two releases completed a job in this period, so there is no pair to compare; name the releases with a and b, widen the period, or compare by period',
+        },
+      },
+    }),
+  );
+  await goto(page, '/usage?range=1h', 'Usage');
+  const found = card(page, 'What got worse and what got better');
+  await expect(found.getByRole('alert')).toHaveCount(0);
+  await expect(found.getByRole('status')).toHaveText(
+    'Fewer than two releases completed a job in this range, so there is no pair to compare; widen the range.',
+  );
+});
+
 test("a host's page says whether its failures came under pressure", async ({ page }) => {
   const hosts = (await page.request.get('/api/v1/hosts').then((r) => r.json())) as {
     items: { id: string; name: string }[];

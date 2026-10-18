@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import type { ErrorCode } from '../src/lib/api/types.ts';
 import {
   analysisContext,
   analysisWindow,
@@ -350,6 +351,33 @@ test('a refusal is told apart from a failed request', () => {
     message: 'The analysis could not be read.',
     refused: false,
   });
+});
+
+// The route's sentence for too few releases tells a caller to name the
+// releases with a and b, or to compare by period. The Usage card asks by
+// version with neither and never compares periods, so two of its three
+// remedies are ones the page has no control for, and on Usage's default day
+// this is the ordinary answer. The page says what it can do.
+test('too few releases is said as the Usage card can act on it', () => {
+  // Typed, so the page's wording follows the code if the API ever renames it.
+  const code: ErrorCode = 'analysis.too_few_releases';
+  const said = refusalOf({
+    status: 409,
+    code,
+    message:
+      'fewer than two releases completed a job in this period, so there is no pair to compare; name the releases with a and b, widen the period, or compare by period',
+  });
+  assert.deepEqual(said, {
+    message:
+      'Fewer than two releases completed a job in this range, so there is no pair to compare; widen the range.',
+    refused: true,
+  });
+  assert.doesNotMatch(said.message, /\ba and b\b|by period/);
+  // Any other refusal keeps the route's own sentence, which says what to change.
+  assert.equal(
+    refusalOf({ status: 409, code: 'conflict', message: 'something else to change' }).message,
+    'Something else to change.',
+  );
 });
 
 // The server's 500 names no cause on purpose and carries its request ID in
