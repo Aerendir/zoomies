@@ -1,5 +1,5 @@
 <!--
-  The Recent repairs history, a page at a time.
+  The History of repairs, a page at a time.
 
   The controller does the filtering and the paging, so this card holds one page
   and a total, never the whole history. It reads on its own ten-second timer
@@ -7,11 +7,12 @@
   forgot them would throw somebody back to the first page of everything while
   they were reading page three of one repository.
 
-  Repairs are chosen here and cleared from the history in one go. Clearing hides
-  a repair and nothing else, which the confirmation says in so many words; the
-  chosen ids are one set that outlives the refresh and a change of page, because
-  choosing is slow work, and is dropped by a change of filter, because what was
-  chosen may not be in the new list at all.
+  Repairs are chosen here and cleared from the history in one go, behind a Select
+  button so the list reads as a record until somebody means to edit it. Clearing
+  hides a repair and nothing else, which the confirmation says in so many words;
+  the chosen ids are one set that outlives the refresh and a change of page,
+  because choosing is slow work, and is dropped by a change of filter, because
+  what was chosen may not be in the new list at all.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -28,6 +29,7 @@
   import Field from '$lib/components/Field.svelte';
   import Input from '$lib/components/Input.svelte';
   import Pagination from '$lib/components/Pagination.svelte';
+  import Panel from '$lib/components/Panel.svelte';
   import Select from '$lib/components/Select.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import {
@@ -48,8 +50,6 @@
   } from './history';
   import ClearOutcome from './ClearOutcome.svelte';
   import RepairRow from './RepairRow.svelte';
-
-  let { onretry }: { onretry: (target: { repo: string; pull: number }) => void } = $props();
 
   const GRID = 'eli-repairs';
   /** Long enough that a word is typed before it is searched for. */
@@ -90,6 +90,11 @@
    * what is chosen.
    */
   const chosen = new SvelteSet<string>();
+  /**
+   * Whether the boxes are showing. Off, the history is a record to read and every
+   * row is a link; on, the rows can be chosen. Turning it off drops what was chosen.
+   */
+  let selecting = $state(false);
   /**
    * What the last select-all took, while the set is still that: how many
    * repairs the filters could clear in all, and whether the server stopped
@@ -168,6 +173,11 @@
     offset = 0;
     unchoose();
     void load();
+  }
+
+  function toggleSelecting(): void {
+    selecting = !selecting;
+    if (!selecting) unchoose();
   }
 
   /** Nothing chosen, and no select-all still on its way to choose something. */
@@ -324,8 +334,16 @@
   });
 </script>
 
-<section class="card" aria-labelledby="repair-history-heading">
-  <h4 id="repair-history-heading">Recent repairs</h4>
+<Panel
+  title="History"
+  description="Every attempt on the repositories you can see. Open one for the failure, the outcome and what Eli used."
+  flush
+>
+  {#snippet actions()}
+    {#if loaded && total > 0}
+      <Button variant="ghost" onclick={toggleSelecting}>{selecting ? 'Done' : 'Select'}</Button>
+    {/if}
+  {/snippet}
   <!--
     The card's two live regions, in the page from the start and empty until there
     is something to say. A region that is inserted already holding its words is
@@ -337,7 +355,7 @@
   <output class="sr-only" aria-live="polite">{counted}</output>
   <output class="sr-only" aria-live="polite">{announcement}</output>
   {#if showFilters}
-    <div class="filters">
+    <div class="filters pad">
       <Field id="repair-filter" label="Show"
         ><Select
           id="repair-filter"
@@ -375,100 +393,112 @@
       >
     </div>
   {/if}
-  {#if error}<p role="alert" class="error">{error}</p>{/if}
+  {#if error}<p role="alert" class="error pad">{error}</p>{/if}
   {#if report}
-    <ClearOutcome
-      cleared={report.cleared}
-      skipped={report.skipped}
-      ondismiss={() => (report = null)}
-    />
+    <div class="pad">
+      <ClearOutcome
+        cleared={report.cleared}
+        skipped={report.skipped}
+        ondismiss={() => (report = null)}
+      />
+    </div>
   {/if}
   {#if !loaded}
-    {#if !error}<Skeleton lines={3} />{/if}
+    {#if !error}<div class="pad"><Skeleton lines={3} /></div>{/if}
   {:else if total === 0}
-    {#if filtered(answered)}
-      <EmptyState
-        compact
-        title="No repairs match these filters"
-        description="Nothing in the history answers all of them at once. Removing one will widen the search."
-      >
-        <Button variant="secondary" onclick={clearFilters}>Clear filters</Button>
-      </EmptyState>
-    {:else}
-      <EmptyState
-        compact
-        title="No repairs yet"
-        description="Repairs appear when a linked user asks or an automatic policy encounters a failed PR job."
-      />
-    {/if}
+    <div class="pad">
+      {#if filtered(answered)}
+        <EmptyState
+          compact
+          title="No repairs match these filters"
+          description="Nothing in the history answers all of them at once. Removing one will widen the search."
+        >
+          <Button variant="secondary" onclick={clearFilters}>Clear filters</Button>
+        </EmptyState>
+      {:else}
+        <EmptyState
+          compact
+          title="No repairs yet"
+          description="Repairs appear when a linked user asks or an automatic policy encounters a failed PR job."
+        />
+      {/if}
+    </div>
   {:else}
-    <div class="bar" role="group" aria-label="Repair selection">
-      <Checkbox
-        checked={allShownChosen}
-        indeterminate={shownChosen > 0 && !allShownChosen}
-        disabled={waiting || clearableShown.length === 0}
-        reason={!waiting && clearableShown.length === 0
-          ? 'Every repair shown is still running.'
-          : undefined}
-        ariaLabel={items.length === 1
-          ? 'Select the repair shown'
-          : `Select the ${items.length} repairs shown`}
-        onchange={chooseShown}
-      />
-      {#if chosen.size > 0}
-        <strong class="count">{howMany}</strong>
-        <div class="actions">
-          {#if canTakeEverything}
+    {#if selecting}
+      <div class="bar" role="group" aria-label="Repair selection">
+        <Checkbox
+          checked={allShownChosen}
+          indeterminate={shownChosen > 0 && !allShownChosen}
+          disabled={waiting || clearableShown.length === 0}
+          reason={!waiting && clearableShown.length === 0
+            ? 'Every repair shown is still running.'
+            : undefined}
+          ariaLabel={items.length === 1
+            ? 'Select the repair shown'
+            : `Select the ${items.length} repairs shown`}
+          onchange={chooseShown}
+        />
+        {#if chosen.size > 0}
+          <strong class="count">{howMany}</strong>
+          <div class="actions">
+            {#if canTakeEverything}
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={taking}
+                onclick={() => void takeEverything()}
+                >Select all {formatNumber(total)} matching</Button
+              >
+            {/if}
+            <!-- The count is not settled while a select-all is out, so neither is what a clear would clear. -->
             <Button
               size="sm"
               variant="secondary"
-              loading={taking}
-              onclick={() => void takeEverything()}
-              >Select all {formatNumber(total)} matching</Button
+              disabled={taking}
+              reason={taking ? 'Still choosing the matching repairs.' : undefined}
+              onclick={askToClear}>Clear from history</Button
             >
-          {/if}
-          <!-- The count is not settled while a select-all is out, so neither is what a clear would clear. -->
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={taking}
-            reason={taking ? 'Still choosing the matching repairs.' : undefined}
-            onclick={askToClear}>Clear from history</Button
-          >
-          <Button size="sm" variant="ghost" onclick={unchoose}>Clear selection</Button>
-        </div>
-      {:else}
-        <span class="hint">Select repairs to clear them from the history.</span>
-      {/if}
+            <Button size="sm" variant="ghost" onclick={unchoose}>Clear selection</Button>
+          </div>
+        {:else}
+          <span class="hint">Select repairs to clear them from the history.</span>
+        {/if}
+      </div>
+    {/if}
+    <!-- The same columns as a row's, so the words sit over what they name. -->
+    <div class="head" class:selecting aria-hidden="true">
+      <span>Repair</span><span>Failure</span><span>Triggered by</span><span>When</span><span></span>
     </div>
     <div class="history">
       {#each items as r (r.id)}
         <RepairRow
           repair={r}
+          {selecting}
           selected={chosen.has(r.id)}
           {waiting}
           onselect={(on) => choose(r.id, on)}
-          {onretry}
         />
       {/each}
     </div>
-    <Pagination
-      {total}
-      {limit}
-      {offset}
-      noun="repairs"
-      onpage={(next) => {
-        offset = next;
-        void load();
-      }}
-      onlimit={(size) => {
-        prefs.setPageSize(GRID, size);
-        offset = 0;
-        void load();
-      }}
-    />
+    <div class="pad">
+      <Pagination
+        {total}
+        {limit}
+        {offset}
+        noun="repairs"
+        onpage={(next) => {
+          offset = next;
+          void load();
+        }}
+        onlimit={(size) => {
+          prefs.setPageSize(GRID, size);
+          offset = 0;
+          void load();
+        }}
+      />
+    </div>
   {/if}
-</section>
+</Panel>
 
 <!--
   It says what clearing leaves alone because that is the part that surprises: the
@@ -485,28 +515,17 @@
 />
 
 <style>
-  .card {
-    padding: var(--z-space-4);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-lg);
-    background: var(--z-surface);
+  .pad {
+    padding: var(--z-space-4) var(--z-space-5) 0;
   }
-  h4 {
-    margin: 0;
-    font-size: var(--z-text-base);
-    font-weight: var(--z-weight-semibold);
-  }
-  p {
-    color: var(--z-text-muted);
-    font-size: var(--z-text-sm);
-    margin: var(--z-space-2) 0 var(--z-space-4);
-    line-height: var(--z-leading-lg);
+  .pad:last-child {
+    padding-bottom: var(--z-space-4);
   }
   .filters {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--z-space-4);
-    margin-top: var(--z-space-3);
+    padding-bottom: var(--z-space-4);
   }
   /* A phone has no room beside the box, so the actions wrap under the count. */
   .bar {
@@ -514,10 +533,8 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--z-space-3);
-    margin-top: var(--z-space-3);
-    padding: var(--z-space-2) var(--z-space-3);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-md);
+    padding: var(--z-space-2) var(--z-space-5);
+    border-top: var(--z-border-width) solid var(--z-border);
     background: var(--z-surface-sunken);
     font-size: var(--z-text-sm);
   }
@@ -530,20 +547,57 @@
     gap: var(--z-space-2);
     margin-left: auto;
   }
-  .history {
-    margin-top: var(--z-space-3);
-  }
-  .history > :global(article + article) {
+  /* Column titles over the rows' columns. Keep the template in step with RepairRow's. */
+  .head {
+    display: grid;
+    grid-template-columns:
+      minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 0.9fr) minmax(0, 0.8fr)
+      1rem;
+    gap: var(--z-space-4);
+    padding: var(--z-space-2) var(--z-space-5);
     border-top: var(--z-border-width) solid var(--z-border);
-    padding-top: var(--z-space-3);
-    margin-top: var(--z-space-3);
+    background: var(--z-surface-sunken);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+    font-weight: var(--z-weight-semibold);
+    letter-spacing: var(--z-tracking-wider);
+    text-transform: uppercase;
+  }
+  .head.selecting {
+    grid-template-columns:
+      2rem minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 0.9fr) minmax(0, 0.8fr)
+      1rem;
+  }
+  .head.selecting > :first-child {
+    grid-column: 2;
+  }
+  .history {
+    border-top: var(--z-border-width) solid var(--z-border);
   }
   .error {
     color: var(--z-danger);
   }
+  @media (max-width: 860px) {
+    .head {
+      display: none;
+    }
+  }
   @media (max-width: 640px) {
+    .pad {
+      padding-right: var(--z-space-4);
+      padding-left: var(--z-space-4);
+    }
+    .bar {
+      padding-right: var(--z-space-4);
+      padding-left: var(--z-space-4);
+    }
+    /* Two short controls share a line and the repository box has the next to itself. */
     .filters {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .filters > :global(:nth-child(2)) {
+      grid-column: 1 / -1;
+      order: 3;
     }
     .actions {
       margin-left: 0;

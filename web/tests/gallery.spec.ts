@@ -489,6 +489,63 @@ test('the Eli repair components show every state they can be in', async ({ page 
     'Pushed commit b7d3e91',
   );
 
+  // The hub's setup bar says whether the person can repair, in each state it can be in.
+  const bars = region
+    .locator('[data-gallery="setup-bars"]')
+    .getByRole('region', { name: 'Repair setup' });
+  await expect(bars.nth(0)).toContainText('Ready to repair');
+  await expect(bars.nth(0)).toContainText('GitHub @dana linked');
+  await expect(bars.nth(0)).toContainText('Ask me first on 3 repositories');
+  await expect(bars.nth(1)).toContainText('Setup needed');
+  await expect(bars.nth(1)).toContainText('repairs not allowed yet');
+  await expect(bars.nth(1)).not.toContainText('Ask me first');
+  await expect(bars.nth(2)).toContainText('No GitHub account linked');
+  await expect(bars.nth(3)).toContainText('Sign-in is off');
+  await expect(bars.nth(4)).toContainText('Checking setup');
+  await expect(bars.nth(0).getByRole('link', { name: /Manage setup/ })).toHaveAttribute(
+    'href',
+    '/repairs/setup',
+  );
+
+  // Offers say what failed and where, and a title or a job name with no break points wraps.
+  const offers = region.locator('[data-gallery="offers"]');
+  await expect(offers.getByRole('article')).toHaveCount(3);
+  await expect(offers.getByRole('article').first()).toContainText('UI (e2e)');
+  await expect(offers.getByRole('article').first()).toContainText('step 4, Install browsers');
+  await expect(offers.getByRole('article').nth(1)).toContainText('step 5, Run the unit tests');
+  await expect(
+    offers.getByRole('link', { name: 'Review repair for eyupio/zoomies #1142' }),
+  ).toHaveAttribute('href', /\/repairs\/new\?.*offer=opp_1/);
+  expect(await offers.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+  // Running repairs say which step they are on, and Follow opens the attempt.
+  const going = region.locator('[data-gallery="active"]');
+  await expect(going).toContainText('Preparing the fix');
+  await expect(going).toContainText('Queued');
+  await expect(going.getByRole('img', { name: 'Step 3 of 5: Preparing the fix' })).toBeVisible();
+  await expect(
+    going.getByRole('link', { name: /Follow the repair for eyupio\/zoomies #1131/ }),
+  ).toHaveAttribute('href', '/repairs/eli_run1');
+
+  // History rows open the attempt, name the failed jobs, and keep their boxes for Select mode.
+  const rows = region.locator('[data-gallery="rows"]');
+  await expect(rows.getByRole('checkbox')).toHaveCount(0);
+  await expect(
+    rows.getByRole('link', { name: 'Add a status line to the repairs page' }),
+  ).toHaveAttribute('href', '/repairs/eli_pass');
+  await expect(rows.getByRole('article').nth(3)).toContainText('+1 more');
+  await expect(rows.getByRole('article').nth(1)).toContainText('Fix commit');
+  // A repair from before cases were kept says less and does not guess.
+  await expect(rows.getByRole('article').nth(4)).toContainText(
+    'Pull request #1002 in eyupio/zoomies',
+  );
+  expect(await rows.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const picking = region.locator('[data-gallery="rows-selecting"]');
+  await expect(picking.getByRole('checkbox')).toHaveCount(3);
+  await expect(picking.getByRole('checkbox').nth(1)).toBeChecked();
+  // The running repair's box says why it cannot be ticked.
+  await expect(picking.getByRole('checkbox').nth(0)).toBeDisabled();
+
   // Every state a repair can end in has its word, and one this build does not know keeps its own.
   const badges = region.locator('[data-gallery="repair-status"]');
   for (const label of [

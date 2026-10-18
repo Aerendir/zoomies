@@ -968,6 +968,46 @@ export function repairStatus(state: string): StatusMeta {
   );
 }
 
+/**
+ * The hub's setup bar: whether the person looking can repair. Ready is the
+ * healthy green and needing setup is the amber of something waiting on a person.
+ * Sign-in being off is neutral, because nothing is wrong, there is simply nobody
+ * to repair as.
+ */
+export function repairSetupStatus(state: 'ready' | 'needed' | 'off' | 'loading'): StatusMeta {
+  switch (state) {
+    case 'ready':
+      return meta(
+        'ready',
+        'Ready to repair',
+        'idle',
+        'filled',
+        CircleCheck,
+        'Your GitHub account is linked and has allowed repairs.',
+      );
+    case 'needed':
+      return meta(
+        'needed',
+        'Setup needed',
+        'pending',
+        'dashed',
+        CircleDashed,
+        'Something has to be set up before Eli can repair as you.',
+      );
+    case 'off':
+      return meta(
+        'off',
+        'Sign-in is off',
+        'neutral',
+        'square',
+        CircleMinus,
+        'Repairs are made for a signed-in person, and nobody is signed in.',
+      );
+    default:
+      return meta('loading', 'Checking setup', 'neutral', 'hollow', Clock);
+  }
+}
+
 /* -- problems and deliveries ---------------------------------------------- */
 
 export function severityStatus(severity: Severity | undefined): StatusMeta {

@@ -5,7 +5,9 @@
   passed, the decision card at every stage, and every state a repair can end in;
   then the attempt page's own: the progress track at three points, the outcome
   of each kind of ending, the technical details with usage the provider never
-  reported, what to try next and the facts and timeline of one attempt.
+  reported, what to try next and the facts and timeline of one attempt; and the
+  hub's: the setup bar in each state, offers with the jobs that failed, the
+  repairs that are running, and history rows with and without their boxes.
 
   The error output is read from the controller when a job's disclosure opens,
   so this section answers that one request itself rather than needing a
@@ -16,15 +18,19 @@
   import Panel from '$lib/components/Panel.svelte';
   import type { Schemas } from '$lib/api/types';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
+  import ActiveRepairs from '$lib/repairs/ActiveRepairs.svelte';
   import AttemptFacts from '$lib/repairs/AttemptFacts.svelte';
   import AttemptTimeline from '$lib/repairs/AttemptTimeline.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
   import NextSteps from '$lib/repairs/NextSteps.svelte';
+  import OfferList from '$lib/repairs/OfferList.svelte';
   import OutcomeBanner from '$lib/repairs/OutcomeBanner.svelte';
   import ProgressTrack from '$lib/repairs/ProgressTrack.svelte';
   import ReadinessChecklist from '$lib/repairs/ReadinessChecklist.svelte';
+  import RepairRow from '$lib/repairs/RepairRow.svelte';
   import RepairStatusBadge from '$lib/repairs/RepairStatusBadge.svelte';
+  import SetupBar from '$lib/repairs/SetupBar.svelte';
   import TechnicalDetails from '$lib/repairs/TechnicalDetails.svelte';
   import type { CaseJob, CaseView } from '$lib/repairs/case';
   import { checkRows } from '$lib/repairs/checks';
@@ -373,6 +379,181 @@
   const newer = finish({ state: 'a-state-from-a-newer-controller', message: '' });
   const OUTCOMES = [couldNot, passed, stillFailing, noCalls, newer];
 
+  // The hub: the setup bar in each state it can be in.
+  const policy = (repo: string): Schemas['EliRepairPolicy'] => ({
+    repo,
+    installation_id: 'ins_1',
+    provider_id: 'prv_1',
+    enabled: true,
+    automatic: false,
+    ask_first: true,
+    allow_workflows: false,
+    daily_limit: 5,
+  });
+  const linked = (confirmed: boolean): Schemas['EliRepairSettings'] => ({
+    identities: [{ user_id: 'usr_1', github_user_id: 42, github_login: 'dana', confirmed }],
+    policies: [policy('eyupio/zoomies'), policy('eyupio/site'), policy('eyupio/docs')],
+  });
+  const nobody: Schemas['EliRepairSettings'] = { identities: [], policies: [] };
+
+  // Offers, each with the jobs that failed in its run.
+  const offer = (over: Partial<Schemas['EliOpportunity']>): Schemas['EliOpportunity'] => ({
+    id: 'opp_1',
+    repo: 'eyupio/zoomies',
+    installation_id: 'ins_1',
+    pull_number: 1142,
+    head_sha: SHA,
+    run_id: 482,
+    title: 'Cache the Playwright browsers between UI test runs',
+    state: 'open',
+    created_at: iso(NOW - 6 * 60_000),
+    updated_at: iso(NOW - 6 * 60_000),
+    ...over,
+  });
+  const job = (key: string, name: string, step: string, stepNumber: number): CaseJob => ({
+    key,
+    name,
+    step,
+    stepNumber,
+    domain: 'workflow',
+    opened: false,
+  });
+  const offers = [
+    offer({}),
+    offer({
+      id: 'opp_2',
+      pull_number: 1139,
+      title: 'Fix the pool wizard’s size step on small screens',
+    }),
+    offer({
+      id: 'opp_3',
+      pull_number: 1150,
+      title:
+        'A very long pull request title that goes on and on, with a-path/that/has/no/spaces/to/break/at/all/and/keeps/going/until/it/must/wrap',
+    }),
+  ];
+  const offerViews: Record<string, CaseView> = {
+    opp_1: {
+      ...withPull,
+      title: offers[0]!.title,
+      pullNumber: 1142,
+      branch: 'ci/cache-playwright',
+      failedAt: iso(NOW - 6 * 60_000),
+      jobs: [job('a', 'UI (e2e)', 'Install browsers', 4)],
+    },
+    opp_2: {
+      ...withPull,
+      title: offers[1]!.title,
+      pullNumber: 1139,
+      branch: 'fix/pool-wizard-size',
+      failedAt: iso(NOW - 31 * 60_000),
+      jobs: [
+        job('a', 'UI (e2e)', 'Playwright mobile', 7),
+        job('b', 'UI unit', 'Run the unit tests', 5),
+      ],
+    },
+    opp_3: {
+      ...withPull,
+      title: offers[2]!.title,
+      pullNumber: 1150,
+      branch: `fix/${'a-very-long-branch-name-'.repeat(4)}end`,
+      failedAt: undefined,
+      jobs: [
+        job(
+          'a',
+          'A job name that is long enough to need wrapping on a phone: internal/registry/client_test.go',
+          'Run the whole suite with a step name that has no spaces to break at: ----------------------------',
+          3,
+        ),
+      ],
+    },
+  };
+
+  // The repairs that are running, and the rows of the history, with their cases.
+  const withCase = (
+    r: Schemas['EliRepair'],
+    title: string,
+    branch: string,
+    jobs: { name: string; step?: string }[],
+  ): Schemas['EliRepair'] => ({
+    ...r,
+    details: { ...r.details, case: { pull_title: title, author: 'dana', branch, jobs } },
+  });
+  const goingNow = withCase(
+    repair({
+      id: 'eli_run1',
+      pull_number: 1131,
+      details: { stage: 'prepare_fix', model: 'claude-sonnet' },
+    }),
+    'Retry transient 502s in the registry client',
+    'fix/registry-retry',
+    [{ name: 'Go (api-2)', step: 'Run go test -race ./internal/...' }],
+  );
+  const goingQueued = withCase(
+    repair({
+      id: 'eli_run2',
+      state: 'queued',
+      trigger: 'automatic',
+      github_login: '',
+      pull_number: 1133,
+    }),
+    'Pin the base image digest in the runner Dockerfile',
+    'chore/pin-base-digest',
+    [],
+  );
+  const rows = [
+    withCase(goingNow, goingNow.details?.case?.pull_title ?? '', 'fix/registry-retry', [
+      { name: 'Go (api-2)', step: 'Run go test -race ./internal/...' },
+      { name: 'Lint', step: 'staticcheck' },
+    ]),
+    withCase(
+      { ...passed, id: 'eli_pass', trigger: 'automatic', github_login: '', pull_number: 1127 },
+      'Add a status line to the repairs page',
+      'feat/repair-status',
+      [{ name: 'Lint', step: 'staticcheck' }],
+    ),
+    withCase(
+      {
+        ...newer,
+        id: 'eli_newer',
+        state: 'superseded',
+        message: 'The PR moved on before the checks answered',
+        pull_number: 1119,
+      },
+      'Pin the base image digest in the runner Dockerfile',
+      'chore/pin-base-digest',
+      [{ name: 'Build runner image', step: 'docker build' }],
+    ),
+    withCase(
+      { ...couldNot, id: 'eli_lost', pull_number: 1096 },
+      'Show the retention window on the Usage page',
+      'feat/usage-retention',
+      [
+        { name: 'UI (e2e)', step: 'Playwright' },
+        { name: 'UI unit', step: 'vitest' },
+        { name: 'Docs', step: 'mkdocs build' },
+      ],
+    ),
+    // From before cases were kept: the row and nothing about the failure.
+    { ...stillFailing, id: 'eli_old', pull_number: 1002 },
+  ];
+  const longRow = withCase(
+    {
+      ...couldNot,
+      id: 'eli_long',
+      pull_number: 1200,
+      message: `Error: ${'x'.repeat(260)}`,
+    },
+    'A very long pull request title that goes on and on, with a-path/that/has/no/spaces/to/break/at/all',
+    `fix/${'a-very-long-branch-name-'.repeat(4)}end`,
+    [
+      {
+        name: 'A job name that is long enough to need wrapping on a phone: client_test.go',
+        step: 'Run it',
+      },
+    ],
+  );
+
   const STATES = [
     'queued',
     'working',
@@ -562,6 +743,56 @@
       </div>
     </div>
 
+    <h3>The hub's setup bar</h3>
+    <div class="stack" data-gallery="setup-bars">
+      <SetupBar settings={linked(true)} admin={true} userId="usr_1" />
+      <SetupBar settings={linked(false)} admin={false} userId="usr_1" />
+      <SetupBar settings={nobody} admin={false} userId="usr_1" />
+      <SetupBar settings={nobody} admin={false} userId="usr_1" authDisabled={true} />
+      <SetupBar settings={null} admin={false} userId="usr_1" />
+    </div>
+
+    <h3>Needs you</h3>
+    <div data-gallery="offers">
+      <OfferList {offers} cases={offerViews} busy={false} ondismiss={noop} />
+    </div>
+
+    <h3>In progress</h3>
+    <div data-gallery="active"><ActiveRepairs items={[goingNow, goingQueued]} total={2} /></div>
+
+    <h3>History</h3>
+    <div class="pair">
+      <div class="rows" data-gallery="rows">
+        {#each rows as r (r.id)}
+          <RepairRow
+            repair={r}
+            selecting={false}
+            selected={false}
+            waiting={false}
+            onselect={noop}
+          />
+        {/each}
+        <RepairRow
+          repair={longRow}
+          selecting={false}
+          selected={false}
+          waiting={false}
+          onselect={noop}
+        />
+      </div>
+      <div class="rows" data-gallery="rows-selecting">
+        {#each rows.slice(0, 3) as r, index (r.id)}
+          <RepairRow
+            repair={r}
+            selecting={true}
+            selected={index === 1}
+            waiting={false}
+            onselect={noop}
+          />
+        {/each}
+      </div>
+    </div>
+
     <h3>A repair's state</h3>
     <div class="badges" data-gallery="repair-status">
       {#each STATES as state (state)}<RepairStatusBadge {state} />{/each}
@@ -587,6 +818,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--z-space-4);
     align-items: start;
+  }
+  .rows {
+    min-width: 0;
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+    overflow: hidden;
   }
   .trio {
     display: grid;

@@ -118,6 +118,13 @@ async function mockHistory(page: Page, count = 120) {
       // Asking for a repair is a POST to this same path and stays real.
       if (request.method() !== 'GET') return route.fallback();
       const query = new URL(request.url()).searchParams;
+      // The hub's own list of the repairs that are running is a separate read, with
+      // a limit no page size uses. It is answered from the same rows and not
+      // counted: these tests are about what the history asks for.
+      if (query.get('group') === 'active' && query.get('limit') === '20') {
+        const going = model.rows.filter((r) => ACTIVE.includes(r.state));
+        return route.fulfill({ json: { items: going.slice(0, 20), total: going.length } });
+      }
       seen.push(query);
       if (model.gate) await model.gate;
       if (model.answer) return route.fulfill({ json: model.answer(query) });
@@ -178,7 +185,7 @@ async function mockHistory(page: Page, count = 120) {
 const asked = (seen: URLSearchParams[], from = 0) =>
   seen.slice(from).map((q) => Object.fromEntries(q));
 
-const historyOf = (page: Page) => page.getByRole('region', { name: 'Recent repairs' });
+const historyOf = (page: Page) => page.getByRole('region', { name: 'History' });
 const paginationOf = (page: Page) => page.getByRole('navigation', { name: 'Pagination' });
 const barOf = (page: Page) => historyOf(page).getByRole('group', { name: 'Repair selection' });
 /** A row's own checkbox, named by the repair it belongs to. */
@@ -188,6 +195,12 @@ const tickOf = (page: Page, r: Row) =>
     exact: true,
   });
 const dialogOf = (page: Page) => page.getByRole('dialog', { name: 'Clear from history' });
+/**
+ * Choosing repairs is behind a button, so the history reads as a record until
+ * somebody means to edit it.
+ */
+const selecting = (page: Page) =>
+  historyOf(page).getByRole('button', { name: 'Select', exact: true }).click();
 /**
  * What a clear left on the card for a person to read. Not a live region: what a
  * screen reader is told is written into one the card keeps mounted.
@@ -291,6 +304,7 @@ test('a filter that matches nothing says so and can be cleared', async ({ page }
   await reload(page, 'Eli repairs');
   await expect(history.getByText('No repairs yet')).toBeVisible();
   await expect(history.getByText('No repairs match these filters')).toHaveCount(0);
+  await expect(history.getByRole('button', { name: 'Select', exact: true })).toHaveCount(0);
   await expect(history.getByLabel('Show', { exact: true })).toHaveCount(0);
   await expect(history.getByLabel('Repository', { exact: true })).toHaveCount(0);
   await expect(history.getByLabel('Triggered by', { exact: true })).toHaveCount(0);
@@ -422,6 +436,35 @@ test('a page that comes back empty at an offset that is in range is not read aga
   await noSidewaysScroll(page);
 });
 
+// Choosing is how a record is edited, so the list reads as a record until somebody
+// asks to edit it, and goes back to one when they are done.
+test('rows are not selectable until Select is pressed', async ({ page }) => {
+  await mockHistory(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const history = historyOf(page);
+  await expect(history.getByRole('article')).toHaveCount(50);
+  await expect(history.getByRole('checkbox')).toHaveCount(0);
+  await expect(barOf(page)).toHaveCount(0);
+
+  await history.getByRole('button', { name: 'Select', exact: true }).click();
+  await expect(
+    history.getByRole('checkbox', { name: 'Select the 50 repairs shown' }),
+  ).toBeVisible();
+  await expect(tickOf(page, repair(3))).toBeVisible();
+  await expect(barOf(page)).toContainText('Select repairs to clear them from the history');
+
+  // Done drops the boxes and whatever was chosen, and the next Select starts clean.
+  await tickOf(page, repair(3)).check();
+  await expect(barOf(page).getByText('1 selected')).toBeVisible();
+  await history.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(history.getByRole('checkbox')).toHaveCount(0);
+  await expect(barOf(page)).toHaveCount(0);
+  await history.getByRole('button', { name: 'Select', exact: true }).click();
+  await expect(barOf(page)).toContainText('Select repairs to clear them from the history');
+  await expect(tickOf(page, repair(3))).not.toBeChecked();
+  await noSidewaysScroll(page);
+});
+
 // Rows are chosen three ways, and they must agree about what is chosen: the
 // count in the bar is the one number an operator reads before clearing.
 test('rows are selected one at a time, by the page, and by everything that matches', async ({
@@ -429,6 +472,7 @@ test('rows are selected one at a time, by the page, and by everything that match
 }) => {
   const model = await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const bar = barOf(page);
   const header = historyOf(page).getByRole('checkbox', { name: 'Select the 50 repairs shown' });
   const selectAll = bar.getByRole('button', { name: /^Select all .* matching$/ });
@@ -489,6 +533,7 @@ test('rows are selected one at a time, by the page, and by everything that match
   // was taken, so nobody clears 500 believing they have cleared 700.
   model.rows = Array.from({ length: 1000 }, (_, i) => repair(i));
   await reload(page, 'Eli repairs');
+  await selecting(page);
   await header.check();
   await selectAll.click();
   await expect(bar.getByText('500 of 700 selected')).toBeVisible();
@@ -501,6 +546,7 @@ test('rows are selected one at a time, by the page, and by everything that match
 test('an in-flight repair cannot be selected', async ({ page }) => {
   await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const bar = barOf(page);
 
   // The reason is shown to a pointer, and is also the box's description.
@@ -528,6 +574,7 @@ test('an in-flight repair cannot be selected', async ({ page }) => {
 test('clearing says what it does, then clears and reports', async ({ page }) => {
   const model = await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const history = historyOf(page);
   const bar = barOf(page);
   const pagination = paginationOf(page);
@@ -591,6 +638,7 @@ test('clearing says what it does, then clears and reports', async ({ page }) => 
 test('a clear that fails keeps the selection and the dialog', async ({ page }) => {
   const model = await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const bar = barOf(page);
 
   await tickOf(page, repair(3)).check();
@@ -616,6 +664,7 @@ test('a selection survives the refresh and a page change, and a filter change dr
   await page.clock.install();
   const { seen } = await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const history = historyOf(page);
   const bar = barOf(page);
   const pagination = paginationOf(page);
@@ -662,6 +711,7 @@ test('clearing the last row on the last page steps back a page', async ({ page }
   // The 51st would be queued, which cannot be cleared.
   model.rows[50]!.state = 'failed';
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const history = historyOf(page);
   const pagination = paginationOf(page);
 
@@ -691,6 +741,7 @@ test('a selection past the bulk limit is cleared in requests the route accepts',
 }) => {
   const model = await mockHistory(page, 1000);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const bar = barOf(page);
   const pagination = paginationOf(page);
 
@@ -722,6 +773,7 @@ test('a clear cannot start while a select-all is being read, and clears what the
 }) => {
   const model = await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const bar = barOf(page);
   const clearing = bar.getByRole('button', { name: 'Clear from history' });
 
@@ -760,6 +812,7 @@ test('a clear cannot start while a select-all is being read, and clears what the
 test('the boxes are off while the list is re-read for new filters', async ({ page }) => {
   const model = await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const history = historyOf(page);
   const bar = barOf(page);
   const header = history.getByRole('checkbox', { name: 'Select the 50 repairs shown' });
@@ -794,6 +847,7 @@ test('a clear that fails on a later request reports what went and keeps the rest
 }) => {
   const model = await mockHistory(page, 1000);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const history = historyOf(page);
   const bar = barOf(page);
   const late = repair(953);
@@ -841,6 +895,7 @@ test('a clear that fails on a later request reports what went and keeps the rest
 test('no box or button on the history card sits inside a live region', async ({ page }) => {
   await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const history = historyOf(page);
   const live = history.locator('[aria-live]');
 
@@ -861,6 +916,7 @@ test('the count and the outcome are announced through live regions that were alr
 }) => {
   await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const history = historyOf(page);
   const live = history.locator('[aria-live]');
   const [selection, outcome] = [live.nth(0), live.nth(1)];
@@ -892,6 +948,7 @@ test('the count and the outcome are announced through live regions that were alr
 test('a second clear that ends in the same words is announced again', async ({ page }) => {
   await mockHistory(page);
   await goto(page, '/repairs', 'Eli repairs');
+  await selecting(page);
   const outcome = historyOf(page).locator('[aria-live]').nth(1);
 
   const clearOne = async (r: Row) => {

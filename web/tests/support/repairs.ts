@@ -29,8 +29,13 @@ export interface RepairApiState {
     string,
     { lines: string[]; note?: string } | { status: number; message: string }
   >;
-  /** The history `GET /assistant/repairs` lists, which is where an active repair is found. */
+  /**
+   * The history `GET /assistant/repairs` lists, which is where an active repair is
+   * found. The stub answers `group`, `limit` and `offset` as the controller does.
+   */
   repairs: Repair[];
+  /** What `GET /assistant/repairs/settings` answers: who is linked and the repository policies. */
+  settings: Schemas['EliRepairSettings'];
   /** Repair offers. */
   offers: Schemas['EliOpportunity'][];
   /** What starting a repair answers: a status and a body. */
@@ -54,7 +59,13 @@ export interface RepairApiCalls {
   offerActions: { id: string; body: unknown }[];
   /** The id of every `GET /assistant/repairs/{id}`, in the order they were asked. */
   attempts: string[];
+  /** The query of every `GET /assistant/repairs`, which is the history and the running list. */
+  lists: URLSearchParams[];
+  /** How many times the offers were read. */
+  offerReads: number;
 }
+
+const ACTIVE = ['queued', 'working', 'checking'];
 
 export const SHA = 'a41c9e2f0b7d5c3e8a1f6d4b2c9e7a5f3d1b8c6e';
 
@@ -209,6 +220,7 @@ export async function mockRepairApi(
     offers: [],
     start: { status: 202, body: { id: 'rep-1' } },
     attempts: {},
+    settings: { identities: [], policies: [] },
     ...options,
   };
   const calls: RepairApiCalls = {
@@ -218,6 +230,8 @@ export async function mockRepairApi(
     starts: [],
     offerActions: [],
     attempts: [],
+    lists: [],
+    offerReads: 0,
   };
 
   await page.route('**/api/v1/**', async (route) => {
@@ -262,20 +276,36 @@ export async function mockRepairApi(
       return json(answer.body, answer.status);
     }
     if (path === '/assistant/repairs' && method === 'GET') {
-      return json({ items: state.repairs, total: state.repairs.length });
+      calls.lists.push(url.searchParams);
+      const group = url.searchParams.get('group');
+      const rows = state.repairs.filter((row) =>
+        group === 'active'
+          ? ACTIVE.includes(row.state)
+          : group === 'attention'
+            ? !ACTIVE.includes(row.state) && row.state !== 'succeeded'
+            : group === 'passed'
+              ? row.state === 'succeeded'
+              : true,
+      );
+      const limit = Number(url.searchParams.get('limit') ?? 50);
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      return json({ items: rows.slice(offset, offset + limit), total: rows.length });
     }
     if (path === '/assistant/repairs/opportunities' && method === 'GET') {
+      calls.offerReads += 1;
       return json({ items: state.offers });
     }
     if (path.startsWith('/assistant/repairs/opportunities/') && method === 'POST') {
-      calls.offerActions.push({
-        id: path.slice('/assistant/repairs/opportunities/'.length),
-        body: request.postDataJSON(),
-      });
+      const id = path.slice('/assistant/repairs/opportunities/'.length);
+      const body = request.postDataJSON();
+      calls.offerActions.push({ id, body });
+      // An offer that has been acted on is no longer offered, as the controller has it.
+      if (body?.action === 'dismiss')
+        state.offers = state.offers.filter((offer) => offer.id !== id);
       return json({ repair: { id: 'rep-offer' } });
     }
     if (path === '/assistant/repairs/settings') {
-      return json({ identities: [], policies: [] });
+      return json(state.settings);
     }
     const attempt = /^\/assistant\/repairs\/([^/]+)$/.exec(path);
     if (attempt && method === 'GET') {
@@ -349,5 +379,30 @@ export function keptCase(over: Partial<NonNullable<NonNullable<Repair['details']
       },
     ],
     ...over,
+  };
+}
+
+/** A repair offer, as `GET /assistant/repairs/opportunities` lists it. */
+export function offerRow(over: Partial<Schemas['EliOpportunity']> = {}): Schemas['EliOpportunity'] {
+  return {
+    id: 'opp-1',
+    repo: 'acme/widgets',
+    installation_id: 'ins_1',
+    pull_number: 17,
+    head_sha: SHA,
+    run_id: 482,
+    title: 'Retry transient 502s',
+    state: 'open',
+    created_at: new Date(Date.now() - 6 * 60_000).toISOString(),
+    updated_at: new Date(Date.now() - 6 * 60_000).toISOString(),
+    ...over,
+  };
+}
+
+/** Who is linked: the signed-in person (`user-1` in the stub) with their GitHub account. */
+export function linkedAs(login: string, confirmed = true): Schemas['EliRepairSettings'] {
+  return {
+    identities: [{ user_id: 'user-1', github_user_id: 42, github_login: login, confirmed }],
+    policies: [],
   };
 }

@@ -503,14 +503,7 @@
       </details>
     {/if}
   </details>
-  <RepairHistory
-    bind:this={history}
-    onretry={(target) => {
-      selectedOffer = null;
-      retryTarget = target;
-      document.getElementById('eli-repairs-heading')?.scrollIntoView();
-    }}
-  />
+  <RepairHistory bind:this={history} />
 </section>
 
 <style>
