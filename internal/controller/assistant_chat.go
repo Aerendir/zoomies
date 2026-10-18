@@ -476,6 +476,12 @@ func AssistantOutputLimit(row *store.AssistantProvider) int {
 	return assistantChatMaxTokens
 }
 
+// nextOutputLimit is the room to ask for after a provider cut an answer at n
+// tokens: twice as much, held to the most a provider row may ask for. It is the
+// step the chat page's button takes (ConversationView.svelte), so that a repair
+// raising its own limit and a person raising it agree.
+func nextOutputLimit(n int) int { return min(n*2, AssistantOutputTokensMax) }
+
 // StartAssistantChat opens the answer to a conversation. Everything that can be
 // refused is refused here, before any stream exists, so the caller can answer
 // with a status and not with a stream that opens and fails.

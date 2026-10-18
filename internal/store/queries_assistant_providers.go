@@ -27,8 +27,9 @@ type AssistantProvider struct {
 	// model at its default effort can spend an answer's whole room on reasoning.
 	ReasoningEffort string
 	// MaxOutputTokens is how much the model may write in one round, thinking
-	// included, or zero for the controller's default. The right number is the
-	// model's, and the cost of the room is the provider's price.
+	// included, or zero for automatic, which the controller works out. A number
+	// is kept exactly. The right number is the model's, and the cost of the room
+	// is the provider's price.
 	MaxOutputTokens int
 	// OwnerID is the account a provider belongs to, and empty for one that is
 	// shared by every administrator. Set when it is created and never changed.

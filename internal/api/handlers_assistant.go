@@ -34,7 +34,8 @@ type assistantProviderInput struct {
 	// words; empty is its default. Absent leaves it as it was.
 	ReasoningEffort *string `json:"reasoning_effort"`
 	// MaxOutputTokens is how much the model may write in one round; zero or
-	// absent-on-create is the controller's default. Absent leaves it as it was.
+	// absent-on-create is automatic, which the controller works out. Absent
+	// leaves it as it was.
 	MaxOutputTokens *int `json:"max_output_tokens"`
 }
 
@@ -123,7 +124,7 @@ func (s *Server) validateAssistantProvider(r *http.Request, p *store.AssistantPr
 	if p.MaxOutputTokens != 0 {
 		switch {
 		case p.MaxOutputTokens < controller.AssistantOutputTokensMin || p.MaxOutputTokens > controller.AssistantOutputTokensMax:
-			errs = append(errs, fieldError{"max_output_tokens", fmt.Sprintf("give a number of tokens from %d to %d, or 0 for the default of %d; a thinking model's reasoning counts against it", controller.AssistantOutputTokensMin, controller.AssistantOutputTokensMax, controller.AssistantOutputLimit(&store.AssistantProvider{}))})
+			errs = append(errs, fieldError{"max_output_tokens", fmt.Sprintf("give a number of tokens from %d to %d, or 0 to let Eli work it out; a thinking model's reasoning counts against it", controller.AssistantOutputTokensMin, controller.AssistantOutputTokensMax)})
 		case assistant.Subscription(kind):
 			errs = append(errs, fieldError{"max_output_tokens", "a subscription's tool decides how much its model writes; leave this at 0 for this kind"})
 		}

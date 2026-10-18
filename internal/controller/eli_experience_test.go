@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -80,7 +81,8 @@ func (s *repairEventStream) Next(context.Context) (assistant.Event, bool) {
 func (s *repairEventStream) Close() error { return nil }
 func TestRepairUsageIsSavedEvenWhenTheProviderCutsItsAnswer(t *testing.T) {
 	var steps []store.EliRepairStep
-	m := repairModel{provider: repairEventProvider{events: []assistant.Event{{Usage: &assistant.Usage{InputTokens: 21, OutputTokens: 12, Reported: true}}, {Done: true, Cut: true}}}, record: func(s store.EliRepairStep) { steps = append(steps, s) }}
+	// An explicit limit, so that a cut is the end of the attempt: an automatic one asks again.
+	m := repairModel{provider: repairEventProvider{events: []assistant.Event{{Usage: &assistant.Usage{InputTokens: 21, OutputTokens: 12, Reported: true}}, {Done: true, Cut: true}}}, maxTokens: 12000, record: func(s store.EliRepairStep) { steps = append(steps, s) }}
 	_, err := m.Answer(context.Background(), []prrepair.Message{{Role: "user", Content: "evidence"}})
 	if err == nil || !strings.Contains(err.Error(), "output limit") || len(steps) != 1 || steps[0].InputTokens != 21 || !steps[0].UsageReported {
 		t.Fatalf("steps %+v error %v", steps, err)
@@ -91,6 +93,156 @@ func TestRepairUsageIsSavedEvenWhenTheProviderCutsItsAnswer(t *testing.T) {
 	}
 	if steps[1].UsageReported {
 		t.Fatal("missing usage was reported as zero")
+	}
+}
+
+// roomProvider answers like a model that needs a given amount of room: asked
+// for less it is cut at the ceiling, and asked for that much or more it
+// answers. It records every ceiling it was asked for, and fails a request when
+// refuse says to, so a test can watch the room a repair asks for.
+type roomProvider struct {
+	needs  int
+	asked  *[]int
+	refuse func(limit int) error
+}
+
+func (p roomProvider) Chat(_ context.Context, req assistant.Request) (assistant.Stream, error) {
+	*p.asked = append(*p.asked, req.MaxTokens)
+	if p.refuse != nil {
+		if err := p.refuse(req.MaxTokens); err != nil {
+			return nil, err
+		}
+	}
+	if req.MaxTokens < p.needs {
+		return &repairEventStream{events: []assistant.Event{{Usage: &assistant.Usage{InputTokens: 100, OutputTokens: req.MaxTokens, Reported: true}}, {Done: true, Cut: true}}}, nil
+	}
+	return &repairEventStream{events: []assistant.Event{{Delta: "{}"}, {Done: true}}}, nil
+}
+func (p roomProvider) Check(context.Context) (assistant.CheckResult, error) {
+	return assistant.CheckResult{}, nil
+}
+
+// statusFailure is a provider answering with an HTTP status, which is how the
+// adapters' errors carry it.
+type statusFailure int
+
+func (s statusFailure) Error() string   { return fmt.Sprintf("the provider answered %d", int(s)) }
+func (s statusFailure) HTTPStatus() int { return int(s) }
+
+// A thinking model can spend all of a repair's 12000 tokens on reasoning, and a
+// repair that failed there could only be rescued by a person editing the
+// provider and starting another attempt. An automatic one asks again with room
+// enough, and keeps both attempts in its history.
+func TestAnAutomaticRepairRaisesItsOwnOutputLimitWhenTheModelRunsOutOfRoom(t *testing.T) {
+	var asked []int
+	var steps []store.EliRepairStep
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked}, record: func(s store.EliRepairStep) { steps = append(steps, s) }}
+	got, err := m.Answer(context.Background(), []prrepair.Message{{Role: "user", Content: "evidence"}})
+	if err != nil || got != "{}" {
+		t.Fatalf("answer %q error %v", got, err)
+	}
+	// A repair starts at 12000, and twice that is 24000, which is enough.
+	if !slices.Equal(asked, []int{12000, 24000}) {
+		t.Fatalf("asked for %v", asked)
+	}
+	// The cut attempt keeps what the provider counted for it. The one after it
+	// reported nothing, which is not zero.
+	if len(steps) != 2 || !steps[0].UsageReported || steps[0].OutputTokens != 12000 || steps[1].UsageReported {
+		t.Fatalf("steps %+v", steps)
+	}
+}
+
+// Only the step that needs more room should pay to find out how much: the steps
+// after it are the same model reading the same evidence.
+func TestARepairKeepsTheRoomItFoundForItsNextStep(t *testing.T) {
+	var asked []int
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked}}
+	for range 2 {
+		if _, err := m.Answer(context.Background(), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(asked, []int{12000, 24000, 24000}) {
+		t.Fatalf("asked for %v", asked)
+	}
+}
+
+// A number on the provider is the operator's, and may be a cap on what an
+// attempt costs, so it is kept exactly and a cut ends the repair as it did.
+func TestAnOutputLimitAnOperatorSetIsNeverRaised(t *testing.T) {
+	var asked []int
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked}, maxTokens: 12000}
+	_, err := m.Answer(context.Background(), nil)
+	if err == nil || !strings.Contains(err.Error(), "output limit") || !slices.Equal(asked, []int{12000}) {
+		t.Fatalf("asked for %v, error %v", asked, err)
+	}
+}
+
+// Room is not asked for without end. A model still cut at the most a provider
+// may be given has nothing more to be asked, and the repair says where it stopped.
+func TestAnAutomaticRepairStopsAtTheMostItMayAsk(t *testing.T) {
+	var asked []int
+	m := &repairModel{provider: roomProvider{needs: 1 << 30, asked: &asked}}
+	_, err := m.Answer(context.Background(), nil)
+	// 12000 doubled is 24000 and then 48000, and doubled again is 96000, which is
+	// held to the 65536 that a provider may be given.
+	if !slices.Equal(asked, []int{12000, 24000, 48000, 65536}) {
+		t.Fatalf("asked for %v", asked)
+	}
+	if err == nil || !strings.Contains(err.Error(), "65536") || repairFailureCode(err.Error()) != "output_limit" {
+		t.Fatalf("error %v", err)
+	}
+}
+
+// A provider that took the room it was asked for before and refuses more has
+// reached its model's own ceiling, or has no context left beside the prompt.
+// Where the answer was cut is then the honest account, and the next step starts
+// from the room that worked and not from the one that was refused.
+func TestAProviderThatRefusesMoreRoomLeavesTheCutAsTheAnswer(t *testing.T) {
+	var asked []int
+	refuse := func(limit int) error {
+		if limit > 12000 {
+			return statusFailure(400)
+		}
+		return nil
+	}
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked, refuse: refuse}}
+	_, err := m.Answer(context.Background(), nil)
+	if err == nil || !strings.Contains(err.Error(), "output limit") || !strings.Contains(err.Error(), "12000") {
+		t.Fatalf("error %v", err)
+	}
+	_, _ = m.Answer(context.Background(), nil)
+	if !slices.Equal(asked, []int{12000, 24000, 12000, 24000}) {
+		t.Fatalf("asked for %v", asked)
+	}
+}
+
+// A refusal means "no more room" only after a cut. On the first request it is
+// whatever it says: a model name the provider does not know, or a request it
+// cannot take for some other reason.
+func TestARefusalOnTheFirstRequestIsNotReadAsAnOutputLimit(t *testing.T) {
+	var asked []int
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked, refuse: func(int) error { return statusFailure(400) }}}
+	_, err := m.Answer(context.Background(), nil)
+	if err == nil || strings.Contains(err.Error(), "output limit") || !slices.Equal(asked, []int{12000}) {
+		t.Fatalf("asked for %v, error %v", asked, err)
+	}
+}
+
+// Only a refusal of the request itself says the room was too much. A rate limit
+// while asking again is a rate limit, and the person is told so.
+func TestAnotherFailureWhileAskingForMoreRoomIsNotHiddenBehindTheCut(t *testing.T) {
+	var asked []int
+	refuse := func(limit int) error {
+		if limit > 12000 {
+			return statusFailure(429)
+		}
+		return nil
+	}
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked, refuse: refuse}}
+	_, err := m.Answer(context.Background(), nil)
+	if err == nil || repairFailureCode(err.Error()) != "rate_limited" {
+		t.Fatalf("error %v", err)
 	}
 }
 

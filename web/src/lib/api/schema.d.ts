@@ -553,7 +553,7 @@ export interface paths {
         };
         /**
          * What got worse and what got better
-         * @description Two releases' jobs in the period, or the period against the one of the same length before it, measure by measure. Cancelled and skipped jobs are left out of every figure, and the response says so in `excluded`. Under 30 jobs on either side nothing is ranked, and the summary says the sample is too small. A side older than `retention.jobs` is read from the daily roll-up: counts only, in whole UTC days. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
+         * @description Two releases' jobs in the period, or the period against the one of the same length before it, measure by measure. Cancelled and skipped jobs are left out of every figure read from the job rows, and the response says so in `excluded`. Under 30 jobs on either side nothing is ranked, and the summary says the sample is too small. A side older than `retention.jobs` is read from the daily roll-up: counts only, in whole UTC days, of every job that ran here, cancelled ones included. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
          */
         get: operations["analyseCompare"];
         put?: never;
@@ -9172,7 +9172,7 @@ export interface components {
             since: string;
             /**
              * Format: date-time
-             * @description End of what the finding covers, not included.
+             * @description End of what the finding covers, not included. Never later than when it was computed.
              */
             until: string;
             /** @description The answer in one or two sentences. Always set. */
@@ -9302,7 +9302,7 @@ export interface components {
             b: components["schemas"]["CompareSide"];
             /** @description One row for every measure, in a fixed order, so a reader finds a measure by name whether or not it moved. */
             changes: components["schemas"]["CompareChange"][];
-            /** @description The conclusions left out of every figure, `cancelled` and `skipped`. */
+            /** @description The conclusions left out of every figure read from the job rows, `cancelled` and `skipped`. */
             excluded: string[];
             /** @description The database could not compute percentiles, so no time was compared. */
             percentiles_unavailable: boolean;
@@ -10572,7 +10572,7 @@ export interface components {
              * @enum {string}
              */
             reasoning_effort: "" | "none" | "low" | "medium" | "high";
-            /** @description How much the model may write in one round of a chat, thinking included, as the request's `max_tokens`; 0 is the controller's default of 8,192. From 1,024 to 65,536. A thinking model's reasoning counts against it, and an answer that reaches it is reported as cut, with this provider and the limit in force, so the person can raise it. Refused on the subscription kinds, whose tool decides. */
+            /** @description How much the model may write in one round, thinking included, as the request's `max_tokens`, from 1,024 to 65,536; 0 is automatic. A chat starts at 8,192 and reports an answer that reaches the limit as cut, with this provider and the limit in force, so the person can raise it. A repair starts at 12,000 and, when the model runs out, asks again with twice as much, up to 65,536, and keeps that amount for the rest of the repair. A number is kept exactly, so it also caps what an answer can cost. A thinking model's reasoning counts against the limit. Refused on the subscription kinds, whose tool decides. */
             max_output_tokens: number;
             /** @description Somebody's own subscription, used through the vendor's own tool on the controller's machine. Such a provider belongs to the person who added it. */
             subscription: boolean;
@@ -10735,7 +10735,7 @@ export interface components {
              * @enum {string}
              */
             reasoning_effort?: "" | "none" | "low" | "medium" | "high";
-            /** @description How much the model may write in one round, from 1,024 to 65,536, or 0 for the controller's default of 8,192. Refused with a `max_output_tokens` field error on a subscription kind, whose tool decides, rather than ignored. */
+            /** @description How much the model may write in one round, from 1,024 to 65,536, or 0 for automatic, where a chat starts at 8,192 and a repair raises the limit itself when the model runs out. A number is kept exactly. Refused with a `max_output_tokens` field error on a subscription kind, whose tool decides, rather than ignored. */
             max_output_tokens?: number;
             /** @description Sealed with the instance key and never returned. An empty string leaves the stored key alone, so a form with a blank key box does not erase it. */
             api_key?: string;
@@ -12241,7 +12241,7 @@ export interface components {
                 };
             };
         };
-        /** @description A `since` or `until` that is not an RFC 3339 instant, a period that does not end after it starts, or one longer than `limits.job_stats_window`, each on the field at fault, and on host pressure a request naming no `host_id`. */
+        /** @description A `since` or `until` that is not an RFC 3339 instant, a period that does not end after it starts, one that begins at or after now, or one longer than `limits.job_stats_window`, each on the field at fault, and on host pressure a request naming no `host_id`. */
         AnalysisBadRequest: {
             headers: {
                 [name: string]: unknown;
@@ -12267,9 +12267,9 @@ export interface components {
         PathID: string;
         Limit: number;
         Offset: number;
-        /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+        /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
         AnalysisSince: string;
-        /** @description End of the period, not included. Defaults to now. */
+        /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
         AnalysisUntil: string;
         /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
         EliRepairGroup: "attention" | "active" | "passed";
@@ -13210,11 +13210,11 @@ export interface operations {
     analyseQueueWait: {
         parameters: {
             query?: {
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
-                /** @description Only the jobs of this pool, and its own conditions. A pool the fleet does not have is a 404. */
+                /** @description Only the jobs of this pool, and its own conditions. A pool the fleet does not have, and none of the period's jobs name, is a 404; one deleted since is read from its jobs. */
                 pool_id?: string;
             };
             header?: never;
@@ -13241,15 +13241,15 @@ export interface operations {
     analyseCompare: {
         parameters: {
             query?: {
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
                 /** @description `version` compares two releases, `period` the period with the one before it. Anything else is a 400. */
                 by?: "version" | "period";
-                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400. */
+                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400, and so is one longer than a release's name can be. */
                 a?: string;
-                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400. */
+                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400, and so is one longer than a release's name can be. */
                 b?: string;
             };
             header?: never;
@@ -13267,7 +13267,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompareFinding"];
                 };
             };
-            /** @description A period that does not end after it starts or is longer than `limits.job_stats_window` (on `since`), a `by` that is neither `version` nor `period`, a release named to a comparison by period, or `analysis.same_release` (on `a`) when `a` and `b` name one release. The message says what to change. */
+            /** @description A period that does not end after it starts, begins at or after now, or is longer than `limits.job_stats_window` (on `since`), a `by` that is neither `version` nor `period`, a release named to a comparison by period or longer than a release's name can be, or `analysis.same_release` (on `a`) when `a` and `b` name one release. The message says what to change. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -13294,9 +13294,9 @@ export interface operations {
             query: {
                 /** @description The host to read. Left out it is a 400; a host the fleet does not have is a 404. */
                 host_id: string;
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
             };
             header?: never;
@@ -13323,13 +13323,13 @@ export interface operations {
     analyseStartupFailures: {
         parameters: {
             query?: {
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
-                /** @description Only the starts for this pool. A pool the fleet does not have is a 404. */
+                /** @description Only the starts for this pool. A pool the fleet does not have, and none of the period's runners name, is a 404. */
                 pool_id?: string;
-                /** @description Only the starts on this host. A host the fleet does not have is a 404. */
+                /** @description Only the starts on this host. A host the fleet does not have, and none of the period's runners name, is a 404. */
                 host_id?: string;
             };
             header?: never;

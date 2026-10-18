@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -269,18 +270,42 @@ func repairBudgetReason(err error, repoLimit int) string {
 	return fmt.Sprintf("This repository has used its %s for the last 24 hours. Explicit requests and automatic repairs share that limit, and an attempt frees its place when it is more than 24 hours old. An administrator can raise the limit, up to 50, under Repository repair policies on the Eli AI Assistant page.", plural(repoLimit, "repair attempt"))
 }
 
+// repairOutputTokens is the room a repair asks a model for when its provider
+// leaves the limit to Eli, and where an automatic limit starts.
+const repairOutputTokens = 12000
+
 type repairModel struct {
 	provider   assistant.Provider
 	model      string
 	record     func(store.EliRepairStep)
 	sourceUsed func(int)
-	maxTokens  int
+	// maxTokens is the limit the provider sets, or zero when it leaves the limit
+	// to Eli. A number is kept exactly, because it may be there to cap what an
+	// attempt costs. Zero is automatic: room starts at repairOutputTokens and
+	// completeWithRoom raises it when the model runs out.
+	maxTokens int
+	// raised is the room an automatic repair has found it needs. It is kept for
+	// the steps after the one that needed it, so that only that step pays to find
+	// out.
+	raised int
 }
 
-func (m repairModel) SourceUsed(n int) {
+func (m *repairModel) SourceUsed(n int) {
 	if m.sourceUsed != nil {
 		m.sourceUsed(n)
 	}
+}
+
+// room is the ceiling to ask the provider for now: the operator's number when
+// they set one, and otherwise where an automatic repair has got to.
+func (m *repairModel) room() int {
+	switch {
+	case m.maxTokens > 0:
+		return m.maxTokens
+	case m.raised > 0:
+		return m.raised
+	}
+	return repairOutputTokens
 }
 
 // Answer asks the model for the next repair step. A repair offers the model no
@@ -294,13 +319,13 @@ func (m repairModel) SourceUsed(n int) {
 // call it made, saying there are no tools and what to send instead. A model
 // that calls again is stopped, and the failure names the tool, so an operator
 // can tell a model ignoring its instructions from a prompt that was wrong.
-func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
+func (m *repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
 	turns := make([]assistant.Message, 0, len(messages)+2)
 	for _, v := range messages {
 		turns = append(turns, assistant.Message{Role: assistant.Role(v.Role), Content: v.Content})
 	}
 	for attempt := 0; ; attempt++ {
-		text, calls, err := m.complete(ctx, turns)
+		text, calls, err := m.completeWithRoom(ctx, turns)
 		if err != nil {
 			return "", err
 		}
@@ -326,10 +351,64 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 	}
 }
 
+// outputCut is the provider stopping an answer at the room it was given.
+type outputCut struct{ limit int }
+
+func (e *outputCut) Error() string {
+	return fmt.Sprintf("provider output limit reached at %d tokens", e.limit)
+}
+
+// completeWithRoom is complete, asked again with more room each time the
+// provider says the model ran out of it, when the room is Eli's to choose. A
+// thinking model's reasoning counts against the room, so a repair that fits
+// easily in one model can need several times as much in another, and whoever set
+// the provider up should not have to learn that from a failed attempt. Each
+// attempt is a step of its own, with the usage the provider counted for it.
+//
+// A provider that refuses the larger request has reached its model's own
+// ceiling, or has no context left beside the prompt. It took the room asked for
+// before, so that is what the repair reports and goes on from.
+func (m *repairModel) completeWithRoom(ctx context.Context, turns []assistant.Message) (string, []assistant.ToolCall, error) {
+	cutAt := 0
+	for {
+		limit := m.room()
+		text, calls, err := m.complete(ctx, turns, limit)
+		var cut *outputCut
+		switch {
+		case errors.As(err, &cut):
+			if m.maxTokens > 0 {
+				return "", nil, fmt.Errorf("provider output limit reached at %d tokens: leave the provider's output limit empty so that Eli raises it as needed, choose a model with more output room, or request a smaller fix", limit)
+			}
+			if limit >= AssistantOutputTokensMax {
+				return "", nil, fmt.Errorf("provider output limit reached at %d tokens, the most Eli asks for: lower the model's reasoning effort, choose a model with more output room, or request a smaller fix", limit)
+			}
+			cutAt = limit
+			m.raised = nextOutputLimit(limit)
+		case cutAt > 0 && refusedRoom(err):
+			m.raised = cutAt
+			return "", nil, fmt.Errorf("provider output limit reached at %d tokens, and the provider would not allow more room: lower the model's reasoning effort, choose a model with more output room, or request a smaller fix", cutAt)
+		default:
+			return text, calls, err
+		}
+	}
+}
+
+// refusedRoom is whether the provider turned down the request itself, which is
+// how a provider answers a ceiling above its model's, or above what its context
+// holds beside the prompt. Any other failure is not about room.
+func refusedRoom(err error) bool {
+	var status interface{ HTTPStatus() int }
+	if !errors.As(err, &status) {
+		return false
+	}
+	code := status.HTTPStatus()
+	return code == http.StatusBadRequest || code == http.StatusUnprocessableEntity
+}
+
 // complete is one call to the provider, recorded as one step of the repair,
 // so the history shows the turn the model spent on a tool call as well as the
-// one that answered.
-func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (string, []assistant.ToolCall, error) {
+// one that answered. limit is how much the model may write, thinking included.
+func (m *repairModel) complete(ctx context.Context, turns []assistant.Message, limit int) (string, []assistant.ToolCall, error) {
 	step := store.EliRepairStep{RequestBytes: len(prrepair.SystemPrompt)}
 	started := time.Now()
 	defer func() {
@@ -340,10 +419,6 @@ func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (s
 	}()
 	for _, v := range turns {
 		step.RequestBytes += len(v.Content)
-	}
-	limit := m.maxTokens
-	if limit <= 0 {
-		limit = 12000
 	}
 	stream, err := m.provider.Chat(ctx, assistant.Request{Model: m.model, System: prrepair.SystemPrompt, Messages: turns, MaxTokens: limit})
 	if err != nil {
@@ -364,7 +439,7 @@ func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (s
 			step.UsageReported = true
 		}
 		if ev.Cut {
-			return "", nil, fmt.Errorf("provider output limit reached: choose a model with more output room or request a smaller fix")
+			return "", nil, &outputCut{limit: limit}
 		}
 		if ev.Err != nil {
 			return "", nil, repairProviderError(ev.Err)
@@ -692,7 +767,7 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		return
 	}
 	r.Details.Stage = "prepare_fix"
-	plan, err := prrepair.Generate(ctx, repairModel{provider: p, model: provider.Model, maxTokens: provider.MaxOutputTokens, sourceUsed: func(n int) { r.Details.SourceBytes = n }, record: func(step store.EliRepairStep) {
+	plan, err := prrepair.Generate(ctx, &repairModel{provider: p, model: provider.Model, maxTokens: provider.MaxOutputTokens, sourceUsed: func(n int) { r.Details.SourceBytes = n }, record: func(step store.EliRepairStep) {
 		r.Details.Steps = append(r.Details.Steps, step)
 		_ = c.persistEliRepair(ctx, r)
 	}}, source, source.Snapshot, r.Instruction, policy.AllowWorkflows)
@@ -938,24 +1013,39 @@ func repairFailureCode(message string) string {
 	}
 }
 
+// repairProviderFailure is a provider's error as a repair words it, with the
+// status the provider answered kept. The words are for whoever reads the PR
+// comment; the status is for the repair, which has to tell a provider refusing
+// the room it was asked for from the other ways a provider fails.
+type repairProviderFailure struct {
+	message string
+	status  int
+}
+
+func (e *repairProviderFailure) Error() string   { return e.message }
+func (e *repairProviderFailure) HTTPStatus() int { return e.status }
+
 func repairProviderError(err error) error {
+	var carried interface{ HTTPStatus() int }
+	status := 0
+	if errors.As(err, &carried) {
+		status = carried.HTTPStatus()
+	}
+	fail := func(message string) error { return &repairProviderFailure{message: message, status: status} }
 	message := strings.ToLower(err.Error())
 	if strings.Contains(message, "context length") || strings.Contains(message, "context window") {
-		return fmt.Errorf("the provider context limit was reached; narrow the investigation or choose a model with more input room")
+		return fail("the provider context limit was reached; narrow the investigation or choose a model with more input room")
 	}
-	var status interface{ HTTPStatus() int }
-	if errors.As(err, &status) {
-		switch status.HTTPStatus() {
-		case 429:
-			return fmt.Errorf("the provider rate limited this repair; check quota or try again later")
-		case 401, 403:
-			return fmt.Errorf("the provider credentials were refused; update or test your provider in Eli settings")
-		case 404:
-			return fmt.Errorf("the provider model or endpoint was not found; check your provider settings")
-		}
+	switch status {
+	case 429:
+		return fail("the provider rate limited this repair; check quota or try again later")
+	case 401, 403:
+		return fail("the provider credentials were refused; update or test your provider in Eli settings")
+	case 404:
+		return fail("the provider model or endpoint was not found; check your provider settings")
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("the provider timed out; try again later")
+		return fail("the provider timed out; try again later")
 	}
-	return fmt.Errorf("the provider could not complete this repair; test its connection in Eli settings")
+	return fail("the provider could not complete this repair; test its connection in Eli settings")
 }

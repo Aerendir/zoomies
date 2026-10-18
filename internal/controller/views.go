@@ -2177,8 +2177,8 @@ type AssistantProviderView struct {
 	// ReasoningEffort is how hard the model is told to think, in the provider's
 	// words, or empty for its default.
 	ReasoningEffort string `json:"reasoning_effort"`
-	// MaxOutputTokens is how much the model may write in one round, or zero
-	// for the controller's default.
+	// MaxOutputTokens is how much the model may write in one round, or zero for
+	// automatic: a chat starts at a default and a repair raises the limit itself.
 	MaxOutputTokens int `json:"max_output_tokens"`
 	// Subscription is a provider that is somebody's own subscription, used through
 	// the vendor's own tool on this machine. Owner says whose, and OwnedByYou whether

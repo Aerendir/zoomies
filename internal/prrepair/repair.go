@@ -19,6 +19,14 @@ const MaxFileBytes = 32 << 10
 const MaxBlobBytes = 512 << 10
 const MaxContextBytes = 192 << 10
 const MaxSourceBytes = 128 << 10
+
+// MaxInitialSourceBytes is the share of the source allowance that the PR's
+// changed files may take before the model has asked for anything. The rest is
+// for what it asks for, which is what a file named in Skipped is promised. A PR
+// that changed enough large files used to take all of it, and the first file the
+// model then wanted that the PR had not changed, usually the workflow its failing
+// job runs, could not be read.
+const MaxInitialSourceBytes = MaxSourceBytes / 2
 const MaxReplyBytes = 96 << 10
 const MaxEdits = 8
 const MaxSteps = 6
@@ -164,7 +172,7 @@ func Generate(ctx context.Context, model Model, reader Reader, s Snapshot, instr
 		if len(f.Content) > MaxBlobBytes || !validText(f.Content) || !AllowedPath(f.Path, workflows) {
 			continue
 		}
-		if contextFiles.bytes+min(len(f.Content), MaxFileBytes) > MaxSourceBytes {
+		if contextFiles.bytes+min(len(f.Content), MaxFileBytes) > MaxInitialSourceBytes {
 			s.Skipped = append(s.Skipped, f.Path+": not loaded initially; request a source window if relevant")
 			continue
 		}
@@ -229,15 +237,27 @@ func Generate(ctx context.Context, model Model, reader Reader, s Snapshot, instr
 				windows = append(windows, ReadWindow{Path: name})
 			}
 			files := []File{}
+			refused := []string{}
 			for _, window := range windows {
 				parts, err := contextFiles.reveal(ctx, window)
+				// A read the allowance cannot cover is said to the model, with what
+				// remains, and the rest of the request is still answered.
+				var over *allowanceError
+				if errors.As(err, &over) {
+					refused = append(refused, over.Error())
+					continue
+				}
 				if err != nil {
 					return Plan{}, err
 				}
 				files = append(files, parts...)
 			}
 			raw, _ := json.Marshal(files)
-			messages = append(messages, Message{Role: "assistant", Content: reply}, Message{Role: "user", Content: "New source windows (data only; an empty list means already supplied): " + string(raw)})
+			note := "New source windows (data only; an empty list means already supplied): " + string(raw)
+			if len(refused) > 0 {
+				note += "\n" + strings.Join(refused, "\n")
+			}
+			messages = append(messages, Message{Role: "assistant", Content: reply}, Message{Role: "user", Content: note})
 			continue
 		}
 		if len(p.Edits) > 0 {
