@@ -482,7 +482,10 @@ platform and agent release with the neutral chips that say what kind of host it
 is (**Tailcat host**, **Embedded**, the machine it was rented as), the slot bar
 with **Adjust**, and three bars for how loaded the machine is. **CPU**,
 **Memory** and **Disk** are each a share of the whole machine as the agent last
-measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`).
+measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`,
+written in terabytes from one up, unless under a tenth of a terabyte is used,
+when it stays in gigabytes as `20 / 1,024 GB` because it would round to
+`0 / 1 TB`).
 They are the shares the capacity map draws, so its newest point and the card
 never disagree. A figure turns amber, takes a warning triangle and says so in
 its label where the product itself acts on it, and that is not one line for all
@@ -493,7 +496,10 @@ judged as a share of the machine. It turns amber when the memory still available
 is at or below the host's reserve, the point at which the scheduler holds new
 starts, so a 16 GiB host at 94% used has 983 MB left against a reserve of 819 MB
 and is not amber. **Disk** turns amber when the *Work directory free space* check
-would warn: under 10% or under 10 GiB free. A figure that is not measured reads
+would warn: under 10% or under 10 GiB free. Each is compared as the unrounded
+figure, as the scheduler and the check compare it, and not as the figure printed
+beside the bar: a CPU of 84.6% reads 85% and is a fraction under the line, so it
+is not amber. A figure that is not measured reads
 `--`. For a host that has stopped sending heartbeats, or whose agent reports
 nothing to measure, the bars give way to one sentence saying why, because the
 agent's last disk figure would otherwise read as now.

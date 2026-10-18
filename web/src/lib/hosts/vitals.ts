@@ -53,9 +53,13 @@ const MB_PER_TB = 1024 * MB_PER_GB;
  * terabytes from one up, because the pair sits in a narrow column and
  * "1,024 / 2,048 GB" does not fit it. One decimal under ten and none above:
  * 6.4 is worth its digit, 158.2 is noise.
+ *
+ * Under a tenth of a terabyte used, the pair stays in gigabytes: 20 GB of a
+ * terabyte would round to "0 / 1 TB", which says less than the share beside it,
+ * and a tenth is the least that survives the decimal place.
  */
 function sizeText(totalMb: number, usedMb: number | null): string {
-  const tb = totalMb >= MB_PER_TB;
+  const tb = totalMb >= MB_PER_TB && (usedMb === null || usedMb >= MB_PER_TB / 10);
   const per = tb ? MB_PER_TB : MB_PER_GB;
   const figure = (mb: number) => {
     const n = mb / per;

@@ -87,6 +87,26 @@ test('CPU turns tight at the scheduler pressure line, counted without the CPU le
   }
 });
 
+test('CPU is compared as the unrounded figure, so a bar that reads 85% can be a fraction under the line', () => {
+  // The scheduler compares what the agent measured, not what the card prints:
+  // hostUnderCPUPressure reads the raw percentage. Rounding first would make the
+  // card amber on a host the scheduler is still placing on as normal, and the
+  // docs say what is compared so that the value beside the bar is not mistaken
+  // for it.
+  const under = vital(
+    hostVitals(host({ usage: { cpu_percent: 84.6, memory_available_mb: 9830 } }), NOW),
+    'cpu',
+  );
+  assert.equal(under.value, '85%', 'it reads 85');
+  assert.equal(under.tight, false, 'and is not past the line');
+  const at = vital(
+    hostVitals(host({ usage: { cpu_percent: 85.0, memory_available_mb: 9830 } }), NOW),
+    'cpu',
+  );
+  assert.equal(at.tight, true);
+  assert.match(at.summary, /From 85%/, 'what it says is exactly the line it passed');
+});
+
 test('a busy CPU that is mostly lent says why it is not amber', () => {
   // A bar at 92% that is not amber looks like a bug unless it says what is
   // excluded, and the capacity map beside it still draws the raw figure.
@@ -309,6 +329,43 @@ test('sizes of a terabyte or more are written in terabytes so the pair stays sho
   );
   assert.equal(disk.detail, '1 / 2 TB');
   assert.equal(disk.value, '50%');
+});
+
+test('a nearly empty terabyte disk is written in gigabytes, so what is used is not rounded to nothing', () => {
+  // 20 GB used of 1 TiB would read "0 / 1 TB", which says less than the share
+  // beside it. A tenth of a terabyte is the least that survives the decimal
+  // place, so below it the pair goes back to gigabytes.
+  const nearlyEmpty = vital(
+    hostVitals(host({ disk_total_mb: 1 * TIB, disk_free_mb: 1 * TIB - 20 * GIB }), NOW),
+    'disk',
+  );
+  assert.equal(nearlyEmpty.detail, '20 / 1,024 GB');
+  assert.equal(nearlyEmpty.value, '2%');
+
+  // Just under a tenth of a terabyte is still gigabytes, and the tenth itself is
+  // the first figure to be written in terabytes.
+  const tenth = Math.ceil(TIB / 10);
+  const justUnder = vital(
+    hostVitals(host({ disk_total_mb: 2 * TIB, disk_free_mb: 2 * TIB - (tenth - 1) }), NOW),
+    'disk',
+  );
+  assert.equal(justUnder.detail, '102 / 2,048 GB');
+  const atTenth = vital(
+    hostVitals(host({ disk_total_mb: 2 * TIB, disk_free_mb: 2 * TIB - tenth }), NOW),
+    'disk',
+  );
+  assert.equal(atTenth.detail, '0.1 / 2 TB');
+
+  // With nothing used to pair it with there is nothing to round away, and a total
+  // of a terabyte or more is still written in terabytes.
+  const memoryAlone = vital(
+    hostVitals(
+      host({ memory_mb: 2 * TIB, allocatable_memory_mb: 2 * TIB - 8192, usage_fresh: false }),
+      NOW,
+    ),
+    'memory',
+  );
+  assert.equal(memoryAlone.detail, '2 TB');
 });
 
 test('a figure past its line says so in words as well as colour', () => {
