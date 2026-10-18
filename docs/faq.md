@@ -1,9 +1,9 @@
 ---
 icon: material/help-circle-outline
-title: Frequently asked questions
+title: "Zoomies FAQ: cost, requirements and supported platforms"
 description: >-
   What Zoomies costs, what it needs, which platforms it runs on, and what
-  self-hosted runners will and will not protect you from.
+  self-hosted runners will and will not protect you from, answered plainly.
 ---
 
 # Frequently asked questions

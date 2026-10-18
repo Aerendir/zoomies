@@ -2,8 +2,8 @@
 icon: material/rocket-launch-outline
 title: "Install self-hosted Actions runners: quick start"
 description: >-
-  Install Zoomies and run your first job on a self-hosted ephemeral runner,
-  one curl command, one GitHub App, no Kubernetes.
+  Install Zoomies and run your first job on a self-hosted ephemeral runner:
+  one curl command, one GitHub App, no Kubernetes, and a working fleet in minutes.
 ---
 
 # Quick start
