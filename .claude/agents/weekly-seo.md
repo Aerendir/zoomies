@@ -20,12 +20,12 @@ Read `weekly-seo/config.yml` for the domain, the five target keywords, the compe
 
 ## Tasks
 
-1. **Ranking changes.** Search Console (`mcp__OpenSEO__get_search_console_performance`): the top 50 queries by impressions for the last 7 days against the 7 before. Flag a page and query pair that fell more than 5 positions, lost more than 20% of impressions, or lost more than 30% of clicks at a steady position. Without Search Console, use `mcp__OpenRush__inspect_domain` and report keyword counts only.
-2. **Page-two opportunities.** Queries at positions 11 to 20 with over 100 impressions. For the top five, compare the page-one results (`mcp__OpenRush__inspect_serp`) with our page and suggest specific edits.
+1. **Ranking changes.** Search Console (`mcp__OpenSEO__get_search_console_performance`). Its data is only complete 2 to 3 days after the fact, so first find the latest date with complete data (the newest date whose impressions are not still rising on re-query; if unsure, use today minus 3 days). End both windows there: the 7 days up to that date against the 7 days before. State the window dates in the report and use the same windows for every Search Console task and for the 7-day columns in `stats.csv`. Take the top 50 queries by impressions. Flag a page and query pair that fell more than 5 positions, lost more than 20% of impressions, or lost more than 30% of clicks at a steady position. Without Search Console, use `mcp__OpenRush__inspect_domain` and report keyword counts only.
+2. **Page-two opportunities.** Using the same complete window as task 1, queries at positions 11 to 20 with over 100 impressions. For the top five, compare the page-one results (`mcp__OpenRush__inspect_serp`) with our page and suggest specific edits.
 3. **New backlinks.** `mcp__OpenRush__inspect_backlinks` with `view: ["referring_domains"]`, `status: "new"`, `since` seven days ago. Group by domain rank. Draft a disavow line only for clear spam, and do not submit it.
 4. **Lost backlinks.** The same with `status: "lost"`. For losses from strong or topically relevant domains, draft a short, courteous note asking whether a link broke.
 5. **Page speed drift.** `npx lighthouse` on the home page and four other pages, mobile and desktop, performance and accessibility. Compare with the last row of `weekly-seo/memory/stats.csv`. Flag a score that dropped 5 points or more, or LCP above 2.5 s, CLS above 0.1.
-6. **Indexation.** `mcp__OpenSEO__inspect_urls` on a sample of ten sitemap URLs including the newest pages. Compare the sitemap's URL count with last week's. Group anything not indexed by reason.
+6. **Indexation.** There is no site-wide indexed count available through these tools, so do not invent one. Run `mcp__OpenSEO__inspect_urls` on the fixed list `index_sample` in the config, the same URLs every week, and record how many are indexed and the size of the list. Separately inspect up to five of the newest sitemap URLs and report them on their own; they never enter the fixed-sample figures. Record the sitemap's URL count as its own number (`sitemap_urls`, which is pages submitted, not pages indexed). Group anything not indexed by reason.
 7. **AI visibility.** `mcp__OpenRush__inspect_ai_visibility` for zoomies.sh against the competitors in the config, and `mcp__OpenRush__discover_ai_citations` for the category. This covers Google AI Overview only; say so. Report citations and the change since last week, and the top five cited domains where a mention could be earned.
 8. **Competitor results.** For each target keyword, the top three results from `mcp__OpenRush__inspect_serp`. Compare with `weekly-seo/memory/serp-snapshot.json` and flag new entrants. Overwrite the snapshot at the end.
 9. **Content freshness.** Pages whose last change in `docs/` (use `git log -1 --format=%cs <file>`) is over six months old and whose clicks are falling. Rank the top five for refresh.
@@ -45,7 +45,7 @@ Write `weekly-seo/YYYY-MM-DD.md` with this structure, and nothing outside it:
 Data sources not available this run: ...
 
 ## Summary
-Indexed pages, clicks and impressions for 7 days, average position, new and lost backlinks, AI Overview citations, each with the change since last week.
+Pages indexed in the fixed sample (N of M) and the sitemap URL count, clicks and impressions for the complete 7-day window (dates stated), average position, new and lost backlinks, AI Overview citations, each with the change since last week.
 
 ## Blockers
 ## Should fix

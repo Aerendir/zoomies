@@ -15,10 +15,12 @@ Nothing runs it automatically. To run it, ask Claude Code to use the `weekly-seo
 | File | Contents | Rule |
 | --- | --- | --- |
 | `YYYY-MM-DD.md` | The week's report | One per run |
-| `memory/stats.csv` | `date,indexed_pages,clicks_7d,impressions_7d,avg_position,new_backlinks,lost_backlinks,ai_overview_citations,lcp_ms,cls,performance_mobile,performance_desktop` | Append only |
+| `memory/stats.csv` | `date,window_end,indexed_in_sample,sample_size,sitemap_urls,clicks_7d,impressions_7d,avg_position,new_backlinks,lost_backlinks,ai_overview_citations,lcp_ms,cls,performance_mobile,performance_desktop` | Append only |
 | `memory/keywords.csv` | `date,keyword,position,impressions,clicks,ctr,page_url` | Append only |
 | `memory/serp-snapshot.json` | Last week's top three results per target keyword | Overwritten each run |
 | `memory/changelog.md` | Changes made to the site and what they did | Entries are never deleted |
+
+`window_end` is the last date with complete Search Console data (data arrives 2 to 3 days late), and the `_7d` columns cover the seven days ending there. `indexed_in_sample` and `sample_size` come from the fixed `index_sample` list in `config.yml`; keep that list unchanged, or the weeks stop being comparable. `sitemap_urls` is pages submitted, not pages indexed.
 
 Whether these files live in this repository or in a separate operations repository is your choice. They are small, but a weekly commit of a report is noise in this history, so a separate repository may suit better.
 

@@ -23,3 +23,17 @@ competitors:
   - blacksmith.sh
   - buildjet.com
   - namespace.so
+
+# The same URLs every week, so "N of M indexed" can be compared week to week.
+# Change the list only on purpose, and say so in the change log.
+index_sample:
+  - https://zoomies.sh/
+  - https://zoomies.sh/quickstart/
+  - https://zoomies.sh/faq/
+  - https://zoomies.sh/costs/
+  - https://zoomies.sh/alternatives/
+  - https://zoomies.sh/architecture/
+  - https://zoomies.sh/hosts-and-pools/
+  - https://zoomies.sh/ephemeral-runners/
+  - https://zoomies.sh/runner-autoscaling/
+  - https://zoomies.sh/privacy/
