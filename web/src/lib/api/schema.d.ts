@@ -3233,7 +3233,7 @@ export interface paths {
         put?: never;
         /**
          * Run the live preflight
-         * @description Asks the provider what it would refuse, changing nothing there. The result is recorded on the row as well as returned, so a check run in a terminal quiets the warning the UI is showing. Audited, because it uses the credential.
+         * @description Asks the provider what it would refuse, changing nothing there. The result is recorded on the row as well as returned, so a check run in a terminal quiets the warning the UI is showing. Audited, because it uses the credential. A token narrowed by scopes needs `providers:pause`, the kill switch's scope; the test machine has a scope of its own, `providers:test`.
          */
         post: operations["checkProvider"];
         delete?: never;
@@ -3256,7 +3256,7 @@ export interface paths {
         put?: never;
         /**
          * Build one machine to prove the provider works
-         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential.
+         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential. Requires the operator role and, for a token narrowed by scopes, `providers:test`. The kill switch's scope, `providers:pause`, does not cover it: a token minted to stop spending cannot start a machine somebody pays for.
          */
         post: operations["testProviderMachine"];
         delete?: never;
@@ -3277,7 +3277,7 @@ export interface paths {
         };
         /**
          * What this credential can actually see
-         * @description The nodes, storages, bridges and templates a provider offers, so the form presents a menu rather than asking somebody to go and look an identifier up. A driver that cannot list them answers 409 and the form asks for the identifiers instead.
+         * @description The nodes, storages, bridges and templates a provider offers, so the form presents a menu rather than asking somebody to go and look an identifier up. A driver that cannot list them answers 409 and the form asks for the identifiers instead. A token narrowed by scopes needs `providers:pause`, the kill switch's scope; the test machine has a scope of its own, `providers:test`.
          */
         get: operations["getProviderDiscovery"];
         put?: never;
@@ -3325,7 +3325,7 @@ export interface paths {
         put?: never;
         /**
          * Stop this provider buying new machines
-         * @description The kill switch. It blocks new machines only: draining, deleting, recovering and verifying ownership all continue, because a switch that stopped those would strand running machines nobody is watching. Pressing it twice is not an error.
+         * @description The kill switch. It blocks new machines only: draining, deleting, recovering and verifying ownership all continue, because a switch that stopped those would strand running machines nobody is watching. Pressing it twice is not an error. A token narrowed by scopes needs `providers:pause`, which also covers resume, the live preflight and discovery, and not the test machine, which has `providers:test`.
          */
         post: operations["pauseProvider"];
         delete?: never;
