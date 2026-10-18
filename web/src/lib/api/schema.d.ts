@@ -907,7 +907,7 @@ export interface paths {
         put?: never;
         /**
          * Approve an MCP connection
-         * @description Creates the connection at the role chosen and returns the client's redirect carrying a single-use authorisation code, for the browser to follow. Audited as `mcp_connection.grant`.
+         * @description Creates the connection at the role chosen and returns the client's redirect carrying a single-use authorisation code, for the browser to follow. The client is read again here and not only when the sign-in began, up to fifteen minutes earlier, so an edit to its redirect URIs since then still reaches a request that is waiting. When the address the sign-in was going to is no longer one of them, nothing is created and the answer is a 422 rather than a redirect, so the person stays on the consent screen, which shows its message as it is: `<client>'s redirect URIs changed after it asked to connect, and the address it asked to send you back to is no longer one of them, so nothing was shared; start the connection again from <client>, and if that is refused too, ask an administrator to check its redirect URIs in Settings, MCP clients`, with the client's name for `<client>`. Audited as `mcp_connection.grant`.
          */
         post: operations["approveMCPRequest"];
         delete?: never;
