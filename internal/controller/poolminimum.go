@@ -92,7 +92,7 @@ func (c *Controller) pairMemoryPeaks(poolID string) (halfPeaks, bool) {
 
 // poolMinimumAdviceProblems is pool.minimum_overcharges.
 func (c *Controller) poolMinimumAdviceProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}

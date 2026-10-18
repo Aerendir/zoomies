@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -489,12 +490,24 @@ func (h *harness) deliveries() []*store.WebhookDelivery {
 	return ds
 }
 
-// problemCodes returns the codes Problems reports, for set assertions.
+// problemCodes returns the codes Problems reports, for set assertions. It asks
+// for the list twice, as it is worked out for the figures that follow a pass,
+// with its sections sharing a read of the fleet, and as it is worked out for a
+// request, with each section reading for itself, and fails if the two are not
+// about the same things. That puts every state a test builds before the
+// comparison, and a good many of them are states only one section notices.
 func (h *harness) problemCodes() []string {
 	h.t.Helper()
 	ps, err := h.c.Problems(h.ctx)
 	if err != nil {
 		h.t.Fatalf("Problems: %v", err)
+	}
+	alone, err := h.c.Problems(noFleetReads(h.ctx))
+	if err != nil {
+		h.t.Fatalf("Problems without sharing: %v", err)
+	}
+	if a, b := problemKeys(ps), problemKeys(alone); !slices.Equal(a, b) {
+		h.t.Fatalf("the problems are %v when the sections share their reads and %v when each reads for itself", a, b)
 	}
 	out := make([]string, 0, len(ps))
 	for _, p := range ps {

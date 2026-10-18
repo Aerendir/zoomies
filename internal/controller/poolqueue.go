@@ -32,7 +32,7 @@ const (
 // poolQueueWaitProblems is pool.queue_wait_high: a pool whose tail waited for a
 // runner while it keeps none warm and has room to, with the minimum that would.
 func (c *Controller) poolQueueWaitProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}

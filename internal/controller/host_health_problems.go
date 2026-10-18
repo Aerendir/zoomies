@@ -50,7 +50,7 @@ func hostHealthReport(h *store.Host, now time.Time) *hosttune.Report {
 // on problems that carry one, so each Fix is a sentence that sends a person to
 // the host rather than a button.
 func (c *Controller) hostHealthProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}

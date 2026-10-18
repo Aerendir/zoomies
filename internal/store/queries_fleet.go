@@ -1352,6 +1352,39 @@ func (s *Store) ListRunnersForHost(ctx context.Context, hostID string, states ..
 	return out, rows.Err()
 }
 
+// ListRunnersByHost is ListRunnersForHost for every host at once: the runners in
+// the given states, or every one that has not been removed, grouped by the host
+// each is on and in the order each host's list is in.
+func (s *Store) ListRunnersByHost(ctx context.Context, states ...RunnerState) (map[string][]*Runner, error) {
+	q := `SELECT ` + runnerCols + ` FROM runners WHERE `
+	var args []any
+	if len(states) > 0 {
+		ph := make([]string, len(states))
+		for i, st := range states {
+			ph[i] = "?"
+			args = append(args, string(st))
+		}
+		q += `state IN (` + strings.Join(ph, ",") + `)`
+	} else {
+		q += `state != 'removed'`
+	}
+	q += ` ORDER BY created_at`
+	rows, err := s.read.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]*Runner{}
+	for rows.Next() {
+		r, err := scanRunner(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[r.HostID] = append(out[r.HostID], r)
+	}
+	return out, rows.Err()
+}
+
 // UpdateRunner persists a full runner row.
 func (s *Store) UpdateRunner(ctx context.Context, r *Runner) error {
 	// Every column the row has. The driver binds positionally and ignores a

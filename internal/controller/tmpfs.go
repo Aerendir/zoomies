@@ -215,7 +215,7 @@ func heldWithoutDaemonShare(p *store.Pool, hosts []PoolHostRoom) (Problem, bool)
 // warns while a pool is being edited, and this keeps saying so afterwards, because an
 // agent that is not upgraded splits the slot evenly with nothing on the pool to show it.
 func (c *Controller) daemonShareHostProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -303,7 +303,7 @@ const (
 // It is information, never a warning: nothing is failing, only slower than it
 // needs to be, and the setting trades memory for it.
 func (c *Controller) tmpfsAdviceProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -320,7 +320,7 @@ func (c *Controller) tmpfsAdviceProblems(ctx context.Context, out *[]Problem) er
 	if len(candidates) == 0 {
 		return nil
 	}
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -409,7 +409,7 @@ func (c *Controller) tmpfsAdviceProblems(ctx context.Context, out *[]Problem) er
 // from a dry run, but a pool created or edited without one -- the normal CLI
 // path -- would otherwise claim memory while some runners quietly use disk.
 func (c *Controller) tmpfsHostProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}

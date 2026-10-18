@@ -104,7 +104,7 @@ func (c *Controller) updatesSnapshot(ctx context.Context, cfg config.Updates, he
 		}
 	}
 
-	if pic.hosts, err = c.st.ListHosts(ctx); err != nil {
+	if pic.hosts, err = c.fleetHosts(ctx); err != nil {
 		return nil, fmt.Errorf("listing the hosts: %w", err)
 	}
 	byHost := make(map[string]*updates.HostFacts, len(pic.hosts))

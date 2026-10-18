@@ -191,7 +191,7 @@ func (c *Controller) Stats(ctx context.Context, window time.Duration) (*Stats, e
 	if err != nil {
 		return nil, fmt.Errorf("counting runners: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing pools: %w", err)
 	}
@@ -237,7 +237,7 @@ func (c *Controller) Stats(ctx context.Context, window time.Duration) (*Stats, e
 	out.Runners.Total = out.Runners.Provisioning + out.Runners.Registering + out.Runners.Idle +
 		out.Runners.Busy + out.Runners.Draining + out.Runners.Failed
 
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing hosts: %w", err)
 	}
