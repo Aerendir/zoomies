@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +33,8 @@ func ParseWhenAt(raw string, now time.Time) (time.Time, error) {
 // ParseAgo reads how long ago: a Go duration such as 90m or 24h, or whole days
 // or weeks as 30d and 2w, because release comparisons are made in those and
 // Go's own parser stops at hours. A sign is ignored: "-5d" and "5d" both mean
-// five days ago.
+// five days ago. An amount a Duration cannot hold, about 292 years, is not a
+// duration, as Go's own parser says of hours.
 func ParseAgo(raw string) (time.Duration, bool) {
 	if n := len(raw) - 1; n > 0 {
 		var unit time.Duration
@@ -44,7 +46,17 @@ func ParseAgo(raw string) (time.Duration, bool) {
 		}
 		if unit != 0 {
 			if count, err := strconv.Atoi(raw[:n]); err == nil {
-				return time.Duration(max(count, -count)) * unit, true
+				// The most negative integer has no positive twin, so negating it
+				// leaves it negative. A product that wraps is negative too, and
+				// "ago" reads a negative amount as a moment in the future, which
+				// is how 400000000d came to mean the year 2318.
+				if count < 0 {
+					count = -count
+				}
+				if count < 0 || time.Duration(count) > math.MaxInt64/unit {
+					return 0, false
+				}
+				return time.Duration(count) * unit, true
 			}
 		}
 	}

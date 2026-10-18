@@ -16,11 +16,12 @@ the machine again once it has been idle long enough.
 Two settings on each provider decide how much it keeps running between bursts.
 **Idle timeout** (default 15 minutes) is how long a machine's host must have had
 no runner on it before the machine is deleted; `0` deletes it as soon as nothing
-needs it. **Warm machines** (`min_machines`; the wizard suggests 1, and the API and terminal default to 0) is a floor: the provider buys up to
-that many with no work waiting, so the first job finds a machine already up, and
-never deletes an idle machine below it. A minimum counts against the provider's
-maximum, so it cannot be set higher, and a provider that is disabled, paused or
-standing down keeps no floor at all.
+needs it. **Warm machines** (`min_machines`; the wizard suggests 1, the API's
+default is 0, and neither `zoomies providers add` nor `edit` has a flag for it)
+is a floor: the provider buys up to that many with no work waiting, so the first
+job finds a machine already up, and never deletes an idle machine below it. A
+minimum counts against the provider's maximum, so it cannot be set higher, and a
+provider that is disabled, paused or standing down keeps no floor at all.
 
 The machine is an ordinary Zoomies host. It appears on the Hosts page, runs the
 same runner backend, and is drained the same way. What is different is that
@@ -321,13 +322,16 @@ Choose the storage and network for clones on the Placement step. Choices
 come from the cluster; anything with one answer is already selected. Review the
 machine shape and limits, then save. The limits step opens on a recommendation
 worked out from the nodes you chose and the size of the template's machine: as
-many machines as the nodes hold after keeping a fifth of each node's memory for
-Proxmox, up to a first ceiling of eight, with one kept warm so the first job
-after a quiet spell does not wait for a clone. The sentence beside it says where
-the figures came from, and **Use recommendation** puts them back after you have
-typed your own. A cluster that does not report the size of its nodes gets two
-and one instead. Nothing is created by saving: machines are rented when a pool
-has work with nowhere to run, and the warm machine is bought on the next pass.
+many machines of that size as the nodes hold after keeping memory for Proxmox (at
+least 2 GB, or a fifth of each node's memory, whichever is larger), up to a first
+ceiling of eight, with one kept warm so the first job after a quiet spell does
+not wait for a clone. That counts each node's total memory, not what other guests
+are using, so a node shared with other guests holds fewer machines than the
+recommendation counts. The sentence beside it says where the figures came from,
+and **Use recommendation** puts them back after you have typed your own. A
+cluster that does not report the size of its nodes gets two and one instead.
+Nothing is created by saving: machines are rented when a pool has work with
+nowhere to run, and the warm machine is bought on the next pass.
 Run a test machine from the provider's page (below) to see one build and join
 before a job depends on it. The setup callback reports QEMU templates,
 with their VMIDs and nodes. The Zoomies template's VMID and node are preselected
@@ -352,8 +356,9 @@ that alternative.
 | Maximum machines | How many this provider may run at once. The wizard recommends a figure from the nodes' size. |
 | Warm machines | The fewest kept running when nothing is waiting. The wizard recommends one. |
 
-The same form is one line in a terminal, for a machine with no browser or a
-setup somebody wants to keep in a script:
+The settings in that table, except **Warm machines**, are one line in a
+terminal, for a machine with no browser or a setup somebody wants to keep in a
+script:
 
 ```sh
 zoomies providers add proxmox --name proxmox-lab \
@@ -372,6 +377,14 @@ from the credential and the credential is not saved until the provider is;
 `zoomies providers edit proxmox-lab --max-machines 8` raises the ceiling later,
 and `--setting key=value` reaches the advanced settings the form keeps behind a
 disclosure; `zoomies providers kinds` lists them. See [the CLI](cli.md#zoomies-providers).
+
+The command line cannot set **Warm machines**. Neither `add` nor `edit` has a
+flag for it, and it is a field of the provider itself rather than one of the
+driver's settings, so `--setting` does not reach it. A provider added from a
+terminal therefore keeps no machine warm, and an edit leaves a floor set
+elsewhere as it was. Set it under **Providers → your provider → Settings** with
+**Edit these settings**, or send `min_machines` to `PATCH /api/v1/providers/{id}`
+(see [the API](api-surface.md#providers-and-machines)).
 
 A cluster on a home network usually has no address a controller in the cloud
 can reach. Run `zoomies gateway --target <node-ip>:8006` on the node, or on any

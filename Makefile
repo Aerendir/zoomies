@@ -197,7 +197,7 @@ test-upgrade: build-nogui ## Install the last published release, then upgrade it
 LOAD_RECORD ?= $(CURDIR)/roadmap/validation/load-$(shell git rev-parse --short HEAD).md
 
 .PHONY: measure
-measure: ## Build a fleet with a month of history and time the reads a page makes
+measure: | $(UI_OUT)/.placeholder ## Build a fleet with a month of history and time the reads a page makes
 	ZOOMIES_LOAD_RECORD=$(LOAD_RECORD) \
 		$(GO) test -count=1 -v -tags load -timeout 20m ./test/load/...
 	@echo "record: $(LOAD_RECORD)"

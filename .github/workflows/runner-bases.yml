@@ -40,8 +40,14 @@ jobs:
       # Moves the digests in internal/naming/images.go and rewrites what the table
       # feeds: the Makefile's variant rows, both workflows' build matrices and the
       # table in docs/naming.md. It changes nothing when no base has moved.
+      #
+      # pipefail, because the default shell has none: a registry that answered 429
+      # made the generator fail, tee reported success, and the step went green
+      # with no pull request and nothing to say the pins had not been looked at.
       - name: Move the pins
-        run: make runner-bases | tee "$RUNNER_TEMP/moved.txt"
+        run: |
+          set -eu -o pipefail
+          make runner-bases | tee "$RUNNER_TEMP/moved.txt"
 
       - name: Describe what moved
         run: |

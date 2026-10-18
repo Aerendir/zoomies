@@ -2,6 +2,20 @@
 const PREFIX = 'ZOOMIES_BUILD_LOG ';
 const VERSION = 'ZOOMIES_BUILD_LOG_V1';
 
+/**
+ * Where the viewer writes that the stream reopened.
+ *
+ * The relay sends its backlog again from the top on every reopen, so the lines
+ * after this one may repeat lines above it. The raw tab shows the marker as it
+ * is; the build log keeps only prefixed lines and would have dropped it, leaving
+ * the repeat in the scrollback and in the saved file with nothing to explain it.
+ * One definition, so what the viewer writes and what the build log recognises
+ * cannot drift apart.
+ */
+const RECONNECT_MARKER = '-- reconnected to the log stream --';
+const RECONNECT_LINE = `\x1b[2m${RECONNECT_MARKER}\x1b[0m`;
+export const RECONNECT_NOTICE = `\r\n${RECONNECT_LINE}\r\n`;
+
 export class BuildLog {
   #partial = '';
   #lines: string[] = [];
@@ -20,6 +34,15 @@ export class BuildLog {
     for (const raw of lines) {
       const line = raw.replace(/\r$/, '');
       if (line === VERSION) this.supported = true;
+      if (line === RECONNECT_LINE) {
+        // A seam separates something from something. Before any build output
+        // there is nothing above it, and a lone seam would hide the waiting
+        // message and switch on Save log for a file of one line about the
+        // connection.
+        if (this.#lines.length > 0 || output.length > 0)
+          output.push(`##[debug]${RECONNECT_MARKER}`);
+        continue;
+      }
       if (/^\[log stream fell behind, \d+ bytes dropped\]$/.test(line)) {
         output.push(`##[warning]${line}. Open GitHub for the complete build log.`);
       }

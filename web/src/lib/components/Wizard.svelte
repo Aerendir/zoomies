@@ -7,11 +7,14 @@
   the pool editor is one page of sections that can each be reached in a tap; see
   "The pool editor" in docs/ui-guidelines.md.
 
-  `jumpable` makes each stage in the list a button that goes straight to that
-  stage, for a form whose answers can be given in any order and are all checked
-  again at the end (the provider form: its review step names every answer still
-  wrong, and sends the operator to the first one). Off, the list is only a
-  picture of where you are, and the flow stays a sequence.
+  `jumpable` makes each stage in the list but the current one a button that goes
+  straight to that stage, for a form whose answers can be given in any order and
+  are all checked again at the end. Such a form leaves its last button pressable
+  whatever the other stages hold, and has `onfinish` send the operator to the
+  first one that is wrong (the provider form does, and says where on its review
+  step): a button that is off for a reason on a stage they are not standing on
+  explains nothing. Off, the list is only a picture of where you are, and the
+  flow stays a sequence.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -88,7 +91,8 @@
    * Go to a stage by its place in the list. Leaving a stage runs the same hook
    * Next or Back would, so whatever that stage marks as seen is marked here too.
    * Deliberately not gated on `canAdvance`: the stage being left may be invalid,
-   * and the operator is allowed to look elsewhere. The final check still is.
+   * and the operator is allowed to look elsewhere. Whatever is wrong is caught
+   * by `onfinish`.
    */
   async function jump(index: number): Promise<void> {
     if (busy || index === current || index < 0 || index >= steps.length) return;
@@ -103,7 +107,7 @@
     {#if i < current}<Check size={12} />{:else}{i + 1}{/if}
   </span>
   <span class="step-text">
-    <span class="step-title" aria-current={i === current ? 'step' : undefined}>{s.title}</span>
+    <span class="step-title">{s.title}</span>
     {#if s.description}<span class="step-description">{s.description}</span>{/if}
   </span>
 {/snippet}
@@ -111,8 +115,18 @@
 <div class="wizard {className}">
   <ol class="steps">
     {#each steps as s, i (s.id)}
-      <li class:done={i < current} class:active={i === current}>
-        {#if jumpable}
+      <!--
+        `aria-current` is on the item, because a button's children are
+        presentational and one set on a span inside it is not announced. The stage
+        you are on is the one stage that goes nowhere, so it is never a button: a
+        control that did nothing would be a tab stop, and a dead one.
+      -->
+      <li
+        class:done={i < current}
+        class:active={i === current}
+        aria-current={i === current ? 'step' : undefined}
+      >
+        {#if jumpable && i !== current}
           <button type="button" class="step-link" disabled={busy} onclick={() => jump(i)}>
             {@render stage(s, i)}
           </button>
@@ -181,8 +195,14 @@
   button.step-link:hover .step-title {
     color: var(--z-text);
   }
+  /*
+    A shadow is not drawn in forced-colours mode (Windows High Contrast), which
+    would leave the stage a keyboard has reached with no indicator at all. The
+    outline is transparent so nothing changes anywhere else, and that mode paints
+    it in a system colour.
+  */
   button.step-link:focus-visible {
-    outline: none;
+    outline: var(--z-focus-width) solid transparent;
     box-shadow: var(--z-focus-ring);
   }
   button.step-link:disabled {

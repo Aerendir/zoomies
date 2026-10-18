@@ -3,7 +3,10 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -283,5 +286,156 @@ func TestGitHubAttentionObservationsDoNotAcknowledgeOrHideNewFailures(t *testing
 	}
 	if err := s.PruneJobAttentionRuns(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// legacyUnreplacedJobSQL is the replacement test as it was first written: one
+// NOT EXISTS with the two kinds of later job joined by an OR. It is kept here,
+// and only here, as the definition the split into two has to agree with. The
+// arguments leave out one half or the other, so a test can tell that a fixture
+// really contains both kinds.
+func legacyUnreplacedJobSQL(laterAttempt, laterRun bool) string {
+	var kinds []string
+	if laterAttempt {
+		kinds = append(kinds, `(later.github_run_id = jobs.github_run_id AND later.github_run_id != 0
+				AND later.run_attempt > jobs.run_attempt)`)
+	}
+	if laterRun {
+		kinds = append(kinds, `(jobs.github_run_id != 0 AND later.github_run_id != 0
+				AND jobs.head_branch != '' AND jobs.workflow != ''
+				AND later.head_branch = jobs.head_branch AND later.workflow = jobs.workflow
+				AND later.github_run_id != jobs.github_run_id
+				AND later.queued_at > jobs.queued_at)`)
+	}
+	return `NOT EXISTS (
+		SELECT 1 FROM jobs later
+		WHERE later.repo = jobs.repo AND later.job_name = jobs.job_name
+			AND (later.state != 'completed' OR later.conclusion NOT IN ('cancelled','skipped','neutral')
+				OR later.runner_fault != '' OR later.fault_kind != '')
+			AND (` + strings.Join(kinds, " OR ") + `))`
+}
+
+// The replacement test was split in two so that SQLite can find a later
+// attempt through the run and a later run through the branch. NOT EXISTS (A OR
+// B) is NOT EXISTS (A) AND NOT EXISTS (B) on paper; this holds the SQL to it,
+// on a small pseudo-random fleet whose few repositories, runs, branches and
+// workflows collide constantly, so every combination of the two kinds of later
+// job, the guards on missing metadata and the jobs that do not count as a
+// replacement turn up many times over.
+func TestSplittingTheReplacementTestKeepsTheSameJobs(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	s := newTestStoreAt(t, func() time.Time { return now })
+	ctx := context.Background()
+	rng := rand.New(rand.NewPCG(7, 11))
+	pick := func(from ...string) string { return from[rng.IntN(len(from))] }
+	for i := 1; i <= 600; i++ {
+		state, conclusion := "completed", pick("success", "failure", "failure", "cancelled", "skipped", "neutral", "timed_out")
+		if rng.IntN(8) == 0 {
+			state, conclusion = pick("queued", "in_progress", "waiting"), ""
+		}
+		fault, kind := "", ""
+		if rng.IntN(10) == 0 {
+			fault, kind = "runner exited with code 137", "out_of_memory"
+		}
+		_, err := s.write.ExecContext(ctx, `INSERT INTO jobs
+			(id, github_job_id, github_run_id, repo, workflow, job_name, head_branch, run_attempt,
+			 state, conclusion, runner_fault, fault_kind, queued_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			fmt.Sprintf("job_%d", i), i, rng.IntN(6), pick("acme/a", "acme/b"), pick("", "CI", "CI", "Deploy"),
+			pick("Test", "Lint"), pick("", "main", "main", "feature"), rng.IntN(4), state, conclusion, fault, kind,
+			ms(now.Add(-time.Duration(rng.IntN(12))*time.Minute)))
+		if err != nil {
+			t.Fatalf("seeding job %d: %v", i, err)
+		}
+	}
+	unreplaced := func(test string) []int64 {
+		t.Helper()
+		rows, err := s.read.QueryContext(ctx, `SELECT github_job_id FROM jobs WHERE `+test+` ORDER BY github_job_id`)
+		if err != nil {
+			t.Fatalf("%v in %s", err, test)
+		}
+		defer rows.Close()
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			ids = append(ids, id)
+		}
+		return ids
+	}
+
+	single, split := unreplaced(legacyUnreplacedJobSQL(true, true)), unreplaced(unreplacedJobSQL())
+	if !slices.Equal(single, split) {
+		t.Fatalf("splitting the replacement test changed which jobs are unreplaced: %d before, %d after", len(single), len(split))
+	}
+	// A fixture in which only one kind of later job ever mattered would pass
+	// the comparison above whatever the second half did.
+	byAttempt, byRun := unreplaced(legacyUnreplacedJobSQL(true, false)), unreplaced(legacyUnreplacedJobSQL(false, true))
+	if len(single) == 0 || len(byAttempt) <= len(single) || len(byRun) <= len(single) {
+		t.Fatalf("the fixture does not need both kinds of later job: %d unreplaced, %d if only a later attempt replaced, %d if only a later run did",
+			len(single), len(byAttempt), len(byRun))
+	}
+}
+
+// Every check of a run costs GitHub requests the runner registrations share the
+// installation's quota with, and the loop makes a fixed number of checks an
+// hour whenever enough runs are waiting, so what it spends them on matters. A
+// run GitHub has settled (its PR closed, a newer commit, a passing re-run) is
+// looked at again only in case that changes, and an hour is soon enough for a
+// PR to be reopened; a run it has not settled, or has said nothing about, is
+// the one a person is waiting on and keeps the short interval. A failure newer
+// than the observation is not settled by it, so it is not made to wait either.
+func TestSettledRunsAreCheckedAgainHourlyAndTheRestEveryFiveMinutes(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Millisecond)
+	clock := start
+	s := newTestStoreAt(t, func() time.Time { return clock })
+	ctx := context.Background()
+	failure := func(id, run int64, completed time.Time) {
+		t.Helper()
+		job := &Job{GitHubJobID: id, GitHubRunID: run, Repo: "acme/repo", State: JobCompleted, Conclusion: "failure",
+			QueuedAt: completed.Add(-time.Minute), CompletedAt: &completed}
+		if _, err := s.UpsertJob(ctx, job); err != nil {
+			t.Fatalf("UpsertJob: %v", err)
+		}
+	}
+	earlier := start.Add(-10 * time.Minute)
+	failure(1, 1, earlier) // closed
+	failure(2, 2, earlier) // checked, still failing
+	failure(3, 3, earlier) // fixed, and then a new failure
+	failure(4, 4, earlier) // never checked
+	for run, reason := range map[int64]string{1: "closed", 2: "", 3: "fixed"} {
+		if err := s.RecordJobAttentionRun(ctx, "acme/repo", run, reason, start, true); err != nil {
+			t.Fatalf("RecordJobAttentionRun: %v", err)
+		}
+	}
+	failure(5, 3, start.Add(30*time.Second))
+
+	dueAt := func(after time.Duration) []int64 {
+		t.Helper()
+		clock = start.Add(after)
+		runs, err := s.JobAttentionRunsToCheck(ctx, 10)
+		if err != nil {
+			t.Fatalf("JobAttentionRunsToCheck: %v", err)
+		}
+		var ids []int64
+		for _, r := range runs {
+			ids = append(ids, r.RunID)
+		}
+		slices.Sort(ids)
+		return ids
+	}
+	if got := dueAt(time.Minute); !slices.Equal(got, []int64{4}) {
+		t.Fatalf("a minute later the runs due are %v, want only the one never checked", got)
+	}
+	if got := dueAt(6 * time.Minute); !slices.Equal(got, []int64{2, 3, 4}) {
+		t.Fatalf("six minutes later the runs due are %v, want every run but the closed one", got)
+	}
+	if got := dueAt(59 * time.Minute); !slices.Equal(got, []int64{2, 3, 4}) {
+		t.Fatalf("just under an hour later the runs due are %v, want the closed run still left alone", got)
+	}
+	if got := dueAt(61 * time.Minute); !slices.Equal(got, []int64{1, 2, 3, 4}) {
+		t.Fatalf("an hour later the runs due are %v, want the closed run looked at again", got)
 	}
 }

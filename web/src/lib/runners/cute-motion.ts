@@ -142,9 +142,11 @@ const FALLBACK: CutePose = {
 
 /**
  * The pose each state holds: posture, ears, eyes, mouth, brows and props.
- * Posture and ears carry the state at grid size, so the four sitting states
- * separate by ear shape and the tag's status tone rather than by detail that
- * only survives at 96px.
+ * At 31px and below the props and brows are not drawn, so no two states may
+ * share all of posture, ears, eyes and mouth (cute-motion.test.ts names the one
+ * pair that does). Six states sit and their ears take only three shapes, so
+ * ears alone do not separate them: idle and registering share ears and eyes and
+ * are told apart by the mouth.
  */
 export function cutePose(state: string): CutePose {
   return POSES[state] ?? FALLBACK;

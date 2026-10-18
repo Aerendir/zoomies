@@ -16,7 +16,7 @@ Each record has five parts and no more:
   because of it.
 
 The decisions the roadmap asks the owner to ratify are listed in
-[ROADMAP.md](../../ROADMAP.md) section 3. Records here are numbered in the
+[ROADMAP.md](../../ROADMAP.md) section 4. Records here are numbered in the
 order they were written, which is not the roadmap's numbering, and not every
 roadmap decision has one: a decision gets a record here when it is ratified or
 changed, so that the roadmap's numbered list stays the index and this

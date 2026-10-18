@@ -138,7 +138,7 @@ func tools() []*tool {
 			Name:  "list_jobs",
 			Title: "List jobs",
 			Description: "Workflow jobs this fleet has seen, newest first, with their pool, runner, queue wait, duration and outcome. " +
-				"Use failed to find what went wrong, ours or theirs to split failures the fleet caused from the workflows' own, and attention to find the failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt. " +
+				"Use failed to find what went wrong, ours or theirs to split failures the fleet caused from the workflows' own, and attention to find the failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed. " +
 				"Each job is a one-line summary without its steps unless include_steps is true; get_job has the steps. " +
 				"A full page carries a next value: pass it back as before to read the next page, until next is absent. " +
 				"For counts and percentiles over a period, use job_stats rather than paging through jobs.",
@@ -149,7 +149,7 @@ func tools() []*tool {
 				"state":              enum("only jobs in this state", "waiting", "queued", "in_progress", "completed"),
 				"conclusion":         enum("only jobs that finished this way", "success", "failure", "cancelled", "skipped"),
 				"failed":             boolean("only jobs that went wrong: a failing conclusion, or a runner that stopped under the job"),
-				"attention":          boolean("only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt of the same job"),
+				"attention":          boolean("only failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed"),
 				"ours":               boolean("only failures this fleet caused"),
 				"theirs":             boolean("only failures the workflow caused, with nothing wrong on the fleet's side"),
 				"unmatched":          boolean("only queued jobs no enabled pool claims; these will never run"),

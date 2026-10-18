@@ -38,7 +38,9 @@
   import {
     analysisWindow,
     refusalOf,
+    type AnalysisNarrowing,
     EXPLANATION_WORDS,
+    startupFailuresScope,
     STAGE_WORDS,
     wordFor,
   } from '$lib/insights/analysis';
@@ -99,7 +101,22 @@
    * narrowed to.
    * ------------------------------------------------------------------------ */
 
-  const failedShown = $derived(states.includes('failed'));
+  // Not for a public view's visitor, whom the route refuses before it reads
+  // anything (lib/shell/sections.ts says why a refused thing is not offered).
+  const failedShown = $derived(!session.visitor && states.includes('failed'));
+  // The pool and host the card was asked about, for Ask Eli to pass to its
+  // tool: a finding narrowed to one of them never names it.
+  const startupNarrowed = $derived<AnalysisNarrowing>({
+    ...(poolId ? { pool: { id: poolId, name: fleet.pool(poolId)?.name } } : {}),
+    ...(hostId ? { host: { id: hostId, name: fleet.host(hostId)?.name } } : {}),
+  });
+  // What the card covers, and the list's search it leaves out.
+  const startupScope = $derived(
+    startupFailuresScope(
+      { pool_id: poolId, host_id: hostId, q: search },
+      { pool: (id) => fleet.pool(id)?.name ?? id, host: (id) => fleet.host(id)?.name ?? id },
+    ),
+  );
   let startup = $state.raw<StartupFailuresFinding | null>(null);
   let startupError = $state<{ message: string; refused: boolean } | null>(null);
   let startupLoading = $state(false);
@@ -111,6 +128,10 @@
     const host = hostId || undefined;
     void startupKey;
     const controller = new AbortController();
+    // The last pool's answer goes at once: left standing while the next loads,
+    // it would sit under a list that has already moved on, as the Jobs card's
+    // and the host page's do not.
+    startup = null;
     startupError = null;
     const period = analysisWindow(undefined, undefined, Date.now());
     if (!period) return;
@@ -122,7 +143,6 @@
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         // The list of failed runners is still the page's; only this card failed.
-        startup = null;
         startupError = refusalOf(cause);
       })
       .finally(() => {
@@ -599,6 +619,9 @@
       finding={startup}
       error={startupError}
       loading={startupLoading}
+      scope={startupScope.scope}
+      note={startupScope.unapplied}
+      narrowedTo={startupNarrowed}
     >
       {#if startup}
         {@const ev = startup.evidence}
@@ -620,6 +643,16 @@
                 <span>
                   {g.scope === 'host' ? 'Host' : 'Pool'}
                   <a href="/{g.scope === 'host' ? 'hosts' : 'pools'}/{g.id}">{g.name || g.id}</a>
+                  {#if g.pool_id}
+                    <!-- A host's group that counts one pool's starts alone. Bare, its
+                         figures read as the host's own across every pool, which is the
+                         one thing the route says they are not. -->
+                    <span class="muted">
+                      (starts of pool <a href="/pools/{g.pool_id}"
+                        >{fleet.pool(g.pool_id)?.name ?? g.pool_id}</a
+                      > alone)
+                    </span>
+                  {/if}
                 </span>
                 <span class="figure muted">
                   {g.failures} of {pluralise(g.starts, 'start')} failed, failing since {formatAbsolute(

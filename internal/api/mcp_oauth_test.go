@@ -811,6 +811,12 @@ func TestEditingAnMCPClientChangesWhereItMayReturn(t *testing.T) {
 	var c mcpClientResponse
 	created.into(t, &c)
 
+	// A connection made before the edit. Without one, "an edit ends no
+	// connection" compares the count of none with the count of none and holds
+	// whatever the edit does.
+	connected := pairFrom(t, h.exchange(c.ClientID,
+		h.approve(admin, requestFrom(t, h.authorize(c.ClientID, claudeReturn, nil)), store.RoleViewer), nil, nil))
+
 	r := h.do(request{method: http.MethodPatch, path: "/api/v1/mcp-clients/" + c.ID, cookie: admin,
 		body: map[string]any{"name": "Claude Code", "redirect_uris": []string{claudeReturn, "http://localhost:3118/callback"}}})
 	r.mustStatus(t, http.StatusOK, "updating a client")
@@ -822,8 +828,25 @@ func TestEditingAnMCPClientChangesWhereItMayReturn(t *testing.T) {
 	if after.ClientID != c.ClientID || after.Confidential != c.Confidential {
 		t.Error("an edit must leave the client ID and secrecy alone")
 	}
-	if after.Connections != c.Connections {
-		t.Errorf("an edit ends no connection, want %d, got %d", c.Connections, after.Connections)
+
+	// The connection is still counted, still listed, and still works: its access
+	// token is accepted on /mcp, and its refresh token is honoured and hands out a
+	// pair that works too.
+	if after.Connections != 1 {
+		t.Errorf("an edit ends no connection: the one made before it must still be counted, got %d", after.Connections)
+	}
+	var listed list[mcpConnectionResponse]
+	h.do(request{method: http.MethodGet, path: "/api/v1/mcp-connections", cookie: admin}).into(t, &listed)
+	if len(listed.Items) != 1 || listed.Items[0].ClientID != c.ID {
+		t.Errorf("the connection made before the edit must still be listed, got %+v", listed.Items)
+	}
+	if names := h.mcpToolNames(connected.AccessToken); !slices.Contains(names, "get_job") {
+		t.Errorf("the connection made before the edit must keep working, got %v", names)
+	}
+	renewed := pairFrom(t, h.form("/oauth/token",
+		url.Values{"grant_type": {"refresh_token"}, "refresh_token": {connected.RefreshToken}, "client_id": {c.ClientID}}, nil))
+	if names := h.mcpToolNames(renewed.AccessToken); !slices.Contains(names, "get_job") {
+		t.Errorf("a refresh after the edit must hand out a working pair, got %v", names)
 	}
 
 	// The refused address is now registered, so the authorise gets past the
@@ -843,4 +866,81 @@ func TestEditingAnMCPClientChangesWhereItMayReturn(t *testing.T) {
 		body: map[string]any{"name": "X"}}); r.status != http.StatusUnprocessableEntity {
 		t.Errorf("editing a dynamic client must be 422, got %d", r.status)
 	}
+}
+
+// Taking a redirect away has to reach the sign-ins already under way for it. A
+// fresh /oauth/authorize for the address was always refused, but a request
+// waiting for consent and a code not yet exchanged are good for fifteen and five
+// minutes, and without a second look they sent the authorisation code to the
+// address the administrator had just removed. A connection already made is
+// another matter, and the API promises an edit leaves it alone.
+func TestRemovingARedirectFromAnMCPClientRefusesWhatIsAlreadyUnderWayForIt(t *testing.T) {
+	h := oauthHarness(t)
+	_, admin := h.user("ada", store.RoleAdmin)
+	const loop = "http://localhost:3118/callback"
+
+	created := h.do(request{method: http.MethodPost, path: "/api/v1/mcp-clients", cookie: admin,
+		body: map[string]any{"name": "Claude", "redirect_uris": []string{claudeReturn, loop}}})
+	created.mustStatus(t, http.StatusCreated, "creating a client")
+	var c mcpClientResponse
+	created.into(t, &c)
+
+	// In flight when the edit lands: a connection already made through the
+	// address that is about to go, a request waiting for consent, and a code
+	// issued but not yet exchanged.
+	connected := pairFrom(t, h.exchange(c.ClientID,
+		h.approve(admin, requestFrom(t, h.authorize(c.ClientID, loop, nil)), store.RoleViewer),
+		url.Values{"redirect_uri": {loop}}, nil))
+	waiting := requestFrom(t, h.authorize(c.ClientID, loop, nil))
+	issued := h.approve(admin, requestFrom(t, h.authorize(c.ClientID, loop, nil)), store.RoleViewer)
+
+	h.do(request{method: http.MethodPatch, path: "/api/v1/mcp-clients/" + c.ID, cookie: admin,
+		body: map[string]any{"name": "Claude", "redirect_uris": []string{claudeReturn}}}).
+		mustStatus(t, http.StatusOK, "removing the loopback address")
+
+	// The front door: a new sign-in for the address is shown the refusal on the
+	// controller's own page, and is not sent anywhere.
+	loc := h.authorize(c.ClientID, loop, nil).header.Get("Location")
+	if !strings.HasPrefix(loc, consentPath+"?") || !strings.Contains(loc, "error=invalid_request") {
+		t.Errorf("a new sign-in for a removed redirect must be refused on the consent page, got %q", loc)
+	}
+
+	// The waiting request: the screen says the code is going to this machine, as
+	// the request's own address does, rather than reading the client's list as
+	// it stands today.
+	view := h.do(request{method: http.MethodGet, path: "/api/v1/auth/mcp-requests/" + waiting, cookie: admin})
+	view.mustStatus(t, http.StatusOK, "the consent view of a waiting request")
+	var consent mcpConsentResponse
+	view.into(t, &consent)
+	if !consent.LoopbackOnly || consent.RedirectHost != "localhost:3118" {
+		t.Errorf("a request to localhost:3118 must be flagged as loopback, got %+v", consent)
+	}
+	// And approving it is refused, in words a person can act on, without a code.
+	approve := h.do(request{method: http.MethodPost, path: "/api/v1/auth/mcp-requests/" + waiting + "/approve", cookie: admin,
+		body: map[string]any{"role": store.RoleViewer}})
+	if approve.status != http.StatusUnprocessableEntity {
+		t.Errorf("approving a request for a removed redirect: status %d, want 422\nbody: %s", approve.status, truncate(approve.body))
+	}
+	if msg := approve.errorMessage(t); !strings.Contains(msg, "redirect URIs") || !strings.Contains(msg, "again") {
+		t.Errorf("the refusal must say the redirect URIs changed and to start again, got %q", msg)
+	}
+	if strings.Contains(string(approve.body), auth.MCPCodePrefix) || strings.Contains(string(approve.body), "localhost:3118/callback?code") {
+		t.Errorf("a refused approval must not carry a code: %s", approve.body)
+	}
+
+	// The code issued before the edit, named by its address or by none.
+	for _, named := range []string{loop, ""} {
+		r := h.exchange(c.ClientID, issued, url.Values{"redirect_uri": {named}}, nil)
+		if r.status != http.StatusBadRequest || oauthErrorCode(t, r) != "invalid_grant" {
+			t.Errorf("exchanging a code for a removed redirect (redirect_uri %q): status %d, want 400 invalid_grant\nbody: %s", named, r.status, truncate(r.body))
+		}
+	}
+
+	// What the edit leaves alone: the connection made before it still works and
+	// still refreshes, and a sign-in for the address that stayed goes through.
+	if names := h.mcpToolNames(connected.AccessToken); !slices.Contains(names, "get_job") {
+		t.Errorf("a connection made before the edit must keep working, got %v", names)
+	}
+	pairFrom(t, h.form("/oauth/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {connected.RefreshToken}, "client_id": {c.ClientID}}, nil))
+	pairFrom(t, h.exchange(c.ClientID, h.approve(admin, requestFrom(t, h.authorize(c.ClientID, claudeReturn, nil)), store.RoleViewer), nil, nil))
 }

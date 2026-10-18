@@ -79,11 +79,14 @@ func jsonNumber(v any) string {
 	return string(raw)
 }
 
-// The point of the command is that the five-step wizard becomes one line, so
-// the test is that one line turns into the same request the wizard would send:
-// the Proxmox questions land in the driver's settings under the keys the
-// driver reads, the token pasted on standard input becomes the credential, and
-// the cluster is asked what it would refuse before the terminal says done.
+// The point of the command is that most of the five-step wizard becomes one
+// line, so the test is that one line turns into the request the wizard would
+// send for the same answers: the Proxmox questions land in the driver's
+// settings under the keys the driver reads, the token pasted on standard input
+// becomes the credential, and the cluster is asked what it would refuse before
+// the terminal says done. The line cannot say everything the form can (see
+// providerSpec): the machine's platform and certificate and its warm machines
+// are not in the request.
 func TestAddingAProviderSendsTheWizardsRequestFromOneLine(t *testing.T) {
 	srv, rec := newProviderAddServer(t)
 	e, out, errOut := newTestEnv(t)

@@ -237,6 +237,58 @@ func TestARolloutIsAnAdministratorsAndHasAScopeOfItsOwn(t *testing.T) {
 	}
 }
 
+// Building a test machine clones and starts a machine somebody pays for. It
+// used to share providers.pause, the kill switch's scope, which is the one an
+// operator hands to something that watches the bill so that it can stop
+// spending, and a token holding it could then start spending. The scope is its
+// own now, and the role is still the operator's, as pausing is.
+func TestBuildingATestMachineIsAnOperatorsAndHasAScopeOfItsOwn(t *testing.T) {
+	if got := ActionProvidersTest.MinRole(); got != store.RoleOperator {
+		t.Errorf("%s needs %s; want operator", ActionProvidersTest, got)
+	}
+	if got := ActionProvidersTest.Scope(); got != "providers:test" {
+		t.Errorf("the scope is %q, want providers:test", got)
+	}
+	for _, tc := range []struct {
+		role store.Role
+		want bool
+	}{
+		{store.RoleViewer, false}, {store.RoleOperator, true}, {store.RoleAdmin, true}, {store.RolePlatform, true},
+	} {
+		id := &Identity{Kind: KindUser, ID: "usr_1", Name: "test", Role: tc.role}
+		if got := id.Can(ActionProvidersTest); got != tc.want {
+			t.Errorf("a %s may build a test machine = %v, want %v", tc.role, got, tc.want)
+		}
+	}
+	if msg := Explain(&Identity{Kind: KindUser, Role: store.RoleViewer}, ActionProvidersTest); !strings.Contains(msg, "operator") {
+		t.Errorf("refusing a viewer says %q, which does not name the role they are missing", msg)
+	}
+
+	pauses := &Identity{Kind: KindToken, Name: "bill-watcher", Role: store.RoleOperator, Scopes: []string{"providers:pause"}}
+	if pauses.Can(ActionProvidersTest) {
+		t.Error("a token scoped to providers:pause may build a test machine")
+	}
+	if !pauses.Can(ActionProvidersPause) {
+		t.Error("a token scoped to providers:pause may no longer press the kill switch")
+	}
+	if msg := Explain(pauses, ActionProvidersTest); !strings.Contains(msg, "providers:test") {
+		t.Errorf("refusing the pause scope says %q, which does not name the scope to add", msg)
+	}
+
+	tests := &Identity{Kind: KindToken, Name: "ci", Role: store.RoleOperator, Scopes: []string{"providers:test"}}
+	if !tests.Can(ActionProvidersTest) || tests.Can(ActionProvidersPause) {
+		t.Errorf("a token scoped to providers:test may build = %v, may press the kill switch = %v; want true, false",
+			tests.Can(ActionProvidersTest), tests.Can(ActionProvidersPause))
+	}
+	for _, scope := range []string{"providers:*", "*"} {
+		both := &Identity{Kind: KindToken, Name: "ops", Role: store.RoleOperator, Scopes: []string{scope}}
+		if !both.Can(ActionProvidersTest) || !both.Can(ActionProvidersPause) {
+			t.Errorf("a token scoped to %s may build = %v, may press the kill switch = %v; want both",
+				scope, both.Can(ActionProvidersTest), both.Can(ActionProvidersPause))
+		}
+	}
+}
+
 func TestUnknownActionIsDenied(t *testing.T) {
 	admin := &Identity{Kind: KindUser, Role: store.RoleAdmin}
 	if admin.Can("pools.nuke") {

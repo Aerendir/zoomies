@@ -384,6 +384,11 @@ func ImportEnvironment(vars map[string]string, key *cryptox.Key) (rows []store.I
 			}
 			continue
 		}
+		// An empty number is nothing the controller acts on, so it is nothing to
+		// store, and not a value to refuse that would stop the others moving.
+		if s.blankSaysNothing(vars[name]) {
+			continue
+		}
 		candidate := Default()
 		if _, err := candidate.SetValueString(s.Key, vars[name]); err != nil {
 			var se *SettingError

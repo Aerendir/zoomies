@@ -25,6 +25,7 @@
     changeFigure,
     DIRECTION_WORDS,
     MEASURE_WORDS,
+    whyNoWindow,
     wordFor,
   } from '$lib/insights/analysis';
   import UsageInsights from '$lib/usage/UsageInsights.svelte';
@@ -33,6 +34,7 @@
   import type { CompareFinding, Usage, UsageGrouping } from '$lib/api/types';
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
+  import { session } from '$lib/state/session.svelte';
   import {
     NO_VALUE,
     formatAbsolute,
@@ -197,15 +199,31 @@
   let compareLoading = $state(false);
   const compareFrom = $derived(query.from);
   const compareTo = $derived(query.to);
+  // Bumped by the page's Refresh. The card follows the range's bounds, and a
+  // day's are midnights that "now" moving along does not change, so without
+  // this a refresh would re-read the table and leave the card on the old
+  // moment (an hour's bounds move, which is the only reason it was missed).
+  let compareKey = $state(0);
+  // Not for a public view's visitor, whom the route refuses before it reads
+  // anything (lib/shell/sections.ts says why a refused thing is not offered).
+  const compareShown = $derived(!session.visitor);
 
   $effect(() => {
+    if (!compareShown) return;
+    void compareKey;
     const period =
       compareFrom && compareTo ? analysisWindow(compareFrom, compareTo, Date.now()) : null;
     const controller = new AbortController();
+    // The last range's comparison goes at once: left standing while the next
+    // loads, it would sit under a table that has already moved on, as the Jobs
+    // card's and the host page's do not.
+    compare = null;
     compareError = null;
     if (!period) {
-      // A backwards range is the page's own warning to give.
-      compare = null;
+      // The date picker points out a range typed backwards, and nothing points
+      // out one that has not started; the card says why it asked nothing,
+      // since a titled frame with nothing under it says nothing.
+      compareError = { message: whyNoWindow(compareFrom, compareTo), refused: true };
       compareLoading = false;
       return;
     }
@@ -217,7 +235,6 @@
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         // The report and the table are still true; only this card failed.
-        compare = null;
         compareError = refusalOf(cause);
       })
       .finally(() => {
@@ -359,6 +376,7 @@
     // effect fetches it. A range typed by hand is fetched as it stands.
     if (preset) now = Date.now();
     else void load(query);
+    compareKey += 1;
   }}
 >
   <Button
@@ -562,95 +580,97 @@
      with no job still has a plain answer to give here, and the release table's
      own request may fail on its own, for a window over the server's limit. -->
 <ReleaseTable from={query.from} to={query.to} />
-<div class="compare">
-  <AnalysisCard
-    title="What got worse and what got better"
-    finding={compare}
-    error={compareError}
-    loading={compareLoading}
-  >
-    {#if compare}
-      {@const ev = compare.evidence}
-      {#each [{ side: ev.a, name: 'Earlier' }, { side: ev.b, name: 'Later' }] as { side, name } (name)}
-        <dl class="facts" aria-label="{name}: {side.label}">
-          <div>
-            <dt>{name}</dt>
-            <dd>
-              {side.label}, {formatAbsolute(side.since)} to {formatAbsolute(side.until)}
-            </dd>
-          </div>
-          <div>
-            <dt>Jobs</dt>
-            <dd class="figure">
-              {#if side.counts_only}
-                {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.fleet_failed)} lost
-                to the fleet
-              {:else}
-                {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.failed)} failed, {formatNumber(
-                  side.figures.fleet_failed,
-                )} lost to the fleet, {formatNumber(side.figures.oom_killed)} OOM killed
-              {/if}
-            </dd>
-          </div>
-          {#if side.counts_only}
+{#if compareShown}
+  <div class="compare">
+    <AnalysisCard
+      title="What got worse and what got better"
+      finding={compare}
+      error={compareError}
+      loading={compareLoading}
+    >
+      {#if compare}
+        {@const ev = compare.evidence}
+        {#each [{ side: ev.a, name: 'Earlier' }, { side: ev.b, name: 'Later' }] as { side, name } (name)}
+          <dl class="facts" aria-label="{name}: {side.label}">
             <div>
-              <dt>Read from</dt>
+              <dt>{name}</dt>
               <dd>
-                The daily roll-up, in whole UTC days, which keeps counts and no outcomes or times.
+                {side.label}, {formatAbsolute(side.since)} to {formatAbsolute(side.until)}
               </dd>
             </div>
-          {/if}
-          {#if side.jobs_gone_before}
             <div>
-              <dt>Gone before</dt>
-              <dd>
-                {formatAbsolute(side.jobs_gone_before)}: older jobs are past retention.jobs, and no
-                roll-up records which release ran them.
+              <dt>Jobs</dt>
+              <dd class="figure">
+                {#if side.counts_only}
+                  {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.fleet_failed)} lost
+                  to the fleet
+                {:else}
+                  {pluralise(side.figures.jobs, 'job')}, {formatNumber(side.figures.failed)} failed, {formatNumber(
+                    side.figures.fleet_failed,
+                  )} lost to the fleet, {formatNumber(side.figures.oom_killed)} OOM killed
+                {/if}
               </dd>
             </div>
-          {/if}
-          {#if side.no_record_before}
-            <div>
-              <dt>No counts before</dt>
-              <dd>{formatAbsolute(side.no_record_before)}</dd>
-            </div>
-          {/if}
-          <!-- Only a roll-up side ends early for want of a midnight; a release's
+            {#if side.counts_only}
+              <div>
+                <dt>Read from</dt>
+                <dd>
+                  The daily roll-up, in whole UTC days, which keeps counts and no outcomes or times.
+                </dd>
+              </div>
+            {/if}
+            {#if side.jobs_gone_before}
+              <div>
+                <dt>Gone before</dt>
+                <dd>
+                  {formatAbsolute(side.jobs_gone_before)}: older jobs are past retention.jobs, and
+                  no roll-up records which release ran them.
+                </dd>
+              </div>
+            {/if}
+            {#if side.no_record_before}
+              <div>
+                <dt>No counts before</dt>
+                <dd>{formatAbsolute(side.no_record_before)}</dd>
+              </div>
+            {/if}
+            <!-- Only a roll-up side ends early for want of a midnight; a release's
                side ends at its last job, which its own dates above already say. -->
-          {#if side.counts_only && side.asked_until !== side.until}
-            <div>
-              <dt>Asked until</dt>
-              <dd>
-                {formatAbsolute(side.asked_until)}, read to {formatAbsolute(side.until)}
-              </dd>
-            </div>
-          {/if}
-        </dl>
-      {/each}
-      {#if ev.percentiles_unavailable}
-        <p class="evidence-note">
-          No time was compared: a side came from the daily roll-up, which keeps counts only.
-        </p>
+            {#if side.counts_only && side.asked_until !== side.until}
+              <div>
+                <dt>Asked until</dt>
+                <dd>
+                  {formatAbsolute(side.asked_until)}, read to {formatAbsolute(side.until)}
+                </dd>
+              </div>
+            {/if}
+          </dl>
+        {/each}
+        {#if ev.percentiles_unavailable}
+          <p class="evidence-note">
+            No time was compared: a side came from the daily roll-up, which keeps counts only.
+          </p>
+        {/if}
+        {#if ev.changes.length}
+          <p class="rows-label" id="compare-changes">Measure by measure</p>
+          <ul class="rows" aria-labelledby="compare-changes">
+            {#each ev.changes as c (c.measure)}
+              <li>
+                <span>{wordFor(MEASURE_WORDS, c.measure)}</span>
+                <span class="figure muted"
+                  >{changeFigure(c.from, c.unit)} to {changeFigure(c.to, c.unit)}, {wordFor(
+                    DIRECTION_WORDS,
+                    c.direction,
+                  )}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {/if}
-      {#if ev.changes.length}
-        <p class="rows-label" id="compare-changes">Measure by measure</p>
-        <ul class="rows" aria-labelledby="compare-changes">
-          {#each ev.changes as c (c.measure)}
-            <li>
-              <span>{wordFor(MEASURE_WORDS, c.measure)}</span>
-              <span class="figure muted"
-                >{changeFigure(c.from, c.unit)} to {changeFigure(c.to, c.unit)}, {wordFor(
-                  DIRECTION_WORDS,
-                  c.direction,
-                )}</span
-              >
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    {/if}
-  </AnalysisCard>
-</div>
+    </AnalysisCard>
+  </div>
+{/if}
 
 <style>
   .compare {

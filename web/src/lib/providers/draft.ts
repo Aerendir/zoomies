@@ -51,7 +51,8 @@ export const WIZARD_STEPS: readonly WizardStepDef[] = [
   {
     id: 'limits',
     title: 'Limits',
-    description: 'The ceilings. Nothing is rented until the first of these is above zero.',
+    description:
+      'The most machines it may rent, and how many stay warm. A maximum of zero rents nothing.',
   },
   { id: 'review', title: 'Review', description: 'What the controller makes of it.' },
 ];
@@ -495,10 +496,40 @@ export function draftErrors(
 }
 
 /**
+ * What Warm machines becomes when Maximum has just been typed.
+ *
+ * Zero is how an operator says rent nothing, and the box says so. A draft opens
+ * on one warm machine, and a warm machine counts against the maximum, so a zero
+ * typed on its own was refused for a figure in the other box, with no word of
+ * why until that box was touched. Only a maximum of zero changes anything, and
+ * only when it is the maximum being typed: a warm figure typed afterwards is the
+ * operator's, and nothing here moves it again.
+ */
+export function warmForMaximum(maximum: string, warm: string): string {
+  return num(maximum) === 0 ? '0' : warm;
+}
+
+/**
+ * What saving a provider sets going, for the note under the toast.
+ *
+ * Saving creates nothing. The warm machine is bought on the next pass, so the
+ * check is worth running now rather than before a first machine that nothing is
+ * waiting for; without one, a machine is rented only when a pool has work with
+ * nowhere to run.
+ */
+export function savedNote(maximum: number, warm: number): string {
+  if (maximum === 0)
+    return 'Nothing is rented yet: its ceiling is zero. Raise it when you are ready to spend.';
+  if (warm === 0)
+    return 'Machines are rented when a pool has work with nowhere to run. Run the check to see what the provider would refuse.';
+  return 'Its warm machine is bought on the next pass, so run the check now to see what the provider would refuse.';
+}
+
+/**
  * Whether this draft would rent anything at all, and why not.
  *
- * A provider saved with a ceiling of zero is a legal answer and the default
- * one, so this is a note beside the setting rather than an error on it.
+ * A provider saved with a ceiling of zero is a legal answer, and the way to say
+ * rent nothing, so this is a note beside the setting rather than an error on it.
  */
 export function willRentNothing(draft: ProviderDraft): string {
   if (!draft.enabled) return 'This provider is switched off, so nothing will be built.';
