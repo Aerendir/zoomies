@@ -11174,7 +11174,7 @@ export interface components {
             redirect_uri: string;
             /** @description Where approving sends you */
             redirect_host: string;
-            /** @description Every redirect the client registered is on your own machine */
+            /** @description Whether `redirect_uri`, the address approving sends you back to, is on your own machine, where any program could listen and claim to be the client. It judges that one address, not every address the client registered. */
             loopback_only: boolean;
             /** @example https://zoomies.example.com/mcp */
             resource: string;
