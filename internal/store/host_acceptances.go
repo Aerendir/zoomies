@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/hosttune"
@@ -102,25 +101,46 @@ func (s *Store) DeleteHostCheckAcceptance(ctx context.Context, hostID, checkID s
 	return nil
 }
 
+// The two questions fillHostAcceptances asks, each a constant so that it is
+// parsed once: see hot.go. A list of hosts built into a statement is a new
+// statement for each length of the list, and the driver parses every statement it
+// is handed. Which host's acceptances are wanted, when one is, and every host's,
+// when more than one is.
+var (
+	hostAcceptancesOfOneQuery = hot(`SELECT ` + hostAcceptanceCols + ` FROM host_check_acceptances WHERE host_id = ? ORDER BY check_id`)
+	hostAcceptancesOfAllQuery = hot(`SELECT ` + hostAcceptanceCols + ` FROM host_check_acceptances ORDER BY host_id, check_id`)
+)
+
 // fillHostAcceptances loads every given host's acceptances with one query. An
 // expired row is still returned: judging reads the clock, and the row is what
 // lets the report say "it ended on" instead of silently counting again.
+//
+// One host is asked for by its ID. Several are asked for by reading every host's,
+// and keeping the ones that were wanted, because the only caller that asks for
+// several asks for all of them (ListHosts), a host holds at most
+// MaxHostCheckAcceptances, and a list of IDs would be a statement of its own
+// length. A caller that wanted a few of many hosts would read more than it keeps.
 func (s *Store) fillHostAcceptances(ctx context.Context, hosts []*Host) error {
 	byID := make(map[string]*Host, len(hosts))
-	args := make([]any, 0, len(hosts))
 	for _, h := range hosts {
 		h.Acceptances = nil
 		if _, dup := byID[h.ID]; dup {
 			continue
 		}
 		byID[h.ID] = h
-		args = append(args, h.ID)
 	}
-	if len(args) == 0 {
+	if len(byID) == 0 {
 		return nil
 	}
-	rows, err := s.read.QueryContext(ctx, `SELECT `+hostAcceptanceCols+` FROM host_check_acceptances WHERE host_id IN (`+
-		strings.TrimSuffix(strings.Repeat("?,", len(args)), ",")+`) ORDER BY host_id, check_id`, args...)
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if len(byID) == 1 {
+		rows, err = s.hotRead().Query(ctx, hostAcceptancesOfOneQuery, hosts[0].ID)
+	} else {
+		rows, err = s.hotRead().Query(ctx, hostAcceptancesOfAllQuery)
+	}
 	if err != nil {
 		return err
 	}
@@ -130,7 +150,9 @@ func (s *Store) fillHostAcceptances(ctx context.Context, hosts []*Host) error {
 		if err != nil {
 			return err
 		}
-		byID[a.HostID].Acceptances = append(byID[a.HostID].Acceptances, a)
+		if h := byID[a.HostID]; h != nil {
+			h.Acceptances = append(h.Acceptances, a)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
