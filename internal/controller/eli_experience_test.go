@@ -246,6 +246,45 @@ func TestAnotherFailureWhileAskingForMoreRoomIsNotHiddenBehindTheCut(t *testing.
 	}
 }
 
+// scriptedRepairModel answers each step with the next reply it was given, and
+// with the last one for as long as it is asked.
+type scriptedRepairModel struct{ replies []string }
+
+func (m *scriptedRepairModel) Answer(context.Context, []prrepair.Message) (string, error) {
+	reply := m.replies[0]
+	if len(m.replies) > 1 {
+		m.replies = m.replies[1:]
+	}
+	return reply, nil
+}
+
+// repairFiles serves the files a test names, and an empty file for any other
+// path, as the GitHub reader does.
+type repairFiles map[string]prrepair.File
+
+func (f repairFiles) ReadFile(_ context.Context, name string) (prrepair.File, error) {
+	return f[name], nil
+}
+
+// What a repair ends with is read from the words of its message, so a message
+// that names the source allowance has to land where the allowance does. A repair
+// that ran out of rounds on reads it was refused is a context limit, like the
+// source budget error it replaced, and the hint under it tells the person to
+// narrow the request: asking again sends the same snapshot, and the model asks
+// for the same reads.
+func TestARepairThatRanOutOfRoundsOnRefusedReadsEndsAsAContextLimit(t *testing.T) {
+	line := "0123456789abcde\n"
+	reader := repairFiles{"big.go": {Path: "big.go", Content: strings.Repeat(line, (40<<10)/len(line))}}
+	for _, name := range []string{"a.go", "b.go", "c.go", "d.go"} {
+		reader[name] = prrepair.File{Path: name, Content: strings.Repeat(line, prrepair.MaxFileBytes/len(line))}
+	}
+	model := &scriptedRepairModel{replies: []string{`{"read":["a.go","b.go","c.go","d.go"]}`, `{"read":["big.go"]}`}}
+	_, err := prrepair.Generate(context.Background(), model, reader, prrepair.Snapshot{}, "fix the failing check", false)
+	if err == nil || repairFailureCode(err.Error()) != "context_limit" {
+		t.Fatalf("error %v ends as %q, want context_limit", err, repairFailureCode(fmt.Sprint(err)))
+	}
+}
+
 type unresolvedRepairRun struct {
 	*repairFake
 	err error

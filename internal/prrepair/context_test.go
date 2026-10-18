@@ -280,6 +280,49 @@ func refusals(note string) string {
 	return after
 }
 
+// A model that keeps asking for what does not fit is stopped by the round limit,
+// and "reached the model-step limit" on its own sends whoever reads it to the
+// model, when it was the request that was too wide for the allowance. The error
+// says which reads were turned away, as the one it replaced did when the refusal
+// itself ended the repair, so that the person narrows the request and does not
+// simply ask again.
+func TestARepairThatRunsOutOfRoundsOnRefusedReadsNamesThem(t *testing.T) {
+	reader := files{}
+	for _, name := range []string{"a.go", "b.go", "c.go", "d.go"} {
+		reader[name] = File{Path: name, Content: source(MaxFileBytes), Mode: "100644"} // four of them are the whole allowance
+	}
+	for _, name := range []string{"x1.go", "x2.go", "x3.go", "x4.go", "x5.go"} {
+		reader[name] = File{Path: name, Content: source(40 << 10), Mode: "100644"}
+	}
+	for _, tc := range []struct {
+		name string
+		asks []string
+		want string
+	}{
+		{"one file", []string{"x1.go"}, "asked for `x1.go`, which"},
+		{"two files", []string{"x1.go", "x2.go"}, "asked for `x1.go` and `x2.go`, which"},
+		{"three files", []string{"x1.go", "x2.go", "x3.go"}, "asked for `x1.go`, `x2.go` and `x3.go`, which"},
+		{"more than three files", []string{"x1.go", "x2.go", "x3.go", "x4.go", "x5.go"}, "asked for `x1.go`, `x2.go`, `x3.go` and 2 more, which"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ask, err := json.Marshal(map[string][]string{"read": tc.asks})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The first round fills the allowance, and every round after it asks
+			// for more than is left.
+			values := []string{`{"read":["a.go","b.go","c.go","d.go"]}`}
+			for len(values) < MaxSteps {
+				values = append(values, string(ask))
+			}
+			_, err = Generate(context.Background(), &replies{values: values}, reader, Snapshot{}, "fix the failing check", false)
+			if err == nil || !strings.Contains(err.Error(), "model-step limit") || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "128 KiB source allowance") {
+				t.Fatalf("got %v, want the round limit, %q and the allowance", err, tc.want)
+			}
+		})
+	}
+}
+
 // "An empty list means already supplied" answers a model that asks for source it
 // holds, and it is wrong for one that asked for source it was refused: the list
 // is empty because nothing was supplied. Told both, a model can take a refusal
