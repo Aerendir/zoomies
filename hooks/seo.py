@@ -29,12 +29,13 @@ from the repository rather than written by hand, so neither can go stale:
   for: ``/auth.md`` (copied from ``hooks/auth.md``), the MCP server card, the
   two product skills, each folder copied under ``agent-skills/`` with the
   digest of its ``SKILL.md``, the ai-catalog index pointing at all of it, the
-  ``did.json`` its host identifier resolves to, and a
-  ``poppy.json``, and the site's own OAuth protected-resource metadata. Each
-  names something that is really serving. The authorization server's metadata
-  is the hosted service's and is mirrored at the edge (``site-worker/``), and
-  A2A metadata stays with the deployments that run it; ``/auth.md`` links to
-  the served one.
+  ``did.json`` its host identifier resolves to, the site's own OAuth
+  protected-resource metadata, an A2A agent card for discovery, which names
+  the MCP interface the product actually speaks and says that is what it
+  speaks, and a ``poppy.json``. Each names something that is really serving.
+  The authorization server's metadata is the hosted service's and is mirrored
+  at the edge (``site-worker/``), and A2A protocol metadata stays with the
+  deployments that run it; ``/auth.md`` links to the served one.
 
 * **A Markdown copy of every page**, at the page's own address plus
   ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
@@ -508,6 +509,54 @@ def _write_agent_discovery(config, site_url: str) -> None:
                 "bearerMethods": ["header"],
             },
             "documentation": f"{site_url}/connect-claude/",
+        }, fh, indent=2)
+        fh.write("\n")
+
+    with open(os.path.join(well, "agent-card.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "name": "Zoomies",
+            "description": (
+                "The agent surface of Zoomies, a self-hosted GitHub Actions runner fleet "
+                "controller: read the fleet's jobs, hosts, pools and runners, explain why "
+                "work queued, waited, failed or scaled, and act on it where a person "
+                "confirms. The url is the live demo deployment's MCP endpoint, and the "
+                "wire protocol it speaks is MCP over Streamable HTTP rather than A2A; "
+                "this card is for discovery and says so."
+            ),
+            "url": f"{_DEMO}/mcp",
+            "version": version,
+            "provider": {"organization": "Zoomies", "url": "https://zoomies.sh"},
+            "documentationUrl": f"{site_url}/connect-claude/",
+            "capabilities": {"streaming": False, "pushNotifications": False},
+            "defaultInputModes": ["application/json"],
+            "defaultOutputModes": ["application/json"],
+            "skills": [
+                {
+                    "id": "fleet-inspection",
+                    "name": "Fleet inspection",
+                    "description": "Read the fleet's jobs, hosts, pools and runners, and explain why work queued, waited, failed or scaled.",
+                    "tags": ["github-actions", "diagnostics", "fleet"],
+                },
+                {
+                    "id": "fleet-operation",
+                    "name": "Fleet operation",
+                    "description": "Propose and, with the person's confirmation, apply operator changes: remedies, runner drains, host throttles and host edits, each audited.",
+                    "tags": ["operations", "fleet"],
+                },
+                {
+                    "id": "workflow-advice",
+                    "name": "Workflow advice",
+                    "description": "Read a repository's workflow files and say what the fleet would run them on, and what changed between versions.",
+                    "tags": ["github-actions", "workflows"],
+                },
+            ],
+            "securitySchemes": {
+                "demoOidc": {
+                    "type": "openIdConnect",
+                    "openIdConnectUrl": f"{_DEMO}/.well-known/openid-configuration",
+                }
+            },
+            "security": [{"demoOidc": ["mcp:read", "mcp:operate"]}],
         }, fh, indent=2)
         fh.write("\n")
 
