@@ -492,9 +492,10 @@ days unless set).
 
 Under it, a **What got worse and what got better** card compares the range's
 two latest releases measure by measure, or says the sample is too small to rank
-when either has fewer than 30 jobs. It leaves cancelled and skipped jobs out of
-every figure and says so, so its counts can be lower than the table's. It
-compares releases, never periods, and is the answer
+when either has fewer than 30 jobs, or says to widen the range when fewer than
+two releases ran a job in it. It leaves cancelled and skipped jobs out of every
+figure read from the job rows, and says so, so its counts can be lower than the
+table's. It compares releases, never periods, and is the answer
 [`zoomies analyse compare`](cli.md#zoomies-analyse) prints.
 
 The same activity matrix as the Overview's draws the
