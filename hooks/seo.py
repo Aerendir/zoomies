@@ -530,6 +530,9 @@ def _write_agent_discovery(config, site_url: str) -> None:
             "capabilities": {"streaming": False, "pushNotifications": False},
             "defaultInputModes": ["application/json"],
             "defaultOutputModes": ["application/json"],
+            "supportedInterfaces": [
+                {"url": f"{_DEMO}/mcp", "transport": "MCP"},
+            ],
             "skills": [
                 {
                     "id": "fleet-inspection",
