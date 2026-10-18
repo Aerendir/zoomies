@@ -213,6 +213,8 @@ nav:
       - Runners in your home lab: home-lab.md
       - Runners in Docker: docker.md
       - Runners without Kubernetes: runners-without-kubernetes.md
+      - Ephemeral runners: ephemeral-runners.md
+      - Autoscaling runners: runner-autoscaling.md
       - Alternatives:
           - Overview: alternatives/index.md
           - Compared with ARC: actions-runner-controller.md
