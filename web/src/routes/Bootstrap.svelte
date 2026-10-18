@@ -359,7 +359,7 @@
   .card {
     position: relative;
     width: 100%;
-    max-width: 25rem;
+    max-width: var(--z-width-dialog-md);
     padding: var(--z-space-8);
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-lg);

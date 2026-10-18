@@ -10,7 +10,7 @@
  * and pressing it changes nothing about what the page says.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { FIXTURE, goto, reload } from './support/fixtures';
+import { FIXTURE, goto, reload, useClassic } from './support/fixtures';
 
 test.beforeEach(async ({ page }) => {
   await goto(page, '/', 'Overview');
@@ -617,6 +617,10 @@ test('the subtitle names the window the figures actually cover', async ({ page }
 test('the activity matrix heads the page, and every square says what it holds', async ({
   page,
 }) => {
+  // Mission Control, the default, leads with the pools; the matrix-first order
+  // is Classic's, and operational-layout.spec.ts holds Mission Control's.
+  await useClassic(page);
+  await goto(page, '/', 'Overview');
   await yearOfDays(page);
   const matrix = page.getByRole('region', { name: 'Activity matrix', exact: true });
   await expect(matrix).toBeVisible();

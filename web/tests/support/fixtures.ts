@@ -389,6 +389,42 @@ export function facetTrigger(page: Page, label: string, open = false): Locator {
   return page.getByRole('button', { name: label, expanded: open });
 }
 
+/**
+ * Start the page on Classic, the visual style these specs were written for.
+ *
+ * Mission Control is the default, so a test that measures Classic's type
+ * scale or its history-first layout says so rather than relying on an empty
+ * browser. Storage starts empty in every context, so this runs before the app.
+ */
+export async function useClassic(page: Page): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem('zoomies.ui-style', 'classic'));
+}
+
+/**
+ * Start the page following the operating system's colour scheme.
+ *
+ * Dark is the default, so a test that flips `prefers-color-scheme` to see both
+ * themes opts into System first.
+ */
+export async function useSystemTheme(page: Page): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem('zoomies.theme', 'system'));
+}
+
+/**
+ * Open the Jobs page's "Fleet context and activity" fold when the page has
+ * folded it away.
+ *
+ * Mission Control does that on a phone to put the rows first; the summary is
+ * hidden at other widths, where the section is simply open.
+ */
+export async function openFleetContext(page: Page): Promise<void> {
+  const fold = page.locator('details.fleet-context');
+  if ((await fold.count()) === 0 || (await fold.evaluate((el: HTMLDetailsElement) => el.open))) {
+    return;
+  }
+  await fold.locator(':scope > summary').click();
+}
+
 /** What the theme currently is: the attribute on `<html>` and what was stored. */
 export async function readTheme(
   page: Page,
@@ -426,10 +462,12 @@ export async function openAccountMenu(page: Page): Promise<Locator> {
  * Choose a theme the way an operator does: from the account menu, where the
  * three options are visible and the one in force is marked.
  */
-export async function chooseTheme(page: Page, choice: 'light' | 'dark'): Promise<void> {
+export async function chooseTheme(page: Page, choice: 'light' | 'dark' | 'system'): Promise<void> {
   const menu = await openAccountMenu(page);
-  await menu.getByRole('menuitemradio', { name: choice === 'dark' ? 'Dark' : 'Light' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', choice);
+  const name = choice === 'dark' ? 'Dark' : choice === 'light' ? 'Light' : 'System';
+  await menu.getByRole('menuitemradio', { name }).click();
+  if (choice === 'system') await expect(page.locator('html')).not.toHaveAttribute('data-theme');
+  else await expect(page.locator('html')).toHaveAttribute('data-theme', choice);
 }
 
 /**
