@@ -209,6 +209,21 @@
     remember(EXPANDED_KEY, openCards);
   }
 
+  /*
+   * The button is offered only while two or more cards are on show, and that
+   * count can fall with nobody pressing anything: a host is deleted, or a report
+   * ages out of the filter on the page's clock. Whoever was on the button would
+   * be dropped on the page when it went, so focus goes to the filter that is on,
+   * which is where showAll() sends it too. This runs before the page changes,
+   * because afterwards the button is gone, and so is the proof that it held focus.
+   */
+  $effect.pre(() => {
+    const chip = `hosts-health-${filter}`;
+    if (shownIds.length > 1) return;
+    if (!document.activeElement?.classList.contains('expand-button')) return;
+    void tick().then(() => document.getElementById(chip)?.focus());
+  });
+
   /* -- the machines behind the hosts -------------------------------------------
    * Fetched here and kept out of the fleet cache deliberately: a fourth
    * collection there would cost every signed-in tab a request on every
@@ -735,14 +750,23 @@
            does. Not offered for a page of one card: that card's own Details is
            the whole of it, and a second button for the same press is noise. -->
       {#if shownIds.length > 1}
-        <Button
-          variant="ghost"
-          size="sm"
-          class="expand-button"
-          icon={allShownOpen ? ChevronsDownUp : ChevronsUpDown}
-          help={toggleShownHelp}
-          onclick={toggleShownCards}>{allShownOpen ? 'Collapse all' : 'Expand all'}</Button
-        >
+        <div class="expand">
+          <!-- Which cards "all" means, in words on the page as well as in the
+               tooltip: a phone has no hover, and "Collapse all" that leaves cards
+               open out of sight would be a surprise. Said only once a filter has
+               taken some away. -->
+          {#if shownIds.length < hosts.length}
+            <span class="expand-hint">Acts on the {pluralise(shownIds.length, 'host')} shown</span>
+          {/if}
+          <Button
+            variant="ghost"
+            size="sm"
+            class="expand-button"
+            icon={allShownOpen ? ChevronsDownUp : ChevronsUpDown}
+            help={toggleShownHelp}
+            onclick={toggleShownCards}>{allShownOpen ? 'Collapse all' : 'Expand all'}</Button
+          >
+        </div>
       {/if}
     </div>
     <!--
@@ -867,10 +891,21 @@
     flex-wrap: wrap;
     gap: var(--z-space-2);
   }
-  /* At the end of the row whether it shares the row with the chips or has wrapped
-     onto a line of its own. */
-  .toolbar :global(.expand-button) {
+  /* The hint and the button are one unit, at the end of the row whether it shares
+     the row with the chips or has wrapped onto a line of its own, and they wrap
+     apart from each other only when a narrow window leaves no room for both. */
+  .expand {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--z-space-1) var(--z-space-3);
     margin-inline-start: auto;
+  }
+  .expand-hint {
+    font-size: var(--z-text-xs);
+    color: var(--z-text-muted);
+    text-align: end;
   }
   .filter {
     display: inline-flex;

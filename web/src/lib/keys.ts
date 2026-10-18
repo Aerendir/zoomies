@@ -95,6 +95,23 @@ export function focusableWithin(root: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * Whether focus is still the closing overlay's to give back.
+ *
+ * It is when it has nowhere to be (on the body, where the browser leaves it once
+ * the focused control is removed) or is still inside the panel that is closing.
+ * Anywhere else, something has claimed it since: "Ask Eli" closes a drawer and
+ * opens a panel that is not modal in the same breath, and handing focus back to
+ * the opener a frame later takes it from the panel that has only just opened.
+ */
+export function focusIsUnclaimed<T extends object>(
+  active: T | null,
+  body: T,
+  closing: { contains(other: T): boolean },
+): boolean {
+  return active === null || active === body || closing.contains(active);
+}
+
+/**
  * A Svelte action that traps Tab inside `node` and restores focus to whatever
  * was focused before, on teardown. Dialogs and drawers both use it; nothing
  * else should need to.
@@ -165,6 +182,7 @@ export function trapFocus(node: HTMLElement, initial?: HTMLElement | null) {
       // `inert` it put on the rest of the page, and an inert element cannot
       // take focus -- restoring in the same turn silently did nothing.
       requestAnimationFrame(() => {
+        if (!focusIsUnclaimed<Element>(document.activeElement, document.body, node)) return;
         // An overlay opened by a redirect rather than a click -- GitHub sending
         // the operator back with a code in the URL -- was focused on <body>
         // when it mounted, and focusing <body> back is a no-op that leaves the

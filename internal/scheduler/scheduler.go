@@ -449,11 +449,18 @@ type tick struct {
 func assign(pools []*store.Pool, jobs []*store.Job, targets map[string]string) (map[string][]*store.Job, []UnmatchedJob) {
 	demand := make(map[string][]*store.Job, len(pools))
 	var unmatched []UnmatchedJob
+	var prepared [][]string
 	for _, j := range sortedJobs(jobs) {
 		if j.State != store.JobQueued || j.Provisioning != "" {
 			continue
 		}
-		p, reason := bestPool(pools, j, targets)
+		if prepared == nil {
+			// Prepared for the first job that needs it. Most passes find nothing
+			// waiting, and they should not pay to get the pools ready for a
+			// comparison that never happens.
+			prepared = preparedLabels(pools)
+		}
+		p, reason := bestOf(pools, prepared, j, store.NormalizeLabels(j.Labels), targets)
 		if p == nil {
 			unmatched = append(unmatched, UnmatchedJob{Job: j, Reason: reason})
 			continue

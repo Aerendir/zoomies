@@ -351,7 +351,7 @@ func (c *Candidate) Discard() {
 func (o *SelfUpdateOptions) verifyChecksums(ctx context.Context, tag, sums string) error {
 	keys := strings.TrimSpace(o.ReleaseKey)
 	if keys == "" {
-		fmt.Fprintf(o.Out, "This build has no release key built in, so %s is not held to a signature; its checksums are taken on trust (docs/release-signing.md).\n", tag)
+		fmt.Fprintf(o.Out, "This build has no release key built in, so %s is not held to a signature; its checksums are taken on trust (docs/upgrading.md#signing-releases).\n", tag)
 		return nil
 	}
 	if tag == "dev" {

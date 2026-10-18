@@ -284,18 +284,30 @@ test('a failure fixed between review and repair replaces the stale offer with it
         : ready,
     }),
   );
+  // Once the checks have passed the controller refuses every repair. Playwright
+  // runs only the latest route that matches, so the refused attempt is recorded
+  // here: the recorder in mockFailure sits behind this route and never sees it,
+  // and an assertion on that recorder alone cannot fail. A request made before
+  // the checks pass falls through to it, and would be queued.
+  const refused: unknown[] = [];
   await page.route(/\/api\/v1\/assistant\/repairs$/, (route) => {
-    if (route.request().method() !== 'POST') return route.fulfill({ json: { items: [] } });
-    fixed = true;
+    if (route.request().method() !== 'POST' || !fixed) return route.fallback();
+    refused.push(route.request().postDataJSON());
     return route.fulfill({
       status: 409,
       json: { code: 'conflict', message: 'Checks passed since review. No repair was started.' },
     });
   });
   await page.goto(`/repairs?repo=${repo}&run=1234`);
-  await page.getByRole('button', { name: 'Fix with Eli', exact: true }).click();
+  const fix = page.getByRole('button', { name: 'Fix with Eli', exact: true });
+  await expect(fix).toBeVisible();
+  // The checks pass after the repair was reviewed and before it is asked for.
+  fixed = true;
+  await fix.click();
   await expect(page.getByRole('heading', { name: 'Already fixed' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+  await expect(fix).toHaveCount(0);
+  // One attempt, for the head that was reviewed, and its refusal ended it.
+  expect(refused).toEqual([{ repo, pull_number: 17, head_sha: 'reviewed-head', instruction: '' }]);
   expect(model.repairs).toEqual([]);
 });
 

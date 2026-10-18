@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -50,6 +51,16 @@ type benchFleet struct {
 	sized bool
 }
 
+// benchJob is a job as the store hands it to the scheduler, with its labels put
+// through NormalizeLabels as every job's are on the way in. The tests' own
+// queued helper leaves them as given, and labels out of order are ones the
+// matching has to normalise again at every comparison, which no job that came
+// from the store ever needs.
+func benchJob(j *store.Job) *store.Job {
+	j.Labels = store.NormalizeLabels(j.Labels)
+	return j
+}
+
 // snapshot builds the fleet: every pool is asked for by a label of its own, and
 // its runners are spread over the hosts in turn, which is what each host's
 // active count is then taken from.
@@ -86,7 +97,7 @@ func (f benchFleet) snapshot(sc benchScale) Snapshot {
 				r = idleRunner(id, p, time.Minute)
 			} else {
 				r = testRunner(id, p, store.RunnerBusy, 10*time.Minute)
-				job := queued("job_"+id, 5*time.Minute, "self-hosted", name)
+				job := benchJob(queued("job_"+id, 5*time.Minute, "self-hosted", name))
 				job.State, job.RunnerID = store.JobInProgress, id
 				jobs = append(jobs, job)
 			}
@@ -98,12 +109,12 @@ func (f benchFleet) snapshot(sc benchScale) Snapshot {
 		}
 		if f.queued {
 			for k := range sc.jobsPerPool {
-				jobs = append(jobs, queued(fmt.Sprintf("job_%s_wait%02d", name, k), time.Minute, "self-hosted", name))
+				jobs = append(jobs, benchJob(queued(fmt.Sprintf("job_%s_wait%02d", name, k), time.Minute, "self-hosted", name)))
 			}
 		}
 		if f.stray {
 			for k := range sc.jobsPerPool {
-				jobs = append(jobs, queued(fmt.Sprintf("job_%s_stray%02d", name, k), time.Minute, "self-hosted", "no-such-pool"))
+				jobs = append(jobs, benchJob(queued(fmt.Sprintf("job_%s_stray%02d", name, k), time.Minute, "self-hosted", "no-such-pool")))
 			}
 		}
 	}
@@ -202,6 +213,20 @@ func BenchmarkDecide(b *testing.B) {
 					first := Decide(s)
 					if msg := sit.expect(sc, first); msg != "" {
 						b.Fatalf("this fleet is not a %s one: %s", sit.name, msg)
+					}
+					// What the store hands over is already normalised, and the
+					// matching has a fast path for exactly that. A fleet whose
+					// labels are not would time the slow path, which no stored
+					// job or pool takes.
+					for _, j := range s.Jobs {
+						if !slices.Equal(j.Labels, store.NormalizeLabels(j.Labels)) {
+							b.Fatalf("job %s has labels the store would have normalised: %v", j.ID, j.Labels)
+						}
+					}
+					for _, p := range s.Pools {
+						if !slices.Equal(p.Labels, store.NormalizeLabels(p.Labels)) {
+							b.Fatalf("pool %s has labels the store would have normalised: %v", p.Name, p.Labels)
+						}
 					}
 					if sit.fleet.sized && Reserved(s.Hosts[0], s.Pools, s.Runners).MemoryMB == 0 {
 						b.Fatal("the hosts report their size but the runners on them are charged nothing against it")

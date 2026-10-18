@@ -46,6 +46,7 @@
   import HostVitals from './HostVitals.svelte';
   import ResourceBar from './ResourceBar.svelte';
   import { backendTrouble } from './backends';
+  import { committedNotice } from './committed';
   import { byHandLink, hostUpdateWords, skewFact } from './update';
   import { hostVitals } from './vitals';
 
@@ -380,6 +381,10 @@
     }
     return rows.length > 0 ? rows : null;
   });
+  // The bars above are detail, but what they explain is not: a free slot that a
+  // nearly promised host cannot fill is a reason, and a reason stays on the
+  // closed card (committed.ts says when).
+  const committedNote = $derived(committedNotice(resources, free));
 
   /** One decimal at most: a CPU share of 3.75 is a fact, 3.7500000001 is not. */
   function round(n: number): string {
@@ -672,6 +677,12 @@
         <span class="muted">Failed <RelativeTime value={pullFailed.observed_at} plain />.</span>
       </p>
     {/if}
+    {#if committedNote}
+      <!-- Pending, like the throttle: the fleet's own reservations, which clear
+         as the runners holding them finish. Only a host with a free slot says
+         it, so a full host does not carry it for being full. -->
+      <p class="cordoned throttled" data-testid="host-committed-note">{committedNote}</p>
+    {/if}
 
     {#if noBackend}
       <!-- Out of the fold for as long as it is true, and in the same place
@@ -705,6 +716,12 @@
         >
       {/if}
     </div>
+    {#if slotsNote && !isThrottled}
+      <!-- Why the slots are the number they are, under the bar that counts them
+         and not behind Details: a cap the operator set, or a machine too small
+         for more, is the answer to "why is this host full at three". -->
+      <p class="note" data-testid="host-slots-note">Slot count: {slotsNote}</p>
+    {/if}
   </div>
 
   <div class="vitals-slot">
@@ -847,12 +864,6 @@
             >
           {/if}
         </p>
-
-        {#if slotsNote && !isThrottled}
-          <!-- Why the slots are the number they are: said here rather than beside
-             the slot bar, where a clause this long ran the line on to three. -->
-          <p class="note" data-testid="host-slots-note">Slot count: {slotsNote}</p>
-        {/if}
       </div>
 
       {#if resources}
@@ -1217,6 +1228,11 @@
     font-weight: var(--z-weight-semibold);
     color: var(--z-text);
     overflow-wrap: anywhere;
+    /* Two lines reserved: a long name wraps and a short one does not. The
+       subgrid below lines the sections of the cards in a row up, but not what is
+       inside one, so without this the pills under the name start a line lower on
+       the card whose name wrapped. */
+    min-height: calc(2 * var(--z-leading-lg));
   }
   .badges {
     display: flex;

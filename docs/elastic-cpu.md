@@ -360,8 +360,9 @@ The controller records what each agent advertises (`features` and
 `elastic_cpu` on the host), the editor's **Size** section says whether every host the
 pool can land on can lend CPU and names the ones that cannot, the controller's
 check at the foot of the page warns (`pool.elastic_cpu_unsupported`) with the same names, and each such
-host's card carries a **Cannot lend CPU** badge with the upgrade command folded
-beneath it. Nothing else about a host is part of it; no slot, reserve or
+host's card carries a **Cannot lend CPU** badge under **Details**, with the
+upgrade command folded at the foot of the card. Nothing else about a host is part
+of it; no slot, reserve or
 capacity setting changes for an elastic pool.
 
 ## What you see

@@ -231,6 +231,14 @@ unset ZOOMIES_JITCONFIG ACTIONS_RUNNER_INPUT_JITCONFIG ZOOMIES_RUNNER_TOKEN ZOOM
 # console, before the console's 1024-character truncation. Keep those lines and
 # discard other verbose traces before they can overwhelm the log relay. The
 # version marker lets the UI distinguish an older image from a quiet build.
+#
+# The log is only live if each line leaves the filter as it arrives, which takes
+# an awk that reads a pipe a line at a time. gawk does, and both families of
+# image carry it for that reason (deploy/runner-packages.sh). mawk does not: it
+# waits for a large block of input before it looks at any (256 KiB in the
+# release Ubuntu 24.04 ships), however often the program flushes, so a build that
+# printed little showed an empty log until it ended. Its -W interactive mode is
+# no way round that: in that same release it drops lines after one over 4 KiB.
 filter_runner_output() {
   awk '
     /^\[(WORKER|RUNNER|LISTENER) [^]]+\] / {
@@ -321,6 +329,16 @@ while :; do
   fi
 done
 # Drain the console pipe before PID 1 exits and the container stops its reader.
-wait "$output_filter" || true
+#
+# The filter ends once nothing holds the pipe's write end, and a step can leave
+# something that does: a daemon started under sudo outlives the runner, which
+# cannot sweep it up because sudo resets the environment its tracking id lives
+# in. Waiting for the filter outright then held PID 1 until that daemon went, and
+# the status below was never reported. So the filter gets a few seconds, which
+# is long for what a pipe has left in it, and the status is reported either way.
+drain_by=$((SECONDS + 3))
+while kill -0 "$output_filter" 2>/dev/null && [ "$SECONDS" -lt "$drain_by" ]; do
+  sleep 0.1 || :
+done
 log "runner exited with status ${status}"
 exit "$status"

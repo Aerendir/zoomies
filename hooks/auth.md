@@ -13,14 +13,20 @@ account to begin with.
 ## Flows
 
 - **Consent first**: every credential an agent gets here was approved by a
-  person, on a page, with the second factor behind them. There is no
-  self-issued or anonymous registration on either half of the product.
+  person, on a page. The hosted service's page is described in the walkthrough
+  below. A self-hosted controller's is its ordinary sign-in, which asks for a
+  second factor only of an account that has two-step verification turned on
+  (or where the instance requires it) and never of a single-sign-on account,
+  whose provider owns that step. Registering a client takes no sign-in on
+  either half, but a registered client holds no credential until a person
+  approves it, so no credential is self-issued or anonymous.
 - **Agent as an OAuth client** (the hosted service's staff console, and the
   self-hosted controller's MCP): dynamic client registration, an
   authorization-code flow with PKCE, a consent page between the request and
   the grant. The full walk is in [Registration](#registration-a-complete-flow).
-- **Operator-issued bearer tokens** (the self-hosted REST interface): a
-  long-lived token with explicit scopes, created by an operator.
+- **API tokens** (the self-hosted REST interface): a bearer token that anybody
+  signed in creates for themselves, with a role no higher than their own,
+  optionally narrowed by scopes and optionally expiring.
 - In the auth.md vocabulary: `identity_assertion` and its ID-JAG and
   verified-email forms are not enabled, `anonymous` is not enabled, and
   `service_auth` is replaced by the consent ceremony above. The
@@ -60,7 +66,9 @@ its own addresses. The walkthrough below registers an agent against it.
   call.
 - `mcp:operate`: on a self-hosted controller, what an operator may change,
   implying `mcp:read`.
-- The REST interface's tokens carry explicit scopes in `resource.verb` form.
+- The REST interface's tokens may carry scopes, written `resource:verb` (for
+  example `hosts:read`, or `pools:*` for every verb on pools). A scope only
+  narrows the token's role; with none, a token has whatever its role allows.
 
 ## Registration: a complete flow
 
@@ -166,9 +174,9 @@ The same shape, at the deployment's own address, and no mirror: the
 controller is its own authorization server and resource server. The scope
 names differ (`mcp:read`, `mcp:operate`), and dynamic client registration is
 part of the metadata only while the deployment's
-`security.mcp_open_registration` setting is on; the default is off, and the
-operator adds the MCP client by hand first. The [public demo](https://demo.zoomies.sh/)
-serves the whole chain live:
+`security.mcp_open_registration` setting is on; the default is on, and an
+operator who turns it off adds the MCP client by hand first. The
+[public demo](https://demo.zoomies.sh/) serves the whole chain live:
 
 ```
 curl -s https://demo.zoomies.sh/.well-known/oauth-protected-resource
@@ -180,15 +188,17 @@ same walk by hand, one screen at a time.
 
 ## Credentials for the REST interface
 
-An operator creates long-lived API tokens in the controller's settings. Each
-token carries an explicit scope list in `resource.verb` form (what a viewer
-may read, what an operator may change), and every request presents it as a
-bearer token:
+Anybody signed in to the controller creates API tokens for themselves, on
+**Settings → API tokens** or with `zoomies tokens create`. A token has a role (a
+viewer's unless another is asked for, and never above the creator's own) and
+may carry scopes in `resource:verb` form that narrow it to part of that role;
+with none, it has whatever the role allows. It may be given an expiry. Every
+request presents it as a bearer token:
 
     Authorization: Bearer <token>
 
-The token answers as the role its scopes give it, never more; a route the
-scope does not cover is refused, and the refusal says which one is missing.
-There is no agent account to create: the token is granted by the person who
-runs the instance, the instance never learns anything else about an agent,
-and revoking it disconnects the agent at once.
+The token answers as its role, narrowed by its scopes if it has any, never
+more; a route the role or the scopes do not cover is refused, and the refusal
+says which one is missing. There is no agent account to create: the token is
+granted by a person with an account on the instance, the instance never learns
+anything else about an agent, and revoking it disconnects the agent at once.

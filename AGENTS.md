@@ -23,6 +23,7 @@ structural; it explains the shape and the reasons for it.
 make build-nogui   # build without rebuilding the UI (the fast inner loop)
 make build         # build the UI and embed it (needs npm)
 make test          # go test -race -count=1 ./...
+make bench         # the benchmarks, six runs each; compare two runs with benchstat (BENCH, BENCH_PKGS, BENCH_COUNT narrow it)
 make lint          # go vet, gofmt check, staticcheck if present, UI lint
 make fmt           # gofmt + prettier
 make dev           # controller with auth off, on :8080, for UI work
@@ -37,8 +38,9 @@ make screenshots   # recapture docs/screenshots from the real UI, both themes (n
 `internal/api/webdist`, which is a build product. Run `make build-nogui` once,
 it writes a placeholder, before any plain Go command (`go build`, `go vet`,
 `go test`) that compiles that package. The `make` targets that run Go (`test`,
-`test-short`, `cover`, `lint`, `generate`) write the placeholder themselves, and
-never over a real UI build. CI does the same thing as its first step.
+`test-short`, `bench`, `cover`, `lint`, `generate`) write the placeholder
+themselves, and never over a real UI build. CI does the same thing as its first
+step.
 
 Go 1.27.1 or later (`go.mod` sets the floor; CI builds with 1.27.2), Node 22 or
 later. Node is a build-time dependency only; the shipped binary is
@@ -46,6 +48,12 @@ self-contained and static (`CGO_ENABLED=0`, pure-Go SQLite).
 
 Run a single test with `go test -run TestName ./internal/pkg/`. `make test-e2e`
 needs real GitHub credentials and skips itself without them.
+
+A change made for speed is held to a number: run `make bench` before and after
+(on an otherwise idle machine, once per package, `tee`d to files) and put the
+`benchstat` comparison in the commit message. `CONTRIBUTING.md` has the
+commands. A benchmark checks that its scenario is the one its name describes
+before it times anything; keep that when adding one.
 
 ## Package boundaries
 
@@ -264,4 +272,4 @@ Issues live in GitHub Issues for eyupio/zoomies, driven by the `gh` CLI. See `do
 
 ### Domain docs
 
-Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: one `GLOSSARY.md` at the repo root, and the numbered decision records in `roadmap/decisions/`. See `docs/agents/domain.md`.

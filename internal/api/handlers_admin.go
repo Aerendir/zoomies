@@ -159,7 +159,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.auth.Auditor().Created(r.Context(), Identity(r.Context()), "user", u.ID, newUserResponse(u))
-	writeJSON(w, http.StatusCreated, newUserResponse(u))
+	writeCreated(w, r, u.ID, newUserResponse(u))
 }
 
 type updateUserRequest struct {

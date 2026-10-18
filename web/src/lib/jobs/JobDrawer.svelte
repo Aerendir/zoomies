@@ -125,14 +125,18 @@
   let forceCancel = $state(false);
 
   async function acknowledge(): Promise<void> {
-    if (!job?.id || acking) return;
+    // The toast outlives the selection: Escape clears `job`, and another row's
+    // drawer may be open by the time Undo is pressed. Undo is for this failure,
+    // so it carries it rather than reading whatever the drawer shows by then.
+    const target = job;
+    if (!target?.id || acking) return;
     acking = true;
     try {
-      await acknowledgeJob(job.id);
+      await acknowledgeJob(target.id);
       toasts.success(
         'Marked as known',
         'The failure stays in the failed view; a re-run that passes is what settles it.',
-        { label: 'Undo', run: () => void reopen() },
+        { label: 'Undo', run: () => void reopen(target) },
       );
     } catch (cause) {
       toasts.fromError(cause, 'Could not mark the failure as known');
@@ -141,11 +145,11 @@
     }
   }
 
-  async function reopen(): Promise<void> {
-    if (!job?.id || acking) return;
+  async function reopen(target: Job): Promise<void> {
+    if (!target.id || acking) return;
     acking = true;
     try {
-      await reopenJobAttention(job.id);
+      await reopenJobAttention(target.id);
       toasts.success('Back on the attention list', 'Whoever looks next will see this failure.');
     } catch (cause) {
       toasts.fromError(cause, 'Could not put the failure back');
@@ -451,7 +455,12 @@
     <div class="footer-actions">
       {#if canAcknowledge}
         {#if acknowledged}
-          <Button variant="secondary" icon={Undo2} loading={acking} onclick={() => void reopen()}>
+          <Button
+            variant="secondary"
+            icon={Undo2}
+            loading={acking}
+            onclick={() => job && void reopen(job)}
+          >
             Needs attention again
           </Button>
         {:else}

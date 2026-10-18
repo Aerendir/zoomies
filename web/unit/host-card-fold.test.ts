@@ -106,3 +106,16 @@ test('the lists it is handed are never changed, however many cards it opens', ()
   assert.deepEqual(shown, ['host_b', 'host_c']);
   assert.notEqual(next, held);
 });
+
+test('the lists it is handed are not changed when it prunes or closes either', () => {
+  // The test above has nothing to prune and only opens, so a version that tidied
+  // the stored list in place, or closed cards in place and handed the same array
+  // back, would pass it and then repaint nothing. Frozen lists make any edit in
+  // place throw, in both directions and with a host that has gone in the way.
+  const held = Object.freeze(['host_gone', 'host_a', 'host_b']);
+  const shown = Object.freeze(['host_a']);
+  const known = Object.freeze(['host_a', 'host_b']);
+  assert.deepEqual(setAllExpanded(held, shown, false, known), ['host_b']);
+  assert.deepEqual(setAllExpanded(held, shown, true, known), ['host_a', 'host_b']);
+  assert.deepEqual(held, ['host_gone', 'host_a', 'host_b']);
+});

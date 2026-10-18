@@ -18,6 +18,9 @@ function host(over: Partial<Host> = {}): Host {
     resources_known: true,
     cpus: 8,
     memory_mb: 16 * GIB,
+    // What the scheduler may place: the machine less the 819 MB (5%) a host of
+    // this size always holds back. The same figure the demo fleet reports.
+    allocatable_memory_mb: 16 * GIB - 819,
     disk_total_mb: 220 * GIB,
     disk_free_mb: 62 * GIB,
     usage_fresh: true,
@@ -56,50 +59,143 @@ test('a healthy host reports CPU, memory and disk as shares of the machine, in t
   assert.equal(vitals.unavailable, '', 'something is measured, so nothing needs explaining');
 });
 
-test('CPU and memory turn tight at the scheduler pressure line, and not a point before it', () => {
-  // From 85% the scheduler places one runner at a time, so that is where the
-  // figure stops being just a number. ResourceBar's 90% is a different rule.
+test('CPU turns tight at the scheduler pressure line, counted without the CPU lent to runners', () => {
+  // From 85% the scheduler places one runner at a time, but it judges CPU
+  // without what elastic CPU lent to runners: that is load the plan chose, and
+  // counting it would have a boost trip the very limit that then withdraws it
+  // (hostUnderCPUPressure reads UnlentCPUPercent). ResourceBar's 90% is a
+  // different rule.
   const cases: {
     name: string;
-    over: Partial<Host>;
-    key: VitalKey;
+    cpu: number;
+    lent?: number;
     value: string;
     tight: boolean;
   }[] = [
-    {
-      name: 'cpu at the line',
-      over: { usage: { cpu_percent: 85, memory_available_mb: 9830 } },
-      key: 'cpu',
-      value: '85%',
-      tight: true,
-    },
-    {
-      name: 'cpu a point under',
-      over: { usage: { cpu_percent: 84, memory_available_mb: 9830 } },
-      key: 'cpu',
-      value: '84%',
-      tight: false,
-    },
-    {
-      name: 'memory exactly at the line',
-      over: { memory_mb: 10000, usage: { cpu_percent: 10, memory_available_mb: 1500 } },
-      key: 'memory',
-      value: '85%',
-      tight: true,
-    },
-    {
-      name: 'memory a megabyte under it',
-      over: { memory_mb: 10000, usage: { cpu_percent: 10, memory_available_mb: 1501 } },
-      key: 'memory',
-      value: '85%',
-      tight: false,
-    },
+    { name: 'at the line', cpu: 85, value: '85%', tight: true },
+    { name: 'a point under', cpu: 84, value: '84%', tight: false },
+    { name: 'busy, with 30 of it lent to runners', cpu: 92, lent: 30, value: '92%', tight: false },
+    { name: 'busy, with only 5 of it lent', cpu: 92, lent: 5, value: '92%', tight: true },
+    { name: 'at the line, with a point of it lent', cpu: 85, lent: 1, value: '85%', tight: false },
   ];
   for (const c of cases) {
-    const found = vital(hostVitals(host(c.over), NOW), c.key);
+    const usage: Host['usage'] = { cpu_percent: c.cpu, memory_available_mb: 9830 };
+    if (c.lent !== undefined) usage.lent_cpu_percent = c.lent;
+    const found = vital(hostVitals(host({ usage }), NOW), 'cpu');
     assert.equal(found.value, c.value, c.name);
     assert.equal(found.tight, c.tight, c.name);
   }
+});
+
+test('CPU is compared as the unrounded figure, so a bar that reads 85% can be a fraction under the line', () => {
+  // The scheduler compares what the agent measured, not what the card prints:
+  // hostUnderCPUPressure reads the raw percentage. Rounding first would make the
+  // card amber on a host the scheduler is still placing on as normal, and the
+  // docs say what is compared so that the value beside the bar is not mistaken
+  // for it.
+  const under = vital(
+    hostVitals(host({ usage: { cpu_percent: 84.6, memory_available_mb: 9830 } }), NOW),
+    'cpu',
+  );
+  assert.equal(under.value, '85%', 'it reads 85');
+  assert.equal(under.tight, false, 'and is not past the line');
+  const at = vital(
+    hostVitals(host({ usage: { cpu_percent: 85.0, memory_available_mb: 9830 } }), NOW),
+    'cpu',
+  );
+  assert.equal(at.tight, true);
+  assert.match(at.summary, /From 85%/, 'what it says is exactly the line it passed');
+});
+
+test('a busy CPU that is mostly lent says why it is not amber', () => {
+  // A bar at 92% that is not amber looks like a bug unless it says what is
+  // excluded, and the capacity map beside it still draws the raw figure.
+  const lent = vital(
+    hostVitals(
+      host({ usage: { cpu_percent: 92, memory_available_mb: 9830, lent_cpu_percent: 30 } }),
+      NOW,
+    ),
+    'cpu',
+  );
+  assert.match(lent.summary, /30% of it is CPU lent to runners/);
+  assert.doesNotMatch(lent.summary, /one runner at a time/, 'it is not under pressure');
+  const pressed = vital(
+    hostVitals(
+      host({ usage: { cpu_percent: 92, memory_available_mb: 9830, lent_cpu_percent: 5 } }),
+      NOW,
+    ),
+    'cpu',
+  );
+  assert.match(pressed.summary, /one runner at a time/);
+  assert.match(pressed.summary, /not lent/, 'the line it passed leaves lent CPU out');
+});
+
+test('memory is tight at the host reserve the scheduler holds starts at, not at 85% used', () => {
+  // The scheduler has no pressure line for memory. It holds new starts when
+  // available memory is at or below the host's reserve (HostAdmissionReason),
+  // which is 5% of the machine with a 512 MB floor, and a gigabyte more on the
+  // host the controller itself runs on. A 16 GiB host at 94% used has 983 MB
+  // left against a reserve of 819 MB and places as normal.
+  const cases: {
+    name: string;
+    over: Partial<Host>;
+    available: number;
+    value: string;
+    tight: boolean;
+  }[] = [
+    { name: '94% used, above the reserve', over: {}, available: 983, value: '94%', tight: false },
+    { name: 'a megabyte above the reserve', over: {}, available: 820, value: '95%', tight: false },
+    { name: 'exactly at the reserve', over: {}, available: 819, value: '95%', tight: true },
+    { name: 'under the reserve', over: {}, available: 100, value: '99%', tight: true },
+    {
+      // memory_mb less allocatable_memory_mb is the reserve, floors included,
+      // whoever set it, so the card never has to know the floors.
+      name: 'a reserve the operator raised to 4 GB',
+      over: { allocatable_memory_mb: 16 * GIB - 4096 },
+      available: 4096,
+      value: '75%',
+      tight: true,
+    },
+    {
+      name: 'the same host just above its raised reserve',
+      over: { allocatable_memory_mb: 16 * GIB - 4096 },
+      available: 4097,
+      value: '75%',
+      tight: false,
+    },
+    {
+      name: 'the controller host, which keeps a gigabyte more back',
+      over: { allocatable_memory_mb: 16 * GIB - 1843 },
+      available: 1843,
+      value: '89%',
+      tight: true,
+    },
+    {
+      // A reserve at or past the machine leaves nothing to place on, and the
+      // API leaves allocatable_memory_mb out rather than send a zero.
+      name: 'a reserve that covers the whole machine',
+      over: { allocatable_memory_mb: undefined },
+      available: 9830,
+      value: '40%',
+      tight: true,
+    },
+  ];
+  for (const c of cases) {
+    const usage = { cpu_percent: 10, memory_available_mb: c.available };
+    const found = vital(hostVitals(host({ ...c.over, usage }), NOW), 'memory');
+    assert.equal(found.value, c.value, c.name);
+    assert.equal(found.tight, c.tight, c.name);
+  }
+});
+
+test('a memory figure at the reserve says it is the reserve, not a pressure line', () => {
+  const at = vital(
+    hostVitals(host({ usage: { cpu_percent: 10, memory_available_mb: 819 } }), NOW),
+    'memory',
+  );
+  assert.match(at.summary, /at or below the 819 MB/);
+  assert.match(at.summary, /holds new starts/);
+  assert.doesNotMatch(at.summary, /85%|one runner at a time/, 'that is the CPU rule');
 });
 
 test('disk is tight by the doctor rule for a low disk, not by the pressure line', () => {
@@ -198,6 +294,33 @@ test('an agent that reports neither usage nor its machine is explained once, not
   );
 });
 
+test('a throttle that outlives its sample is not called impossible', () => {
+  // A throttle is lifted only after ten minutes without a fresh sample, so a
+  // healthy host whose usage has gone stale can still be on a rung, and the card
+  // says so in the sentence above this one. "This host cannot be throttled" beside
+  // it would be untrue, which is why the card once said the throttle stands on its
+  // last measurements instead.
+  const silentButThrottled = host({
+    usage: undefined,
+    usage_fresh: false,
+    disk_total_mb: undefined,
+    disk_free_mb: undefined,
+    throttle: { level: 1 },
+  });
+  const vitals = hostVitals(silentButThrottled, NOW);
+  assert.match(vitals.unavailable, /throttle stands on its last measurements/);
+  assert.match(vitals.unavailable, /ten minutes without a fresh one/);
+  assert.doesNotMatch(vitals.unavailable, /cannot be throttled/);
+  // The rows that go unmeasured say the same of themselves.
+  assert.doesNotMatch(vital(vitals, 'cpu').summary, /cannot be throttled/);
+  assert.match(vital(vitals, 'memory').summary, /throttle stands on its last measurements/);
+
+  // A host with no throttle keeps the sentence that is true of it.
+  const calm = hostVitals({ ...silentButThrottled, throttle: undefined }, NOW);
+  assert.match(calm.unavailable, /this host cannot be throttled/);
+  assert.doesNotMatch(calm.unavailable, /throttle stands/);
+});
+
 test('sizes of a terabyte or more are written in terabytes so the pair stays short', () => {
   // The figure sits in a narrow column; "1,024 / 2,048 GB" would not fit it.
   const disk = vital(
@@ -206,6 +329,43 @@ test('sizes of a terabyte or more are written in terabytes so the pair stays sho
   );
   assert.equal(disk.detail, '1 / 2 TB');
   assert.equal(disk.value, '50%');
+});
+
+test('a nearly empty terabyte disk is written in gigabytes, so what is used is not rounded to nothing', () => {
+  // 20 GB used of 1 TiB would read "0 / 1 TB", which says less than the share
+  // beside it. A tenth of a terabyte is the least that survives the decimal
+  // place, so below it the pair goes back to gigabytes.
+  const nearlyEmpty = vital(
+    hostVitals(host({ disk_total_mb: 1 * TIB, disk_free_mb: 1 * TIB - 20 * GIB }), NOW),
+    'disk',
+  );
+  assert.equal(nearlyEmpty.detail, '20 / 1,024 GB');
+  assert.equal(nearlyEmpty.value, '2%');
+
+  // Just under a tenth of a terabyte is still gigabytes, and the tenth itself is
+  // the first figure to be written in terabytes.
+  const tenth = Math.ceil(TIB / 10);
+  const justUnder = vital(
+    hostVitals(host({ disk_total_mb: 2 * TIB, disk_free_mb: 2 * TIB - (tenth - 1) }), NOW),
+    'disk',
+  );
+  assert.equal(justUnder.detail, '102 / 2,048 GB');
+  const atTenth = vital(
+    hostVitals(host({ disk_total_mb: 2 * TIB, disk_free_mb: 2 * TIB - tenth }), NOW),
+    'disk',
+  );
+  assert.equal(atTenth.detail, '0.1 / 2 TB');
+
+  // With nothing used to pair it with there is nothing to round away, and a total
+  // of a terabyte or more is still written in terabytes.
+  const memoryAlone = vital(
+    hostVitals(
+      host({ memory_mb: 2 * TIB, allocatable_memory_mb: 2 * TIB - 8192, usage_fresh: false }),
+      NOW,
+    ),
+    'memory',
+  );
+  assert.equal(memoryAlone.detail, '2 TB');
 });
 
 test('a figure past its line says so in words as well as colour', () => {

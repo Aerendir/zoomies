@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/mcp"
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 // runJobs is `zoomies jobs ...`.
@@ -26,6 +27,19 @@ func runJobs(ctx context.Context, e *env, args []string) error {
 	}, args)
 }
 
+// faultKindNames lists the fault categories the controller accepts, read from
+// the store's closed set. The help used to carry a copy of its own and named
+// nine of the eleven, so two filters the controller honours could not be found
+// from the command.
+func faultKindNames() string {
+	kinds := store.FaultKinds()
+	names := make([]string, len(kinds))
+	for i, k := range kinds {
+		names[i] = string(k)
+	}
+	return strings.Join(names, ", ")
+}
+
 func jobsList(ctx context.Context, e *env, args []string) error {
 	fs := newFlagSet(e, "zoomies jobs list [filters]", "List jobs, newest first.")
 	cf := registerClientFlags(fs, true)
@@ -41,7 +55,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	until := fs.String("until", "", "only jobs queued before then")
 	unmatched := fs.Bool("unmatched", false, "only jobs no enabled pool claims; these will never run")
 	failed := fs.Bool("failed", false, "only jobs that went wrong: a failing conclusion, or a runner that stopped under the job")
-	attention := fs.Bool("attention", false, "only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt")
+	attention := fs.Bool("attention", false, "only failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed")
 	faulted := fs.Bool("ours", false, "only the failures this fleet caused, not the workflows' own")
 	theirs := fs.Bool("theirs", false, "only the failures the workflows caused, with nothing wrong on this side")
 	jobNames, versions, hostIDs := &exactList{}, &listValue{}, &listValue{}
@@ -52,7 +66,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	before := fs.String("before", "", "continue after the previous page: the cursor it printed, or the next field of --output json")
 	steps := fs.Bool("include-steps", true, "with --output json, include each job's steps; --include-steps=false returns short summaries")
 	faults := &listValue{}
-	fs.Var(faults, "fault", "only this fault category: out_of_memory, host_lost, image, registration, backend, config, out_of_disk, removed, runner_exited (repeatable)")
+	fs.Var(faults, "fault", "only this fault category: "+faultKindNames()+" (repeatable)")
 	fs.example(
 		"zoomies jobs list --repo acme/widgets --since 24h",
 		"zoomies jobs list --unmatched",

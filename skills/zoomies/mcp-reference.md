@@ -421,11 +421,11 @@ No arguments.
 
 List jobs
 
-Workflow jobs this fleet has seen, newest first, with their pool, runner, queue wait, duration and outcome. Use failed to find what went wrong, ours or theirs to split failures the fleet caused from the workflows' own, and attention to find the failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt. Each job is a one-line summary without its steps unless include_steps is true; get_job has the steps. A full page carries a next value: pass it back as before to read the next page, until next is absent. For counts and percentiles over a period, use job_stats rather than paging through jobs.
+Workflow jobs this fleet has seen, newest first, with their pool, runner, queue wait, duration and outcome. Use failed to find what went wrong, ours or theirs to split failures the fleet caused from the workflows' own, and attention to find the failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed. Each job is a one-line summary without its steps unless include_steps is true; get_job has the steps. A full page carries a next value: pass it back as before to read the next page, until next is absent. For counts and percentiles over a period, use job_stats rather than paging through jobs.
 
 Arguments:
 
-* `attention` (boolean): only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt of the same job
+* `attention` (boolean): only failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed
 * `before` (string): continue after the previous page: the next value it returned, unchanged
 * `conclusion` (string): only jobs that finished this way One of `success`, `failure`, `cancelled`, `skipped`.
 * `controller_version` (string): only jobs claimed by this controller version, as job records show it; "unknown" is the jobs that were never stamped

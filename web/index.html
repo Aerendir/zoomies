@@ -101,8 +101,9 @@
          fixed near-black put a black bar above a white page for every
          light-theme operator on Android and iOS. These are --z-bg in each
          theme, spelled out because a meta tag cannot read a custom property.
-         The media queries cover the "system" setting, which is the default; an
-         explicit choice is pinned by theme.svelte.ts, which rewrites them. -->
+         The media queries cover the "system" setting. Any other choice (dark,
+         when none is stored) is pinned by the script below before the first
+         paint and by theme.svelte.ts afterwards: both rewrite these tags. -->
     <meta
       name="theme-color"
       data-theme-colour="light"

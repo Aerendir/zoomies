@@ -8,9 +8,12 @@
   may do.
 
   The redirect host is shown plainly because it is the one thing about the
-  client the controller has checked, and a client whose every redirect is on
-  this computer gets a warning of its own: any program running here can listen
-  on a loopback port and claim to be it.
+  client the controller has checked, and a request that sends the person back to
+  an address on this computer gets a warning of its own: any program running
+  here can listen on a loopback port and claim to be it. The warning is about
+  the address this request sends them to and not about the client's list (see
+  LoopbackOnly in internal/auth/mcp_oauth.go), so a client that also registered
+  an https address is warned about on its loopback one.
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
@@ -196,9 +199,9 @@
         <p class="warning" role="note">
           <Laptop size={16} aria-hidden="true" />
           <span>
-            Every address this app registered is on <strong>this computer</strong>. Any program
-            running here could claim to be it, so continue only if you started this yourself, from
-            an app you trust such as Claude Code.
+            This app is sending you back to an address on <strong>this computer</strong>. Any
+            program running here could claim to be it, so continue only if you started this
+            yourself, from an app you trust such as Claude Code.
           </span>
         </p>
       {/if}

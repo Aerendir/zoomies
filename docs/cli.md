@@ -272,7 +272,11 @@ The runners that exist right now.
 `--until`; each of which takes a duration (`24h`) or a date. `--unmatched`,
 `--failed` and `--attention` are the three questions worth a switch of their
 own; `--attention` is the one GitHub cannot answer at all: failures from the
-last week that nobody has acknowledged and no later attempt has replaced.
+last week that nobody has acknowledged, that no later attempt of the job, or
+later run of it on the same branch, has replaced, and that GitHub has not
+settled since. The controller asks GitHub about each such run in the
+background, and one whose PR is closed, whose PR has newer commits than the run
+or whose checks now pass leaves this list on its own, and stays in `--failed`.
 `jobs get <job-id>` shows one.
 
 `--ours` and `--theirs` split `--failed` by whose failure it was. GitHub records
@@ -635,7 +639,7 @@ helper; only the host's owner does.
 | --- | --- |
 | `providers list` | Every provider machines can be rented from, how many it has, and whether it may buy more. A provider that is buying nothing says why in a sentence below the table. |
 | `providers kinds` | What this build can rent machines from, and the settings each kind asks for; the list `--setting` on the next command chooses from. |
-| `providers add <kind>` | The wizard in one line. `--name`, `--endpoint`, `--nodes`, `--template`, `--storage` and `--bridge` are the Proxmox form's questions as flags; `--vmid-range 9000-9099`, `--max-machines`, `--capacity`, `--labels` and the machine's shape follow, and `--setting key=value` reaches anything else. The API token is asked for without echo, read from standard input when that is not a terminal, or taken from `--credential-file`; `--endpoint-ca-file` is the cluster's CA. It validates the answers first (a wrong one is named and nothing is saved) then creates the provider, then runs the live check and prints what the cluster would refuse. The ceiling is zero unless `--max-machines` says otherwise, so a connection test never starts an invoice. |
+| `providers add <kind>` | The wizard's manual path in one line, apart from three answers that have no flag. `--name`, `--endpoint`, `--nodes`, `--template`, `--storage` and `--bridge` are the Proxmox form's questions as flags; `--vmid-range 9000-9099`, `--max-machines`, `--capacity`, `--labels` and the machine's shape (`--backend`, `--cpus`, `--memory-mb` and `--disk-mb`) follow, and `--setting key=value` reaches the driver's other settings, which `providers kinds` lists. The three are the machine's operating system and architecture, the certificate machines trust for the controller, and how many machines are kept warm. They are fields of the provider and not driver settings, so `--setting` does not reach them either: set them in the form or with `PATCH /api/v1/providers/{id}`, and a provider added here keeps no machine warm until then ([Proxmox VE](proxmox.md#the-provider)). The API token is asked for without echo, read from standard input when that is not a terminal, or taken from `--credential-file`; `--endpoint-ca-file` is the cluster's CA. It validates the answers first (a wrong one is named and nothing is saved) then creates the provider, then runs the live check and prints what the cluster would refuse. The ceiling is zero unless `--max-machines` says otherwise, so a connection test never starts an invoice. |
 | `providers edit <name\|id>` | Change the settings you name and nothing else: `--max-machines 8` raises the ceiling, `--credential-file` rotates the token, `--storage ceph` changes one driver setting and keeps the rest. It takes the same flags as `add`. |
 | `providers check <name\|id>` | The live preflight: ask the hypervisor what it would refuse, changing nothing there. Exits non-zero if anything would stop a machine being created, and prints what to fix in the same words the setup wizard uses. |
 | `providers pause <name\|id>` | Stop buying new machines. `--reason` is kept for the card and the audit row. Machines that exist keep running, and drains, deletes and recovery carry on. Pressing it twice is not an error. |

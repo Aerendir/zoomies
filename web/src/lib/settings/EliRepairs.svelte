@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { GitPullRequest, Link, Settings2 } from '@lucide/svelte';
   import {
     ApiError,
@@ -36,6 +36,14 @@
     initialPull?: number;
     initialRun?: number;
   } = $props();
+  /**
+   * What the page was opened with, which is what the card is keyed on. The card
+   * writes the pull request it is reviewing into the address as it checks
+   * readiness, and keying on the live address rebuilt it on every paste: the card
+   * that had started the check was thrown away with the check in flight, and a
+   * new one asked again.
+   */
+  const arrival = untrack(() => `${initialRepo}:${initialPull}:${initialRun}`);
   let identities = $state<Schemas['EliIdentity'][]>([]);
   let policies = $state<Schemas['EliRepairPolicy'][]>([]);
   let installations = $state<Installation[]>([]);
@@ -259,7 +267,7 @@
       {:else}<p>
           No pending offers. Enable Ask me first for your repositories, or paste a PR link below.
         </p>{/if}
-      {#key selectedOffer?.id ?? (retryTarget ? `${retryTarget.repo}:${retryTarget.pull}` : `${initialRepo}:${initialPull}:${initialRun}`)}
+      {#key selectedOffer?.id ?? (retryTarget ? `${retryTarget.repo}:${retryTarget.pull}` : arrival)}
         <RepairJourney
           repo={selectedOffer?.repo ?? retryTarget?.repo ?? initialRepo}
           pull={selectedOffer?.pull_number ?? retryTarget?.pull ?? initialPull}
