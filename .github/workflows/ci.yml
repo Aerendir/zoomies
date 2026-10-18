@@ -1395,7 +1395,7 @@ jobs:
   runner-images:
     name: Runner image (${{ matrix.tag }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || (((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64') }}
-    timeout-minutes: 30 # the longest successful run seen was 8 minutes
+    timeout-minutes: 60 # the longest successful run seen was 25 minutes (rocky-9 on arm64)
     needs: [images]
     if: github.event.action != 'closed' && needs.images.outputs.runner == 'true'
     permissions:
