@@ -600,3 +600,137 @@ func TestATokenNarrowedToAssistantOwnClearsOnlyItsOwnPersonsRepairs(t *testing.T
 		t.Errorf("a token scoped to assistant:* clearing someone else's repair got %+v, want ok", got)
 	}
 }
+
+// A repair has a page of its own, addressed by its id, and an id is not a
+// secret: it turns up in links, logs and pasted screenshots. So a repair that
+// is not the caller's is answered word for word as one that does not exist,
+// and the only person who can tell the difference is an administrator.
+func TestGetEliRepairAnswersOwnersAdministratorsAndNobodyElse(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	owner, ownerCookie := h.user("repair-owner", store.RoleViewer)
+	_, otherCookie := h.user("repair-other", store.RoleViewer)
+	_, adminCookie := h.user("repair-admin", store.RoleAdmin)
+	ids := h.seedRepairs(t, inst, historyRow{owner: owner.ID, repo: inst.Target + "/repo", trigger: "mention", state: "failed"})
+	path := "/api/v1/assistant/repairs/" + ids[0]
+
+	own := h.do(request{method: http.MethodGet, path: path, cookie: ownerCookie})
+	own.mustStatus(t, http.StatusOK, "the owner reads their repair")
+	var got struct {
+		ID string `json:"id"`
+	}
+	own.into(t, &got)
+	if got.ID != ids[0] {
+		t.Errorf("answered repair %q, want %q", got.ID, ids[0])
+	}
+	assertShape(t, loadSpec(t), "EliRepair", own.body)
+
+	h.do(request{method: http.MethodGet, path: path, cookie: adminCookie}).mustStatus(t, http.StatusOK, "an administrator reads anyone's repair")
+
+	someoneElses := h.do(request{method: http.MethodGet, path: path, cookie: otherCookie})
+	someoneElses.mustStatus(t, http.StatusNotFound, "another person's repair")
+	missing := h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs/eli_missing", cookie: otherCookie})
+	missing.mustStatus(t, http.StatusNotFound, "a repair that does not exist")
+	if a, b := someoneElses.errorMessage(t), missing.errorMessage(t); a == "" || a != b || someoneElses.errorCode(t) != missing.errorCode(t) {
+		t.Errorf("the two refusals differ, so one tells a person that an id exists: %q (%s) and %q (%s)", a, someoneElses.errorCode(t), b, missing.errorCode(t))
+	}
+}
+
+// A repair cleared from the history is gone from the list, not from the page
+// that follows it: a link someone kept still opens, so they can see what it was.
+func TestGetEliRepairStillOpensARepairClearedFromTheHistory(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	owner, cookie := h.user("repair-owner", store.RoleViewer)
+	ids := h.seedRepairs(t, inst, historyRow{owner: owner.ID, repo: inst.Target + "/repo", trigger: "mention", state: "failed"})
+	if res, err := h.st.ClearEliRepairs(h.ctx, ids, owner.ID, true); err != nil || len(res) != 1 {
+		t.Fatalf("clearing the repair: %v %v", res, err)
+	}
+	h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs/" + ids[0], cookie: cookie}).
+		mustStatus(t, http.StatusOK, "a cleared repair opened by its link")
+}
+
+// The error output of a job is its log, so it is asked for by a query that says
+// which log. The mistakes are named by field, so a caller knows what to fix.
+func TestErrorOutputNeedsAJobIDAndARepo(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("repair-viewer", store.RoleViewer)
+	for name, tc := range map[string]struct {
+		query  string
+		fields []string
+	}{
+		"nothing at all":       {"", []string{"repo", "job_id"}},
+		"no job":               {"?repo=acme/repo", []string{"job_id"}},
+		"no repository":        {"?job_id=5", []string{"repo"}},
+		"a job that is zero":   {"?repo=acme/repo&job_id=0", []string{"job_id"}},
+		"a job below zero":     {"?repo=acme/repo&job_id=-3", []string{"job_id"}},
+		"a job not a number":   {"?repo=acme/repo&job_id=abc", []string{"job_id"}},
+		"a bare owner":         {"?repo=acme&job_id=5", []string{"repo"}},
+		"an empty name":        {"?repo=acme/&job_id=5", []string{"repo"}},
+		"too many parts":       {"?repo=acme/repo/extra&job_id=5", []string{"repo"}},
+		"a very long repo":     {"?repo=" + strings.Repeat("a", 300) + "/repo&job_id=5", []string{"repo"}},
+		"both wrong together":  {"?repo=acme&job_id=0", []string{"repo", "job_id"}},
+		"whitespace is not it": {"?repo=%20&job_id=5", []string{"repo"}},
+	} {
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs/error-output" + tc.query, cookie: cookie})
+		resp.mustStatus(t, http.StatusUnprocessableEntity, name)
+		if got := fieldsOf(t, resp); !slices.Equal(got, tc.fields) {
+			t.Errorf("%s: the refusal names %v, want %v", name, got, tc.fields)
+		}
+	}
+}
+
+// Whatever a job printed is shown to people who could fix the pull request. A
+// caller whose GitHub account is not linked, or cannot write to the repository,
+// is told what to do, and the log is not read for them.
+func TestErrorOutputIsRefusedWithoutWriteAccess(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	repo := inst.Target + "/repo"
+	linked, linkedCookie := h.user("repair-linked", store.RoleViewer)
+	_, strangerCookie := h.user("repair-stranger", store.RoleViewer)
+	if err := h.st.SetEliIdentity(h.ctx, store.EliIdentity{UserID: linked.ID, GitHubUserID: 42, GitHubLogin: "octo"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.ConfirmEliIdentity(h.ctx, linked.ID, 42, true); err != nil {
+		t.Fatal(err)
+	}
+	h.gh.SetRepairActor("octo", 42, false)
+
+	for name, cookie := range map[string]string{"not linked": strangerCookie, "linked but read-only": linkedCookie} {
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs/error-output?repo=" + repo + "&job_id=5", cookie: cookie})
+		resp.mustStatus(t, http.StatusConflict, name)
+		if msg := resp.errorMessage(t); !strings.Contains(msg, "write access") || !strings.Contains(msg, "GitHub") {
+			t.Errorf("%s: the refusal does not say what is needed: %q", name, msg)
+		}
+	}
+}
+
+// With write access the log is read through the installation. GitHub having no
+// log for the job is an answer, not a failure: the page gets an empty list, and
+// a sentence to show, in the shape the contract promises.
+func TestErrorOutputAnswersAnEmptyListWhenGitHubHasNoLog(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	repo := inst.Target + "/repo"
+	person, cookie := h.user("repair-writer", store.RoleViewer)
+	if err := h.st.SetEliIdentity(h.ctx, store.EliIdentity{UserID: person.ID, GitHubUserID: 42, GitHubLogin: "octo"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.ConfirmEliIdentity(h.ctx, person.ID, 42, true); err != nil {
+		t.Fatal(err)
+	}
+	h.gh.SetRepairActor("octo", 42, true)
+
+	resp := h.do(request{method: http.MethodGet, path: "/api/v1/assistant/repairs/error-output?repo=" + repo + "&job_id=5", cookie: cookie})
+	resp.mustStatus(t, http.StatusOK, "reading a job the fake GitHub has no log for")
+	assertShape(t, loadSpec(t), "EliErrorOutput", resp.body)
+	var got struct {
+		Lines *[]string `json:"lines"`
+		Note  string    `json:"note"`
+	}
+	resp.into(t, &got)
+	if got.Lines == nil || len(*got.Lines) != 0 || got.Note == "" {
+		t.Errorf("answered %s, want an empty lines array and a note", resp.body)
+	}
+}

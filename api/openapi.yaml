@@ -6001,6 +6001,40 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /assistant/repairs/error-output:
+    get:
+      operationId: getEliErrorOutput
+      tags: [assistant]
+      summary: Read the error lines of one failed job, when asked
+      description: >-
+        The lines of the job's log that say why it failed, read from GitHub when the request is
+        made and passed through the same credential redaction a repair's evidence gets. They are
+        kept nowhere: held in memory for a minute so a second look is not a second download, and
+        never stored or logged. Personal accounts only, like readiness, and only for a caller
+        whose confirmed GitHub account can write to the repository; anyone else is a 409 that
+        says what is needed. A log GitHub no longer has, or a job that printed no error lines,
+        is an empty `lines` with a `note`.
+      x-zoomies-role: viewer
+      parameters:
+        - name: repo
+          in: query
+          required: true
+          description: The repository, as `owner/name`.
+          schema: { type: string, maxLength: 200 }
+        - name: job_id
+          in: query
+          required: true
+          description: GitHub's id for the job.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliErrorOutput" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /assistant/repairs/opportunities:
     get:
       operationId: listEliOpportunities
@@ -6086,6 +6120,30 @@ paths:
               schema: { $ref: "#/components/schemas/EliRepair" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/{id}:
+    get:
+      operationId: getEliRepair
+      tags: [assistant]
+      summary: Read one repair
+      description: >-
+        One repair by id, in the shape the list returns. Administrators reach any repair and
+        everyone else their own; a repair that is not the caller's is a 404 word for word the
+        same as one that does not exist. A repair cleared from the history still opens, so a
+        link someone kept keeps working.
+      x-zoomies-role: viewer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliRepair" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /assistant/repairs/selection:
     get:
@@ -14270,6 +14328,19 @@ components:
         total: { type: integer }
         capped: { type: boolean }
         missing_permissions: { type: array, items: { type: string } }
+    EliErrorOutput:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          description: >-
+            The error lines of the job's log, redacted: at most twelve, each at most 300 bytes,
+            the last ones being those that ended the job.
+          items: { type: string }
+        note:
+          type: string
+          description: A sentence for the person when there are no lines to show.
     EliReadinessPull:
       type: object
       description: >-

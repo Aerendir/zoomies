@@ -439,6 +439,63 @@ func (s *Server) handleEliReadiness(w http.ResponseWriter, r *http.Request) {
 	run, _ := strconv.ParseInt(r.URL.Query().Get("run_id"), 10, 64)
 	writeJSON(w, http.StatusOK, s.ctrl.EliReadiness(ctx, Identity(ctx).UserID, r.URL.Query().Get("repo"), pull, run))
 }
+
+// handleGetEliRepair answers GET /api/v1/assistant/repairs/{id}: one repair, for
+// the page that follows it.
+//
+// It reaches what the list reaches and nothing more, through the same scope. A
+// repair that is not the caller's is answered word for word as one that does
+// not exist, because an id is not a secret: it travels in links and logs, and
+// the answer must not tell a stranger that it names something. A repair
+// cleared from the history still opens; clearing tidies the list, and a link a
+// person kept should not stop working because they did.
+func (s *Server) handleGetEliRepair(w http.ResponseWriter, r *http.Request) {
+	owner, scoped := eliRepairScope(r, auth.ActionAssistantRead)
+	row, err := s.ctrl.Store().GetEliRepair(r.Context(), chiURLParam(r, "id"), owner, scoped)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		notFound(w, "there is no repair with that id")
+	case err != nil:
+		s.internal(w, r, "reading an Eli repair", err)
+	default:
+		writeJSON(w, http.StatusOK, row)
+	}
+}
+
+// handleEliErrorOutput answers GET /api/v1/assistant/repairs/error-output: the
+// error lines of one failed job, read from GitHub when the person asks.
+//
+// A caller who may not read them is answered 409, as the request for a repair
+// answers a caller with no write access, and not 403: that status is this API's
+// word for a role or a scope that is missing, and a person whose GitHub account
+// cannot write has neither lost a role nor been scoped out.
+func (s *Server) handleEliErrorOutput(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	repo := strings.TrimSpace(q.Get("repo"))
+	var fields []fieldError
+	if owner, name, ok := strings.Cut(repo, "/"); !ok || owner == "" || name == "" || strings.Contains(name, "/") || len(repo) > maxEliRepairSearch {
+		fields = append(fields, fieldError{"repo", "name the repository as owner/name"})
+	}
+	jobID, err := strconv.ParseInt(strings.TrimSpace(q.Get("job_id")), 10, 64)
+	if err != nil || jobID < 1 {
+		fields = append(fields, fieldError{"job_id", "give GitHub's id for the job, a whole number above zero"})
+	}
+	if len(fields) > 0 {
+		unprocessable(w, "the error output could not be read as asked", fields)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+	defer cancel()
+	out, err := s.ctrl.EliErrorOutput(ctx, Identity(ctx).UserID, repo, jobID)
+	switch {
+	case errors.Is(err, controller.ErrEliErrorOutputDenied):
+		conflict(w, "Your linked GitHub account needs write access to this repository to read a job's error output. Link and confirm it in Eli repair setup.")
+	case err != nil:
+		s.internal(w, r, "reading a job's error output", err)
+	default:
+		writeJSON(w, http.StatusOK, out)
+	}
+}
 func (s *Server) handleEliOpportunities(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()

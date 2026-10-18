@@ -431,6 +431,7 @@ func (s *Server) apiRoutes() chi.Router {
 		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs/selection", s.handleEliRepairSelection)
 		r.With(s.require(auth.ActionAssistantOwn)).Post("/assistant/repairs/bulk", s.handleBulkEliRepairs)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/readiness", s.handleEliReadiness)
+		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/error-output", s.handleEliErrorOutput)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/opportunities", s.handleEliOpportunities)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Post("/assistant/repairs/opportunities/{id}", s.handleEliOpportunityAction)
 		r.With(s.require(auth.ActionAssistantWrite)).Get("/assistant/repairs/repositories", s.handleEliRepositories)
@@ -439,6 +440,7 @@ func (s *Server) apiRoutes() chi.Router {
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Post("/assistant/repairs", s.handleRequestEliRepair)
 		r.With(s.require(auth.ActionAssistantWrite)).Put("/assistant/repairs/policy", s.handleSetEliPolicy)
 		r.With(s.require(auth.ActionUsersWrite)).Put("/assistant/repairs/identity", s.handleSetEliIdentity)
+		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs/{id}", s.handleGetEliRepair)
 		r.With(s.require(auth.ActionAssistantChat)).Post("/assistant/chat", s.handleAssistantChat)
 		r.Route("/assistant/personal", func(r chi.Router) {
 			r.Use(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner)

@@ -83,6 +83,9 @@ type repairFake struct {
 	// title, author, url and base are what the pull request says about itself,
 	// for the tests that read it back.
 	title, author, url, base string
+	// onFailures, when set, answers a read of a job's error output, so a test
+	// chooses what comes back and counts the reads.
+	onFailures func(jobID int64) ([]string, error)
 }
 
 func (f *repairFake) RepairActor(context.Context, string, string) (github.RepairActor, error) {
@@ -110,7 +113,10 @@ func (f *repairFake) RepairSource(context.Context, string, github.RepairPull, bo
 	}
 	return &github.RepairSource{Snapshot: prrepair.Snapshot{Files: []prrepair.File{{Path: "main.go", Content: "old", Mode: "100644"}}}}, nil
 }
-func (f *repairFake) RepairFailures(context.Context, string, github.RepairPull, int64) ([]string, error) {
+func (f *repairFake) RepairFailures(_ context.Context, _ string, _ github.RepairPull, jobID int64) ([]string, error) {
+	if f.onFailures != nil {
+		return f.onFailures(jobID)
+	}
 	return []string{"main.go: test failed"}, nil
 }
 func (f *repairFake) CommitRepair(_ context.Context, _ string, p github.RepairPull, plan prrepair.Plan) (string, error) {
