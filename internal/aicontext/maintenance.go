@@ -37,7 +37,9 @@ func PlanMaintenance(key RepositoryKey, name string, previous Config, config Con
 		}
 		switch {
 		case f.Path == WorkflowPath || f.Path == ConfigPath || f.Path == GeneratorPackagePath || f.Path == GeneratorLockPath:
-			if f.SHA != "" && !owned[f.Path] && f.Content != canonical[f.Path] && !(f.Path == WorkflowPath && IsOlderSetupWorkflow(key, previous, f.Content)) {
+			if f.SHA != "" && !owned[f.Path] && f.Content != canonical[f.Path] &&
+				!(f.Path == WorkflowPath && IsOlderSetupWorkflow(key, previous, f.Content)) &&
+				!(f.Path == GeneratorLockPath && IsOlderGeneratorLock(f.Content)) {
 				return nil, fmt.Errorf("%s has no recognised Zoomies ownership", f.Path)
 			}
 			if remove && f.SHA != "" {

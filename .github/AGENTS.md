@@ -48,7 +48,9 @@ has a CI job that diffs them:
   context's access gate until the bot reinstalls the file. A test in
   `internal/docs` keeps Dependabot away. Their pins move when a release changes
   the template, which needs the previous template kept as a recognised
-  generation (`olderGenerations` in `workflow.go`).
+  generation (`olderGenerations` in `workflow.go`, and `olderGeneratorLocks`
+  there for the lockfile, which a dependency fix changes without a new
+  template).
 * The Go CI and releases use is written once, in `.github/actions/setup-go`, and
   every job calls that action; `go.mod` holds the lower floor a contributor
   needs and gets no `toolchain` line. The UI's Node major is `NODE_VERSION` in

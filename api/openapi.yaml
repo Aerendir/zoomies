@@ -41,11 +41,13 @@ info:
     ## Conventions
 
     * List endpoints take `limit`, `offset`, `sort` and `order`, and return
-      `{ items, total, limit, offset }`. The exceptions are the listings of
-      things an operator keeps few of and reads whole: `/hosts`, `/pools`,
-      `/users`, `/tokens`, `/backups`, `/providers`, `/installations` and
-      `/problems` return every row as `{ items }`, because their size follows
-      the size of the fleet rather than the volume of work through it.
+      `{ items, total, limit, offset }`. Some do not page. The listings of
+      things an operator keeps few of and reads whole, such as `/hosts`,
+      `/pools`, `/users`, `/tokens`, `/backups`, `/providers`,
+      `/installations` and `/problems`, return every row as `{ items }`,
+      because their size follows the size of the fleet rather than the volume
+      of work through it, and so do other small or bounded listings. A
+      listing's response schema says which shape it has.
     * A `201` from a create whose result can be read back names it in a
       `Location` header.
     * Timestamps are RFC 3339 with a `Z` offset.

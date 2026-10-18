@@ -726,6 +726,33 @@ func (c *Controller) jobView(ctx context.Context, j *store.Job) JobView {
 	return NewJobView(j, name)
 }
 
+// jobViewIn is jobView for a caller that has just read the pools to claim the
+// job. It names the job's pool from them, instead of reading the pool again,
+// whole, to learn what the pools in hand already say; that read was a fifth of a
+// poller sweep. A pool that is not among them, made since or named by no job, is
+// looked up as jobView does. The name is as old as the read, the way a page of
+// jobs is named from one listing. Only the name is read from the pools, so the
+// listing made for a claim serves.
+func (c *Controller) jobViewIn(ctx context.Context, j *store.Job, pools []*store.Pool) JobView {
+	if p := poolIn(pools, j.PoolID); p != nil {
+		return NewJobView(j, p.Name)
+	}
+	return c.jobView(ctx, j)
+}
+
+// poolIn finds a pool by ID among pools already read, or returns nil.
+func poolIn(pools []*store.Pool, id string) *store.Pool {
+	if id == "" {
+		return nil
+	}
+	for _, p := range pools {
+		if p.ID == id {
+			return p
+		}
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Workflow runs
 // ---------------------------------------------------------------------------

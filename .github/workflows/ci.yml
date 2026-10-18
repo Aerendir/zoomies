@@ -31,6 +31,10 @@ concurrency:
   # moving :dev channel: cancelling it before Images has pushed can leave every
   # successful merge unavailable to `zoomies upgrade`. Queue main runs so the
   # newest one always gets a chance to publish.
+  #
+  # GitHub keeps only the newest run still waiting in a group and cancels the
+  # rest, so the changes job diffs a push to main against the last run that was
+  # not cancelled, and the newest run covers the files of the ones it replaced.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The Go version is in .github/actions/setup-go, which every job uses.
@@ -75,6 +79,10 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
     timeout-minutes: 15 # the longest successful run seen was 3 minutes
+    # actions: read is for the base step, which lists this workflow's runs.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       go: ${{ steps.filter.outputs.go }}
       shards: ${{ steps.filter.outputs.shards }}
@@ -84,11 +92,49 @@ jobs:
       publish: ${{ steps.filter.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Main queues its runs and keeps only the newest of those still waiting,
+      # so the run for a push that another push overtook is cancelled before it
+      # starts. The run that overtook it would be diffed against the push before
+      # its own and never see that push's files: a Go change merged just before
+      # a docs change ran no Go shard on main, and a change to what ships was
+      # not published. Diff against the last run of main that was not cancelled
+      # instead, so the newest run covers what the ones it replaced would have.
+      # A run that failed still ran; one that was cancelled, or never started,
+      # did not finish what its diff asked for.
+      - id: base
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -eu
+          # The runs endpoint takes the workflow's file name, which this run
+          # knows as owner/repo/.github/workflows/ci.yml@ref.
+          workflow=${GITHUB_WORKFLOW_REF#*/.github/workflows/}
+          workflow=${workflow%%@*}
+          # Only runs before this one, so that running it again sees what it
+          # saw the first time.
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&status=completed&per_page=100" \
+            --jq '[.workflow_runs[]
+                   | select(.event == "push" or .event == "workflow_dispatch")
+                   | select(.run_number < '"$RUN_NUMBER"')
+                   | select(.conclusion == "success" or .conclusion == "failure" or .conclusion == "timed_out")]
+                  | max_by(.run_number) | .head_sha // empty') || sha=
+          # A base that cannot be named says nothing about what changed, so the
+          # filter is given the all-zero commit, which it answers by running
+          # everything.
+          if [ -z "$sha" ]; then
+            echo "No earlier run of main to diff against, so everything runs."
+            sha=0000000000000000000000000000000000000000
+          else
+            echo "Diffing against $sha, the head of the last run of main that was not cancelled."
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ steps.base.outputs.sha || github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -eu
           # Main publishes the dev channel from any commit that changes what
@@ -109,11 +155,12 @@ jobs:
             everything
           fi
           # A pull request's checkout is the merge into its base, so its diff
-          # against the base commit is exactly what it changes; a push's is
-          # the diff against the commit main was at before. A base that cannot
-          # be fetched -- a force push, a new branch's all-zero "before", a
-          # base that moved on -- says nothing about what changed, so run
-          # everything rather than guess.
+          # against the base commit is exactly what it changes; a push to main
+          # is diffed against the last run of main that was not cancelled (the
+          # base step), so it covers the pushes that were overtaken before they
+          # ran. A base that cannot be named or fetched, such as a force push, a
+          # new branch's all-zero "before" or a base that moved on, says nothing
+          # about what changed, so run everything rather than guess.
           case "$BASE" in ''|0000000000000000000000000000000000000000) everything ;; esac
           if ! git fetch --no-tags --depth=1 origin "$BASE" 2>/dev/null; then
             everything

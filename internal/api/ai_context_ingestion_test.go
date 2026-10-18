@@ -120,6 +120,29 @@ func TestContextIngestionRequiresMergeAndClosesAccessOnDriftOrRevocation(t *test
 		t.Log("refresh after restoring the current workflow:", err)
 	}
 	outdated(false)
+	// The generator's lockfile is held to the same rule: the one an earlier
+	// release wrote is due a repair, an edited one closes the gate.
+	olderLock, err := aicontext.PreviousGeneratorLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentLock := findSetupContent(t, plan, aicontext.GeneratorLockPath)
+	h.gh.AddFile(draft.FullName, aicontext.GeneratorLockPath, olderLock)
+	_ = h.ctrl.RefreshAIContext(h.ctx, draft.ID)
+	if got, err := h.st.GetAIContextFreshness(h.ctx, draft.ID); err != nil || strings.Contains(got.Failure, "edited after review") {
+		t.Fatalf("a lockfile from the previous template was treated as an edit: %+v %v", got, err)
+	}
+	outdated(true)
+	h.gh.AddFile(draft.FullName, aicontext.GeneratorLockPath, olderLock+" ")
+	if err := h.ctrl.RefreshAIContext(h.ctx, draft.ID); err == nil {
+		t.Fatal("lockfile drift admitted")
+	}
+	check(false)
+	h.gh.AddFile(draft.FullName, aicontext.GeneratorLockPath, currentLock)
+	if err := h.ctrl.RefreshAIContext(h.ctx, draft.ID); err != nil {
+		t.Log("refresh after restoring the current lockfile:", err)
+	}
+	outdated(false)
 	h.gh.AddFile(draft.FullName, aicontext.WorkflowPath, "unreviewed workflow")
 	if err := h.ctrl.RefreshAIContext(h.ctx, draft.ID); err == nil {
 		t.Fatal("workflow drift admitted")

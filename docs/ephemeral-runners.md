@@ -63,8 +63,9 @@ flowchart LR
    the agent deletes the finished container and anything it made for it.
 
 The retention window is the only reason a finished runner lingers: it is how
-long you can still read that runner's log from the Runners page. Set it to zero
-and the workload goes as soon as the controller has the report. The full
+long you can still read that runner's log from the Runners page. It is `0s` by
+default, so the workload goes as soon as the controller has the report; set it
+to a few minutes if you want to look at a finished runner's output. The full
 sequence is in [the architecture notes](architecture.md#a-job-arrives).
 
 ## Ephemeral is a pool setting, and it is on

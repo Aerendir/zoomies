@@ -1,20 +1,23 @@
-// The edge of zoomies.sh: content negotiation for agents.
+// The edge of zoomies.sh: the site and its content negotiation, in one worker.
 //
-// The site is served by GitHub Pages, which cannot read an Accept header, so a
-// request that asks for text/markdown is answered here instead of at the
-// origin. Every page's Markdown copy is built beside the site (hooks/seo.py
-// writes one at the page's address plus index.md), so serving one is a lookup,
-// not a conversion: an agent receives the source the page was written in,
-// without the navigation, footer and inline icons the HTML carries.
+// The site is the deployment's static assets (the directory the docs build
+// writes, declared in wrangler.toml), and the worker runs first on every
+// request: what it does not rewrite, it serves from the asset binding, so no
+// request in the chain dials an origin server and no origin resolution can
+// take a document dark. Every page's Markdown copy is built beside the page
+// (hooks/seo.py writes one at the page's address plus index.md), so serving
+// one is a lookup, not a conversion: an agent receives the source the page
+// was written in, without the navigation, footer and inline icons the HTML
+// carries.
 //
 // HTML stays the default. Only an explicit text/markdown entry in Accept gets
-// Markdown; anything else, including a browser's */*, is passed through to the
-// origin with its body untouched.
+// Markdown; anything else, including a browser's */*, is served from the
+// assets with its body untouched.
 //
 // Every page answer also carries a Link header (RFC 8288) with the relations
 // an agent follows to the machine-readable resources: the API Catalog
 // (RFC 9727), the plain-text index, and the REST API's description and
-// documentation. GitHub Pages cannot set arbitrary response headers, so the
+// documentation. Static assets cannot set arbitrary response headers, so the
 // header is added here. So is Vary: Accept, on the HTML as on the Markdown,
 // because the choice between them is made here.
 
@@ -129,13 +132,14 @@ function relayedHeaders(upstream) {
 }
 
 // The Markdown copy as a response, or null when this address has none, in
-// which case the origin's answer (including a real 404) stands.
+// which case the not-found page stands.
 //
-// Both variants of a page carry Vary: Accept, this one and the HTML the origin
-// serves (see the handler below): the worker, not the origin, chooses the
-// format, so a cache has to know that the choice depends on Accept. It is
-// appended to what the origin sends, Accept-Encoding, never put in its place.
-async function markdownResponse(request, url) {
+// Both variants of a page carry Vary: Accept, this one and the HTML the
+// assets serve (see the handler below): the worker, not the asset pipeline,
+// chooses the format, so a cache has to know that the choice depends on
+// Accept. It is appended to what the assets send, Accept-Encoding, never put
+// in its place.
+async function markdownResponse(request, url, env) {
   const path = markdownPath(url.pathname);
   if (path === null) {
     return null;
@@ -144,10 +148,7 @@ async function markdownResponse(request, url) {
   if (target === null) {
     return null;
   }
-  const copy = await fetch(target, {
-    headers: { accept: MARKDOWN_TYPE },
-    redirect: "follow",
-  });
+  const copy = await env.ASSETS.fetch(new URL(target, url.origin));
   if (!copy.ok) {
     return null;
   }
@@ -160,12 +161,11 @@ async function markdownResponse(request, url) {
   return new Response(body, { status: copy.status, headers });
 }
 
-// The API Catalog document (RFC 9727) at its well-known address. The origin
-// stores it as api-catalog.json, because GitHub Pages picks a content type
-// from the extension and would serve an extensionless file as
-// application/octet-stream; the type the RFC asks for is set here.
-async function apiCatalogResponse(url) {
-  const source = await fetch(new URL("/api-catalog.json", url.origin), { redirect: "follow" });
+// The API Catalog document (RFC 9727) at its well-known address. The assets
+// store it as api-catalog.json, because a file's extension picks the content
+// type and the type the RFC asks for is set here.
+async function apiCatalogResponse(url, env) {
+  const source = await env.ASSETS.fetch(new URL("/api-catalog.json", url.origin));
   if (!source.ok) {
     return null;
   }
@@ -177,13 +177,11 @@ async function apiCatalogResponse(url) {
 }
 
 // The site's own protected-resource metadata (RFC 9728) at its well-known
-// address, for the same reason as the catalog above: the origin stores it as a
-// .json file and Pages types an extensionless one as application/octet-stream,
-// where the RFC requires application/json.
-async function protectedResourceResponse(url) {
-  const source = await fetch(new URL("/.well-known/oauth-protected-resource.json", url.origin), {
-    redirect: "follow",
-  });
+// address, for the same reason as the catalog above: the assets store it as a
+// .json file and a file without the extension would be typed
+// application/octet-stream, where the RFC requires application/json.
+async function protectedResourceResponse(url, env) {
+  const source = await env.ASSETS.fetch(new URL("/.well-known/oauth-protected-resource.json", url.origin));
   if (!source.ok) {
     return null;
   }
@@ -318,7 +316,7 @@ function withSecurityHeaders(response) {
   return rebuilt;
 }
 
-async function route(request) {
+async function route(request, env) {
   if (request.method === "GET" || request.method === "HEAD") {
     const url = new URL(request.url);
     const mirror = MIRRORS.find((m) => m.at.includes(url.pathname));
@@ -329,44 +327,45 @@ async function route(request) {
       }
     }
     if (url.pathname === "/.well-known/api-catalog" || url.pathname === "/.well-known/api-catalog/") {
-      const catalog = await apiCatalogResponse(url);
+      const catalog = await apiCatalogResponse(url, env);
       if (catalog !== null) {
         return request.method === "HEAD" ? new Response(null, catalog) : catalog;
       }
     }
     if (url.pathname === "/.well-known/oauth-protected-resource") {
-      const resource = await protectedResourceResponse(url);
+      const resource = await protectedResourceResponse(url, env);
       if (resource !== null) {
         return request.method === "HEAD" ? new Response(null, resource) : resource;
       }
     }
     if (wantsMarkdown(request.headers.get("accept"))) {
-      const markdown = await markdownResponse(request, url);
+      const markdown = await markdownResponse(request, url, env);
       if (markdown !== null) {
         return request.method === "HEAD" ? new Response(null, markdown) : markdown;
       }
     }
-    const origin = await fetch(request);
+    const asset = await env.ASSETS.fetch(request);
     // A page answer announces where the machine-readable resources are. The
     // markdownPath test is the worker's existing idea of what a page is: it
     // keeps install.sh and the images from wearing links that are not
     // about them. It is also what can be answered as Markdown, so it is the
     // HTML variant of a negotiated page and varies on Accept like the other.
-    if (origin.ok && markdownPath(url.pathname) !== null) {
-      const response = new Response(origin.body, origin);
+    if (asset.ok && markdownPath(url.pathname) !== null) {
+      const response = new Response(asset.body, asset);
       response.headers.set("link", discoveryLinks());
       response.headers.append("vary", "Accept");
       return response;
     }
-    return origin;
+    return asset;
   }
-  // A same-zone fetch from a Worker goes to the origin directly, so the HTML
-  // answer reaches GitHub Pages exactly as it always did.
-  return fetch(request);
+  // Methods the assets pipeline does not answer are answered by it anyway:
+  // the binding serves what the deployment shipped, and nothing here is a
+  // write.
+  return env.ASSETS.fetch(request);
 }
 
 export default {
-  async fetch(request) {
-    return withSecurityHeaders(await route(request));
+  async fetch(request, env) {
+    return withSecurityHeaders(await route(request, env));
   },
 };

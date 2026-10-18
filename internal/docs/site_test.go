@@ -112,12 +112,11 @@ func TestReleaseRefreshKeepsTagsOutOfThePagesEnvironment(t *testing.T) {
 	if !ok {
 		t.Fatal("the website workflow has no build job")
 	}
-	build, deploy, ok := strings.Cut(rest, "\n  deploy:\n")
-	if !ok {
-		t.Fatal("the website workflow has no deploy job")
-	}
+	// The build job deploys the site to the edge itself, so the step that
+	// publishes is in it and not in a job of its own.
+	build, deploy := rest, rest
 	for _, want := range []string{
-		"if: github.event.action != 'closed' && github.event_name == 'release' && github.event.repository.has_pages",
+		"if: github.event.action != 'closed' && github.event_name == 'release'",
 		"actions: write",
 		"GH_TOKEN: ${{ github.token }}",
 	} {
@@ -131,7 +130,7 @@ func TestReleaseRefreshKeepsTagsOutOfThePagesEnvironment(t *testing.T) {
 	if !strings.Contains(build, "if: github.event.action != 'closed' && github.event_name != 'release'") {
 		t.Error("release tags still build a Pages artefact instead of leaving it to the main-branch run")
 	}
-	if !strings.Contains(deploy, "if: github.event.action != 'closed' && github.event.repository.has_pages && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'") {
+	if !strings.Contains(deploy, "if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'") {
 		t.Error("Pages must only deploy from main, including when a release requested the run")
 	}
 	if strings.Contains(build, "actions: write") || strings.Contains(deploy, "actions: write") {
