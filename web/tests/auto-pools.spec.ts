@@ -28,7 +28,7 @@ import {
   grid,
   openFleetContext,
   openHostCard,
-  useClassic,
+  tokenPixels,
 } from './support/fixtures';
 
 test.describe.configure({ mode: 'serial' });
@@ -648,7 +648,6 @@ test.describe('pools the controller keeps', () => {
   }) => {
     // The pools most fleets run on are the ones the controller keeps, so without
     // this the valve could never be turned on for them.
-    await useClassic(page); // the hint's 12px is Classic's type scale
     const pool = await realPool(page);
     let patched: Record<string, unknown> | null = null;
     const current = auto();
@@ -684,7 +683,10 @@ test.describe('pools the controller keeps', () => {
     const valve = dialog.getByRole('group', { name: 'Elastic memory' });
     await expect(valve).toHaveCSS('display', 'flex');
     await expect(valve.locator('legend')).toHaveCSS('border-top-width', '1px');
-    await expect(valve.locator('.hint').first()).toHaveCSS('font-size', '12px');
+    await expect(valve.locator('.hint').first()).toHaveCSS(
+      'font-size',
+      await tokenPixels(page, '--z-text-xs'),
+    );
     await dialog.getByRole('radio', { name: /^Lend memory/ }).check();
     // Swap past a terabyte is a typo, and is said where it is typed.
     const swap = dialog.getByRole('textbox', { name: 'Swap as the last resort', exact: true });

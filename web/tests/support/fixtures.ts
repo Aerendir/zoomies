@@ -449,6 +449,25 @@ export async function openFleetContext(page: Page): Promise<void> {
   await fold.locator(':scope > summary').click();
 }
 
+/**
+ * A size token as the page in front of the test computes it, in pixels.
+ *
+ * A test that pins a size to a number is pinned to one visual style's type
+ * scale, and Mission Control's is larger than Classic's. Asking the page what the
+ * token comes to makes the claim "this is the size the token says", which holds
+ * in both styles, so the test need not choose one.
+ */
+export async function tokenPixels(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement('span');
+    probe.style.fontSize = `var(${name})`;
+    document.body.append(probe);
+    const pixels = getComputedStyle(probe).fontSize;
+    probe.remove();
+    return pixels;
+  }, token);
+}
+
 /** What the theme currently is: the attribute on `<html>` and what was stored. */
 export async function readTheme(
   page: Page,
