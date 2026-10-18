@@ -43,7 +43,7 @@ collects the Docker Compose, CLI and API equivalents.
 
 ## Just looking?
 
-Open the [live demo](https://demo.zoomies.sh/) to explore a running fleet in
+Open the [live demo](https://demo.zoomies.sh/){ target=_blank rel="noopener" } to explore a running fleet in
 your browser without installing anything or signing in. It uses [public
 view](public-view.md): visitors can read the fleet, while settings, Eli and
 changes require sign-in.

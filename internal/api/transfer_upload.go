@@ -130,7 +130,7 @@ func (s *Server) handleCreateTransferUpload(w http.ResponseWriter, r *http.Reque
 		_ = os.Remove(u.path)
 		delete(s.transfers.items, u.ID)
 	})
-	writeJSON(w, http.StatusCreated, u)
+	writeCreated(w, r, u.ID, u)
 }
 func (s *Server) handleGetTransferUpload(w http.ResponseWriter, r *http.Request) {
 	u := s.transferUpload(r)
