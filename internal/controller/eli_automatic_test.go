@@ -182,3 +182,156 @@ func TestTheAutomaticOverviewOrdersProblemsFirstThenByName(t *testing.T) {
 		t.Errorf("order %v, want %v", order, want)
 	}
 }
+
+func policyOf(t *testing.T, h *harness, repo string) store.EliRepairPolicy {
+	t.Helper()
+	policies, err := h.st.EliRepairPolicies(h.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range policies {
+		if p.Repo == repo {
+			return p
+		}
+	}
+	t.Fatalf("no policy for %s", repo)
+	return store.EliRepairPolicy{}
+}
+
+// Ask me first is the way back to a person deciding, so the repository keeps
+// everything else it was set up with: the provider that will pay again if
+// Automatic is chosen later, the allowance and the workflow setting.
+func TestStoppingAutomaticRepairsToAskFirstKeepsTheProviderAndLimits(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	team := installationProvider(t, h, "Team", true)
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/auto", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true, AllowWorkflows: true, DailyLimit: 9})
+
+	got, err := h.c.StopEliAutomatic(h.ctx, []string{"acme/auto"}, EliStopAskFirst)
+	if err != nil || len(got) != 1 || !got[0].Changed || got[0].Error != "" {
+		t.Fatalf("results %+v, error %v", got, err)
+	}
+	want := store.EliRepairPolicy{Repo: "acme/auto", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, AskFirst: true, AllowWorkflows: true, DailyLimit: 9}
+	if p := policyOf(t, h, "acme/auto"); p != want {
+		t.Errorf("policy %+v, want %+v", p, want)
+	}
+}
+
+// Turning repairs off clears the switch and nothing else, so the switch is also
+// how it is turned back on: setup resumes Automatic as it was.
+func TestStoppingAutomaticRepairsToOffOnlyClearsTheSwitch(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	team := installationProvider(t, h, "Team", true)
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/auto", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true, AllowWorkflows: true, DailyLimit: 9})
+
+	got, err := h.c.StopEliAutomatic(h.ctx, []string{"acme/auto"}, EliStopOff)
+	if err != nil || len(got) != 1 || !got[0].Changed {
+		t.Fatalf("results %+v, error %v", got, err)
+	}
+	want := store.EliRepairPolicy{Repo: "acme/auto", InstallationID: inst.ID, ProviderID: team.ID, Enabled: false, Automatic: true, AllowWorkflows: true, DailyLimit: 9}
+	if p := policyOf(t, h, "acme/auto"); p != want {
+		t.Errorf("policy %+v, want %+v", p, want)
+	}
+	if overview := overviewOf(t, h); len(overview) != 0 {
+		t.Errorf("a repository that is switched off is still listed as automatic: %+v", overview)
+	}
+}
+
+// The day the control is needed is the day the provider is the problem. Saving a
+// policy through setup is refused then, so a stop that went through the same
+// check would be unavailable exactly when it was wanted.
+func TestStoppingWorksWhenTheProviderIsGone(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	team := installationProvider(t, h, "Team", true)
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/a", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true})
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/b", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true})
+	if err := h.st.DeleteAssistantProvider(h.ctx, team.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	for repo, then := range map[string]string{"acme/a": EliStopAskFirst, "acme/b": EliStopOff} {
+		got, err := h.c.StopEliAutomatic(h.ctx, []string{repo}, then)
+		if err != nil || len(got) != 1 || !got[0].Changed || got[0].Error != "" {
+			t.Errorf("%s (%s): results %+v, error %v", repo, then, got, err)
+		}
+	}
+	if a := policyOf(t, h, "acme/a"); a.Automatic || !a.AskFirst || !a.Enabled {
+		t.Errorf("acme/a was not moved to ask first: %+v", a)
+	}
+	if b := policyOf(t, h, "acme/b"); b.Enabled {
+		t.Errorf("acme/b was not turned off: %+v", b)
+	}
+}
+
+// A second press, or a second administrator, finds it already done. That is not
+// an error, and it must not write the policy again.
+func TestStoppingTwiceChangesNothingTheSecondTime(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	team := installationProvider(t, h, "Team", true)
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/auto", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true})
+	if _, err := h.c.StopEliAutomatic(h.ctx, []string{"acme/auto"}, EliStopAskFirst); err != nil {
+		t.Fatal(err)
+	}
+	saved := policyOf(t, h, "acme/auto")
+
+	// Asking for off now must not turn an ask-first repository off: it is not
+	// automatic, so there is nothing to stop.
+	got, err := h.c.StopEliAutomatic(h.ctx, []string{"acme/auto"}, EliStopOff)
+	if err != nil || len(got) != 1 || got[0].Changed || got[0].Error != "" {
+		t.Fatalf("second stop: %+v, error %v", got, err)
+	}
+	if p := policyOf(t, h, "acme/auto"); p != saved {
+		t.Errorf("the second stop changed the policy: %+v, was %+v", p, saved)
+	}
+}
+
+func TestStoppingARepositoryWithNoPolicySaysSoAndTakesEachNameOnce(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	team := installationProvider(t, h, "Team", true)
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/auto", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true})
+
+	got, err := h.c.StopEliAutomatic(h.ctx, []string{"acme/missing", "acme/auto", "acme/auto"}, EliStopAskFirst)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("results %+v, error %v", got, err)
+	}
+	if got[0].Repo != "acme/missing" || got[0].Changed || got[0].Error == "" {
+		t.Errorf("a repository with no policy: %+v", got[0])
+	}
+	if got[1].Repo != "acme/auto" || !got[1].Changed || got[1].Error != "" {
+		t.Errorf("the repository stopped: %+v", got[1])
+	}
+	if _, err := h.c.StopEliAutomatic(h.ctx, []string{"acme/auto"}, "pause"); err == nil {
+		t.Error("a choice that is not ask_first or off was accepted")
+	}
+}
+
+// Telling the administrator that a repair "stops before it changes the branch" is
+// only honest because the worker looks at the policy again when it gets to a
+// repair. This pins that, for both ways of stopping, so the dialog's promise
+// cannot drift from the worker.
+func TestAStoppedRepositoryBlocksItsQueuedAutomaticRepair(t *testing.T) {
+	for _, then := range []string{EliStopAskFirst, EliStopOff} {
+		t.Run(then, func(t *testing.T) {
+			s := newCommandSetup(t, 5)
+			policy := policyOf(t, s.h, s.repo)
+			policy.Automatic = true
+			savePolicy(t, s.h, policy)
+			row := &store.EliRepair{DedupKey: "automatic:" + s.repo + ":old", Repo: s.repo, InstallationID: s.inst.ID, PullNumber: 1, HeadSHA: "old", RunID: 9, Trigger: "automatic"}
+			if _, err := s.h.st.EnqueueEliRepair(s.h.ctx, row, 5); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.h.c.StopEliAutomatic(s.h.ctx, []string{s.repo}, then); err != nil {
+				t.Fatal(err)
+			}
+
+			s.h.c.runEliRepair(s.h.ctx, row)
+			if row.State != "blocked" || s.fake.commits != 0 || len(s.fake.comments) != 0 {
+				t.Fatalf("a repair queued before the stop ran: state %q, %d commits, comments %q", row.State, s.fake.commits, s.fake.comments)
+			}
+		})
+	}
+}
