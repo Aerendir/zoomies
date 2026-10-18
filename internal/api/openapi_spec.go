@@ -6,9 +6,10 @@ package api
 // openapiSpecGzB64 is api/openapi.yaml, gzipped and base64 encoded.
 //
 // It is generated rather than embedded because go:embed cannot reach a file
-// outside its package directory. openapi_spec_test.go compares it with the
-// original on every test run, so the two cannot drift apart unnoticed; when it
-// fails, run `go run internal/api/gen_openapi.go` from the repository root.
+// outside its package directory. TestEmbeddedSpecMatchesTheSource (web_test.go)
+// compares it with the original on every test run, so the two cannot drift
+// apart unnoticed; when it fails, run `go run internal/api/gen_openapi.go`
+// from the repository root.
 const openapiSpecGzB64 = "" +
 	"H4sIAAAAAAAC/+z9e5Mct5U3DP6vT3Ginzdekt7qIkXJfsbN188ETck2PZLFh6RGsePQdqEqUV1wZwFpANnFskYR+9d+gP1v" +
 	"v977STbOBUhk3asvvEjdETMWuzMBJHBw7ud3XKOtaswZfDH8fPjks8+MnbqzzwCiibU+g/9ybm50gOevXn4GcKV9MM6ewcnn" +
