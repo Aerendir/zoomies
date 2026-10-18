@@ -545,6 +545,49 @@ func TestNarrowingToAPoolOrHostDeletedSinceReadsWhatThePeriodHoldsOfIt(t *testin
 	}
 }
 
+// Not found is a pool or host the fleet does not have and none of the period's
+// rows name. One it has, with nothing in the period, is a quiet period and is
+// answered as one: the Jobs page's card narrowed to a pool with nothing queued
+// today, and a host's startup card on a day it started nothing, would
+// otherwise show an error where they should say that nothing happened. An id
+// nothing ever had is still not found in the same quiet period.
+func TestNarrowingToAQuietPoolOrHostAnswersAnEmptyPeriodAndAnUnknownIDIsStillNotFound(t *testing.T) {
+	f := newAnalysisFleet(t)
+	pool := f.pool("quiet", nil)
+	host := f.host("vm-quiet", "amd64")
+
+	q, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, pool.ID)
+	if err != nil {
+		t.Fatalf("queue wait narrowed to a pool with no jobs: %v", err)
+	}
+	if q.Evidence.Jobs != 0 || q.Summary != "No jobs were queued in this period." {
+		t.Errorf("queue wait read %d jobs and says %q, want an empty period", q.Evidence.Jobs, q.Summary)
+	}
+	for name, ids := range map[string][2]string{
+		"a pool": {pool.ID, ""}, "a host": {"", host.ID}, "a pool and a host": {pool.ID, host.ID},
+	} {
+		s, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, ids[0], ids[1])
+		if err != nil {
+			t.Fatalf("startup failures narrowed to %s with no runners: %v", name, err)
+		}
+		if s.Evidence.Starts+s.Evidence.Unknown != 0 || s.Summary != "No runners were asked to start in this period." {
+			t.Errorf("startup failures narrowed to %s read %+v and say %q, want an empty period", name, s.Evidence, s.Summary)
+		}
+	}
+
+	if _, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, "pool_nothing_ever_had"); !errors.As(err, new(NotFoundError)) {
+		t.Errorf("queue wait on a pool nothing ever had: %v, want not found", err)
+	}
+	for name, ids := range map[string][2]string{
+		"a pool": {"pool_nothing_ever_had", ""}, "a host": {"", "host_nothing_ever_had"},
+		"a pool the fleet has and a host it does not": {pool.ID, "host_nothing_ever_had"},
+	} {
+		if _, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, ids[0], ids[1]); !errors.As(err, new(NotFoundError)) {
+			t.Errorf("startup failures narrowed to %s: %v, want not found", name, err)
+		}
+	}
+}
+
 // An until past now ends now. Read as asked, every job still waiting would
 // be counted as waiting through hours that have not happened, and the
 // answer would lead with that wait at full confidence: an operator asking
