@@ -35,7 +35,7 @@ const (
 // that declares its own os or arch: that is a promise about the machine, so a
 // job asking for a different one must not land there.
 func Matches(poolLabels, jobLabels []string) bool {
-	return matches(store.NormalizeLabels(poolLabels), store.NormalizeLabels(jobLabels), true)
+	return matches(store.NormalizeLabels(poolLabels), labelsOf(store.NormalizeLabels(jobLabels)), true)
 }
 
 // PoolMatches is Matches for a whole pool, which knows whether its runners
@@ -45,21 +45,54 @@ func Matches(poolLabels, jobLabels []string) bool {
 // offer that job to such a runner, and a runner started for it would sit
 // idle while the job waited.
 func PoolMatches(p *store.Pool, jobLabels []string) bool {
-	return matches(store.NormalizeLabels(p.Labels), store.NormalizeLabels(jobLabels), !p.NoDefaultLabels)
+	return matches(store.NormalizeLabels(p.Labels), labelsOf(store.NormalizeLabels(jobLabels)), !p.NoDefaultLabels)
 }
 
-// matches is Matches over already-normalised label sets. implicit says
-// whether the pool's runners advertise store.ImplicitLabels.
-func matches(pool, job []string, implicit bool) bool {
-	for _, l := range job {
-		if implicit && store.ImplicitLabels[l] {
+// jobLabels is a job's normalised labels with the one question every
+// comparison would otherwise put to a map for itself, answered once: which of
+// them are the labels every runner advertises. A pass sets each queued job
+// against every pool, and the pools that cannot run it turn it away on its first
+// label, so that lookup was the commonest thing the matching did.
+type jobLabels struct {
+	names []string
+	// implicit has bit i set when names[i] is in store.ImplicitLabels, for the
+	// first 64 labels. A job has a handful, so the word is enough; the rest ask
+	// the map, which is slower and still right.
+	implicit uint64
+}
+
+// labelsOf classifies a job's labels, which the caller has put through
+// NormalizeLabels.
+func labelsOf(names []string) jobLabels {
+	j := jobLabels{names: names}
+	for i, l := range names[:min(len(names), 64)] {
+		if store.ImplicitLabels[l] {
+			j.implicit |= 1 << i
+		}
+	}
+	return j
+}
+
+// isImplicit reports whether the job's i-th label is one every runner advertises.
+func (j jobLabels) isImplicit(i int) bool {
+	if i < 64 {
+		return j.implicit&(1<<i) != 0
+	}
+	return store.ImplicitLabels[j.names[i]]
+}
+
+// matches is Matches over a pool's normalised labels and a job's classified
+// ones. implicit says whether the pool's runners advertise store.ImplicitLabels.
+func matches(pool []string, job jobLabels, implicit bool) bool {
+	for i, l := range job.names {
+		if implicit && job.isImplicit(i) {
 			continue
 		}
 		if !slices.Contains(pool, l) {
 			return false
 		}
 	}
-	return !contradicts(pool, job, osLabels) && !contradicts(pool, job, archLabels)
+	return !contradicts(pool, job.names, osLabels) && !contradicts(pool, job.names, archLabels)
 }
 
 // contradicts reports whether the job asked for a label from dim that the pool
@@ -89,11 +122,11 @@ func Score(poolLabels, jobLabels []string) int {
 // score is Score for a pool that may not advertise the implicit labels.
 func score(poolLabels, jobLabels []string, implicit bool) int {
 	pool := store.NormalizeLabels(poolLabels)
-	job := store.NormalizeLabels(jobLabels)
+	job := labelsOf(store.NormalizeLabels(jobLabels))
 	if !matches(pool, job, implicit) {
 		return noMatch
 	}
-	return surplusScore(pool, job)
+	return surplusScore(pool, job.names)
 }
 
 // surplusScore is the score of a pool already known to match a job, both
@@ -169,7 +202,7 @@ func BestPool(pools []*store.Pool, j *store.Job) *store.Pool {
 // fleet does not offer -- and only the first is worth a sentence, because the
 // second is what the Jobs page already says.
 func bestPool(pools []*store.Pool, j *store.Job, targets map[string]string) (*store.Pool, string) {
-	return bestOf(pools, nil, j, store.NormalizeLabels(j.Labels), targets)
+	return bestOf(pools, nil, j, labelsOf(store.NormalizeLabels(j.Labels)), targets)
 }
 
 // preparedLabels is each pool's labels put through NormalizeLabels, in the
@@ -186,12 +219,12 @@ func preparedLabels(pools []*store.Pool) [][]string {
 }
 
 // bestOf is bestPool for a job whose labels the caller has put through
-// NormalizeLabels. prepared, from preparedLabels, is the pools' labels put
-// through it too, for a caller that sets many jobs against the same pools. Nil
-// makes bestOf normalise each pool's as it meets it, which is the better way to
-// ask about one job: labels already in order are returned as they are, so
-// nothing is allocated, where preparing them would build a slice as long as the
-// fleet for a single comparison.
+// NormalizeLabels and classified (labelsOf). prepared, from preparedLabels, is
+// the pools' labels put through NormalizeLabels too, for a caller that sets many
+// jobs against the same pools. Nil makes bestOf normalise each pool's as it
+// meets it, which is the better way to ask about one job: labels already in
+// order are returned as they are, so nothing is allocated, where preparing them
+// would build a slice as long as the fleet for a single comparison.
 //
 // It gives the answer bestPool always gave, which labels_prepared_test.go holds
 // it to over a great many random fleets; what differs is how much it does to
@@ -206,7 +239,7 @@ func preparedLabels(pools []*store.Pool) [][]string {
 // jobs against a hundred pools, took about 27 ms, 270 ns a pair, and takes about
 // 4 ms now. A pair costs one matches call and, when the pool is eligible, one
 // pass over its labels to score it.
-func bestOf(pools []*store.Pool, prepared [][]string, j *store.Job, jobLabels []string, targets map[string]string) (*store.Pool, string) {
+func bestOf(pools []*store.Pool, prepared [][]string, j *store.Job, job jobLabels, targets map[string]string) (*store.Pool, string) {
 	var best, elsewhere *store.Pool
 	bestScore := noMatch
 	for i, p := range pools {
@@ -219,7 +252,7 @@ func bestOf(pools []*store.Pool, prepared [][]string, j *store.Job, jobLabels []
 		} else {
 			labels = store.NormalizeLabels(p.Labels)
 		}
-		if !matches(labels, jobLabels, !p.NoDefaultLabels) {
+		if !matches(labels, job, !p.NoDefaultLabels) {
 			continue
 		}
 		if refusalBeforeLabels(p, j) != "" {
@@ -231,7 +264,7 @@ func bestOf(pools []*store.Pool, prepared [][]string, j *store.Job, jobLabels []
 			}
 			continue
 		}
-		s := surplusScore(labels, jobLabels)
+		s := surplusScore(labels, job.names)
 		if best == nil || s > bestScore || (s == bestScore && lessPoolFor(j, p, best)) {
 			best, bestScore = p, s
 		}
