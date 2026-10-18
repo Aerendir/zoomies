@@ -280,6 +280,90 @@ func refusals(note string) string {
 	return after
 }
 
+// The changed files may take half of the allowance before the model asks for
+// anything, and no more: the rest is what its own requests are promised, the
+// workflow its failing job runs among them, which the PR did not change. Three
+// files of one window each are 98304 bytes, so the third is the one that does
+// not load, and it is named so that the model knows it may ask for it.
+func TestTheChangedFilesTakeAtMostHalfTheAllowanceAndTheRestAreNamed(t *testing.T) {
+	snapshot := Snapshot{}
+	for _, name := range []string{"a.go", "b.go", "c.go"} {
+		snapshot.Files = append(snapshot.Files, File{Path: name, Content: source(MaxFileBytes), Mode: "100644"})
+	}
+	model := &usage{replies: &replies{values: []string{`{"cannot_fix":"enough"}`}}}
+	if _, err := Generate(context.Background(), model, files{}, snapshot, "fix the failing check", false); !errors.Is(err, ErrCannotFix) {
+		t.Fatalf("got %v", err)
+	}
+	// Half is what the documentation promises, so the number is written here and
+	// not read from the constant that holds it.
+	if len(model.used) != 1 || model.used[0] != 65536 {
+		t.Fatalf("source supplied before the first call: %v, want 65536", model.used)
+	}
+	first := model.seen[0].Content
+	for name, loaded := range map[string]bool{"a.go": true, "b.go": true, "c.go": false} {
+		if named := strings.Contains(first, name+": not loaded initially"); named == loaded {
+			t.Errorf("%s: named as not loaded = %v, but loaded = %v", name, named, loaded)
+		}
+	}
+}
+
+// The allowance is a count of bytes, and both of its edges matter: a read that
+// needs exactly what is left must fit, or a repair loses the last byte of room
+// it was promised, and one that needs a byte more must not, or the allowance
+// drifts upwards with every read that is allowed to stretch it.
+func TestAReadNeedingExactlyWhatRemainsFitsAndOneByteMoreDoesNot(t *testing.T) {
+	window := strings.Repeat("x", MaxFileBytes)
+	for _, tc := range []struct {
+		name string
+		// extra is what has been read beyond three whole windows, which leaves
+		// either exactly one window of the allowance or a byte less.
+		extra int
+		fits  bool
+	}{
+		{"a read needing exactly what remains", 0, true},
+		{"a read needing one byte more than remains", 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := files{"a": {Content: window}, "b": {Content: window}, "c": {Content: window}, "d": {Content: window}, "e": {Content: strings.Repeat("e", tc.extra)}}
+			s := newSourceContext(reader, false)
+			for _, name := range []string{"a", "b", "c", "e"} {
+				if _, err := s.reveal(context.Background(), ReadWindow{Path: name}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before := s.bytes
+			_, err := s.reveal(context.Background(), ReadWindow{Path: "d"})
+			var over *allowanceError
+			switch {
+			case tc.fits && (err != nil || s.bytes != MaxSourceBytes):
+				t.Fatalf("the last window was refused or miscounted: %v, %d bytes of %d", err, s.bytes, MaxSourceBytes)
+			case !tc.fits && (!errors.As(err, &over) || over.need != MaxFileBytes || over.left != MaxSourceBytes-before || s.bytes != before):
+				t.Fatalf("a window one byte too many was admitted or spent something: %v, %d bytes, was %d", err, s.bytes, before)
+			}
+		})
+	}
+}
+
+// With nothing left there is no window to ask for, and the model is told so in
+// as many words, not that some number of bytes remain: the sentence is what
+// sends it to its own answer, and a figure of zero would send it looking for a
+// window to shrink.
+func TestAnUsedUpAllowanceIsSaidToTheModelAsSuch(t *testing.T) {
+	ci := bigWorkflow()
+	model := &replies{values: []string{
+		`{"read":["a.go","b.go","c.go","d.go"]}`,
+		`{"read":["` + ci.Path + `"]}`,
+		`{"cannot_fix":"enough"}`,
+	}}
+	if _, err := Generate(context.Background(), model, readerWithFour(MaxFileBytes), Snapshot{}, "fix the failing check", true); !errors.Is(err, ErrCannotFix) {
+		t.Fatalf("got %v", err)
+	}
+	last := model.seen[len(model.seen)-1].Content
+	if !strings.Contains(last, "the whole 128 KiB source allowance is used up") || strings.Contains(last, "bytes of the 128 KiB allowance remain") {
+		t.Fatalf("the model was told:\n%s", refusals(last))
+	}
+}
+
 // A model that keeps asking for what does not fit is stopped by the round limit,
 // and "reached the model-step limit" on its own sends whoever reads it to the
 // model, when it was the request that was too wide for the allowance. The error
