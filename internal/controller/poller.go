@@ -261,7 +261,7 @@ func (c *Controller) ingestQueuedJobs(ctx context.Context, polled *store.Install
 		if saved.State == store.JobQueued {
 			changed++
 		}
-		c.publishJob(ctx, saved)
+		c.publishJobIn(ctx, saved, pools)
 	}
 	return changed, nil
 }

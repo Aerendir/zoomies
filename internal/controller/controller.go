@@ -1148,10 +1148,16 @@ func (c *Controller) rememberHost(id string, raw []byte) {
 
 // publishJob announces a job change in the shape GET /jobs/{id} returns.
 func (c *Controller) publishJob(ctx context.Context, j *store.Job) {
+	c.publishJobIn(ctx, j, nil)
+}
+
+// publishJobIn is publishJob for a caller that has the pools in hand, which
+// names the job's pool from them: see jobViewIn.
+func (c *Controller) publishJobIn(ctx context.Context, j *store.Job, pools []*store.Pool) {
 	if j == nil || c.bus == nil {
 		return
 	}
-	c.publish(events.KindJobUpdated, "job:"+j.ID, c.jobView(ctx, j))
+	c.publish(events.KindJobUpdated, "job:"+j.ID, c.jobViewIn(ctx, j, pools))
 }
 
 // publishInstallation announces an installation change in the shape

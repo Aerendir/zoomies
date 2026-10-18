@@ -403,8 +403,12 @@ func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJob
 	c.recordJobChange(ctx, saved, change, source, runner)
 	if saved.StartedAt != nil && (change.Created || change.StateChanged) && change.PreviousState != store.JobInProgress {
 		poolName, backendName := UnmatchedPool, "unknown"
-		if p, e := c.st.GetPool(ctx, saved.PoolID); e == nil {
+		if p := poolIn(pools, saved.PoolID); p != nil {
 			poolName, backendName = p.Name, string(p.Backend)
+		} else if saved.PoolID != "" {
+			if p, e := c.st.GetPool(ctx, saved.PoolID); e == nil {
+				poolName, backendName = p.Name, string(p.Backend)
+			}
 		}
 		observeDuration(c.metrics.queuedToStarted, poolName, backendName, saved.QueuedAt, *saved.StartedAt)
 	}
@@ -471,7 +475,7 @@ func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJob
 			"job", saved.ID, "repo", saved.Repo, "labels", strings.Join(saved.Labels, ","))
 	}
 
-	c.publishJob(ctx, saved)
+	c.publishJobIn(ctx, saved, pools)
 	// Wake the reconcile loop rather than scheduling inline: GitHub is holding
 	// this connection open, and a reconcile can take as long as GitHub's API
 	// does to answer.
