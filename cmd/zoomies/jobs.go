@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/mcp"
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 // runJobs is `zoomies jobs ...`.
@@ -24,6 +25,19 @@ func runJobs(ctx context.Context, e *env, args []string) error {
 		{"acknowledge", "<job-id>", "Mark a failed job as known, so the attention list stops asking", jobsAcknowledge},
 		{"reopen", "<job-id>", "Put an acknowledged failure back in front of whoever looks next", jobsReopen},
 	}, args)
+}
+
+// faultKindNames lists the fault categories the controller accepts, read from
+// the store's closed set. The help used to carry a copy of its own and named
+// nine of the eleven, so two filters the controller honours could not be found
+// from the command.
+func faultKindNames() string {
+	kinds := store.FaultKinds()
+	names := make([]string, len(kinds))
+	for i, k := range kinds {
+		names[i] = string(k)
+	}
+	return strings.Join(names, ", ")
 }
 
 func jobsList(ctx context.Context, e *env, args []string) error {
@@ -52,7 +66,7 @@ func jobsList(ctx context.Context, e *env, args []string) error {
 	before := fs.String("before", "", "continue after the previous page: the cursor it printed, or the next field of --output json")
 	steps := fs.Bool("include-steps", true, "with --output json, include each job's steps; --include-steps=false returns short summaries")
 	faults := &listValue{}
-	fs.Var(faults, "fault", "only this fault category: out_of_memory, host_lost, image, registration, backend, config, out_of_disk, removed, runner_exited (repeatable)")
+	fs.Var(faults, "fault", "only this fault category: "+faultKindNames()+" (repeatable)")
 	fs.example(
 		"zoomies jobs list --repo acme/widgets --since 24h",
 		"zoomies jobs list --unmatched",

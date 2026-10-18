@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 // `jobs get` is the page somebody opens when a job did not do what they
@@ -158,6 +160,35 @@ func TestJobsListSendsTheFaultFiltersTheAPIUnderstands(t *testing.T) {
 	if _, _ = runCLI(t, "jobs", "list", "--fault", "out_of_memory", "--url", srv.URL); len(asked) != 1 ||
 		!strings.Contains(asked[0], "fault=out_of_memory") {
 		t.Fatalf("--fault sent %v, want fault=out_of_memory", asked)
+	}
+}
+
+// The --fault help is where an operator learns which categories there are, and
+// it used to keep a copy of them by hand: it named nine of the eleven the
+// controller accepts, so backend_busy and container_conflict were filters
+// nobody could find from the command. It reads the store's closed set now, and
+// this holds it to every kind in it.
+func TestJobsListFaultHelpNamesEveryCategoryTheControllerAccepts(t *testing.T) {
+	e, _, errOut := newTestEnv(t)
+	if code := dispatch(context.Background(), e, []string{"jobs", "list", "--help"}); code != exitOK {
+		t.Fatalf("exit code = %d, want 0\n%s", code, errOut)
+	}
+	// The examples below the flags use --fault too, so the flag's own line is
+	// the one to read, not the whole help.
+	var line string
+	for _, l := range strings.Split(errOut.String(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "--fault ") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatalf("jobs list --help has no --fault flag:\n%s", errOut)
+	}
+	for _, kind := range store.FaultKinds() {
+		if !strings.Contains(line, string(kind)) {
+			t.Errorf("--fault help does not name %q, which the controller accepts:\n%s", kind, line)
+		}
 	}
 }
 
