@@ -49,9 +49,11 @@ func (f *fakeFactory) For(_ context.Context, inst *store.Installation, privateKe
 	return f.gh.Client(inst.Target, inst.TargetType), nil
 }
 
-// harness is a controller wired to an in-memory store and a fake GitHub.
+// harness is a controller wired to an in-memory store and a fake GitHub. It
+// takes a testing.TB rather than a *testing.T so that the benchmarks can build
+// the same controller the tests do, instead of a second one that drifts.
 type harness struct {
-	t       *testing.T
+	t       testing.TB
 	c       *Controller
 	st      *store.Store
 	gh      *github.FakeGitHub
@@ -82,7 +84,7 @@ func (h *harness) advance(d time.Duration) { h.offset.Add(int64(d)) }
 // testConfig is a configuration that validates without a single warning, so a
 // test asserting "Problems is empty" is asserting about the fleet rather than
 // about the defaults.
-func testConfig(t *testing.T) *config.Config {
+func testConfig(t testing.TB) *config.Config {
 	t.Helper()
 	cfg := config.Default()
 	cfg.Server.Bind = "127.0.0.1:8080"
@@ -97,7 +99,7 @@ func testConfig(t *testing.T) *config.Config {
 	return cfg
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t testing.TB) *harness {
 	t.Helper()
 	return newHarnessAt(t, nil)
 }
@@ -107,7 +109,7 @@ func newHarness(t *testing.T) *harness {
 // own stamps (a runner's creation, a failure's end) to fall inside it, and
 // the store stamps those from its clock, not from anything the test passes.
 // A nil clock is the wall clock.
-func newHarnessAt(t *testing.T, clock func() time.Time) *harness {
+func newHarnessAt(t testing.TB, clock func() time.Time) *harness {
 	t.Helper()
 	ctx := context.Background()
 

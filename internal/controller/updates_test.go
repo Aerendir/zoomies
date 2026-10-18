@@ -34,7 +34,7 @@ func jsonResponse(status int, body string) *http.Response {
 
 // withVersion stamps a version for the duration of one test, because the whole
 // question this feature answers is "what was this binary built from".
-func withVersion(t *testing.T, v string) {
+func withVersion(t testing.TB, v string) {
 	t.Helper()
 	prev := version.Version
 	version.Version = v
@@ -82,7 +82,7 @@ func (h *harness) inMode(mode string) {
 // tests run on, which is the one the controller asks Newest about. It is built
 // from runtime rather than written out so that the same fixtures hold on an
 // arm64 runner.
-func completeAssets(t *testing.T) []string {
+func completeAssets(t testing.TB) []string {
 	t.Helper()
 	binary := updates.AssetName(runtime.GOOS, runtime.GOARCH)
 	if binary == "" {
