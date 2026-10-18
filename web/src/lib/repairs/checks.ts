@@ -27,8 +27,24 @@ export interface CheckRow {
   label: string;
   status: CheckStatus;
   message: string;
+  /**
+   * Why a blocked check is blocked: the code of the blocker the controller
+   * recorded for it, which the check's own code cannot say. A controller older
+   * than this build sends none, and the row reads by the check alone.
+   */
+  blocker?: string;
   action?: CheckAction;
 }
+
+/**
+ * Blockers that say a check could not be made, not that it failed. The controller
+ * folds them into the check it was making, so the check's own code would send the
+ * person to choose another pull request or to open the installations because GitHub
+ * did not answer. Whichever check it was, the way forward is to look again.
+ */
+const COULD_NOT_CHECK = ['github', 'budget_unavailable'];
+export const couldNotCheck = (blocker: string | undefined): blocker is string =>
+  blocker !== undefined && COULD_NOT_CHECK.includes(blocker);
 
 type Readiness = Schemas['EliReadiness'];
 
@@ -115,9 +131,18 @@ function wayForward(code: string, repoUrl: string | undefined): CheckAction {
   }
 }
 
-function row(code: string, status: CheckStatus, message: string, repoUrl?: string): CheckRow {
+function row(
+  code: string,
+  status: CheckStatus,
+  message: string,
+  repoUrl?: string,
+  blocker?: string,
+): CheckRow {
   const out: CheckRow = { code, label: LABELS[code] ?? code, status, message };
-  if (status === 'blocked') out.action = wayForward(code, repoUrl);
+  if (status === 'blocked') {
+    if (blocker) out.blocker = blocker;
+    out.action = wayForward(couldNotCheck(blocker) ? blocker : code, repoUrl);
+  }
   return out;
 }
 
@@ -127,14 +152,14 @@ const rank = (code: string): number => {
 };
 
 function rowsFromBlockers(blockers: Readiness['blockers'], repoUrl?: string): CheckRow[] {
-  const seen = new Map<string, string>();
+  const seen = new Map<string, { message: string; blocker: string }>();
   for (const blocker of blockers) {
     const code = CHECK_OF_BLOCKER[blocker.code] ?? blocker.code;
-    if (!seen.has(code)) seen.set(code, blocker.message);
+    if (!seen.has(code)) seen.set(code, { message: blocker.message, blocker: blocker.code });
   }
   return [...seen.entries()]
     .sort(([a], [b]) => rank(a) - rank(b))
-    .map(([code, message]) => row(code, 'blocked', message, repoUrl));
+    .map(([code, { message, blocker }]) => row(code, 'blocked', message, repoUrl, blocker));
 }
 
 /**
@@ -151,6 +176,7 @@ export function checkRows(readiness: ReadinessLike, repoUrl?: string): CheckRow[
       check.status === 'ok' || check.status === 'blocked' ? check.status : 'unchecked',
       check.message,
       repoUrl,
+      check.blocker,
     ),
   );
 }
@@ -166,11 +192,15 @@ const HEADLINES: Record<string, string> = {
   checks: 'Wait for the checks',
   permissions: 'Grant the GitHub App its permissions',
   github: 'GitHub did not answer',
+  budget_unavailable: 'Could not check the allowance',
 };
 
-/** What the decision card says about the check that blocks, as the one thing to do. */
-export function blockedHeadline(code: string): string {
-  return HEADLINES[code] ?? 'Something needs your attention';
+/**
+ * What the decision card says about the check that blocks, as the one thing to do.
+ * A check that could not be made says so in place of what it was checking.
+ */
+export function blockedHeadline(code: string, blocker?: string): string {
+  return HEADLINES[couldNotCheck(blocker) ? blocker : code] ?? 'Something needs your attention';
 }
 
 /** The first thing in the way, which is the one the card is about. */

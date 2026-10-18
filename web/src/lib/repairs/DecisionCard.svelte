@@ -19,7 +19,7 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Textarea from '$lib/components/Textarea.svelte';
   import type { Schemas } from '$lib/api/types';
-  import { blockedHeadline, blockingRow, type CheckRow } from './checks';
+  import { blockedHeadline, blockingRow, couldNotCheck, type CheckRow } from './checks';
   import { safeHttpUrl } from './links';
   import { changedBlocker, type WorkspaceStage } from './workspace';
 
@@ -37,6 +37,13 @@
     onrecheck: () => void;
     onsetup: () => void;
     onchoose?: () => void;
+    /**
+     * Ask about the pull request as it stands now. A failure reached by its run is
+     * checked against the commit that run ran on, so asking again by run says the
+     * same thing for ever once a newer commit has landed; with this, the way forward
+     * from that is a button that asks by the pull request's number instead.
+     */
+    oncurrent?: () => void;
     /** The failing run on GitHub, kept for the card that says the target changed. */
     runUrl?: string;
     /** What went wrong when readiness could not be read. */
@@ -54,6 +61,7 @@
     onrecheck,
     onsetup,
     onchoose,
+    oncurrent,
     runUrl,
     error = '',
   }: Props = $props();
@@ -93,7 +101,7 @@
       case 'ready':
         return 'Ready to fix';
       default:
-        return blockedHeadline(blocking?.code ?? '');
+        return blockedHeadline(blocking?.code ?? '', blocking?.blocker);
     }
   });
 </script>
@@ -124,7 +132,7 @@
       <p class="muted">{changed.message}</p>
       <div class="buttons">
         {#if changed.code === 'superseded'}
-          <Button variant="primary" full loading={busy} onclick={onrecheck}
+          <Button variant="primary" full loading={busy} onclick={oncurrent ?? onrecheck}
             >Check the current PR</Button
           >
         {:else}
@@ -180,7 +188,7 @@
       </p>
     {:else}
       {#if blocking}<p class="muted">{blocking.message}</p>{/if}
-      {#if blocking?.code === 'pull'}
+      {#if blocking?.code === 'pull' && !couldNotCheck(blocking.blocker)}
         <p class="muted">
           Eli repairs open PR branches in this repository. Choose or paste a pull request if this
           run has no eligible PR.

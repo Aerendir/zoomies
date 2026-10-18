@@ -896,7 +896,9 @@ may edit workflow files and which branch it pushes to, with room to tell Eli wha
 to look at, and **Fix with Eli** starts the repair and opens its page. A failure
 that Eli is already repairing opens that repair instead of offering another, and
 one that has since been fixed, closed or replaced by a newer commit says so
-instead of offering a repair.
+instead of offering a repair; for a newer commit, **Check the current PR** asks
+again about the pull request as it stands now. When GitHub does not answer, the
+card says so and offers to ask again, whichever check was being made.
 
 ![The repair page for a pull request Eli cannot yet act on: the failure it is about, a wizard to link a GitHub account, and the checks, with the account and the model provider in the way](screenshots/eli-repair-readiness-dark.webp#only-dark){ .zoomies-shot }
 ![The repair page for a pull request Eli cannot yet act on: the failure it is about, a wizard to link a GitHub account, and the checks, with the account and the model provider in the way](screenshots/eli-repair-readiness-light.webp#only-light){ .zoomies-shot }

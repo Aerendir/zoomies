@@ -71,12 +71,17 @@ func TestEliReadinessAlwaysReturnsNineChecksInTheSpecsShape(t *testing.T) {
 	}
 	for i, raw := range answer.Checks {
 		assertShape(t, doc, "EliReadinessCheck", raw)
-		var check struct{ Code, Status string }
+		var check struct{ Code, Status, Blocker string }
 		if err := json.Unmarshal(raw, &check); err != nil {
 			t.Fatal(err)
 		}
 		if check.Code != want[i] || check.Status == "" {
 			t.Errorf("check %d is %+v, want code %s", i, check, want[i])
+		}
+		// A blocked check says which blocker stopped it, and nothing else does, so
+		// the page can tell GitHub not answering from the check it was making.
+		if (check.Status == "blocked") != (check.Blocker != "") {
+			t.Errorf("check %d is %s and names blocker %q", i, check.Status, check.Blocker)
 		}
 	}
 	pull, err := json.Marshal(controller.EliReadinessPull{Number: 1, Title: "t", Author: "a", Branch: "b", Base: "main", URL: "https://github.com/acme/repo/pull/1", Open: true})

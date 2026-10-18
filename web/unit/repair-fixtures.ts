@@ -39,15 +39,16 @@ export function allOk(): Check[] {
 
 /**
  * What the controller answers when a check stops it: the ones before it passed,
- * it is blocked, and the ones after were never reached.
+ * it is blocked, and the ones after were never reached. `blocker` is the code of
+ * the blocker that stopped it, which the controller sends with every blocked check.
  */
-export function stoppedAt(code: Check['code'], message: string): Check[] {
+export function stoppedAt(code: Check['code'], message: string, blocker?: string): Check[] {
   const at = CHECK_ORDER.indexOf(code);
   return CHECK_ORDER.map((c, i): Check =>
     i < at
       ? passed(c)
       : i === at
-        ? { code: c, status: 'blocked', message }
+        ? { code: c, status: 'blocked', message, ...(blocker ? { blocker } : {}) }
         : { code: c, status: 'unchecked', message: 'Not checked yet.' },
   );
 }

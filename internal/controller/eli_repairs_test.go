@@ -80,6 +80,8 @@ type repairFake struct {
 	comments []string
 	// sourceErr, when set, is what reading the PR's source fails with.
 	sourceErr error
+	// checkErr, when set, is what asking GitHub for the PR's checks fails with.
+	checkErr error
 	// title, author, url and base are what the pull request says about itself,
 	// for the tests that read it back.
 	title, author, url, base string
@@ -142,7 +144,7 @@ func (f *repairFake) RepairReact(_ context.Context, _ string, id int64, content 
 	return nil
 }
 func (f *repairFake) RepairChecks(context.Context, string, string) (string, error) {
-	return f.check, nil
+	return f.check, f.checkErr
 }
 func TestRepairWorkerSelectsTheHybridProviderAndRecordsRealCheckOutcome(t *testing.T) {
 	for _, trigger := range []string{"mention", "automatic", "revoked", "expired-lease", "cancelled", "queued-old"} {

@@ -131,6 +131,76 @@ test('each blocked check has its own way forward', () => {
   }
 });
 
+// The controller folds a failed attempt to ask GitHub into the check it was making, so an
+// outage while the pull request is looked up is the pull request check, blocked. The way
+// forward from that is to look again, not to choose another pull request or to open the
+// installations, and the card must say that GitHub did not answer.
+test('a check blocked because GitHub did not answer is looked at again, whichever check it was making', () => {
+  const message = 'GitHub could not resolve this repair target. Try checking readiness again.';
+  for (const code of ['installation', 'pull', 'checks'] as const) {
+    const rows = checkRows(
+      readiness({
+        ready: false,
+        blockers: [{ code: 'github', message }],
+        checks: stoppedAt(code, message, 'github'),
+      }),
+      REPO_URL,
+    );
+    const blocking = blockingRow(rows);
+    // It is still that check, so the list keeps its order and its names.
+    assert.equal(blocking?.code, code);
+    assert.deepEqual(blocking?.action, { kind: 'recheck' }, code);
+    assert.equal(blockedHeadline(blocking?.code ?? '', blocking?.blocker), 'GitHub did not answer');
+  }
+});
+
+test('an allowance that could not be read is looked at again, and is not one that ran out', () => {
+  const unreadable = blockingRow(
+    checkRows(
+      readiness({
+        ready: false,
+        blockers: [
+          { code: 'budget_unavailable', message: 'Repair allowance could not be checked.' },
+        ],
+        checks: stoppedAt('budget', 'Repair allowance could not be checked.', 'budget_unavailable'),
+      }),
+      REPO_URL,
+    ),
+  );
+  assert.deepEqual(unreadable?.action, { kind: 'recheck' });
+  assert.equal(
+    blockedHeadline(unreadable?.code ?? '', unreadable?.blocker),
+    'Could not check the allowance',
+  );
+  const spent = blockingRow(
+    checkRows(
+      readiness({
+        ready: false,
+        blockers: [{ code: 'budget', message: 'The repair allowance is exhausted.' }],
+        checks: stoppedAt('budget', 'The repair allowance is exhausted.', 'budget'),
+      }),
+      REPO_URL,
+    ),
+  );
+  assert.equal(blockedHeadline(spent?.code ?? '', spent?.blocker), 'No attempts left today');
+});
+
+// A controller older than this build sends no blocker with a check, and its rows read as
+// they always did: by the check they belong to.
+test('a blocked check that does not say why is read by the check it is', () => {
+  const rows = checkRows(
+    readiness({
+      ready: false,
+      blockers: [{ code: 'pull', message: 'No open pull request.' }],
+      checks: stoppedAt('pull', 'No open pull request.'),
+    }),
+    REPO_URL,
+  );
+  const blocking = blockingRow(rows);
+  assert.deepEqual(blocking?.action, { kind: 'choose' });
+  assert.equal(blockedHeadline(blocking?.code ?? '', blocking?.blocker), 'Choose a pull request');
+});
+
 test('a pull request that is not eligible can be chosen instead', () => {
   const rows = checkRows(
     readiness({

@@ -10694,6 +10694,8 @@ export interface components {
             /** @enum {string} */
             status: "ok" | "blocked" | "unchecked";
             message: string;
+            /** @description On a blocked check, the code of the blocker that stopped it, as it appears in `blockers`. The check says where readiness stopped and the blocker says why, and they are not the same: GitHub not answering (`github`) or the allowance not being readable (`budget_unavailable`) is reported on whichever check it was making. When the target has changed, `blockers` holds that change alone, and a check blocked before it was found still names what stopped it. Absent on a check that passed or was not reached, and from a controller older than this field. */
+            blocker?: string;
         };
         EliReadiness: {
             ready: boolean;

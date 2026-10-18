@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Schemas } from '../src/lib/api/types';
-import { blockedAt, readiness as makeReadiness } from './support/repairs';
+import { blockedAt, readiness as makeReadiness, stoppedAt } from './support/repairs';
 
 const repo = 'acme/widgets';
 const identity: Schemas['EliIdentity'] = {
@@ -252,6 +252,40 @@ for (const [code, check, heading, message] of [
   });
 }
 
+// A failure reached by its run is checked against the commit that run ran on, so asking
+// for it again by run gets the same answer for ever: the newer commit is still newer. The
+// way forward is the pull request as it stands now, which is asked for by its number.
+test('a superseded failure is checked again by the pull request it belongs to', async ({
+  page,
+}) => {
+  const model = await mockFailure(page);
+  const message = 'PR #17 has newer commits than this failed run.';
+  const asked: URLSearchParams[] = [];
+  await page.route('**/api/v1/assistant/repairs/readiness?*', (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    asked.push(query);
+    return route.fulfill({
+      json: query.get('pull_number')
+        ? ready
+        : blockedAt('pull', message, { blockers: [{ code: 'superseded', message }] }),
+    });
+  });
+  await page.goto(PAGE);
+  const card = page.getByRole('complementary', { name: 'Next step' });
+  await expect(
+    card.getByRole('heading', { name: 'A newer commit replaced this failure' }),
+  ).toBeVisible();
+  await card.getByRole('button', { name: 'Check the current PR' }).click();
+
+  await expect(page).toHaveURL(/\/repairs\/new\?repo=acme%2Fwidgets&pull=17$/);
+  await expect(card.getByRole('button', { name: 'Fix with Eli', exact: true })).toBeVisible();
+  expect(asked.map((query) => [query.get('run_id'), query.get('pull_number')])).toEqual([
+    ['1234', null],
+    [null, '17'],
+  ]);
+  expect(model.repairs).toEqual([]);
+});
+
 test('a failure fixed between review and repair replaces the stale offer with its outcome', async ({
   page,
 }) => {
@@ -295,6 +329,37 @@ test('a failure fixed between review and repair replaces the stale offer with it
   expect(refused).toEqual([
     { repo, pull_number: 17, head_sha: 'reviewed-head', instruction: '', run_id: 1234 },
   ]);
+  expect(model.repairs).toEqual([]);
+});
+
+// The controller folds GitHub not answering into the check it was making, so an outage while
+// the pull request is looked up arrives as the pull request check, blocked, with the reason
+// in `blocker`. Read by the check alone it sends the person to choose another pull request,
+// which is not what is wrong; the card says that GitHub did not answer and offers to ask again.
+test('a GitHub outage while the pull request is looked up says so and offers to ask again', async ({
+  page,
+}) => {
+  const model = await mockFailure(page);
+  const message = 'GitHub could not resolve this repair target. Try checking readiness again.';
+  await page.route('**/api/v1/assistant/repairs/readiness?*', (route) =>
+    route.fulfill({
+      json: makeReadiness({
+        ready: false,
+        pull: undefined,
+        pull_number: 0,
+        head_sha: '',
+        blockers: [{ code: 'github', message }],
+        checks: stoppedAt('pull', message, 'github'),
+      }),
+    }),
+  );
+  await page.goto(PAGE);
+  const card = page.getByRole('complementary', { name: 'Next step' });
+  await expect(card.getByRole('heading', { name: 'GitHub did not answer' })).toBeVisible();
+  await expect(card).toContainText(message);
+  await expect(card.getByRole('button', { name: 'Check again' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Choose a pull request' })).toHaveCount(0);
+  await expect(card).not.toContainText('Eli repairs open PR branches');
   expect(model.repairs).toEqual([]);
 });
 

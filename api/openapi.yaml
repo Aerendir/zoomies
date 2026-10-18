@@ -14429,6 +14429,18 @@ components:
           enum: [identity, provider, installation, access, policy, budget, pull, checks, permissions]
         status: { type: string, enum: [ok, blocked, unchecked] }
         message: { type: string }
+        blocker:
+          type: string
+          description: >-
+            On a blocked check, the code of the blocker that stopped it, as it
+            appears in `blockers`. The check says where readiness stopped and the
+            blocker says why, and they are not the same: GitHub not answering
+            (`github`) or the allowance not being readable (`budget_unavailable`)
+            is reported on whichever check it was making. When the target has
+            changed, `blockers` holds that change alone, and a check blocked
+            before it was found still names what stopped it. Absent on a check
+            that passed or was not reached, and from a controller older than
+            this field.
     EliReadiness:
       type: object
       required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers, checks]

@@ -84,14 +84,17 @@ const CHECK_ORDER: Check['code'][] = [
 export const allOk = (): Check[] =>
   CHECK_ORDER.map((code): Check => ({ code, status: 'ok', message: `${code} is fine.` }));
 
-/** The checks as the controller answers when `code` stops it: the rest are never reached. */
-export function stoppedAt(code: Check['code'], message: string): Check[] {
+/**
+ * The checks as the controller answers when `code` stops it: the rest are never reached.
+ * `blocker` is the code of the blocker that stopped it, which says why, not only where.
+ */
+export function stoppedAt(code: Check['code'], message: string, blocker?: string): Check[] {
   const at = CHECK_ORDER.indexOf(code);
   return CHECK_ORDER.map((c, i): Check =>
     i < at
       ? { code: c, status: 'ok', message: `${c} is fine.` }
       : i === at
-        ? { code: c, status: 'blocked', message }
+        ? { code: c, status: 'blocked', message, ...(blocker ? { blocker } : {}) }
         : { code: c, status: 'unchecked', message: 'Not checked yet.' },
   );
 }

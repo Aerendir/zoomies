@@ -34,7 +34,7 @@
   import { caseFromLive } from '$lib/repairs/case';
   import { blockingRow, checkRows } from '$lib/repairs/checks';
   import { runningRepair } from '$lib/repairs/journey';
-  import { changedBlocker, parseTarget, stageOf } from '$lib/repairs/workspace';
+  import { changedBlocker, parseTarget, stageOf, targetHref } from '$lib/repairs/workspace';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
@@ -230,6 +230,17 @@
     }
   }
 
+  /**
+   * A failure replaced by a newer commit is asked about again as the pull request
+   * it belongs to, in place of the stale run, so the answer can change.
+   */
+  function checkCurrent(): void {
+    if (!readiness?.pull_number) return;
+    router.navigate(targetHref({ repo: readiness.repo, pull: readiness.pull_number }), {
+      replace: true,
+    });
+  }
+
   function openSetup(): void {
     setupOpen = true;
     queueMicrotask(() =>
@@ -369,6 +380,7 @@
         onrecheck={() => void load()}
         onsetup={openSetup}
         onchoose={() => (dialogOpen = true)}
+        oncurrent={readiness?.pull_number ? checkCurrent : undefined}
         runUrl={view.runUrl}
         error={readFailed || startError}
       />

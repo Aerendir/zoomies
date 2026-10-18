@@ -57,6 +57,12 @@ type EliCheck struct {
 	Code    string `json:"code"`
 	Status  string `json:"status"`
 	Message string `json:"message"`
+	// Blocker is the code of the blocker that stopped a blocked check. A check
+	// says where readiness stopped and a blocker says why, and the two are not
+	// the same thing: GitHub not answering is folded into whichever check it was
+	// making. When the target has changed the answer's Blockers hold that change
+	// alone, and a check blocked before it was found still names what stopped it.
+	Blocker string `json:"blocker,omitempty"`
 }
 
 const (
@@ -75,6 +81,11 @@ type eliChecks map[string]EliCheck
 
 func (c eliChecks) set(code, status, message string) {
 	c[code] = EliCheck{Code: code, Status: status, Message: message}
+}
+
+// block marks a check blocked, and says by which blocker.
+func (c eliChecks) block(code, blocker, message string) {
+	c[code] = EliCheck{Code: code, Status: EliCheckBlocked, Message: message, Blocker: blocker}
 }
 
 func (c eliChecks) list() []EliCheck {
@@ -126,7 +137,7 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 	// block records a blocker exactly as before and marks the check it belongs to.
 	block := func(check, code, message string) {
 		out.Blockers = append(out.Blockers, EliBlocker{code, message})
-		checks.set(check, EliCheckBlocked, message)
+		checks.block(check, code, message)
 	}
 	id, err := c.eliIdentity(ctx, user)
 	if err != nil {
@@ -207,7 +218,7 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 			// A changed target is the answer to the person's original question,
 			// even when their provider or repository setup is also incomplete.
 			out.Blockers = []EliBlocker{{Code: changed.Code, Message: changed.Message}}
-			checks.set("pull", EliCheckBlocked, changed.Message)
+			checks.block("pull", changed.Code, changed.Message)
 			if run > 0 {
 				_ = c.st.RecordJobAttentionRun(ctx, repo, run, changed.Code, checked, true)
 			}
@@ -233,7 +244,7 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 			_ = c.st.RecordJobAttentionRun(ctx, repo, run, "fixed", checked, true)
 		}
 		out.Blockers = []EliBlocker{{Code: "fixed", Message: "The latest checks on this PR have passed. This failure has already been fixed; no repair is needed."}}
-		checks.set("checks", EliCheckBlocked, out.Blockers[0].Message)
+		checks.block("checks", out.Blockers[0].Code, out.Blockers[0].Message)
 		return out
 	}
 	if run > 0 {
@@ -258,7 +269,7 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 			}
 		}
 		if len(missing) > 0 {
-			checks.set("permissions", EliCheckBlocked, strings.Join(missing, " "))
+			checks.block("permissions", "permissions", strings.Join(missing, " "))
 		} else {
 			checks.set("permissions", EliCheckOK, "Contents, pull requests and actions are granted.")
 		}
