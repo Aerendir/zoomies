@@ -91,13 +91,21 @@ renting, a pool somebody changed, and what the controller changed on its own abo
 runners 5 → 10: host build-2 joined*. What went right is in it as much as what
 went wrong. Which of those it carries is yours to choose, one switch per
 kind on **Settings → Events**, and the panel counts what it is showing rather
-than quietly leaving the rest out. When
-something needs a person it is one line and a *Review* button, never a list
-that pushes the fleet below the fold. The
+than quietly leaving the rest out. When the
+fleet itself needs a person it is one line and a *Review* button, never a list
+that pushes the fleet below the fold. The exception is the failures nobody has
+read, because each is a separate job with a separate thing to do about it:
+**Recent failures** shows the newest two of what failed in the last week and
+nobody has marked as known or replaced with a later attempt, with the whole
+count in its header and a link to the rest on the Jobs page's **Needs
+attention** view. A row opens the job's drawer and **Fix with Eli** opens the
+repair page for it. An operator can also mark a failure as known, which takes it
+off the list and changes nothing else: it keeps its row in the failed view, a
+re-run that passes is what settles it, and the toast carries an *Undo*. The
 *Other runners* switch says whether these numbers count only the jobs this
-fleet ran or every job GitHub reported on an installed repository; the
-default is this fleet's own work, because that is the question an operator is
-usually asking.
+fleet ran or every job GitHub reported on an installed repository, and the
+panel and its link to the rest follow it; the default is this fleet's own work,
+because that is the question an operator is usually asking.
 
 A new instance is different. It opens on a checklist in place of the matrix,
 which has nothing to draw yet: create the first account, connect GitHub, add a
@@ -223,7 +231,7 @@ evidence folded under the next steps.
 
 A runner's page carries the job it is on, a timeline of how long it spent in
 each state (provisioning, registering, idle, busy) its resource usage as the
-host's agent last reported it, and the live log. Beside the usage is the
+host's agent last reported it, and its output. Beside the usage is the
 **allocation**: the CPU and memory the runner was created with, and whether the
 pool set them or the host gave it its default share of the machine. The source
 is the thing to read when a runner was killed for exceeding its memory: a limit
@@ -249,6 +257,16 @@ wears one more, with a folder icon for each folder that is, and what they come
 to. Hover, focus or tap a pill for its card; the runner's page repeats them
 beside its status and draws the cards open in a **Memory and folders** panel.
 [Elastic memory](elastic-memory.md#what-you-see) has the whole list.
+
+The output on a runner's page opens on the **Build log** while the runner has a
+job: the workflow's console output after the GitHub runner has masked secrets.
+**Runner diagnostics**, the second tab, is the raw startup, registration and
+worker messages, and a runner with no job has only those, folded under that
+name. When the stream drops and reopens, the build log marks the join with a dim
+*reconnected to the log stream* line, because the relay sends its backlog again
+and what follows may repeat what is above it. **Save log** keeps the build
+output received in that view, and **Open on GitHub** is the complete archived
+log.
 
 ![A busy runner's page: its current job, a timeline of its states, details and resource usage](screenshots/runner-dark.webp#only-dark){ .zoomies-shot }
 ![A busy runner's page: its current job, a timeline of its states, details and resource usage](screenshots/runner-light.webp#only-light){ .zoomies-shot }
@@ -328,10 +346,19 @@ is, but every link that names a job lands here, and **Workflow runs** at the
 top goes back up with the same filters in force. Everything this fleet claims,
 runs or is waiting to run is listed, with each job's queue wait and duration.
 Status is the filter this page is opened for, so it is a row of buttons above
-the grid (**Running**, **Queued**, **Failed**, **Finished**, **All**) and
-the page opens on *Running*, which is the question an operator arrives with. That default is for a bare visit only: every link into this page
-that already carries a filter keeps it, so the problems drawer's unmatched link
-and the Overview's outcome links still show what they promised.
+the grid (**Needs attention**, **Running**, **Queued**, **Failed**, **Our
+failures**, **Finished**, **All**) and the page opens on *Running*, which is the
+question an operator arrives with. That default is for a bare visit only: every
+link into this page that already carries a filter keeps it, so the problems
+drawer's unmatched link and the Overview's outcome links still show what they
+promised.
+
+Two of the buttons are questions about a failure more than a status.
+**Needs attention** is the failures from the last week that nobody has marked as
+known and no later attempt has replaced, the list the Overview's **Recent
+failures** counts, with room for the rest of it. **Our failures** is the half of
+**Failed** this fleet caused, a runner that never started or one that stopped
+under the job, which GitHub records as an ordinary failure.
 
 The rest of the filters (repository, workflow, pool, host, label, outcome, dates)
 live in the URL alongside it, so a view can be pasted into a chat. *Host* is the
@@ -976,9 +1003,15 @@ in [Backup and restore](backup-and-restore.md).
 ### Updates
 
 Which release the update mode would take, and when, and for the platform role
-the one thing on the page that installs anything: the **Update** button for this
-controller. A host is updated from its own card on **Hosts**, or with every
-other host that is behind in a [rollout](#updating-every-host-that-is-behind).
+what installs anything on the page: **Review update to v1.3.2…** for this
+controller, which opens a confirmation naming the release, whose own button
+reads **Update to v1.3.2**, and **Review dev upgrade…** (**Reinstall latest
+dev…** when the controller already runs the newest build from `main`) for the
+development build, with a warning that it may include untested changes. Where
+updating is off, or the controller's host has no update helper, the page says
+why and, where there is one, gives the command to run there instead. A host is
+updated from its own card on **Hosts**, or with every other host that is behind
+in a [rollout](#updating-every-host-that-is-behind).
 
 At the top, Installed build and release status labels the controller as
 Standard, Development or Custom. A stamped development build shows its commit,
@@ -1016,7 +1049,7 @@ controller restart itself without another request. One built
 from `main` is offered the newest release as a replacement, with a warning in
 the confirmation that it may take the controller back to older code, since a
 build from `main` is usually ahead of the newest release. Auto never takes it:
-only a person pressing the button does.
+only a person confirming it does.
 
 ![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
 ![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
