@@ -1098,6 +1098,29 @@ test("the failures panel's link to the rest keeps the scope the panel counted", 
   await expect(page).toHaveURL(/[?&]all=true/);
 });
 
+// The line shown when nothing is owed links to the history, and it says nothing
+// is waiting "wherever they ran" only when the switch is on. A bare link would
+// land on the fleet's own failed jobs, a shorter list than the claim it was
+// reached from, the same way the link under a full panel would.
+test("the one-line failures panel's link to the failed view keeps the scope", async ({ page }) => {
+  await page.route(/\/api\/v1\/jobs\?.*attention=true/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({ response, json: { ...body, items: [], total: 0 } });
+  });
+  await reload(page, 'Overview');
+
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const history = failures.getByRole('link', { name: 'Failed view' });
+  await expect(history).toHaveAttribute('href', '/jobs?failed=true');
+
+  const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
+  const toggle = header.getByRole('switch', { name: 'Other runners' });
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(history).toHaveAttribute('href', '/jobs?failed=true&all=true');
+});
+
 // Marking a failure as known takes its row off the list, and the button that was
 // pressed goes with it. Keyboard focus fell to the top of the document, so
 // working down the list meant tabbing back to where you had been after every row.
