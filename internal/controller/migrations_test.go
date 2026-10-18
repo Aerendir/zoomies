@@ -1,10 +1,16 @@
 package controller
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/migrate"
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -274,6 +280,132 @@ func TestApplyMigrationBadgeIsDeclinedAndReported(t *testing.T) {
 				t.Errorf("the body mentions the badge = %v, want %v", !tc.touched, tc.touched)
 			}
 		})
+	}
+}
+
+// workflowGate is a GitHub client that is asked only for workflows and holds
+// each answer until it is released, which is what reading a large organisation
+// looks like from this side. Every other method is the embedded nil
+// interface's, so a read that strayed into asking for anything else fails loudly.
+type workflowGate struct {
+	github.Client
+	release chan struct{}
+	calls   atomic.Int32
+	// panicOn is the repository whose listing blows up.
+	panicOn string
+}
+
+func (g *workflowGate) ListWorkflows(ctx context.Context, repo string) ([]github.WorkflowFile, error) {
+	g.calls.Add(1)
+	if repo == g.panicOn {
+		panic("a nil pointer where a workflow listing should be")
+	}
+	select {
+	case <-g.release:
+		return nil, github.ErrNoWorkflows
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+var quietLog = slog.New(slog.DiscardHandler)
+
+func reposNamed(n int) []github.Repository {
+	repos := make([]github.Repository, n)
+	for i := range repos {
+		repos[i] = github.Repository{FullName: fmt.Sprintf("acme/repo%03d", i)}
+	}
+	return repos
+}
+
+// Reading an organisation's workflows is meant to be a few repositories at a
+// time. It used to start a goroutine for every repository at once and leave all
+// but four parked on the semaphore, so ten thousand repositories cost ten
+// thousand goroutines for a job that never reads more than four.
+func TestReadingWorkflowsStartsNoMoreWorkersThanItMayRunAtOnce(t *testing.T) {
+	gate := &workflowGate{release: make(chan struct{})}
+	repos := reposNamed(20 * planConcurrency)
+	before := runtime.NumGoroutine()
+
+	done := make(chan []workflowSource, 1)
+	go func() { done <- readWorkflows(context.Background(), gate, repos, quietLog) }()
+	eventually(t, 5*time.Second, "the first readers to be waiting on GitHub", func() bool {
+		return int(gate.calls.Load()) == planConcurrency
+	})
+
+	// The readers, and the goroutine above that is running readWorkflows.
+	if extra := runtime.NumGoroutine() - before; extra > 2*planConcurrency {
+		t.Errorf("%d goroutines started for %d repositories, of which %d may be read at once", extra, len(repos), planConcurrency)
+	}
+
+	close(gate.release)
+	got := <-done
+	for i, src := range got {
+		if src.repo.FullName != repos[i].FullName || src.err != "" {
+			t.Fatalf("repository %d came back as %+v, want it read and in order", i, src)
+		}
+	}
+}
+
+// A request that is given up on stops waiting for a slot. The repositories it
+// never reached have to say so: the wizard shows an organisation as partly
+// read, where a silent empty result would show repositories with nothing to
+// migrate.
+func TestACancelledReadSaysWhichRepositoriesItNeverReached(t *testing.T) {
+	gate := &workflowGate{release: make(chan struct{})}
+	repos := reposNamed(3 * planConcurrency)
+	archived := repos[2*planConcurrency+1].FullName
+	repos[2*planConcurrency+1].Archived = true // never read, so it never has anything to report
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan []workflowSource, 1)
+	go func() { done <- readWorkflows(ctx, gate, repos, quietLog) }()
+	eventually(t, 5*time.Second, "the first readers to be waiting on GitHub", func() bool {
+		return int(gate.calls.Load()) == planConcurrency
+	})
+	cancel()
+	got := <-done
+
+	if calls := int(gate.calls.Load()); calls != planConcurrency {
+		t.Errorf("GitHub was asked about %d repositories; none should be asked once the request is cancelled", calls)
+	}
+	inFlight, unreached := 0, 0
+	for _, src := range got {
+		switch {
+		case src.err == context.Canceled.Error():
+			inFlight++
+		case strings.Contains(src.err, "cancelled"):
+			unreached++
+		case src.err != "":
+			t.Errorf("%s reported %q, want a cancellation", src.repo.FullName, src.err)
+		case src.repo.FullName != archived:
+			t.Errorf("%s was neither read nor reported as unread", src.repo.FullName)
+		}
+	}
+	if inFlight != planConcurrency || unreached != len(repos)-planConcurrency-1 {
+		t.Errorf("%d reads were cut off and %d repositories were never reached, want %d and %d",
+			inFlight, unreached, planConcurrency, len(repos)-planConcurrency-1)
+	}
+}
+
+// The reads run on goroutines of their own, which a request cannot recover: a
+// listing that panics for one repository has to cost that repository and not
+// the process, the way one unreadable repository already does.
+func TestAPanicReadingOneRepositoryIsRecordedAgainstThatRepository(t *testing.T) {
+	repos := reposNamed(5)
+	gate := &workflowGate{release: make(chan struct{}), panicOn: repos[2].FullName}
+	close(gate.release)
+
+	got := readWorkflows(context.Background(), gate, repos, quietLog)
+
+	for i, src := range got {
+		switch {
+		case i == 2 && !strings.Contains(src.err, "nil pointer"):
+			t.Errorf("the repository whose listing panicked reported %q, want the panic said", src.err)
+		case i != 2 && src.err != "":
+			t.Errorf("%s reported %q, but nothing was wrong with it", src.repo.FullName, src.err)
+		}
 	}
 }
 

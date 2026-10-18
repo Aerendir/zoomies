@@ -298,6 +298,17 @@ jobs:
           cmp connect-proxmox.sh site/connect-proxmox.sh
           dash -n site/connect-proxmox.sh
 
+      # The scripts people pipe into a shell are copied into site/ by a build
+      # step, so a deploy of a plain `mkdocs build` (run by hand with wrangler)
+      # ships a site whose install commands all answer 404. Nothing is uploaded
+      # unless they are in the directory that becomes the assets.
+      - name: The installer scripts are in the directory the edge will serve
+        run: |
+          set -eu
+          for f in install.sh install install.ps1 connect-proxmox.sh; do
+            test -s "site/$f" || { echo "::error::site/$f is missing, so the deploy would 404 the install commands"; exit 1; }
+          done
+
       # The site is served by the edge worker from this build's static assets.
       # Deploying from the job that built and checked it keeps one artefact:
       # the upload is the publish.
@@ -308,6 +319,22 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx --yes wrangler@4.151.1 deploy
+
+      # What the build holds says nothing about what the edge answers, and a
+      # deploy made from somewhere else can replace it between runs. The
+      # published script is fetched the way a user's `curl -fsSL` fetches it.
+      - name: The live site serves the installer scripts
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          set -eu
+          for f in install.sh install.ps1 connect-proxmox.sh; do
+            ok=
+            for attempt in 1 2 3 4 5 6; do
+              if curl -fsSL "https://zoomies.sh/$f?check=$GITHUB_RUN_ID" | cmp -s - "site/$f"; then ok=1; break; fi
+              sleep 10
+            done
+            test -n "$ok" || { echo "::error::https://zoomies.sh/$f is not serving the published file"; exit 1; }
+          done
 
       # After the deploy, not before: an engine told about a page fetches it
       # straight away, and it has to find the new one. A failed submission is

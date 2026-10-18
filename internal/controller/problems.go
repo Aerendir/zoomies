@@ -2525,18 +2525,25 @@ func (c *Controller) unmatchedQueuedJobs(ctx context.Context) ([]scheduler.Unmat
 }
 
 // loopProblems reports every background loop that has panicked since the
-// process started. The loop was restarted, so the fleet is still being run;
-// the entry is here because a crash is a bug, and a bug that fixes itself
-// after a minute is one nobody would otherwise report.
+// process started, and every kind of detached work. A loop was restarted, so
+// the fleet is still being run, and detached work was abandoned and has to be
+// asked for again; the entry is here because a crash is a bug, and a bug that
+// fixes itself after a minute is one nobody would otherwise report.
 func (c *Controller) loopProblems() []Problem {
 	panics := c.LoopPanics()
 	names := slices.Sorted(maps.Keys(panics))
 	out := make([]Problem, 0, len(names))
 	for _, name := range names {
 		p := panics[name]
-		title := fmt.Sprintf("the %s loop crashed and was restarted", name)
+		// What the entry says has to be what happened: only a loop is started
+		// again, and each kind logs its stack under its own message.
+		kind, outcome, logged := "loop", "restarted", "controller loop panicked"
+		if p.Detached {
+			kind, outcome, logged = "work", "abandoned", detachedPanicMessage
+		}
+		title := fmt.Sprintf("the %s %s crashed and was %s", name, kind, outcome)
 		if p.Count > 1 {
-			title = fmt.Sprintf("the %s loop has crashed %d times and was restarted each time", name, p.Count)
+			title = fmt.Sprintf("the %s %s has crashed %d times and was %s each time", name, kind, p.Count, outcome)
 		}
 		at := p.At
 		out = append(out, Problem{
@@ -2544,8 +2551,8 @@ func (c *Controller) loopProblems() []Problem {
 			Severity: config.SeverityError,
 			Title:    title,
 			Detail:   "the last panic said: " + p.Last,
-			Fix: "this is a bug in Zoomies. The stack is in the controller's log under \"controller loop panicked\"; " +
-				"please report it with that stack. Restarting the controller clears this entry.",
+			Fix: fmt.Sprintf("this is a bug in Zoomies. The stack is in the controller's log under %q; "+
+				"please report it with that stack. Restarting the controller clears this entry.", logged),
 			Since: &at,
 		})
 	}

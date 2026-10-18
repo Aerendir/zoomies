@@ -233,6 +233,9 @@ site-worker/        the edge that serves zoomies.sh: the built site as the
                     worker's static assets, content negotiation for agents,
                     the discovery mirrors and every response header the
                     assets pipeline cannot set
+weekly-seo/         the weekly search check for zoomies.sh: its config, notes and
+                    the report and memory files the .claude/agents/weekly-seo.md
+                    agent writes
 ROADMAP.md          the follow-on roadmap, and the decisions it asks the owner to take
 roadmap/            what supports it: the work-package record, decision records,
                     gate evidence, dated plans, the model guidance, the source

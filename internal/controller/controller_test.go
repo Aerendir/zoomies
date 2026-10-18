@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -318,6 +319,64 @@ func TestAPanickingLoopIsRestartedAndReported(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the restarted loop did not stop with its context")
+	}
+}
+
+// Work a loop hands to a goroutine of its own is not behind the loop's guard: a
+// panic there ends the process, not just the work, and ends it in the middle of
+// a provider call or a GitHub round trip that Stop waits so carefully to see
+// finished. It is recovered where it starts and reported the way a loop's crash
+// is, but truthfully: a loop is started again, and this work is not.
+func TestAPanicInDetachedWorkIsRecoveredAndReportedAsAbandoned(t *testing.T) {
+	h := newHarness(t)
+	var logged bytes.Buffer
+	h.c.log = slog.New(slog.NewTextHandler(&logged, nil))
+
+	// The outer recover stands in for the end of the process: it sees only a
+	// panic that got past the guard under test.
+	var escaped any
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() { escaped = recover() }()
+		func() {
+			defer h.c.recoverDetached("flaky-work")
+			panic("a nil pointer where a pool should be")
+		}()
+	}()
+	<-done
+	if escaped != nil {
+		t.Fatalf("the panic got past the guard: %v", escaped)
+	}
+
+	panics := h.c.LoopPanics()
+	if panics["flaky-work"].Count != 1 || !strings.Contains(panics["flaky-work"].Last, "nil pointer") {
+		t.Fatalf("recorded panics = %+v, want one with the message", panics["flaky-work"])
+	}
+	for _, want := range []string{"detached controller work panicked", "flaky-work", "nil pointer", "stack="} {
+		if !strings.Contains(logged.String(), want) {
+			t.Errorf("the log does not carry %q:\n%s", want, logged.String())
+		}
+	}
+
+	problems, err := h.c.Problems(h.ctx)
+	if err != nil {
+		t.Fatalf("Problems: %v", err)
+	}
+	var found *Problem
+	for i := range problems {
+		if problems[i].Code == "controller.loop_panicked" {
+			found = &problems[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("problems = %v, want the crash reported", codesOf(problems))
+	}
+	if !strings.Contains(found.Title, "flaky-work") || strings.Contains(found.Title, "restarted") {
+		t.Errorf("title = %q, want it to name the work and not claim a restart", found.Title)
+	}
+	if !strings.Contains(found.Fix, "detached controller work panicked") {
+		t.Errorf("fix = %q, want it to name the log line that carries the stack", found.Fix)
 	}
 }
 

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "22e30cca",
+  "generated_from": "c010d13",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -910,8 +910,8 @@
       "category": "capacity",
       "severity": "error",
       "detection": "runtime",
-      "detects": "A background loop panicked and was restarted. The fleet keeps running, but this is a bug: the stack is in the log, and it is worth reporting.",
-      "fix": "A background loop panicked and was restarted. The fleet keeps running, but this is a bug: the stack is in the log, and it is worth reporting.",
+      "detects": "A background loop panicked and was restarted, or work that a loop hands to a goroutine of its own (a provider call, creating or removing a runner, a capacity-demand delivery, a scan) panicked and was abandoned; the entry says which. The fleet keeps running, but this is a bug: the stack is in the log, under \"controller loop panicked\" for a loop and \"detached controller work panicked\" for the rest, and it is worth reporting.",
+      "fix": "A background loop panicked and was restarted, or work that a loop hands to a goroutine of its own (a provider call, creating or removing a runner, a capacity-demand delivery, a scan) panicked and was abandoned; the entry says which. The fleet keeps running, but this is a bug: the stack is in the log, under \"controller loop panicked\" for a loop and \"detached controller work panicked\" for the rest, and it is worth reporting.",
       "verify": null,
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-pools-jobs-and-runners"
