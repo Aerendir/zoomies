@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -160,4 +161,79 @@ func BenchmarkSubscribe(b *testing.B) {
 			bus.Subscribe(ctx, SubscribeOptions{Replay: since}).Close()
 		}
 	})
+}
+
+// BenchmarkPublishParallel is Publish called from every core at once, which is
+// what happens when the reconcile loop, an API handler and a webhook each
+// announce a change in the same instant. The payload is encoded in parallel;
+// the numbering, the ring and the walk over the subscribers take the one lock
+// in turn, so the more subscribers there are to walk, the longer each publisher
+// holds the others up. Run it with -cpu 1,2,4 to see whether ns/op falls as
+// cores are added: if the lock were the whole cost it would not.
+//
+// The subscribers here turn every frame away. One that received frames would
+// need a consumer keeping up with publishers on every core, and none can: the
+// goroutine that drains it is starved of a core, its queue fills, and the bus
+// does what it is built to do and cuts it off, which is a different thing to
+// time. The benchmark fails if any were.
+func BenchmarkPublishParallel(b *testing.B) {
+	frame := newBenchFrame()
+	for _, tc := range []struct {
+		name        string
+		subscribers int
+	}{
+		{"subscribers=0", 0},
+		{"subscribers=100,filtered_out", 100},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			bus := New()
+			opts := SubscribeOptions{Kinds: []Kind{KindPoolUpdated}, TopicPrefix: "pool:"}
+			for range tc.subscribers {
+				s := bus.Subscribe(context.Background(), opts)
+				b.Cleanup(s.Close)
+			}
+
+			b.ReportAllocs()
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					bus.Publish(KindRunnerUpdated, "runner:run_bench", frame)
+				}
+			})
+			if open := bus.Subscribers(); open != tc.subscribers {
+				b.Fatalf("%d of %d subscribers were cut off for falling behind", tc.subscribers-open, tc.subscribers)
+			}
+		})
+	}
+}
+
+// BenchmarkRecent is a read of the ring, as the recent-events routes and the
+// MCP wait make it: every event it holds put through a filter and copied out
+// under the read lock that each publisher has to wait for.
+func BenchmarkRecent(b *testing.B) {
+	bus := New()
+	frame := newBenchFrame()
+	kinds := []Kind{KindRunnerUpdated, KindPoolUpdated, KindJobUpdated, KindHostUpdated}
+	for i := range bus.ringCap {
+		bus.Publish(kinds[i%len(kinds)], "x:"+strconv.Itoa(i), frame)
+	}
+
+	for _, tc := range []struct {
+		name string
+		opts SubscribeOptions
+		want int
+	}{
+		{"everything", SubscribeOptions{}, bus.ringCap},
+		{"one_kind_in_four", SubscribeOptions{Kinds: []Kind{KindJobUpdated}}, bus.ringCap / 4},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			if got, complete, _ := bus.Recent(0, tc.opts, 0); len(got) != tc.want || !complete {
+				b.Fatalf("the ring gave %d events (complete = %v), want %d", len(got), complete, tc.want)
+			}
+
+			b.ReportAllocs()
+			for b.Loop() {
+				bus.Recent(0, tc.opts, 0)
+			}
+		})
+	}
 }
