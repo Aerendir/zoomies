@@ -822,7 +822,10 @@ test('a failure can be marked as known and put back, from the row or the drawer'
   await expect(drawer).toBeVisible();
   await drawer.getByRole('button', { name: 'Mark as known' }).click();
   await expect(drawer.getByText('Known', { exact: true })).toBeVisible();
-  await expect(drawer.getByTestId('job-acknowledged')).toContainText('auth-disabled');
+  // Nobody is signed in on this fixture, so no name was recorded, and the drawer
+  // says what it can rather than a placeholder that looks like somebody.
+  await expect(drawer.getByTestId('job-acknowledged')).toContainText('by an operator');
+  await expect(drawer.getByTestId('job-acknowledged')).not.toContainText('auth-disabled');
   await drawer.getByRole('button', { name: 'Needs attention again' }).click();
   await expect(drawer.getByText('Known', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
