@@ -41,6 +41,19 @@ TEST_PKGS ?= ./...
 # A -run regexp, for CI to run half of one package on each runner.
 TEST_RUN ?=
 
+# What `make bench` runs: every package that has a benchmark, found rather than
+# listed so that a new one is not left out of a list that went stale, six runs
+# of each so that benchstat can say how far apart they were, with the
+# allocations beside the times. BENCH narrows it by benchmark name (a -bench
+# regexp, matched a slash-separated part at a time, so BENCH=Decide/quiet works;
+# leave out any $, which make would read as one of its own), BENCH_PKGS by
+# package, and BENCH_COUNT sets the runs. go test runs the packages of a -bench
+# run one at a time, because benchmarks that share the CPU contaminate each
+# other; leave the machine alone while it works.
+BENCH       ?= .
+BENCH_COUNT ?= 6
+BENCH_PKGS  ?= $(sort $(patsubst %/,./%,$(dir $(shell grep -rl --include='*_test.go' '^func Benchmark' cmd internal))))
+
 ##@ Build
 
 .PHONY: build
@@ -99,6 +112,10 @@ test: | $(UI_OUT)/.placeholder ## Run Go unit and integration tests
 .PHONY: test-short
 test-short: | $(UI_OUT)/.placeholder ## Run only fast tests
 	$(GO) test -short -count=1 ./...
+
+.PHONY: bench
+bench: | $(UI_OUT)/.placeholder ## Run the benchmarks, six runs each (BENCH, BENCH_PKGS, BENCH_COUNT narrow it); compare two runs with benchstat
+	$(GO) test -run '^$$' -bench '$(BENCH)' -benchmem -count=$(BENCH_COUNT) -timeout $(GO_TEST_TIMEOUT) $(BENCH_PKGS)
 
 .PHONY: cover
 cover: | $(UI_OUT)/.placeholder ## Run tests with a coverage report
