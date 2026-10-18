@@ -74,11 +74,11 @@
 **Interfaces:**
 - Consumes: Task 1's two reads.
 - Produces: `type EliAutomaticRepository struct{ Repo, InstallationID, ProviderID, ProviderName, Model, Problem string; AllowWorkflows bool; DailyLimit, Used, Running int; NextFreeAt *time.Time; Last *store.EliAutomaticLast }` with JSON `repo,installation_id,provider_id,provider_name,model,problem(omitempty),allow_workflows,daily_limit,used,next_free_at(omitempty),running,last(omitempty)`; `func (c *Controller) EliAutomaticRepairs(ctx context.Context) ([]EliAutomaticRepository, error)` returning one entry per policy that is `Enabled && Automatic`, the ones with a problem first and then by repository name, `NextFreeAt` set to `Oldest+24h` when `Used > 0`; `EliReadiness.PolicyMode string` (`json:"policy_mode,omitempty"`) set to `automatic`, `ask_first` or `manual` when readiness reaches the policy check.
-- `Problem` is empty when the provider is an enabled installation provider and the installation exists, and otherwise one sentence: the provider was deleted; the provider is disabled (naming it); the provider belongs to a person; the GitHub installation was removed. Each tells an administrator what to do in setup.
+- `Problem` is empty when the provider is an enabled installation provider, and otherwise one sentence: the provider was deleted (the policy keeps no provider id, because the column is set null when its provider goes); the provider is disabled (naming it); the provider belongs to a person. Each tells an administrator what to do in setup. A removed installation cannot appear: the policy is deleted with it.
 
 - [ ] **Step 1: Write the failing tests:**
   * `TestTheAutomaticOverviewListsOnlyEnabledAutomaticPolicies`: policies for an automatic one, an ask-first one, a manual one and a disabled automatic one; assert one entry, with `ProviderName`, `Model`, `DailyLimit`, `AllowWorkflows` from the policy and provider.
-  * `TestTheAutomaticOverviewSaysWhyAProviderCannotPay`: a table over a deleted provider (policy keeps the id), a disabled one, a personal one (`OwnerID` set), a removed installation, and a working one; assert `Problem` is non-empty for the first four, mentions the provider's name for the disabled one, and is empty for the last.
+  * `TestTheAutomaticOverviewSaysWhyAProviderCannotPay`: a table over a deleted provider (the policy is left with none), a disabled one, a personal one (`OwnerID` set) and a working one; assert `Problem` is non-empty for the first three, mentions the provider's name for the disabled one, and is empty for the last.
   * `TestTheAutomaticOverviewCountsTheAllowanceAndSaysWhenAPlaceFrees`: limit 2, one automatic and one requested attempt at known times with the injected clock; assert `Used` 2 and `NextFreeAt` equal to the older time plus 24 hours; a repository with nothing used has no `NextFreeAt`.
   * `TestTheAutomaticOverviewOrdersProblemsFirstThenByName`.
   * In `eli_experience_test.go`, `TestReadinessNamesTheRepositorysMode`: over an automatic, an ask-first and a manual policy, reusing the file's ready scaffold; assert `PolicyMode` is `automatic`, `ask_first`, `manual`, and empty when the person is not linked (readiness stops before the policy).
@@ -101,7 +101,7 @@ Behaviour: for each repository, once, in order: no policy is `Changed` false wit
 
 - [ ] **Step 1: Write the failing tests:**
   * `TestStoppingAutomaticRepairsToAskFirstKeepsTheProviderAndLimits` and `TestStoppingAutomaticRepairsToOffOnlyClearsTheSwitch`: assert the saved policy field by field.
-  * `TestStoppingWorksWhenTheProviderIsGone`: delete the provider, stop both ways, assert success and `Changed`.
+  * `TestStoppingWorksWhenTheProviderIsGone`: delete the provider (the policy is left with no provider id), stop both ways, assert success and `Changed`.
   * `TestStoppingTwiceChangesNothingTheSecondTime` and `TestStoppingARepositoryWithNoPolicySaysSo`.
   * `TestAStoppedRepositoryBlocksItsQueuedAutomaticRepair`: enqueue an automatic row, stop, run `runEliRepair` with the file's fake client; assert the row is `blocked`, no commit was made and the model was not asked. (It pins behaviour the worker already has; ledger it as a characterisation test.)
 - [ ] **Step 2:** `go test -count=1 ./internal/controller -run 'StoppingAutomatic|StoppingWorks|StoppingTwice|StoppingARepository|StoppedRepository'`. Expected: FAIL (undefined), except the pinning test.

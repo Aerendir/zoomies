@@ -73,9 +73,10 @@ row per repository, repositories with a problem first and then by name:
   and whether workflow file edits are allowed;
 * **health**: "Ready", or the problem in a sentence with the way to fix it
   ("The provider is disabled. Choose another in setup." linking to
-  `/repairs/setup?repo=`). The problem is one of: the installation provider is
-  missing, disabled or not an installation provider; the GitHub installation that
-  served the repository is gone;
+  `/repairs/setup?repo=`). The problem is that the installation provider is
+  missing (deleting a provider leaves its policies with none), disabled, or not
+  an installation provider at all. A removed GitHub installation cannot appear:
+  its policies are deleted with it;
 * **allowance**: "3 of 5 attempts used in the last 24 hours" with a bar. Requests
   and automatic repairs share it, and the row says so in its tooltip. When it is
   spent: "All 5 attempts used. Automatic repairs here wait until 14:05." (the
@@ -212,8 +213,8 @@ until readiness has reached the policy check.
   repository; activity counts running automatic repairs only and returns the
   newest non-cleared automatic repair per repository.
 * Controller: the overview lists enabled Automatic policies only; reports a
-  missing, disabled and personal provider and a missing installation as problems
-  and a working one as none; `next_free_at` is the oldest attempt plus 24 hours;
+  missing, disabled and personal provider as problems and a working one as none;
+  `next_free_at` is the oldest attempt plus 24 hours;
   stop changes `ask_first` and `off` as specified, keeps provider, limit and mode,
   succeeds with the provider gone, is idempotent, and reports an unknown
   repository; a queued automatic repair of a stopped repository is blocked when

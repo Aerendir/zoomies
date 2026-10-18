@@ -729,3 +729,40 @@ func TestReadinessNamesAMissingAppPermission(t *testing.T) {
 		t.Fatalf("blockers: %v", got)
 	}
 }
+
+// A page that offers to start a repair has to know whether the repository would
+// have started one itself. Readiness already reads the policy for its fifth
+// check, so it says which mode that is, and says nothing before it gets there.
+func TestReadinessNamesTheRepositorysMode(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		shape func(*store.EliRepairPolicy)
+		want  string
+	}{
+		{"automatic", func(p *store.EliRepairPolicy) { p.Automatic = true }, "automatic"},
+		{"ask first", func(p *store.EliRepairPolicy) { p.AskFirst = true }, "ask_first"},
+		{"manual", func(*store.EliRepairPolicy) {}, "manual"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := readinessSetup(t)
+			policies, err := s.h.st.EliRepairPolicies(s.h.ctx)
+			if err != nil || len(policies) != 1 {
+				t.Fatalf("policies %+v %v", policies, err)
+			}
+			policy := policies[0]
+			tc.shape(&policy)
+			if err := s.h.st.SetEliRepairPolicy(s.h.ctx, policy); err != nil {
+				t.Fatal(err)
+			}
+			if got := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0).PolicyMode; got != tc.want {
+				t.Errorf("mode %q, want %q", got, tc.want)
+			}
+		})
+	}
+	t.Run("before the policy is reached", func(t *testing.T) {
+		s := newCommandSetup(t, 5)
+		if got := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0).PolicyMode; got != "" {
+			t.Errorf("mode %q for someone who is not linked, want none", got)
+		}
+	})
+}
