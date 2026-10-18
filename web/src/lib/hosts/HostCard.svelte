@@ -1228,6 +1228,11 @@
     font-weight: var(--z-weight-semibold);
     color: var(--z-text);
     overflow-wrap: anywhere;
+    /* Two lines reserved: a long name wraps and a short one does not. The
+       subgrid below lines the sections of the cards in a row up, but not what is
+       inside one, so without this the pills under the name start a line lower on
+       the card whose name wrapped. */
+    min-height: calc(2 * var(--z-leading-lg));
   }
   .badges {
     display: flex;

@@ -365,6 +365,9 @@ async function measure(page: Page, name: string) {
   };
   return {
     card: await box(host),
+    // The state pills under the name: the first thing in a card that a name
+    // wrapping onto a second line can push out of line with its neighbours.
+    pills: await box(host.locator('header .badges')),
     slots: await box(host.getByRole('img', { name: /^Runner slots in use on / })),
     bars: await box(host.getByRole('group', { name: /^Utilisation of / })),
     details: await box(toggle(page, name)),
@@ -375,7 +378,7 @@ type Measured = Awaited<ReturnType<typeof measure>>;
 
 /** Every card has the part at the same height and of the same size, to a pixel. */
 function expectUniform(cards: Measured[], when: string): void {
-  for (const part of ['card', 'slots', 'bars', 'details'] as const) {
+  for (const part of ['card', 'pills', 'slots', 'bars', 'details'] as const) {
     const tops = cards.map((c) => c[part].y);
     const heights = cards.map((c) => c[part].height);
     expect(
@@ -388,6 +391,30 @@ function expectUniform(cards: Measured[], when: string): void {
     ).toBeLessThanOrEqual(1);
   }
 }
+
+test('a name that wraps does not move its pills out of line with the cards beside it', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'a phone has one card to a row, so there is nothing to line up with');
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  // A name in the grammar internal/naming gives a rented machine: long enough to
+  // take two lines in a card a third of the page wide, where its neighbours' names
+  // take one. Every fixture name is one line, so without this the pills could
+  // slip by a line and nothing would say so.
+  const LONG = 'zoomies-16vcpu-64gb-ubuntu-2404-arm64-tuck';
+  await reshape(page, BUILDER, (host) => ({ ...host, name: LONG }));
+  await goto(page, '/hosts', 'Hosts');
+  await expect(card(page, CORDONED)).toContainText('Cordoned.');
+  const lines = await card(page, LONG)
+    .getByRole('heading', { level: 3 })
+    .locator('a')
+    .evaluate((link) => link.getClientRects().length);
+  expect(lines, 'the long name takes more than one line').toBeGreaterThan(1);
+
+  const row = await Promise.all([CORDONED, LONG, LOW_DISK].map((name) => measure(page, name)));
+  expectUniform(row, 'with one name on two lines');
+});
 
 test('the cards in a row are one height, and their sections line up across it', async ({
   page,
