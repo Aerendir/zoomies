@@ -14595,8 +14595,8 @@ components:
         value: { type: string }
         label: { type: string }
         consequence: { type: string, description: What picking it means, because a list of identifiers with no consequences is a list somebody guesses at. }
-        cpus: { type: integer, description: The processors a node has or a template gives, when the provider said. The limits step's recommendation is arithmetic on it. }
-        memory_mb: { type: integer, format: int64, description: The memory in MiB a node has or a template gives, when the provider said. }
+        cpus: { type: integer, description: "The processors a node has or a template gives, when the provider said. The limits step's recommendation is arithmetic on it." }
+        memory_mb: { type: integer, format: int64, description: "The memory in MiB a node has or a template gives, when the provider said." }
 
     ProviderDiscovery:
       type: object
@@ -14670,7 +14670,7 @@ components:
         host_name: { type: string }
         capacity: { type: integer }
         labels: { type: object, additionalProperties: { type: string } }
-        test: { type: boolean, description: True for the machine an operator asked for to prove the provider works. It is released once it reports ready, and the provider page reads the result of the test from it. }
+        test: { type: boolean, description: "True for the machine an operator asked for to prove the provider works. It is released once it reports ready, and the provider page reads the result of the test from it." }
         operation: { type: string, enum: [create, start, stop, bootstrap, delete], description: The operation in flight, if any. }
         operation_id: { type: string, examples: [mop_k3f9qz2mx7ab] }
         operation_handle: { type: string, description: The provider's own handle for the call, which is what an operator pastes into its task log. }
@@ -15116,7 +15116,7 @@ components:
       description: Comparison with main for a stamped development build. Main may still be publishing to the dev channel.
       properties:
         current: { type: string, description: The commit in the running build. }
-        latest: { type: string, description: The last observed commit on main, or empty before a successful check. }
+        latest: { type: string, description: "The last observed commit on main, or empty before a successful check." }
         state: { type: string, enum: [unknown, current, available] }
         checked_at: { type: [string, "null"], format: date-time }
     UpdatesRelease:

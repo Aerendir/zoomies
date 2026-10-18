@@ -10847,11 +10847,11 @@ export interface components {
             label?: string;
             /** @description What picking it means */
             consequence?: string;
-            /** @description The processors a node has or a template gives */
+            /** @description The processors a node has or a template gives, when the provider said. The limits step's recommendation is arithmetic on it. */
             cpus?: number;
             /**
              * Format: int64
-             * @description The memory in MiB a node has or a template gives
+             * @description The memory in MiB a node has or a template gives, when the provider said.
              */
             memory_mb?: number;
         };
@@ -10923,7 +10923,7 @@ export interface components {
             labels: {
                 [key: string]: string;
             };
-            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready */
+            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready, and the provider page reads the result of the test from it. */
             test?: boolean;
             /**
              * @description The operation in flight
@@ -11334,7 +11334,7 @@ export interface components {
         UpdatesDevelopment: {
             /** @description The commit in the running build. */
             current: string;
-            /** @description The last observed commit on main */
+            /** @description The last observed commit on main, or empty before a successful check. */
             latest: string;
             /** @enum {string} */
             state: "unknown" | "current" | "available";
