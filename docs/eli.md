@@ -453,8 +453,8 @@ history below uses labelled sample outcomes; no real PR was changed to produce
 these images. A stopped attempt explains what needs attention before you spend
 another attempt, while a passed repair still needs normal PR review.
 
-![Eli repairs: the setup line, an empty Needs you, and History with a repair that could not fix its failure, one that needs attention and one whose checks passed, each with its pull request, its failed job and when it ran](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
-![Eli repairs: the setup line, an empty Needs you, and History with a repair that could not fix its failure, one that needs attention and one whose checks passed, each with its pull request, its failed job and when it ran](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+![Eli repairs: the setup line counting two repositories that repair themselves, an empty Needs you, the Automatic repairs panel with each repository's provider, allowance, latest repair and a Stop automatic repairs button, and History with each repair's pull request, its failed job and when it ran](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs: the setup line counting two repositories that repair themselves, an empty Needs you, the Automatic repairs panel with each repository's provider, allowance, latest repair and a Stop automatic repairs button, and History with each repair's pull request, its failed job and when it ran](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
 From **Recent failures**, click the failure summary to inspect its failed step,
 explanation and timeline, or choose **Fix with Eli**. The repair page opens on
@@ -566,6 +566,62 @@ which on a repository whose CI fails often can use it up before anyone asks.
 The App's own GitHub handle (for example `@zoomies-eyupio2`, the name GitHub
 autocompletes) works too, once Zoomies has learned the App's slug. Recognition
 uses the comment text and does not require GitHub mention notification routing.
+
+### Watching and stopping automatic repairs
+
+A repository set to **Automatic** has Eli repair its failed pull request checks
+with nobody asking: when a job fails on the head of an open pull request that Eli
+may repair, a repair is queued, paid for by the repository's installation
+provider, and Eli pushes one commit. Because nobody is there when that happens,
+the Eli repairs page shows it, to an administrator and to nobody else: automatic
+repairs have no owner, so no one else can read them. A repository that is not
+automatic adds nothing to any page.
+
+The hub's **Automatic repairs** panel appears when at least one enabled policy is
+Automatic. Each repository has a row, and the ones that cannot run come first:
+
+* **Who pays, and whether they can.** A provider that was deleted (which leaves
+  the policy with none), is disabled or belongs to a person cannot pay for an
+  unattended repair, and the row says so in a sentence with a link to the policy
+  in setup, before the next failure is spent on it.
+* **The allowance.** How many attempts the last 24 hours have used out of the
+  daily limit. It is the repository's, shared by repairs people ask for and by the
+  automation, and a repair cleared from the history still counts. When every
+  attempt is used the row says when the oldest leaves the window. Until then no
+  automatic repair starts there, and a repair started by hand is refused for the
+  same reason.
+* **The latest automatic repair** still in the history, which opens, and how many
+  are running now.
+
+**Stop automatic repairs** (and **Stop all**, with two or more repositories) asks
+what should happen instead. **Ask me first** hands the decision back: when checks
+fail Eli offers a repair under *Needs you* and waits, and the repository keeps its
+provider, allowance and workflow setting. **Turn repairs off** clears the policy's
+enable switch and nothing else, so Eli neither offers nor starts a repair there
+and nobody can request one until the switch is turned back on in repair setup,
+which resumes Automatic as it was. Either way, a repair already queued is blocked
+when the worker reaches it, and one that has not pushed yet stops before it
+changes the branch; one that has pushed carries on watching its checks. The stop
+needs no working provider, which is the day it is wanted, writes an
+`assistant.repair_automatic_stop` audit row for each repository it changed, and
+never turns anything on: starting Automatic is a decision made in setup.
+
+A repair the policy started says so on its own page (**Started by** Automatic
+repairs, by the repository's policy), and an administrator gets a card for the
+repository's policy with the same stop. On the repair page of a failure on an
+automatic repository a note says whether Eli already tried this failure on its
+own (it does not try the same commit twice by itself, so starting another attempt
+is the retry) or why nothing has started. Eli starts an automatic repair from
+GitHub's report that a job failed, so a failure reported before Automatic was
+switched on, or whose report never arrived, is not picked up on its own. Anyone
+else who opens that page sees one sentence saying the repository repairs itself.
+
+![An automatic repair that did not fix its failure: Started by Automatic repairs, and the Automatic repairs card for the repository with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-dark.webp#only-dark){ .zoomies-shot }
+![An automatic repair that did not fix its failure: Started by Automatic repairs, and the Automatic repairs card for the repository with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-light.webp#only-light){ .zoomies-shot }
+
+The panel reads `GET /api/v1/assistant/repairs/automatic` and the stop is
+`POST /api/v1/assistant/repairs/automatic/stop`, both for administrators; the
+[API surface](api-surface.md) describes them.
 
 ## What a repair does
 

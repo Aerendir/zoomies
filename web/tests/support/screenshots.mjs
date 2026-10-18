@@ -457,8 +457,28 @@ const SHOTS = [
     device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
     async prepare(page) {
       await page.getByRole('region', { name: 'Repair setup' }).waitFor();
-      await page.locator('.history').getByText('Checks passed', { exact: true }).waitFor();
+      await page
+        .getByRole('region', { name: 'Automatic repairs' })
+        .getByRole('article')
+        .first()
+        .waitFor();
+      await page.locator('.history').getByText('Checks passed', { exact: true }).first().waitFor();
       await page.getByText('Needs attention', { exact: true }).last().waitFor();
+    },
+  },
+  {
+    // A repair the repository's own policy started: how it ended, and the card that says
+    // where that policy stands and stops it.
+    name: 'eli-repair-automatic',
+    path: (api) => repairAttemptPath(api, 109),
+    heading: 'Cap the retry budget in the gateway client',
+    repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1300 }, deviceScaleFactor: SCALE },
+    async prepare(page) {
+      await page
+        .getByRole('region', { name: 'Automatic repairs on acme/gateway' })
+        .getByText('Automatic repairs are on.')
+        .waitFor();
     },
   },
   {

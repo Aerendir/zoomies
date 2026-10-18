@@ -5,8 +5,10 @@ The owner's words were: "Don't forget auto repairs if enabled. User needs
 visibility and controls." The repair pages in
 [2026-10-18-eli-repair-workspace.md](2026-10-18-eli-repair-workspace.md) are built
 and merged (#1156), and that document never mentions automatic repairs. This one
-closes the gap. The implementation plan is
-[2026-10-18-eli-automatic-repairs-plan.md](2026-10-18-eli-automatic-repairs-plan.md).
+closes the gap, and all of it is built, in the pull request that carries this
+document. The implementation plan is
+[2026-10-18-eli-automatic-repairs-plan.md](2026-10-18-eli-automatic-repairs-plan.md),
+which says where the build departed from it.
 
 ## What was asked
 

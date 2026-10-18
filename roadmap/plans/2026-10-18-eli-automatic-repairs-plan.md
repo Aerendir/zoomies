@@ -10,6 +10,23 @@
 
 **Spec:** [2026-10-18-eli-automatic-repairs.md](2026-10-18-eli-automatic-repairs.md)
 
+> **Where the build departed from this plan.** The store's activity read takes the
+> repositories it answers for, so its scan for the newest row can stop early and
+> no index is needed. There is no "installation removed" problem, because a
+> policy is deleted with its installation, and a deleted provider leaves the
+> policy with none. The controller keeps a failed save as that repository's result
+> and carries on with the rest. The repair page's note takes the repository's row
+> of the overview, which can say whose allowance stopped an automatic repair and
+> carries a provider problem as the better reason, in place of a spent-allowance
+> flag. The client does not sort the rows again, because the controller orders
+> them. The stop (send, toast, stay open with the reason) lives once in
+> `lib/repairs/stop.ts`. The note reads only for an administrator, only on a
+> repository that is automatic and only while the failure has not been fixed,
+> closed or replaced. The audits found two overflows, in the shared breadcrumb and
+> in the new card, both fixed with `overflow-wrap`. The screenshot fixture seeds two
+> automatic repositories, so the hub and setup images were retaken and an attempt
+> image was added.
+
 ## Global Constraints
 
 * Go 1.27.1 or later; Node 22 or later. No new dependency, Go or npm (`docs/dependencies.md`).
