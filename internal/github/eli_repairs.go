@@ -34,10 +34,13 @@ type RepairActor struct {
 	CanWrite bool
 }
 type RepairPull struct {
-	Number        int
-	AuthorID      int64
-	Author        string
-	Branch        string
+	Number   int
+	AuthorID int64
+	Author   string
+	Branch   string
+	// Base is the branch the pull request merges into, which is not always the
+	// repository's default branch: it can target a release branch.
+	Base          string
 	HeadSHA       string
 	Title         string
 	Body          string
@@ -127,11 +130,14 @@ func (c *appClient) RepairPull(ctx context.Context, repo string, number int) (Re
 				DefaultBranch string `json:"default_branch"`
 			} `json:"repo"`
 		} `json:"head"`
+		Base struct {
+			Ref string `json:"ref"`
+		} `json:"base"`
 	}
 	if err := c.repairRequest(ctx, http.MethodGet, base+"/pulls/"+strconv.Itoa(number), nil, &p); err != nil {
 		return RepairPull{}, err
 	}
-	out := RepairPull{Number: p.Number, AuthorID: p.User.ID, Author: p.User.Login, Branch: p.Head.Ref, HeadSHA: p.Head.SHA, Title: p.Title, Body: p.Body, URL: p.HTMLURL, DefaultBranch: p.Head.Repo.DefaultBranch, Fork: p.Head.Repo.FullName != repo, Open: p.State == "open"}
+	out := RepairPull{Number: p.Number, AuthorID: p.User.ID, Author: p.User.Login, Branch: p.Head.Ref, Base: p.Base.Ref, HeadSHA: p.Head.SHA, Title: p.Title, Body: p.Body, URL: p.HTMLURL, DefaultBranch: p.Head.Repo.DefaultBranch, Fork: p.Head.Repo.FullName != repo, Open: p.State == "open"}
 	if out.Number > 0 && p.State == "closed" {
 		return out, &RepairTargetChanged{Code: "closed", Message: fmt.Sprintf("PR #%d is closed or merged. This failure no longer needs a PR repair. You can still inspect the original run on GitHub.", out.Number)}
 	}
