@@ -20,6 +20,7 @@
   import { visualStyle } from '$lib/state/ui-style.svelte';
   import ControlsSection from './sections/Controls.svelte';
   import DataSection from './sections/Data.svelte';
+  import EliRepairsSection from './sections/EliRepairs.svelte';
   import FeedbackSection from './sections/Feedback.svelte';
   import FormsSection from './sections/Forms.svelte';
   import OverlaysSection from './sections/Overlays.svelte';
@@ -87,6 +88,7 @@
     <SurfacesSection />
     <OverlaysSection />
     <DataSection />
+    <EliRepairsSection />
   </div>
 </main>
 

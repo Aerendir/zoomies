@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Schemas } from '../src/lib/api/types.ts';
-import { blockingRow, checkRows } from '../src/lib/repairs/checks.ts';
+import { blockedHeadline, blockingRow, checkRows } from '../src/lib/repairs/checks.ts';
 import { CHECK_ORDER, allOk, readiness, stoppedAt, withoutChecks } from './repair-fixtures.ts';
 
 const REPO_URL = 'https://github.com/acme/widgets';
@@ -187,4 +187,17 @@ test('a readiness with no checks falls back to rows made from its blockers', () 
   assert.equal(blockingRow(rows)?.code, 'provider');
 
   assert.deepEqual(checkRows(withoutChecks(readiness()), REPO_URL), []);
+});
+
+// The card beside the checklist says the one thing to do about the first check
+// that blocks, in words that name the thing rather than the code.
+test('each blocked check has a headline for the decision card', () => {
+  for (const code of CHECK_ORDER) {
+    const headline = blockedHeadline(code);
+    assert.notEqual(headline, '', code);
+    assert.notEqual(headline, code, `${code} has no wording`);
+    assert.ok(!headline.includes('\u2014') && !headline.includes(' -- '), headline);
+  }
+  assert.equal(blockedHeadline('access'), 'Fix write access first');
+  assert.equal(blockedHeadline('quantum'), 'Something needs your attention');
 });

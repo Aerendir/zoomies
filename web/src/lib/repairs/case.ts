@@ -18,6 +18,15 @@ import { commitUrl, linksFromJobUrl, pullUrl, safeHttpUrl } from './links';
 type Readiness = Schemas['EliReadiness'];
 type Repair = Schemas['EliRepair'];
 
+/** One step of a failed job, as GitHub reported it. */
+export interface CaseStep {
+  number: number;
+  name: string;
+  /** How it ended: success, failure, skipped, cancelled, or empty while it has not. */
+  conclusion: string;
+  durationMs?: number;
+}
+
 export interface CaseJob {
   /** Stable for the list: the Zoomies job id, or a stand-in when there is none. */
   key: string;
@@ -34,6 +43,8 @@ export interface CaseJob {
   /** The job the person opened to get here. */
   opened: boolean;
   githubJobId?: number;
+  /** Every step the job reported, when the job is still on record. A snapshot has none. */
+  steps?: CaseStep[];
 }
 
 export interface CaseView {
@@ -74,6 +85,22 @@ function plainTitle(repo: string, pullNumber: number | undefined): string {
   return pullNumber ? `Pull request #${pullNumber} in ${repo}` : `A repair in ${repo}`;
 }
 
+function liveSteps(job: Job): CaseStep[] {
+  return (job.steps ?? []).map((step, index) => {
+    const out: CaseStep = {
+      number: step.number ?? index + 1,
+      name: step.name ?? '',
+      conclusion: step.conclusion ?? '',
+    };
+    const took =
+      step.started_at && step.completed_at
+        ? Date.parse(step.completed_at) - Date.parse(step.started_at)
+        : NaN;
+    if (took > 0) out.durationMs = took;
+    return out;
+  });
+}
+
 function liveJob(job: Job, index: number, openedJobId: string | undefined): CaseJob {
   const domain = faultDomain(job);
   const out: CaseJob = {
@@ -93,6 +120,7 @@ function liveJob(job: Job, index: number, openedJobId: string | undefined): Case
   if (label) out.faultLabel = label;
   if (job.fault_fix) out.fix = job.fault_fix;
   if (job.github_job_id) out.githubJobId = job.github_job_id;
+  if (job.steps?.length) out.steps = liveSteps(job);
   return out;
 }
 

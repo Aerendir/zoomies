@@ -284,3 +284,54 @@ test('hostile text in a snapshot is text and its addresses are dropped', () => {
   assert.equal(view.jobs[0]?.name, '<b>x</b>');
   assert.equal(view.jobs[0]?.url, undefined);
 });
+
+// The page lists a failed job's steps beside the one it stopped at, so a person
+// sees what ran first and what never ran. A step that was skipped has no time.
+test('a live job carries its steps, how each ended and how long it took', () => {
+  const view = caseFromLive({
+    repo: 'acme/widgets',
+    readiness: null,
+    jobs: [
+      failedJob({
+        steps: [
+          {
+            number: 1,
+            name: 'Set up job',
+            status: 'completed',
+            conclusion: 'success',
+            started_at: '2026-10-18T09:10:00Z',
+            completed_at: '2026-10-18T09:10:02Z',
+          },
+          {
+            number: 2,
+            name: 'Run go test ./...',
+            status: 'completed',
+            conclusion: 'failure',
+            started_at: '2026-10-18T09:10:02Z',
+            completed_at: '2026-10-18T09:11:48Z',
+          },
+          { number: 3, name: 'Upload coverage', status: 'completed', conclusion: 'skipped' },
+        ],
+      }),
+    ],
+  });
+  assert.deepEqual(view.jobs[0]?.steps, [
+    { number: 1, name: 'Set up job', conclusion: 'success', durationMs: 2000 },
+    { number: 2, name: 'Run go test ./...', conclusion: 'failure', durationMs: 106000 },
+    { number: 3, name: 'Upload coverage', conclusion: 'skipped' },
+  ]);
+});
+
+test('a job with no steps reported, and a job read from a snapshot, have none', () => {
+  assert.equal(
+    caseFromLive({ repo: 'acme/widgets', readiness: null, jobs: [failedJob()] }).jobs[0]?.steps,
+    undefined,
+  );
+  assert.equal(
+    caseFromLive({ repo: 'acme/widgets', readiness: null, jobs: [failedJob({ steps: [] })] })
+      .jobs[0]?.steps,
+    undefined,
+  );
+  const snapshot = caseFromSnapshot(repair({ details: { case: { jobs: [{ name: 'unit' }] } } }));
+  assert.equal(snapshot.jobs[0]?.steps, undefined);
+});

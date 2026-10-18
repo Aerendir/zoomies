@@ -152,6 +152,23 @@ export function checkRows(readiness: ReadinessLike, repoUrl?: string): CheckRow[
   );
 }
 
+const HEADLINES: Record<string, string> = {
+  identity: 'Link your GitHub account',
+  provider: 'Add a model provider',
+  installation: 'Connect the GitHub installation',
+  access: 'Fix write access first',
+  policy: 'Turn repairs on for this repository',
+  budget: 'No attempts left today',
+  pull: 'Choose a pull request',
+  checks: 'Wait for the checks',
+  permissions: 'Grant the GitHub App its permissions',
+};
+
+/** What the decision card says about the check that blocks, as the one thing to do. */
+export function blockedHeadline(code: string): string {
+  return HEADLINES[code] ?? 'Something needs your attention';
+}
+
 /** The first thing in the way, which is the one the card is about. */
 export function blockingRow(rows: readonly CheckRow[]): CheckRow | undefined {
   return rows.find((r) => r.status === 'blocked');
