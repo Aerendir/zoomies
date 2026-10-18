@@ -56,6 +56,7 @@ import {
 } from '@lucide/svelte';
 import type { LucideIcon } from '@lucide/svelte';
 import DogSitting from './icons/DogSitting.svelte';
+import { stateLabel as repairStateLabel } from './repairs/history';
 import type {
   APIToken,
   Host,
@@ -858,6 +859,113 @@ export function poolStatus(pool: Pick<Pool, 'enabled'>): StatusMeta {
         'Existing runners drain; no new ones are made.',
       )
     : meta('enabled', 'Enabled', 'idle', 'hollow', Circle);
+}
+
+/* -- Eli repairs ------------------------------------------------------------ */
+
+/*
+ * A repair's state, drawn as every other status is. The words are the history's
+ * own, so a badge never disagrees with the line beside it. The three failures
+ * share the danger tone and the triangle because they are the same news to the
+ * person reading: it did not end well, and the card says why.
+ */
+const REPAIR: Record<string, StatusMeta> = {
+  queued: meta(
+    'queued',
+    repairStateLabel('queued'),
+    'pending',
+    'dashed',
+    Clock,
+    'Waiting for Eli to pick this repair up.',
+  ),
+  working: meta(
+    'working',
+    repairStateLabel('working'),
+    'busy',
+    'filled',
+    Activity,
+    'Eli is reading the failure and preparing a fix.',
+  ),
+  checking: meta(
+    'checking',
+    repairStateLabel('checking'),
+    'busy',
+    'filled',
+    Hourglass,
+    'Eli pushed a commit and its checks are running.',
+  ),
+  succeeded: meta(
+    'succeeded',
+    repairStateLabel('succeeded'),
+    'idle',
+    'filled',
+    CircleCheck,
+    'The checks on Eli\u2019s commit passed. Review it like any other change.',
+  ),
+  checks_failed: meta(
+    'checks_failed',
+    repairStateLabel('checks_failed'),
+    'danger',
+    'triangle',
+    CircleX,
+    'Eli pushed a commit and its checks still fail.',
+  ),
+  failed: meta(
+    'failed',
+    repairStateLabel('failed'),
+    'danger',
+    'triangle',
+    CircleX,
+    'Eli could not produce a fix to push.',
+  ),
+  blocked: meta(
+    'blocked',
+    repairStateLabel('blocked'),
+    'danger',
+    'triangle',
+    TriangleAlert,
+    'Something stopped the repair before it began.',
+  ),
+  interrupted: meta(
+    'interrupted',
+    repairStateLabel('interrupted'),
+    'danger',
+    'triangle',
+    TriangleAlert,
+    'The controller restarted while Eli was working.',
+  ),
+  superseded: meta(
+    'superseded',
+    repairStateLabel('superseded'),
+    'neutral',
+    'square',
+    CircleMinus,
+    'The pull request has a newer commit.',
+  ),
+  unverified: meta(
+    'unverified',
+    repairStateLabel('unverified'),
+    'pending',
+    'hollow',
+    CircleQuestionMark,
+    'No complete check result was seen within an hour.',
+  ),
+};
+
+/**
+ * The status of a repair from its state. A state this build does not know is
+ * neutral and keeps its own word, so a newer controller's state is shown rather
+ * than hidden.
+ */
+export function repairStatus(state: string): StatusMeta {
+  if (Object.hasOwn(REPAIR, state)) return REPAIR[state]!;
+  return meta(
+    state || 'unknown',
+    state ? repairStateLabel(state) : 'Unknown',
+    'neutral',
+    'square',
+    CircleQuestionMark,
+  );
 }
 
 /* -- problems and deliveries ---------------------------------------------- */
