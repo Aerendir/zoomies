@@ -152,8 +152,9 @@ func benchApplyRedelivery(b *testing.B, s *Store) {
 
 // benchApplyStale is a delivery that arrives after the job has moved on, a
 // queued one after the completed: the merge that must not take the row
-// backwards, and the one that keeps a late in_progress from putting every
-// finished step back to queued.
+// backwards. The row is a finished job's, steps included, so it reads and
+// rewrites more than the redelivery's row does, and part of the gap between
+// the two is that.
 func benchApplyStale(b *testing.B, s *Store) {
 	ctx := context.Background()
 	if _, _, err := s.ApplyJob(ctx, benchDelivery(1, JobCompleted)); err != nil {

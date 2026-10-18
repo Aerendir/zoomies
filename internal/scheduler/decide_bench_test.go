@@ -114,8 +114,9 @@ func (f benchFleet) snapshot(sc benchScale) Snapshot {
 }
 
 // benchSituations are the shapes of pass a fleet spends its time in. Quiet is
-// by far the commonest, so it is the number that sets the steady cost; the
-// others are the passes an operator is waiting on.
+// the commonest, since most passes find nothing to do, so it is the number
+// that sets the steady cost; the others are the passes an operator is waiting
+// on.
 var benchSituations = []struct {
 	name  string
 	fleet benchFleet

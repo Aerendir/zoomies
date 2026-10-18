@@ -13,9 +13,13 @@ import (
 // against the number of subscribers, and Subscribe, whose queue is large enough
 // to be worth knowing the price of every time a tab connects.
 
-// benchFrame stands in for the payload of a resource frame. The controller
-// publishes the same JSON its GET route returns: a dozen scalar fields, a few
-// times and a list of labels, about half a kilobyte on the wire.
+// benchFrame stands in for the payload of a resource frame, which the
+// controller publishes as the same JSON its GET route returns. A runner's has
+// over forty fields, most of them left out when empty, and carries the job it
+// is holding while it holds one, so this smaller stand-in (a dozen scalar
+// fields, two times and a list of labels: 394 bytes) gives a lower bound on
+// what publishing a real frame costs. What it costs to deliver a frame to each
+// subscriber does not depend on its size.
 type benchFrame struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
