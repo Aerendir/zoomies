@@ -343,4 +343,90 @@ func BenchmarkReconcile(b *testing.B) {
 			})
 		}
 	})
+
+	// The watched fleet with a history behind it. A controller that has run for a
+	// week has a jobs table to match, and the problems list asks it how long jobs
+	// waited, how long they took against the week before, and what they used. The
+	// fleets above have no job in the table, so none of that has ever been timed
+	// against the thing it is dearest on. The jobs here are spread evenly over the
+	// last eight days, the span the slower-job check reads.
+	b.Run("busy", func(b *testing.B) {
+		for _, jobs := range []int{2000, 10000} {
+			b.Run(fmt.Sprintf("pools=20/jobs=%d", jobs), func(b *testing.B) {
+				h := warmFleet(b, 20)
+				pools, err := h.st.ListPools(h.ctx)
+				if err != nil || len(pools) != 20 {
+					b.Fatalf("ListPools = %d pools, err = %v; want 20", len(pools), err)
+				}
+				seedFinishedJobs(b, h, pools, jobs)
+
+				now := time.Now()
+				dayAgo, weekBefore := now.Add(-slowerRecent), now.Add(-slowerRecent-slowerBase)
+				_, recent, err := h.st.ListJobs(h.ctx, store.JobFilter{Since: &dayAgo}, store.Page{Limit: 1})
+				if err != nil {
+					b.Fatalf("ListJobs: %v", err)
+				}
+				_, earlier, err := h.st.ListJobs(h.ctx, store.JobFilter{Since: &weekBefore, Until: &dayAgo}, store.Page{Limit: 1})
+				if err != nil {
+					b.Fatalf("ListJobs: %v", err)
+				}
+				if recent+earlier != jobs || recent < jobs/10 || earlier < jobs/2 {
+					b.Fatalf("the table holds %d jobs in the last day and %d in the week before; want all %d, with the week the larger share", recent, earlier, jobs)
+				}
+
+				sub := h.listen()
+				told := map[events.Kind]bool{}
+				if err := h.c.Reconcile(h.ctx); err != nil {
+					b.Fatalf("Reconcile: %v", err)
+				}
+				for len(sub.C) > 0 {
+					told[(<-sub.C).Kind] = true
+				}
+				if !told[events.KindStats] || !told[events.KindProblems] {
+					b.Fatalf("a pass with a listener told it %v; want it told the statistics and the problems", told)
+				}
+				go func() {
+					for range sub.C {
+					}
+				}()
+
+				b.ReportAllocs()
+				for b.Loop() {
+					if err := h.c.Reconcile(h.ctx); err != nil {
+						b.Fatal(err)
+					}
+				}
+				if h.c.Events().Subscribers() == 0 {
+					b.Fatal("the listener was dropped while the passes were timed")
+				}
+			})
+		}
+	})
+}
+
+// seedFinishedJobs records n completed jobs over the last eight days, across the
+// pools and five job names in turn. Most succeed; one in twenty fails and one in
+// fifty is cancelled, which is the part of the history the duration figures leave out.
+func seedFinishedJobs(b *testing.B, h *harness, pools []*store.Pool, n int) {
+	b.Helper()
+	now := time.Now()
+	spacing := (slowerRecent + slowerBase - time.Hour) / time.Duration(n)
+	for i := range n {
+		queued := now.Add(-time.Duration(i+1) * spacing)
+		started, done := queued.Add(20*time.Second), queued.Add(time.Duration(50+i%90)*time.Second)
+		conclusion := "success"
+		switch {
+		case i%50 == 0:
+			conclusion = "cancelled"
+		case i%20 == 0:
+			conclusion = "failure"
+		}
+		if _, err := h.st.UpsertJob(h.ctx, &store.Job{
+			GitHubJobID: int64(5000 + i), Repo: "acme/api", Workflow: "CI", JobName: fmt.Sprintf("build-%d", i%5),
+			State: store.JobCompleted, Conclusion: conclusion, PoolID: pools[i%len(pools)].ID, Matched: true,
+			QueuedAt: queued, StartedAt: &started, CompletedAt: &done,
+		}); err != nil {
+			b.Fatalf("UpsertJob: %v", err)
+		}
+	}
 }
