@@ -131,11 +131,16 @@ next call is refused and it asks you to sign in again.
 An administrator sees everybody's connections, and every client (the ones they
 created, the ones that registered themselves and the metadata documents) under
 **Settings → MCP clients**, where each can be revoked. Everything is in the
-audit log: `mcp_connection.grant`, `mcp_connection.revoke`,
-`mcp_connection.replay`, `mcp_client.register`, `mcp_client.create`,
+audit log: `mcp_connection.grant`, `mcp_connection.deny`,
+`mcp_connection.revoke`, `mcp_connection.replay`, `mcp_connection.revoke_all`,
+`mcp_connection.context`, `mcp_client.register`, `mcp_client.create`,
 `mcp_client.update`, `mcp_client.secret_rotate`, `mcp_client.revoke`, and
 `mcp_connection.call` for every tool call that changed or tried to change the
-fleet.
+fleet. `mcp_connection.deny` is someone pressing **Deny** on the consent screen;
+`mcp_connection.revoke_all` is a password change, an administrator's password
+reset or **Sign out other sessions** ending every connection an account holds;
+and `mcp_connection.context` is a connection's owner choosing the repositories
+it may read source from and write notes to.
 
 ## What it can and cannot do
 

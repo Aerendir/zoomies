@@ -104,7 +104,7 @@ Conventions:
 | POST | `/api/v1/auth/two-step/recovery-codes` | viewer | `{password, code}`: replaces every recovery code and returns the new ones. |
 | GET | `/api/v1/auth/mcp-requests/{id}` | viewer | What the consent screen shows about an MCP sign-in waiting for the signed-in person: the client, the redirect's host, whether the address approving sends the person to is on their own machine (`loopback_only`: that one address, not every address the client registered), and the roles they may give the connection; no higher than their own, never above operator. A session only; an API token is refused. |
 | POST | `/api/v1/auth/mcp-requests/{id}/approve` | viewer | `{role}`: creates the connection and returns `{redirect_to}`, the client's redirect with a single-use code, for the browser to follow. Audited as `mcp_connection.grant`. |
-| POST | `/api/v1/auth/mcp-requests/{id}/deny` | viewer | Discards the request and returns `{redirect_to}` carrying `access_denied`. |
+| POST | `/api/v1/auth/mcp-requests/{id}/deny` | viewer | Discards the request and returns `{redirect_to}` carrying `access_denied`. Audited as `mcp_connection.deny`. |
 | GET | `/api/v1/auth/mcp-connections` | viewer | The signed-in person's MCP connections: client, role, scope, when it was made and last used. |
 | DELETE | `/api/v1/auth/mcp-connections/{id}` | viewer | Disconnect one of your own; its tokens stop working at once. Audited as `mcp_connection.revoke`. |
 | GET | `/api/v1/auth/oidc/start` | - | 302 to the identity provider. |
