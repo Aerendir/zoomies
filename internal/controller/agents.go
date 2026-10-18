@@ -1237,7 +1237,10 @@ func (c *Controller) unknownRunners(ctx context.Context, hostID string, reports 
 // to a poll interval later.
 func (c *Controller) PollTasks(ctx context.Context, hostID string, wait time.Duration) (*agent.TaskBatch, error) {
 	c.recoveryMu.RLock()
-	defer c.recoveryMu.RUnlock()
+	// Released once, before the wait below; the deferred call is for every
+	// return that comes before it.
+	unlock := sync.OnceFunc(c.recoveryMu.RUnlock)
+	defer unlock()
 	if h, err := c.st.GetHost(ctx, hostID); err == nil && h.Retired {
 		return nil, agent.ErrHostGone
 	}
@@ -1267,6 +1270,12 @@ func (c *Controller) PollTasks(ctx context.Context, hostID string, wait time.Dur
 
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
+	// The wait looks at nothing, and it can last DefaultPollWait. Held through
+	// it, the read lock made a retirement or the lifting of the fence wait that
+	// long for the write lock, and a waiting writer holds back every other
+	// agent call behind it. So it is let go here and taken again by the one
+	// branch that goes on to look at the queue.
+	unlock()
 	select {
 	case <-ctx.Done():
 		// A cancelled long poll is the client hanging up, not an error worth
@@ -1279,6 +1288,10 @@ func (c *Controller) PollTasks(ctx context.Context, hostID string, wait time.Dur
 		// task reaches its host in the instant it is queued.
 		return &agent.TaskBatch{Backoff: c.shed()}, nil
 	case <-q.wake:
+		// A retirement that committed while this poll waited has sealed the
+		// queue, so take hands out nothing for it.
+		c.recoveryMu.RLock()
+		defer c.recoveryMu.RUnlock()
 		if !c.mayAct() {
 			return &agent.TaskBatch{Backoff: time.Second}, nil
 		}
@@ -2213,10 +2226,13 @@ func (t *embeddedTransport) OpenLogStream(ctx context.Context, streamID string) 
 	}
 	pr, pw := io.Pipe()
 	go func() {
-		err := t.c.AcceptLogStream(t.host(), streamID, pr)
+		var err error
 		// Closing with the error makes the agent's next Write fail rather than
-		// block on a pipe nobody is draining.
-		_ = pr.CloseWithError(err)
+		// block on a pipe nobody is draining, and that has to hold on the way
+		// out through a panic as much as on the way out through a return.
+		defer func() { _ = pr.CloseWithError(err) }()
+		defer t.c.recoverDetached("log-stream")
+		err = t.c.AcceptLogStream(t.host(), streamID, pr)
 	}()
 	return pw, nil
 }

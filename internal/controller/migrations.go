@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -268,7 +270,7 @@ func (c *Controller) PlanMigration(ctx context.Context, req MigrationPlanRequest
 	// separate because the mapping the server proposes depends on what the
 	// first pass found, and reading each repository twice would double the
 	// cost of the most expensive call Zoomies makes.
-	sources := readWorkflows(ctx, client, repos)
+	sources := readWorkflows(ctx, client, repos, c.log)
 
 	// Asking GitHub what this installation may do costs one call, and it is
 	// asked before the plans are built rather than after because the answer
@@ -748,6 +750,11 @@ type workflowSource struct {
 	err       string
 }
 
+// workflowReadCancelled is what a repository says when the request ended before
+// it was read, so that an organisation shown as partly read can be told from
+// one with nothing to migrate.
+const workflowReadCancelled = "the request was cancelled before this repository was read"
+
 // readWorkflows reads every repository's workflows, a few at a time.
 //
 // One repository failing is recorded against that repository rather than
@@ -759,24 +766,47 @@ type workflowSource struct {
 // it whatever its workflows say, and a scan of an organisation that has been
 // tidying up for years would otherwise spend most of its GitHub quota on
 // repositories the wizard is about to grey out.
-func readWorkflows(ctx context.Context, client github.Client, repos []github.Repository) []workflowSource {
+func readWorkflows(ctx context.Context, client github.Client, repos []github.Repository, log *slog.Logger) []workflowSource {
 	out := make([]workflowSource, len(repos))
 	sem := make(chan struct{}, planConcurrency)
 	var wg sync.WaitGroup
 
 	for i, repo := range repos {
+		// The slot is taken here, before the goroutine exists. Taken inside it,
+		// an organisation of ten thousand repositories parked ten thousand
+		// goroutines on the semaphore to read four at a time, and a request that
+		// had been given up on still queued every one of them.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			out[i] = workflowSource{repo: repo}
+			if !repo.Archived {
+				out[i].err = workflowReadCancelled
+			}
+			continue
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
+			// Nothing above this goroutine can recover a panic in it, and a
+			// listing that panics for one repository should cost that
+			// repository, as one that cannot be read already does, and not the
+			// process.
+			defer func() {
+				if r := recover(); r != nil {
+					log.Error("reading a repository's workflows panicked; it is recorded against that repository and the read carries on",
+						"repo", repo.FullName, "panic", r, "stack", string(debug.Stack()))
+					out[i].err = fmt.Sprintf("reading this repository's workflows panicked: %v", r)
+				}
+			}()
 
 			out[i] = workflowSource{repo: repo}
 			if repo.Archived {
 				return
 			}
 			if ctx.Err() != nil {
-				out[i].err = "the request was cancelled before this repository was read"
+				out[i].err = workflowReadCancelled
 				return
 			}
 			files, err := client.ListWorkflows(ctx, repo.FullName)

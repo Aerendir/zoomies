@@ -1,0 +1,39 @@
+# Read by .claude/agents/weekly-seo.md. Nothing here is a secret.
+domain: zoomies.sh
+
+# Search Console property, and the OpenSEO project that has it connected.
+# Leave the project id empty until the site is verified and connected; the
+# agent then skips the tasks that need Search Console and says so.
+gsc_property: sc-domain:zoomies.sh
+openseo_project_id: ""
+
+# Phrases from the October 2026 keyword audit. Volumes are small, so these are
+# the ones where a dedicated page can plausibly reach page one.
+target_keywords:
+  - "github actions self hosted runner"
+  - "actions runner controller"
+  - "ephemeral github runners"
+  - "github actions runner autoscaling"
+  - "github actions runner cost"
+
+# Domains compared in the AI Overview citation check.
+competitors:
+  - cirun.io
+  - runs-on.com
+  - blacksmith.sh
+  - buildjet.com
+  - namespace.so
+
+# The same URLs every week, so "N of M indexed" can be compared week to week.
+# Change the list only on purpose, and say so in the change log.
+index_sample:
+  - https://zoomies.sh/
+  - https://zoomies.sh/quickstart/
+  - https://zoomies.sh/faq/
+  - https://zoomies.sh/costs/
+  - https://zoomies.sh/alternatives/
+  - https://zoomies.sh/architecture/
+  - https://zoomies.sh/hosts-and-pools/
+  - https://zoomies.sh/ephemeral-runners/
+  - https://zoomies.sh/runner-autoscaling/
+  - https://zoomies.sh/privacy/

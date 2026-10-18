@@ -23,7 +23,7 @@ zoomies.sh is a static site published through GitHub Pages from the
   tag manager and no tracking pixel, and it does not set cookies of its own.
 - **Self-hosted fonts and scripts.** The fonts and the one script the site
   ships come from zoomies.sh itself, so reading a page does not tell a font
-  provider or a CDN that you did.
+  provider or a third-party script host that you did.
 - **Search runs in your browser.** The search index is downloaded once and
   queried locally; what you type is not sent anywhere.
 - **Your colour-scheme choice stays on your device.** The light and dark toggle
@@ -32,6 +32,12 @@ zoomies.sh is a static site published through GitHub Pages from the
   address and browser details any web server receives, under
   [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
   This project does not receive those logs.
+- **Cloudflare sees it too.** zoomies.sh is served through Cloudflare, which sits
+  in front of GitHub Pages and so receives the same ordinary web-server data,
+  under [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
+  Cloudflare may also serve its own bot-detection script from this site's
+  address (under `/cdn-cgi/`); that script is Cloudflare's, not part of this
+  project's pages, and this project does not receive what it collects.
 - **What the build looks up.** When the site is built, it asks GitHub for the
   latest release, star count and fork count of the repository, and tells
   participating search engines (through IndexNow) which pages changed. Neither

@@ -1694,3 +1694,30 @@ func TestAnEnrolledHostCannotJoinAgainUnderANewRefusedName(t *testing.T) {
 		t.Errorf("name = %q after a refused join, want it untouched", after.Name)
 	}
 }
+
+// The in-process agent writes a runner's output into a pipe whose other end is
+// read on a goroutine of the controller's. If that goroutine panics, the
+// agent's next write has to fail; left open, it would block for ever on a pipe
+// nobody is draining, with the runner's output pipe backed up behind it.
+func TestAPanicInTheEmbeddedLogRelayEndsTheAgentsStreamInsteadOfHangingIt(t *testing.T) {
+	h := newHarness(t)
+	h.c.relay = nil // AcceptLogStream reads it first, so this is the panic
+	w, err := h.c.EmbeddedTransport().OpenLogStream(h.ctx, "stream_x")
+	if err != nil {
+		t.Fatalf("OpenLogStream: %v", err)
+	}
+
+	written := make(chan error, 1)
+	go func() {
+		_, err := w.Write([]byte("output"))
+		written <- err
+	}()
+	select {
+	case err := <-written:
+		if err == nil {
+			t.Error("a write to a stream whose relay panicked succeeded")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the agent's write blocked on a pipe nobody was draining")
+	}
+}
