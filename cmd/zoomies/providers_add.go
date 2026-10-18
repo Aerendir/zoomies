@@ -250,7 +250,11 @@ func parseVMIDRange(s string) (lo, hi string, err error) {
 	return a, b, nil
 }
 
-// providersAdd is `zoomies providers add <kind>`: the wizard in one command.
+// providersAdd is `zoomies providers add <kind>`: the wizard's manual path in
+// one line, apart from three answers that have no flag. They are the machine's
+// operating system and architecture, the certificate machines trust for the
+// controller, and how many machines are kept warm; the form or the API sets
+// them, and a provider added here keeps no machine warm until one does.
 //
 // It runs the same dry run the wizard's review step does before it writes
 // anything, so a typo is refused with a field name and no row; then it

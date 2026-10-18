@@ -1376,7 +1376,7 @@ nudge.
 Every PR that touches the UI should be able to answer yes to all of these:
 
 - [ ] Operable with the keyboard alone, including grids and dialogs
-- [ ] Focus visible everywhere, and moved into and restored out of dialogs
+- [ ] Focus visible everywhere, moved into a dialog, and given back when it closes unless something else has taken it meanwhile
 - [ ] Custom widgets carry the right `role`, and state via `aria-*`
 - [ ] Colour is never the sole carrier of meaning
 - [ ] Text meets WCAG AA in **both** themes (4.5:1 body, 3:1 large and UI)

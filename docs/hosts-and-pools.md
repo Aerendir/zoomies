@@ -285,9 +285,16 @@ systemd does not run it, or its agent runs in a container under a rootless
 runtime), the card says **Update by command** and which of those it is, draws no
 button and suggests no install: the command beneath it is the way.
 A host that matches the controller has no row at all. The agent inside the controller is updated with the
-controller, from **Settings → Updates**. The copyable command stays beneath the
-button on every card, for an operator to run on the host, whatever the button
-does.
+controller, from **Settings → Updates**. On the card of a remote host whose
+release differs from the controller's (or whose agent speaks a protocol the
+controller cannot work with), the copyable command is at the foot, beneath the
+row, in a folded **Update this agent** section, for an operator to run on the
+host whatever the button does. The row is for administrators, so an operator who
+is not one sees the section alone, and the host's own page has the row and not
+the command. Where no command can work (an agent newer than the controller, a
+machine Zoomies rents, or a controller built from no release) the section is
+called **Agent version guidance** and holds only the sentence that says what to
+do.
 
 ## Priority among hosts
 
