@@ -38,6 +38,7 @@
   import {
     analysisWindow,
     refusalOf,
+    type AnalysisNarrowing,
     EXPLANATION_WORDS,
     STAGE_WORDS,
     wordFor,
@@ -102,6 +103,12 @@
   // Not for a public view's visitor, whom the route refuses before it reads
   // anything (lib/shell/sections.ts says why a refused thing is not offered).
   const failedShown = $derived(!session.visitor && states.includes('failed'));
+  // The pool and host the card was asked about, for Ask Eli to pass to its
+  // tool: a finding narrowed to one of them never names it.
+  const startupNarrowed = $derived<AnalysisNarrowing>({
+    ...(poolId ? { pool: { id: poolId, name: fleet.pool(poolId)?.name } } : {}),
+    ...(hostId ? { host: { id: hostId, name: fleet.host(hostId)?.name } } : {}),
+  });
   let startup = $state.raw<StartupFailuresFinding | null>(null);
   let startupError = $state<{ message: string; refused: boolean } | null>(null);
   let startupLoading = $state(false);
@@ -604,6 +611,7 @@
       finding={startup}
       error={startupError}
       loading={startupLoading}
+      narrowedTo={startupNarrowed}
     >
       {#if startup}
         {@const ev = startup.evidence}

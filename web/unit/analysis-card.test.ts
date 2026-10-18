@@ -126,6 +126,49 @@ test('Ask Eli is handed the finding the card shows', () => {
   assert.ok(context.question && context.question.length > 0);
 });
 
+// The prompt tells Eli to check what the page showed against the fleet with its
+// tools, and the tools read the last day of the whole fleet unless told
+// otherwise. A card narrowed to a pool or a host, or reading a period of its
+// own, has to hand over what it was narrowed to and say to pass it, or Eli's
+// check answers another question than the card's: the fleet's "host
+// demo-builder-2 failed to start 6 of 10" against a pool's "no start failed".
+test('Ask Eli is told which pool or host the card was narrowed to, and to pass it', () => {
+  const finding = {
+    analysis: 'startup_failures',
+    since: '2026-10-12T12:00:00Z',
+    until: '2026-10-13T12:00:00Z',
+    summary: 'No start failed in this period: 6 runners started.',
+    confidence: 'medium',
+    next_steps: [],
+    codes: [],
+  };
+  const pool = analysisContext('What keeps failing to start', finding, {
+    pool: { id: 'pool_a', name: 'linux' },
+  });
+  assert.equal(pool.facts.Pool, 'linux (pool_a)');
+  assert.equal(pool.facts.Host, undefined);
+  assert.match(pool.question ?? '', /for this pool\b/);
+  assert.match(pool.question ?? '', /pool_id pool_a\b/);
+  assert.match(pool.question ?? '', /since 2026-10-12T12:00:00Z, until 2026-10-13T12:00:00Z/);
+
+  const both = analysisContext('What keeps failing to start', finding, {
+    pool: { id: 'pool_a' },
+    host: { id: 'host_x', name: 'demo-builder-2' },
+  });
+  // A name the page does not know is the id alone, not "pool_a (pool_a)".
+  assert.equal(both.facts.Pool, 'pool_a');
+  assert.equal(both.facts.Host, 'demo-builder-2 (host_x)');
+  assert.match(both.question ?? '', /pool_id pool_a and host_id host_x/);
+
+  // Nothing narrowed: the fleet, and the period alone.
+  const fleet = analysisContext('What keeps failing to start', finding);
+  assert.equal(fleet.facts.Pool, undefined);
+  assert.equal(fleet.facts.Host, undefined);
+  assert.match(fleet.question ?? '', /for this fleet\b/);
+  assert.doesNotMatch(fleet.question ?? '', /pool_id|host_id/);
+  assert.match(fleet.question ?? '', /since 2026-10-12T12:00:00Z/);
+});
+
 // With the names withheld every one is empty; joining them would print a row
 // of separators, which reads as names that are blank rather than left out.
 test("a job's names skip the empty ones", () => {

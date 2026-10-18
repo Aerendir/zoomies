@@ -733,6 +733,7 @@
     finding={pressure}
     error={pressureError}
     loading={pressureLoading}
+    narrowedTo={{ host: { id: host?.id ?? id, name: host?.name } }}
   >
     {#if pressure}
       {@const ev = pressure.evidence}

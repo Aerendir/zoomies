@@ -61,6 +61,7 @@
   import {
     analysisWindow,
     refusalOf,
+    type AnalysisNarrowing,
     CAUSE_WORDS,
     jobWords,
     longestWaits,
@@ -246,6 +247,12 @@
       },
       (poolId) => fleet.pool(poolId)?.name ?? poolId,
     ),
+  );
+
+  // The pool the card was asked about, for Ask Eli to pass to its tool: the
+  // finding for one pool never names it unless that pool waited most.
+  const waitNarrowed = $derived<AnalysisNarrowing>(
+    waitPool ? { pool: { id: waitPool, name: fleet.pool(waitPool)?.name } } : {},
   );
 
   /** Every pool's longest waits, longest first, as one list. */
@@ -771,6 +778,7 @@
       error={waitError}
       loading={waitLoading}
       scope={waitScope.scope}
+      narrowedTo={waitNarrowed}
       note={waitScope.unapplied}
     >
       {#if wait}

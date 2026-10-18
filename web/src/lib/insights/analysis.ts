@@ -210,12 +210,47 @@ export interface FindingFacts {
   codes: readonly string[];
 }
 
+/** The pool or host a card was narrowed to, which its finding does not say. */
+export interface AnalysisNarrowing {
+  pool?: { id: string; name?: string };
+  host?: { id: string; name?: string };
+}
+
+/** A name with its id, or the id alone when the page does not know the name. */
+function namedWithId(x: { id: string; name?: string }): string {
+  return x.name && x.name !== x.id ? `${x.name} (${x.id})` : x.id;
+}
+
 /**
  * The finding as the card shows it, named one by one. The evidence stays on
  * the page: it quotes names a workflow wrote, and Eli has the analysis tools
  * to read it whole.
+ *
+ * What the card was narrowed to goes with it, and so does the instruction to
+ * pass it. The prompt tells Eli to check the snapshot with its tools, which
+ * read the last day of the whole fleet unless told otherwise, and a finding
+ * narrowed to one pool says nothing of the pool ("No start failed in this
+ * period") for Eli to repeat.
  */
-export function analysisContext(title: string, f: FindingFacts): EliContext {
+export function analysisContext(
+  title: string,
+  f: FindingFacts,
+  narrowed: AnalysisNarrowing = {},
+): EliContext {
+  const passed = joinWords(
+    [
+      narrowed.pool ? `pool_id ${narrowed.pool.id}` : '',
+      narrowed.host ? `host_id ${narrowed.host.id}` : '',
+    ].filter((a) => a !== ''),
+  );
+  const of =
+    narrowed.pool && narrowed.host
+      ? 'this pool and host'
+      : narrowed.pool
+        ? 'this pool'
+        : narrowed.host
+          ? 'this host'
+          : 'this fleet';
   return {
     kind: 'analysis',
     title,
@@ -223,6 +258,8 @@ export function analysisContext(title: string, f: FindingFacts): EliContext {
       Analysis: f.analysis,
       From: f.since,
       To: f.until,
+      Pool: narrowed.pool ? namedWithId(narrowed.pool) : undefined,
+      Host: narrowed.host ? namedWithId(narrowed.host) : undefined,
       Summary: f.summary,
       Confidence: confidenceWords(f.confidence, f.confidence_reason),
       'Next steps': f.next_steps.length
@@ -230,7 +267,10 @@ export function analysisContext(title: string, f: FindingFacts): EliContext {
         : undefined,
       Codes: f.codes.length ? f.codes.join(', ') : undefined,
     },
-    question: 'What does this analysis mean for this fleet, and what should I change first?',
+    question:
+      `What does this analysis mean for ${of}, and what should I change first? ` +
+      `To check it against the fleet now, ask for the same analysis again with since ${f.since}, until ${f.until}` +
+      `${passed ? `, ${passed}` : ''}; without them it reads the last day of the whole fleet.`,
   };
 }
 

@@ -275,6 +275,81 @@ test('a new range does not leave the last comparison standing on Usage', async (
   await expect(found.getByText('Working it out')).toBeVisible();
 });
 
+/**
+ * What a press on the card's Ask Eli sends the model. The demo's built-in model
+ * is the default provider, so the prompt the page builds is the first message
+ * of the chat request.
+ */
+async function askedByTheCard(page: Page, title: string): Promise<string> {
+  const asked: string[] = [];
+  await page.route('**/api/v1/assistant/personal/chat', async (route) => {
+    const body = route.request().postDataJSON() as { messages: { content: string }[] };
+    asked.push(body.messages[0]!.content);
+    await route.continue();
+  });
+  await card(page, title).getByRole('button', { name: 'Ask Eli' }).click();
+  await expect.poll(() => asked.length, 'the prompt Eli was sent').toBeGreaterThan(0);
+  return asked[0]!;
+}
+
+// The prompt tells Eli to check what the page showed with its tools, which
+// read the last day of the whole fleet unless they are passed what the card
+// was narrowed to. A finding for one pool says nothing of the pool ("No start
+// failed in this period"), so without the id Eli's check answered the
+// fleet-wide question and contradicted the card it had been asked about.
+test('Ask Eli is sent the pool the failed runners were narrowed to, and told to pass it', async ({
+  page,
+}) => {
+  const pools = (await page.request.get('/api/v1/pools').then((r) => r.json())) as {
+    items: { id: string; name: string }[];
+  };
+  const pool = pools.items[0]!;
+  await goto(page, `/runners?state=failed&pool_id=${pool.id}`, 'Runners');
+  const title = 'What keeps failing to start';
+  await expect(card(page, title).getByTestId('analysis-summary')).toBeVisible();
+  const prompt = await askedByTheCard(page, title);
+  expect(prompt).toContain(`Pool: ${pool.name} (${pool.id})`);
+  expect(prompt).toContain(`pool_id ${pool.id}`);
+  expect(prompt).toMatch(/since \S+, until \S+/);
+});
+
+test('Ask Eli is sent the pool the Queued card was narrowed to, and told to pass it', async ({
+  page,
+}) => {
+  const pools = (await page.request.get('/api/v1/pools').then((r) => r.json())) as {
+    items: { id: string; name: string }[];
+  };
+  const pool = pools.items[0]!;
+  await goto(page, `/jobs?state=queued&pool_id=${pool.id}`, 'Jobs');
+  const title = 'Why jobs waited';
+  await expect(card(page, title).getByTestId('analysis-summary')).toBeVisible();
+  const prompt = await askedByTheCard(page, title);
+  expect(prompt).toContain(`Pool: ${pool.name} (${pool.id})`);
+  expect(prompt).toContain(`pool_id ${pool.id}`);
+});
+
+test('Ask Eli is sent the host the page is about, and told to pass it', async ({ page }) => {
+  const hosts = (await page.request.get('/api/v1/hosts').then((r) => r.json())) as {
+    items: { id: string; name: string }[];
+  };
+  const host = hosts.items.find((h) => h.name === FIXTURE.machineHost)!;
+  await goto(page, `/hosts/${host.id}`, FIXTURE.machineHost);
+  const title = 'Whether its failures came under pressure';
+  await expect(card(page, title).getByTestId('analysis-summary')).toBeVisible();
+  const prompt = await askedByTheCard(page, title);
+  expect(prompt).toContain(`Host: ${host.name} (${host.id})`);
+  expect(prompt).toContain(`host_id ${host.id}`);
+});
+
+test('Ask Eli on a card asked about the whole fleet passes no pool or host', async ({ page }) => {
+  await goto(page, '/jobs?state=queued', 'Jobs');
+  const title = 'Why jobs waited';
+  await expect(card(page, title).getByTestId('analysis-summary')).toBeVisible();
+  const prompt = await askedByTheCard(page, title);
+  expect(prompt).toContain('for this fleet');
+  expect(prompt).not.toMatch(/pool_id|host_id/);
+});
+
 /** Mission Control at a phone's width, set up as operational-layout.spec.ts does. */
 async function missionControl(page: Page): Promise<void> {
   await page.setViewportSize({ width: 375, height: 900 });
