@@ -231,6 +231,9 @@ hooks/              the site's build-time metadata: git dates, llms.txt, and the
                     latest release and star count the header shows
 site-worker/        the Cloudflare Worker in front of zoomies.sh: answers
                     Accept: text/markdown with the page's Markdown copy
+weekly-seo/         the weekly search check for zoomies.sh: its config, notes and
+                    the report and memory files the .claude/agents/weekly-seo.md
+                    agent writes
 ROADMAP.md          the follow-on roadmap, and the decisions it asks the owner to take
 roadmap/            what supports it: the work-package record, decision records,
                     gate evidence, dated plans, the model guidance, the source
