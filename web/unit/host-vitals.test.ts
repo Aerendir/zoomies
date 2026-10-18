@@ -274,6 +274,33 @@ test('an agent that reports neither usage nor its machine is explained once, not
   );
 });
 
+test('a throttle that outlives its sample is not called impossible', () => {
+  // A throttle is lifted only after ten minutes without a fresh sample, so a
+  // healthy host whose usage has gone stale can still be on a rung, and the card
+  // says so in the sentence above this one. "This host cannot be throttled" beside
+  // it would be untrue, which is why the card once said the throttle stands on its
+  // last measurements instead.
+  const silentButThrottled = host({
+    usage: undefined,
+    usage_fresh: false,
+    disk_total_mb: undefined,
+    disk_free_mb: undefined,
+    throttle: { level: 1 },
+  });
+  const vitals = hostVitals(silentButThrottled, NOW);
+  assert.match(vitals.unavailable, /throttle stands on its last measurements/);
+  assert.match(vitals.unavailable, /ten minutes without a fresh one/);
+  assert.doesNotMatch(vitals.unavailable, /cannot be throttled/);
+  // The rows that go unmeasured say the same of themselves.
+  assert.doesNotMatch(vital(vitals, 'cpu').summary, /cannot be throttled/);
+  assert.match(vital(vitals, 'memory').summary, /throttle stands on its last measurements/);
+
+  // A host with no throttle keeps the sentence that is true of it.
+  const calm = hostVitals({ ...silentButThrottled, throttle: undefined }, NOW);
+  assert.match(calm.unavailable, /this host cannot be throttled/);
+  assert.doesNotMatch(calm.unavailable, /throttle stands/);
+});
+
 test('sizes of a terabyte or more are written in terabytes so the pair stays short', () => {
   // The figure sits in a narrow column; "1,024 / 2,048 GB" would not fit it.
   const disk = vital(

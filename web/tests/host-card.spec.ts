@@ -310,6 +310,34 @@ test('a host that has gone quiet shows no figure as current', async ({ page }) =
   await expect(vitals.getByRole('img')).toHaveCount(0);
 });
 
+test('a throttled host whose usage has gone stale does not say it cannot be throttled', async ({
+  page,
+}) => {
+  // The throttle outlives its sample and lifts after ten minutes without a fresh
+  // one. Nothing is measured here (no usage, no disk), so the card explains why in
+  // one sentence, and that sentence must not contradict the one above it.
+  await reshape(page, BUILDER, (host) => ({
+    ...host,
+    usage: undefined,
+    usage_fresh: false,
+    disk_total_mb: 0,
+    disk_free_mb: 0,
+    capacity: 8,
+    effective_capacity: 6,
+    free: 4,
+    throttle: { level: 1, since: new Date().toISOString() },
+    throttle_reason:
+      'throttled to 6 of 8 slots (step 1 of 3) after sustained pressure: the 1-minute load average is 20.0',
+  }));
+  await goto(page, '/hosts', 'Hosts');
+  await settle(page);
+  await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'false');
+  await expect(card(page, BUILDER)).toContainText('throttled to 6 of 8 slots (step 1 of 3)');
+  const vitals = card(page, BUILDER).getByRole('group', { name: `Utilisation of ${BUILDER}` });
+  await expect(vitals).toContainText('The throttle stands on its last measurements');
+  await expect(card(page, BUILDER)).not.toContainText('cannot be throttled');
+});
+
 /**
  * What a bar is drawn in: the computed background of its fill and of the track
  * behind it. Windows high contrast replaces every author colour with the

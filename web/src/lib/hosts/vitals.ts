@@ -14,6 +14,7 @@
 import type { Host, HostSample } from '$lib/api/types';
 import { NO_VALUE, formatMegabytes, formatNumber } from '$lib/format';
 import { PRESSURE, liveSample, metricValue } from '$lib/insights/hostSeries';
+import { throttled } from '$lib/status';
 import { DISK_LOW_FLOOR_MB, DISK_LOW_PERCENT, diskIsLow } from './health-card';
 
 export type VitalKey = 'cpu' | 'memory' | 'disk';
@@ -91,8 +92,13 @@ function reasonOf(key: VitalKey, host: Host, silent: boolean): string {
   if (host.resources_known === false)
     return "This agent has not reported its machine's size, usage or disk. Upgrade the agent and the figures appear on its next heartbeat.";
   if (key === 'disk') return 'This agent has not reported its disk.';
+  // A throttle outlives the sample that put it there: the rung stands on the last
+  // measurements and is lifted after ten minutes without a fresh one, so "cannot
+  // be throttled" would be untrue of a host whose card says it is.
   if (!host.usage_fresh)
-    return 'Current usage unavailable. Placement uses configured capacity and reservations, and this host cannot be throttled.';
+    return throttled(host.throttle)
+      ? 'Current usage unavailable. The throttle stands on its last measurements and lifts after ten minutes without a fresh one.'
+      : 'Current usage unavailable. Placement uses configured capacity and reservations, and this host cannot be throttled.';
   return key === 'cpu'
     ? 'This agent has not reported CPU usage.'
     : 'This agent has not reported available memory.';
