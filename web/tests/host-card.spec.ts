@@ -904,3 +904,48 @@ test('a page with one card has no Expand all, because that card has its own butt
   await toggle(page, BUILDER).click();
   await expect(collapseAll(page)).toHaveCount(0);
 });
+
+test('a button that leaves the page while it holds focus hands it to the filters, not to the page', async ({
+  page,
+}) => {
+  // Nobody presses anything on the page: the list answers with fewer hosts the
+  // next time it is asked, which is what a host being deleted looks like from
+  // here, and R asks without moving focus off the button.
+  const gone = new Set<string>();
+  await rewriteHosts(page, (hosts) => hosts.filter((host) => !gone.has(String(host.name))));
+  await goto(page, '/hosts', 'Hosts');
+  await settle(page);
+  await expandAll(page).focus();
+  await expect(expandAll(page)).toBeFocused();
+
+  gone.add(BUILDER).add(LOW_DISK);
+  await page.keyboard.press('r');
+  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(expandAll(page)).toHaveCount(0);
+  // Not the page: a reader who was on the button is left where the filters are.
+  await expect(page.getByRole('button', { name: /^All \d+$/ })).toBeFocused();
+});
+
+test('and with a filter on it hands focus to the filter that is on', async ({ page }) => {
+  const gone = new Set<string>();
+  await rewriteHosts(page, (hosts) =>
+    hosts
+      .filter((host) => !gone.has(String(host.name)))
+      .map((host) => (host.name === BUILDER ? { ...host, doctor: cleanReport() } : host)),
+  );
+  await goto(page, '/hosts', 'Hosts');
+  await settle(page);
+  const chip = page
+    .getByRole('group', { name: 'Show hosts by OS health' })
+    .getByRole('button', { name: /^No report \d+$/ });
+  await chip.click();
+  await expect(page.getByRole('article')).toHaveCount(2);
+  await expandAll(page).focus();
+  await expect(expandAll(page)).toBeFocused();
+
+  gone.add(LOW_DISK);
+  await page.keyboard.press('r');
+  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(expandAll(page)).toHaveCount(0);
+  await expect(chip).toBeFocused();
+});

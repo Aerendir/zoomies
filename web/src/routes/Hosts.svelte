@@ -209,6 +209,21 @@
     remember(EXPANDED_KEY, openCards);
   }
 
+  /*
+   * The button is offered only while two or more cards are on show, and that
+   * count can fall with nobody pressing anything: a host is deleted, or a report
+   * ages out of the filter on the page's clock. Whoever was on the button would
+   * be dropped on the page when it went, so focus goes to the filter that is on,
+   * which is where showAll() sends it too. This runs before the page changes,
+   * because afterwards the button is gone, and so is the proof that it held focus.
+   */
+  $effect.pre(() => {
+    const chip = `hosts-health-${filter}`;
+    if (shownIds.length > 1) return;
+    if (!document.activeElement?.classList.contains('expand-button')) return;
+    void tick().then(() => document.getElementById(chip)?.focus());
+  });
+
   /* -- the machines behind the hosts -------------------------------------------
    * Fetched here and kept out of the fleet cache deliberately: a fourth
    * collection there would cost every signed-in tab a request on every
