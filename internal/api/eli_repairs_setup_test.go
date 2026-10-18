@@ -89,6 +89,14 @@ func TestEliReadinessAlwaysReturnsNineChecksInTheSpecsShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertShape(t, doc, "EliReadinessPull", pull)
+	// The mode is only present once readiness reaches the policy, which an
+	// unlinked caller never does, so the document is checked against an answer
+	// that carries it.
+	mode, err := json.Marshal(controller.EliReadiness{Repo: "acme/repo", PolicyMode: "automatic", Blockers: []controller.EliBlocker{}, Checks: []controller.EliCheck{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertShape(t, doc, "EliReadiness", mode)
 }
 
 // The page that starts a repair knows which run it is looking at and says so.
