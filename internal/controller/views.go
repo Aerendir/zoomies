@@ -731,7 +731,8 @@ func (c *Controller) jobView(ctx context.Context, j *store.Job) JobView {
 // whole, to learn what the pools in hand already say; that read was a fifth of a
 // poller sweep. A pool that is not among them, made since or named by no job, is
 // looked up as jobView does. The name is as old as the read, the way a page of
-// jobs is named from one listing.
+// jobs is named from one listing. Only the name is read from the pools, so the
+// listing made for a claim serves.
 func (c *Controller) jobViewIn(ctx context.Context, j *store.Job, pools []*store.Pool) JobView {
 	if p := poolIn(pools, j.PoolID); p != nil {
 		return NewJobView(j, p.Name)

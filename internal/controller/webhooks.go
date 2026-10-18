@@ -357,15 +357,19 @@ func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJob
 	// Which pool claims this job is decided here rather than at reconcile time
 	// so that "no pool wants this job" is visible on the Jobs page the moment
 	// it arrives, instead of only in a scheduler decision nobody is watching.
-	pools, err := c.st.ListPools(ctx)
+	//
+	// Only what a claim reads of each pool is read, and the pools are used for
+	// nothing else here but naming a job's pool, in the frame published for it
+	// and in the histogram's labels: see ListPoolsForClaim.
+	claimable, err := c.st.ListPoolsForClaim(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools to match job %d: %w", e.JobID, err)
 	}
 	// The class comes first, because the claim below is made for it: a job sent
 	// to the large pool has to be claimed by the large pool at the door, or its
 	// row names one pool and the scheduler feeds another.
-	classing := c.sizeOnArrival(ctx, job, pools)
-	if p := c.bestPool(pools, job); p != nil {
+	classing := c.sizeOnArrival(ctx, job, claimable)
+	if p := c.bestPool(claimable, job); p != nil {
 		job.PoolID = p.ID
 		job.Matched = true
 	}
@@ -403,7 +407,7 @@ func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJob
 	c.recordJobChange(ctx, saved, change, source, runner)
 	if saved.StartedAt != nil && (change.Created || change.StateChanged) && change.PreviousState != store.JobInProgress {
 		poolName, backendName := UnmatchedPool, "unknown"
-		if p := poolIn(pools, saved.PoolID); p != nil {
+		if p := poolIn(claimable, saved.PoolID); p != nil {
 			poolName, backendName = p.Name, string(p.Backend)
 		} else if saved.PoolID != "" {
 			if p, e := c.st.GetPool(ctx, saved.PoolID); e == nil {
@@ -475,7 +479,7 @@ func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJob
 			"job", saved.ID, "repo", saved.Repo, "labels", strings.Join(saved.Labels, ","))
 	}
 
-	c.publishJobIn(ctx, saved, pools)
+	c.publishJobIn(ctx, saved, claimable)
 	// Wake the reconcile loop rather than scheduling inline: GitHub is holding
 	// this connection open, and a reconcile can take as long as GitHub's API
 	// does to answer.

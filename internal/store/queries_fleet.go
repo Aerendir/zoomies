@@ -395,6 +395,55 @@ func (s *Store) ListPools(ctx context.Context) ([]*Pool, error) {
 	return out, rows.Err()
 }
 
+// poolClaimCols are the columns ClaimView keeps, in the order ListPoolsForClaim
+// scans them.
+const poolClaimCols = `id, name, installation_id, labels, backend, arch, enabled, no_default_labels, auto_key`
+
+// ClaimView is a pool with only the fields a claim reads, and every other field
+// zero. Which pool takes a job is decided by whether a pool is enabled, which
+// installation it belongs to, the labels it advertises and whether it advertises
+// the ones every runner does, and, where two fit equally, by name, by ID, by
+// whether the controller keeps the pool from its hosts (the auto key) and by its
+// architecture. The backend is there because the queued-to-started histogram is
+// labelled with it. The labels are shared with the pool, not copied.
+//
+// It is what ListPoolsForClaim returns, and the one place that says which fields
+// those are: a test in internal/scheduler fills the others in with values of
+// their own and checks that no claim depends on them.
+func ClaimView(p *Pool) *Pool {
+	return &Pool{
+		ID: p.ID, Name: p.Name, InstallationID: p.InstallationID, Labels: p.Labels,
+		Backend: p.Backend, Platform: Platform{Arch: p.Platform.Arch},
+		Enabled: p.Enabled, NoDefaultLabels: p.NoDefaultLabels, AutoKey: p.AutoKey,
+	}
+}
+
+// ListPoolsForClaim returns every pool ordered by name, as ClaimView sees it. A
+// webhook delivery or a poller sweep reads the pools to claim a job, and a pool
+// row is thirty-nine columns and ten JSON documents, of which a claim reads nine
+// columns and one document: at a hundred pools that was nearly half of a
+// delivery. The pools it returns are for a claim and for naming a job's pool,
+// and for nothing else; any other reader wants ListPools.
+func (s *Store) ListPoolsForClaim(ctx context.Context) ([]*Pool, error) {
+	rows, err := s.read.QueryContext(ctx, `SELECT `+poolClaimCols+` FROM pools ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Pool
+	for rows.Next() {
+		var p Pool
+		var enabled, noDefaultLabels int
+		if err := rows.Scan(&p.ID, &p.Name, &p.InstallationID, &p.Labels, &p.Backend, &p.Platform.Arch,
+			&enabled, &noDefaultLabels, &p.AutoKey); err != nil {
+			return nil, err
+		}
+		p.Enabled, p.NoDefaultLabels = enabled == 1, noDefaultLabels == 1
+		out = append(out, &p)
+	}
+	return out, rows.Err()
+}
+
 // UpdatePool persists changes to a pool. The name is branded on the way in for
 // the reason CreatePool brands it, which also means a pool carried over from a
 // build that did not brand names gains the prefix the next time it is edited.

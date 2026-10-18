@@ -218,7 +218,10 @@ func (c *Controller) ingestQueuedJobs(ctx context.Context, polled *store.Install
 	if len(jobs) == 0 {
 		return 0, nil
 	}
-	pools, err := c.st.ListPools(ctx)
+	// Only what a claim reads of each pool is read, and the pools are used for
+	// nothing else here but naming a job's pool in the frame published for it:
+	// see ListPoolsForClaim.
+	claimable, err := c.st.ListPoolsForClaim(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listing pools to match polled jobs: %w", err)
 	}
@@ -246,8 +249,8 @@ func (c *Controller) ingestQueuedJobs(ctx context.Context, polled *store.Install
 		if job.QueuedAt.IsZero() {
 			job.QueuedAt = c.Now()
 		}
-		classing := c.sizeOnArrival(ctx, job, pools)
-		if p := c.bestPool(pools, job); p != nil {
+		classing := c.sizeOnArrival(ctx, job, claimable)
+		if p := c.bestPool(claimable, job); p != nil {
 			job.PoolID = p.ID
 			job.Matched = true
 		}
@@ -261,7 +264,7 @@ func (c *Controller) ingestQueuedJobs(ctx context.Context, polled *store.Install
 		if saved.State == store.JobQueued {
 			changed++
 		}
-		c.publishJobIn(ctx, saved, pools)
+		c.publishJobIn(ctx, saved, claimable)
 	}
 	return changed, nil
 }
