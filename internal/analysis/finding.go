@@ -15,9 +15,11 @@ const (
 	Low    Confidence = "low"
 )
 
-// NextStep names a setting or a catalog code, never a command: the catalog's
-// own rule, because a pasted command skips the reading that says whether it
-// applies.
+// NextStep is never a command, and names a setting or a catalog code where
+// one applies: the catalog's own rule, because a pasted command skips the
+// reading that says whether it applies. Some steps rightly name neither, such
+// as GitHub's own delay in handing a job over, or the step that says job names
+// were withheld, and are said in their text alone.
 type NextStep struct {
 	Text string `json:"text"`
 	// Setting is a settings key, or a pool or host field as "pool.max_runners".

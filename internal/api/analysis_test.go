@@ -156,6 +156,10 @@ func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) 
 			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "by=version"},
 		"a release named as b to a comparison by period": {query: analysisQuery(since, until, url.Values{"by": {"period"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "by=version"},
+		"an a longer than a release's name can be": {query: analysisQuery(since, until, url.Values{"a": {strings.Repeat("v", maxReleaseName+1)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "longer than a release's name can be"},
+		"a b longer than a release's name can be": {query: analysisQuery(since, until, url.Values{"b": {strings.Repeat("v", maxReleaseName+1)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "longer than a release's name can be"},
 		"the same release twice": {query: analysisQuery(since, until, url.Values{"a": {"v1.3.3"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeAnalysisSameRelease, field: "a", want: controller.ErrSameRelease},
 		"a fleet with no two releases": {query: analysisQuery(since, until, nil),
@@ -253,7 +257,9 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 		}
 	}
 	// The runners are stamped by the store's clock, so the window reaches a
-	// minute past now to hold them.
+	// minute past now to hold them. The controller reads an until past now as
+	// now, so each read ends at its own instant, and the route's is the one
+	// the controller's answer is compared at.
 	until := time.Now().UTC().Truncate(time.Second).Add(time.Minute)
 	since := until.Add(-time.Hour)
 
@@ -262,7 +268,14 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 	} {
 		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/startup-failures" + analysisQuery(since, until, extra), cookie: cookie})
 		resp.mustStatus(t, http.StatusOK, "the startup failures of "+name)
-		want, err := h.ctrl.AnalyseStartupFailures(h.ctx, controller.AnalysisWindow{Since: since, Until: until}, extra.Get("pool_id"), extra.Get("host_id"))
+		var read struct {
+			Until time.Time `json:"until"`
+		}
+		resp.into(t, &read)
+		if !read.Until.Before(until) || read.Until.After(time.Now()) {
+			t.Errorf("%s: the finding ends at %v, past the instant it was read", name, read.Until)
+		}
+		want, err := h.ctrl.AnalyseStartupFailures(h.ctx, controller.AnalysisWindow{Since: since, Until: read.Until}, extra.Get("pool_id"), extra.Get("host_id"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -353,6 +366,57 @@ func TestAnAnalysisRefusesAWindowThatEndsBeforeItStarts(t *testing.T) {
 		}
 		if env.Error.Field != want {
 			t.Errorf("%s: the refusal is on %q; want %q: %s", name, env.Error.Field, want, env.Error.Message)
+		}
+	}
+}
+
+// A period that begins in the future holds nothing that has happened. The
+// route says so on since, in the controller's sentence, rather than answering
+// for an empty period as if it had been quiet.
+func TestAnAnalysisRefusesAPeriodThatBeginsAfterNow(t *testing.T) {
+	h := newHarness(t)
+	host := h.host("vm-1")
+	_, cookie := h.user("viewer", store.RoleViewer)
+	ahead := time.Now().UTC().Truncate(time.Second).Add(time.Hour)
+	for _, path := range []string{"queue-wait", "compare", "host-pressure", "startup-failures"} {
+		extra := url.Values{}
+		if path == "host-pressure" {
+			extra.Set("host_id", host.ID)
+		}
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/" + path + analysisQuery(ahead, ahead.Add(time.Hour), extra), cookie: cookie})
+		resp.mustStatus(t, http.StatusBadRequest, path+" over a period that begins after now")
+		var env errorEnvelope
+		resp.into(t, &env)
+		if env.Error.Field != "since" || env.Error.Message != controller.ErrSinceNotPast.Error() {
+			t.Errorf("%s: the refusal is %q on %q; want the controller's sentence on since", path, env.Error.Message, env.Error.Field)
+		}
+	}
+}
+
+// An until past now ends now before the route works anything out from it. An
+// operator who asks about today up to tomorrow's midnight, as the CLI's
+// whole-day form invites, is answered for today: not refused on a since they
+// never sent, and not refused as too long for hours that have not happened.
+func TestAnAnalysisWindowEndingInTheFutureIsReadUpToNow(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("viewer", store.RoleViewer)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	for name, q := range map[string]string{
+		"no since, until two days out":          analysisQuery(time.Time{}, now.Add(48*time.Hour), nil),
+		"since at the limit, until an hour out": analysisQuery(now.Add(-90*24*time.Hour+time.Minute), now.Add(time.Hour), nil),
+	} {
+		before := time.Now()
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/queue-wait" + q, cookie: cookie})
+		after := time.Now()
+		resp.mustStatus(t, http.StatusOK, name)
+		var got struct{ Since, Until time.Time }
+		resp.into(t, &got)
+		if got.Until.Before(before.Add(-time.Second)) || got.Until.After(after) {
+			t.Errorf("%s: until is %v; want now, between %v and %v", name, got.Until, before, after)
+		}
+		if !got.Since.Before(got.Until) {
+			t.Errorf("%s: since %v is not before until %v", name, got.Since, got.Until)
 		}
 	}
 }

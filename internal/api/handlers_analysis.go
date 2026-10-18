@@ -12,6 +12,13 @@ import (
 	"github.com/eyupio/zoomies/internal/store"
 )
 
+// maxReleaseName bounds a and b. Neither internal/version nor the jobs'
+// controller_version column bounds a release's name, so this is the bound the
+// installer holds a binary's reported version to, which is a few characters
+// for any real build. A longer name names no release this fleet stamped, and
+// would be carried into every sentence and label of the answer.
+const maxReleaseName = 128
+
 // defaultAnalysisSpan is the period an analysis reads when the caller names
 // none: a day is what "why was it slow today" means, and short enough that the
 // per-minute reads behind a finding stay small.
@@ -36,6 +43,12 @@ func (s *Server) statsWindowFits(w http.ResponseWriter, since, until time.Time, 
 // analysisWindow is the period an analysis route reads: until defaults to now
 // and since to a day before it, never further back than the limit allows, so a
 // request that named nothing is never refused for a period it did not ask for.
+//
+// An until past now ends now here as it does in the controller, and before the
+// default and the span are worked out from it: otherwise an until two days out
+// would default since into the future and be refused on a field the caller
+// never sent, and a since at the limit would be refused as too long for hours
+// nobody reads.
 func (s *Server) analysisWindow(w http.ResponseWriter, r *http.Request) (controller.AnalysisWindow, bool) {
 	since, err := queryTime(r, "since")
 	if err != nil {
@@ -47,13 +60,18 @@ func (s *Server) analysisWindow(w http.ResponseWriter, r *http.Request) (control
 		badRequestField(w, "until", err.Error())
 		return controller.AnalysisWindow{}, false
 	}
-	out := controller.AnalysisWindow{Until: s.ctrl.Now()}
-	if until != nil {
+	now := s.ctrl.Now()
+	out := controller.AnalysisWindow{Until: now}
+	if until != nil && until.Before(now) {
 		out.Until = *until
 	}
 	out.Since = out.Until.Add(-min(defaultAnalysisSpan, s.cfg().Limits.JobStatsSpan()))
 	if since != nil {
 		out.Since = *since
+		if !out.Since.Before(now) {
+			badRequestField(w, "since", controller.ErrSinceNotPast.Error())
+			return controller.AnalysisWindow{}, false
+		}
 	}
 	if !s.statsWindowFits(w, out.Since, out.Until, "an analysis covers") {
 		return controller.AnalysisWindow{}, false
@@ -79,6 +97,8 @@ func (s *Server) answerAnalysis(w http.ResponseWriter, r *http.Request, doing st
 		notFound(w, fmt.Sprintf("there is no %s %s in this fleet; it may have been removed, or the id is wrong", missing.Kind, missing.ID))
 	case errors.Is(err, store.ErrNotFound):
 		notFound(w, err.Error())
+	case errors.Is(err, controller.ErrSinceNotPast):
+		badRequestField(w, "since", err.Error())
 	case errors.Is(err, controller.ErrSameRelease):
 		writeError(w, http.StatusBadRequest, errorEnvelope{Error: errorBody{
 			Code: codeAnalysisSameRelease, Message: err.Error(), Field: "a"}})
@@ -125,6 +145,12 @@ func (s *Server) handleAnalyseCompare(w http.ResponseWriter, r *http.Request) {
 	default:
 		badRequestField(w, "by", fmt.Sprintf("a comparison is by version or period, not %q", req.By))
 		return
+	}
+	for _, name := range []string{"a", "b"} {
+		if len(q.Get(name)) > maxReleaseName {
+			badRequestField(w, name, fmt.Sprintf("%s is longer than a release's name can be (%d bytes at most); name a release such as v1.3.2", name, maxReleaseName))
+			return
+		}
 	}
 	f, err := s.ctrl.AnalyseCompare(r.Context(), req)
 	s.answerAnalysis(w, r, "comparing", f, err)
