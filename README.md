@@ -62,7 +62,7 @@ you press Ctrl-C.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-dark.webp">
-  <img src="docs/screenshots/overview-light.webp" alt="The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events" width="100%">
+  <img src="docs/screenshots/overview-light.webp" alt="The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events" width="100%">
 </picture>
 
 </div>
@@ -596,6 +596,9 @@ hooks/              the site's build-time metadata: git dates, llms.txt, and the
                     latest release and star count the header shows
 site-worker/        the Cloudflare Worker in front of zoomies.sh: answers
                     Accept: text/markdown with the page's Markdown copy
+weekly-seo/         the weekly search check for zoomies.sh: its config, notes and
+                    the report and memory files the .claude/agents/weekly-seo.md
+                    agent writes
 ROADMAP.md          the sole active roadmap: scope, order and owner decisions
 roadmap/            supporting status/evidence, decision records, model guidance,
                     dated plans, an archive and historical source material; its

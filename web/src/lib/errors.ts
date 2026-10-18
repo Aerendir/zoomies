@@ -54,6 +54,12 @@ export function authFailureText(error: unknown): string {
   if (error.status === 429) {
     return 'Too many attempts from this address. Wait a minute, then try again.';
   }
+  // The one 5xx that is not the controller's fault: GitHub, or the network to it,
+  // would not let a release check finish. The controller wrote a sentence for the
+  // person who pressed the button (the outbound rule to api.github.com to check,
+  // or that the check can be tried again later), and the generic line below would
+  // swap it for a pointer to a log that does not hold the cause.
+  if (error.code === 'update.check_failed') return sentence(error.message);
   if (error.status >= 500) {
     return 'The controller answered with an error. Its logs will say more than this page can.';
   }

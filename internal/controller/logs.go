@@ -60,8 +60,11 @@ type logStream struct {
 	closed bool
 
 	// budget is the stream's remaining byte allowance and budgetAt when it
-	// was last topped up. Only AcceptLogStream touches them, from the one
-	// goroutine reading the agent's POST, so they need no lock.
+	// was last topped up, both under budgetMu. One goroutine is meant to read
+	// the agent's POST, but an agent that opens the stream again while this
+	// side is still blocked on a connection that has not failed yet puts a
+	// second one on it, and the two have to share one allowance.
+	budgetMu sync.Mutex
 	budget   float64
 	budgetAt time.Time
 }
@@ -70,6 +73,8 @@ type logStream struct {
 // them if they do. A chunk that does not fit is dropped whole rather than cut:
 // half a line is worse than a gap.
 func (s *logStream) spend(n int, now time.Time) bool {
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
 	if s.budgetAt.IsZero() {
 		s.budget = logStreamBurst
 	} else if d := now.Sub(s.budgetAt); d > 0 {

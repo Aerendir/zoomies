@@ -415,9 +415,13 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionProvidersDelete)).Delete("/{id}", s.handleDeleteProvider)
 			// The preflight and discovery both use the credential to talk to
 			// the hypervisor, and both change nothing there, so they are the
-			// operator's to run rather than the admin's.
+			// operator's to run rather than the admin's, and they share the
+			// kill switch's scope.
 			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/check", s.handleCheckProvider)
-			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/test-machine", s.handleTestProviderMachine)
+			// The test machine does not share it. It clones and starts a machine
+			// somebody pays for, and a token minted to stop spending would
+			// otherwise be able to start it.
+			r.With(s.require(auth.ActionProvidersTest)).Post("/{id}/test-machine", s.handleTestProviderMachine)
 			r.With(s.require(auth.ActionProvidersPause)).Get("/{id}/discovery", s.handleProviderDiscovery)
 			// The orphan review is admin because its one act is destructive
 			// and because it names resources this fleet does not own.

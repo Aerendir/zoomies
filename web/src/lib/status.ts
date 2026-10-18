@@ -632,6 +632,16 @@ const JOB_EVENTS: Record<JobEventKind, StatusMeta> = {
     "Zoomies asked GitHub to run this run's failed jobs again. They arrive as a new run attempt, so GitHub remains authoritative about what happens next.",
   ),
   oom_killed: OOM_KILLED,
+  // The controller's own sizing of a waiting job. Neutral because it is a
+  // decision on the fleet's side, not an outcome of the job and not a fault.
+  sized: meta(
+    'sized',
+    'Sized',
+    'neutral',
+    'hollow',
+    Circle,
+    'The controller put this job in a size class, or sent it to the pool of another class. The entry says why.',
+  ),
   acknowledged: meta(
     'acknowledged',
     'Acknowledged',

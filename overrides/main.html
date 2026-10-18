@@ -92,6 +92,17 @@
   <meta name="robots" content="noindex, follow" />
   {% endif %}
 
+  {#
+    The theme's `favicon` setting emits only the .ico. The paw/swish SVG swaps
+    colour with the browser's scheme, which a tab on a dark toolbar needs and
+    an .ico cannot do; the touch icon and manifest are what a phone's home
+    screen and an Android toolbar read. They are the icons the product's own UI
+    ships, so the site and the app look like one thing.
+  #}
+  <link rel="icon" href="{{ config.site_url }}favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="{{ config.site_url }}apple-touch-icon.png" />
+  <link rel="manifest" href="{{ config.site_url }}site.webmanifest" />
+
   <meta property="og:type" content="{{ 'article' if page and not page.is_homepage else 'website' }}" />
   <meta property="og:locale" content="en_GB" />
   <meta property="og:site_name" content="{{ config.site_name }}" />

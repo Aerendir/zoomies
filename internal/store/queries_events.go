@@ -1113,23 +1113,45 @@ func attentionJobSQL() string {
 	return unreplacedJobSQL() + ` AND NOT EXISTS (
 		SELECT 1 FROM job_attention_runs a
 		WHERE a.repo = jobs.repo AND a.run_id = jobs.github_run_id
-			AND a.reason IN ('closed','superseded','fixed')
-			AND a.checked_at >= COALESCE(jobs.completed_at, jobs.queued_at))`
+			AND ` + settledOnGitHubSQL("a", "jobs") + `)`
 }
 
+// settledOnGitHubSQL is the observation that takes a failure out of the
+// attention list: GitHub said, after the job finished, that its PR is closed,
+// that newer commits replaced it or that its checks pass. The list and the loop
+// that asks GitHub again both read it, so that "settled" cannot mean one thing
+// to the page and another to the schedule.
+func settledOnGitHubSQL(observation, jobs string) string {
+	return `(` + observation + `.reason IN ('closed','superseded','fixed')
+		AND ` + observation + `.checked_at >= COALESCE(` + jobs + `.completed_at, ` + jobs + `.queued_at))`
+}
+
+// unreplacedJobSQL says that no later job has taken this one's place. A later
+// job does that in one of two ways, and each is its own NOT EXISTS: a later
+// attempt of the same run is found through idx_jobs_run, and a later run of the
+// same workflow on the same branch through idx_jobs_attention_branch. Joined
+// by an OR inside a single NOT EXISTS, SQLite could use neither and walked
+// every retained job with the same name in every repository, which took seconds
+// on a month of history and queued every other read behind it.
+// TestTheAttentionFilterIsReadFromTheRunAndBranchIndexes holds the plan, and
+// TestSplittingTheReplacementTestKeepsTheSameJobs holds the meaning.
 func unreplacedJobSQL() string {
-	return `NOT EXISTS (
+	const countsAsReplacement = `(later.state != 'completed' OR later.conclusion NOT IN ('cancelled','skipped','neutral')
+				OR later.runner_fault != '' OR later.fault_kind != '')`
+	return `(NOT EXISTS (
 		SELECT 1 FROM jobs later
-		WHERE later.repo = jobs.repo AND later.job_name = jobs.job_name
-			AND (later.state != 'completed' OR later.conclusion NOT IN ('cancelled','skipped','neutral')
-				OR later.runner_fault != '' OR later.fault_kind != '')
-			AND ((later.github_run_id = jobs.github_run_id AND later.github_run_id != 0
-				AND later.run_attempt > jobs.run_attempt)
-			OR (jobs.github_run_id != 0 AND later.github_run_id != 0
-				AND jobs.head_branch != '' AND jobs.workflow != ''
-				AND later.head_branch = jobs.head_branch AND later.workflow = jobs.workflow
-				AND later.github_run_id != jobs.github_run_id
-				AND later.queued_at > jobs.queued_at)))`
+		WHERE later.github_run_id = jobs.github_run_id AND later.repo = jobs.repo
+			AND later.github_run_id != 0 AND later.job_name = jobs.job_name
+			AND later.run_attempt > jobs.run_attempt
+			AND ` + countsAsReplacement + `)
+	AND NOT EXISTS (
+		SELECT 1 FROM jobs later
+		WHERE jobs.github_run_id != 0 AND jobs.head_branch != '' AND jobs.workflow != ''
+			AND later.repo = jobs.repo AND later.head_branch = jobs.head_branch
+			AND later.workflow = jobs.workflow AND later.job_name = jobs.job_name
+			AND later.github_run_id != 0 AND later.github_run_id != jobs.github_run_id
+			AND later.queued_at > jobs.queued_at
+			AND ` + countsAsReplacement + `))`
 }
 
 // StatsSince counts the jobs behind the Overview.

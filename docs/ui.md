@@ -13,8 +13,10 @@ failed PR checks. Everything on the fleet pages is live (every page updates in
 place from the controller's event stream, so you never have to press refresh,
 though the same button sits at the top of each one for when you want to be sure)
 and nothing is reachable from the UI that is not reachable from the
-[REST API](api-surface.md). Light and dark follow your system until you
-choose one, and the screenshots below follow this site's. Start with
+[REST API](api-surface.md). A browser that has chosen nothing opens in
+Mission Control and the dark theme; **Settings → Appearance** changes either,
+including to follow your system. The screenshots below follow this site's light
+or dark and show the Classic style. Start with
 [Signing in](#signing-in), [Overview](#overview), [Jobs](#jobs),
 [Ask Eli](#ask-eli) or [Eli repairs](#eli-repairs).
 
@@ -50,9 +52,12 @@ above the form, the introductory copy is hidden and the links move below it.
 
 ## Overview
 
-The page that has to earn the second monitor. It opens on the activity
-matrix, showing today by the hour: a row of twenty-four squares coloured by
-what finished, greener as more jobs finish and red the moment any fail. Widen
+The page that has to earn the second monitor. Mission Control, the default,
+puts problems, unread failures and the four numbers ahead of history; this
+section and its screenshots describe the Classic order, which opens on the
+activity matrix, showing today by the hour: a row of twenty-four squares
+coloured by what finished, greener as more jobs finish and red the moment
+any fail. Widen
 it to the year and the same band becomes the fleet's days laid out the way a
 contribution graph is; a column per week, a row per weekday, the month named
 above the week it begins in. Hover a square and it says everything
@@ -91,13 +96,21 @@ renting, a pool somebody changed, and what the controller changed on its own abo
 runners 5 → 10: host build-2 joined*. What went right is in it as much as what
 went wrong. Which of those it carries is yours to choose, one switch per
 kind on **Settings → Events**, and the panel counts what it is showing rather
-than quietly leaving the rest out. When
-something needs a person it is one line and a *Review* button, never a list
-that pushes the fleet below the fold. The
+than quietly leaving the rest out. When the
+fleet itself needs a person it is one line and a *Review* button, never a list
+that pushes the fleet below the fold. The exception is the failures nobody has
+read, because each is a separate job with a separate thing to do about it:
+**Recent failures** shows the newest two of what failed in the last week and
+nobody has marked as known or replaced with a later attempt, with the whole
+count in its header and a link to the rest on the Jobs page's **Needs
+attention** view. A row opens the job's drawer and **Fix with Eli** opens the
+repair page for it. An operator can also mark a failure as known, which takes it
+off the list and changes nothing else: it keeps its row in the failed view, a
+re-run that passes is what settles it, and the toast carries an *Undo*. The
 *Other runners* switch says whether these numbers count only the jobs this
-fleet ran or every job GitHub reported on an installed repository; the
-default is this fleet's own work, because that is the question an operator is
-usually asking.
+fleet ran or every job GitHub reported on an installed repository, and the
+panel and its link to the rest follow it; the default is this fleet's own work,
+because that is the question an operator is usually asking.
 
 A new instance is different. It opens on a checklist in place of the matrix,
 which has nothing to draw yet: create the first account, connect GitHub, add a
@@ -111,8 +124,8 @@ runner took it, and when it finishes, to how long the job waited for a runner
 and how long it ran. Only this fleet's own jobs count; a job on a hosted
 runner elsewhere in the organisation neither ticks a step nor retires the list.
 
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
 
 ![The activity matrix with a day selected: the day's figures, its outcomes hour by hour, and links to its jobs](screenshots/activity-dark.webp#only-dark){ .zoomies-shot }
 ![The activity matrix with a day selected: the day's figures, its outcomes hour by hour, and links to its jobs](screenshots/activity-light.webp#only-light){ .zoomies-shot }
@@ -214,16 +227,17 @@ hover them.
 When the state filter includes failed runners, a **What keeps failing to start**
 card above the grid names the host or pool that keeps failing to start runners
 over the last day: since when, at which stage, and whether the image, an
-incident on its host or a throttle explains it. It is the answer
-[`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with its
-evidence folded under the next steps.
+incident on its host or a throttle explains it. It says which pool and host the
+list is narrowed to, and that the list's search is not applied to it. It is the
+answer [`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with
+its evidence folded under the next steps.
 
 ![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
 ![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
 
 A runner's page carries the job it is on, a timeline of how long it spent in
 each state (provisioning, registering, idle, busy) its resource usage as the
-host's agent last reported it, and the live log. Beside the usage is the
+host's agent last reported it, and its output. Beside the usage is the
 **allocation**: the CPU and memory the runner was created with, and whether the
 pool set them or the host gave it its default share of the machine. The source
 is the thing to read when a runner was killed for exceeding its memory: a limit
@@ -249,6 +263,16 @@ wears one more, with a folder icon for each folder that is, and what they come
 to. Hover, focus or tap a pill for its card; the runner's page repeats them
 beside its status and draws the cards open in a **Memory and folders** panel.
 [Elastic memory](elastic-memory.md#what-you-see) has the whole list.
+
+The output on a runner's page opens on the **Build log** while the runner has a
+job: the workflow's console output after the GitHub runner has masked secrets.
+**Runner diagnostics**, the second tab, is the raw startup, registration and
+worker messages, and a runner with no job has only those, folded under that
+name. When the stream drops and reopens, the build log marks the join with a dim
+*reconnected to the log stream* line, because the relay sends its backlog again
+and what follows may repeat what is above it. **Save log** keeps the build
+output received in that view, and **Open on GitHub** is the complete archived
+log.
 
 ![A busy runner's page: its current job, a timeline of its states, details and resource usage](screenshots/runner-dark.webp#only-dark){ .zoomies-shot }
 ![A busy runner's page: its current job, a timeline of its states, details and resource usage](screenshots/runner-light.webp#only-light){ .zoomies-shot }
@@ -328,10 +352,19 @@ is, but every link that names a job lands here, and **Workflow runs** at the
 top goes back up with the same filters in force. Everything this fleet claims,
 runs or is waiting to run is listed, with each job's queue wait and duration.
 Status is the filter this page is opened for, so it is a row of buttons above
-the grid (**Running**, **Queued**, **Failed**, **Finished**, **All**) and
-the page opens on *Running*, which is the question an operator arrives with. That default is for a bare visit only: every link into this page
-that already carries a filter keeps it, so the problems drawer's unmatched link
-and the Overview's outcome links still show what they promised.
+the grid (**Needs attention**, **Running**, **Queued**, **Failed**, **Our
+failures**, **Finished**, **All**) and the page opens on *Running*, which is the
+question an operator arrives with. That default is for a bare visit only: every
+link into this page that already carries a filter keeps it, so the problems
+drawer's unmatched link and the Overview's outcome links still show what they
+promised.
+
+Two of the buttons are questions about a failure more than a status.
+**Needs attention** is the failures from the last week that nobody has marked as
+known and no later attempt has replaced, the list the Overview's **Recent
+failures** counts, with room for the rest of it. **Our failures** is the half of
+**Failed** this fleet caused, a runner that never started or one that stopped
+under the job, which GitHub records as an ordinary failure.
 
 The rest of the filters (repository, workflow, pool, host, label, outcome, dates)
 live in the URL alongside it, so a view can be pasted into a chat. *Host* is the
@@ -355,7 +388,9 @@ tiles count, and a chip above the grid says so where a filter is in force.
 On *Queued*, a **Why jobs waited** card puts the wait of the jobs queued in the
 page's dates (the last day when none are set) down to its causes, for every
 pool or for the one pool the list is narrowed to, and names any of the list's
-other filters it does not apply. It sits above the grid, and below it on a
+other filters it does not apply. Like the list, it leaves out the jobs another
+vendor's runners ran; with **Include other runners** on, it says the list holds
+jobs it does not. It sits above the grid, and below it on a
 Mission Control phone, and it is the answer
 [`zoomies analyse queue-wait`](cli.md#zoomies-analyse) prints.
 
@@ -457,9 +492,10 @@ days unless set).
 
 Under it, a **What got worse and what got better** card compares the range's
 two latest releases measure by measure, or says the sample is too small to rank
-when either has fewer than 30 jobs. It leaves cancelled and skipped jobs out of
-every figure and says so, so its counts can be lower than the table's. It
-compares releases, never periods, and is the answer
+when either has fewer than 30 jobs, or says to widen the range when fewer than
+two releases ran a job in it. It leaves cancelled and skipped jobs out of every
+figure read from the job rows, and says so, so its counts can be lower than the
+table's. It compares releases, never periods, and is the answer
 [`zoomies analyse compare`](cli.md#zoomies-analyse) prints.
 
 The same activity matrix as the Overview's draws the
@@ -482,7 +518,10 @@ and memory against what may be placed on it, the backends its agent found (and
 the exact command to run when one is missing) and the labels pools select it
 by. Slots and the committed bars answer different questions: the first is
 whether the fleet will place another runner here, the second whether the machine
-can carry it, and a host with free slots and no memory left takes nothing.
+can carry it, and a host with free slots and no memory left takes nothing. The
+closed card says so when it matters: with a slot free and 90% or more of the
+CPU or memory the scheduler may place already committed, a notice names the
+figures.
 Each of the two settings a host has is reached from the thing it describes.
 *Adjust*, beside the slot bar, owns the resources: how many runners the host may
 hold, and the reserve; the cores, memory and disk the scheduler leaves alone
@@ -500,27 +539,53 @@ platform and agent release with the neutral chips that say what kind of host it
 is (**Tailcat host**, **Embedded**, the machine it was rented as), the slot bar
 with **Adjust**, and three bars for how loaded the machine is. **CPU**,
 **Memory** and **Disk** are each a share of the whole machine as the agent last
-measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`).
-They are the shares the capacity map draws, so its newest point and the card
-never disagree. CPU and memory turn amber, take a warning triangle and say so in
-their label from 85%, the line from which the scheduler places one runner at a
-time, and the disk does the same when the *Work directory free space* check
-would warn: under 10% or under 10 GiB free. A figure that is not measured reads
+measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`,
+written in terabytes from one up, unless under a tenth of a terabyte is used,
+when it stays in gigabytes as `20 / 1,024 GB` because it would round to
+`0 / 1 TB`).
+They are the shares the capacity map draws, so for a host that is sending
+heartbeats the newest point on that chart and the card are one figure. A figure
+turns amber, takes a warning triangle and says so in
+its label where the product itself acts on it, and that is not one line for all
+three. **CPU** turns amber from 85%, the line from which the scheduler places one
+runner at a time, counted without the CPU it has lent to runners: a host at 92%
+with 30 points of it lent is not amber, and its label says why. **Memory** is not
+judged as a share of the machine. It turns amber when the memory still available
+is at or below the host's reserve, the point at which the scheduler holds new
+starts, so a 16 GiB host at 94% used has 983 MB left against a reserve of 819 MB
+and is not amber. **Disk** turns amber when the *Work directory free space* check
+would warn: under 10% or under 10 GiB free. Each is compared as the unrounded
+figure, as the scheduler and the check compare it, and not as the figure printed
+beside the bar: a CPU of 84.6% reads 85% and is a fraction under the line, so it
+is not amber. A figure that is not measured reads
 `--`. For a host that has stopped sending heartbeats, or whose agent reports
 nothing to measure, the bars give way to one sentence saying why, because the
-agent's last disk figure would otherwise read as now.
+agent's last disk figure would otherwise read as now. The capacity map has no
+such rule, and still draws that last disk figure as the newest point of a silent
+host's line.
 
 Nothing that keeps a host from taking work is folded away. The sentence for a
-cordon, a throttle, a runtime that is recovering, an image that will not pull or
-an incompatible agent, the line naming a failed health check and the update row
-all stay on the closed card, and so does the **Backends** block, with the
+cordon, a throttle, a hold on new starts, a busy CPU, a runtime that is
+recovering, an image that will not pull, an incompatible agent or a machine that
+is draining, the line naming a failed health check and the update row all stay on
+the closed card, and so does the **Backends** block, with the
 agent's own explanation, for a host with no backend that works. A host with
-Docker and no Podman is the ordinary case and is not one of them.
+Docker and no Podman is the ordinary case and is not one of them. Two more
+sentences stay because the numbers beside them cannot say what they say. The
+line under the slot bar that says why the slot count is what it is (a capacity
+set below what the machine holds, or a machine that holds fewer runners than the
+capacity) explains a host that is full at fewer runners than its capacity. The
+**Committed** notice is for a host with a slot free whose committed CPU or
+memory has reached 90% of what may be placed, the line the **Committed** bars
+turn amber at: the slot line counts slots, and the **Memory** bar beside it is
+what the machine is using, so neither shows that the runners already on the host
+have promised the rest away. A full host has every slot used, which the slot
+line already says, so it does not carry the notice for being full.
 
 **Details** opens the rest beneath it: the size class and the other neutral
 chips, the disk figure with its link to the check, the heartbeat and usage
-lines, why the slot count is what it is, **Committed**, **Memory to lend**,
-**Runner sizes**, **Priority**, **Backends** and **Tags**. The cards in a row are
+lines, the **Committed** bars, **Memory to lend**, **Runner sizes**,
+**Priority**, **Backends** and **Tags**. The cards in a row are
 one height and their sections line up across it: the pills, the slot bars, the
 three utilisation bars and the **Details** buttons sit at the same height from
 card to card, so a row reads straight across. A card with a notice leaves the
@@ -532,16 +597,18 @@ on sight, and forgets a host that no longer exists.
 
 **Expand all**, at the end of the row of filters, opens every card on the page at
 once, and becomes **Collapse all** when they are all open, so a card opened or
-closed by hand turns it over too. With a filter on, it acts on the hosts the
-filter shows and leaves the others as they were. A page with one card does not
+closed by hand turns it over too. A host that joins later arrives closed, and the
+button then offers **Expand all** again. With a filter on, it acts on the hosts
+the filter shows and leaves the others as they were, and a line beside it says
+how many that is (**Acts on the 2 hosts shown**). A page with one card does not
 have it, because that card's **Details** button is the whole of it.
 
 Under **Details**, **Agent connected** describes the heartbeat. Recent **CPU usage**,
 **memory available** and the one-minute **load** describe the machine's actual
-load, separately from its committed resources. A pressure warning says whether
-new starts are held or limited to one at a time; recovery happens automatically
-and keeps any manual cordon. A missing or stale reading is shown as unavailable.
-See
+load, separately from its committed resources. A missing or stale reading is
+shown as unavailable. The pressure warning is not one of these lines: it is on
+the closed card, where it says whether new starts are held or limited to one at a
+time, and recovery happens automatically and keeps any manual cordon. See
 [current usage and automatic holds](hosts-and-pools.md#current-usage-and-automatic-holds)
 for the thresholds and the limits of these measurements.
 
@@ -644,13 +711,17 @@ Where machines come from. A provider is one place Zoomies may rent a machine,
 a hypervisor, today [Proxmox VE](proxmox.md), and its card leads with what is
 being spent: the machines it holds against the ceiling it may not pass, the
 shape it builds, and, in the controller's own sentence, why no new machine may
-be bought this moment. A new provider starts at a ceiling of zero and rents
-nothing, so turning a provider on and saying how much of it you are willing to
-pay for are the same act. *Check* runs the preflight against the real provider
-(read-only there, audited here) and a provider nobody has ever checked says
-so rather than looking healthy. Under the cards is every machine across every
-provider, narrowed by a state filter that lives in the URL, so a link to one
-part of the lifecycle is a link somebody else can open.
+be bought this moment. The wizard opens a new provider on a maximum of two
+machines with one kept warm, and for a Proxmox provider replaces both with a
+recommendation worked out from its nodes: as many machines as they hold, up to
+eight, with one kept warm. Saving creates nothing, and nothing is rented while
+**Rent machines** (`provider.enabled`) is off, which it is until an
+administrator turns it on, or while the fleet's own ceiling
+(`provider.max_machines`) is zero. *Check* runs the preflight against the real
+provider (read-only there, audited here) and a provider nobody has ever checked
+says so rather than looking healthy. Under the cards is every machine across
+every provider, narrowed by a state filter that lives in the URL, so a link to
+one part of the lifecycle is a link somebody else can open.
 
 An administrator can tick machines in that list, or in a provider's own
 Machines tab, and delete them together. It exists for the pile a wrong template
@@ -723,11 +794,21 @@ host Zoomies rented says so on its card, and its remove action sends you to
 delete the machine instead: removing the host here would leave the machine
 running, and on the bill.
 
-There is no way to make a machine by hand, here or anywhere else. A machine
-exists because a pool had queued work and nowhere to put it, and a second
-source of supply would be a second thing the reconciler would then decide to
-delete. An operator who wants more machines raises a ceiling. [What a provider
-has to implement](providers.md) is the contract behind all of this.
+There is one way to ask for a machine by hand, and it is a test. **Run a test
+machine**, in the **Test machine** panel on a provider's own page, builds a
+single real machine and follows it through each step a first job would depend
+on (cloned, powered on, agent installed, enrolled as a host, reported ready),
+then releases it; one that fails is left in place so that what it said can be
+read. It is held to the rules every machine is: it counts against the
+provider's maximum and the fleet's, it is refused while renting is off or the
+provider is paused, disabled or standing down, and only one runs at a time.
+Starting one needs the operator role, and [Proxmox
+VE](proxmox.md#proving-it-works-the-test-machine) has the rest. Every other
+machine exists because a pool had queued work and nowhere to put it, or because
+a provider's warm minimum asked for one, and a second source of supply would be
+a second thing the reconciler would then decide to delete. An operator who wants
+more machines raises a ceiling. [What a provider has to
+implement](providers.md) is the contract behind all of this.
 
 ## Installations
 
@@ -981,9 +1062,15 @@ in [Backup and restore](backup-and-restore.md).
 ### Updates
 
 Which release the update mode would take, and when, and for the platform role
-the one thing on the page that installs anything: the **Update** button for this
-controller. A host is updated from its own card on **Hosts**, or with every
-other host that is behind in a [rollout](#updating-every-host-that-is-behind).
+what installs anything on the page: **Review update to v1.3.2…** for this
+controller, which opens a confirmation naming the release, whose own button
+reads **Update to v1.3.2**, and **Review dev upgrade…** (**Reinstall latest
+dev…** when the controller already runs the newest build from `main`) for the
+development build, with a warning that it may include untested changes. Where
+updating is off, or the controller's host has no update helper, the page says
+why and, where there is one, gives the command to run there instead. A host is
+updated from its own card on **Hosts**, or with every other host that is behind
+in a [rollout](#updating-every-host-that-is-behind).
 
 At the top, Installed build and release status labels the controller as
 Standard, Development or Custom. A stamped development build shows its commit,
@@ -1021,7 +1108,7 @@ controller restart itself without another request. One built
 from `main` is offered the newest release as a replacement, with a warning in
 the confirmation that it may take the controller back to older code, since a
 build from `main` is usually ahead of the newest release. Auto never takes it:
-only a person pressing the button does.
+only a person confirming it does.
 
 ![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
 ![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
@@ -1062,11 +1149,12 @@ Read-only monitoring from a phone is a stated requirement, so it is tested. The
 navigation moves to the bottom edge, the tiles stack, and everything still
 updates in place.
 
-Every grid stays the table it is on a desktop, one line per runner, scrolling
-sideways inside its own frame to the columns that do not fit, never taking the
-page with it. If you would rather read a row downwards, the **Cards / Rows**
-toggle above each grid gives every value a line of its own, with nothing cut
-off; **Settings → Appearance** sets which of the two every grid starts in.
+In Mission Control, the default, a grid starts as cards on a phone: every value
+on a line of its own, with nothing cut off. In Classic every grid stays the
+table it is on a desktop, one line per runner, scrolling sideways inside its own
+frame to the columns that do not fit, never taking the page with it. The
+**Cards / Rows** toggle above each grid switches between the two;
+**Settings → Appearance** sets which of them every grid starts in.
 
 ![The Overview: four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
 ![The Overview: four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }

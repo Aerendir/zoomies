@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"github.com/eyupio/zoomies/internal/agent"
 	"github.com/eyupio/zoomies/internal/scheduler"
@@ -185,6 +186,94 @@ func TestRecoveryWaitsForAnInflightTaskPollBeforeRetiring(t *testing.T) {
 	}
 	if err := <-retireDone; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A long poll with nothing to hand over looks at nothing while it waits, so it
+// must not keep recovery waiting for the lock. It used to hold the read lock
+// through the whole wait, which made every retirement and every lifting of the
+// fence wait up to the poll interval, and a writer that is waiting holds every
+// other agent call behind it: the heartbeats, results and reports of every host
+// stood still for as long.
+func TestAnIdleLongPollDoesNotKeepRecoveryWaitingForTheLock(t *testing.T) {
+	h := newHarness(t)
+	joined, err := h.c.Join(h.ctx, joinRequest("idle", h.joinToken(t, nil, 0)), "10.0.0.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pollCtx, stop := context.WithCancel(h.ctx)
+	pollDone := make(chan error, 1)
+	go func() {
+		_, err := h.c.PollTasks(pollCtx, joined.HostID, agent.DefaultPollWait)
+		pollDone <- err
+	}()
+	t.Cleanup(func() { stop(); <-pollDone })
+
+	eventually(t, 5*time.Second, "the poll to be admitted", func() bool { return h.c.pollsInFlight.Load() == 1 })
+	eventually(t, 2*time.Second, "recovery to be able to take the lock while the poll waits", func() bool {
+		if !h.c.recoveryMu.TryLock() {
+			return false
+		}
+		h.c.recoveryMu.Unlock()
+		return true
+	})
+}
+
+// What a poll does once it wakes is an observation like any other: it takes
+// tasks off the queue, and a retirement must not commit in the middle of it.
+// Only the wait is outside the lock. The clock holds the poll inside its second
+// look at the queue, which is where the lock has to be held again.
+func TestAPollThatHasWokenHoldsTheRecoveryLockWhileItTakesItsTasks(t *testing.T) {
+	var block atomic.Bool
+	var enteredOnce sync.Once
+	entered, release := make(chan struct{}), make(chan struct{})
+	clock := func() time.Time {
+		if block.Load() {
+			enteredOnce.Do(func() { close(entered) })
+			<-release
+		}
+		return time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	}
+	h := newHarnessAt(t, clock)
+	joined, err := h.c.Join(h.ctx, joinRequest("waking", h.joinToken(t, nil, 0)), "10.0.0.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type polled struct {
+		batch *agent.TaskBatch
+		err   error
+	}
+	pollDone := make(chan polled, 1)
+	go func() {
+		batch, err := h.c.PollTasks(h.ctx, joined.HostID, agent.DefaultPollWait)
+		pollDone <- polled{batch, err}
+	}()
+	eventually(t, 5*time.Second, "the poll to be admitted", func() bool { return h.c.pollsInFlight.Load() == 1 })
+	eventually(t, 2*time.Second, "the poll to be waiting with the lock let go", func() bool {
+		if !h.c.recoveryMu.TryLock() {
+			return false
+		}
+		h.c.recoveryMu.Unlock()
+		return true
+	})
+
+	block.Store(true)
+	h.c.queues.get(joined.HostID).enqueue(agent.Task{Kind: agent.TaskStopRunner, RunnerID: "run_previous"})
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the task did not wake the poll into its second look at the queue")
+	}
+	if h.c.recoveryMu.TryLock() {
+		h.c.recoveryMu.Unlock()
+		t.Error("recovery could take the lock while the woken poll was taking its tasks")
+	}
+
+	block.Store(false)
+	close(release)
+	poll := <-pollDone
+	if poll.err != nil || poll.batch == nil || len(poll.batch.Tasks) != 1 {
+		t.Fatalf("the woken poll returned %+v, want the one task that woke it", poll)
 	}
 }
 

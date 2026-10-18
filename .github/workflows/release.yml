@@ -174,7 +174,7 @@ jobs:
         run: |
           set -eu
           if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
-            echo "::error::RELEASE_SIGNING_KEY is not set. Mint a key with 'zoomies release keygen --out DIR', commit its public half to internal/releasekey/default.go, store its private half as this secret, and run again (docs/upgrading.md, Signing releases)."
+            echo "::error::RELEASE_SIGNING_KEY is not set. Mint a key with 'zoomies release keygen --out DIR', put its public half in the five places docs/upgrading.md names (internal/releasekey/default.go is the first), store its private half as this secret, and run again (docs/upgrading.md, Signing releases)."
             exit 1
           fi
           keyfile="$(mktemp)"

@@ -660,6 +660,41 @@ func TestTheStatusWithholdsAnAttemptsErrorBelowPlatform(t *testing.T) {
 	})
 }
 
+// The directory of the copy an update took first names a folder on the
+// controller's host, as an error can, so a role below the platform is not given
+// it whatever state the attempt is in. A succeeded update records one too, and
+// an attempt with no error was passed through whole, path and all.
+func TestTheStatusWithholdsAnAttemptsBackupDirectoryBelowPlatformInEveryState(t *testing.T) {
+	const dir = "/var/lib/zoomies-update/backup-20261018"
+	for _, tc := range []struct{ state, text string }{
+		{"requested", ""},
+		{"succeeded", ""},
+		{"cancelled", ""},
+		{"failed", "cannot write in /var/lib/zoomies-update"},
+		{"timed_out", "no answer from the helper"},
+	} {
+		t.Run(tc.state, func(t *testing.T) {
+			view := UpdatesView{Controller: &UpdatesAttempt{
+				ID: "upd_1", State: tc.state, From: "1.3.4", To: "v1.3.5", Error: tc.text, Backup: dir, RolledBack: true,
+			}}
+
+			if got := view.For(true).Controller.Backup; got != dir {
+				t.Errorf("the platform's backup = %q, want the directory as it was recorded", got)
+			}
+			below := view.For(false)
+			if below.Controller.Backup != "" {
+				t.Errorf("the backup below platform = %q, want it withheld: it names a folder on the controller's host", below.Controller.Backup)
+			}
+			if !below.Controller.RolledBack || below.Controller.State != tc.state {
+				t.Errorf("the attempt below platform = %+v, want what happened kept: only the path is withheld", below.Controller)
+			}
+			if view.Controller.Backup != dir {
+				t.Errorf("narrowing the status changed the one it was made from: %q", view.Controller.Backup)
+			}
+		})
+	}
+}
+
 // The page shows the helper's sentence as it was written, line breaks and all.
 // The folder is one the service can write, so a result in it is not trusted to
 // be plain text: a direction override would reorder what an operator reads, and

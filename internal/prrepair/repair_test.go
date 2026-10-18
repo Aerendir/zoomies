@@ -79,7 +79,8 @@ func TestRepairStopsAfterItsStepBudget(t *testing.T) {
 		m.values = append(m.values, `{"read":["a"]}`)
 	}
 	_, e := Generate(context.Background(), m, files{"a": {Path: "a"}}, Snapshot{}, "", false)
-	if e == nil || !strings.Contains(e.Error(), "step limit") {
+	// Nothing was refused, so the allowance is not what ran the repair out of rounds.
+	if e == nil || !strings.Contains(e.Error(), "step limit") || strings.Contains(e.Error(), "allowance") {
 		t.Fatalf("%v", e)
 	}
 }

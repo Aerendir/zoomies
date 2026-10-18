@@ -27,11 +27,15 @@ from the repository rather than written by hand, so neither can go stale:
 
 * **The agent discovery documents**, the rest of what a machine reader asks
   for: ``/auth.md`` (copied from ``hooks/auth.md``), the MCP server card, the
-  two product skills with their ``SKILL.md`` copies and digests under
-  ``agent-skills/``, the ai-catalog index pointing at all of it, and a
-  ``poppy.json``. Each names something that is really serving; where
-  OAuth or A2A metadata is asked for, it stays with the deployments that run
-  it and ``/auth.md`` links to the served one.
+  two product skills, each folder copied under ``agent-skills/`` with the
+  digest of its ``SKILL.md``, the ai-catalog index pointing at all of it, the
+  ``did.json`` its host identifier resolves to, the site's own OAuth
+  protected-resource metadata, an A2A agent card for discovery, which names
+  the MCP interface the product actually speaks and says that is what it
+  speaks, and a ``poppy.json``. Each names something that is really serving.
+  The authorization server's metadata is the hosted service's and is mirrored
+  at the edge (``site-worker/``), and A2A protocol metadata stays with the
+  deployments that run it; ``/auth.md`` links to the served one.
 
 * **A Markdown copy of every page**, at the page's own address plus
   ``index.md``, and **``llms-full.txt``**, the readable pages in one file. The
@@ -77,9 +81,11 @@ _nav = None
 _sources: dict[str, tuple[object, str]] = {}
 
 # A page larger than this is not copied into llms-full.txt, only linked. The
-# narrative pages (quickstart, the FAQ, the comparisons) are well under it; the
-# generated references (every setting, every API route, every problem code)
-# are several times over, and one of them would crowd out the rest.
+# comparisons and the short explainers are well under it. The quickstart is
+# over it, as are many of the product pages, and the generated references
+# (every setting, every API route, every problem code) are several times over,
+# and one of them would crowd out the rest. What is left out is listed at the
+# end of the file with a link to its own copy.
 _FULL_PAGE_LIMIT = 15_000
 
 _comment = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -414,17 +420,20 @@ def _write_agent_discovery(config, site_url: str) -> None:
     """Write the discovery documents for what the product actually offers.
 
     Everything here names something a machine client can reach: the skills the
-    repository installs (copied byte for byte, with their digests), the MCP
+    repository installs (each folder copied byte for byte, with the digest of
+    its SKILL.md), the MCP
     interface the controller serves at /mcp with the demo instance standing in
     as the reachable example, and the index under which a registry can find
     all of it. The documents are written into .well-known/ here because mkdocs
     passes over dot directories, and as .json files because Pages would serve
     an extensionless name as application/octet-stream.
 
-    No document claims something is running unless it is: OAuth and A2A
-    metadata belong to a deployment, not to the site that documents it, and
-    publishing them here would be discovery metadata pointing at nothing.
-    auth.md says where the real chain lives instead.
+    No document claims something is running unless it is: A2A metadata belongs
+    to a deployment, not to the site that documents it, and publishing it here
+    would be discovery metadata pointing at nothing. The OAuth protected-resource
+    document is written here because the site declares it for itself; the
+    authorization server it names is the hosted service's, whose own documents
+    the edge worker mirrors. auth.md says where the real chain lives.
     """
     root = os.path.dirname(os.path.abspath(config["config_file_path"]))
     well = os.path.join(config["site_dir"], ".well-known")
@@ -437,13 +446,19 @@ def _write_agent_discovery(config, site_url: str) -> None:
 
     skills: list[dict] = []
     for name in ("zoomies", "zoomies-kennel"):
-        source = os.path.join(root, "skills", name, "SKILL.md")
-        with open(source, "rb") as fh:
+        folder = os.path.join(root, "skills", name)
+        with open(os.path.join(folder, "SKILL.md"), "rb") as fh:
             body = fh.read()
-        target = os.path.join(well, "agent-skills", name, "SKILL.md")
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "wb") as fh:
-            fh.write(body)
+        # The whole folder, not SKILL.md alone: the skill keeps its detail in
+        # files beside it and reads them by relative link, and those links
+        # answered 404 when only SKILL.md was published. The index still names
+        # SKILL.md, and its digest is of that file.
+        shutil.copytree(
+            folder,
+            os.path.join(well, "agent-skills", name),
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(".*", "__pycache__"),
+        )
         front = re.search(r"^description: (.+)$", body.decode("utf-8"), re.MULTILINE)
         if front is None:
             raise ValueError(f"skills/{name}/SKILL.md has no front-matter description for the discovery index")
@@ -497,10 +512,71 @@ def _write_agent_discovery(config, site_url: str) -> None:
         }, fh, indent=2)
         fh.write("\n")
 
+    with open(os.path.join(well, "agent-card.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "name": "Zoomies",
+            "description": (
+                "The agent surface of Zoomies, a self-hosted GitHub Actions runner fleet "
+                "controller: read the fleet's jobs, hosts, pools and runners, explain why "
+                "work queued, waited, failed or scaled, and act on it where a person "
+                "confirms. The url is the live demo deployment's MCP endpoint, and the "
+                "wire protocol it speaks is MCP over Streamable HTTP rather than A2A; "
+                "this card is for discovery and says so."
+            ),
+            "url": f"{_DEMO}/mcp",
+            "version": version,
+            "provider": {"organization": "Zoomies", "url": "https://zoomies.sh"},
+            "documentationUrl": f"{site_url}/connect-claude/",
+            "capabilities": {"streaming": False, "pushNotifications": False},
+            "defaultInputModes": ["application/json"],
+            "defaultOutputModes": ["application/json"],
+            "supportedInterfaces": [
+                {"url": f"{_DEMO}/mcp", "transport": "MCP"},
+            ],
+            "skills": [
+                {
+                    "id": "fleet-inspection",
+                    "name": "Fleet inspection",
+                    "description": "Read the fleet's jobs, hosts, pools and runners, and explain why work queued, waited, failed or scaled.",
+                    "tags": ["github-actions", "diagnostics", "fleet"],
+                },
+                {
+                    "id": "fleet-operation",
+                    "name": "Fleet operation",
+                    "description": "Propose and, with the person's confirmation, apply operator changes: remedies, runner drains, host throttles and host edits, each audited.",
+                    "tags": ["operations", "fleet"],
+                },
+                {
+                    "id": "workflow-advice",
+                    "name": "Workflow advice",
+                    "description": "Read a repository's workflow files and say what the fleet would run them on, and what changed between versions.",
+                    "tags": ["github-actions", "workflows"],
+                },
+            ],
+            "securitySchemes": {
+                "demoOidc": {
+                    "type": "openIdConnect",
+                    "openIdConnectUrl": f"{_DEMO}/.well-known/openid-configuration",
+                }
+            },
+            "security": [{"demoOidc": ["mcp:read", "mcp:operate"]}],
+        }, fh, indent=2)
+        fh.write("\n")
+
+    # The catalog names its host by a did:web identifier, which resolves to
+    # /.well-known/did.json on that domain. The document says who the DID is and
+    # nothing more: no keys and no services, because nothing here signs anything
+    # a key would be checked against. It exists so the identifier the catalog
+    # claims resolves, not to claim more.
+    host_did = "did:web:zoomies.sh"
+    with open(os.path.join(well, "did.json"), "w", encoding="utf-8") as fh:
+        json.dump({"@context": ["https://www.w3.org/ns/did/v1"], "id": host_did}, fh, indent=2)
+        fh.write("\n")
+
     with open(os.path.join(well, "ai-catalog.json"), "w", encoding="utf-8") as fh:
         json.dump({
             "specVersion": "1.0",
-            "host": {"displayName": "Zoomies", "identifier": "did:web:zoomies.sh"},
+            "host": {"displayName": "Zoomies", "identifier": host_did},
             "entries": [
                 {
                     "identifier": "urn:air:zoomies.sh:server:fleet-mcp",
@@ -517,7 +593,7 @@ def _write_agent_discovery(config, site_url: str) -> None:
                 {
                     "identifier": "urn:air:zoomies.sh:api:rest",
                     "displayName": "The Zoomies REST interface",
-                    "type": "application/yaml",
+                    "type": "text/html",
                     "url": f"{site_url}/api-surface/",
                     "representativeQueries": [
                         "which REST routes does the fleet controller expose",
@@ -556,9 +632,12 @@ def _write_agent_discovery(config, site_url: str) -> None:
     # provider, and the agent_auth block is the same one the provider's
     # metadata carries. The mirrors (site-worker/) serve the provider's two
     # documents; this one is written here, because the resource is the site's
-    # to declare and a mirror's bytes must name the mirror's host.
+    # to declare and a mirror's bytes must name the mirror's host. It is a
+    # .json file for the reason every document here is, and the worker serves
+    # it at the extensionless well-known address with the application/json
+    # that RFC 9728 requires and Pages would not give it.
     portal = "https://portal.zoomies.sh"
-    with open(os.path.join(well, "oauth-protected-resource"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(well, "oauth-protected-resource.json"), "w", encoding="utf-8") as fh:
         json.dump({
             "resource": f"{site_url}/",
             "authorization_servers": [portal],

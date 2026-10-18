@@ -774,7 +774,7 @@ func (s *Server) handleCreateJoinToken(w http.ResponseWriter, r *http.Request) {
 	// a credential was minted, not the credential.
 	s.auth.Auditor().Created(r.Context(), id, "join_token", token.ID, token)
 
-	writeJSON(w, http.StatusCreated, createJoinTokenResponse{
+	writeCreated(w, r, token.ID, createJoinTokenResponse{
 		joinTokenResponse: s.joinTokenResponse(token),
 		Token:             plaintext,
 		Command:           s.joinCommand(plaintext, controllerURL),

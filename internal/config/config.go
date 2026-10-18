@@ -1988,7 +1988,7 @@ func (c *Config) applyEnvFrom(lookup func(string) (string, bool)) error {
 	var errs []string
 	for _, s := range Settings() {
 		raw, ok := lookup(s.Env)
-		if !ok {
+		if !ok || s.blankSaysNothing(raw) {
 			continue
 		}
 		if _, err := c.SetValueString(s.Key, raw); err != nil {

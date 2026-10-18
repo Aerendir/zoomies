@@ -281,3 +281,39 @@ func TestNoCapacityDemandWithoutABlockage(t *testing.T) {
 		t.Fatalf("requests = %d, want none for a pool nothing is blocking", requests)
 	}
 }
+
+// panickingTransport is a client transport that blows up, which is what a bug
+// in building or sending a request looks like from the delivery's side.
+type panickingTransport struct{}
+
+func (panickingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	panic("a nil pointer where a response should be")
+}
+
+// A delivery to an operator's receiver runs on a goroutine of its own, apart
+// from the pass that decided it. A panic in it has to end the delivery and not
+// the process, and the delivery still has to be counted as finished: Stop waits
+// for these, and a count that never came down would hold the shutdown to its
+// timeout.
+func TestAPanicWhileDeliveringACapacityEventEndsTheDeliveryNotTheProcess(t *testing.T) {
+	h := newHarness(t)
+	h.cfg.CapacityDemand.DestinationURL = "http://receiver.invalid"
+	h.cfg.CapacityDemand.SigningSecret = "secret"
+	h.cfg.CapacityDemand.Cooldown = time.Hour
+	h.cfg.CapacityDemand.Timeout = time.Second
+	h.c.httpClient = &http.Client{Transport: panickingTransport{}}
+	p := &store.Pool{ID: "pool-panic", Backend: store.BackendDocker}
+
+	h.c.deliverCapacityEvent(h.ctx, p, 1, 1, 30, 1, capacityDemandEvent, false)
+	finished := make(chan struct{})
+	go func() { h.c.deliveries.Wait(); close(finished) }()
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the delivery that panicked was never counted as finished, so Stop would wait on it for ever")
+	}
+
+	if got := h.c.LoopPanics()["capacity-demand"]; got.Count != 1 || !got.Detached {
+		t.Errorf("recorded panics = %+v, want the delivery's crash recorded once, as detached work", got)
+	}
+}

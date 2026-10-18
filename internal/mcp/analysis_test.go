@@ -864,31 +864,107 @@ func TestTheCardSaysWhatTheToolsSayOfTheUnclaimedRowAndTheLeftOutJobs(t *testing
 	}
 }
 
-// The head of a finding is never cut, so its structured copy is held to the
-// bounds its text is: a host's name or a release label long enough would
-// otherwise carry the copy past its block with no row left to cut.
-func TestAnOversizedNameInTheHeadKeepsTheStructuredCopyWithinItsBlock(t *testing.T) {
-	huge := strings.Repeat("n", 100<<10)
-	h := hostPressureFinding()
-	h.Evidence.HostName, h.Evidence.Events = huge, nil
-	h.Summary = "6 of " + huge + "'s 7 failures came in the minutes it was pressured."
-	c := compareFinding()
-	c.Evidence.A.Label, c.Evidence.B.Label, c.Evidence.Changes = huge, huge, nil
-	c.Summary = huge + " against " + huge + ": nothing moved."
-	for path, call := range map[string]struct {
-		tool, args string
-		body       any
-	}{
-		"/analysis/host-pressure": {"host_pressure", `{"host_id":"h"}`, h},
-		"/analysis/compare":       {"compare_periods", `{}`, c},
-	} {
-		api := &routeAPI{bodies: map[string]string{path: analysisBody(t, call.body)}}
-		_, raw := structuredOf(t, New(api, Options{}), call.tool, call.args)
-		if len(raw) > maxWindowBlock {
-			t.Errorf("%s: the structured copy is %d bytes with no rows, over %d", call.tool, len(raw), maxWindowBlock)
+// oversize is a field of a finding's head that a test made longer than a whole
+// block, the letter it made it of, and the bound the text holds it to.
+type oversize struct {
+	field  string
+	letter byte
+	bound  int
+}
+
+// oversizeBy returns the maker of those values. Each is a run of one letter
+// that no other field of its finding uses, so a run of that letter in the
+// structured copy is traced to the field it came from.
+func oversizeBy(made *[]oversize) func(field string, letter byte, bound int) string {
+	return func(field string, letter byte, bound int) string {
+		if !slices.Contains(*made, oversize{field, letter, bound}) {
+			*made = append(*made, oversize{field, letter, bound})
 		}
-		if strings.Contains(string(raw), strings.Repeat("n", maxTrustedValue+1)) {
-			t.Errorf("%s: a name in the structured copy was not clipped", call.tool)
+		return strings.Repeat(string(letter), maxWindowBlock+1)
+	}
+}
+
+// oversizeHead makes every sentence and name in the head all four findings
+// share too long: the summary, the confidence's reason, what the summary leads
+// with, each step's text, setting, code and link, and the codes.
+func oversizeHead[E any](f *analysis.Finding[E], big func(field string, letter byte, bound int) string) {
+	f.Summary = big("the summary", 's', maxSentence)
+	f.ConfidenceReason = big("the confidence's reason", 'r', maxSentence)
+	f.Dominant = big("what the summary leads with", 'd', maxTrustedValue)
+	f.NextSteps = nil
+	for range 3 {
+		f.NextSteps = append(f.NextSteps, analysis.NextStep{
+			Text: big("a step's text", 't', maxSentence), Setting: big("a step's setting", 'g', maxTrustedValue),
+			Code: big("a step's code", 'c', maxTrustedValue), Link: big("a step's link", 'l', maxTrustedValue)})
+	}
+	f.Codes = []string{big("a code", 'k', maxTrustedValue), big("a code", 'k', maxTrustedValue)}
+}
+
+// The head of a finding is never cut, so its structured copy is held to the
+// bounds its text is: a host's name, a release label or any one of the
+// controller's sentences long enough would otherwise carry the copy past its
+// block with no row left to cut. Every sentence and name in the head of all four
+// findings is made longer than the whole block, and must come back clipped to
+// exactly the bound the text holds it to and marked as cut, in a copy that has
+// no rows to cut to make room.
+func TestAnOversizedNameInTheHeadKeepsTheStructuredCopyWithinItsBlock(t *testing.T) {
+	type maker = func(field string, letter byte, bound int) string
+	for _, c := range []struct {
+		tool, path, args string
+		build            func(maker) any
+	}{
+		{"queue_wait_breakdown", "/analysis/queue-wait", `{}`, func(big maker) any {
+			f := queueWaitFinding(0, 0, 0)
+			oversizeHead(&f, big)
+			for i := range f.Evidence.Fleet {
+				f.Evidence.Fleet[i].Cause = analysis.WaitCause(big("a cause in the fleet's wait", 'f', maxTrustedValue))
+			}
+			return f
+		}},
+		{"compare_periods", "/analysis/compare", `{}`, func(big maker) any {
+			f := compareFinding()
+			f.Evidence.Changes = nil
+			oversizeHead(&f, big)
+			f.Evidence.By = big("what the comparison is by", 'b', maxTrustedValue)
+			f.Evidence.A.Label = big("side a's label", 'a', maxTrustedValue)
+			f.Evidence.B.Label = big("side b's label", 'v', maxTrustedValue)
+			f.Evidence.Excluded = []string{big("an excluded conclusion", 'x', maxTrustedValue), big("an excluded conclusion", 'x', maxTrustedValue)}
+			return f
+		}},
+		{"host_pressure", "/analysis/host-pressure", `{"host_id":"h"}`, func(big maker) any {
+			f := hostPressureFinding()
+			f.Evidence.Events = nil
+			oversizeHead(&f, big)
+			f.Evidence.HostID = big("the host's id", 'i', maxTrustedValue)
+			f.Evidence.HostName = big("the host's name", 'h', maxTrustedValue)
+			f.Evidence.Threshold.Measure = big("the threshold's measure", 'm', maxTrustedValue)
+			return f
+		}},
+		{"startup_failures", "/analysis/startup-failures", `{}`, func(big maker) any {
+			f := startupFinding()
+			f.Evidence.Groups = nil
+			oversizeHead(&f, big)
+			return f
+		}},
+	} {
+		var made []oversize
+		api := &routeAPI{bodies: map[string]string{c.path: analysisBody(t, c.build(oversizeBy(&made)))}}
+		_, raw := structuredOf(t, New(api, Options{}), c.tool, c.args)
+		if len(made) < 8 {
+			t.Fatalf("%s: only %d fields of its head were made oversize; the test would pass on anything", c.tool, len(made))
+		}
+		copied := string(raw)
+		if len(copied) > maxWindowBlock {
+			t.Errorf("%s: the structured copy is %d bytes with no rows, over %d", c.tool, len(copied), maxWindowBlock)
+		}
+		for _, m := range made {
+			run := strings.Repeat(string(m.letter), m.bound)
+			if !strings.Contains(copied, run+"...") {
+				t.Errorf("%s: %s is not clipped to %d bytes and marked as cut in the structured copy", c.tool, m.field, m.bound)
+			}
+			if strings.Contains(copied, run+string(m.letter)) {
+				t.Errorf("%s: %s keeps more than the %d bytes the text holds it to", c.tool, m.field, m.bound)
+			}
 		}
 	}
 }

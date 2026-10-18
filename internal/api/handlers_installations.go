@@ -193,7 +193,7 @@ func (s *Server) handleCreateInstallation(w http.ResponseWriter, r *http.Request
 	s.ctrl.PublishInstallation(r.Context(), inst)
 	// A fresh installation may already own queued jobs.
 	s.ctrl.Nudge()
-	writeJSON(w, http.StatusCreated, controller.NewInstallationView(inst, 0))
+	writeCreated(w, r, inst.ID, controller.NewInstallationView(inst, 0))
 }
 
 type installationUpdateRequest struct {

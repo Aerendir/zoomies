@@ -68,6 +68,26 @@ func TestImportEnvironmentStoresNothingWhenAValueWillNotDo(t *testing.T) {
 	}
 }
 
+// docs/upgrading.md tells an operator with the repository's Compose file to run
+// `config import-env < .env`, and that .env is a copy of .env.example, whose
+// ZOOMIES_AGENT_CAPACITY= is empty on purpose. The controller reads an empty
+// number as nothing said, so the import has to as well: it promises to parse
+// each variable as the controller would, and a refusal of the one line the
+// controller accepts would stop every other setting from moving with it.
+func TestImportEnvironmentReadsAnEmptyNumberAsTheControllerDoes(t *testing.T) {
+	rows, imported, left, err := ImportEnvironment(map[string]string{
+		"ZOOMIES_AGENT_CAPACITY":      "",
+		"ZOOMIES_RUNNER_DEFAULT_CPUS": " ",
+		"ZOOMIES_LOG_LEVEL":           "debug",
+	}, nil)
+	if err != nil {
+		t.Fatalf("ImportEnvironment refused an empty number: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Key != "log.level" || len(imported) != 1 || len(left) != 0 {
+		t.Errorf("rows = %+v, imported = %+v, left = %v; want only the log level stored, the empty numbers storing nothing", rows, imported, left)
+	}
+}
+
 func TestSettingForEnvKnowsOnlyStoredSettings(t *testing.T) {
 	if s, ok := SettingForEnv("ZOOMIES_EXTERNAL_URL"); !ok || s.Key != "server.external_url" {
 		t.Errorf("ZOOMIES_EXTERNAL_URL = %+v, %v", s, ok)

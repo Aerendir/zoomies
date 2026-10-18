@@ -3,6 +3,8 @@ package controller
 import (
 	"bytes"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -162,6 +164,37 @@ func TestALogStreamSpendsItsBudgetAndRefillsWithTime(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// One goroutine is meant to read an agent's POST, but nothing makes that so:
+// an agent that opens a stream again while this side is still blocked on the
+// first connection, a half-open one that has not failed yet, puts a second
+// reader on the same stream. Two readers have to share one budget; with no lock
+// they read the same balance and each spend it, and the byte limit that exists
+// to protect the controller from a noisy agent doubles.
+func TestTwoReadersOfOneLogStreamShareItsBudget(t *testing.T) {
+	const chunk = 8 << 10 // the burst is 1024 of these
+	s := &logStream{}
+	now := time.Unix(1_000_000, 0) // a clock that never moves refills nothing
+
+	var spent atomic.Int64
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 2 * logStreamBurst / chunk {
+				if s.spend(chunk, now) {
+					spent.Add(chunk)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := spent.Load(); got != logStreamBurst {
+		t.Errorf("two readers spent %d bytes against a budget of %d", got, logStreamBurst)
 	}
 }
 

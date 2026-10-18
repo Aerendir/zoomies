@@ -281,4 +281,14 @@ test('editing an MCP client adds a redirect the app can then sign in through', a
   await edit.getByRole('button', { name: 'Save changes' }).click();
   await expect(edit).toBeHidden();
   await expect(page.getByRole('row', { name: 'Local app' })).toBeVisible();
+
+  // A closed dialog and a row still on the page are what a save that stored
+  // nothing looks like too. The consent screen checks the redirect list the
+  // controller holds, so read that: a fresh page, then the client's edit
+  // dialog, which is filled in from what the controller returns.
+  await page.reload();
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await expect(edit.getByLabel('Redirect URIs')).toHaveValue(
+    `${CALLBACK}\nhttp://localhost:3118/callback`,
+  );
 });

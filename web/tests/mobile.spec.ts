@@ -989,7 +989,12 @@ const tablesDefault = (page: Page, name: 'Rows' | 'Cards') =>
   page.getByRole('group', { name: 'Tables on a phone' }).getByRole('button', { name });
 
 test('the Settings default decides for every grid that has not chosen', async ({ page }) => {
+  // A fresh phone grid is Rows in Classic and Cards in Mission Control, so this
+  // starts on Classic: the Cards it then chooses is a change and not the fallback.
+  // Started on the default, it passed with the setting doing nothing.
+  await useClassic(page);
   await goto(page, '/settings/appearance', 'Appearance');
+  await expect(tablesDefault(page, 'Rows')).toHaveAttribute('aria-pressed', 'true');
   await tablesDefault(page, 'Cards').click();
   await expect(tablesDefault(page, 'Cards')).toHaveAttribute('aria-pressed', 'true');
 

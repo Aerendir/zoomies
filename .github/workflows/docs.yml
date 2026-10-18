@@ -15,6 +15,7 @@ on:
       - "overrides/**"
       - "hooks/**"
       - "site-worker/**"
+      - "skills/**"
       - "mkdocs.yml"
       - "install.sh"
       - "install.ps1"
@@ -27,6 +28,7 @@ on:
       - "overrides/**"
       - "hooks/**"
       - "site-worker/**"
+      - "skills/**"
       - "mkdocs.yml"
       - "install.sh"
       - "install.ps1"
@@ -136,7 +138,15 @@ jobs:
           set -eu
           grep -q "https://zoomies.sh/quickstart/" site/sitemap.xml
           grep -q "https://zoomies.sh/faq/" site/llms.txt
-          grep -q "https://zoomies.sh/quickstart/" site/llms-full.txt
+          # Anchored to the file's own lines. A bare grep for a page's URL
+          # also matches every link to it from another page, which for the
+          # quickstart is dozens, so it passed with the page missing. A page
+          # is either written out, under a "Canonical page:" line, or, over
+          # _FULL_PAGE_LIMIT in hooks/seo.py, listed at the end with a link
+          # to its own copy. The quickstart is the second today and either is
+          # right; a short page that must be written out guards the first.
+          grep -Eq '^(Canonical page: https://zoomies\.sh/quickstart/|- \[.*\]\(https://zoomies\.sh/quickstart/index\.md\))$' site/llms-full.txt
+          grep -q '^Canonical page: https://zoomies.sh/what-are-self-hosted-runners/$' site/llms-full.txt
           grep -q "^# " site/quickstart/index.md
           grep -q "^# " site/index.md
           grep -q "^Contact: " site/.well-known/security.txt
@@ -147,7 +157,7 @@ jobs:
       - name: The agent discovery documents are well formed
         run: |
           python3 - <<'EOF'
-          import hashlib, json, re
+          import hashlib, json, os, re
 
           def load(path):
               with open("site/" + path, encoding="utf-8") as fh:
@@ -172,11 +182,23 @@ jobs:
           for skill in index["skills"]:
               assert re.fullmatch(r"[a-z0-9-]+", skill["name"]), skill["name"]
               assert skill["type"] == "skill-md" and skill["description"] and skill["url"]
-              with open("site/.well-known/agent-skills/" + skill["name"] + "/SKILL.md", "rb") as fh:
+              folder = "site/.well-known/agent-skills/" + skill["name"] + "/"
+              with open(folder + "SKILL.md", "rb") as fh:
                   body = fh.read()
               assert skill["digest"] == "sha256:" + hashlib.sha256(body).hexdigest(), skill["name"]
+              # A skill reads its siblings by relative link, so each link has
+              # to resolve beside the published SKILL.md. Published alone, the
+              # zoomies skill sent an agent to a 404 for its command reference.
+              for target in re.findall(r"\]\(([^)\s]+)\)", body.decode("utf-8")):
+                  if "://" in target or target.startswith(("#", "mailto:")):
+                      continue
+                  linked = os.path.normpath(folder + target.split("#")[0])
+                  assert linked.startswith(folder) and os.path.isfile(linked), skill["name"] + " links to " + target + ", which is not published beside its SKILL.md"
 
-          prm = load(".well-known/oauth-protected-resource")
+          # A .json name, because Pages types a file by its extension and
+          # RFC 9728 requires application/json; the edge worker serves it at
+          # the extensionless well-known address.
+          prm = load(".well-known/oauth-protected-resource.json")
           assert prm["resource"].startswith("https://zoomies.sh"), prm["resource"]
           assert prm["authorization_servers"] == ["https://portal.zoomies.sh"]
           assert prm["bearer_methods_supported"] == ["header"]
@@ -190,9 +212,24 @@ jobs:
           for entry in catalog["entries"]:
               assert ("url" in entry) != ("data" in entry), entry["identifier"]
               assert 2 <= len(entry["representativeQueries"]) <= 5, entry["identifier"]
+              # The type is what the url serves, and a page is text/html
+              # whatever it is about: the REST entry once said application/yaml
+              # of the API documentation's page.
+              if entry.get("url", "").endswith("/"):
+                  assert entry["type"] == "text/html", entry["identifier"] + " is a page, not " + entry["type"]
+          # The host is named by a DID, and a DID that nothing resolves is a
+          # claim nothing backs. did:web:zoomies.sh is read from
+          # /.well-known/did.json.
+          assert load(".well-known/did.json")["id"] == catalog["host"]["identifier"], "did.json does not describe the catalog's host"
           poppy = load(".well-known/poppy.json")
           assert poppy["organization"]["domain"] == "zoomies.sh"
           assert poppy["protocol_version"]
+          agent = load(".well-known/agent-card.json")
+          assert agent["name"] == "Zoomies" and agent["version"] and agent["version"] != "0.0.0", "the agent card names no release"
+          assert agent["url"] == "https://demo.zoomies.sh/mcp", "the agent card does not name the demo's MCP endpoint"
+          assert agent["capabilities"] is not None and agent["skills"], "the agent card has no capabilities or skills"
+          for skill in agent["skills"]:
+              assert skill["id"] and skill["name"] and skill["description"], skill["id"]
           api_catalog = load("api-catalog.json")
           entry = api_catalog["linkset"][0]
           assert entry["status"][0]["href"] == "https://demo.zoomies.sh/readyz", entry

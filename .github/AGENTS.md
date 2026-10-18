@@ -16,12 +16,13 @@ has a CI job that diffs them:
   are generated from `docs/problem-codes.md` and the Kennel registry by
   `make generate`; `TestTheCatalogIsCurrent` fails on a stale copy.
 * The runner image catalogue in `internal/naming/images.go` is the source for
-  both workflows' build matrices, the Makefile's `variant.*` rows and the table
-  in `docs/naming.md`. Adding or swapping an operating system is a row there and
-  then `make generate`; editing any of the four by hand fails a test in
-  `internal/naming`. The base-image digests in those rows are moved weekly by
-  `runner-bases.yml`, which opens a pull request (`make runner-bases` does the
-  same by hand): Dependabot cannot see them, and five of seven had aged.
+  both workflows' build matrices, the Makefile's `variant.*` rows, the table in
+  `docs/naming.md` and the default base in `deploy/Dockerfile.runner`. Adding or
+  swapping an operating system is a row there and then `make generate`; editing
+  any of the five by hand fails a test in `internal/naming`. The base-image
+  digests in those rows are moved weekly by `runner-bases.yml`, which opens a
+  pull request (`make runner-bases` does the same by hand): Dependabot cannot
+  see them, and five of seven had aged.
 * `install.sh` at the repo root is copied verbatim to the site root; the script
   people `curl` is the script a contributor edits. Do not create a second copy.
   `install.ps1` is published the same way and is held to the same rule; the

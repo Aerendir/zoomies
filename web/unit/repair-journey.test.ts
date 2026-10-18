@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { REPAIR_TRACK, stateOf, trackIndex } from '../src/lib/repairs/journey';
+import { REPAIR_TRACK, runningRepair, stateOf, trackIndex } from '../src/lib/repairs/journey';
 
 // The track is what a waiting operator reads, so a row caught between two
 // writes may not move the mark backwards: the commit is the proof, and an
@@ -23,4 +23,53 @@ test('the track moves forwards only, and an absent state is queued', () => {
   // No state at all, as a row read mid-write can be: queued, not finished.
   assert.equal(trackIndex({}), 0);
   assert.equal(REPAIR_TRACK.length, 5);
+});
+// A failure is reached by its run, but only a repair Eli queued itself records a
+// run: one a person queued from the page is known by its pull request and commit.
+// Looking only by run offered that repair a second time to whoever came back to
+// the failure.
+test('a repair a person queued is found by its pull request and commit, not by a run', () => {
+  const row = (over: { run_id?: number } = {}) => ({
+    state: 'working',
+    repo: 'Acme/Widgets',
+    run_id: 0,
+    pull_number: 17,
+    head_sha: 'abc123',
+    ...over,
+  });
+  const automatic = row({ run_id: 1234 });
+  const queuedByAPerson = row();
+
+  // By the run it arrived with: the automatic repair, and not the person's.
+  assert.equal(
+    runningRepair([queuedByAPerson, automatic], { repo: 'acme/widgets', run: 1234 }),
+    automatic,
+  );
+  assert.equal(runningRepair([queuedByAPerson], { repo: 'acme/widgets', run: 1234 }), undefined);
+
+  // Once readiness has resolved the run to its pull request and commit.
+  const resolved = { repo: 'acme/widgets', pull: 17, head: 'abc123' };
+  assert.equal(runningRepair([queuedByAPerson], resolved), queuedByAPerson);
+
+  // Arriving by pull request alone is as it was: any repair on that pull request.
+  assert.equal(
+    runningRepair([queuedByAPerson], { repo: 'acme/widgets', pull: 17 }),
+    queuedByAPerson,
+  );
+});
+
+// A repair for another commit is a different task, and one that has finished is
+// not running: neither may take the place of the offer.
+test('a repair on another commit, another pull request or a finished one is not the one running', () => {
+  const base = { repo: 'acme/widgets', run_id: 0, pull_number: 17, head_sha: 'abc123' };
+  const want = { repo: 'acme/widgets', pull: 17, head: 'abc123' };
+  assert.equal(runningRepair([{ ...base, state: 'working', head_sha: 'older' }], want), undefined);
+  assert.equal(runningRepair([{ ...base, state: 'working', pull_number: 18 }], want), undefined);
+  assert.equal(runningRepair([{ ...base, state: 'working', repo: 'acme/other' }], want), undefined);
+  for (const state of ['succeeded', 'failed', 'checks_failed', 'interrupted', 'superseded']) {
+    assert.equal(runningRepair([{ ...base, state }], want), undefined, state);
+  }
+  for (const state of ['queued', 'working', 'checking']) {
+    assert.ok(runningRepair([{ ...base, state }], want), state);
+  }
 });

@@ -333,6 +333,8 @@
                     : 'while it was still thinking'}. Lower the provider's reasoning effort under
                   Settings, Eli AI Assistant, or raise its output limit.
                   {#if raisable(turn) && turn === last && !conversation.busy}
+                    Raising it writes the new number to the provider's Output limit, which a repair
+                    on this provider then keeps exactly instead of raising it as needed.
                     <button
                       type="button"
                       class="retry"

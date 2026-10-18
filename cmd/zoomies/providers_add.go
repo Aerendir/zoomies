@@ -15,12 +15,19 @@ import (
 // Keeping them in one place is what makes `edit` accept exactly the settings
 // `add` does, as the pool commands do.
 //
-// The wizard asks its questions over five steps. Here they are one line, and
-// the line is the same shape as `hosts join-token create`: what to connect to,
-// what to build, what it may spend. The answers the wizard discovers from the
-// cluster -- nodes, storages, bridges, templates -- have to be typed, because
-// discovery needs a saved credential and this command has not saved one yet.
-// `zoomies providers check` says afterwards which of them the cluster refuses.
+// The wizard asks its questions over five steps. Most of them are one line
+// here, and the line is the same shape as `hosts join-token create`: what to
+// connect to, what to build, what it may spend. The answers the wizard
+// discovers from the cluster (nodes, storages, bridges, templates) have to be
+// typed, because discovery needs a saved credential and this command has not
+// saved one yet. `zoomies providers check` says afterwards which of them the
+// cluster refuses.
+//
+// Three answers have no flag at all: the machine's operating system and
+// architecture (machine_platform), the certificate machines trust for the
+// controller (machine_ca_pem) and how many machines are kept warm
+// (min_machines). They are fields of the provider and not driver settings, so
+// --setting does not reach them either; the form or the API sets them.
 type providerSpec struct {
 	name        *string
 	endpoint    *string
@@ -48,8 +55,14 @@ type providerSpec struct {
 	enabled     *bool
 }
 
-// registerProviderFlags declares them, with the API's own defaults so that a
-// provider created here is the same as one the wizard made.
+// registerProviderFlags declares them, with the API's own defaults for what the
+// line leaves out. They are not the wizard's. The wizard opens on one warm
+// machine and a ceiling worked out from the cluster; a provider created here
+// rents nothing until --max-machines says otherwise and keeps nothing warm,
+// because there is no flag for warm machines (min_machines). A scripted
+// provider's first job after a quiet spell therefore waits for a clone until
+// the form or the API sets the floor, and an edit here leaves a floor set there
+// as it was.
 func registerProviderFlags(fs *flagSet) *providerSpec {
 	spec := &providerSpec{
 		nodes:    &listValue{},
@@ -237,7 +250,11 @@ func parseVMIDRange(s string) (lo, hi string, err error) {
 	return a, b, nil
 }
 
-// providersAdd is `zoomies providers add <kind>`: the wizard in one command.
+// providersAdd is `zoomies providers add <kind>`: the wizard's manual path in
+// one line, apart from three answers that have no flag. They are the machine's
+// operating system and architecture, the certificate machines trust for the
+// controller, and how many machines are kept warm; the form or the API sets
+// them, and a provider added here keeps no machine warm until one does.
 //
 // It runs the same dry run the wizard's review step does before it writes
 // anything, so a typo is refused with a field name and no row; then it

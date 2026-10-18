@@ -4,8 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyupio/zoomies/internal/store"
 )
 
 // `jobs get` is the page somebody opens when a job did not do what they
@@ -157,6 +160,35 @@ func TestJobsListSendsTheFaultFiltersTheAPIUnderstands(t *testing.T) {
 	if _, _ = runCLI(t, "jobs", "list", "--fault", "out_of_memory", "--url", srv.URL); len(asked) != 1 ||
 		!strings.Contains(asked[0], "fault=out_of_memory") {
 		t.Fatalf("--fault sent %v, want fault=out_of_memory", asked)
+	}
+}
+
+// The --fault help is where an operator learns which categories there are, and
+// it used to keep a copy of them by hand: it named nine of the eleven the
+// controller accepts, so backend_busy and container_conflict were filters
+// nobody could find from the command. It reads the store's closed set now, and
+// this holds it to every kind in it.
+func TestJobsListFaultHelpNamesEveryCategoryTheControllerAccepts(t *testing.T) {
+	e, _, errOut := newTestEnv(t)
+	if code := dispatch(context.Background(), e, []string{"jobs", "list", "--help"}); code != exitOK {
+		t.Fatalf("exit code = %d, want 0\n%s", code, errOut)
+	}
+	// The examples below the flags use --fault too, so the flag's own line is
+	// the one to read, not the whole help.
+	var line string
+	for _, l := range strings.Split(errOut.String(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "--fault ") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatalf("jobs list --help has no --fault flag:\n%s", errOut)
+	}
+	for _, kind := range store.FaultKinds() {
+		if !strings.Contains(line, string(kind)) {
+			t.Errorf("--fault help does not name %q, which the controller accepts:\n%s", kind, line)
+		}
 	}
 }
 
@@ -336,5 +368,70 @@ func TestJobsListSendsTheNewFiltersAndPrintsTheCursor(t *testing.T) {
 	if code := dispatch(context.Background(), e, []string{"jobs", "list", "--hosted", "maybe", "--url", srv.URL}); code != exitUsage ||
 		!strings.Contains(errOut.String(), "true or false") {
 		t.Errorf("a bad --hosted must be refused as a usage error, got %d: %s", code, errOut.String())
+	}
+}
+
+// --attention is the question the Overview's failures panel and the Jobs page's
+// "Needs attention" view ask, put to the terminal. The CLI sends it as the
+// API's one parameter and nothing beside it: composing the failed filter with
+// it here would be the half-answer the parameter exists to prevent.
+func TestJobsListAsksForTheFailuresStillWaitingOnAPerson(t *testing.T) {
+	var got map[string][]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		_, _ = w.Write([]byte(`{"items":[{"id":"job_1","repo":"acme/widgets","workflow":"CI","job_name":"build","state":"completed",
+			"conclusion":"failure","matched":true,"queued_at":"2026-09-01T00:00:00Z"}],"total":1}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	out, _ := runCLI(t, "jobs", "list", "--attention", "--url", srv.URL)
+	if len(got["attention"]) != 1 || got["attention"][0] != "true" || len(got["failed"]) != 0 {
+		t.Errorf("--attention sent %v, want attention=true on its own", got)
+	}
+	if !strings.Contains(out, "build") {
+		t.Errorf("the failure it answered with is not listed:\n%s", out)
+	}
+
+	if _, _ = runCLI(t, "jobs", "list", "--url", srv.URL); len(got["attention"]) != 0 {
+		t.Errorf("a plain listing asked for the attention view: %v", got)
+	}
+}
+
+// Triage at the terminal is the same two routes the Jobs page presses: marking
+// a failure as known is a POST and taking it back a DELETE, on one address. Each
+// says what it did and, for the first, what it did not do, because a failure
+// marked as known is still failed.
+func TestJobsAcknowledgeAndReopenAreTheTriageRoutes(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"job_1","conclusion":"failure","acknowledged_at":"2026-09-01T00:00:00Z"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	out, _ := runCLI(t, "jobs", "acknowledge", "job_1", "--url", srv.URL)
+	if !strings.Contains(out, "Marked as known") || !strings.Contains(out, "a re-run that passes is what settles it") {
+		t.Errorf("acknowledging does not say what it did, or that it settled nothing:\n%s", out)
+	}
+	out, _ = runCLI(t, "jobs", "reopen", "job_1", "--url", srv.URL)
+	if !strings.Contains(out, "Back in the failures needing attention") {
+		t.Errorf("reopening does not say what it did:\n%s", out)
+	}
+	if want := []string{"POST /api/v1/jobs/job_1/acknowledge", "DELETE /api/v1/jobs/job_1/acknowledge"}; !slices.Equal(seen, want) {
+		t.Errorf("asked %v, want %v", seen, want)
+	}
+
+	// A script reads the job the route answered with, not a sentence.
+	raw, _ := runCLI(t, "jobs", "acknowledge", "job_1", "--output", "json", "--url", srv.URL)
+	if !strings.Contains(raw, `"acknowledged_at"`) || strings.Contains(raw, "Marked as known") {
+		t.Errorf("--output json must be the job and nothing else:\n%s", raw)
+	}
+
+	// Without a job there is nothing to mark.
+	e, _, errOut := newTestEnv(t)
+	if code := dispatch(context.Background(), e, []string{"jobs", "acknowledge", "--url", srv.URL}); code != exitUsage ||
+		!strings.Contains(errOut.String(), "job ID") {
+		t.Errorf("acknowledging nothing must be a usage error that asks for a job ID, got %d: %s", code, errOut.String())
 	}
 }

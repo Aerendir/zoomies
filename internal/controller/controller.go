@@ -433,6 +433,10 @@ type Controller struct {
 	started bool
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
+	// lifetime is the context the loops run on, cancelled by Stop and nil until
+	// the first Start. Work a request hands off derives from it, so that it ends
+	// with the controller; see goTracked.
+	lifetime context.Context
 	// deliveries tracks capacity-demand requests in flight, which run apart
 	// from the reconcile pass that decided them; Stop waits for them, and so
 	// do the tests.
@@ -447,11 +451,15 @@ type Controller struct {
 	loopPanics map[string]loopPanic
 }
 
-// loopPanic is the record of one background loop's crashes.
+// loopPanic is the record of one background loop's crashes, or of one kind of
+// detached work's.
 type loopPanic struct {
 	Count int
 	Last  string
 	At    time.Time
+	// Detached is set for work that runs apart from any loop. A loop is started
+	// again after a crash; this work is abandoned, and the record says which.
+	Detached bool
 }
 
 // loopRestartMax caps the wait between restarts of a loop that keeps
@@ -626,6 +634,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	loopCtx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
+	c.lifetime = loopCtx
 	c.started = true
 
 	c.spawn("reconcile", loopCtx, c.reconcileLoop)
@@ -699,7 +708,7 @@ func (c *Controller) spawn(name string, ctx context.Context, fn func(context.Con
 			if value == nil || ctx.Err() != nil {
 				return
 			}
-			c.notePanic(name, value)
+			c.notePanic(name, value, false)
 			c.log.Error("controller loop panicked; it will be restarted",
 				"loop", name, "panic", value, "restart_in", delay, "stack", stack)
 			select {
@@ -709,6 +718,47 @@ func (c *Controller) spawn(name string, ctx context.Context, fn func(context.Con
 			}
 			delay = min(2*delay, loopRestartMax)
 		}
+	}()
+}
+
+// goTracked runs fn on a goroutine of its own, cut loose from ctx's
+// cancellation but not from the controller's.
+//
+// Work a request hands off has to outlive the request, which has returned by
+// the time it matters, and must not outlive the controller, which is told to
+// stop and then waits. So fn keeps ctx's values and loses its cancellation, is
+// cancelled when the controller stops, and, while the controller runs, is one
+// of the things Stop waits for. A controller that was never started has no
+// lifetime to bind to and no Stop to wait, so the work simply runs; that is
+// every test that builds a controller and does not start its loops. One that
+// has been stopped binds to the lifetime it had, which is over, so work asked
+// for in the last moments of a shutdown ends at once instead of running on
+// unobserved.
+func (c *Controller) goTracked(ctx context.Context, name string, fn func(context.Context)) {
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+
+	// Whether the controller runs and the Add that counts this work are decided
+	// together under startMu, which Stop takes to say it has stopped before it
+	// waits: an Add can never land after the Wait that should have counted it.
+	c.startMu.Lock()
+	tracked, lifetime := c.started, c.lifetime
+	if tracked {
+		c.wg.Add(1)
+	}
+	c.startMu.Unlock()
+
+	stop := func() bool { return false }
+	if lifetime != nil {
+		stop = context.AfterFunc(lifetime, cancel)
+	}
+	go func() {
+		if tracked {
+			defer c.wg.Done()
+		}
+		defer c.recoverDetached(name)
+		defer cancel()
+		defer stop()
+		fn(runCtx)
 	}()
 }
 
@@ -725,8 +775,43 @@ func runGuarded(ctx context.Context, fn func(context.Context)) (value any, stack
 	return nil, ""
 }
 
-// notePanic records a loop's crash for the problems drawer.
-func (c *Controller) notePanic(name string, value any) {
+// detachedPanicMessage is what a recovered panic in detached work is logged
+// under. The problems drawer sends the operator looking for it, so the two are
+// one constant.
+const detachedPanicMessage = "detached controller work panicked"
+
+// recoverDetached is deferred, directly, by a goroutine that runs apart from
+// any loop: a provider call, a GitHub round trip, a delivery. Those were taken
+// off the pass that decided them so that the pass's lock would not span a slow
+// call, and that took them from behind the loop's guard as well. A panic on a
+// goroutine nothing recovers ends the process, in the middle of the work whose
+// outcome Stop waits so carefully to see recorded.
+//
+// The work is abandoned, not retried. What it had not yet written is what a
+// crash at that point would have left, which the design already recovers from,
+// and whatever asked for it asks again on its next pass or request. The crash
+// goes on the problems drawer beside the loops'.
+//
+// It has to be the deferred function itself and not something a deferred
+// closure calls: recover only stops a panic when the function the panic is
+// unwinding through calls it directly.
+func (c *Controller) recoverDetached(name string) {
+	if r := recover(); r != nil {
+		c.reportDetachedPanic(name, r, debug.Stack())
+	}
+}
+
+// reportDetachedPanic logs a recovered panic with its stack and records it.
+// The log comes first so that the stack is out before anything that can wait.
+func (c *Controller) reportDetachedPanic(name string, value any, stack []byte) {
+	c.log.Error(detachedPanicMessage+"; it was abandoned and the controller carries on",
+		"work", name, "panic", value, "stack", string(stack))
+	c.notePanic(name, value, true)
+}
+
+// notePanic records a crash for the problems drawer: a loop's, or, when
+// detached is set, that of work a loop handed to a goroutine of its own.
+func (c *Controller) notePanic(name string, value any, detached bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.loopPanics == nil {
@@ -736,6 +821,7 @@ func (c *Controller) notePanic(name string, value any) {
 	p.Count++
 	p.Last = fmt.Sprint(value)
 	p.At = c.Now()
+	p.Detached = detached
 	c.loopPanics[name] = p
 }
 
@@ -798,8 +884,9 @@ func (c *Controller) Unfence(ctx context.Context) error {
 	return nil
 }
 
-// LoopPanics returns the crashes recorded against each background loop since
-// the process started, for the problems drawer.
+// LoopPanics returns the crashes recorded against each background loop, and
+// each kind of detached work, since the process started, for the problems
+// drawer.
 func (c *Controller) LoopPanics() map[string]loopPanic {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -669,3 +669,158 @@ func TestEditingAnMCPClientChangesItsNameAndRedirects(t *testing.T) {
 		t.Errorf("editing a dynamic client: %v", err)
 	}
 }
+
+// An edit that removes a redirect URI is meant for the sign-ins already under
+// way as much as for the ones that start afterwards. A fresh request for the
+// address is refused at once, but a request begun in the last fifteen minutes
+// and a code issued in the last five carry the address with them, and unless
+// they are looked at again they deliver an authorisation code to the very place
+// the administrator took away. What the edit still does not do is end a
+// connection already made: its refresh token names no redirect, and the API
+// promises that an edit leaves connections alone.
+func TestRemovingARedirectRefusesTheSignInsAlreadyUnderWayForIt(t *testing.T) {
+	s, st, _ := newService(t)
+	ctx := t.Context()
+	u := addUser(t, st, "olive", store.RoleOperator, nil)
+	person := &Identity{Kind: KindUser, ID: u.ID, Name: u.Username, Role: u.Role}
+	admin := &Identity{Kind: KindUser, ID: "usr_admin", Name: "admin", Role: store.RoleAdmin}
+	const loopback = "http://localhost:3118/callback"
+
+	client, _, err := s.CreateMCPClient(ctx, admin, NewMCPClient{Name: "Claude", RedirectURIs: []string{ClaudeCallback, loopback}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	begin := func(redirect string) (*store.OAuthRequest, error) {
+		return s.BeginAuthorization(ctx, testPolicy, AuthorizeParams{ClientID: client.ClientID, RedirectURI: redirect,
+			ResponseType: "code", CodeChallenge: PKCEChallenge(verifier), CodeChallengeMethod: "S256"})
+	}
+	waitingFor := func(redirect string) *store.OAuthRequest {
+		t.Helper()
+		r, err := begin(redirect)
+		if err != nil {
+			t.Fatalf("starting a sign-in for %s: %v", redirect, err)
+		}
+		return r
+	}
+	codeFor := func(redirect string) string {
+		t.Helper()
+		d, err := s.ApproveAuthorization(ctx, testPolicy, person, waitingFor(redirect).ID, store.RoleViewer)
+		if err != nil {
+			t.Fatalf("approving a sign-in for %s: %v", redirect, err)
+		}
+		back, _ := url.Parse(d.RedirectTo)
+		return back.Query().Get("code")
+	}
+	exchange := func(code, redirect string) (*TokenResponse, error) {
+		return s.Token(ctx, testPolicy, ClientCredentials{ClientID: client.ClientID}, TokenRequest{
+			GrantType: "authorization_code", Code: code, CodeVerifier: verifier, RedirectURI: redirect}, "203.0.113.9")
+	}
+
+	// Everything in flight when the edit lands: a connection already made
+	// through the address that is about to go, a request waiting for consent
+	// and a code not yet exchanged for it, and the same two for the address that
+	// stays.
+	connected, err := exchange(codeFor(loopback), loopback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting := waitingFor(loopback)
+	issued := codeFor(loopback)
+	stayingRequest := waitingFor(ClaudeCallback)
+	stayingCode := codeFor(ClaudeCallback)
+
+	if _, err := s.UpdateMCPClient(ctx, admin, client.ID, NewMCPClient{Name: "Claude", RedirectURIs: []string{ClaudeCallback}}); err != nil {
+		t.Fatalf("removing the loopback redirect: %v", err)
+	}
+
+	// The front door was always shut: a new sign-in for the address is refused.
+	var refusal *AuthorizeRefusal
+	if _, err := begin(loopback); !errors.As(err, &refusal) {
+		t.Fatalf("a new sign-in for a removed redirect must be refused, got %v", err)
+	}
+
+	// The consent screen for the waiting request says where approving would send
+	// the person, which is the address the request holds and not whatever the
+	// client lists today.
+	view, err := s.DescribeAuthorization(ctx, person, waiting.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !view.LoopbackOnly || view.RedirectHost != "localhost:3118" {
+		t.Errorf("the screen for a request to localhost:3118 says loopback=%v host=%q, want true and localhost:3118", view.LoopbackOnly, view.RedirectHost)
+	}
+
+	// Approving it would hand a code to the removed address. It is refused, in
+	// words that say what happened and what to do, and nothing is written.
+	d, err := s.ApproveAuthorization(ctx, testPolicy, person, waiting.ID, store.RoleViewer)
+	if d != nil || !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "redirect URIs") || !strings.Contains(err.Error(), "again") {
+		t.Errorf("approving a request for a removed redirect = %+v, %v; want it refused as invalid input saying to start again", d, err)
+	}
+	if _, err := st.GetOAuthRequest(ctx, waiting.ID); err != nil {
+		t.Errorf("a refused approval must leave the request as it was: %v", err)
+	}
+
+	// The code issued before the edit is refused at the token endpoint, whether
+	// the exchange names the address or leaves it out, because the code's own
+	// address is what is checked.
+	for _, named := range []string{loopback, ""} {
+		_, err = exchange(issued, named)
+		var oe *OAuthError
+		if !errors.As(err, &oe) || oe.Code != "invalid_grant" || oe.Status != 400 || !strings.Contains(oe.Description, "sign in again") {
+			t.Errorf("exchanging a code for a removed redirect (redirect_uri %q) = %v; want 400 invalid_grant saying to sign in again", named, err)
+		}
+	}
+
+	// What the edit leaves alone. The address that stayed is approved and
+	// exchanged as before, and the connection made before the edit is still a
+	// connection: it works, and it refreshes.
+	if _, err := s.ApproveAuthorization(ctx, testPolicy, person, stayingRequest.ID, store.RoleViewer); err != nil {
+		t.Errorf("a request for an address that is still registered must still be approved: %v", err)
+	}
+	if _, err := exchange(stayingCode, ClaudeCallback); err != nil {
+		t.Errorf("a code for an address that is still registered must still be exchanged: %v", err)
+	}
+	if _, err := s.AuthenticateMCP(ctx, testPolicy, connected.AccessToken, ""); err != nil {
+		t.Errorf("an edit must not end a connection already made: %v", err)
+	}
+	if _, err := s.Token(ctx, testPolicy, ClientCredentials{ClientID: client.ClientID},
+		TokenRequest{GrantType: "refresh_token", RefreshToken: connected.RefreshToken}, ""); err != nil {
+		t.Errorf("an edit must not stop a connection already made from refreshing: %v", err)
+	}
+}
+
+// The consent screen warns that the code is going to the person's own machine,
+// where any program can listen. That is a fact about the address this request
+// sends them to: a client that also registered an https address is not made
+// safe on its loopback one by it, and is not made unsafe on the https one.
+func TestTheConsentScreenWarnsAboutTheAddressThisRequestSendsThePersonTo(t *testing.T) {
+	s, st, _ := newService(t)
+	ctx := t.Context()
+	u := addUser(t, st, "olive", store.RoleOperator, nil)
+	person := &Identity{Kind: KindUser, ID: u.ID, Name: u.Username, Role: u.Role}
+	admin := &Identity{Kind: KindUser, ID: "usr_admin", Name: "admin", Role: store.RoleAdmin}
+
+	client, _, err := s.CreateMCPClient(ctx, admin, NewMCPClient{
+		Name: "Claude", RedirectURIs: []string{ClaudeCallback, "http://localhost/callback", "http://127.0.0.1/callback"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for redirect, want := range map[string]bool{
+		ClaudeCallback:                    false,
+		"http://localhost:3118/callback":  true,
+		"http://127.0.0.1:50000/callback": true,
+	} {
+		r, err := s.BeginAuthorization(ctx, testPolicy, AuthorizeParams{ClientID: client.ClientID, RedirectURI: redirect,
+			ResponseType: "code", CodeChallenge: PKCEChallenge(verifier), CodeChallengeMethod: "S256"})
+		if err != nil {
+			t.Fatalf("starting a sign-in for %s: %v", redirect, err)
+		}
+		v, err := s.DescribeAuthorization(ctx, person, r.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.LoopbackOnly != want {
+			t.Errorf("the screen for a request to %s says loopback=%v, want %v", redirect, v.LoopbackOnly, want)
+		}
+	}
+}

@@ -7,21 +7,30 @@
 RELEASE_KEY="6dK2/jDPHR8wAjsIayrxGxL8ednKVKdEMHdRcmNU67U="
 
 # signature_required says whether a release has to carry a signature. The first
-# signed release was v1.3.6.1: everything before it, and the moving dev
-# prerelease, has none, so there is nothing to check and refusing them would
-# refuse every version published before signing began. From v1.3.6 up a release
-# that is not signed is refused, because otherwise whoever could replace the
-# binary could also delete its signature, and a script that only warns would run
-# what is left.
+# signed release was v1.3.6.1: everything before it has none, so there is
+# nothing to check and refusing them would refuse every version published before
+# signing began, and the moving dev prerelease is never signed. From v1.3.6 up a
+# release that is not signed is refused, because otherwise whoever could replace
+# the binary could also delete its signature, and a script that only warns would
+# run what is left.
+#
+# A name this cannot read as three short numbers is held to a signature as well.
+# Whoever publishes a release picks its name, so a name nobody can place must
+# never be the way out of the check. A number is compared only when it is short
+# enough to compare: the shell's [ answers one that overflows with an error
+# status, which a caller would read as "not required".
 signature_required() {
-    case "$1" in v[0-9]*.[0-9]*.[0-9]*) ;; *) return 1 ;; esac
+    [ "$1" != dev ] || return 1
+    case "$1" in v[0-9]*.[0-9]*.[0-9]*) ;; *) return 0 ;; esac
     _rest=${1#v}
     _major=${_rest%%.*}
     _rest=${_rest#*.}
     _minor=${_rest%%.*}
     _rest=${_rest#*.}
     _patch=${_rest%%[!0-9]*}
-    case "$_major$_minor$_patch" in '' | *[!0-9]*) return 1 ;; esac
+    for _n in "$_major" "$_minor" "$_patch"; do
+        case $_n in [0-9] | [0-9][0-9] | [0-9][0-9][0-9] | [0-9][0-9][0-9][0-9]) ;; *) return 0 ;; esac
+    done
     [ "$_major" -gt 1 ] || { [ "$_major" -eq 1 ] && { [ "$_minor" -gt 3 ] || { [ "$_minor" -eq 3 ] && [ "$_patch" -gt 5 ]; }; }; }
 }
 

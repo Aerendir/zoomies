@@ -510,6 +510,7 @@ func (c *Controller) createRunner(ctx context.Context, pool *store.Pool, host *s
 		defer c.lifecycleCalls.Done()
 		// Release admission before signalling completion to lifecycle waiters.
 		defer c.releaseCredentialMint(inst.ID)
+		defer c.recoverDetached("create-runner")
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lifecycleCallTimeout)
 		defer cancel()
 		c.finishCreateRunner(cctx, inst, pool, r, a, name, resources, source)
@@ -986,6 +987,7 @@ func (c *Controller) removeRunnerID(ctx context.Context, id, reason string, pool
 	go func() {
 		defer c.lifecycleCalls.Done()
 		defer c.releaseRemoval(r.ID)
+		defer c.recoverDetached("remove-runner")
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lifecycleCallTimeout)
 		defer cancel()
 		if _, err := c.finishRemoveRunner(cctx, r, reason, pool); err != nil {

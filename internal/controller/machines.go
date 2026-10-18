@@ -76,6 +76,10 @@ type machineRuntime struct {
 	sweepRetry         map[string]time.Time
 	operationCount     int
 	providerOperations map[string]int
+	// testMu holds a request for a test machine together, from the checks that
+	// read what exists to the reservation that writes. It is not mu: a pass
+	// holds that across provider calls, and a button must never wait on them.
+	testMu sync.Mutex
 	// calls tracks the provider calls a pass issued, which outlive the pass:
 	// Stop waits on it beside deliveries, because exiting under a create
 	// leaves a machine whose outcome nobody recorded.
@@ -944,6 +948,7 @@ func (c *Controller) stepMachines(ctx context.Context, env *machineEnv) {
 				c.machines.providerOperations[m.ProviderID]--
 				c.machines.mu.Unlock()
 			}()
+			defer c.recoverDetached("machine-step")
 			cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 			defer cancel()
 			c.runMachineStep(cctx, env, pr, m)

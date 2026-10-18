@@ -18,7 +18,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/controller"
@@ -113,6 +115,20 @@ type errorEnvelope struct {
 	// Errors carries per-field messages on a 422, so a form can attach each one
 	// to the input that caused it.
 	Errors []fieldError `json:"errors,omitempty"`
+}
+
+// writeCreated answers a create with 201 and a Location header naming the new
+// resource, so a client that creates one can follow the header to the same
+// resource GET without building the URL itself.
+//
+// The location is the request's own path plus the id, which is only right for
+// a collection whose members live at "<collection>/{id}"; a create whose result
+// has no GET of its own answers with writeJSON and no header instead of
+// advertising a URL that would 404. Using the request path keeps the API's
+// mount prefix correct without this package having to know it.
+func writeCreated(w http.ResponseWriter, r *http.Request, id string, v any) {
+	w.Header().Set("Location", strings.TrimSuffix(r.URL.Path, "/")+"/"+url.PathEscape(id))
+	writeJSON(w, http.StatusCreated, v)
 }
 
 // writeJSON renders v as the whole response body.

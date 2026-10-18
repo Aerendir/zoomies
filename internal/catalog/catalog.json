@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "ba0c4267",
+  "generated_from": "c010d13",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -910,8 +910,8 @@
       "category": "capacity",
       "severity": "error",
       "detection": "runtime",
-      "detects": "A background loop panicked and was restarted. The fleet keeps running, but this is a bug: the stack is in the log, and it is worth reporting.",
-      "fix": "A background loop panicked and was restarted. The fleet keeps running, but this is a bug: the stack is in the log, and it is worth reporting.",
+      "detects": "A background loop panicked and was restarted, or work that a loop hands to a goroutine of its own (a provider call, creating or removing a runner, a capacity-demand delivery, a scan) panicked and was abandoned; the entry says which. The fleet keeps running, but this is a bug: the stack is in the log, under \"controller loop panicked\" for a loop and \"detached controller work panicked\" for the rest, and it is worth reporting.",
+      "fix": "A background loop panicked and was restarted, or work that a loop hands to a goroutine of its own (a provider call, creating or removing a runner, a capacity-demand delivery, a scan) panicked and was abandoned; the entry says which. The fleet keeps running, but this is a bug: the stack is in the log, under \"controller loop panicked\" for a loop and \"detached controller work panicked\" for the rest, and it is worth reporting.",
       "verify": null,
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-pools-jobs-and-runners"
@@ -2479,8 +2479,8 @@
       "category": "capacity",
       "severity": "info",
       "detection": "runtime",
-      "detects": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* under Runner sizes on the host's card, or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
-      "fix": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* under Runner sizes on the host's card, or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
+      "detects": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* in the host's runner sizes (*Set runner sizes* in its menu, or **Edit** on the **Runner sizes** block under the card's **Details**), or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
+      "fix": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* in the host's runner sizes (*Set runner sizes* in its menu, or **Edit** on the **Runner sizes** block under the card's **Details**), or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
       "verify": "The entry leaves the list once the hosts' profiles allow in-memory folders or the pool stops asking for them.",
       "status_sentence": "Some machines keep runners' working files on disk by choice, so runners placed there are not sped up.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",

@@ -26,13 +26,19 @@ export const SUGGESTED_CEILING = 8;
 /** Processors are shared between machines, so a node offers this many per core. */
 const CPU_SHARING = 2;
 
+/** The least a node keeps back for the hypervisor, whatever a fifth of it comes to. */
+const NODE_RESERVE_FLOOR_MB = 2048;
+
 /**
  * Memory kept back for the hypervisor itself: a fifth of the node, and never
  * less than two gigabytes. A node filled to the brim swaps, and every machine
  * on it slows down with it.
  */
 export function nodeReserveMb(memoryMb: number): number {
-  return Math.min(Math.max(2048, Math.round(memoryMb * 0.2)), Math.max(memoryMb - 1024, 0));
+  return Math.min(
+    Math.max(NODE_RESERVE_FLOOR_MB, Math.round(memoryMb * 0.2)),
+    Math.max(memoryMb - 1024, 0),
+  );
 }
 
 /** How many machines of this size one node holds, after its reserve. */
@@ -106,27 +112,35 @@ export function recommendLimits(
     (total, n) => total + machinesPerNode({ cpus: n.cpus ?? 0, memoryMb: n.memory_mb ?? 0 }, size),
     0,
   );
-  const where = sized.length === 1 ? `node ${sized[0]?.value}` : `${sized.length} nodes`;
+  const one = sized.length === 1;
+  const where = one ? `node ${sized[0]?.value}` : `${sized.length} nodes`;
   const basis =
     size.source === 'default'
       ? ` (a guess, because no template size was given: ${machine})`
       : ` at ${machine}`;
+  // The reserve as the arithmetic applies it. An operator checks one against
+  // the other, and "a fifth of its memory" was wrong for every node under 10 GB,
+  // where the two gigabytes are what is kept.
+  const kept = `after keeping memory for Proxmox (at least ${gigabytes(NODE_RESERVE_FLOOR_MB)}, or a fifth of ${one ? 'its' : "each node's"} memory, whichever is larger)`;
   if (fits < 1) {
     return {
       max: 1,
       min: 1,
       fits,
-      reason: `${capitalise(where)} cannot hold even one machine${basis} after keeping a fifth of its memory for Proxmox. Give the machine less, or choose a larger node.`,
+      reason: `${capitalise(where)} cannot hold even one machine${basis} ${kept}. Give the machine less, or choose a larger node.`,
     };
   }
   const max = Math.min(fits, SUGGESTED_CEILING);
   const min = 1;
   const capped = fits > max ? `, held to ${max} as a first ceiling` : '';
+  // The figure is from what a node has, not from what is free on it: the
+  // cluster is not asked what its other guests use, so a shared node holds fewer.
+  const counted = `That counts ${one ? "the node's" : "each node's"} total memory, not what other guests are using, so a node shared with other guests holds fewer.`;
   return {
     max,
     min,
     fits,
-    reason: `${capitalise(where)} can hold ${fits} machine${fits === 1 ? '' : 's'}${basis}, after keeping a fifth of its memory for Proxmox${capped}. One stays warm so the first job after a quiet spell does not wait for a clone.`,
+    reason: `${capitalise(where)} can hold ${fits} machine${fits === 1 ? '' : 's'}${basis}, ${kept}${capped}. ${counted} One stays warm so the first job after a quiet spell does not wait for a clone.`,
   };
 }
 

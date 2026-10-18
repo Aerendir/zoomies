@@ -26,7 +26,7 @@ assistant through MCP.
 
 <p class="actions" markdown>
 [Run your first job :material-arrow-right:](quickstart.md){ .md-button .md-button--primary }
-[Try the live demo](https://demo.zoomies.sh/){ .md-button }
+[Try the live demo](https://demo.zoomies.sh/){ .md-button target=_blank rel="noopener" }
 </p>
 
 <div class="zoomies-install" markdown>
@@ -73,10 +73,10 @@ Size capacity, measure queue waits, tune resources and automate operations.
 
 </div>
 
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
 
-Watch jobs, capacity and scheduler decisions update in place. [Explore the web UI](ui.md).
+Watch jobs, capacity and scheduler decisions update in place, shown here in the Classic style. [Explore the web UI](ui.md).
 { .zoomies-shot-caption }
 
 ## Ask your fleet. Understand your builds.
