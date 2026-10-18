@@ -25,7 +25,6 @@
     listEliOpportunities,
     listEliRepairs,
     listJobs,
-    stopEliAutomaticRepairs,
   } from '$lib/api/client';
   import type { Schemas } from '$lib/api/types';
   import Button from '$lib/components/Button.svelte';
@@ -34,9 +33,10 @@
   import { router } from '$lib/router';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
-  import { stoppedWords, type StopChoice } from '$lib/repairs/automatic';
+  import type { StopChoice } from '$lib/repairs/automatic';
   import type { CaseView } from '$lib/repairs/case';
   import { RUNNING_LIMIT, offerCases } from '$lib/repairs/hub';
+  import { stopAutomatic } from '$lib/repairs/stop';
   import { parseTarget, targetHref } from '$lib/repairs/workspace';
   import ActiveRepairs from '$lib/repairs/ActiveRepairs.svelte';
   import AutomaticRepairs from '$lib/repairs/AutomaticRepairs.svelte';
@@ -181,34 +181,24 @@
 
   /**
    * Stops them, and says what became of each. When nothing could be stopped the
-   * dialog stays, with the reason, so the same press is another try; when some
-   * were, it closes and the toast names the ones that were not.
+   * dialog stays, with the reason, so the same press is another try.
    */
   async function stop(then: StopChoice): Promise<void> {
     if (stopBusy) return;
     stopBusy = true;
     stopError = '';
-    try {
-      const { results } = await stopEliAutomaticRepairs({ repos: stopping, then });
-      const outcome = stoppedWords(results, then);
-      if (outcome.tone === 'error' && !results.some((r) => r.changed)) {
-        stopError = outcome.message;
-        return;
-      }
-      stopOpen = false;
-      if (outcome.tone === 'error') toasts.error(outcome.title, outcome.message);
-      else toasts.success(outcome.title, outcome.message);
-      await refresh();
-      // The button that opened the dialog went with its row, and focus with it.
-      await tick();
-      if (!document.activeElement || document.activeElement === document.body) {
-        document.getElementById('page-heading')?.focus();
-      }
-    } catch (cause) {
-      stopError =
-        cause instanceof ApiError ? cause.message : 'Could not stop automatic repairs. Try again.';
-    } finally {
-      stopBusy = false;
+    const result = await stopAutomatic(stopping, then);
+    stopBusy = false;
+    if (!result.done) {
+      stopError = result.error;
+      return;
+    }
+    stopOpen = false;
+    await refresh();
+    // The button that opened the dialog went with its row, and focus with it.
+    await tick();
+    if (!document.activeElement || document.activeElement === document.body) {
+      document.getElementById('page-heading')?.focus();
     }
   }
 

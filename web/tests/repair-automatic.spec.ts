@@ -12,8 +12,10 @@ import { expect, test } from '@playwright/test';
 import {
   automaticPolicy,
   automaticRow,
+  keptCase,
   linkedAs,
   mockRepairApi,
+  repairRow,
   settingsWithAutomatic,
 } from './support/repairs';
 
@@ -315,5 +317,157 @@ test.describe('stopping', () => {
     await expect(page.getByText('Already stopped')).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Automatic repairs' })).toHaveCount(0);
+  });
+});
+
+test.describe('the attempt page', () => {
+  const automaticAttempt = (over: Parameters<typeof repairRow>[0] = {}) =>
+    repairRow({
+      id: 'rep-auto',
+      trigger: 'automatic',
+      github_login: '',
+      user_id: '',
+      state: 'checks_failed',
+      message: 'Checks failed on Eli’s commit b7d3e91.',
+      details: { case: keptCase() },
+      ...over,
+    });
+  const card = (page: import('@playwright/test').Page) =>
+    page.getByRole('region', { name: 'Automatic repairs on acme/widgets' });
+
+  test('says an automatic repair was started by the repository’s policy', async ({ page }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      attempts: { 'rep-auto': automaticAttempt() },
+      automatic: [automaticRow({ used: 3 })],
+    });
+    await page.goto('/repairs/rep-auto');
+    const facts = page.getByRole('complementary', { name: 'This attempt' });
+    await expect(facts).toContainText('Started by');
+    await expect(facts).toContainText('Automatic repairs, by the repository’s policy');
+  });
+
+  test('shows an administrator where the policy stands, and stops it from the repair', async ({
+    page,
+  }) => {
+    const { calls } = await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      attempts: { 'rep-auto': automaticAttempt() },
+      automatic: [automaticRow({ used: 3 })],
+    });
+    await page.goto('/repairs/rep-auto');
+    await expect(card(page)).toContainText('Automatic repairs are on');
+    await expect(card(page)).toContainText('Paid by Team provider (team-model)');
+    await expect(card(page)).toContainText('3 of 5 attempts used in the last 24 hours');
+    await expect(card(page).getByRole('link', { name: 'Policy in setup' })).toHaveAttribute(
+      'href',
+      '/repairs/setup?repo=acme%2Fwidgets',
+    );
+
+    await card(page).getByRole('button', { name: 'Stop automatic repairs' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Stop automatic repairs' });
+    await dialog.getByRole('button', { name: 'Stop automatic repairs' }).click();
+    await expect(page.getByText('Stopped automatic repairs on acme/widgets')).toBeVisible();
+    expect(calls.stops).toEqual([{ repos: ['acme/widgets'], then: 'ask_first' }]);
+    await expect(card(page)).toContainText('no longer set to repair automatically');
+    await expect(card(page).getByRole('button', { name: 'Stop automatic repairs' })).toHaveCount(0);
+  });
+
+  test('puts keyboard focus on the card when the button that was pressed has left it', async ({
+    page,
+  }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      attempts: { 'rep-auto': automaticAttempt() },
+      automatic: [automaticRow()],
+    });
+    await page.goto('/repairs/rep-auto');
+    await card(page).getByRole('button', { name: 'Stop automatic repairs' }).click();
+    await page
+      .getByRole('dialog', { name: 'Stop automatic repairs' })
+      .getByRole('button', { name: 'Stop automatic repairs' })
+      .click();
+    await expect(card(page)).toContainText('no longer set to repair automatically');
+    await expect(
+      card(page).getByRole('heading', { name: 'Automatic repairs on acme/widgets' }),
+    ).toBeFocused();
+  });
+
+  test('says when stopping would also stop this repair, if it is still going', async ({ page }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      attempts: {
+        'rep-auto': automaticAttempt({
+          state: 'working',
+          message: '',
+          details: { stage: 'prepare_fix', case: keptCase() },
+        }),
+      },
+      automatic: [automaticRow({ running: 1 })],
+    });
+    await page.goto('/repairs/rep-auto');
+    await expect(card(page)).toContainText(
+      'Stopping now also stops this repair if it has not pushed yet.',
+    );
+  });
+
+  test('says a repository that stopped being automatic is no longer, and links to setup', async ({
+    page,
+  }) => {
+    await mockRepairApi(page, {
+      settings: {
+        ...linkedAs('dana'),
+        policies: [automaticPolicy('acme/widgets', { automatic: false, ask_first: true })],
+      },
+      attempts: { 'rep-auto': automaticAttempt() },
+      automatic: [],
+    });
+    await page.goto('/repairs/rep-auto');
+    await expect(card(page)).toContainText('no longer set to repair automatically');
+    await expect(card(page).getByRole('link', { name: 'Policy in setup' })).toBeVisible();
+  });
+
+  test('leaves the rest of the page standing when the status cannot be read', async ({ page }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      attempts: { 'rep-auto': automaticAttempt() },
+      automatic: { status: 500, message: 'The overview could not be read.' },
+    });
+    await page.goto('/repairs/rep-auto');
+    await expect(card(page)).toContainText(
+      'Could not read the repository’s automatic repair status',
+    );
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'This attempt' })).toContainText(
+      'Started by',
+    );
+  });
+
+  test('shows a repair somebody asked for no card and reads nothing about automation', async ({
+    page,
+  }) => {
+    const { calls } = await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      attempts: { 'rep-req': repairRow({ id: 'rep-req', trigger: 'mention', state: 'failed' }) },
+      automatic: [automaticRow()],
+    });
+    await page.goto('/repairs/rep-req');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+    await expect(page.getByRole('complementary', { name: 'This attempt' })).not.toContainText(
+      'Started by',
+    );
+    expect(calls.automaticReads).toBe(0);
+  });
+
+  test('does not read the overview for someone who is not an administrator', async ({ page }) => {
+    const { calls } = await mockRepairApi(page, {
+      role: 'viewer',
+      attempts: { 'rep-auto': automaticAttempt() },
+    });
+    await page.goto('/repairs/rep-auto');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+    expect(calls.automaticReads).toBe(0);
   });
 });

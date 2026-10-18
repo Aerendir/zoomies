@@ -15,8 +15,8 @@
 -->
 <script lang="ts">
   import { ExternalLink } from '@lucide/svelte';
-  import { untrack } from 'svelte';
-  import { ApiError, getEliRepair } from '$lib/api/client';
+  import { tick, untrack } from 'svelte';
+  import { ApiError, getEliAutomaticRepairs, getEliRepair } from '$lib/api/client';
   import type { Schemas } from '$lib/api/types';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -26,14 +26,18 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { shortId } from '$lib/format';
   import { router } from '$lib/router';
+  import { session } from '$lib/state/session.svelte';
   import { repairStatus } from '$lib/status';
   import { providerWords, requestedBy } from '$lib/repairs/attempt';
+  import type { StopChoice } from '$lib/repairs/automatic';
   import { caseFromSnapshot } from '$lib/repairs/case';
   import { isActive } from '$lib/repairs/history';
   import { REPAIR_TRACK, trackIndex } from '$lib/repairs/journey';
   import { safeHttpUrl } from '$lib/repairs/links';
+  import { stopAutomatic } from '$lib/repairs/stop';
   import AttemptFacts from '$lib/repairs/AttemptFacts.svelte';
   import AttemptTimeline from '$lib/repairs/AttemptTimeline.svelte';
+  import AutomaticCard from '$lib/repairs/AutomaticCard.svelte';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
   import NextSteps from '$lib/repairs/NextSteps.svelte';
@@ -41,6 +45,7 @@
   import OutcomeBanner from '$lib/repairs/OutcomeBanner.svelte';
   import ProgressTrack from '$lib/repairs/ProgressTrack.svelte';
   import RepairStatusBadge from '$lib/repairs/RepairStatusBadge.svelte';
+  import StopAutomaticDialog from '$lib/repairs/StopAutomaticDialog.svelte';
   import TechnicalDetails from '$lib/repairs/TechnicalDetails.svelte';
 
   /** How often a repair that is still going is read again. */
@@ -62,6 +67,22 @@
   const view = $derived(repair ? caseFromSnapshot(repair) : null);
   const pullLink = $derived(safeHttpUrl(view?.pullUrl));
   const runLink = $derived(safeHttpUrl(view?.runUrl));
+
+  // An automatic repair has no owner, so only an administrator can open one, and only
+  // an administrator can read the policy that started it.
+  const automatic = $derived(repair?.trigger === 'automatic' && session.can('admin'));
+  let overview = $state<Schemas['EliAutomaticRepository'][] | null>(null);
+  let overviewFailed = $state(false);
+  let overviewFor = '';
+  let card = $state<AutomaticCard | null>(null);
+  let stopOpen = $state(false);
+  let stopBusy = $state(false);
+  let stopError = $state('');
+  const repository = $derived(
+    repair
+      ? overview?.find((row) => row.repo.toLowerCase() === repair!.repo.toLowerCase())
+      : undefined,
+  );
 
   const spoken = $derived.by(() => {
     if (phase === 'missing') return 'This repair is not in your history.';
@@ -110,6 +131,35 @@
     }
   }
 
+  async function readOverview(): Promise<void> {
+    const mine = overviewFor;
+    try {
+      const answer = await getEliAutomaticRepairs();
+      if (mine !== overviewFor) return;
+      overview = answer.repositories;
+      overviewFailed = false;
+    } catch {
+      if (mine === overviewFor) overviewFailed = true;
+    }
+  }
+
+  async function stopHere(then: StopChoice): Promise<void> {
+    if (!repair || stopBusy) return;
+    stopBusy = true;
+    stopError = '';
+    const result = await stopAutomatic([repair.repo], then);
+    stopBusy = false;
+    if (!result.done) {
+      stopError = result.error;
+      return;
+    }
+    stopOpen = false;
+    await readOverview();
+    await tick();
+    // The button that was pressed left the card with the state it belonged to.
+    if (!document.activeElement || document.activeElement === document.body) card?.focus();
+  }
+
   function stop(): void {
     token++;
     inFlight?.abort();
@@ -135,6 +185,19 @@
 
   // Leaving the page ends the polling and any read in flight.
   $effect(() => stop);
+
+  // The policy is read once for each automatic repair the page shows, and not at all
+  // for any other.
+  $effect(() => {
+    const wanted = automatic && repair ? repair.id : '';
+    if (wanted === overviewFor) return;
+    overviewFor = wanted;
+    untrack(() => {
+      overview = null;
+      overviewFailed = false;
+      if (wanted) void readOverview();
+    });
+  });
 
   $effect(() => {
     const onVisible = () => {
@@ -239,9 +302,34 @@
     </div>
     <aside class="side" aria-label="This attempt">
       <AttemptFacts {repair} {view} />
+      {#if automatic}
+        <AutomaticCard
+          bind:this={card}
+          repo={repair.repo}
+          {repository}
+          loaded={overview !== null}
+          failed={overviewFailed}
+          unpushed={repair.state === 'queued' || repair.state === 'working'}
+          onstop={() => {
+            stopError = '';
+            stopOpen = true;
+          }}
+          onretry={() => {
+            overviewFailed = false;
+            void readOverview();
+          }}
+        />
+      {/if}
       {#if !active}<AttemptTimeline {repair} />{/if}
     </aside>
   </div>
+  <StopAutomaticDialog
+    bind:open={stopOpen}
+    repos={[repair.repo]}
+    busy={stopBusy}
+    error={stopError}
+    onconfirm={(then) => void stopHere(then)}
+  />
 {/if}
 
 <style>

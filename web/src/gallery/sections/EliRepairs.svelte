@@ -29,6 +29,7 @@
   import AutomaticRepairs from '$lib/repairs/AutomaticRepairs.svelte';
   import AttemptFacts from '$lib/repairs/AttemptFacts.svelte';
   import AttemptTimeline from '$lib/repairs/AttemptTimeline.svelte';
+  import AutomaticCard from '$lib/repairs/AutomaticCard.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
   import NextSteps from '$lib/repairs/NextSteps.svelte';
@@ -319,6 +320,13 @@
   const PUSHED = 'b7d3e9150c2a4f8e6d1b0a93c5e7f2a4d6b8c0e1';
   const queued = repair({ state: 'queued' });
   const preparing = repair({ details: { stage: 'prepare_fix', model: 'claude-sonnet' } });
+  // A repair the repository's policy started, which says so in its facts.
+  const autoAttempt = repair({
+    trigger: 'automatic',
+    github_login: '',
+    user_id: '',
+    details: { stage: 'prepare_fix', model: 'claude-sonnet' },
+  });
   const watching = repair({
     state: 'checking',
     commit_sha: PUSHED,
@@ -817,6 +825,62 @@
       <div data-gallery="facts-finished">
         <AttemptFacts repair={passed} view={withPull} />
         <AttemptTimeline repair={passed} />
+      </div>
+    </div>
+
+    <h3>An automatic repair's policy</h3>
+    <div class="pair">
+      <div class="stack" data-gallery="automatic-cards-a">
+        <AutomaticCard
+          repo="eyupio/zoomies"
+          repository={automaticRows[2]}
+          loaded={true}
+          failed={false}
+          unpushed={true}
+          onstop={noop}
+          onretry={noop}
+        />
+        <AutomaticCard
+          repo="eyupio/site"
+          repository={automaticRows[0]}
+          loaded={true}
+          failed={false}
+          unpushed={false}
+          onstop={noop}
+          onretry={noop}
+        />
+        <div data-gallery="facts-automatic">
+          <AttemptFacts repair={autoAttempt} view={withPull} />
+        </div>
+      </div>
+      <div class="stack" data-gallery="automatic-cards-b">
+        <AutomaticCard
+          repo="eyupio/zoomies"
+          repository={undefined}
+          loaded={true}
+          failed={false}
+          unpushed={false}
+          onstop={noop}
+          onretry={noop}
+        />
+        <AutomaticCard
+          repo="eyupio/zoomies"
+          repository={undefined}
+          loaded={true}
+          failed={true}
+          unpushed={false}
+          onstop={noop}
+          onretry={noop}
+        />
+        <AutomaticCard
+          repo="eyupio/zoomies"
+          repository={undefined}
+          loaded={false}
+          failed={false}
+          unpushed={false}
+          onstop={noop}
+          onretry={noop}
+        />
       </div>
     </div>
 
