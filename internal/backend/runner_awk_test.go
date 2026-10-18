@@ -16,7 +16,10 @@ import (
 // lines after one longer than 4 KiB. The package list is where this is decided,
 // and putting mawk back would read as a tidy-up.
 func TestEveryRunnerImageFamilyInstallsGawkForTheBuildLog(t *testing.T) {
-	script := readFile(t, filepath.Join("..", "..", "deploy", "runner-packages.sh"))
+	// A Windows checkout gives the script CRLF line endings, and the Windows job
+	// in CI runs this package. The branches are found by the newline before
+	// their label, so the endings are made the shell's own first.
+	script := strings.ReplaceAll(readFile(t, filepath.Join("..", "..", "deploy", "runner-packages.sh")), "\r\n", "\n")
 	for _, family := range []string{"apt", "dnf"} {
 		_, branch, ok := strings.Cut(script, "\n  "+family+")\n")
 		if !ok {
