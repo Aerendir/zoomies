@@ -115,6 +115,24 @@ test('browser-chrome colours match the actual palette tokens in both styles', ()
   }
 });
 
+// Every other test here reads the Mission Control colours back, so a bootstrap
+// that gave each look Mission Control's ground left the suite green while a
+// Classic operator's phone drew its address bar in the wrong navy.
+test('Classic keeps its own browser-chrome colours in every colour mode', () => {
+  for (const mode of ['light', 'dark', 'system', null]) {
+    const { attrs, tags } = boot('classic', mode);
+    assert.equal(attrs.has('data-ui-style'), false, `${mode}: Classic names no style`);
+    for (const tag of tags) {
+      const which = tag.data.get('data-theme-colour');
+      assert.equal(
+        tag.data.get('content'),
+        tag.data.get('data-classic-colour'),
+        `${mode}: the ${which} tag`,
+      );
+    }
+  }
+});
+
 // The picture runner (tests/support/screenshots.mjs) photographs one look per
 // pass. An empty browser is dark Mission Control whatever the system says, so a
 // pass has to store the look it means, and this holds it to the bootstrap it relies

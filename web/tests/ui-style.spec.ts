@@ -19,10 +19,15 @@ test('style selection keeps colour mode, logo, dog vocabulary and saved grid pre
   await goto(page, '/settings/appearance', 'Appearance');
   const saved = await page.evaluate(() => localStorage.getItem('zoomies.prefs'));
   await expect(page.getByLabel('Logo style', { exact: true })).toHaveValue('circle');
+  // The browser chrome (a phone's address bar) takes the page's own ground, and
+  // each style has its own: the dark theme is pinned, so its tag is the one in use.
+  const chrome = page.locator('meta[data-theme-colour="dark"]');
+  await expect(chrome).toHaveAttribute('content', '#0a0b0d');
   const mission = page.getByRole('radio', { name: /^Mission Control/ });
   await mission.check();
   await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
   await expect(root(page)).toHaveAttribute('data-theme', 'dark');
+  await expect(chrome).toHaveAttribute('content', '#090e18');
   await expect(mission).toBeFocused();
   expect(await page.evaluate(() => localStorage.getItem('zoomies.prefs'))).toBe(saved);
   await expect(
@@ -39,6 +44,7 @@ test('style selection keeps colour mode, logo, dog vocabulary and saved grid pre
   await page.getByRole('radio', { name: /^Classic/ }).check();
   await expect(root(page)).not.toHaveAttribute('data-ui-style');
   await expect(root(page)).toHaveAttribute('data-theme', 'dark');
+  await expect(chrome).toHaveAttribute('content', '#0a0b0d');
   expect(await page.evaluate(() => localStorage.getItem('zoomies.ui-style'))).toBe('classic');
   await page.getByRole('button', { name: 'Reset visual style to Mission Control' }).click();
   await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
