@@ -112,18 +112,29 @@ func BenchmarkWebhookJob(b *testing.B) {
 	})
 }
 
-// benchPolled is n queued jobs as a sweep finds them, numbered from first and
-// asking for the pools in turn.
-func benchPolled(first, n int64, poolCount int) []github.QueuedJob {
+// benchRepo is the repository job number id belongs to when a sweep's jobs are
+// spread over n of them in turn. One repository is the one the other benchmarks
+// have always used.
+func benchRepo(id int64, n int) string {
+	if n <= 1 {
+		return "acme/widgets"
+	}
+	return fmt.Sprintf("acme/repo-%03d", int(id)%n)
+}
+
+// benchPolled is n queued jobs as a sweep finds them, numbered from first,
+// asking for the pools in turn and spread over repoCount repositories in turn.
+func benchPolled(first, n int64, poolCount, repoCount int) []github.QueuedJob {
 	queuedAt := time.Now().Add(-time.Minute)
 	jobs := make([]github.QueuedJob, n)
 	for i := range jobs {
 		id := first + int64(i)
+		repo := benchRepo(id, repoCount)
 		jobs[i] = github.QueuedJob{
 			ID: id, RunID: 9_000_000_000 + id/3, RunNumber: 1000 + id/3,
-			Repo: "acme/widgets", WorkflowName: "CI", JobName: "build (linux, x64)",
+			Repo: repo, WorkflowName: "CI", JobName: "build (linux, x64)",
 			Labels:   []string{"self-hosted", "linux", "x64", benchLabel(int(id) % poolCount)},
-			QueuedAt: queuedAt, HTMLURL: "https://github.com/acme/widgets/actions/runs/9000000000",
+			QueuedAt: queuedAt, HTMLURL: "https://github.com/" + repo + "/actions/runs/9000000000",
 			Status: "queued",
 		}
 	}
@@ -138,13 +149,21 @@ func BenchmarkIngestQueuedJobs(b *testing.B) {
 	// found again because it is still waiting. This is what the poller costs
 	// on every round for as long as a queue lasts.
 	b.Run("known", func(b *testing.B) {
-		for _, tc := range []struct{ jobs, pools int }{
-			{10, 20}, {100, 20}, {500, 20}, {100, 4}, {100, 100},
+		// repos is how many repositories the jobs are spread over; the sweeps
+		// that do not say are of one repository, as they always were. The jobs
+		// of a repository share the answer to which installation covers it.
+		for _, tc := range []struct{ jobs, pools, repos int }{
+			{10, 20, 1}, {100, 20, 1}, {500, 20, 1}, {100, 4, 1}, {100, 100, 1},
+			{100, 20, 10}, {100, 20, 100},
 		} {
-			b.Run(fmt.Sprintf("jobs=%d/pools=%d", tc.jobs, tc.pools), func(b *testing.B) {
+			name := fmt.Sprintf("jobs=%d/pools=%d", tc.jobs, tc.pools)
+			if tc.repos > 1 {
+				name += fmt.Sprintf("/repos=%d", tc.repos)
+			}
+			b.Run(name, func(b *testing.B) {
 				h := newHarness(b)
 				inst, pools := benchPools(h, tc.pools)
-				jobs := benchPolled(1, int64(tc.jobs), tc.pools)
+				jobs := benchPolled(1, int64(tc.jobs), tc.pools, tc.repos)
 				if left, err := h.c.ingestQueuedJobs(h.ctx, inst, jobs); err != nil || left != tc.jobs {
 					b.Fatalf("the first sweep left %d of %d jobs waiting, err = %v", left, tc.jobs, err)
 				}
@@ -152,6 +171,9 @@ func BenchmarkIngestQueuedJobs(b *testing.B) {
 				// count above cannot say the pools were found.
 				benchClaimed(b, h, 1, pools)
 				benchClaimed(b, h, int64(tc.jobs), pools)
+				if job, err := h.st.GetJobByGitHubID(h.ctx, int64(tc.jobs)); err != nil || job.InstallationID != inst.ID || job.Repo != jobs[len(jobs)-1].Repo {
+					b.Fatalf("the last job was attributed to %+v, err = %v; want installation %s and repository %s", job, err, inst.ID, jobs[len(jobs)-1].Repo)
+				}
 
 				b.ReportAllocs()
 				for b.Loop() {
@@ -171,7 +193,7 @@ func BenchmarkIngestQueuedJobs(b *testing.B) {
 		inst, pools := benchPools(h, poolCount)
 		next := int64(1)
 		sweep := func() (int, error) {
-			batch := benchPolled(next, jobs, poolCount)
+			batch := benchPolled(next, jobs, poolCount, 1)
 			next += jobs
 			return h.c.ingestQueuedJobs(h.ctx, inst, batch)
 		}
