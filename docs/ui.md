@@ -13,8 +13,10 @@ failed PR checks. Everything on the fleet pages is live (every page updates in
 place from the controller's event stream, so you never have to press refresh,
 though the same button sits at the top of each one for when you want to be sure)
 and nothing is reachable from the UI that is not reachable from the
-[REST API](api-surface.md). Light and dark follow your system until you
-choose one, and the screenshots below follow this site's. Start with
+[REST API](api-surface.md). A browser that has chosen nothing opens in
+Mission Control and the dark theme; **Settings → Appearance** changes either,
+including to follow your system. The screenshots below follow this site's light
+or dark and show the Classic style. Start with
 [Signing in](#signing-in), [Overview](#overview), [Jobs](#jobs),
 [Ask Eli](#ask-eli) or [Eli repairs](#eli-repairs).
 
@@ -50,9 +52,12 @@ above the form, the introductory copy is hidden and the links move below it.
 
 ## Overview
 
-The page that has to earn the second monitor. It opens on the activity
-matrix, showing today by the hour: a row of twenty-four squares coloured by
-what finished, greener as more jobs finish and red the moment any fail. Widen
+The page that has to earn the second monitor. Mission Control, the default,
+puts problems, unread failures and the four numbers ahead of history; this
+section and its screenshots describe the Classic order, which opens on the
+activity matrix, showing today by the hour: a row of twenty-four squares
+coloured by what finished, greener as more jobs finish and red the moment
+any fail. Widen
 it to the year and the same band becomes the fleet's days laid out the way a
 contribution graph is; a column per week, a row per weekday, the month named
 above the week it begins in. Hover a square and it says everything
@@ -119,8 +124,8 @@ runner took it, and when it finishes, to how long the job waited for a runner
 and how long it ran. Only this fleet's own jobs count; a job on a hosted
 runner elsewhere in the organisation neither ticks a step nor retires the list.
 
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
 
 ![The activity matrix with a day selected: the day's figures, its outcomes hour by hour, and links to its jobs](screenshots/activity-dark.webp#only-dark){ .zoomies-shot }
 ![The activity matrix with a day selected: the day's figures, its outcomes hour by hour, and links to its jobs](screenshots/activity-light.webp#only-light){ .zoomies-shot }
@@ -1092,11 +1097,12 @@ Read-only monitoring from a phone is a stated requirement, so it is tested. The
 navigation moves to the bottom edge, the tiles stack, and everything still
 updates in place.
 
-Every grid stays the table it is on a desktop, one line per runner, scrolling
-sideways inside its own frame to the columns that do not fit, never taking the
-page with it. If you would rather read a row downwards, the **Cards / Rows**
-toggle above each grid gives every value a line of its own, with nothing cut
-off; **Settings → Appearance** sets which of the two every grid starts in.
+In Mission Control, the default, a grid starts as cards on a phone: every value
+on a line of its own, with nothing cut off. In Classic every grid stays the
+table it is on a desktop, one line per runner, scrolling sideways inside its own
+frame to the columns that do not fit, never taking the page with it. The
+**Cards / Rows** toggle above each grid switches between the two;
+**Settings → Appearance** sets which of them every grid starts in.
 
 ![The Overview: four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
 ![The Overview: four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
