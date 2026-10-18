@@ -202,7 +202,7 @@ func (s *Server) revertShareAfterMemoryKill(ctx context.Context, now time.Time) 
 			continue
 		}
 		since := rec.row.CreatedAt
-		stats, err := s.ctrl.Store().JobStats(ctx, store.JobFilter{Since: &since, PoolIDs: []string{rec.row.TargetID}}, []string{store.GroupByPool})
+		stats, err := s.ctrl.Store().JobStatsOf(ctx, store.JobFilter{Since: &since, PoolIDs: []string{rec.row.TargetID}}, []string{store.GroupByPool}, store.MeasurePeaks)
 		if err != nil {
 			return fmt.Errorf("reading what the pool's jobs have done since the change: %w", err)
 		}

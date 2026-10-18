@@ -338,7 +338,7 @@ func (c *Controller) tmpfsAdviceProblems(ctx context.Context, out *[]Problem) er
 		return nil
 	}
 	since := now.Add(-tmpfsAdviceWindow)
-	stats, err := c.st.JobStats(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool, store.GroupByHost})
+	stats, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool, store.GroupByHost}, store.MeasureCounts)
 	if err != nil {
 		return fmt.Errorf("counting recent jobs: %w", err)
 	}

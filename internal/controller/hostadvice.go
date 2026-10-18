@@ -43,7 +43,7 @@ const (
 // within the window.
 func (c *Controller) poolsUnderPressure(ctx context.Context) (map[string]bool, error) {
 	since := c.Now().Add(-pressureWindow)
-	res, err := c.st.JobStats(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool})
+	res, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool}, store.MeasureQueueWait)
 	if err != nil {
 		return nil, fmt.Errorf("reading how long jobs waited: %w", err)
 	}
@@ -205,7 +205,7 @@ func (c *Controller) hostSizeKillsJobs(ctx context.Context, reaching []*store.Po
 		return "", nil
 	}
 	since := c.Now().Add(-minimumEvidenceWindow)
-	stats, err := c.st.JobStats(ctx, store.JobFilter{Since: &since, PoolIDs: ids}, []string{store.GroupByPool})
+	stats, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since, PoolIDs: ids}, []string{store.GroupByPool}, store.MeasurePeaks)
 	if err != nil {
 		return "", fmt.Errorf("reading what jobs used: %w", err)
 	}

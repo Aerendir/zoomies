@@ -37,7 +37,7 @@ func (c *Controller) poolQueueWaitProblems(ctx context.Context, out *[]Problem) 
 		return fmt.Errorf("listing pools: %w", err)
 	}
 	since := c.Now().Add(-pressureWindow)
-	stats, err := c.st.JobStats(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool})
+	stats, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool}, store.MeasureQueueWait)
 	if err != nil {
 		return fmt.Errorf("reading how long jobs waited: %w", err)
 	}
