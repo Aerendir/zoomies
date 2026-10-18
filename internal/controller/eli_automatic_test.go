@@ -1,6 +1,10 @@
 package controller
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -331,6 +335,147 @@ func TestAStoppedRepositoryBlocksItsQueuedAutomaticRepair(t *testing.T) {
 			s.h.c.runEliRepair(s.h.ctx, row)
 			if row.State != "blocked" || s.fake.commits != 0 || len(s.fake.comments) != 0 {
 				t.Fatalf("a repair queued before the stop ran: state %q, %d commits, comments %q", row.State, s.fake.commits, s.fake.comments)
+			}
+			// Ask me first leaves repairs on, so "disabled" would be a lie the
+			// attempt page repeats beside a card that says the opposite.
+			want := "were stopped for this repository"
+			if then == EliStopOff {
+				want = "disabled"
+			}
+			if !strings.Contains(row.Message, want) {
+				t.Errorf("a repair blocked by a stop to %s says %q, want it to mention %q", then, row.Message, want)
+			}
+		})
+	}
+}
+
+// Lowering the limit leaves more attempts in the window than the limit allows. A
+// place frees when the count drops below the limit, which is when the attempt
+// that many from the oldest leaves the window, not the oldest itself: telling an
+// administrator "tomorrow at nine" and then still refusing at nine is worse than
+// no time at all.
+func TestTheAutomaticOverviewSaysWhenAPlaceFreesAfterTheLimitWasLowered(t *testing.T) {
+	start := time.Now().Truncate(time.Millisecond)
+	var moved atomic.Int64
+	h := newHarnessAt(t, func() time.Time { return start.Add(time.Duration(moved.Load())) })
+	inst := h.installation()
+	team := installationProvider(t, h, "Team", true)
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/busy", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true, DailyLimit: 10})
+	for i := range 3 {
+		if _, err := h.st.EnqueueEliRepair(h.ctx, &store.EliRepair{DedupKey: fmt.Sprintf("comment:acme/busy:%d", i), Repo: "acme/busy", InstallationID: inst.ID, Trigger: "mention", PullNumber: 1, HeadSHA: "abc"}, 10); err != nil {
+			t.Fatal(err)
+		}
+		moved.Add(int64(time.Hour))
+	}
+	savePolicy(t, h, store.EliRepairPolicy{Repo: "acme/busy", InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true, DailyLimit: 1})
+
+	rows, _, err := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("expected three attempts, got %d (%v)", len(rows), err)
+	}
+	newest := rows[0]
+	busy := overviewOf(t, h)["acme/busy"]
+	if busy.Used != 3 || busy.DailyLimit != 1 {
+		t.Fatalf("the allowance reads %d of %d, want 3 of 1", busy.Used, busy.DailyLimit)
+	}
+	// Used 3, limit 1: the count must fall to 0, so all three must leave.
+	if busy.NextFreeAt == nil || busy.NextFreeAt.UnixMilli() != newest.CreatedAt.Add(24*time.Hour).UnixMilli() {
+		t.Errorf("a place frees at %v, want when the newest attempt leaves the window: %v", busy.NextFreeAt, newest.CreatedAt.Add(24*time.Hour))
+	}
+}
+
+// A failed check on a repository whose provider cannot pay used to be queued,
+// charged to the allowance, and then failed with a comment on the pull request.
+// The panel says automatic repairs cannot start there, so they must not.
+func TestAFailedCheckIsNotQueuedWhenTheProviderCannotPay(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, h *harness, instID string) string
+		// after runs once the policy exists, for what can only happen to a
+		// provider a policy already names.
+		after func(t *testing.T, h *harness, providerID string)
+	}{
+		{"no provider set", func(t *testing.T, h *harness, instID string) string { return "" }, nil},
+		{"deleted provider", func(t *testing.T, h *harness, instID string) string {
+			return installationProvider(t, h, "Gone", true).ID
+		}, func(t *testing.T, h *harness, providerID string) {
+			if err := h.st.DeleteAssistantProvider(h.ctx, providerID); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"disabled provider", func(t *testing.T, h *harness, instID string) string {
+			return installationProvider(t, h, "Sleepy", false).ID
+		}, nil},
+		{"personal provider", func(t *testing.T, h *harness, instID string) string {
+			user := &store.User{Username: "octo", Role: store.RoleViewer}
+			if err := h.st.CreateUser(h.ctx, user); err != nil {
+				t.Fatal(err)
+			}
+			p := &store.AssistantProvider{Name: "Mine", OwnerID: user.ID, Kind: "openai", Model: "m", Enabled: true}
+			if err := h.st.CreateAssistantProvider(h.ctx, p); err != nil {
+				t.Fatal(err)
+			}
+			return p.ID
+		}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			inst := h.installation()
+			repo := inst.Target + "/repo"
+			fake := &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType)}
+			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+			providerID := tc.setup(t, h, inst.ID)
+			savePolicy(t, h, store.EliRepairPolicy{Repo: repo, InstallationID: inst.ID, ProviderID: providerID, Enabled: true, Automatic: true, DailyLimit: 3})
+			if tc.after != nil {
+				tc.after(t, h, providerID)
+			}
+			body, _ := json.Marshal(map[string]any{"action": "completed", "repository": map[string]any{"full_name": repo}, "workflow_job": map[string]any{"id": 12, "run_id": 9, "head_sha": "old", "conclusion": "failure"}})
+			if err := h.c.enqueueRepairWebhook(h.ctx, inst, "workflow_job", body); err != nil {
+				t.Fatal(err)
+			}
+			rows, _, _ := h.st.ListEliRepairsPage(h.ctx, store.EliRepairFilter{Limit: store.MaxEliRepairPage})
+			if len(rows) != 0 {
+				t.Fatalf("a repair was queued with no provider able to pay: %+v", rows)
+			}
+		})
+	}
+}
+
+// The dialog promises that a repair which has not pushed yet stops without
+// changing the branch. The queued checkpoint is pinned above; this pins the one
+// the worker reaches after the model has answered, the last before the first
+// write, for both ways of stopping.
+func TestAStopWhileTheModelIsWorkingPublishesNothing(t *testing.T) {
+	for _, then := range []string{EliStopAskFirst, EliStopOff} {
+		t.Run(then, func(t *testing.T) {
+			h := newHarness(t)
+			inst := h.installation()
+			repo := inst.Target + "/repo"
+			fake := &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: "failed"}
+			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// The administrator presses Stop while the model is still answering.
+				if _, err := h.c.StopEliAutomatic(h.ctx, []string{repo}, then); err != nil {
+					t.Error(err)
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				chunk, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]string{"content": `{"summary":"Fix cause","files":[{"path":"main.go","content":"fixed"}]}`}, "finish_reason": nil}}})
+				fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", chunk)
+			}))
+			defer srv.Close()
+			team := &store.AssistantProvider{Name: "Team", Kind: "openai_compatible", BaseURL: srv.URL, Model: "team-model", Enabled: true}
+			if err := h.st.CreateAssistantProvider(h.ctx, team); err != nil {
+				t.Fatal(err)
+			}
+			savePolicy(t, h, store.EliRepairPolicy{Repo: repo, InstallationID: inst.ID, ProviderID: team.ID, Enabled: true, Automatic: true})
+			row := &store.EliRepair{DedupKey: "automatic:" + repo + ":old", Repo: repo, InstallationID: inst.ID, PullNumber: 1, HeadSHA: "old", RunID: 9, Trigger: "automatic"}
+			if _, err := h.st.EnqueueEliRepair(h.ctx, row, 5); err != nil {
+				t.Fatal(err)
+			}
+
+			h.c.runEliRepair(h.ctx, row)
+			if row.State != "failed" || fake.commits != 0 {
+				t.Fatalf("a repair stopped while the model worked ended %q with %d commits: %q", row.State, fake.commits, row.Message)
 			}
 		})
 	}

@@ -104,7 +104,8 @@ read, because each is a separate job with a separate thing to do about it:
 nobody has marked as known or replaced with a later attempt, with the whole
 count in its header and a link to the rest on the Jobs page's **Needs
 attention** view. A row opens the job's drawer and **Fix with Eli** opens the
-repair page for it. An operator can also mark a failure as known, which takes it
+repair page for it, except on a failure of a run no pull request started, which
+Eli cannot repair and is not offered. An operator can also mark a failure as known, which takes it
 off the list and changes nothing else: it keeps its row in the failed view, a
 re-run that passes is what settles it, and the toast carries an *Undo*. The
 *Other runners* switch says whether these numbers count only the jobs this
@@ -873,8 +874,8 @@ beside it. Under that:
   many are running now. **Stop automatic repairs** opens a dialog that asks what
   should happen instead, **Ask me first** or **Turn repairs off**, and says what
   becomes of a repair already under way: one that has not pushed yet stops
-  without changing the branch, and one that has pushed carries on watching its
-  checks. With two or more repositories **Stop all** does the same for every
+  before it changes the branch, unless it is already publishing, and one that
+  has pushed carries on watching its checks. With two or more repositories **Stop all** does the same for every
   row. Stopping never turns anything on; starting Automatic is a decision made
   in setup.
 * **History** is a page at a time and filtered by state, repository and who or

@@ -6,10 +6,24 @@ import (
 )
 
 // EliRepairUsage is how much of a repository's allowance the last 24 hours have
-// spent, and when the oldest of those attempts leaves the window.
+// spent, and when each of those attempts was made, oldest first, so a caller can
+// say when the count will have fallen far enough to let another in.
 type EliRepairUsage struct {
-	Used   int
-	Oldest time.Time
+	Used  int
+	Times []time.Time
+}
+
+// FreesAt is the instant the window will hold fewer than limit attempts, which
+// is when the attempt that many from the oldest leaves it. With room to spare it
+// is the oldest, the first thing to change. A limit lowered below what has been
+// spent needs several to leave, and the oldest alone would promise a place that
+// is not there.
+func (u EliRepairUsage) FreesAt(limit int) time.Time {
+	if len(u.Times) == 0 {
+		return time.Time{}
+	}
+	i := min(max(u.Used-limit, 0), len(u.Times)-1)
+	return u.Times[i].Add(24 * time.Hour)
 }
 
 // EliRepairUsage counts, for every repository with an attempt in the last 24
@@ -20,7 +34,7 @@ type EliRepairUsage struct {
 // from the one enforced would say a repository has room when the next failure is
 // refused.
 func (s *Store) EliRepairUsage(ctx context.Context) (map[string]EliRepairUsage, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT repo, count(*), min(created_at) FROM eli_repairs WHERE created_at>=? GROUP BY repo`, ms(s.Now().Add(-24*time.Hour)))
+	rows, err := s.read.QueryContext(ctx, `SELECT repo, created_at FROM eli_repairs WHERE created_at>=? ORDER BY repo, created_at`, ms(s.Now().Add(-24*time.Hour)))
 	if err != nil {
 		return nil, err
 	}
@@ -28,12 +42,13 @@ func (s *Store) EliRepairUsage(ctx context.Context) (map[string]EliRepairUsage, 
 	out := map[string]EliRepairUsage{}
 	for rows.Next() {
 		var repo string
-		var u EliRepairUsage
-		var oldest int64
-		if err := rows.Scan(&repo, &u.Used, &oldest); err != nil {
+		var created int64
+		if err := rows.Scan(&repo, &created); err != nil {
 			return nil, err
 		}
-		u.Oldest = at(oldest)
+		u := out[repo]
+		u.Used++
+		u.Times = append(u.Times, at(created))
 		out[repo] = u
 	}
 	return out, rows.Err()

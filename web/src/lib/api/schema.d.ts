@@ -8709,6 +8709,8 @@ export interface components {
              * @description GitHub's own sequential number for this workflow run - the "#1009" its Actions UI shows next to the workflow name, for cross-referencing the two. Zero until a workflow_run lookup backfills it, since the webhook that recorded the job never carries it.
              */
             run_number?: number;
+            /** @description What started the run: `push`, `pull_request`, `schedule` and so on. Absent until the controller has read the run from GitHub, since the webhook that recorded the job never carries it. Eli repairs a pull request's branch and nothing else, so a failure of a run that is not a pull request's is never offered to it. */
+            run_event?: string;
             /** @description The controller version that claimed the job, stamped once and never rewritten, so jobs can be grouped by release. Absent on a job recorded before this field existed and on one no pool here claimed; neither is guessed at. Filter with `controller_version=unknown` to find them. */
             controller_version?: string;
             /** @description The install channel of that controller build. */
@@ -10883,7 +10885,7 @@ export interface components {
             used: number;
             /**
              * Format: date-time
-             * @description When the oldest of those attempts leaves the 24-hour window, which is when a full allowance has a place again. Present when `used` is above zero.
+             * @description When a full allowance has a place again: the oldest of those attempts leaves the 24-hour window, or, when the limit was lowered below what is spent, the one whose leaving brings the count under it. Present when `used` is above zero.
              */
             next_free_at?: string;
             /** @description Automatic repairs queued, working or waiting on checks now. */

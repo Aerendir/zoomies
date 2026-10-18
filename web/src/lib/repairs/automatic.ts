@@ -126,7 +126,7 @@ export function stopCopy(repos: readonly string[]): StopCopy {
         : 'Eli neither offers nor starts a repair on these repositories, and nobody can request one, until each is turned on again in setup.',
     },
     inFlight:
-      'A repair that has not pushed yet stops without changing the branch. One that has pushed carries on watching its checks.',
+      'A repair that has not pushed yet stops before it changes the branch, unless it is already publishing. One that has pushed carries on watching its checks.',
     confirm: 'Stop automatic repairs',
   };
 }

@@ -101,10 +101,16 @@ evidence.
   all of them), a card on an automatic repair's own page, and a note on the repair
   page that says whether Eli already tried the failure or why nothing started.
   Everyone else sees one sentence on the repair page and nothing more, and a fleet
-  with nothing automatic sees nothing at all. The API changes are additive and need
-  no migration: `GET /assistant/repairs/automatic` for administrators,
+  with nothing automatic sees nothing at all. The API changes are additive:
+  `GET /assistant/repairs/automatic` for administrators,
   `POST /assistant/repairs/automatic/stop`, which only relaxes a policy and so works
-  when the provider is the problem, and `policy_mode` on readiness. The Go, unit and
+  when the provider is the problem, `policy_mode` on readiness, and `run_event` on a
+  job. A failed check on a repository whose provider cannot pay is no longer queued,
+  so it spends none of the allowance and comments on no pull request. Eli repairs a
+  pull request's branch and never raises one, so **Fix with Eli** is no longer
+  offered, on the Overview or in a job's drawer, for a failure of a run that no
+  pull request started: the controller now records what started each failed run
+  (migration 0113), and a failure it has not read yet is still offered. The Go, unit and
   browser suites cover it on a desktop and on a phone, with the accessibility,
   hostile-input and component-gallery passes. The audits found two overflows, since
   fixed: a repository name with nowhere to break pushed the attempt page's breadcrumb

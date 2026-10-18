@@ -457,7 +457,13 @@ another attempt, while a passed repair still needs normal PR review.
 ![Eli repairs: the setup line counting two repositories that repair themselves, an empty Needs you, the Automatic repairs panel with each repository's provider, allowance, latest repair and a Stop automatic repairs button, and History with each repair's pull request, its failed job and when it ran](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
 From **Recent failures**, click the failure summary to inspect its failed step,
-explanation and timeline, or choose **Fix with Eli**. The repair page opens on
+explanation and timeline, or choose **Fix with Eli**. Eli repairs a pull
+request's branch and never raises a pull request, so **Fix with Eli** is not
+offered for a failure of a run that no pull request started (a push to the
+default branch, a merge, a schedule or a manual run). The controller reads what
+started each failed run from GitHub, so a failure it has not read yet is still
+offered, and the repair page says why if it turns out not to be a pull request's.
+The repair page opens on
 the failure and not on a button: it names the pull request, its branch, the
 commit and the run, each linked to GitHub, lists every failed job with the step
 it stopped at, and checks readiness without invoking a model. A person decides to
@@ -583,11 +589,13 @@ Automatic. Each repository has a row, and the ones that cannot run come first:
 * **Who pays, and whether they can.** A provider that was deleted (which leaves
   the policy with none), is disabled or belongs to a person cannot pay for an
   unattended repair, and the row says so in a sentence with a link to the policy
-  in setup, before the next failure is spent on it.
+  in setup. A failed check there is not queued at all, so it spends none of the
+  allowance and leaves no comment on the pull request.
 * **The allowance.** How many attempts the last 24 hours have used out of the
   daily limit. It is the repository's, shared by repairs people ask for and by the
   automation, and a repair cleared from the history still counts. When every
-  attempt is used the row says when the oldest leaves the window. Until then no
+  attempt is used the row says when a place frees, which after a lowered limit
+  is later than the oldest attempt leaving. Until then no
   automatic repair starts there, and a repair started by hand is refused for the
   same reason.
 * **The latest automatic repair** still in the history, which opens, and how many

@@ -77,7 +77,7 @@ func (c *Controller) EliAutomaticRepairs(ctx context.Context) ([]EliAutomaticRep
 		}
 		if used, ok := usage[p.Repo]; ok && used.Used > 0 {
 			entry.Used = used.Used
-			free := used.Oldest.Add(24 * time.Hour)
+			free := used.FreesAt(p.DailyLimit)
 			entry.NextFreeAt = &free
 		}
 		if p.ProviderID == "" {
@@ -182,4 +182,22 @@ func (c *Controller) StopEliAutomatic(ctx context.Context, repos []string, then 
 		}
 	}
 	return out, nil
+}
+
+// automaticProviderCanPay is whether the policy names an installation provider
+// that is switched on, the only kind that may pay for a repair nobody asked for.
+// It is the test the overview describes in words and the worker applies again
+// before it writes, so all three agree on what "cannot pay" means.
+func (c *Controller) automaticProviderCanPay(ctx context.Context, p store.EliRepairPolicy) (bool, error) {
+	if p.ProviderID == "" {
+		return false, nil
+	}
+	provider, err := c.st.GetAssistantProvider(ctx, p.ProviderID)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return provider.Enabled && provider.OwnerID == "", nil
 }

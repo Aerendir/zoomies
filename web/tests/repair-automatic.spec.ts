@@ -191,7 +191,7 @@ test.describe('stopping', () => {
     );
     await expect(dialog).toContainText('turned on again in setup');
     await expect(dialog).toContainText(
-      'A repair that has not pushed yet stops without changing the branch.',
+      'A repair that has not pushed yet stops before it changes the branch, unless it is already publishing.',
     );
     await dialog.getByRole('button', { name: 'Stop automatic repairs' }).click();
 

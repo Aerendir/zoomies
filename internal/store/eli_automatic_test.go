@@ -32,8 +32,8 @@ func TestRepairUsageCountsTheLast24HoursPerRepositoryClearedOnesIncluded(t *test
 	if site.Used != 2 {
 		t.Errorf("acme/site used %d, want the 23-hour row and the cleared 1-hour row: 2", site.Used)
 	}
-	if site.Oldest.UnixMilli() != edge.UnixMilli() {
-		t.Errorf("acme/site's oldest attempt in the window is %s, want %s", site.Oldest, edge)
+	if len(site.Times) == 0 || site.Times[0].UnixMilli() != edge.UnixMilli() {
+		t.Errorf("acme/site's oldest attempt in the window is %v, want %s", site.Times, edge)
 	}
 	if usage["acme/other"].Used != 1 {
 		t.Errorf("acme/other used %d, want 1", usage["acme/other"].Used)

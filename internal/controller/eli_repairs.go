@@ -175,6 +175,19 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 		if ownCommit {
 			return nil
 		}
+		// A provider that cannot pay would only queue an attempt that fails at once,
+		// spend a place of the allowance and comment on the pull request. The
+		// repository's panel already tells an administrator why nothing starts.
+		if policy.Automatic {
+			canPay, err := c.automaticProviderCanPay(ctx, *policy)
+			if err != nil {
+				return err
+			}
+			if !canPay {
+				c.log.Info("Eli automatic repair skipped: the repository's provider cannot pay", "repo", r.Repo)
+				return nil
+			}
+		}
 		// A failing default-branch run must not spend a PR's budget. GitHub's job
 		// delivery has no PR association, so resolve the pinned run before admission.
 		admissionCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -641,6 +654,10 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 	if err != nil || r.Trigger == "automatic" && !policy.Automatic {
 		r.State = "blocked"
 		r.Message = "Repository repairs are disabled or the installation changed."
+		if err == nil {
+			// Ask me first leaves repairs on, so "disabled" would contradict the page.
+			r.Message = "Automatic repairs were stopped for this repository before this one ran."
+		}
 		_ = c.persistEliRepair(ctx, r)
 		return
 	}

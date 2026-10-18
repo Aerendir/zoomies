@@ -118,7 +118,10 @@ test('the stop dialog names one repository or counts several, and says what happ
   assert.equal(stopCopy(['a/1', 'a/2']).intro.includes('and'), true);
 
   for (const copy of [one, many]) {
-    assert.match(copy.inFlight, /has not pushed yet stops without changing the branch/);
+    assert.match(
+      copy.inFlight,
+      /has not pushed yet stops before it changes the branch, unless it is already publishing/,
+    );
     assert.match(copy.inFlight, /carries on watching its checks/);
     assert.equal(copy.askFirst.label, 'Ask me first');
     assert.equal(copy.off.label, 'Turn repairs off');
