@@ -158,6 +158,17 @@ test('a host with no backend that works says why on the closed card, and one wit
   await expect(card(page, LOW_DISK)).not.toContainText('no socket at');
 });
 
+/**
+ * Let the page finish asking before a spec that rewrites its answers ends.
+ *
+ * The page reads the hosts a second time when its event stream connects, about a
+ * tenth of a second after the first. A spec that ends on the first answer leaves
+ * that request to be disposed of with the page, and the route handler still
+ * reading it fails with "Response has been disposed". Shorter specs are the ones
+ * that hit it, so those that rewrite the list settle before they look.
+ */
+const settle = (page: Page): Promise<void> => page.waitForLoadState('networkidle');
+
 test('a host with free slots and its memory all promised away says so on the closed card', async ({
   page,
 }) => {
@@ -178,6 +189,7 @@ test('a host with free slots and its memory all promised away says so on the clo
     reserved_memory_mb: 30720,
   }));
   await goto(page, '/hosts', 'Hosts');
+  await settle(page);
   await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'false');
   await expect(card(page, BUILDER)).toContainText(/2 of 8 slots in use\s*· 6 free/);
   const note = card(page, BUILDER).getByTestId('host-committed-note');
@@ -215,6 +227,7 @@ test('why a slot count is capped is said on the closed card, not behind Details'
     runner_profile: { standard: { cpus: 2, memory_mb: 4096 } },
   }));
   await goto(page, '/hosts', 'Hosts');
+  await settle(page);
   await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'false');
   await expect(card(page, BUILDER).getByTestId('host-slots-note')).toContainText(
     'capped by its capacity of 2, below what its machine holds',
@@ -264,6 +277,7 @@ test('a figure the scheduler does not act on stays calm, however high it reads',
     },
   }));
   await goto(page, '/hosts', 'Hosts');
+  await settle(page);
   const vitals = card(page, LOW_DISK).getByRole('group', { name: `Utilisation of ${LOW_DISK}` });
   const cpu = vitals.getByTestId('host-vital-cpu');
   const memory = vitals.getByTestId('host-vital-memory');
@@ -329,6 +343,7 @@ test('the bars keep their fill in forced colours, calm or tight', async ({ page 
     reserved_memory_mb: 30720,
   }));
   await goto(page, '/hosts', 'Hosts');
+  await settle(page);
   await toggle(page, BUILDER).click();
   const host = card(page, BUILDER);
 
@@ -463,6 +478,7 @@ test('a name that wraps does not move its pills out of line with the cards besid
   const LONG = 'zoomies-16vcpu-64gb-ubuntu-2404-arm64-tuck';
   await reshape(page, BUILDER, (host) => ({ ...host, name: LONG }));
   await goto(page, '/hosts', 'Hosts');
+  await settle(page);
   await expect(card(page, CORDONED)).toContainText('Cordoned.');
   const lines = await card(page, LONG)
     .getByRole('heading', { level: 3 })
