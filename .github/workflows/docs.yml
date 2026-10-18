@@ -1,11 +1,12 @@
 name: Website
 
 # Publishes zoomies.sh from the docs that live in docs/, so the site cannot
-# drift from the repository, and serves install.sh and install.ps1 from the site
-# root -- copied from the ones in the repository root, so the script people curl
-# (or irm) and the script a contributor edits are the same file. The site
-# worker's tests run here too: the copies it serves for Accept: text/markdown
-# come out of this build.
+# drift from the repository: the build is checked, then deployed to the site
+# worker's static assets, which is where the domain is served from. install.sh
+# and install.ps1 land in the site root the same way, so the script people curl
+# (or irm) and the script a contributor edits are the same file. The worker's
+# tests run here too: the copies it serves for Accept: text/markdown come out
+# of this build.
 
 on:
   push:
@@ -62,18 +63,17 @@ concurrency:
   # One group per pull request, and one per ref for everything else. A pull
   # request's build is replaced by a newer push and dropped when the pull
   # request closes, as in ci.yml; no other run is ever cancelled. Deployments
-  # only happen from main, so they queue in main's group, and the deploy job
-  # names the Pages group again for itself below.
+  # only happen from main, so they queue in main's group.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   refresh-release:
     name: Refresh the website from main
-    # A release run belongs to its tag even if checkout selects main. Pages
-    # rejects that tag before the deploy job starts, so request a new run whose
-    # ref really is main. workflow_dispatch can be triggered by GITHUB_TOKEN.
-    if: github.event.action != 'closed' && github.event_name == 'release' && github.event.repository.has_pages
+    # A release run belongs to its tag even if checkout selects main, so a
+    # release asks for a new run whose ref really is main.
+    # workflow_dispatch can be triggered by GITHUB_TOKEN.
+    if: github.event.action != 'closed' && github.event_name == 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 10 # the longest successful run seen was under a minute
     permissions:
@@ -89,11 +89,6 @@ jobs:
     name: Build
     # The main-branch run requested above owns both the build and deployment.
     if: github.event.action != 'closed' && github.event_name != 'release'
-    outputs:
-      # The pages this build changed, as an IndexNow payload (hooks/indexnow.py),
-      # for the deploy job to submit once they are actually live. Empty when
-      # nothing changed.
-      indexnow: ${{ steps.indexnow.outputs.payload }}
     env:
       # The IndexNow key. Not a secret: the protocol proves ownership by this
       # key being served as docs/<key>.txt at the site root, where anyone can
@@ -264,11 +259,6 @@ jobs:
           cp install.ps1 site/install.ps1
           # The provider wizard's short Proxmox command fetches this one.
           cp connect-proxmox.sh site/connect-proxmox.sh
-          # The custom domain. Without this file Pages serves the repo path.
-          echo "zoomies.sh" > site/CNAME
-          # Pages would otherwise run the output through Jekyll, which ignores
-          # files and directories beginning with an underscore.
-          touch site/.nojekyll
 
       # The edge worker answers Accept: text/markdown with the copies the build
       # just wrote, on the Accept header GitHub Pages cannot read. Its rules
@@ -308,60 +298,25 @@ jobs:
           cmp connect-proxmox.sh site/connect-proxmox.sh
           dash -n site/connect-proxmox.sh
 
-      # upload-pages-artifact leaves out hidden files and directories, so
-      # /.well-known/security.txt was built, passed the check above and never
-      # reached the site (and neither did .nojekyll). It is the same tarball the
-      # action makes, packed by hand so the dotfiles are in it, and uploaded
-      # under the name deploy-pages looks for.
-      - name: Pack the site, hidden files included
-        run: |
-          set -eu
-          tar --dereference --hard-dereference --directory site \
-            -cf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
-          tar -tf "$RUNNER_TEMP/artifact.tar" | grep -q '^\./\.well-known/security\.txt$'
-          tar -tf "$RUNNER_TEMP/artifact.tar" | grep -q '^\./\.nojekyll$'
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: github-pages
-          path: ${{ runner.temp }}/artifact.tar
-          retention-days: 1
-          if-no-files-found: error
-
-  deploy:
-    name: Deploy
-    # Only from main, and only when Pages is enabled. Release events request a
-    # main-branch run above; tags and pull requests never enter the environment.
-    if: github.event.action != 'closed' && github.event.repository.has_pages && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: build
-    runs-on: ${{ inputs.runner == 'github' && 'ubuntu-latest' || 'blacksmith-4vcpu-ubuntu-2404' }}
-    timeout-minutes: 15 # the longest successful run seen was 1 minute
-    # Pages takes one deployment at a time, so deployments queue behind one
-    # another here and are never cancelled. This used to be the whole
-    # workflow's group, which also held every pull request's build: one could
-    # sit in the queue ahead of a deployment, and because a newer run takes the
-    # queue's only waiting place it could displace the deployment behind it.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - id: deploy
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      # The site is served by the edge worker from this build's static assets.
+      # Deploying from the job that built and checked it keeps one artefact:
+      # the upload is the publish.
+      - name: Deploy the site to the edge
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        working-directory: site-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.151.1 deploy
 
       # After the deploy, not before: an engine told about a page fetches it
       # straight away, and it has to find the new one. A failed submission is
       # reported and does not fail the deploy -- the site is up, and the
       # sitemap will get the pages found regardless.
       - name: Tell IndexNow which pages changed
-        if: needs.build.outputs.indexnow != ''
+        if: steps.indexnow.outputs.payload != ''
         env:
-          PAYLOAD: ${{ needs.build.outputs.indexnow }}
+          PAYLOAD: ${{ steps.indexnow.outputs.payload }}
         run: |
           set -u
           status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
