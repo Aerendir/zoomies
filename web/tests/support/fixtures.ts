@@ -435,6 +435,23 @@ export async function useSystemTheme(page: Page): Promise<void> {
 }
 
 /**
+ * Open the Jobs page's Filters disclosure when the page has folded it away.
+ *
+ * Mission Control does that on a phone, behind a summary that counts what is in
+ * force, so the facet menus, the date range and the switches are not there to be
+ * pressed until it is opened; everywhere else they are simply on the page and the
+ * summary is hidden. Idempotent, and safe to call before the grid has answered:
+ * the disclosure is part of the page's frame.
+ */
+export async function openFilters(page: Page): Promise<void> {
+  const fold = page.locator('details.advanced');
+  if ((await fold.count()) === 0 || (await fold.evaluate((el: HTMLDetailsElement) => el.open))) {
+    return;
+  }
+  await fold.locator(':scope > summary').click();
+}
+
+/**
  * Open the Jobs page's "Fleet context and activity" fold when the page has
  * folded it away.
  *

@@ -22,17 +22,9 @@ import {
   FIXTURE,
   goto,
   grid,
+  openFilters,
   rowCount,
-  useClassic,
 } from './support/fixtures';
-
-// Mission Control folds the facets and switches away on a phone to put the
-// rows first; these specs are about what the filters do, so the phone project
-// starts on Classic, where they sit open. operational-layout.spec.ts holds
-// Mission Control's own layout.
-test.beforeEach(async ({ page }, testInfo) => {
-  if (testInfo.project.name === 'mobile') await useClassic(page);
-});
 
 /**
  * What formatDuration produces: "820ms", "9.4s", "35m 00s", "2h 05m". Not
@@ -101,6 +93,7 @@ test('the grid lists jobs with their queue wait and duration', async ({ page }) 
 
 test('a repository facet narrows the rows and is shareable', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
@@ -131,6 +124,7 @@ test('a host facet narrows the jobs to the ones that ran there, and agrees with 
   page,
 }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
@@ -238,6 +232,7 @@ test('a start with a time of day keeps the jobs from that minute and shows it', 
   const pad = (n: number) => String(n).padStart(2, '0');
   const local = `${middle.getFullYear()}-${pad(middle.getMonth() + 1)}-${pad(middle.getDate())}T${pad(middle.getHours())}:${pad(middle.getMinutes())}`;
   await goto(page, `/jobs?since=${encodeURIComponent(local)}`, 'Jobs');
+  await openFilters(page);
   await expect(rowCount(page)).toContainText(`of ${kept} jobs`);
 
   // The bound is shown where it can be read and changed: a date input given a
@@ -252,6 +247,7 @@ test('a start with a time of day keeps the jobs from that minute and shows it', 
   // the whole of that day, so a job queued at 17:00:40 is inside "to 17:00".
   const keptByEnd = items.filter((job) => Date.parse(job.queued_at) < middle.getTime() + 60_000);
   await goto(page, `/jobs?until=${encodeURIComponent(local)}`, 'Jobs');
+  await openFilters(page);
   await expect(rowCount(page)).toContainText(`of ${keptByEnd.length} jobs`);
   await expect(range.getByLabel('to', { exact: true })).toHaveValue(local);
   await expect(page.getByRole('group', { name: 'Filters in effect' })).toContainText(
@@ -265,11 +261,13 @@ test('a start with a time of day keeps the jobs from that minute and shows it', 
     .click();
   await expect(rowCount(page)).toContainText(`of ${FIXTURE.managedJobs} jobs`);
   await goto(page, `/jobs?since=${local.slice(0, 10)}`, 'Jobs');
+  await openFilters(page);
   await expect(range.getByLabel('From')).toHaveValue(local.slice(0, 10));
 });
 
 test('the unmatched filter finds the job no pool claims and explains it', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
 
   await page.getByRole('switch', { name: 'Unmatched only' }).click();
@@ -349,6 +347,7 @@ test('the page opens on what is running, and the status row moves between views'
  */
 test('narrowing something else keeps the status the page is showing', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
 
   await facetTrigger(page, 'Repository').click();
@@ -432,6 +431,7 @@ test('a job that already ran is never called unmatched, whatever its labels say'
  */
 test('the unmatched explanation waits to be asked for', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
@@ -465,6 +465,7 @@ test('the unmatched explanation waits to be asked for', async ({ page }) => {
  */
 test('other runners are hidden by default and one switch brings them back', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
   await expect(jobs(page).getByText('blacksmith-4vcpu-ubuntu-2404')).toHaveCount(0);
@@ -605,6 +606,7 @@ test("the fleet's own failures are one click from everything that failed", async
 
 test('the failed filter is one switch and survives a copied link', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
