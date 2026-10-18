@@ -296,6 +296,64 @@ test('a host that has gone quiet shows no figure as current', async ({ page }) =
   await expect(vitals.getByRole('img')).toHaveCount(0);
 });
 
+/**
+ * What a bar is drawn in: the computed background of its fill and of the track
+ * behind it. Windows high contrast replaces every author colour with the
+ * system's, so a bar is only seen where it is told to take a system colour of
+ * its own, and a fill the same colour as its track is a bar that is not there.
+ */
+async function drawn(root: Locator, fill: string, track: string) {
+  return root.evaluate(
+    (element, [fillSelector, trackSelector]) => {
+      const colour = (selector: string) => {
+        const found = element.querySelector(selector);
+        return found ? getComputedStyle(found).backgroundColor : null;
+      };
+      return { fill: colour(fillSelector), track: colour(trackSelector) };
+    },
+    [fill, track] as const,
+  );
+}
+
+test('the bars keep their fill in forced colours, calm or tight', async ({ page }) => {
+  await page.emulateMedia({ forcedColors: 'active' });
+  // CPU is calm; memory and disk are past their lines, and the committed memory
+  // is all promised, so there is a calm and a tight bar of every kind.
+  await reshape(page, BUILDER, (host) => ({
+    ...host,
+    usage_fresh: true,
+    usage: { cpu_percent: 40, memory_available_mb: 512, sampled_at: new Date().toISOString() },
+    disk_total_mb: 40960,
+    disk_free_mb: 2048,
+    allocatable_memory_mb: 30720,
+    reserved_memory_mb: 30720,
+  }));
+  await goto(page, '/hosts', 'Hosts');
+  await toggle(page, BUILDER).click();
+  const host = card(page, BUILDER);
+
+  const vitals = host.getByRole('group', { name: `Utilisation of ${BUILDER}` });
+  const bars: Record<string, Awaited<ReturnType<typeof drawn>>> = {};
+  for (const key of ['cpu', 'memory', 'disk'])
+    bars[key] = await drawn(vitals.getByTestId(`host-vital-${key}`), '.fill', '.track');
+  for (const [key, bar] of Object.entries(bars))
+    expect(bar.fill, `the ${key} fill is not the colour of its track`).not.toBe(bar.track);
+  expect(bars.memory!.fill, 'a tight fill is the same system colour as a calm one').toBe(
+    bars.cpu!.fill,
+  );
+
+  // The committed bars and the slot bar are the same thing in other components.
+  const committed = host.getByRole('region', { name: `Resources committed on ${BUILDER}` });
+  const rows = await committed.locator('.row').all();
+  expect(rows.length, 'a calm and a tight committed bar').toBe(2);
+  for (const row of rows) {
+    const bar = await drawn(row, '.fill', '.track');
+    expect(bar.fill, 'a committed fill is not the colour of its track').not.toBe(bar.track);
+  }
+  const slots = await drawn(host.locator('.bar-wrap'), '.busy', '.track');
+  expect(slots.fill, 'the slots in use are not the colour of their track').not.toBe(slots.track);
+});
+
 test('the Details button is a finger-sized target on a touch screen, and neither state overflows the page', async ({
   page,
   isMobile,

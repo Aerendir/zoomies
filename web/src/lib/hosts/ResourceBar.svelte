@@ -85,4 +85,17 @@
     color: var(--z-pending);
     font-weight: var(--z-weight-medium);
   }
+  /* Windows high contrast replaces every background with the page's own, which
+     leaves the fill the colour of its track and the bar not there, tight or not.
+     The figure beside it says everything either way; this keeps the picture too,
+     in the system's colours (HostVitals does the same). */
+  @media (forced-colors: active) {
+    .track {
+      border: var(--z-border-width) solid CanvasText;
+    }
+    .fill,
+    .fill.tight {
+      background: Highlight;
+    }
+  }
 </style>

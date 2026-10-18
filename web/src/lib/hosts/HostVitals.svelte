@@ -137,12 +137,15 @@
   /* Windows high contrast replaces every background with the page's own, which
      would take both the track and its fill and leave a row with no bar. The
      figures beside it say everything either way; this keeps the picture too, in
-     the system's colours, and the triangle still marks a figure past its line. */
+     the system's colours, and the triangle still marks a figure past its line.
+     The amber fill is named as well: its selector is the more specific, so left
+     out it wins, is forced to the page's colour and is the track's own. */
   @media (forced-colors: active) {
     .track {
       border: var(--z-border-width) solid CanvasText;
     }
-    .fill {
+    .fill,
+    .tight .fill {
       background: Highlight;
     }
   }
