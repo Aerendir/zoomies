@@ -40,6 +40,7 @@
     refusalOf,
     type AnalysisNarrowing,
     EXPLANATION_WORDS,
+    startupFailuresScope,
     STAGE_WORDS,
     wordFor,
   } from '$lib/insights/analysis';
@@ -109,6 +110,13 @@
     ...(poolId ? { pool: { id: poolId, name: fleet.pool(poolId)?.name } } : {}),
     ...(hostId ? { host: { id: hostId, name: fleet.host(hostId)?.name } } : {}),
   });
+  // What the card covers, and the list's search it leaves out.
+  const startupScope = $derived(
+    startupFailuresScope(
+      { pool_id: poolId, host_id: hostId, q: search },
+      { pool: (id) => fleet.pool(id)?.name ?? id, host: (id) => fleet.host(id)?.name ?? id },
+    ),
+  );
   let startup = $state.raw<StartupFailuresFinding | null>(null);
   let startupError = $state<{ message: string; refused: boolean } | null>(null);
   let startupLoading = $state(false);
@@ -611,6 +619,8 @@
       finding={startup}
       error={startupError}
       loading={startupLoading}
+      scope={startupScope.scope}
+      note={startupScope.unapplied}
       narrowedTo={startupNarrowed}
     >
       {#if startup}

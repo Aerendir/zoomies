@@ -533,6 +533,39 @@ test('the card is the failed filter’s alone', async ({ page }) => {
   await expect(card(page, 'What keeps failing to start')).toHaveCount(0);
 });
 
+// The Queued card names every filter of the list that it leaves out, because
+// the fleet's answer under a list narrowed to one thing reads as that thing's.
+// The failed runners are the same: searched down to a name that matches
+// nothing, the list says "No runners match these filters" while the card above
+// it went on blaming a host without a word of what it covered.
+test('the failed runners card says what it covers, and that the list’s search is not applied', async ({
+  page,
+}) => {
+  const pools = (await page.request.get('/api/v1/pools').then((r) => r.json())) as {
+    items: { id: string; name: string }[];
+  };
+  const pool = pools.items[0]!;
+  const found = card(page, 'What keeps failing to start');
+
+  await goto(page, '/runners?state=failed', 'Runners');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await expect(found.getByText(/^Every pool and host, /)).toBeVisible();
+  await expect(found.getByText("The list's search filter is not applied here")).toHaveCount(0);
+
+  await goto(page, '/runners?state=failed&q=no-such-runner-name', 'Runners');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await expect(
+    found.getByText(
+      "The list's search filter is not applied here: this analysis reads every start in the period, narrowed only by pool and host.",
+    ),
+  ).toBeVisible();
+
+  // Narrowed by the page's own controls, the card says which pool it covers.
+  await goto(page, `/runners?state=failed&pool_id=${pool.id}`, 'Runners');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await expect(found.getByText(`Pool ${pool.name}, `)).toBeVisible();
+});
+
 test("a refusal is the route's own sentence, and the page's facts stand", async ({ page }) => {
   // A refusal the route gives, with its code; the card shows the sentence
   // rather than a generic failure, because the sentence says what to change.

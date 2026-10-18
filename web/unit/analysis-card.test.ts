@@ -12,6 +12,7 @@ import {
   longestWaits,
   queueWaitScope,
   refusalOf,
+  startupFailuresScope,
   stepLine,
   thresholdValue,
   UNCLAIMED_POOL,
@@ -330,6 +331,40 @@ test('the Include other runners switch is named when it is on, and only then', (
     queueWaitScope({ ...none, repo: ['acme/api'], all: true }, (x) => x).unapplied,
     `The list's repository filter is not applied here: this analysis reads every pool, or one pool. ${said}`,
   );
+});
+
+// The failed runners' card reads the period's starts, narrowed by the pool and
+// host the page chose, and says so; the list beside it also takes a search,
+// which the analysis has no use for. A card that went on saying the fleet's
+// answer under a list searched down to one runner would read as that runner's.
+test('the failed runners card names its scope and the search it cannot apply', () => {
+  const none = { pool_id: '', host_id: '', q: '' };
+  const names = {
+    pool: (id: string) => (id === 'pool_a' ? 'linux' : id),
+    host: (id: string) => (id === 'host_a' ? 'builder-1' : id),
+  };
+  assert.deepEqual(startupFailuresScope(none, names), {
+    scope: 'Every pool and host',
+    unapplied: null,
+  });
+  assert.equal(startupFailuresScope({ ...none, pool_id: 'pool_a' }, names).scope, 'Pool linux');
+  assert.equal(startupFailuresScope({ ...none, host_id: 'host_a' }, names).scope, 'Host builder-1');
+  assert.equal(
+    startupFailuresScope({ ...none, pool_id: 'pool_a', host_id: 'host_a' }, names).scope,
+    'Pool linux, host builder-1',
+  );
+  // A pool the page has no name for is its id, as the Queued card has it.
+  assert.equal(
+    startupFailuresScope({ ...none, pool_id: 'pool_gone' }, names).scope,
+    'Pool pool_gone',
+  );
+  assert.deepEqual(startupFailuresScope({ ...none, q: 'runner-7' }, names), {
+    scope: 'Every pool and host',
+    unapplied:
+      "The list's search filter is not applied here: this analysis reads every start in the period, narrowed only by pool and host.",
+  });
+  // Spaces are not a search, as the list reads them.
+  assert.equal(startupFailuresScope({ ...none, q: '   ' }, names).unapplied, null);
 });
 
 // A period card names its scope and its period above the summary; a

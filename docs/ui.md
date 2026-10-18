@@ -227,9 +227,10 @@ hover them.
 When the state filter includes failed runners, a **What keeps failing to start**
 card above the grid names the host or pool that keeps failing to start runners
 over the last day: since when, at which stage, and whether the image, an
-incident on its host or a throttle explains it. It is the answer
-[`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with its
-evidence folded under the next steps.
+incident on its host or a throttle explains it. It says which pool and host the
+list is narrowed to, and that the list's search is not applied to it. It is the
+answer [`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with
+its evidence folded under the next steps.
 
 ![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
 ![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }

@@ -159,6 +159,30 @@ export function queueWaitScope(
   };
 }
 
+/**
+ * What the failed runners' card covers, and which of the list's filters it
+ * does not. The route reads every start in the period, narrowed to the pool
+ * and host the page chose; the list beside it also takes a search, which an
+ * analysis of starts has no use for. The fleet's answer under a list searched
+ * down to one runner would read as that runner's, so the card says what it
+ * covers and names the search it leaves out, as the Queued card does its own.
+ */
+export function startupFailuresScope(
+  f: { pool_id: string; host_id: string; q: string },
+  name: { pool: (id: string) => string; host: (id: string) => string },
+): { scope: string; unapplied: string | null } {
+  const covered = [
+    f.pool_id ? `Pool ${name.pool(f.pool_id)}` : '',
+    f.host_id ? `${f.pool_id ? 'host' : 'Host'} ${name.host(f.host_id)}` : '',
+  ].filter((w) => w !== '');
+  return {
+    scope: covered.length ? covered.join(', ') : 'Every pool and host',
+    unapplied: f.q.trim()
+      ? "The list's search filter is not applied here: this analysis reads every start in the period, narrowed only by pool and host."
+      : null,
+  };
+}
+
 /** The fields a card's description line is drawn from. */
 export interface DescribedFinding {
   analysis: string;
