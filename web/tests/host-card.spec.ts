@@ -225,10 +225,48 @@ test('a host with free slots and its memory all promised away says so on the clo
 });
 
 test('the committed notice stays quiet where it would explain nothing', async ({ page }) => {
-  // demo-builder-2 has every slot in use and more promised than it may place, as
-  // any full host does, and its slot line already says why it takes nothing.
-  // demo-builder-1 has room in both.
+  // A full host has more promised than it may place, as any full host does, and
+  // its slot line already says why it takes nothing. A host with room in both has
+  // nothing to explain. Both are written out here: the demo fleet's own figures
+  // move as its simulated jobs come and go, and this spec read them as they were
+  // at start-up until a controller had been up for about twenty-five minutes.
+  await rewriteHosts(page, (hosts) =>
+    hosts.map((host) => {
+      if (host.name === LOW_DISK) {
+        return {
+          ...host,
+          capacity: 4,
+          effective_capacity: 4,
+          slots: 4,
+          active_runners: 4,
+          free: 0,
+          resources_known: true,
+          reserved_known: true,
+          reserved_cpus: 4,
+          allocatable_memory_mb: 8192,
+          reserved_memory_mb: 8192,
+        };
+      }
+      if (host.name === BUILDER) {
+        return {
+          ...host,
+          capacity: 8,
+          effective_capacity: 8,
+          slots: 8,
+          active_runners: 1,
+          free: 7,
+          resources_known: true,
+          reserved_known: true,
+          reserved_cpus: 1,
+          allocatable_memory_mb: 30720,
+          reserved_memory_mb: 2048,
+        };
+      }
+      return host;
+    }),
+  );
   await goto(page, '/hosts', 'Hosts');
+  await settle(page);
   await expect(card(page, LOW_DISK)).toContainText(/4 of 4 slots in use/);
   await expect(card(page, LOW_DISK).getByTestId('host-committed-note')).toHaveCount(0);
   await expect(card(page, BUILDER).getByTestId('host-committed-note')).toHaveCount(0);
