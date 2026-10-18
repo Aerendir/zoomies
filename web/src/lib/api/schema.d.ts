@@ -8723,10 +8723,10 @@ export interface components {
             fault_fix?: string;
             /**
              * Format: date-time
-             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Null on a failure nobody has triaged, which is the ordinary state.
+             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Absent on a failure nobody has triaged, which is the ordinary state.
              */
             acknowledged_at?: string | null;
-            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Empty when nobody has, and on an instance with authentication off, where there is no account behind the action. */
+            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Absent when nobody has acknowledged the failure, on an instance with authentication off, where there is no account behind the action, and for a visitor to a public view, who is told a failure was marked as known and when but never by whom. */
             acknowledged_by?: string;
             /** Format: date-time */
             queued_at?: string;
