@@ -7,8 +7,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import worker, {
+  CONTENT_SECURITY_POLICY,
+  CSP_HEADER,
   discoveryLinks,
   markdownPath,
+  securityHeaders,
   tokenEstimate,
   wantsMarkdown,
 } from "./worker.js";
@@ -346,4 +349,49 @@ test("the generated resource metadata passes through from the origin untouched",
   ]), { headers: { accept: "application/json" } });
   assert.equal(response.status, 200);
   assert.equal(await response.text(), PRM);
+});
+
+// GitHub Pages sets none of these, so the worker is the only place they can
+// come from. A page, the origin's own 404 and a Markdown copy all need them: a
+// browser can be sent to any of the three.
+test("every kind of answer carries the browser-hardening headers", async () => {
+  const origin = new Map([
+    ["/quickstart/", { type: "text/html; charset=utf-8", body: HTML }],
+    ["/quickstart/index.md", { type: "text/markdown; charset=utf-8", body: MARKDOWN }],
+  ]);
+  const answers = [
+    await handle("https://zoomies.sh/quickstart/", origin),
+    await handle("https://zoomies.sh/not-a-page/", origin),
+    await handle("https://zoomies.sh/quickstart/", origin, { headers: { accept: "text/markdown" } }),
+  ];
+
+  for (const response of answers) {
+    for (const [name, value] of Object.entries(securityHeaders())) {
+      assert.equal(response.headers.get(name), value, name);
+    }
+  }
+});
+
+test("the content security policy forbids framing, plugins and foreign base URLs", () => {
+  assert.match(CONTENT_SECURITY_POLICY, /frame-ancestors 'none'/);
+  assert.match(CONTENT_SECURITY_POLICY, /object-src 'none'/);
+  assert.match(CONTENT_SECURITY_POLICY, /base-uri 'self'/);
+  assert.doesNotMatch(CONTENT_SECURITY_POLICY, /https?:\/\/[a-z]/);
+});
+
+test("HSTS does not preload or cover subdomains until the owner decides it should", () => {
+  const value = securityHeaders()["strict-transport-security"];
+  assert.doesNotMatch(value, /preload|includeSubDomains/i);
+});
+
+test("a header the origin set deliberately is not overwritten", async () => {
+  const response = await handle(
+    "https://zoomies.sh/quickstart/",
+    new Map([
+      ["/quickstart/", { body: HTML, headers: { "content-type": "text/html", "x-frame-options": "SAMEORIGIN" } }],
+    ]),
+  );
+
+  assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
+  assert.equal(response.headers.get(CSP_HEADER), CONTENT_SECURITY_POLICY);
 });
