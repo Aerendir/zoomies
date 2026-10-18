@@ -25,6 +25,7 @@
     changeFigure,
     DIRECTION_WORDS,
     MEASURE_WORDS,
+    whyNoWindow,
     wordFor,
   } from '$lib/insights/analysis';
   import UsageInsights from '$lib/usage/UsageInsights.svelte';
@@ -219,7 +220,10 @@
     compare = null;
     compareError = null;
     if (!period) {
-      // A backwards range is the page's own warning to give.
+      // The date picker points out a range typed backwards, and nothing points
+      // out one that has not started; the card says why it asked nothing,
+      // since a titled frame with nothing under it says nothing.
+      compareError = { message: whyNoWindow(compareFrom, compareTo), refused: true };
       compareLoading = false;
       return;
     }

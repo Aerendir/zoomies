@@ -66,6 +66,7 @@
     jobWords,
     longestWaits,
     queueWaitScope,
+    whyNoWindow,
     wordFor,
   } from '$lib/insights/analysis';
   import { events } from '$lib/api/sse';
@@ -203,14 +204,19 @@
   $effect(() => {
     if (!queuedShown) return;
     void adviceKey;
-    const period = analysisWindow(startOfMoment(waitSince), endOfMoment(waitUntil), Date.now());
+    const since = startOfMoment(waitSince);
+    const until = endOfMoment(waitUntil);
+    const period = analysisWindow(since, until, Date.now());
     const controller = new AbortController();
     // The last window's answer goes at once: left standing while the next
     // loads, it would sit under the new dates, as HostDetail's does not.
     wait = null;
     waitError = null;
     if (!period) {
-      // A range typed backwards is the date picker's to point out.
+      // The date picker points out a range typed backwards, and nothing points
+      // out one that has not started; the card says why it asked nothing,
+      // since a titled frame with nothing under it says nothing.
+      waitError = { message: whyNoWindow(since, until), refused: true };
       waitLoading = false;
       return;
     }

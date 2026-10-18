@@ -275,6 +275,47 @@ test('a new range does not leave the last comparison standing on Usage', async (
   await expect(found.getByText('Working it out')).toBeVisible();
 });
 
+/** A calendar day on the operator's clock as an address writes it, `ahead` days from today. */
+function dayAt(ahead: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + ahead);
+  const pad = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const NOT_STARTED =
+  'This period has not started, and an analysis reads only what has already happened; choose a start in the past.';
+const BACKWARDS = 'The end is before the start, so there is no period to analyse.';
+
+// A window the page does not ask about used to leave its card a titled frame
+// with nothing under it. The date picker points out a range that runs
+// backwards, in an alert of its own, and nothing points out one that has not
+// started: the list is merely empty. So the card says why it asked nothing,
+// and the route is still not asked.
+test('a Queued window that has not started, or runs backwards, says why there is no answer', async ({
+  page,
+}) => {
+  const requests = watchAnalysis(page, 'queue-wait');
+  const found = card(page, 'Why jobs waited');
+  await goto(page, `/jobs?state=queued&since=${dayAt(3)}`, 'Jobs');
+  await expect(found.getByRole('status')).toHaveText(NOT_STARTED);
+  await goto(page, `/jobs?state=queued&since=${dayAt(-2)}&until=${dayAt(-5)}`, 'Jobs');
+  await expect(found.getByRole('status')).toHaveText(BACKWARDS);
+  expect(requests, 'the route was asked nothing').toEqual([]);
+});
+
+test('a Usage range that has not started, or runs backwards, says why there is no comparison', async ({
+  page,
+}) => {
+  const requests = watchAnalysis(page, 'compare');
+  const found = card(page, 'What got worse and what got better');
+  await goto(page, `/usage?since=${dayAt(3)}&until=${dayAt(4)}`, 'Usage');
+  await expect(found.getByRole('status')).toHaveText(NOT_STARTED);
+  await goto(page, `/usage?since=${dayAt(-2)}&until=${dayAt(-5)}`, 'Usage');
+  await expect(found.getByRole('status')).toHaveText(BACKWARDS);
+  expect(requests, 'the route was asked nothing').toEqual([]);
+});
+
 /**
  * What a press on the card's Ask Eli sends the model. The demo's built-in model
  * is the default provider, so the prompt the page builds is the first message

@@ -59,7 +59,7 @@ export function stepLine(s: {
  * still waiting would have its wait counted into it. The controller clamps the
  * same way for every caller; doing it here too keeps the period the card
  * describes the one it was given. A window that does not end after it starts
- * asks nothing, because the page that holds it already says it is backwards.
+ * asks nothing, and `whyNoWindow` says why where the answer would be.
  */
 export function analysisWindow(
   since: string | undefined,
@@ -72,6 +72,34 @@ export function analysisWindow(
   const start = Date.parse(since);
   if (Number.isNaN(start) || start >= end) return null;
   return { since: new Date(start).toISOString(), until: new Date(end).toISOString() };
+}
+
+/**
+ * Why `analysisWindow` asked nothing, as the card says it in place of a
+ * finding: a titled frame with nothing under it says nothing at all. The date
+ * picker points out a range that runs backwards, in an alert of its own, and
+ * nothing points out one that has not started, where the list is merely empty,
+ * so the card names whichever it is. The future one repeats the route's own
+ * refusal of a start that is not in the past (ErrSinceNotPast), which is why
+ * the page does not ask.
+ *
+ * Only for a window `analysisWindow` gave null, with the same two bounds; any
+ * other has an answer. A bound left out is undefined, as there; one that is
+ * there and empty, or not a date, is one the page could not read (Usage's
+ * address parses to empty bounds, and does not reach `analysisWindow`).
+ */
+export function whyNoWindow(since: string | undefined, until: string | undefined): string {
+  const start = since === undefined ? Number.NEGATIVE_INFINITY : Date.parse(since);
+  // An end left out is now, which a start is after only by not having happened
+  // yet, so only an end that was written can make a range run backwards.
+  const end = until === undefined ? undefined : Date.parse(until);
+  if (Number.isNaN(start) || (end !== undefined && Number.isNaN(end))) {
+    return 'The range has a date this page cannot read, so there is no period to analyse.';
+  }
+  if (end !== undefined && start >= end) {
+    return 'The end is before the start, so there is no period to analyse.';
+  }
+  return 'This period has not started, and an analysis reads only what has already happened; choose a start in the past.';
 }
 
 /** The list's filters, as far as the queue-wait card needs to know them. */

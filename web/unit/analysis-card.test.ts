@@ -15,6 +15,7 @@ import {
   stepLine,
   thresholdValue,
   UNCLAIMED_POOL,
+  whyNoWindow,
 } from '../src/lib/insights/analysis.ts';
 
 // The confidence is words on a neutral badge, so the words carry all of it:
@@ -99,6 +100,37 @@ test('a window that does not end after it starts asks nothing', () => {
   assert.equal(analysisWindow('2026-10-14T00:00:00.000Z', undefined, NOW), null);
   assert.equal(analysisWindow('not a time', undefined, NOW), null);
   assert.equal(analysisWindow(undefined, 'not a time', NOW), null);
+});
+
+// A window nothing is asked of leaves the card with no finding, no failure and
+// nothing loading, which is a titled frame with nothing under it. The date
+// picker points out a backwards range and nothing points out one that has not
+// started, so the card says why it asked nothing, in each case.
+test('a window nothing is asked of says why, whichever way it is empty', () => {
+  const future =
+    'This period has not started, and an analysis reads only what has already happened; choose a start in the past.';
+  const backwards = 'The end is before the start, so there is no period to analyse.';
+  const unreadable =
+    'The range has a date this page cannot read, so there is no period to analyse.';
+  const cases: [string | undefined, string | undefined, string][] = [
+    ['2026-10-14T00:00:00.000Z', '2026-10-15T00:00:00.000Z', future],
+    // An end left out is now, so a start after now is the same case.
+    ['2026-10-14T00:00:00.000Z', undefined, future],
+    ['2026-10-13T10:00:00.000Z', '2026-10-13T09:00:00.000Z', backwards],
+    // Both in the future, and the wrong way round: backwards is what to fix first.
+    ['2026-10-16T00:00:00.000Z', '2026-10-15T00:00:00.000Z', backwards],
+    ['not a time', undefined, unreadable],
+    [undefined, 'not a time', unreadable],
+  ];
+  for (const [since, until, said] of cases) {
+    // Said only for a window that asks nothing: the others have an answer.
+    assert.equal(analysisWindow(since, until, NOW), null, `${since} to ${until} asks nothing`);
+    assert.equal(whyNoWindow(since, until), said, `${since} to ${until}`);
+  }
+  // Usage reads an address it cannot parse as bounds that are empty, and never
+  // gets as far as asking analysisWindow, which would take them for no window.
+  assert.equal(whyNoWindow('', ''), unreadable);
+  assert.equal(whyNoWindow('2026-10-13T00:00:00.000Z', ''), unreadable);
 });
 
 // Eli is handed what the card shows, named one by one, and never the evidence
