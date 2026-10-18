@@ -118,6 +118,9 @@ type Store struct {
 	read  *sql.DB
 	write *sql.DB
 	wmu   sync.Mutex
+	// rstmts and wstmts hold the prepared statements of the hot queries, one set
+	// for each pool; see hot.go.
+	rstmts, wstmts *stmtCache
 	// writes, when set, is told how long each write waited for wmu and how
 	// long it then held it; see ObserveWrites.
 	writes atomic.Pointer[WriteObserver]
@@ -261,7 +264,8 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 		return nil, fmt.Errorf("store: connecting to %s: %w", opts.Path, err)
 	}
 
-	s := &Store{read: read, write: write, path: opts.Path, now: opts.Now, readOnly: opts.ReadOnly}
+	s := &Store{read: read, write: write, path: opts.Path, now: opts.Now, readOnly: opts.ReadOnly,
+		rstmts: newStmtCache(read), wstmts: newStmtCache(write)}
 	if opts.ReadOnly {
 		// Not migrating is the point, so the ledger check that migrate would
 		// have made is made here instead: a caller reading a database from a
@@ -300,6 +304,8 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 // Close releases both connection pools.
 func (s *Store) Close() error {
 	var errs []error
+	s.rstmts.close()
+	s.wstmts.close()
 	if s.read != nil {
 		errs = append(errs, s.read.Close())
 	}
@@ -625,6 +631,7 @@ func (s *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
 		return ErrReadOnly
 	}
 	defer s.lockWriter()()
+	s.wstmts.prepareWanted(ctx)
 	t, err := s.write.BeginTx(ctx, nil)
 	if err != nil {
 		return err

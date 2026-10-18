@@ -112,10 +112,7 @@ func (s *Store) FindInstallationByTarget(ctx context.Context, repoFullName strin
 	// still out there. Two installations covering the same target are ordered
 	// by age so the answer is the same on every call rather than whichever
 	// row SQLite reached first.
-	row := s.read.QueryRowContext(ctx, `SELECT `+installationCols+` FROM installations
-		WHERE (target_type = 'repo' AND LOWER(target) = ?) OR (target_type = 'org' AND LOWER(target) = ?)
-		ORDER BY CASE target_type WHEN 'repo' THEN 0 ELSE 1 END, created_at, id LIMIT 1`,
-		strings.ToLower(repoFullName), strings.ToLower(owner))
+	row := s.hotRead().QueryRow(ctx, installationByTargetQuery, strings.ToLower(repoFullName), strings.ToLower(owner))
 	i, err := scanInstallation(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no installation covers %s: %w", repoFullName, ErrNotFound)
@@ -349,9 +346,19 @@ func poolJSON(p *Pool) (res, cache, settings, burst, tmpfs, memoryBurst string, 
 	return
 }
 
+// The statements a webhook delivery and a poller sweep read the fleet with: see
+// hot.go.
+var (
+	poolByIDQuery             = hot(`SELECT ` + poolCols + ` FROM pools WHERE id = ?`)
+	poolsForClaimQuery        = hot(`SELECT ` + poolClaimCols + ` FROM pools ORDER BY name`)
+	installationByTargetQuery = hot(`SELECT ` + installationCols + ` FROM installations
+		WHERE (target_type = 'repo' AND LOWER(target) = ?) OR (target_type = 'org' AND LOWER(target) = ?)
+		ORDER BY CASE target_type WHEN 'repo' THEN 0 ELSE 1 END, created_at, id LIMIT 1`)
+)
+
 // GetPool returns a pool by ID.
 func (s *Store) GetPool(ctx context.Context, id string) (*Pool, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+poolCols+` FROM pools WHERE id = ?`, id)
+	row := s.hotRead().QueryRow(ctx, poolByIDQuery, id)
 	p, err := scanPool(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("pool %s: %w", id, ErrNotFound)
@@ -431,7 +438,7 @@ func ClaimView(p *Pool) *Pool {
 // delivery. The pools it returns are for a claim and for naming a job's pool,
 // and for nothing else; any other reader wants ListPools.
 func (s *Store) ListPoolsForClaim(ctx context.Context) ([]*Pool, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+poolClaimCols+` FROM pools ORDER BY name`)
+	rows, err := s.hotRead().Query(ctx, poolsForClaimQuery)
 	if err != nil {
 		return nil, err
 	}
