@@ -69,6 +69,14 @@ const ACTIVE = ['queued', 'working', 'checking'];
 
 export const SHA = 'a41c9e2f0b7d5c3e8a1f6d4b2c9e7a5f3d1b8c6e';
 
+/**
+ * The commit a repair in the world is working on. It is not the head readiness
+ * reports (`SHA`): a repair on the very commit a page is about is the one that page
+ * follows, so a world whose running repair sat on `SHA` would move the repair page to
+ * the attempt before anything could be audited on it.
+ */
+export const EARLIER_HEAD = '3f9c1d7a5b2e4c8d6a0f1e9b7d5c3a2e4f6b8d0c';
+
 const CHECK_ORDER: Check['code'][] = [
   'identity',
   'provider',
@@ -422,6 +430,7 @@ export async function mockRepairWorld(page: Page, over: Partial<RepairApiState> 
   const running = repairRow({
     id: 'rep-run',
     state: 'working',
+    head_sha: EARLIER_HEAD,
     created_at: new Date(Date.now() - 63_000).toISOString(),
     updated_at: new Date(Date.now() - 2000).toISOString(),
     details: { stage: 'prepare_fix', model: 'my-model', source_bytes: 38_912, case: case_ },
@@ -429,6 +438,7 @@ export async function mockRepairWorld(page: Page, over: Partial<RepairApiState> 
   const done = repairRow({
     id: 'rep-done',
     state: 'failed',
+    head_sha: EARLIER_HEAD,
     message: 'Eli could not produce a supported fix.',
     details: {
       stage: 'prepare_fix',
@@ -489,7 +499,8 @@ export const REPAIR_PAGES = [
     path: '/repairs/new?repo=acme%2Fsite&run=9',
     heading: 'Repair a failed check',
     stubbed: true,
-    ready: (page: Page) => page.getByRole('region', { name: 'What failed' }),
+    // Only this page has the decision card; the attempt has a "What failed" of its own.
+    ready: (page: Page) => page.getByRole('complementary', { name: 'Next step' }),
   },
   {
     path: '/repairs/rep-run',

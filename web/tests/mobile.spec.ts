@@ -29,6 +29,7 @@ import {
   expectNoSidewaysScroll,
 } from './support/fixtures';
 import {
+  EARLIER_HEAD,
   failedJob,
   keptCase,
   mockRepairWorld,
@@ -1188,7 +1189,12 @@ test('a title, a branch and a job with nowhere to break stay inside the screen o
       },
     }),
     repairs: [
-      repairRow({ id: 'rep-run', state: 'working', details: { stage: 'prepare_fix', case: kept } }),
+      repairRow({
+        id: 'rep-run',
+        state: 'working',
+        head_sha: EARLIER_HEAD,
+        details: { stage: 'prepare_fix', case: kept },
+      }),
       repairRow({
         id: 'rep-done',
         state: 'failed',
@@ -1200,6 +1206,7 @@ test('a title, a branch and a job with nowhere to break stay inside the screen o
       'rep-run': repairRow({
         id: 'rep-run',
         state: 'working',
+        head_sha: EARLIER_HEAD,
         details: { stage: 'prepare_fix', case: kept },
       }),
       'rep-done': repairRow({
