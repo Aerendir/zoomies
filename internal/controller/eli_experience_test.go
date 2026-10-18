@@ -241,8 +241,8 @@ func TestAnAutomaticRepairStopsAtTheMostItMayAsk(t *testing.T) {
 
 // A provider that took the room it was asked for before and refuses more has
 // reached its model's own ceiling, or has no context left beside the prompt.
-// Where the answer was cut is then the honest account, and the next step starts
-// from the room that worked and not from the one that was refused.
+// The answer was still cut, so the repair ends there, and the account it gives
+// is where the cut was (12000), not the amount that was refused (24000).
 func TestAProviderThatRefusesMoreRoomLeavesTheCutAsTheAnswer(t *testing.T) {
 	var asked []int
 	refuse := func(limit int) error {
@@ -253,12 +253,59 @@ func TestAProviderThatRefusesMoreRoomLeavesTheCutAsTheAnswer(t *testing.T) {
 	}
 	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked, refuse: refuse}}
 	_, err := m.Answer(context.Background(), nil)
-	if err == nil || !strings.Contains(err.Error(), "output limit") || !strings.Contains(err.Error(), "12000") {
+	if err == nil || !strings.Contains(err.Error(), "output limit") || !strings.Contains(err.Error(), "12000") || strings.Contains(err.Error(), "24000") {
 		t.Fatalf("error %v", err)
 	}
-	_, _ = m.Answer(context.Background(), nil)
-	if !slices.Equal(asked, []int{12000, 24000, 12000, 24000}) {
+	if !slices.Equal(asked, []int{12000, 24000}) {
 		t.Fatalf("asked for %v", asked)
+	}
+}
+
+// Lowering the reasoning effort is advice for the kinds of provider that take
+// one. Given to an Anthropic provider it is a dead end: the form has no such
+// setting, and the API refuses it, so the person who went looking for it would
+// find nothing to change.
+func TestAdviceToLowerTheReasoningEffortIsOnlyGivenWhereTheProviderTakesOne(t *testing.T) {
+	refuseAbove12000 := func(limit int) error {
+		if limit > 12000 {
+			return statusFailure(400)
+		}
+		return nil
+	}
+	for _, kind := range []assistant.Kind{assistant.KindOpenAICompatible, assistant.KindOpenAI, assistant.KindAnthropic} {
+		for name, provider := range map[string]roomProvider{
+			"cut at the most it asks": {needs: 1 << 30},
+			"refused more room":       {needs: 20000, refuse: refuseAbove12000},
+		} {
+			t.Run(fmt.Sprintf("%s, %s", kind, name), func(t *testing.T) {
+				var asked []int
+				provider.asked = &asked
+				m := &repairModel{provider: provider, kind: kind}
+				_, err := m.Answer(context.Background(), nil)
+				if want := assistant.SupportsReasoningEffort(kind); err == nil || strings.Contains(err.Error(), "reasoning effort") != want {
+					t.Fatalf("error %v, want advice about the reasoning effort = %v", err, want)
+				}
+			})
+		}
+	}
+}
+
+// A model whose output ceiling lies between where it was cut and twice that is
+// refused the doubled ask every time, so an empty limit can never give it the
+// room it does have. Only a person can set the number, and the message that
+// ends the repair is the one place that can tell them to.
+func TestAModelRefusedMoreRoomIsToldToSetTheOutputLimitToItsMaximum(t *testing.T) {
+	var asked []int
+	refuseAbove16384 := func(limit int) error {
+		if limit > 16384 {
+			return statusFailure(400)
+		}
+		return nil
+	}
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked, refuse: refuseAbove16384}}
+	_, err := m.Answer(context.Background(), nil)
+	if err == nil || !strings.Contains(err.Error(), "set the provider's Output limit to that model's maximum") {
+		t.Fatalf("error %v", err)
 	}
 }
 

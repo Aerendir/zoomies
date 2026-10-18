@@ -589,11 +589,14 @@ the repair history with the usage the provider reported, so the tokens spent
 finding the room stay visible; a cut attempt is billed by the provider, and its
 input is sent again. A provider that refuses a larger request (its model's own
 ceiling is lower, or too little context is left beside the prompt) ends the
-repair at the last amount it accepted. A number set on the provider is never
-raised: it is the cap, and a cut at it ends the repair. The whole repair has ten
-minutes, so a slow model can run out of time before it has found its room.
-Lowering the model's reasoning effort is the cheaper cure for a model that keeps
-running out.
+repair at the last amount it accepted, and the comment says to set the
+provider's Output limit to that model's maximum: an automatic limit asks for
+twice as much, so a model whose ceiling lies between the two is refused every
+time. A number set on the provider is never raised: it is the cap, and a cut at
+it ends the repair. The whole repair has ten minutes, so a slow model can run out
+of time before it has found its room. Where the provider takes a reasoning effort
+(the OpenAI-compatible and OpenAI kinds), lowering it is the cheaper cure for a
+model that keeps running out; the comment suggests it only for those kinds.
 
 For large files, Eli returns exact before/after edits instead of rewriting the
 whole file. The controller requires unique, non-overlapping preimages in source

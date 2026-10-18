@@ -275,8 +275,11 @@ func repairBudgetReason(err error, repoLimit int) string {
 const repairOutputTokens = 12000
 
 type repairModel struct {
-	provider   assistant.Provider
-	model      string
+	provider assistant.Provider
+	model    string
+	// kind is what the provider is, which decides what the messages that end a
+	// repair may advise: only some kinds can be told to think less.
+	kind       assistant.Kind
 	record     func(store.EliRepairStep)
 	sourceUsed func(int)
 	// maxTokens is the limit the provider sets, or zero when it leaves the limit
@@ -367,7 +370,8 @@ func (e *outputCut) Error() string {
 //
 // A provider that refuses the larger request has reached its model's own
 // ceiling, or has no context left beside the prompt. It took the room asked for
-// before, so that is what the repair reports and goes on from.
+// before, so that is where the answer was cut, and the repair ends there and
+// says so.
 func (m *repairModel) completeWithRoom(ctx context.Context, turns []assistant.Message) (string, []assistant.ToolCall, error) {
 	cutAt := 0
 	for {
@@ -380,13 +384,12 @@ func (m *repairModel) completeWithRoom(ctx context.Context, turns []assistant.Me
 				return "", nil, fmt.Errorf("provider output limit reached at %d tokens: leave the provider's output limit empty so that Eli raises it as needed, choose a model with more output room, or request a smaller fix", limit)
 			}
 			if limit >= AssistantOutputTokensMax {
-				return "", nil, fmt.Errorf("provider output limit reached at %d tokens, the most Eli asks for: lower the model's reasoning effort, choose a model with more output room, or request a smaller fix", limit)
+				return "", nil, fmt.Errorf("provider output limit reached at %d tokens, the most Eli asks for: %schoose a model with more output room, or request a smaller fix", limit, m.lowerEffort())
 			}
 			cutAt = limit
 			m.raised = nextOutputLimit(limit)
 		case cutAt > 0 && refusedRoom(err):
-			m.raised = cutAt
-			return "", nil, fmt.Errorf("provider output limit reached at %d tokens, and the provider would not allow more room: lower the model's reasoning effort, choose a model with more output room, or request a smaller fix", cutAt)
+			return "", nil, fmt.Errorf("provider output limit reached at %d tokens, and the provider would not allow more room: set the provider's Output limit to that model's maximum, %schoose a model with more output room, or request a smaller fix", cutAt, m.lowerEffort())
 		case cutAt == 0 && m.maxTokens == 0 && m.raised > repairOutputTokens && refusedRoom(err):
 			// The room kept from an earlier step has to fit beside a prompt that is
 			// longer now. This step has not run out of room, so it starts again from
@@ -396,6 +399,16 @@ func (m *repairModel) completeWithRoom(ctx context.Context, turns []assistant.Me
 			return text, calls, err
 		}
 	}
+}
+
+// lowerEffort is the advice to make a model think less, for a model that keeps
+// running out of room. It is given only to a provider that can be told to: the
+// others refuse the setting, and their form has nothing to change.
+func (m *repairModel) lowerEffort() string {
+	if assistant.SupportsReasoningEffort(m.kind) {
+		return "lower the model's reasoning effort, "
+	}
+	return ""
 }
 
 // refusedRoom is whether the provider turned down the request itself, which is
@@ -772,7 +785,7 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		return
 	}
 	r.Details.Stage = "prepare_fix"
-	plan, err := prrepair.Generate(ctx, &repairModel{provider: p, model: provider.Model, maxTokens: provider.MaxOutputTokens, sourceUsed: func(n int) { r.Details.SourceBytes = n }, record: func(step store.EliRepairStep) {
+	plan, err := prrepair.Generate(ctx, &repairModel{provider: p, model: provider.Model, kind: assistant.Kind(provider.Kind), maxTokens: provider.MaxOutputTokens, sourceUsed: func(n int) { r.Details.SourceBytes = n }, record: func(step store.EliRepairStep) {
 		r.Details.Steps = append(r.Details.Steps, step)
 		_ = c.persistEliRepair(ctx, r)
 	}}, source, source.Snapshot, r.Instruction, policy.AllowWorkflows)
