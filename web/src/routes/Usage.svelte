@@ -198,12 +198,18 @@
   let compareLoading = $state(false);
   const compareFrom = $derived(query.from);
   const compareTo = $derived(query.to);
+  // Bumped by the page's Refresh. The card follows the range's bounds, and a
+  // day's are midnights that "now" moving along does not change, so without
+  // this a refresh would re-read the table and leave the card on the old
+  // moment (an hour's bounds move, which is the only reason it was missed).
+  let compareKey = $state(0);
   // Not for a public view's visitor, whom the route refuses before it reads
   // anything (lib/shell/sections.ts says why a refused thing is not offered).
   const compareShown = $derived(!session.visitor);
 
   $effect(() => {
     if (!compareShown) return;
+    void compareKey;
     const period =
       compareFrom && compareTo ? analysisWindow(compareFrom, compareTo, Date.now()) : null;
     const controller = new AbortController();
@@ -366,6 +372,7 @@
     // effect fetches it. A range typed by hand is fetched as it stands.
     if (preset) now = Date.now();
     else void load(query);
+    compareKey += 1;
   }}
 >
   <Button

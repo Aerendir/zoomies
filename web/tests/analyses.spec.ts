@@ -436,6 +436,33 @@ test('Usage says too few releases in terms of its own range', async ({ page }) =
   );
 });
 
+test('Refresh on Usage asks for the comparison again, once, whatever the range', async ({
+  page,
+}) => {
+  // A day's bounds are midnights, so Refresh moving "now" along changes
+  // neither of them, and a range typed by hand does not move at all; the card,
+  // which followed the bounds alone, was not asked again: the table was read
+  // anew and the card kept the old moment. An hour's bounds do move, and were
+  // asked again, which is how it went unseen. The hour also guards the other
+  // way: moving the bounds and pressing the button are one refresh, not two
+  // requests.
+  const requests = watchAnalysis(page, 'compare');
+  const refresh = page.getByRole('button', { name: 'Refresh', exact: true });
+  for (const address of ['/usage', '/usage?range=1h', '/usage?since=2026-10-01&until=2026-10-08']) {
+    requests.length = 0;
+    await goto(page, address, 'Usage');
+    await expect.poll(() => requests.length, address).toBe(1);
+    await expect(
+      card(page, 'What got worse and what got better').locator('[aria-busy]'),
+    ).toHaveCount(0);
+    await refresh.click();
+    await expect.poll(() => requests.length, `${address} after Refresh`).toBe(2);
+    // Not a third, from the bounds and the button each asking.
+    await page.waitForTimeout(600);
+    expect(requests.length, `${address} after Refresh, once`).toBe(2);
+  }
+});
+
 test("a host's page says whether its failures came under pressure", async ({ page }) => {
   const hosts = (await page.request.get('/api/v1/hosts').then((r) => r.json())) as {
     items: { id: string; name: string }[];
