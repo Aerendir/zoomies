@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -407,5 +408,110 @@ func TestADeletedUserReleasesItsLink(t *testing.T) {
 	}
 	if e := s.SetEliIdentity(ctx, EliIdentity{UserID: newUser.ID, GitHubUserID: 42, GitHubLogin: "octo"}); e != nil {
 		t.Fatal(e)
+	}
+}
+
+// What a repair was about is written once, when it is queued or when the worker
+// has resolved the pull request, and the worker then saves the row's details
+// many times as it moves through its stages. The case has to ride along with
+// every one of those saves, or the page that follows the repair would lose the
+// failure it was started for the first time the stage changed.
+func TestARepairKeepsItsCaseThroughEveryWrite(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	want := &EliRepairCase{
+		PullTitle: "Retry transient 502s in the registry client",
+		PullURL:   "https://github.com/acme/repo/pull/7",
+		Author:    "dana",
+		Branch:    "fix/registry-retry",
+		RunURL:    "https://github.com/acme/repo/actions/runs/9",
+		Workflow:  "CI",
+		RunNumber: 482,
+		Jobs: []EliRepairCaseJob{{
+			Name:       "Go (api-2)",
+			Step:       "Run go test -race ./internal/...",
+			URL:        "https://github.com/acme/repo/actions/runs/9/job/3",
+			DurationMS: 192000,
+		}},
+	}
+	r := &EliRepair{Repo: "acme/repo", DedupKey: "ui:case", Details: EliRepairDetails{Case: want}}
+	if added, e := s.EnqueueEliRepair(ctx, r, 5); e != nil || !added {
+		t.Fatalf("enqueue: added=%v, %v", added, e)
+	}
+	r.State = "working"
+	r.Details.Stage = "prepare_fix"
+	r.Details.Model = "a-model"
+	if e := s.SaveEliRepair(ctx, r); e != nil {
+		t.Fatal(e)
+	}
+	got, e := s.GetEliRepair(ctx, r.ID, "", false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !reflect.DeepEqual(got.Details.Case, want) {
+		t.Fatalf("the case did not survive a save:\n got %+v\nwant %+v", got.Details.Case, want)
+	}
+	if got.Details.Stage != "prepare_fix" || got.State != "working" {
+		t.Fatalf("the save itself was lost: %+v", got)
+	}
+}
+
+// Every repair made before cases existed has details with no "case" in them,
+// and some have details older still. They must open without an error.
+func TestARepairWrittenBeforeCasesExistStillReads(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	id := insertRepair(t, s, EliRepair{Repo: "acme/repo", State: "failed", Details: EliRepairDetails{Model: "m", Stage: "source"}})
+	got, e := s.GetEliRepair(ctx, id, "", false)
+	if e != nil || got.Details.Case != nil || got.Details.Stage != "source" {
+		t.Fatalf("a row with no case: %+v, %v", got, e)
+	}
+	if _, e := s.exec(ctx, `UPDATE eli_repairs SET details=? WHERE id=?`, `{"model":"m"}`, id); e != nil {
+		t.Fatal(e)
+	}
+	got, e = s.GetEliRepair(ctx, id, "", false)
+	if e != nil || got.Details.Case != nil || got.Details.Model != "m" {
+		t.Fatalf("a row with the oldest details: %+v, %v", got, e)
+	}
+}
+
+// One repair is read by the rule the history is read by: the owner and an
+// administrator reach it and nobody else does, an automatic repair has no owner
+// to match, and a repair someone cleared from the history is still there by its
+// id, since clearing hides a row and does nothing else.
+func TestGetEliRepairScopesLikeTheHistory(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	own := insertRepair(t, s, EliRepair{Repo: "acme/repo", UserID: "usr_one", State: "failed"})
+	automatic := insertRepair(t, s, EliRepair{Repo: "acme/repo", Trigger: "automatic", State: "failed"})
+	for _, tc := range []struct {
+		name    string
+		id      string
+		owner   string
+		scoped  bool
+		visible bool
+	}{
+		{"the owner reads their own", own, "usr_one", true, true},
+		{"another user does not", own, "usr_two", true, false},
+		{"an administrator reads any", own, "", false, true},
+		{"an administrator reads an automatic one", automatic, "", false, true},
+		{"a scoped caller with no identity reads nothing", own, "", true, false},
+		{"nobody scoped reaches an automatic repair", automatic, "usr_one", true, false},
+		{"a missing id is not found", "rep_missing", "", false, false},
+	} {
+		got, e := s.GetEliRepair(ctx, tc.id, tc.owner, tc.scoped)
+		switch {
+		case tc.visible && (e != nil || got == nil || got.ID != tc.id):
+			t.Errorf("%s: %+v, %v", tc.name, got, e)
+		case !tc.visible && !errors.Is(e, ErrNotFound):
+			t.Errorf("%s: want ErrNotFound, got %+v, %v", tc.name, got, e)
+		}
+	}
+	results, e := s.ClearEliRepairs(ctx, []string{own}, "usr_one", true)
+	if e != nil || len(results) != 1 || !results[0].OK {
+		t.Fatalf("clearing: %+v, %v", results, e)
+	}
+	if got, e := s.GetEliRepair(ctx, own, "usr_one", true); e != nil || got.ID != own {
+		t.Fatalf("a cleared repair is still readable by id: %+v, %v", got, e)
 	}
 }
