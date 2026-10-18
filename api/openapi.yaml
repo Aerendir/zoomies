@@ -13024,11 +13024,14 @@ components:
         otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel
         killing the job's runner, or one of its steps, for its memory limit -- which can be
         recorded after `completed`, because a runner whose step was killed finishes the job
-        and reports the kill only when it exits. `acknowledged` and `reopened` are the
-        fleet's triage of a failure: somebody said they had read it, and somebody put it
-        back in front of whoever looks next. Neither changes the job, which is why they are
-        entries here rather than a move of the job.
-      enum: [queued, waiting, approved, claimed, unmatched, started, completed, runner_lost, runner_returned, cancel_requested, runner_start_failed, rerun_requested, oom_killed, acknowledged, reopened]
+        and reports the kill only when it exits. `sized` is the controller's sizing of a
+        waiting job: it put the job in a size class, sent it to the pool of another class, or
+        took that back when `scheduler.size_routing` was switched `off`, with the sentence
+        that says why; a fleet that leaves size routing `off` writes none. `acknowledged`
+        and `reopened` are the fleet's triage of a failure: somebody said they had read it,
+        and somebody put it back in front of whoever looks next. Neither changes the job,
+        which is why they are entries here rather than a move of the job.
+      enum: [queued, waiting, approved, claimed, unmatched, started, completed, runner_lost, runner_returned, cancel_requested, runner_start_failed, rerun_requested, oom_killed, sized, acknowledged, reopened]
 
     JobEvent:
       type: object
