@@ -1,10 +1,12 @@
 /**
  * Which host cards an operator has opened, remembered per browser.
  *
- * A card is closed unless its host is on this list, so the list holds the
- * exceptions and a host nobody has touched costs nothing. It is written when a
- * choice is made and never on sight, for the reason the capacity map gives:
- * a browser that had merely looked would otherwise have "chosen".
+ * A card is closed unless its host is on this list, so a host nobody has chosen
+ * for costs nothing. That stops being a short list once "Expand all" is pressed:
+ * it puts every host that was on show on the list, and a host that joins later
+ * is not on it, so it arrives closed. The list is written when a choice is made
+ * and never on sight, for the reason the capacity map gives: a browser that had
+ * merely looked would otherwise have "chosen".
  */
 export const EXPANDED_KEY = 'zoomies.hosts.expanded';
 

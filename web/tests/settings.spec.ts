@@ -12,7 +12,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { goto, openAccountMenu, pageHeading, dialog } from './support/fixtures';
+import { goto, openAccountMenu, pageHeading, dialog, useSystemTheme } from './support/fixtures';
 
 /**
  * A name nothing else in the suite will collide with. Random bytes rather than
@@ -491,7 +491,7 @@ test('the account menu leads to the pages that are about the person', async ({ p
   const menu = await openAccountMenu(page);
   // The identity first, then the theme as a choice with the one in force
   // marked, then the pages, then the way out.
-  await expect(menu.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute(
+  await expect(menu.getByRole('menuitemradio', { name: 'Dark' })).toHaveAttribute(
     'aria-checked',
     'true',
   );
@@ -648,6 +648,7 @@ test('an unsupported saved logo style falls back to Orbital haze without losing 
 });
 
 test('logo styles leave paw icons unchanged in both themes', async ({ page }) => {
+  await useSystemTheme(page); // the test flips the system's colour scheme
   await goto(page, '/settings/appearance', 'Appearance');
   const choice = page.getByRole('combobox', { name: 'Logo style' });
   const paw = page.locator('.logo:not(.large) .art:visible').first();

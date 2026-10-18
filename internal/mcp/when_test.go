@@ -38,6 +38,51 @@ func TestParseAgoReadsDurationsDaysAndWeeksAndIgnoresASign(t *testing.T) {
 	}
 }
 
+// An amount too large for a Duration used to wrap round to a negative one, and
+// "ago" reads a negative amount as a time in the future: 400000000d came back as
+// a moment in the year 2318 with no complaint, so a --since that was meant to
+// reach back as far as the data goes found nothing, and said nothing. The most a
+// Duration holds is about 292 years, and anything beyond is refused with the
+// same sentence as any other value that is not a duration.
+func TestParseAgoRefusesAnAmountTooLargeForADuration(t *testing.T) {
+	// The most whole days and weeks that fit, and the first that does not.
+	const maxDays, maxWeeks = 106751, 15250
+	for _, tc := range []struct {
+		in   string
+		want time.Duration
+		ok   bool
+	}{
+		{"106751d", maxDays * 24 * time.Hour, true},
+		{"-106751d", maxDays * 24 * time.Hour, true},
+		{"15250w", maxWeeks * 7 * 24 * time.Hour, true},
+		{"106752d", 0, false},
+		{"15251w", 0, false},
+		{"400000000d", 0, false},
+		{"-400000000d", 0, false},
+		{"9223372036854775807d", 0, false},
+		{"9223372036854775807w", 0, false},
+		// Its own negation overflows, so a sign cannot simply be dropped.
+		{"-9223372036854775808d", 0, false},
+		// Not even an integer, so not a count of anything.
+		{"99999999999999999999d", 0, false},
+	} {
+		got, ok := ParseAgo(tc.in)
+		if ok != tc.ok || got != tc.want {
+			t.Errorf("ParseAgo(%q) = %v, %v; want %v, %v", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	for _, in := range []string{"400000000d", "-400000000d", "9223372036854775807w"} {
+		if got, err := ParseWhenAt(in, now); err == nil {
+			t.Errorf("ParseWhenAt(%q) = %v; an amount no Duration can hold was accepted", in, got)
+		}
+	}
+	if _, err := ParseWhenAt("106751d", now); err != nil {
+		t.Errorf("ParseWhenAt(%q) was refused although it fits: %v", "106751d", err)
+	}
+}
+
 func TestParseWhenCountsAgoFromTheInstantItIsGivenAndReadsTimestamps(t *testing.T) {
 	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {

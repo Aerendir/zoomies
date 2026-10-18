@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { goto } from './support/fixtures';
+import { goto, useClassic } from './support/fixtures';
 
 async function mission(page: import('@playwright/test').Page, prefs?: Record<string, unknown>) {
   await page.setViewportSize({ width: 375, height: 900 });
@@ -120,6 +120,7 @@ test('saving vocabulary does not turn a fresh style default into an explicit glo
 });
 
 test('Classic retains its original history-first layout and Rows fallback', async ({ page }) => {
+  await useClassic(page);
   await page.setViewportSize({ width: 375, height: 900 });
   await goto(page, '/jobs', 'Jobs');
   await expect(page.getByRole('button', { name: /^Rows,/ })).toHaveAttribute(

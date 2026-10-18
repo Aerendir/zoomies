@@ -63,9 +63,10 @@ func (s *Server) handleListRunners(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, "listing runners", err)
 		return
 	}
+	visitor := isVisitor(r.Context())
 	out := make([]runnerResponse, 0, len(runners))
 	for _, run := range runners {
-		out = append(out, view.View(run))
+		out = append(out, view.View(run).For(visitor))
 	}
 	writeJSON(w, http.StatusOK, newPage(out, total, p))
 }
@@ -83,7 +84,7 @@ func (s *Server) handleGetRunner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail := runnerDetailResponse{
-		RunnerView: view.View(run),
+		RunnerView: view.View(run).For(isVisitor(r.Context())),
 		Timeline:   runnerTimeline(run, s.ctrl.Now()),
 	}
 

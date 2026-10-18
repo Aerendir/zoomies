@@ -22,6 +22,7 @@ import {
   FIXTURE,
   goto,
   grid,
+  openFilters,
   rowCount,
 } from './support/fixtures';
 
@@ -92,6 +93,7 @@ test('the grid lists jobs with their queue wait and duration', async ({ page }) 
 
 test('a repository facet narrows the rows and is shareable', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
@@ -122,6 +124,7 @@ test('a host facet narrows the jobs to the ones that ran there, and agrees with 
   page,
 }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
@@ -229,6 +232,7 @@ test('a start with a time of day keeps the jobs from that minute and shows it', 
   const pad = (n: number) => String(n).padStart(2, '0');
   const local = `${middle.getFullYear()}-${pad(middle.getMonth() + 1)}-${pad(middle.getDate())}T${pad(middle.getHours())}:${pad(middle.getMinutes())}`;
   await goto(page, `/jobs?since=${encodeURIComponent(local)}`, 'Jobs');
+  await openFilters(page);
   await expect(rowCount(page)).toContainText(`of ${kept} jobs`);
 
   // The bound is shown where it can be read and changed: a date input given a
@@ -243,6 +247,7 @@ test('a start with a time of day keeps the jobs from that minute and shows it', 
   // the whole of that day, so a job queued at 17:00:40 is inside "to 17:00".
   const keptByEnd = items.filter((job) => Date.parse(job.queued_at) < middle.getTime() + 60_000);
   await goto(page, `/jobs?until=${encodeURIComponent(local)}`, 'Jobs');
+  await openFilters(page);
   await expect(rowCount(page)).toContainText(`of ${keptByEnd.length} jobs`);
   await expect(range.getByLabel('to', { exact: true })).toHaveValue(local);
   await expect(page.getByRole('group', { name: 'Filters in effect' })).toContainText(
@@ -256,11 +261,13 @@ test('a start with a time of day keeps the jobs from that minute and shows it', 
     .click();
   await expect(rowCount(page)).toContainText(`of ${FIXTURE.managedJobs} jobs`);
   await goto(page, `/jobs?since=${local.slice(0, 10)}`, 'Jobs');
+  await openFilters(page);
   await expect(range.getByLabel('From')).toHaveValue(local.slice(0, 10));
 });
 
 test('the unmatched filter finds the job no pool claims and explains it', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
 
   await page.getByRole('switch', { name: 'Unmatched only' }).click();
@@ -340,6 +347,7 @@ test('the page opens on what is running, and the status row moves between views'
  */
 test('narrowing something else keeps the status the page is showing', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
 
   await facetTrigger(page, 'Repository').click();
@@ -423,6 +431,7 @@ test('a job that already ran is never called unmatched, whatever its labels say'
  */
 test('the unmatched explanation waits to be asked for', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
@@ -456,6 +465,7 @@ test('the unmatched explanation waits to be asked for', async ({ page }) => {
  */
 test('other runners are hidden by default and one switch brings them back', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
   await expect(jobs(page).getByText('blacksmith-4vcpu-ubuntu-2404')).toHaveCount(0);
@@ -596,6 +606,7 @@ test("the fleet's own failures are one click from everything that failed", async
 
 test('the failed filter is one switch and survives a copied link', async ({ page }) => {
   await goto(page, '/jobs', 'Jobs');
+  await openFilters(page);
   await expect(dataRows(jobs(page)).first()).toBeVisible();
   await everyStatus(page);
 
@@ -811,7 +822,10 @@ test('a failure can be marked as known and put back, from the row or the drawer'
   await expect(drawer).toBeVisible();
   await drawer.getByRole('button', { name: 'Mark as known' }).click();
   await expect(drawer.getByText('Known', { exact: true })).toBeVisible();
-  await expect(drawer.getByTestId('job-acknowledged')).toContainText('auth-disabled');
+  // Nobody is signed in on this fixture, so no name was recorded, and the drawer
+  // says what it can rather than a placeholder that looks like somebody.
+  await expect(drawer.getByTestId('job-acknowledged')).toContainText('by an operator');
+  await expect(drawer.getByTestId('job-acknowledged')).not.toContainText('auth-disabled');
   await drawer.getByRole('button', { name: 'Needs attention again' }).click();
   await expect(drawer.getByText('Known', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');

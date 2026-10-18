@@ -103,6 +103,67 @@ test.describe('accessibility', () => {
   });
 });
 
+/** What the page is dressed in right now: the attribute, and the scheme it resolves to. */
+function look(page: Page): Promise<{ attribute: string | null; scheme: string }> {
+  return page.evaluate(() => ({
+    attribute: document.documentElement.getAttribute('data-theme'),
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+  }));
+}
+
+/*
+ * The page's theme is dark unless the reader's browser says otherwise, as the
+ * app's is. The app puts that on the page with an inline script; this document
+ * cannot, because its Content-Security-Policy carries a hash for the app's script
+ * and none for any of its own. So the default has to be in the markup, where it
+ * is there for the first paint and for a browser that will not let the page read
+ * its storage, and the script only undoes it for a reader who chose otherwise.
+ */
+test.describe('theme', () => {
+  test('the document carries the dark default itself, and no inline script', async ({ page }) => {
+    const html = await (await page.request.get('/status')).text();
+    expect(html).toMatch(/<html[^>]*\sdata-theme="dark"/);
+    expect(html, 'an inline script here would be refused by the policy').not.toMatch(
+      /<script(?![^>]*\ssrc=)/,
+    );
+  });
+
+  test('a light system with nothing stored is dark before any script has run', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    // The bundle never arrives, so what is left is what the document says of itself.
+    await page.route('**/assets/status*.js', (route) => route.abort());
+    await page.goto('/status', { waitUntil: 'load' });
+    expect(await look(page)).toEqual({ attribute: 'dark', scheme: 'dark' });
+  });
+
+  test('storage the page cannot read leaves it dark, as it does the app', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.addInitScript(() =>
+      Object.defineProperty(window, 'localStorage', {
+        get() {
+          throw new Error('Blocked storage');
+        },
+      }),
+    );
+    await openStatus(page);
+    expect(await look(page)).toEqual({ attribute: 'dark', scheme: 'dark' });
+  });
+
+  for (const [stored, system, attribute, scheme] of [
+    ['system', 'light', null, 'light'],
+    ['system', 'dark', null, 'dark'],
+    ['light', 'dark', 'light', 'light'],
+    ['dark', 'light', 'dark', 'dark'],
+  ] as const) {
+    test(`a stored ${stored} choice on a ${system} system is kept`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: system });
+      await page.addInitScript((value) => localStorage.setItem('zoomies.theme', value), stored);
+      await openStatus(page);
+      expect(await look(page)).toEqual({ attribute, scheme });
+    });
+  }
+});
+
 const { defaultBrowserType: _phoneBrowser, ...phone } = devices['Pixel 7'];
 
 test.describe('on a phone', () => {

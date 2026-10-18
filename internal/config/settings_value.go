@@ -328,6 +328,22 @@ func decode(s Setting, f reflect.Value, value any) error {
 	return nil
 }
 
+// blankSaysNothing reports whether raw, the text of an environment variable,
+// is an empty value of a setting that has no empty spelling, which a number does
+// not. The compose file hands the container every line of .env, and Compose
+// passes an empty value (or a bare ${NAME} that .env never sets) as the empty
+// string rather than leaving the variable out. .env.example relies on that for
+// ZOOMIES_AGENT_CAPACITY, where empty means the agent works the figure out from
+// the machine, and refusing it stopped the documented first run. Such a value
+// says nothing, so the layers beneath it stand; a string or a list keeps its
+// empty form, because empty is a value there.
+//
+// Reading the environment and importing it into the database both ask, because
+// the import promises to parse a variable as the controller does.
+func (s Setting) blankSaysNothing(raw string) bool {
+	return (s.Kind == KindInt || s.Kind == KindFloat) && strings.TrimSpace(raw) == ""
+}
+
 // parseString reads a value written as text. It is what an environment
 // variable, a `zoomies config set` argument and a database row all go through,
 // so one spelling means one thing in all three.

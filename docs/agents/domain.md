@@ -6,24 +6,28 @@ How the engineering skills should consume this repo's domain documentation when 
 
 - **`GLOSSARY.md`** at the repo root, or
 - **`GLOSSARY-MAP.md`** at the repo root if it exists: it points at one `GLOSSARY.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`roadmap/decisions/`**: read the decision records that touch the area you're about to work in. Its `README.md` is the index.
+
+The decision records are kept as one numbered file per decision, never renumbered and never deleted. A decision that is reversed gets a new record that says so and links back, and the old one is marked superseded. A record gives its status (proposed, accepted, superseded by NNNN), its date and who took the decision, the context, the decision and its consequences. It says why a decision was taken and authorises nothing: `ROADMAP.md` says what work is authorised, and `roadmap/README.md` says which document in `roadmap/` answers which question. A decision gets a record when it is ratified or changed, so the numbered "Decisions for the owner" in `ROADMAP.md` stay the index, and not every decision in them has a record yet.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure
 
-Single-context repo (most repos):
+Single-context repo (this one):
 
 ```
 /
 ├── GLOSSARY.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
+├── roadmap/
+│   └── decisions/
+│       ├── README.md
+│       ├── 0001-planning-documents-live-beside-the-code.md
+│       └── 0002-choose-the-model-by-what-the-stage-risks.md
+└── internal/
 ```
 
-Multi-context repo (presence of `GLOSSARY-MAP.md` at the root):
+Multi-context repo (presence of `GLOSSARY-MAP.md` at the root, which this repository does not have):
 
 ```
 /
@@ -46,6 +50,6 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 ## Flag ADR conflicts
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
+If your output contradicts an existing ADR (here, a decision record in `roadmap/decisions/`), surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts decision 0004 (the fleet may re-run a job it broke), but worth reopening because…_

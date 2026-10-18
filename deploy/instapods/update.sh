@@ -46,13 +46,20 @@ job_running() {
     grep -qa 'Runner[.]Worker' /proc/[0-9]*/cmdline 2>/dev/null
 }
 
-# restart_app restarts the pod's app service. reset-failed first, because a
-# service that crashed on its way down (a missing token, say) can be refused a
-# restart for starting too often.
+# job_blocks_restart <role> <force> says whether a restart now would fail a job:
+# this is the worker, --force was not given, and a job is in progress.
+job_blocks_restart() {
+    [ "$1" = agent ] && [ "$2" -eq 0 ] && job_running
+}
+
+# restart_app restarts the pod's app service, and returns 1 when there is no
+# service here to restart, so that the caller does not claim the new version is
+# running. reset-failed first, because a service that crashed on its way down (a
+# missing token, say) can be refused a restart for starting too often.
 restart_app() {
     if ! have systemctl || ! systemctl cat app.service >/dev/null 2>&1; then
         say "restart the app to run the new version: sudo systemctl restart app"
-        return 0
+        return 1
     fi
     if [ "$(id -u)" -eq 0 ]; then
         systemctl reset-failed app 2>/dev/null || true
@@ -103,13 +110,17 @@ main() {
         fi
     fi
 
-    if [ "$role" = agent ] && [ "$force" -eq 0 ] && job_running; then
+    if job_blocks_restart "$role" "$force"; then
         say "a job is running here, and restarting would fail it, so nothing was changed."
         say "run this again when it has finished, or with --force to update anyway."
         return 0
     fi
 
     bin=${ZOOMIES_BIN:-$HOME/zoomies/bin/zoomies}
+    # Written when a job holds a restart back, and read by the next run: with the
+    # new binary already in place that run would otherwise find nothing to do,
+    # and the app would go on running the old one.
+    pending="$(dirname "$bin")/restart-pending"
     before_bin=$(sha_of "$bin")
     before_scripts=''
 
@@ -134,13 +145,28 @@ main() {
     # The scripts are compared as well as the binary: they decide how the app
     # starts, but most commits to the repository change neither, and a pod that
     # restarted for every one of them would restart daily for nothing.
-    if [ "$before_bin" = "$after_bin" ] && [ "$before_scripts" = "$after_scripts" ]; then
+    if [ "$before_bin" = "$after_bin" ] && [ "$before_scripts" = "$after_scripts" ] && [ ! -e "$pending" ]; then
         say "already up to date; nothing was restarted."
         return 0
     fi
 
-    restart_app
-    "$bin" version | head -1 | sed 's/^/zoomies: now running: /'
+    # The check at the top was made before the download, and a download takes
+    # minutes: a job that started in them would be failed by this restart.
+    if job_blocks_restart "$role" "$force"; then
+        mkdir -p "$(dirname "$pending")"
+        : >"$pending"
+        say "a job started while this update was running, so the app was not restarted and the job was left to finish."
+        say "the new version is installed. Run this again when the job has finished, or with --force to restart now."
+        return 0
+    fi
+
+    if restart_app; then
+        state="now running"
+    else
+        state="installed"
+    fi
+    rm -f "$pending"
+    "$bin" version | head -1 | sed "s/^/zoomies: $state: /"
 }
 
 main "$@"; exit $?

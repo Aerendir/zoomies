@@ -27,7 +27,13 @@
   import AskEli from '$lib/assistant/AskEli.svelte';
   import Panel from '$lib/components/Panel.svelte';
   import { formatAbsolute } from '$lib/format';
-  import { analysisContext, confidenceWords, findingDescription, stepLine } from './analysis';
+  import {
+    analysisContext,
+    confidenceWords,
+    findingDescription,
+    stepLine,
+    type AnalysisNarrowing,
+  } from './analysis';
 
   interface Props {
     title: string;
@@ -41,13 +47,24 @@
     loading: boolean;
     /** What the card covers, said before its period: "Every pool", "Pool linux". */
     scope?: string;
+    /** The pool or host it was asked about, which Ask Eli passes on to the tool. */
+    narrowedTo?: AnalysisNarrowing;
     /** A line under the summary, for what the page shows that the card does not. */
     note?: string | null;
     /** The analysis's own evidence, drawn by the page that knows its shape. */
     children?: Snippet;
   }
 
-  let { title, finding, error, loading, scope, note = null, children }: Props = $props();
+  let {
+    title,
+    finding,
+    error,
+    loading,
+    scope,
+    narrowedTo,
+    note = null,
+    children,
+  }: Props = $props();
 
   const problem = $derived(
     error === null ? null : typeof error === 'string' ? { message: error, refused: false } : error,
@@ -67,7 +84,7 @@
 
 <Panel {title} {description} class="analysis-card">
   {#snippet actions()}
-    {#if finding}<AskEli context={analysisContext(title, finding)} />{/if}
+    {#if finding}<AskEli context={analysisContext(title, finding, narrowedTo)} />{/if}
   {/snippet}
   <div class="body" aria-busy={loading ? 'true' : undefined}>
     {#if problem}

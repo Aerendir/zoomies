@@ -1,6 +1,6 @@
 ---
 icon: material/shield-account-outline
-title: Privacy
+title: "Zoomies privacy: no telemetry, analytics or accounts"
 description: >-
   What the Zoomies website and software collect: nothing. No telemetry,
   analytics or account; the only non-fleet request is a daily release check you

@@ -36,9 +36,40 @@ const STEPS: readonly { id: string; phase: string; label: string }[] = [
   { id: 'ready', phase: 'ready', label: 'Reported ready' },
 ];
 
+/**
+ * What a step says about itself to somebody who is told rather than shown. The
+ * icon and the colour that say it to everyone else are drawn, and a screen
+ * reader gets five identical list items without these.
+ */
+const STEP_WORDS: Record<StepStatus, string> = {
+  done: 'done',
+  active: 'in progress',
+  waiting: 'not reached',
+  failed: 'failed',
+};
+
+export function stepStatusText(status: StepStatus): string {
+  return STEP_WORDS[status];
+}
+
 /** Whether this is the machine a provider's test built. */
 export function isTestMachine(machine: Machine): boolean {
   return machine.test === true;
+}
+
+/**
+ * Whether the controller would turn down another test because of this machine.
+ *
+ * It starts one at a time and counts a test as still there until its machine has
+ * been deleted, apart from one a failure or a quarantine left in place to be read
+ * (StartTestMachine in internal/controller/testmachine.go; keep the two in step).
+ * So a test that has passed is in the way while it is being released, and a
+ * button that offered the next one then would be offering a certain 409.
+ */
+export function blocksAnotherTest(machine: Machine): boolean {
+  return (
+    machine.state !== 'deleted' && machine.state !== 'failed' && machine.state !== 'quarantined'
+  );
 }
 
 /** The newest test machine in a list, or null when there is none. */

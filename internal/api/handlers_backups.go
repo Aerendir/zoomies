@@ -333,7 +333,7 @@ func (s *Server) handleTakeBackup(w http.ResponseWriter, r *http.Request) {
 	s.auth.Auditor().Act(r.Context(), id, "backup.take", "backup", e.ID, map[string]any{
 		"bytes": e.Bytes, "dir": e.Dir,
 	})
-	writeJSON(w, http.StatusCreated, s.backupView(*e, locationBackups))
+	writeCreated(w, r, e.ID, s.backupView(*e, locationBackups))
 }
 
 // handleDeleteBackup answers DELETE /api/v1/backups/{id}.

@@ -12,9 +12,13 @@
 # arguments:
 #
 #   docker build -f deploy/Dockerfile.runner \
-#     --build-arg BASE=debian:12-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 --build-arg OS_FAMILY=apt \
+#     --build-arg BASE=debian:12-slim --build-arg OS_FAMILY=apt \
 #     --build-arg OS_ID=debian --build-arg OS_VERSION=12 \
 #     -t ghcr.io/eyupio/zoomies-runner:debian-12 .
+#
+# `make image-runner` passes each variant's base pinned by digest, from the
+# catalogue in internal/naming/images.go; the example names the tag only, so
+# that it does not go stale when the weekly refresh moves the pins.
 #
 # Everything a distribution names differently lives in deploy/runner-*.sh, one
 # script per concern, each branching on the package family. That is deliberate:
@@ -66,7 +70,13 @@ ARG RUNNER_VERSION=2.338.0
 # process backend, and the runner-version workflow moves all of them together.
 ARG RUNNER_SHA256_X64=af4b794c1bc41d73d40535e3fe092a39f9679cd8d965954c2aca25a05ca41d32
 ARG RUNNER_SHA256_ARM64=628b4a7258487b80c1d3c221095a7ded349f5ae0175fd3dfab708d07428f041b
+# What a plain build of this file uses is the catalogue's default variant, on the
+# base the weekly refresh last pinned. The line between the markers is written by
+# internal/naming/gen_catalogue.go, so it moves with the table; a test compares
+# it, and the OS arguments below, with the catalogue's default row.
+# zoomies:catalogue-begin
 ARG BASE=ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
+# zoomies:catalogue-end
 
 FROM ${BASE} AS runner-base
 # Re-declared after FROM: an ARG from before it is out of scope in the build

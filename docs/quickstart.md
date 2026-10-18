@@ -2,8 +2,8 @@
 icon: material/rocket-launch-outline
 title: "Install self-hosted Actions runners: quick start"
 description: >-
-  Install Zoomies and run your first job on a self-hosted ephemeral runner,
-  one curl command, one GitHub App, no Kubernetes.
+  Install Zoomies and run your first job on a self-hosted ephemeral runner:
+  one curl command, one GitHub App, no Kubernetes, and a working fleet in minutes.
 ---
 
 # Quick start
@@ -43,7 +43,7 @@ collects the Docker Compose, CLI and API equivalents.
 
 ## Just looking?
 
-Open the [live demo](https://demo.zoomies.sh/) to explore a running fleet in
+Open the [live demo](https://demo.zoomies.sh/){ target=_blank rel="noopener" } to explore a running fleet in
 your browser without installing anything or signing in. It uses [public
 view](public-view.md): visitors can read the fleet, while settings, Eli and
 changes require sign-in.

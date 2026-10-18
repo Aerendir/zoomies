@@ -15,6 +15,11 @@ import (
 // was. Output is coalesced into chunks of up to relayChunkSize as it goes in, so
 // the writer takes a few large writes where the source made a thousand small
 // ones, and catches up with a burst instead of falling further behind it.
+//
+// The bound is on the bytes queued, which is what a refusal and its notice
+// count. The arrays the chunks grow into are larger than what they hold, by up
+// to half again, so a stream whose writer has stalled holds about 3 MiB of
+// memory for its 2 MiB of output.
 type relayBuffer struct {
 	// wake carries a token whenever there is something for next to find, so a
 	// writer that has just looked and found nothing cannot sleep through an add.

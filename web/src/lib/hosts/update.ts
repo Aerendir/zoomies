@@ -31,9 +31,10 @@ type HostFields = Pick<
 
 /**
  * The badge for a host that is updated on the host itself. The controller sends
- * a command only where one works; a Windows agent has none (Windows has no sudo
- * and zoomies upgrade knows no Windows service), so its card says "by hand"
- * rather than promise a command that is not there.
+ * a command wherever it can name a release to install, a PowerShell one to a
+ * Windows agent; a host with none (the controller is a local build, or the
+ * machine is rented) says "by hand" rather than promise a command that is not
+ * there.
  */
 function byHandLabel(host: Pick<Host, 'upgrade_command'>): string {
   return host.upgrade_command ? 'Update by command' : 'Update by hand';
@@ -41,9 +42,10 @@ function byHandLabel(host: Pick<Host, 'upgrade_command'>): string {
 
 /**
  * Where the steps for updating a host by hand are, or empty when the card has a
- * command to copy, which is the way. Only a Windows agent is sent no command
- * for a reason the page explains; an unpublished controller build has its own
- * note and no published steps to link to.
+ * command to copy, which is the way. Only a Windows agent with a note and no
+ * command is pointed at them, because the page explains its installer; any other
+ * host's note, such as an unpublished controller build's, stands alone with no
+ * published steps to link to.
  */
 export function byHandLink(
   host: Pick<Host, 'os' | 'upgrade_command' | 'embedded' | 'upgrade_note'>,

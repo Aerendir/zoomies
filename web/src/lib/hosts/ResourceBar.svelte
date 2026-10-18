@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
   import Tooltip from '../components/Tooltip.svelte';
+  import { isCommittedTight } from './committed';
 
   interface Props {
     label: string;
@@ -29,8 +30,9 @@
   const pct = $derived(total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0);
   // Above this, the next runner is the one that does not fit. It is the same
   // judgement the disk figure makes on the card above: worth attending to
-  // before it becomes the reason a queue stops draining.
-  const tight = $derived(total > 0 && used / total >= 0.9);
+  // before it becomes the reason a queue stops draining. The closed card's
+  // committed notice reads the same line from committed.ts.
+  const tight = $derived(isCommittedTight({ used, total }));
   const summary = $derived(`${label}: ${text}${hint ? `. ${hint}` : ''}`);
 </script>
 
@@ -82,5 +84,18 @@
   .value.tight {
     color: var(--z-pending);
     font-weight: var(--z-weight-medium);
+  }
+  /* Windows high contrast replaces every background with the page's own, which
+     leaves the fill the colour of its track and the bar not there, tight or not.
+     The figure beside it says everything either way; this keeps the picture too,
+     in the system's colours (HostVitals does the same). */
+  @media (forced-colors: active) {
+    .track {
+      border: var(--z-border-width) solid CanvasText;
+    }
+    .fill,
+    .fill.tight {
+      background: Highlight;
+    }
   }
 </style>

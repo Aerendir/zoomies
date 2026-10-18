@@ -23,6 +23,7 @@ import {
   openNavMenu,
   pageHeading,
   PRIMARY_SECTIONS,
+  useClassic,
   SECTIONS,
   sectionHeading,
   expectNoSidewaysScroll,
@@ -929,6 +930,8 @@ function layout(page: Page, choice: 'Cards' | 'Rows'): Locator {
 }
 
 test('a grid can be read as cards instead of rows, and remembers which', async ({ page }) => {
+  // Mission Control starts a fresh phone grid as Cards; this walks from Rows.
+  await useClassic(page);
   await goto(page, '/runners', 'Runners');
   const rows = dataRows(grid(page, 'Runners'));
   await expect(rows.first()).toBeVisible();
@@ -977,7 +980,12 @@ const tablesDefault = (page: Page, name: 'Rows' | 'Cards') =>
   page.getByRole('group', { name: 'Tables on a phone' }).getByRole('button', { name });
 
 test('the Settings default decides for every grid that has not chosen', async ({ page }) => {
+  // A fresh phone grid is Rows in Classic and Cards in Mission Control, so this
+  // starts on Classic: the Cards it then chooses is a change and not the fallback.
+  // Started on the default, it passed with the setting doing nothing.
+  await useClassic(page);
   await goto(page, '/settings/appearance', 'Appearance');
+  await expect(tablesDefault(page, 'Rows')).toHaveAttribute('aria-pressed', 'true');
   await tablesDefault(page, 'Cards').click();
   await expect(tablesDefault(page, 'Cards')).toHaveAttribute('aria-pressed', 'true');
 

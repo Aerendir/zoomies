@@ -1,8 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Dark is the default, as in the app, and it is written on <html> rather than
+         applied by a script: this page's Content-Security-Policy has a hash for the
+         app's inline script and none for one of its own, so a script could only run
+         after the first paint, and not at all where storage cannot be read.
+         src/status/main.ts undoes it for a reader who chose Light or System. -->
     <meta name="color-scheme" content="light dark" />
     <!-- A fleet's status is for the people whose jobs run on it, not for a
          search engine, whatever server.allow_indexing says about the app. -->

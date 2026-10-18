@@ -109,24 +109,32 @@ test('a collapsed navigation is still collapsed after a reload', async ({ page }
   }
 });
 
-test('the theme toggle switches to dark and the choice survives a reload', async ({ page }) => {
+test('the theme defaults to dark, and a choice survives a reload', async ({ page }) => {
   await goto(page, '/', 'Overview');
-  expect((await readTheme(page)).attribute, 'system is the default and writes nothing').toBeNull();
+  const first = await readTheme(page);
+  expect(first.attribute, 'dark is the default').toBe('dark');
+  expect(first.stored, 'a default is not a stored choice').toBeNull();
 
-  await chooseTheme(page, 'dark');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  expect((await readTheme(page)).stored).toBe('dark');
+  await chooseTheme(page, 'light');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  expect((await readTheme(page)).stored).toBe('light');
 
   await reload(page, 'Overview');
   const after = await readTheme(page);
-  expect(after.attribute).toBe('dark');
-  expect(after.stored).toBe('dark');
+  expect(after.attribute).toBe('light');
+  expect(after.stored).toBe('light');
 
-  // And with nothing stored it is the operating system's choice again, which
-  // is what "system is the default" has to mean.
-  await clearStoredPreferences(page);
+  // Following the system is a choice too, so it has to be remembered: it is
+  // no longer what an empty browser gets.
+  await chooseTheme(page, 'system');
+  expect((await readTheme(page)).stored).toBe('system');
   await reload(page, 'Overview');
   expect((await readTheme(page)).attribute).toBeNull();
+
+  // And with nothing stored it is the default again.
+  await clearStoredPreferences(page);
+  await reload(page, 'Overview');
+  expect((await readTheme(page)).attribute).toBe('dark');
 });
 
 test('an unknown address renders the not-found page, not a blank screen', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { goto } from './support/fixtures';
+import { goto, tokenPixels } from './support/fixtures';
 
 test('private enrolment explains unavailable configuration in an auth-disabled demo', async ({
   page,
@@ -94,7 +94,7 @@ test('the connection chooser labels itself like every other group and rings a ca
   // Soft, so the ring below is judged on the same run.
   await expect.soft(legend).toHaveCSS('font-weight', weight);
   // --z-text-xs, which computes to pixels.
-  await expect.soft(legend).toHaveCSS('font-size', '12px');
+  await expect.soft(legend).toHaveCSS('font-size', await tokenPixels(page, '--z-text-xs'));
 
   const card = page.locator('label.connection-choice', { hasText: 'Direct connection' });
   const radio = card.getByRole('radio');

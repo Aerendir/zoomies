@@ -23,6 +23,7 @@
   beside it.
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import { Check, CircleCheck } from '@lucide/svelte';
   import { acknowledgeJob, listJobs, reopenJobAttention } from '$lib/api/client';
   import { events } from '$lib/api/sse';
@@ -37,7 +38,6 @@
   import { toasts } from '$lib/state/toasts.svelte';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
-  import EmptyState from '$lib/components/EmptyState.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import JobDrawer from '$lib/jobs/JobDrawer.svelte';
@@ -68,8 +68,15 @@
   let acking = $state<string | null>(null);
   let selected = $state<Job | null>(null);
   let drawerOpen = $state(false);
+  let list = $state<HTMLUListElement | null>(null);
 
   const others = $derived(prefs.otherRunners);
+  // The Jobs page lists this fleet's own jobs unless it is told otherwise, so the
+  // link to the rest has to carry the scope the count above it was made in.
+  const restHref = $derived(`/jobs?attention=true${others ? '&all=true' : ''}`);
+  // The same goes for the line shown when nothing is owed: it says "wherever they
+  // ran" only when the switch is on, so its link to the history has to as well.
+  const failedHref = $derived(`/jobs?failed=true${others ? '&all=true' : ''}`);
   // Marking a failure as known is the fleet's, not one reader's, so it takes
   // the operator role the API asks for and nobody below it.
   const canAcknowledge = $derived(session.can('operator'));
@@ -156,10 +163,14 @@
     if (!job.id || acking !== null) return;
     const before = jobs;
     const beforeTotal = total;
+    // The press is on the row that is about to leave, and focus leaves with it.
+    const held = list?.contains(document.activeElement) ?? false;
+    const at = jobs.findIndex((row) => row.id === job.id);
     acking = job.id;
     ++loadRevision;
     jobs = jobs.filter((row) => row.id !== job.id);
     total = Math.max(0, beforeTotal - 1);
+    if (held) void settleFocus(at);
     try {
       await acknowledgeJob(job.id);
       toasts.success(
@@ -174,6 +185,18 @@
     } finally {
       acking = null;
     }
+  }
+
+  /**
+   * Put focus on the failure that took the place of the one that left, or on the
+   * page when none is left, so the keyboard carries on down the list instead of
+   * starting again from the top of the document.
+   */
+  async function settleFocus(at: number): Promise<void> {
+    await tick();
+    const rows = list ? Array.from(list.querySelectorAll<HTMLElement>('.what')) : [];
+    const next = rows[Math.min(at, rows.length - 1)] ?? document.getElementById('page-heading');
+    next?.focus();
   }
 
   async function reopen(job: Job): Promise<void> {
@@ -192,111 +215,128 @@
   }
 </script>
 
-<Panel
-  title="Recent failures"
-  description={others
-    ? 'Unresolved failures from the last week, wherever they ran. Fixed, superseded and closed PR failures leave this list.'
-    : 'Unresolved failures from the last week. Fixed, superseded and closed PR failures leave this list.'}
-  class={className}
-  flush
->
-  {#snippet actions()}
-    {#if !loading && total > 0}
-      <Badge tone="danger" label="{formatNumber(total)} to look at" dot={false} />
-    {/if}
-  {/snippet}
+{#if !error && !loading && jobs.length === 0}
+  <!-- Nothing is owed, so nothing needs a card: a line, like the problems summary. -->
+  <section class={['clear', className]} aria-label="Recent failures">
+    <CircleCheck size={16} aria-hidden="true" />
+    <p>
+      No failure is waiting on you.
+      <a href={failedHref}>Failed view</a>
+      keeps the history.
+    </p>
+  </section>
+{:else}
+  <Panel
+    title="Recent failures"
+    description={others
+      ? 'Unresolved failures from the last week, wherever they ran. Fixed, superseded and closed PR failures leave this list.'
+      : 'Unresolved failures from the last week. Fixed, superseded and closed PR failures leave this list.'}
+    class={className}
+    flush
+  >
+    {#snippet actions()}
+      {#if !loading && total > 0}
+        <Badge tone="danger" label="{formatNumber(total)} to look at" dot={false} />
+      {/if}
+    {/snippet}
 
-  {#if error}
-    <div class="pad">
-      <ErrorState
-        {error}
-        compact
-        title="The recent failures could not be loaded"
-        onretry={() => void load(others)}
-      />
-    </div>
-  {:else if loading}
-    <p class="sr-only">Loading recent failures.</p>
-    <ul class="rows" aria-hidden="true">
-      {#each [0, 1, 2] as row (row)}
-        <li class="row">
-          <div class="what"><Skeleton width="60%" height="var(--z-text-base)" /></div>
-          <div class="elapsed"><Skeleton width="3rem" height="var(--z-text-xs)" /></div>
-        </li>
-      {/each}
-    </ul>
-  {:else if jobs.length === 0}
-    <EmptyState
-      icon={CircleCheck}
-      compact
-      title="No failure is waiting on you"
-      description="No unresolved failure from the last week is waiting for review. The Failed view keeps the original runs, including fixed, superseded and acknowledged failures."
-    />
-  {:else}
-    <ul class="rows">
-      {#each jobs as job (job.id)}
-        <li class="row">
-          <button
-            class="what"
-            type="button"
-            aria-label="Inspect {readableJobText(job.job_name) || 'this failure'}"
-            onclick={() => open(job)}
-          >
-            <span class="title">
-              <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
-              <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
-            </span>
-            <span class="detail">
-              {#if readableJobText(job.job_name)}<span class="job-name"
-                  >{readableJobText(job.job_name)}</span
-                >{/if}
-              {#if failureSummary(job)}
-                <span class="reason" class:danger={fleetFailed(job)}>{failureSummary(job)}</span>
+    {#if error}
+      <div class="pad">
+        <ErrorState
+          {error}
+          compact
+          title="The recent failures could not be loaded"
+          onretry={() => void load(others)}
+        />
+      </div>
+    {:else if loading}
+      <p class="sr-only">Loading recent failures.</p>
+      <ul class="rows" aria-hidden="true">
+        {#each [0, 1, 2] as row (row)}
+          <li class="row">
+            <div class="what"><Skeleton width="60%" height="var(--z-text-base)" /></div>
+            <div class="elapsed"><Skeleton width="3rem" height="var(--z-text-xs)" /></div>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <ul class="rows" bind:this={list}>
+        {#each jobs as job (job.id)}
+          <li class="row">
+            <button
+              class="what"
+              type="button"
+              aria-label="Inspect {readableJobText(job.job_name) || 'this failure'}"
+              onclick={() => open(job)}
+            >
+              <span class="title">
+                <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
+                <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
+              </span>
+              <span class="detail">
+                {#if readableJobText(job.job_name)}<span class="job-name"
+                    >{readableJobText(job.job_name)}</span
+                  >{/if}
+                {#if failureSummary(job)}
+                  <span class="reason" class:danger={fleetFailed(job)}>{failureSummary(job)}</span>
+                {/if}
+              </span>
+              <span class="inspect">View failure details</span>
+            </button>
+            <p class="elapsed">
+              <span class="sr-only">Failed </span>
+              <RelativeTime value={job.completed_at ?? job.queued_at} />
+            </p>
+            <div class="act">
+              {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}
+                <Button
+                  size="sm"
+                  href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
+                  >Fix with Eli</Button
+                >
               {/if}
-            </span>
-            <span class="inspect">View failure details</span>
-          </button>
-          <p class="elapsed">
-            <span class="sr-only">Failed </span>
-            <RelativeTime value={job.completed_at ?? job.queued_at} />
-          </p>
-          <div class="act">
-            {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}
-              <Button
-                size="sm"
-                href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
-                >Fix with Eli</Button
-              >
-            {/if}
-            {#if canAcknowledge}
-              <IconButton
-                icon={Check}
-                label="Mark this failure as known"
-                help="Takes it off the failures needing attention without changing the failure."
-                size="sm"
-                disabled={acking === job.id}
-                onclick={() => void acknowledge(job)}
-              />
-            {/if}
-          </div>
-        </li>
-      {/each}
-    </ul>
-    {#if total > jobs.length}
-      <p class="more">
-        <a href="/jobs?attention=true"
-          >and {formatNumber(total - jobs.length)} more on the jobs page</a
-        >
-      </p>
+              {#if canAcknowledge}
+                <IconButton
+                  icon={Check}
+                  label="Mark this failure as known"
+                  help="Takes it off the failures needing attention without changing the failure."
+                  size="sm"
+                  disabled={acking === job.id}
+                  onclick={() => void acknowledge(job)}
+                />
+              {/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
+      {#if total > jobs.length}
+        <p class="more">
+          <a href={restHref}>and {formatNumber(total - jobs.length)} more on the jobs page</a>
+        </p>
+      {/if}
     {/if}
-  {/if}
-</Panel>
+  </Panel>
+{/if}
 
 <JobDrawer bind:open={drawerOpen} job={selected} onclose={() => (selected = null)} />
 
 <style>
   .pad {
     padding: var(--z-space-4) var(--z-space-5);
+  }
+  .clear {
+    display: flex;
+    align-items: center;
+    gap: var(--z-space-2);
+    padding: var(--z-space-1) var(--z-space-1);
+    font-size: var(--z-text-sm);
+    color: var(--z-text-muted);
+  }
+  .clear p {
+    margin: 0;
+  }
+  .clear a {
+    color: var(--z-accent);
   }
   .rows {
     margin: 0;

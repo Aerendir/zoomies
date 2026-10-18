@@ -10,6 +10,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   clearStoredPreferences,
+  closeHostCard,
   expectNoReload,
   FIXTURE,
   goto,
@@ -229,17 +230,23 @@ test('host usage distinguishes a connected agent from held new starts and recove
     await heartbeat(0);
     await goto(page, '/hosts', 'Hosts');
     const card = page.getByRole('article', { name, exact: true });
-    await openHostCard(card);
-    await expect(card).toContainText('Agent connected');
-    await expect(card).toContainText('CPU usage 20%');
-    await expect(card).toContainText('0 B memory available');
     // Two slots stepped to one: the controller's sentence names the rung,
-    // the measurement and what the running work is doing.
+    // the measurement and what the running work is doing. It is why this host
+    // takes less work, so it is on the card before anything is opened.
+    await expect(card.getByRole('button', { name: /^Details for / })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     await expect(card).toContainText(
       "throttled to 1 of 2 slots (step 1 of 3) after sustained pressure: available memory is at or below the host's reserve",
     );
     await expect(card).toContainText('running jobs continue');
     await expect(card).toContainText(/0 of 1 slots in use\s*· throttled from 2/);
+    // The heartbeat and the usage lines are detail, and are behind Details.
+    await openHostCard(card);
+    await expect(card).toContainText('Agent connected');
+    await expect(card).toContainText('CPU usage 20%');
+    await expect(card).toContainText('0 B memory available');
     await testInfo.attach('host-pressure-hold', {
       body: await card.screenshot(),
       contentType: 'image/png',
@@ -249,7 +256,9 @@ test('host usage distinguishes a connected agent from held new starts and recove
     // Still on its rung: calm has to last before a step is given back.
     await expect(card).toContainText('throttled from 2');
 
-    // retry_in is a Go duration on the wire: nanoseconds.
+    // A runtime that is cooling down is a reason too, so it is looked for with
+    // the fold shut. retry_in is a Go duration on the wire: nanoseconds.
+    await closeHostCard(card);
     await heartbeat(8192, {
       failures: 3,
       kind: 'unavailable',
@@ -328,7 +337,12 @@ test('a host under sustained pressure is throttled, says why, and an operator ca
 
     await goto(page, '/hosts', 'Hosts');
     const card = page.getByRole('article', { name, exact: true });
-    await openHostCard(card);
+    // All of this is why the host takes less work than it was given, so it is
+    // on the card as it opens, with Details still shut.
+    await expect(card.getByRole('button', { name: /^Details for / })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     // The badge carries the step in its tooltip, so hovering answers "how bad".
     await card.getByText('Throttled', { exact: true }).hover();
     await expect(page.locator('.bubble:popover-open')).toContainText(/^Throttled, step 1 of 3/);
@@ -337,6 +351,8 @@ test('a host under sustained pressure is throttled, says why, and an operator ca
     );
     await expect(card).toContainText('the throttle lifts one step after 5m of calm');
     await expect(card).toContainText(/0 of 3 slots in use\s*· throttled from 4/);
+    // The load average is a figure about the machine, and is behind Details.
+    await openHostCard(card);
     await expect(card).toContainText('load 20');
     await testInfo.attach('host-throttled', {
       body: await card.screenshot(),

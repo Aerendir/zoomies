@@ -22,13 +22,17 @@ place.
 
 `zoomies init` offers **Docker Compose** whenever the host has a `compose`
 command, and makes it the default. It writes a `docker-compose.yml` and a
-**fully populated `.env`** (external URL, a freshly generated encryption key,
-bind address, TLS mode, trusted proxies, backend, capacity, paths, the image
-tag, the published port and the host's real docker group id) then brings the
-stack up. Every variable carries a one-line comment saying what it is for; the
-file is `0600` because it holds your encryption key; and it is written
-atomically, so an interrupted install never leaves a half-written file that
-compose would then read.
+**fully populated `.env`** (a freshly generated encryption key, the paths of the
+state directory and the database, the image tag, the published address and port,
+and the host's real docker group id), stores the rest of its answers as the
+controller's settings in its database (the external URL, bind address, TLS mode,
+trusted proxies, backend and capacity), then brings the stack up. The settings
+are kept out of the file on purpose: a variable there would override the
+database, and the Settings page would show it as locked. Every variable in the
+file carries a one-line comment saying what it is for; the file is `0600`
+because it holds your encryption key; and it is written atomically, so an
+interrupted install never leaves a half-written file that compose would then
+read.
 
 ```sh
 curl -fsSL https://zoomies.sh/install.sh | sh -s -- --deployment compose
@@ -139,7 +143,10 @@ reachable from a job unless a pool's `docker_mode` says so.
 measures, which also sets the share a pool sized by its host gives each runner.
 A constant pins every deployment of the file to the same slot count however
 large the host is, so set a number only to hold this host below what it would
-take on its own. The installer's `.env` leaves it empty for the same reason.
+take on its own. The installer does not leave it empty: `zoomies init` measures
+the host and stores a number as the controller's `agent.capacity` setting before
+the container first starts, one runner per two of the cores it found (at least
+one) unless you gave it another.
 
 Every further host joins the same way it would on any other deployment:
 **Hosts → Add a host** hands you one line to paste on the new machine. [Adding

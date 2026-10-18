@@ -485,7 +485,7 @@ func (s *Server) handleCreateProvider(w http.ResponseWriter, r *http.Request) {
 			s.logger(r).Warn("could not remove completed provider setup", "error", err)
 		}
 	}
-	writeJSON(w, http.StatusCreated, s.ctrl.ProviderView(fresh, nil))
+	writeCreated(w, r, fresh.ID, s.ctrl.ProviderView(fresh, nil))
 }
 
 // handleUpdateProvider answers PATCH /api/v1/providers/{id}.

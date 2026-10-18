@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import type { ErrorCode } from '../src/lib/api/types.ts';
 import {
   analysisContext,
   analysisWindow,
@@ -11,9 +12,11 @@ import {
   longestWaits,
   queueWaitScope,
   refusalOf,
+  startupFailuresScope,
   stepLine,
   thresholdValue,
   UNCLAIMED_POOL,
+  whyNoWindow,
 } from '../src/lib/insights/analysis.ts';
 
 // The confidence is words on a neutral badge, so the words carry all of it:
@@ -100,6 +103,37 @@ test('a window that does not end after it starts asks nothing', () => {
   assert.equal(analysisWindow(undefined, 'not a time', NOW), null);
 });
 
+// A window nothing is asked of leaves the card with no finding, no failure and
+// nothing loading, which is a titled frame with nothing under it. The date
+// picker points out a backwards range and nothing points out one that has not
+// started, so the card says why it asked nothing, in each case.
+test('a window nothing is asked of says why, whichever way it is empty', () => {
+  const future =
+    'This period has not started, and an analysis reads only what has already happened; choose a start in the past.';
+  const backwards = 'The end is before the start, so there is no period to analyse.';
+  const unreadable =
+    'The range has a date this page cannot read, so there is no period to analyse.';
+  const cases: [string | undefined, string | undefined, string][] = [
+    ['2026-10-14T00:00:00.000Z', '2026-10-15T00:00:00.000Z', future],
+    // An end left out is now, so a start after now is the same case.
+    ['2026-10-14T00:00:00.000Z', undefined, future],
+    ['2026-10-13T10:00:00.000Z', '2026-10-13T09:00:00.000Z', backwards],
+    // Both in the future, and the wrong way round: backwards is what to fix first.
+    ['2026-10-16T00:00:00.000Z', '2026-10-15T00:00:00.000Z', backwards],
+    ['not a time', undefined, unreadable],
+    [undefined, 'not a time', unreadable],
+  ];
+  for (const [since, until, said] of cases) {
+    // Said only for a window that asks nothing: the others have an answer.
+    assert.equal(analysisWindow(since, until, NOW), null, `${since} to ${until} asks nothing`);
+    assert.equal(whyNoWindow(since, until), said, `${since} to ${until}`);
+  }
+  // Usage reads an address it cannot parse as bounds that are empty, and never
+  // gets as far as asking analysisWindow, which would take them for no window.
+  assert.equal(whyNoWindow('', ''), unreadable);
+  assert.equal(whyNoWindow('2026-10-13T00:00:00.000Z', ''), unreadable);
+});
+
 // Eli is handed what the card shows, named one by one, and never the evidence
 // object: names a workflow wrote stay on the page, and Eli has the tool.
 test('Ask Eli is handed the finding the card shows', () => {
@@ -124,6 +158,49 @@ test('Ask Eli is handed the finding the card shows', () => {
   assert.equal(context.facts.Codes, 'pool.at_max_runners');
   assert.ok(!('Evidence' in context.facts));
   assert.ok(context.question && context.question.length > 0);
+});
+
+// The prompt tells Eli to check what the page showed against the fleet with its
+// tools, and the tools read the last day of the whole fleet unless told
+// otherwise. A card narrowed to a pool or a host, or reading a period of its
+// own, has to hand over what it was narrowed to and say to pass it, or Eli's
+// check answers another question than the card's: the fleet's "host
+// demo-builder-2 failed to start 6 of 10" against a pool's "no start failed".
+test('Ask Eli is told which pool or host the card was narrowed to, and to pass it', () => {
+  const finding = {
+    analysis: 'startup_failures',
+    since: '2026-10-12T12:00:00Z',
+    until: '2026-10-13T12:00:00Z',
+    summary: 'No start failed in this period: 6 runners started.',
+    confidence: 'medium',
+    next_steps: [],
+    codes: [],
+  };
+  const pool = analysisContext('What keeps failing to start', finding, {
+    pool: { id: 'pool_a', name: 'linux' },
+  });
+  assert.equal(pool.facts.Pool, 'linux (pool_a)');
+  assert.equal(pool.facts.Host, undefined);
+  assert.match(pool.question ?? '', /for this pool\b/);
+  assert.match(pool.question ?? '', /pool_id pool_a\b/);
+  assert.match(pool.question ?? '', /since 2026-10-12T12:00:00Z, until 2026-10-13T12:00:00Z/);
+
+  const both = analysisContext('What keeps failing to start', finding, {
+    pool: { id: 'pool_a' },
+    host: { id: 'host_x', name: 'demo-builder-2' },
+  });
+  // A name the page does not know is the id alone, not "pool_a (pool_a)".
+  assert.equal(both.facts.Pool, 'pool_a');
+  assert.equal(both.facts.Host, 'demo-builder-2 (host_x)');
+  assert.match(both.question ?? '', /pool_id pool_a and host_id host_x/);
+
+  // Nothing narrowed: the fleet, and the period alone.
+  const fleet = analysisContext('What keeps failing to start', finding);
+  assert.equal(fleet.facts.Pool, undefined);
+  assert.equal(fleet.facts.Host, undefined);
+  assert.match(fleet.question ?? '', /for this fleet\b/);
+  assert.doesNotMatch(fleet.question ?? '', /pool_id|host_id/);
+  assert.match(fleet.question ?? '', /since 2026-10-12T12:00:00Z/);
 });
 
 // With the names withheld every one is empty; joining them would print a row
@@ -231,6 +308,65 @@ test('the unmatched filter is named', () => {
   assert.equal(queueWaitScope({ ...none, unmatched: false }, (x) => x).unapplied, null);
 });
 
+// GitHub reports every job in an installed repository, so the list leaves
+// another vendor's jobs out until "Include other runners" is on, and the
+// analysis leaves them out always: they are that vendor's to run, never time
+// a pool should have claimed them in. With the switch on the list holds jobs
+// the card does not, which is the one thing a reader comparing the two would
+// not guess, so the card says it.
+test('the Include other runners switch is named when it is on, and only then', () => {
+  const none = { pool_id: [], repo: [], workflow: [], host_id: [], label: [], q: '' };
+  const said =
+    "The list's Include other runners switch is not applied here: this analysis leaves out the jobs another vendor's runners ran.";
+  assert.deepEqual(
+    queueWaitScope({ ...none, all: true }, (x) => x),
+    {
+      scope: 'Every pool',
+      unapplied: said,
+    },
+  );
+  assert.equal(queueWaitScope({ ...none, all: false }, (x) => x).unapplied, null);
+  // Beside a filter it names both, each in its own sentence.
+  assert.equal(
+    queueWaitScope({ ...none, repo: ['acme/api'], all: true }, (x) => x).unapplied,
+    `The list's repository filter is not applied here: this analysis reads every pool, or one pool. ${said}`,
+  );
+});
+
+// The failed runners' card reads the period's starts, narrowed by the pool and
+// host the page chose, and says so; the list beside it also takes a search,
+// which the analysis has no use for. A card that went on saying the fleet's
+// answer under a list searched down to one runner would read as that runner's.
+test('the failed runners card names its scope and the search it cannot apply', () => {
+  const none = { pool_id: '', host_id: '', q: '' };
+  const names = {
+    pool: (id: string) => (id === 'pool_a' ? 'linux' : id),
+    host: (id: string) => (id === 'host_a' ? 'builder-1' : id),
+  };
+  assert.deepEqual(startupFailuresScope(none, names), {
+    scope: 'Every pool and host',
+    unapplied: null,
+  });
+  assert.equal(startupFailuresScope({ ...none, pool_id: 'pool_a' }, names).scope, 'Pool linux');
+  assert.equal(startupFailuresScope({ ...none, host_id: 'host_a' }, names).scope, 'Host builder-1');
+  assert.equal(
+    startupFailuresScope({ ...none, pool_id: 'pool_a', host_id: 'host_a' }, names).scope,
+    'Pool linux, host builder-1',
+  );
+  // A pool the page has no name for is its id, as the Queued card has it.
+  assert.equal(
+    startupFailuresScope({ ...none, pool_id: 'pool_gone' }, names).scope,
+    'Pool pool_gone',
+  );
+  assert.deepEqual(startupFailuresScope({ ...none, q: 'runner-7' }, names), {
+    scope: 'Every pool and host',
+    unapplied:
+      "The list's search filter is not applied here: this analysis reads every start in the period, narrowed only by pool and host.",
+  });
+  // Spaces are not a search, as the list reads them.
+  assert.equal(startupFailuresScope({ ...none, q: '   ' }, names).unapplied, null);
+});
+
 // A period card names its scope and its period above the summary; a
 // comparison names each side's own dates instead of the period asked for,
 // and that cancelled and skipped jobs were left out, both visible without
@@ -282,6 +418,33 @@ test('a refusal is told apart from a failed request', () => {
     message: 'The analysis could not be read.',
     refused: false,
   });
+});
+
+// The route's sentence for too few releases tells a caller to name the
+// releases with a and b, or to compare by period. The Usage card asks by
+// version with neither and never compares periods, so two of its three
+// remedies are ones the page has no control for, and on Usage's default day
+// this is the ordinary answer. The page says what it can do.
+test('too few releases is said as the Usage card can act on it', () => {
+  // Typed, so the page's wording follows the code if the API ever renames it.
+  const code: ErrorCode = 'analysis.too_few_releases';
+  const said = refusalOf({
+    status: 409,
+    code,
+    message:
+      'fewer than two releases completed a job in this period, so there is no pair to compare; name the releases with a and b, widen the period, or compare by period',
+  });
+  assert.deepEqual(said, {
+    message:
+      'Fewer than two releases completed a job in this range, so there is no pair to compare; widen the range.',
+    refused: true,
+  });
+  assert.doesNotMatch(said.message, /\ba and b\b|by period/);
+  // Any other refusal keeps the route's own sentence, which says what to change.
+  assert.equal(
+    refusalOf({ status: 409, code: 'conflict', message: 'something else to change' }).message,
+    'Something else to change.',
+  );
 });
 
 // The server's 500 names no cause on purpose and carries its request ID in

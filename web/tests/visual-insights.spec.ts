@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { goto, openHostCapacityMap } from './support/fixtures';
+import { goto, openFleetContext, openHostCapacityMap } from './support/fixtures';
 
 test('runner queue context uses fleet totals and links to provisioning controls', async ({
   page,
@@ -224,6 +224,8 @@ for (const route of [
       await goto(page, route.path, route.heading);
       // The Hosts page folds its map away until it is asked for.
       if (route.path === '/hosts') await openHostCapacityMap(page);
+      // And Mission Control folds the Jobs page's context away on a phone.
+      if (route.path === '/jobs') await openFleetContext(page);
       await expect(page.getByRole('region', { name: route.panel, exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,

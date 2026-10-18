@@ -21,7 +21,15 @@
  * every test that turns one on puts it back.
  */
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { dataRows, documentWidth, goto, grid, openHostCard } from './support/fixtures';
+import {
+  dataRows,
+  documentWidth,
+  goto,
+  grid,
+  openFleetContext,
+  openHostCard,
+  tokenPixels,
+} from './support/fixtures';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -675,7 +683,10 @@ test.describe('pools the controller keeps', () => {
     const valve = dialog.getByRole('group', { name: 'Elastic memory' });
     await expect(valve).toHaveCSS('display', 'flex');
     await expect(valve.locator('legend')).toHaveCSS('border-top-width', '1px');
-    await expect(valve.locator('.hint').first()).toHaveCSS('font-size', '12px');
+    await expect(valve.locator('.hint').first()).toHaveCSS(
+      'font-size',
+      await tokenPixels(page, '--z-text-xs'),
+    );
     await dialog.getByRole('radio', { name: /^Lend memory/ }).check();
     // Swap past a terabyte is a typo, and is said where it is typed.
     const swap = dialog.getByRole('textbox', { name: 'Swap as the last resort', exact: true });
@@ -893,6 +904,8 @@ test.describe('job size', () => {
     });
 
     await goto(page, '/jobs', 'Jobs');
+    // Mission Control folds the page's context away on a phone.
+    await openFleetContext(page);
     const panel = page.getByTestId('size-advice');
     await expect(panel).toContainText('Size labels and pins');
     // The count is on the closed summary, so the report is not found by chance,
@@ -975,6 +988,7 @@ test.describe('job size', () => {
       return route.fulfill({ json: { items: [] } });
     });
     await goto(page, '/jobs', 'Jobs');
+    await openFleetContext(page);
     const panel = page.getByTestId('size-advice');
     await panel.locator('summary').click();
     await expect(panel.getByTestId('advice-none')).toContainText('Nothing to suggest');

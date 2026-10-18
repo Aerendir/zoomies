@@ -111,7 +111,8 @@ above a floor it keeps for itself.
 
 If the host measures less free memory than the ledger allows (a page cache
 that is not coming back, something else on the machine) the free memory is the
-limit instead, and the host card says which of the two it was. What has been
+limit instead, and the host card's **Memory to lend**, under **Details**, says
+which of the two it was. What has been
 lent already is part of the total and comes off what is left: after a runner is
 lent 1216 MB, the pool above is 3700 MB.
 
@@ -289,8 +290,8 @@ folders** panel draws the cards open. Under **Resource usage**, the memory figur
 is measured against what the runner may hold now, with the loan counted: *4.9 GB
 of 5.5 GB allowed, 1.5 GB of it lent*.
 
-**On a host's card**, **Memory to lend** is the pool as a bar drawn against the
-whole machine (what is promised, what the host keeps back, what is lent, and
+**On a host's card**, under **Details**, **Memory to lend** is the pool as a bar
+drawn against the whole machine (what is promised, what the host keeps back, what is lent, and
 what is left) with the ledger behind it, line by line, in the card that opens
 from it on hover, focus or a tap. A host that has refused a runner memory in the
 last quarter of an hour says when, and why.

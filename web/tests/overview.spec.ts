@@ -10,7 +10,7 @@
  * and pressing it changes nothing about what the page says.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { FIXTURE, goto } from './support/fixtures';
+import { FIXTURE, goto, reload, useClassic } from './support/fixtures';
 
 test.beforeEach(async ({ page }) => {
   await goto(page, '/', 'Overview');
@@ -617,6 +617,10 @@ test('the subtitle names the window the figures actually cover', async ({ page }
 test('the activity matrix heads the page, and every square says what it holds', async ({
   page,
 }) => {
+  // Mission Control, the default, leads with the pools; the matrix-first order
+  // is Classic's, and operational-layout.spec.ts holds Mission Control's.
+  await useClassic(page);
+  await goto(page, '/', 'Overview');
   await yearOfDays(page);
   const matrix = page.getByRole('region', { name: 'Activity matrix', exact: true });
   await expect(matrix).toBeVisible();
@@ -1019,8 +1023,9 @@ test('a fleet that has run jobs is never announced its first one while its count
  * The question GitHub cannot answer, on the page an operator leaves open:
  * which failures has anybody read. The panel lists the failures from the last
  * week that nobody has acknowledged and no later attempt has replaced, its
- * header carries the whole count rather than the five rows, and a row opens
- * the job's own drawer where the same decision can be taken and taken back.
+ * header carries the whole count rather than the two rows it shows (SHOWN in
+ * RecentFailures.svelte), and a row opens the job's own drawer where the same
+ * decision can be taken and taken back.
  */
 test('recent failures says which failures nobody has read, and links to the rest', async ({
   page,
@@ -1065,4 +1070,107 @@ test('recent failures says which failures nobody has read, and links to the rest
   } else {
     await expect(more).toHaveCount(0);
   }
+});
+
+/*
+ * The link under the panel is the rest of what the panel counted, so it has to
+ * lead to the same scope. The Jobs page lists this fleet's own jobs unless it is
+ * told otherwise, and the panel's switch is the same preference the tiles use:
+ * with other runners on, the count includes failures elsewhere and a bare link
+ * lands on a list that is shorter than the number it was reached from.
+ */
+test("the failures panel's link to the rest keeps the scope the panel counted", async ({
+  page,
+}) => {
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const more = failures.getByRole('link', { name: /more on the jobs page/ });
+  await expect(more, 'the fixture has more failures than the panel shows').toBeVisible();
+  await expect(more).toHaveAttribute('href', '/jobs?attention=true');
+
+  const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
+  const toggle = header.getByRole('switch', { name: 'Other runners' });
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(more).toHaveAttribute('href', '/jobs?attention=true&all=true');
+
+  await more.click();
+  await expect(page).toHaveURL(/[?&]attention=true/);
+  await expect(page).toHaveURL(/[?&]all=true/);
+});
+
+// The line shown when nothing is owed links to the history, and it says nothing
+// is waiting "wherever they ran" only when the switch is on. A bare link would
+// land on the fleet's own failed jobs, a shorter list than the claim it was
+// reached from, the same way the link under a full panel would.
+test("the one-line failures panel's link to the failed view keeps the scope", async ({ page }) => {
+  await page.route(/\/api\/v1\/jobs\?.*attention=true/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({ response, json: { ...body, items: [], total: 0 } });
+  });
+  await reload(page, 'Overview');
+
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const history = failures.getByRole('link', { name: 'Failed view' });
+  await expect(history).toHaveAttribute('href', '/jobs?failed=true');
+
+  const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
+  const toggle = header.getByRole('switch', { name: 'Other runners' });
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(history).toHaveAttribute('href', '/jobs?failed=true&all=true');
+});
+
+// Marking a failure as known takes its row off the list, and the button that was
+// pressed goes with it. Keyboard focus fell to the top of the document, so
+// working down the list meant tabbing back to where you had been after every row.
+test('marking a failure as known moves focus to the failure that takes its place', async ({
+  page,
+}) => {
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const rows = failures.getByRole('listitem');
+  const count = failures.getByText(/\d+ to look at/);
+  await expect(rows).toHaveCount(2);
+  const before = await count.textContent();
+  const next = await rows
+    .nth(1)
+    .getByRole('button', { name: /^Inspect/ })
+    .getAttribute('aria-label');
+
+  await rows.first().getByRole('button', { name: 'Mark this failure as known' }).click();
+
+  const inspect = rows.first().getByRole('button', { name: /^Inspect/ });
+  await expect(inspect).toHaveAttribute('aria-label', next ?? '');
+  await expect(inspect).toBeFocused();
+
+  // Put it back, so the fleet the other specs share is as this one found it.
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(count).toHaveText(before ?? '');
+});
+
+// With no failure left to take the row's place, focus has nowhere on the panel to
+// go, and the page heading is where the app puts it after any other change of
+// place. The fleet is given one failure and the requests that mark it as known
+// are answered here, so the fixture the other specs share is not touched.
+test('marking the only failure as known moves focus to the page heading', async ({ page }) => {
+  let acknowledged = false;
+  await page.route(/\/api\/v1\/jobs\?.*attention=true/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const items = acknowledged ? [] : (body.items ?? []).slice(0, 1);
+    await route.fulfill({ response, json: { ...body, items, total: items.length } });
+  });
+  await page.route(/\/api\/v1\/jobs\/[^/]+\/acknowledge$/, (route) => {
+    acknowledged = route.request().method() === 'POST';
+    return route.fulfill({ json: {} });
+  });
+  await reload(page, 'Overview');
+
+  const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
+  const rows = failures.getByRole('listitem');
+  await expect(rows).toHaveCount(1);
+  await rows.first().getByRole('button', { name: 'Mark this failure as known' }).click();
+
+  await expect(failures.getByText('No failure is waiting on you')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeFocused();
 });

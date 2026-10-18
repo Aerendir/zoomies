@@ -285,9 +285,16 @@ systemd does not run it, or its agent runs in a container under a rootless
 runtime), the card says **Update by command** and which of those it is, draws no
 button and suggests no install: the command beneath it is the way.
 A host that matches the controller has no row at all. The agent inside the controller is updated with the
-controller, from **Settings → Updates**. The copyable command stays beneath the
-button on every card, for an operator to run on the host, whatever the button
-does.
+controller, from **Settings → Updates**. On the card of a remote host whose
+release differs from the controller's (or whose agent speaks a protocol the
+controller cannot work with), the copyable command is at the foot, beneath the
+row, in a folded **Update this agent** section, for an operator to run on the
+host whatever the button does. The row is for administrators, so an operator who
+is not one sees the section alone, and the host's own page has the row and not
+the command. Where no command can work (an agent newer than the controller, a
+machine Zoomies rents, or a controller built from no release) the section is
+called **Agent version guidance** and holds only the sentence that says what to
+do.
 
 ## Priority among hosts
 
@@ -574,7 +581,7 @@ by the standard on each of CPU and memory, the smaller count winning) and never
 more than its capacity. Capacity becomes the operator's ceiling on that count
 rather than the count itself: a host that holds three runners and has a capacity
 of eight takes three, and one that holds eight with a capacity of two takes two.
-The host's card says which of the two it is, under **Details** (`slots_limited_by` on the API is
+The host's card says which of the two it is, under the slot bar (`slots_limited_by` on the API is
 `cpu`, `memory` or `capacity`). A capacity of zero still takes nothing, because
 that is how a host is paused and a size must never un-pause one, and a host that
 has not reported its machine is counted by its capacity alone until it does.
@@ -1015,7 +1022,9 @@ say:
 ![The Runner sizes dialog for a host, scrolled to In-memory folders, where its owner sets the size each folder is asked for on the machine and a ceiling, or falls back to disk as a temporary fix.](screenshots/host-runner-sizes-dark.webp#only-dark){ .zoomies-shot }
 ![The Runner sizes dialog for a host, scrolled to In-memory folders, where its owner sets the size each folder is asked for on the machine and a ceiling, or falls back to disk as a temporary fix.](screenshots/host-runner-sizes-light.webp#only-light){ .zoomies-shot }
 
-Set them under **Runner sizes** in the host card's **Details**, with
+Set them in the host's runner sizes (*Set runner sizes* in its menu, or **Edit**
+on the **Runner sizes** block under the card's **Details**, which a host has once
+it has a profile), with
 `zoomies hosts edit <host> --tmpfs-work-mb 16384` (also `--tmpfs-tmp-mb`,
 `--tmpfs-docker-mb` and `--tmpfs-max-mb`), `--tmpfs-off` for the tactical
 fallback, or with
@@ -1175,11 +1184,12 @@ anything: load keeps counting what is queued behind the cores, so it is what
 says a host has been pushed *past* them rather than merely to them. Sampling
 reads procfs and makes no extra Docker requests.
 
-The Hosts page shows actual usage separately from **Committed** resources.
-Committed CPU is a reservation, not a measurement of CPU saturation. A fresh
-reading tightens memory admission and influences host ranking; it never raises
-the configured capacity or overrides the pool's limits and host reserves.
-Measured memory already contains running workloads, so their reservations are
+The Hosts page shows actual usage separately from **Committed** resources, both
+under a card's **Details**; the closed card says so when committed resources are
+why a free slot goes unused. Committed CPU is a reservation, not a measurement of
+CPU saturation. A fresh reading tightens memory admission and influences host
+ranking; it never raises the configured capacity or overrides the pool's limits
+and host reserves. Measured memory already contains running workloads, so their reservations are
 not subtracted from that measurement again. Runners still provisioning or
 registering, starts newer than the measurement, and all placements in the
 current pass are charged before another placement is allowed. The independent

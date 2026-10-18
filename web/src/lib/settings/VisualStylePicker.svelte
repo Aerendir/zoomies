@@ -44,7 +44,9 @@
       </label>
     {/each}
   </div>
-  <Button variant="ghost" onclick={() => select('classic')}>Reset visual style to Classic</Button>
+  <Button variant="ghost" onclick={() => select('mission-control')}
+    >Reset visual style to Mission Control</Button
+  >
   <span class="sr-only" aria-live="polite" aria-atomic="true">{announcement}</span>
 </fieldset>
 
