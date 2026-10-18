@@ -262,51 +262,111 @@ async function mirrorResponse(from) {
   return new Response(body, { status: upstream.status, headers });
 }
 
+// GitHub Pages cannot set response headers, so the browser-hardening set is
+// added here, on every answer the zone gives: pages, the origin's own 404,
+// the Markdown copies and the mirrored identity documents.
+//
+// HSTS is deliberately one year with no includeSubDomains and no preload.
+// Preload is close to irreversible and would bind portal.zoomies.sh and
+// demo.zoomies.sh to HTTPS-only for years; that is the owner's decision to
+// take, not a default to ship quietly.
+//
+// The policy allows 'unsafe-inline' for scripts and styles because the theme
+// writes inline scripts and the JSON-LD blocks into every page, and a static
+// origin has no per-request nonce to give them. It is still tighter than no
+// policy: no third-party origin may run script, load a font or be connected
+// to, nothing may frame the site, and no plugin content or foreign base URL is
+// accepted. It is sent as Report-Only until someone has browsed the built site
+// with the console open and seen no violation; then the name below changes.
+export const CSP_HEADER = "content-security-policy-report-only";
+
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "manifest-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join("; ");
+
+export function securityHeaders() {
+  return {
+    "strict-transport-security": "max-age=31536000",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    [CSP_HEADER]: CONTENT_SECURITY_POLICY,
+  };
+}
+
+// A response from fetch() has immutable headers, so it is rebuilt rather than
+// edited. A header the origin or an earlier step already set is kept: the
+// hardening fills gaps and never overrides a deliberate choice.
+function withSecurityHeaders(response) {
+  const rebuilt = new Response(response.body, response);
+  for (const [name, value] of Object.entries(securityHeaders())) {
+    if (!rebuilt.headers.has(name)) {
+      rebuilt.headers.set(name, value);
+    }
+  }
+  return rebuilt;
+}
+
+async function route(request) {
+  if (request.method === "GET" || request.method === "HEAD") {
+    const url = new URL(request.url);
+    const mirror = MIRRORS.find((m) => m.at.includes(url.pathname));
+    if (mirror) {
+      const mirrored = await mirrorResponse(mirror.from);
+      if (mirrored !== null) {
+        return request.method === "HEAD" ? new Response(null, mirrored) : mirrored;
+      }
+    }
+    if (url.pathname === "/.well-known/api-catalog" || url.pathname === "/.well-known/api-catalog/") {
+      const catalog = await apiCatalogResponse(url);
+      if (catalog !== null) {
+        return request.method === "HEAD" ? new Response(null, catalog) : catalog;
+      }
+    }
+    if (url.pathname === "/.well-known/oauth-protected-resource") {
+      const resource = await protectedResourceResponse(url);
+      if (resource !== null) {
+        return request.method === "HEAD" ? new Response(null, resource) : resource;
+      }
+    }
+    if (wantsMarkdown(request.headers.get("accept"))) {
+      const markdown = await markdownResponse(request, url);
+      if (markdown !== null) {
+        return request.method === "HEAD" ? new Response(null, markdown) : markdown;
+      }
+    }
+    const origin = await fetch(request);
+    // A page answer announces where the machine-readable resources are. The
+    // markdownPath test is the worker's existing idea of what a page is: it
+    // keeps install.sh and the images from wearing links that are not
+    // about them. It is also what can be answered as Markdown, so it is the
+    // HTML variant of a negotiated page and varies on Accept like the other.
+    if (origin.ok && markdownPath(url.pathname) !== null) {
+      const response = new Response(origin.body, origin);
+      response.headers.set("link", discoveryLinks());
+      response.headers.append("vary", "Accept");
+      return response;
+    }
+    return origin;
+  }
+  // A same-zone fetch from a Worker goes to the origin directly, so the HTML
+  // answer reaches GitHub Pages exactly as it always did.
+  return fetch(request);
+}
+
 export default {
   async fetch(request) {
-    if (request.method === "GET" || request.method === "HEAD") {
-      const url = new URL(request.url);
-      const mirror = MIRRORS.find((m) => m.at.includes(url.pathname));
-      if (mirror) {
-        const mirrored = await mirrorResponse(mirror.from);
-        if (mirrored !== null) {
-          return request.method === "HEAD" ? new Response(null, mirrored) : mirrored;
-        }
-      }
-      if (url.pathname === "/.well-known/api-catalog" || url.pathname === "/.well-known/api-catalog/") {
-        const catalog = await apiCatalogResponse(url);
-        if (catalog !== null) {
-          return request.method === "HEAD" ? new Response(null, catalog) : catalog;
-        }
-      }
-      if (url.pathname === "/.well-known/oauth-protected-resource") {
-        const resource = await protectedResourceResponse(url);
-        if (resource !== null) {
-          return request.method === "HEAD" ? new Response(null, resource) : resource;
-        }
-      }
-      if (wantsMarkdown(request.headers.get("accept"))) {
-        const markdown = await markdownResponse(request, url);
-        if (markdown !== null) {
-          return request.method === "HEAD" ? new Response(null, markdown) : markdown;
-        }
-      }
-      const origin = await fetch(request);
-      // A page answer announces where the machine-readable resources are. The
-      // markdownPath test is the worker's existing idea of what a page is: it
-      // keeps install.sh and the images from wearing links that are not
-      // about them. It is also what can be answered as Markdown, so it is the
-      // HTML variant of a negotiated page and varies on Accept like the other.
-      if (origin.ok && markdownPath(url.pathname) !== null) {
-        const response = new Response(origin.body, origin);
-        response.headers.set("link", discoveryLinks());
-        response.headers.append("vary", "Accept");
-        return response;
-      }
-      return origin;
-    }
-    // A same-zone fetch from a Worker goes to the origin directly, so the HTML
-    // answer reaches GitHub Pages exactly as it always did.
-    return fetch(request);
+    return withSecurityHeaders(await route(request));
   },
 };

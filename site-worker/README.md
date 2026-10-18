@@ -27,6 +27,15 @@ Two things the origin cannot do itself, the worker does on the way through:
   origin's 404 is cached for hours and would turn an outage into "this domain
   has no OAuth metadata".
 
+* Every answer carries the browser-hardening headers GitHub Pages cannot set:
+  `Strict-Transport-Security` (one year, deliberately without `preload` or
+  `includeSubDomains`), `X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy` and a Content Security Policy. The
+  policy is sent as `Content-Security-Policy-Report-Only` until the built site
+  has been browsed with the console open and shown no violation; then
+  `CSP_HEADER` in `worker.js` becomes `content-security-policy`. A header the
+  origin sets itself is kept.
+
 The copies it serves are the ones `hooks/seo.py` writes beside the built site,
 at every page's address plus `index.md` (the address the pages already declare
 as their `rel="alternate"` link). Serving a copy is a lookup rather than an
