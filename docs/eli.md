@@ -311,7 +311,9 @@ a hostile name can do is mislead an answer: check what you act on.
   provider and the limit, with a button that raises the limit on your own
   provider and asks again: a thinking model at high effort can spend the ceiling
   on reasoning and send no words at all. Lowering the provider's reasoning
-  effort is the cheaper cure.
+  effort is the cheaper cure. The button writes the new number to the provider,
+  so a repair on that provider keeps it exactly from then on and no longer
+  raises it itself, until the field on the provider's form is emptied again.
 * A conversation is at most 40 messages and 32 KiB in all, and a message you
   write is at most 8 KiB. Eli's own answers have no limit of their own, only the
   32 KiB, so a long answer never stops you asking the next question; a
