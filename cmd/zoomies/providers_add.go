@@ -15,12 +15,19 @@ import (
 // Keeping them in one place is what makes `edit` accept exactly the settings
 // `add` does, as the pool commands do.
 //
-// The wizard asks its questions over five steps. Here they are one line, and
-// the line is the same shape as `hosts join-token create`: what to connect to,
-// what to build, what it may spend. The answers the wizard discovers from the
-// cluster -- nodes, storages, bridges, templates -- have to be typed, because
-// discovery needs a saved credential and this command has not saved one yet.
-// `zoomies providers check` says afterwards which of them the cluster refuses.
+// The wizard asks its questions over five steps. Most of them are one line
+// here, and the line is the same shape as `hosts join-token create`: what to
+// connect to, what to build, what it may spend. The answers the wizard
+// discovers from the cluster (nodes, storages, bridges, templates) have to be
+// typed, because discovery needs a saved credential and this command has not
+// saved one yet. `zoomies providers check` says afterwards which of them the
+// cluster refuses.
+//
+// Three answers have no flag at all: the machine's operating system and
+// architecture (machine_platform), the certificate machines trust for the
+// controller (machine_ca_pem) and how many machines are kept warm
+// (min_machines). They are fields of the provider and not driver settings, so
+// --setting does not reach them either; the form or the API sets them.
 type providerSpec struct {
 	name        *string
 	endpoint    *string
