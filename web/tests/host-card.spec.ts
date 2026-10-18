@@ -844,6 +844,39 @@ test('Expand all acts on the cards a filter shows, and leaves the others as they
   await expect(toggle(page, LOW_DISK)).toHaveAttribute('aria-expanded', 'false');
 });
 
+test('a card the filter hid stays closed through Expand all, and the button reads only the cards on show', async ({
+  page,
+}) => {
+  // The spec above hides a card that is already open, so opening what is on show
+  // and opening every card end in the same place, and a button that read every
+  // card would say the same in each step. A hidden card that is closed tells them
+  // apart: nobody can see it, so pressing Expand all must not open it, and once
+  // the two on show are open the button offers to close them.
+  await reshape(page, BUILDER, (host) => ({ ...host, doctor: cleanReport() }));
+  await goto(page, '/hosts', 'Hosts');
+  await settle(page);
+  await page
+    .getByRole('group', { name: 'Show hosts by OS health' })
+    .getByRole('button', { name: /^No report \d+$/ })
+    .click();
+  await expect(card(page, BUILDER)).toHaveCount(0);
+
+  await expandAll(page).click();
+  for (const name of [CORDONED, LOW_DISK])
+    await expect(toggle(page, name)).toHaveAttribute('aria-expanded', 'true');
+  await expect(collapseAll(page), 'every card on show is open').toBeVisible();
+
+  await page.getByRole('button', { name: /^All \d+$/ }).click();
+  await expect(toggle(page, BUILDER), 'nobody opened the card the filter hid').toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(
+    expandAll(page),
+    'one card is closed again, so the button offers to open',
+  ).toBeVisible();
+});
+
 test('the button says whose cards it acts on when a filter has narrowed the page', async ({
   page,
 }) => {
