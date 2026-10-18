@@ -3,6 +3,8 @@ package prrepair
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -92,5 +94,145 @@ func TestRepositoryInventoryDoesNotCrowdOutRelevantSource(t *testing.T) {
 	}
 	if !strings.Contains(model.seen[0].Content, `"inventory_truncated":true`) {
 		t.Fatal("inventory truncation not disclosed")
+	}
+}
+
+// source is n bytes of 16-byte lines, so a test can say what a file costs the
+// allowance without counting. n is a multiple of 16.
+func source(n int) string { return strings.Repeat("0123456789abcde\n", n/16) }
+
+// bigWorkflow is a workflow of some four thousand lines, far past one window,
+// whose lines all differ so that a targeted edit can name one of them.
+func bigWorkflow() File {
+	var b strings.Builder
+	for i := 0; b.Len() < 91<<10; i++ {
+		fmt.Fprintf(&b, "  step-%05d: echo ok\n", i)
+	}
+	return File{Path: ".github/workflows/ci.yml", Content: b.String(), Mode: "100644"}
+}
+
+// usage records how much of the allowance had been spent before each model call.
+type usage struct {
+	*replies
+	used []int
+}
+
+func (u *usage) SourceUsed(n int) { u.used = append(u.used, n) }
+
+// fixStep edits the one line of bigWorkflow that the tests below name.
+func fixStep(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := json.Marshal(Plan{Summary: "Fix the step", Edits: []Edit{{Path: path, Before: "  step-00007: echo ok\n", After: "  step-00007: echo fixed\n"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+// readerWithFour returns a reader holding the four files a model reads to fill
+// most of the allowance, each size bytes, beside the workflow it will then want.
+func readerWithFour(size int) files {
+	ci := bigWorkflow()
+	reader := files{ci.Path: ci}
+	for _, name := range []string{"a.go", "b.go", "c.go", "d.go"} {
+		reader[name] = File{Path: name, Content: source(size), Mode: "100644"}
+	}
+	return reader
+}
+
+// A PR that changed several large files used to take the whole allowance before
+// the model asked for anything, so the first file it asked for that the PR had
+// not changed (the workflow its failing job runs) could not be read, and the
+// repair ended there.
+func TestChangedFilesLeaveRoomForWhatTheModelAsksFor(t *testing.T) {
+	ci := bigWorkflow()
+	snapshot := Snapshot{}
+	for _, name := range []string{"a.go", "b.go", "c.go", "d.go"} {
+		snapshot.Files = append(snapshot.Files, File{Path: name, Content: source(40 << 10), Mode: "100644"})
+	}
+	model := &replies{values: []string{`{"read":["` + ci.Path + `"]}`, fixStep(t, ci.Path)}}
+	plan, err := Generate(context.Background(), model, files{ci.Path: ci}, snapshot, "fix the failing check", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Files) != 1 || plan.Files[0].Path != ci.Path {
+		t.Fatalf("plan changes %d files", len(plan.Files))
+	}
+	if plan.Files[0].Content != strings.Replace(ci.Content, "  step-00007: echo ok\n", "  step-00007: echo fixed\n", 1) {
+		t.Fatal("the edit was not applied to the whole workflow, or other lines changed")
+	}
+}
+
+// The allowance is spent as the model reads, so a read can ask for more than is
+// left. That is a request that was too wide and not a repair that went wrong:
+// the model is told what remains, spends nothing on the refusal, and can ask
+// for a window of the file instead.
+func TestARequestThatDoesNotFitIsRefusedToTheModelAndTheRepairGoesOn(t *testing.T) {
+	ci := bigWorkflow()
+	model := &usage{replies: &replies{values: []string{
+		`{"read":["a.go","b.go","c.go","d.go"]}`,
+		`{"read":["` + ci.Path + `"]}`,
+		`{"windows":[{"path":"` + ci.Path + `","start_line":1,"end_line":40}]}`,
+		fixStep(t, ci.Path),
+	}}}
+	plan, err := Generate(context.Background(), model, readerWithFour(28<<10), Snapshot{}, "fix the failing check", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Files) != 1 || plan.Files[0].Path != ci.Path {
+		t.Fatalf("plan changes %d files", len(plan.Files))
+	}
+	// Four files of 28 KiB are 114688 bytes, which leaves 131072 - 114688 = 16384.
+	if len(model.used) != 4 || model.used[1] != 114688 || model.used[2] != 114688 {
+		t.Fatalf("allowance used before each call: %v", model.used)
+	}
+	var told strings.Builder
+	for _, m := range model.seen {
+		told.WriteString(m.Content)
+	}
+	if !strings.Contains(told.String(), "16384") {
+		t.Fatal("the model was not told how much of the allowance remained")
+	}
+}
+
+// One request can name several files. A file that does not fit must not take
+// the others down with it, or a model that asks for its workflow and a small
+// helper together gets neither.
+func TestARefusedReadDoesNotWithholdTheRestOfTheSameRequest(t *testing.T) {
+	ci := bigWorkflow()
+	reader := readerWithFour(28 << 10)
+	reader["tiny.go"] = File{Path: "tiny.go", Content: "package tiny\n", Mode: "100644"}
+	model := &usage{replies: &replies{values: []string{
+		`{"read":["a.go","b.go","c.go","d.go"]}`,
+		`{"read":["` + ci.Path + `","tiny.go"]}`,
+		`{"cannot_fix":"enough"}`,
+	}}}
+	_, err := Generate(context.Background(), model, reader, Snapshot{}, "fix the failing check", true)
+	if !errors.Is(err, ErrCannotFix) {
+		t.Fatalf("got %v", err)
+	}
+	// "package tiny\n" is 13 bytes.
+	if len(model.used) != 3 || model.used[2] != 114688+13 {
+		t.Fatalf("allowance used before each call: %v", model.used)
+	}
+	last := model.seen[len(model.seen)-1].Content
+	if !strings.Contains(last, "package tiny") {
+		t.Fatal("the file that fitted was not supplied")
+	}
+}
+
+// With nothing left there is nothing to narrow a request to. The model must
+// still reach its own answer, which is what an operator reads, rather than the
+// repair ending on a limit the model could not have known it was approaching.
+func TestAnUsedUpAllowanceLeavesTheModelAbleToGiveUp(t *testing.T) {
+	ci := bigWorkflow()
+	model := &replies{values: []string{
+		`{"read":["a.go","b.go","c.go","d.go"]}`,
+		`{"read":["` + ci.Path + `"]}`,
+		`{"cannot_fix":"the workflow could not be read"}`,
+	}}
+	_, err := Generate(context.Background(), model, readerWithFour(MaxFileBytes), Snapshot{}, "fix the failing check", true)
+	if !errors.Is(err, ErrCannotFix) || !strings.Contains(err.Error(), "the workflow could not be read") {
+		t.Fatalf("got %v", err)
 	}
 }

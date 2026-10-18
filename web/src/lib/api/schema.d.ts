@@ -10572,7 +10572,7 @@ export interface components {
              * @enum {string}
              */
             reasoning_effort: "" | "none" | "low" | "medium" | "high";
-            /** @description How much the model may write in one round of a chat, thinking included, as the request's `max_tokens`; 0 is the controller's default of 8,192. From 1,024 to 65,536. A thinking model's reasoning counts against it, and an answer that reaches it is reported as cut, with this provider and the limit in force, so the person can raise it. Refused on the subscription kinds, whose tool decides. */
+            /** @description How much the model may write in one round, thinking included, as the request's `max_tokens`, from 1,024 to 65,536; 0 is automatic. A chat starts at 8,192 and reports an answer that reaches the limit as cut, with this provider and the limit in force, so the person can raise it. A repair starts at 12,000 and, when the model runs out, asks again with twice as much, up to 65,536, and keeps that amount for the rest of the repair. A number is kept exactly, so it also caps what an answer can cost. A thinking model's reasoning counts against the limit. Refused on the subscription kinds, whose tool decides. */
             max_output_tokens: number;
             /** @description Somebody's own subscription, used through the vendor's own tool on the controller's machine. Such a provider belongs to the person who added it. */
             subscription: boolean;
@@ -10735,7 +10735,7 @@ export interface components {
              * @enum {string}
              */
             reasoning_effort?: "" | "none" | "low" | "medium" | "high";
-            /** @description How much the model may write in one round, from 1,024 to 65,536, or 0 for the controller's default of 8,192. Refused with a `max_output_tokens` field error on a subscription kind, whose tool decides, rather than ignored. */
+            /** @description How much the model may write in one round, from 1,024 to 65,536, or 0 for automatic, where a chat starts at 8,192 and a repair raises the limit itself when the model runs out. A number is kept exactly. Refused with a `max_output_tokens` field error on a subscription kind, whose tool decides, rather than ignored. */
             max_output_tokens?: number;
             /** @description Sealed with the instance key and never returned. An empty string leaves the stored key alone, so a form with a blank key box does not erase it. */
             api_key?: string;

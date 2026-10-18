@@ -372,7 +372,7 @@
       <Field
         id="assistant-max-output-tokens"
         label="Output limit"
-        hint="How much the model may write in one round, thinking included, from 1,024 to 65,536 tokens. Empty is 8,192. A thinking model's reasoning counts against it; an answer that reaches it is reported as cut, with a button to raise this."
+        hint="How much the model may write in one round, thinking included, from 1,024 to 65,536 tokens. Empty is automatic: a repair starts at 12,000 and raises it itself, up to 65,536, when the model runs out, and chat starts at 8,192 and offers a button to raise it. A number is kept exactly, so it also caps what an answer can cost. A thinking model's reasoning counts against it."
         error={errors.max_output_tokens}
       >
         <Input
@@ -382,7 +382,7 @@
           min={1024}
           max={65536}
           step={1024}
-          placeholder="8192"
+          placeholder="Automatic"
           bind:value={maxOutputTokens}
         />
       </Field>
