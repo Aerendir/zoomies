@@ -574,7 +574,7 @@ by the standard on each of CPU and memory, the smaller count winning) and never
 more than its capacity. Capacity becomes the operator's ceiling on that count
 rather than the count itself: a host that holds three runners and has a capacity
 of eight takes three, and one that holds eight with a capacity of two takes two.
-The host's card says which of the two it is, under **Details** (`slots_limited_by` on the API is
+The host's card says which of the two it is, under the slot bar (`slots_limited_by` on the API is
 `cpu`, `memory` or `capacity`). A capacity of zero still takes nothing, because
 that is how a host is paused and a size must never un-pause one, and a host that
 has not reported its machine is counted by its capacity alone until it does.

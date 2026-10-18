@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
   import Tooltip from '../components/Tooltip.svelte';
+  import { isCommittedTight } from './committed';
 
   interface Props {
     label: string;
@@ -29,8 +30,9 @@
   const pct = $derived(total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0);
   // Above this, the next runner is the one that does not fit. It is the same
   // judgement the disk figure makes on the card above: worth attending to
-  // before it becomes the reason a queue stops draining.
-  const tight = $derived(total > 0 && used / total >= 0.9);
+  // before it becomes the reason a queue stops draining. The closed card's
+  // committed notice reads the same line from committed.ts.
+  const tight = $derived(isCommittedTight({ used, total }));
   const summary = $derived(`${label}: ${text}${hint ? `. ${hint}` : ''}`);
 </script>
 

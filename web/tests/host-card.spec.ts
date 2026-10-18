@@ -158,6 +158,69 @@ test('a host with no backend that works says why on the closed card, and one wit
   await expect(card(page, LOW_DISK)).not.toContainText('no socket at');
 });
 
+test('a host with free slots and its memory all promised away says so on the closed card', async ({
+  page,
+}) => {
+  // "2 of 8 slots in use · 6 free" beside a memory bar of what the machine is
+  // using reads as a host with room. What explains the runner that does not
+  // start is what idle runners have reserved, and that was behind Details.
+  await reshape(page, BUILDER, (host) => ({
+    ...host,
+    capacity: 8,
+    effective_capacity: 8,
+    slots: 8,
+    active_runners: 2,
+    free: 6,
+    resources_known: true,
+    reserved_known: true,
+    reserved_cpus: 4,
+    allocatable_memory_mb: 30720,
+    reserved_memory_mb: 30720,
+  }));
+  await goto(page, '/hosts', 'Hosts');
+  await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'false');
+  await expect(card(page, BUILDER)).toContainText(/2 of 8 slots in use\s*· 6 free/);
+  const note = card(page, BUILDER).getByTestId('host-committed-note');
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('memory 30 GB of 30 GB');
+  await expect(note).toContainText('may not take another runner');
+  // CPU is at 4 of 14.2, so it is not named; the bars themselves are detail.
+  await expect(note).not.toContainText('CPU');
+  await expect(
+    card(page, BUILDER).getByRole('region', { name: `Resources committed on ${BUILDER}` }),
+  ).toHaveCount(0);
+});
+
+test('the committed notice stays quiet where it would explain nothing', async ({ page }) => {
+  // demo-builder-2 has every slot in use and more promised than it may place, as
+  // any full host does, and its slot line already says why it takes nothing.
+  // demo-builder-1 has room in both.
+  await goto(page, '/hosts', 'Hosts');
+  await expect(card(page, LOW_DISK)).toContainText(/4 of 4 slots in use/);
+  await expect(card(page, LOW_DISK).getByTestId('host-committed-note')).toHaveCount(0);
+  await expect(card(page, BUILDER).getByTestId('host-committed-note')).toHaveCount(0);
+});
+
+test('why a slot count is capped is said on the closed card, not behind Details', async ({
+  page,
+}) => {
+  await reshape(page, BUILDER, (host) => ({
+    ...host,
+    capacity: 2,
+    effective_capacity: 2,
+    slots: 2,
+    active_runners: 1,
+    free: 1,
+    slots_limited_by: 'capacity',
+    runner_profile: { standard: { cpus: 2, memory_mb: 4096 } },
+  }));
+  await goto(page, '/hosts', 'Hosts');
+  await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'false');
+  await expect(card(page, BUILDER).getByTestId('host-slots-note')).toContainText(
+    'capped by its capacity of 2, below what its machine holds',
+  );
+});
+
 test('a figure past its pressure line says so in words, and the others stay quiet', async ({
   page,
 }) => {

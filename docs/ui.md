@@ -461,7 +461,10 @@ and memory against what may be placed on it, the backends its agent found (and
 the exact command to run when one is missing) and the labels pools select it
 by. Slots and the committed bars answer different questions: the first is
 whether the fleet will place another runner here, the second whether the machine
-can carry it, and a host with free slots and no memory left takes nothing.
+can carry it, and a host with free slots and no memory left takes nothing. The
+closed card says so when it matters: with a slot free and 90% or more of the
+CPU or memory the scheduler may place already committed, a notice names the
+figures.
 Each of the two settings a host has is reached from the thing it describes.
 *Adjust*, beside the slot bar, owns the resources: how many runners the host may
 hold, and the reserve; the cores, memory and disk the scheduler leaves alone
@@ -494,12 +497,22 @@ cordon, a throttle, a runtime that is recovering, an image that will not pull or
 an incompatible agent, the line naming a failed health check and the update row
 all stay on the closed card, and so does the **Backends** block, with the
 agent's own explanation, for a host with no backend that works. A host with
-Docker and no Podman is the ordinary case and is not one of them.
+Docker and no Podman is the ordinary case and is not one of them. Two more
+sentences stay because the numbers beside them cannot say what they say. The
+line under the slot bar that says why the slot count is what it is (a capacity
+set below what the machine holds, or a machine that holds fewer runners than the
+capacity) explains a host that is full at fewer runners than its capacity. The
+**Committed** notice is for a host with a slot free whose committed CPU or
+memory has reached 90% of what may be placed, the line the **Committed** bars
+turn amber at: the slot line counts slots, and the **Memory** bar beside it is
+what the machine is using, so neither shows that the runners already on the host
+have promised the rest away. A full host has every slot used, which the slot
+line already says, so it does not carry the notice for being full.
 
 **Details** opens the rest beneath it: the size class and the other neutral
 chips, the disk figure with its link to the check, the heartbeat and usage
-lines, why the slot count is what it is, **Committed**, **Memory to lend**,
-**Runner sizes**, **Priority**, **Backends** and **Tags**. The cards in a row are
+lines, the **Committed** bars, **Memory to lend**, **Runner sizes**,
+**Priority**, **Backends** and **Tags**. The cards in a row are
 one height and their sections line up across it: the pills, the slot bars, the
 three utilisation bars and the **Details** buttons sit at the same height from
 card to card, so a row reads straight across. A card with a notice leaves the
