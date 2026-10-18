@@ -23,7 +23,7 @@
   import type { AssistantScope } from '$lib/api/client';
   import { session } from '$lib/state/session.svelte';
   import { settingTitle } from './assistant';
-  import EliRepairs from './EliRepairs.svelte';
+  import RepairsCard from './RepairsCard.svelte';
   import { eli } from '$lib/assistant/eli.svelte';
   import { supportHint } from '$lib/errors';
   import { toasts } from '$lib/state/toasts.svelte';
@@ -41,7 +41,6 @@
   const LOCAL_ONLY_KEY = 'assistant.local_only';
 
   let scope = $state<AssistantScope>('personal');
-  let providerRevision = $state(0);
   let loadRevision = 0;
   let providers = $state<readonly AssistantProvider[]>([]);
   let settings = $state<readonly Setting[]>([]);
@@ -61,7 +60,6 @@
         session.can('admin') ? getSettings() : Promise.resolve({ settings: [] }),
       ]);
       if (revision !== loadRevision) return;
-      providerRevision++;
       providers = list.items ?? [];
       // The widget in the corner is told at once, not at the next page load.
       if (scope === 'personal') eli.know(providers);
@@ -223,7 +221,7 @@
   </section>
 {/if}
 
-<EliRepairs {providerRevision} />
+<RepairsCard />
 
 <AssistantProviderForm
   bind:open={formOpen}

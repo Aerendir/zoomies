@@ -1,68 +1,12 @@
-import { isActive } from './history';
-
 /*
-  The repair process as one small state machine: where somebody is between
-  arriving with a failure and reading the outcome. The stepper, the running
-  timeline and the live region all read it, so the three cannot tell different
-  stories about the same repair, and a test can hold the whole journey in its
-  hands without a browser.
+  Where a repair that is running has got to: the five steps the worker takes, in
+  order, and the mark on the one it is on. The attempt page's track, the hub's
+  small bars and the live region all read it, so they cannot tell different
+  stories about the same repair, and a test can hold it without a browser.
 */
 
-export type JourneyStage =
-  /** No target yet: the paste-a-PR-link form is the whole card. */
-  | 'idle'
-  /** Readiness is in flight, which is the first thing that happens on arrival. */
-  | 'checking'
-  /** Readiness answered with blockers: each carries its own way forward. */
-  | 'blocked'
-  /** Readiness answered clean: one review, one press, and the repair is queued. */
-  | 'ready'
-  /** The repair is queued or running and this card is following it. */
-  | 'running'
-  /** The repair reached a terminal state and the outcome is on screen. */
-  | 'done';
-
-export const JOURNEY_STEPS = [
-  { id: 'check', label: 'Readiness' },
-  { id: 'review', label: 'Review' },
-  { id: 'repair', label: 'Repair' },
-  { id: 'outcome', label: 'Outcome' },
-] as const;
-
-export type JourneyStepId = (typeof JOURNEY_STEPS)[number]['id'];
-
-const STEP_ORDER: readonly JourneyStepId[] = JOURNEY_STEPS.map((step) => step.id);
-
-/**
- * The step a stage is on. A blocked check is still the check: it has not
- * passed, so the stepper must not paint it as behind anybody.
- */
-export function journeyStep(stage: JourneyStage): JourneyStepId | null {
-  switch (stage) {
-    case 'checking':
-    case 'blocked':
-      return 'check';
-    case 'ready':
-      return 'review';
-    case 'running':
-      return 'repair';
-    case 'done':
-      return 'outcome';
-    default:
-      return null;
-  }
-}
-
+/** A step of the track against the mark: behind it, on it, or still to come. */
 export type StepState = 'done' | 'current' | 'todo';
-
-export function stepState(id: JourneyStepId, stage: JourneyStage): StepState {
-  const current = journeyStep(stage);
-  if (current === null) return 'todo';
-  const here = STEP_ORDER.indexOf(id);
-  const at = STEP_ORDER.indexOf(current);
-  if (here < at) return 'done';
-  return here === at ? 'current' : 'todo';
-}
 
 /**
  * The work a running repair is doing, in the order the worker does it. The
@@ -142,18 +86,4 @@ export function stageWords(stage: string | null | undefined): string {
   if (Object.hasOwn(STAGE_WORDS, stage)) return STAGE_WORDS[stage]!;
   const spaced = stage.replace(/_+/g, ' ').trim();
   return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : 'Not recorded';
-}
-
-/** A state the worker will not move on from, which is when following stops. */
-export const isTerminal = (state: string): boolean => !isActive(state);
-
-/**
- * The colour of an outcome. Success and failure are the two an operator acts
- * on differently; everything in between (superseded by a newer commit, never
- * verified) is news, not a verdict, and stays neutral.
- */
-export function outcomeTone(state: string): 'success' | 'danger' | 'neutral' {
-  if (state === 'succeeded') return 'success';
-  if (['checks_failed', 'failed', 'blocked', 'interrupted'].includes(state)) return 'danger';
-  return 'neutral';
 }
