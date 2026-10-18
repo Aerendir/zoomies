@@ -230,6 +230,9 @@ jobs:
           assert agent["capabilities"] is not None and agent["skills"], "the agent card has no capabilities or skills"
           for skill in agent["skills"]:
               assert skill["id"] and skill["name"] and skill["description"], skill["id"]
+          assert agent["security"] and agent["securitySchemes"], "the agent card says nothing about signing in"
+          for scheme in agent["securitySchemes"].values():
+              assert scheme["type"] == "oauth2" and scheme["oauth2MetadataUrl"].endswith("/.well-known/oauth-authorization-server"), "the demo is an OAuth 2.0 server with RFC 8414 metadata and publishes no OpenID Connect discovery, so the card must not say otherwise"
           api_catalog = load("api-catalog.json")
           entry = api_catalog["linkset"][0]
           assert entry["status"][0]["href"] == "https://demo.zoomies.sh/readyz", entry
