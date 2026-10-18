@@ -211,6 +211,13 @@ runners are at each step this moment and a link into each; under it, a bar of
 the same states whose segments are links too, and say their share when you
 hover them.
 
+When the state filter includes failed runners, a **What keeps failing to start**
+card above the grid names the host or pool that keeps failing to start runners
+over the last day: since when, at which stage, and whether the image, an
+incident on its host or a throttle explains it. It is the answer
+[`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with its
+evidence folded under the next steps.
+
 ![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
 ![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
 
@@ -345,6 +352,13 @@ out a job whose workflow run has been cancelled, and *Queued* also leaves out
 anything an operator removed from the queue; the same sets the Overview's two
 tiles count, and a chip above the grid says so where a filter is in force.
 
+On *Queued*, a **Why jobs waited** card puts the wait of the jobs queued in the
+page's dates (the last day when none are set) down to its causes, for every
+pool or for the one pool the list is narrowed to, and names any of the list's
+other filters it does not apply. It sits above the grid, and below it on a
+Mission Control phone, and it is the answer
+[`zoomies analyse queue-wait`](cli.md#zoomies-analyse) prints.
+
 None of those jobs is hidden: they are in the history under *All*, badged
 **Cancelling**, **Removed** or **Paused**. GitHub goes on calling all three
 `queued` or `in_progress`, because Zoomies can neither unqueue a job nor
@@ -441,6 +455,13 @@ leaves out cancelled and skipped jobs. Jobs only go back as far as
 `retention.jobs`, and the range may not exceed `limits.job_stats_window` (90
 days unless set).
 
+Under it, a **What got worse and what got better** card compares the range's
+two latest releases measure by measure, or says the sample is too small to rank
+when either has fewer than 30 jobs. It leaves cancelled and skipped jobs out of
+every figure and says so, so its counts can be lower than the table's. It
+compares releases, never periods, and is the answer
+[`zoomies analyse compare`](cli.md#zoomies-analyse) prints.
+
 The same activity matrix as the Overview's draws the
 chosen range in the squares the Overview uses for a window that long (a
 square per hour for up to a fortnight, each day cut into six four-hour
@@ -473,7 +494,49 @@ tags and nothing else. A cordoned host keeps its runners and takes no new
 ones. *Add a host* mints a join token and prints the one line to paste on the
 new machine.
 
-**Agent connected** describes the heartbeat. Recent **CPU usage**,
+A card opens **closed**, and a closed card answers one question: does this host
+have room, and if not, why. It carries the host's name and state pills, the
+platform and agent release with the neutral chips that say what kind of host it
+is (**Tailcat host**, **Embedded**, the machine it was rented as), the slot bar
+with **Adjust**, and three bars for how loaded the machine is. **CPU**,
+**Memory** and **Disk** are each a share of the whole machine as the agent last
+measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`).
+They are the shares the capacity map draws, so its newest point and the card
+never disagree. CPU and memory turn amber, take a warning triangle and say so in
+their label from 85%, the line from which the scheduler places one runner at a
+time, and the disk does the same when the *Work directory free space* check
+would warn: under 10% or under 10 GiB free. A figure that is not measured reads
+`--`. For a host that has stopped sending heartbeats, or whose agent reports
+nothing to measure, the bars give way to one sentence saying why, because the
+agent's last disk figure would otherwise read as now.
+
+Nothing that keeps a host from taking work is folded away. The sentence for a
+cordon, a throttle, a runtime that is recovering, an image that will not pull or
+an incompatible agent, the line naming a failed health check and the update row
+all stay on the closed card, and so does the **Backends** block, with the
+agent's own explanation, for a host with no backend that works. A host with
+Docker and no Podman is the ordinary case and is not one of them.
+
+**Details** opens the rest beneath it: the size class and the other neutral
+chips, the disk figure with its link to the check, the heartbeat and usage
+lines, why the slot count is what it is, **Committed**, **Memory to lend**,
+**Runner sizes**, **Priority**, **Backends** and **Tags**. The cards in a row are
+one height and their sections line up across it: the pills, the slot bars, the
+three utilisation bars and the **Details** buttons sit at the same height from
+card to card, so a row reads straight across. A card with a notice leaves the
+same space on the cards beside it, and opening one makes its row as tall as that
+card needs. The button names its host for a screen reader, says whether it is
+open, and is 44 pixels tall on a touch screen. This browser
+remembers which cards are open, writing it when one is opened or closed and never
+on sight, and forgets a host that no longer exists.
+
+**Expand all**, at the end of the row of filters, opens every card on the page at
+once, and becomes **Collapse all** when they are all open, so a card opened or
+closed by hand turns it over too. With a filter on, it acts on the hosts the
+filter shows and leaves the others as they were. A page with one card does not
+have it, because that card's **Details** button is the whole of it.
+
+Under **Details**, **Agent connected** describes the heartbeat. Recent **CPU usage**,
 **memory available** and the one-minute **load** describe the machine's actual
 load, separately from its committed resources. A pressure warning says whether
 new starts are held or limited to one at a time; recovery happens automatically
@@ -516,8 +579,14 @@ throttle by hand once the cause is fixed. The adjust dialog's note about the
 floors under a reserve names the CPU floor too: half a core, or a twentieth of
 the machine, held back for the daemon whatever the operator sets.
 
-![The Hosts page scrolled to its host cards, below the capacity map: each card shows its connection state beside a health link, then the slots in use, committed CPU and memory, the memory it can lend and its backends](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
-![The Hosts page scrolled to its host cards, below the capacity map: each card shows its connection state beside a health link, then the slots in use, committed CPU and memory, the memory it can lend and its backends](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
+A host's own page carries a **Whether its failures came under pressure** card:
+whether the failures, OOM kills and slow startups of the jobs it ran over the
+last day came in the minutes it was busy, and the line that separates them when
+one does. It is the answer
+[`zoomies analyse host-pressure`](cli.md#zoomies-analyse) prints.
+
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
 
 ### Updating every host that is behind
 
@@ -555,7 +624,7 @@ reads **Updating**, and afterwards **Updated**, **Failed**, **Timed out** or
 ![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-light.webp#only-light){ .zoomies-shot }
 
 **Tags and size class.** A host's tags are the labels pools select it by, and its
-card lists them in two groups: those stored on the host, which **Edit** changes,
+card lists them, under **Details**, in two groups: those stored on the host, which **Edit** changes,
 and those the controller works out from the machine (`os`, `arch` and, while a
 size switch is on, `size`) under a caption saying so. Once either switch is
 `shadow` or `on`, a **Size class** block says which class the host is in, in the

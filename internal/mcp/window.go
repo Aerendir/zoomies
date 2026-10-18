@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -601,18 +602,28 @@ func scalar(raw json.RawMessage) (string, bool) {
 }
 
 // token is a value in a line: bare when it is plain, quoted when it holds a
-// space, a control character or a quote, so a field cannot run into the next.
+// space, a control character, a line break of any kind or a quote, so a field
+// cannot run into the next or begin a line of its own.
 func token(s string) string {
 	s = clip(s, maxTrustedValue)
 	if s == "" {
 		return `""`
 	}
 	for _, r := range s {
-		if r <= ' ' || r == '"' || r == '=' || r == 0x7f {
+		if r <= ' ' || r == '"' || r == '=' || breaksALine(r) {
 			return strconv.Quote(s)
 		}
 	}
 	return s
+}
+
+// breaksALine is a rune a reader may take as the end of a line: a control
+// character, which takes in DEL and U+0085 (next line), and the line and
+// paragraph separators U+2028 and U+2029, which are not controls but are line
+// breaks to anything that follows Unicode's rules for them. A host's name can
+// carry the latter two, since ValidateHostName refuses only controls.
+func breaksALine(r rune) bool {
+	return unicode.IsControl(r) || unicode.In(r, unicode.Zl, unicode.Zp)
 }
 
 // clip holds a value to n bytes, on a rune boundary.

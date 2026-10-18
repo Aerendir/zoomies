@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/analysis"
+	"github.com/eyupio/zoomies/internal/naming"
 	"github.com/eyupio/zoomies/internal/scheduler"
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -91,18 +92,35 @@ var analysisExcluded = []string{"cancelled", "skipped"}
 // started; what went wrong was its job's, not its start's.
 var faultsOfARunningJob = []store.FaultKind{store.FaultHostLost, store.FaultOutOfMemory, store.FaultOutOfDisk, store.FaultRemoved}
 
-// checkAnalysisWindow refuses a period an analysis cannot read: one that
-// ends before it starts, and one longer than limits.job_stats_window, which
-// bounds every analysis as it bounds the job statistics. The routes check
-// both before calling; this is the same rule for any other caller.
-func (c *Controller) checkAnalysisWindow(w AnalysisWindow) error {
+// ErrSinceNotPast is a period that begins at or after now. Nothing in it has
+// happened, so any answer would be about an empty period read as a quiet one.
+var ErrSinceNotPast = errors.New("since is not before now, and an analysis reads only what has already happened; choose a since in the past")
+
+// readableWindow is the period an analysis reads, given the instant its call
+// read the clock at, or why it cannot read it: one that ends before it
+// starts, one that begins at or after now, and one longer than
+// limits.job_stats_window, which bounds every analysis as it bounds the job
+// statistics. The routes check all three, on the same window clamped to now,
+// before calling; this is the same rule for any other caller.
+//
+// An until past now ends now. The hours after it have not happened, and read
+// as if they had, every job still waiting would be counted as waiting
+// through them, and a host's unsampled future minutes would read as gaps in
+// its samples, at full confidence. Clamping here, once, holds the route, the
+// tools, the CLI and the card to it, and the finding's until says what was
+// read.
+func (c *Controller) readableWindow(w AnalysisWindow, now time.Time) (AnalysisWindow, error) {
 	if w.Since.IsZero() || !w.Since.Before(w.Until) {
-		return errors.New("an analysis needs a period whose since is before its until")
+		return w, errors.New("an analysis needs a period whose since is before its until")
 	}
+	if !w.Since.Before(now) {
+		return w, ErrSinceNotPast
+	}
+	w.Until = earlier(w.Until, now)
 	if limit := c.cfg().Limits.JobStatsSpan(); w.Until.Sub(w.Since) > limit {
-		return errors.New(SpanRefusal(w.Until.Sub(w.Since), limit, "an analysis covers"))
+		return w, errors.New(SpanRefusal(w.Until.Sub(w.Since), limit, "an analysis covers"))
 	}
-	return nil
+	return w, nil
 }
 
 // SpanRefusal is the sentence that refuses a period longer than
@@ -186,8 +204,9 @@ func (c *Controller) AnalyseQueueWait(ctx context.Context, w AnalysisWindow, poo
 }
 
 func (c *Controller) queueWaitSnapshot(ctx context.Context, w AnalysisWindow, poolID string) (analysis.QueueWaitSnapshot, error) {
+	w, err := c.readableWindow(w, c.Now())
 	snap := analysis.QueueWaitSnapshot{Since: w.Since, Until: w.Until}
-	if err := c.checkAnalysisWindow(w); err != nil {
+	if err != nil {
 		return snap, err
 	}
 	pools, err := c.st.ListPools(ctx)
@@ -195,14 +214,18 @@ func (c *Controller) queueWaitSnapshot(ctx context.Context, w AnalysisWindow, po
 		return snap, fmt.Errorf("listing pools: %w", err)
 	}
 	byID := poolsByID(pools)
-	if poolID != "" && byID[poolID] == nil {
-		return snap, NotFoundError{Kind: "pool", ID: poolID}
-	}
 	// Queued in the period, not active in it: the wait is not clamped at
 	// Since, so a job queued before it would bring its earlier wait along.
 	jobs, more, err := c.st.JobWaits(ctx, store.JobWaitFilter{Since: w.Since, Until: w.Until, PoolID: poolID}, analysis.MaxReadJobs)
 	if err != nil {
 		return snap, fmt.Errorf("reading job waits: %w", err)
+	}
+	// A pool deleted since is still named in the period's jobs, and a cut
+	// answer tells its reader to narrow to it; refusing it then would send
+	// them round in a circle. Only an id the fleet never had, or none of
+	// the period's jobs name, is not found.
+	if poolID != "" && byID[poolID] == nil && len(jobs) == 0 {
+		return snap, NotFoundError{Kind: "pool", ID: poolID}
 	}
 	snap.JobsTruncated = more
 	hosts, err := c.st.ListHosts(ctx)
@@ -500,18 +523,17 @@ func (c *Controller) AnalyseCompare(ctx context.Context, req CompareRequest) (an
 }
 
 func (c *Controller) compareSnapshot(ctx context.Context, req CompareRequest) (analysis.CompareSnapshot, error) {
-	w := AnalysisWindow{Since: req.Since, Until: req.Until}
+	now := c.Now()
 	snap := analysis.CompareSnapshot{By: cmp.Or(req.By, "version"), Excluded: slices.Clone(analysisExcluded)}
-	if err := c.checkAnalysisWindow(w); err != nil {
+	w, err := c.readableWindow(AnalysisWindow{Since: req.Since, Until: req.Until}, now)
+	if err != nil {
 		return snap, err
 	}
-	now := c.Now()
 	// Jobs completed before this are pruned; zero keeps them for ever.
 	var cut *time.Time
 	if keep := c.cfg().Retention.Jobs; keep > 0 {
 		cut = ptrTo(now.Add(-keep))
 	}
-	var err error
 	switch snap.By {
 	case "version":
 		snap.A, snap.B, err = c.releaseSides(ctx, req, w, cut)
@@ -803,8 +825,9 @@ func (c *Controller) AnalyseHostPressure(ctx context.Context, w AnalysisWindow, 
 }
 
 func (c *Controller) hostPressureSnapshot(ctx context.Context, w AnalysisWindow, hostID string) (analysis.HostPressureSnapshot, error) {
+	w, err := c.readableWindow(w, c.Now())
 	snap := analysis.HostPressureSnapshot{Since: w.Since, Until: w.Until, HostID: hostID, Thresholds: analysis.DefaultPressure}
-	if err := c.checkAnalysisWindow(w); err != nil {
+	if err != nil {
 		return snap, err
 	}
 	h, err := c.st.GetHost(ctx, hostID)
@@ -814,7 +837,9 @@ func (c *Controller) hostPressureSnapshot(ctx context.Context, w AnalysisWindow,
 	if err != nil {
 		return snap, fmt.Errorf("reading host %s: %w", hostID, err)
 	}
-	snap.HostName = h.Name
+	// A name stored before joins were checked can carry what ValidateHostName
+	// now refuses, and it reaches the finding's sentences.
+	snap.HostName = naming.ForSentence(h.Name)
 	// The throttle's own memory test is the host's reserve, which has no
 	// default to fall back on (F9).
 	snap.Thresholds.MemoryReserveMB = h.MemoryReserve()
@@ -884,8 +909,9 @@ func (c *Controller) AnalyseStartupFailures(ctx context.Context, w AnalysisWindo
 }
 
 func (c *Controller) startupSnapshot(ctx context.Context, w AnalysisWindow, poolID, hostID string) (analysis.StartupSnapshot, error) {
+	w, err := c.readableWindow(w, c.Now())
 	snap := analysis.StartupSnapshot{Since: w.Since, Until: w.Until, HeartbeatInterval: c.heartbeatInterval()}
-	if err := c.checkAnalysisWindow(w); err != nil {
+	if err != nil {
 		return snap, err
 	}
 	pools, err := c.st.ListPools(ctx)
@@ -897,15 +923,18 @@ func (c *Controller) startupSnapshot(ctx context.Context, w AnalysisWindow, pool
 		return snap, fmt.Errorf("listing hosts: %w", err)
 	}
 	poolByID, hostByID := poolsByID(pools), hostsByID(hosts)
-	if poolID != "" && poolByID[poolID] == nil {
-		return snap, NotFoundError{Kind: "pool", ID: poolID}
-	}
-	if hostID != "" && hostByID[hostID] == nil {
-		return snap, NotFoundError{Kind: "host", ID: hostID}
-	}
 	spans, more, err := c.st.RunnerSpans(ctx, store.RunnerSpanFilter{Since: w.Since, Until: w.Until, PoolID: poolID, HostID: hostID}, analysis.MaxReadJobs)
 	if err != nil {
 		return snap, fmt.Errorf("reading runners: %w", err)
+	}
+	// A pool or host deleted since is still named in the period's runners,
+	// as the queue wait's pools are in its jobs: only one that none of them
+	// name, and the fleet does not have, is not found.
+	if poolID != "" && poolByID[poolID] == nil && len(spans) == 0 {
+		return snap, NotFoundError{Kind: "pool", ID: poolID}
+	}
+	if hostID != "" && hostByID[hostID] == nil && len(spans) == 0 {
+		return snap, NotFoundError{Kind: "host", ID: hostID}
 	}
 	snap.Truncated = startupTruncated(spans, more, w.Since)
 	for _, s := range spans {
@@ -922,7 +951,7 @@ func (c *Controller) startupSnapshot(ctx context.Context, w AnalysisWindow, pool
 			a.PoolName = p.Name
 		}
 		if h := hostByID[s.HostID]; h != nil {
-			a.HostName = h.Name
+			a.HostName = naming.ForSentence(h.Name)
 		}
 		snap.Attempts = append(snap.Attempts, a)
 	}

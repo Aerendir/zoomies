@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -49,5 +50,21 @@ func TestACancellationTheClientDidNotCauseIsStillAFailure(t *testing.T) {
 	}
 	if logged := h.logs.text(); !strings.Contains(logged, "request failed") {
 		t.Errorf("did not log the failure:\n%s", logged)
+	}
+}
+
+// The UI says the support hint in its own copy (supportHint in
+// web/src/lib/errors.ts), and an analysis card takes the server's sentence off
+// a 500's message by matching that copy before it adds one naming the request.
+// Were the two to drift, nothing would fail: every failed card would just say
+// the hint twice. So the UI's no-id sentence is held to this one, as the token
+// drift checks hold the UI's tokens to their source.
+func TestTheUIsSupportHintIsTheServersSentence(t *testing.T) {
+	src, err := os.ReadFile("../../web/src/lib/errors.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "'" + supportHint() + "'"; !strings.Contains(string(src), want) {
+		t.Errorf("web/src/lib/errors.ts's supportHint() does not say %s for a failure with no request ID; keep the two the same sentence", want)
 	}
 }
