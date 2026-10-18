@@ -445,18 +445,22 @@ installation provider leaves repository policies in place; automatic repairs sto
 
 ## Set up PR repairs
 
-The [repair UI tour](ui.md#eli-repairs) shows readiness checks and repository
-setup. The history below uses labelled sample outcomes; no real PR was changed
-to produce these images. A stopped attempt explains what needs attention before
-you spend another attempt, while a passed repair still needs normal PR review.
+The [repair UI tour](ui.md#eli-repairs) shows the four pages repairs live on:
+the hub, the repair page for one failure, a page for each repair, and setup. The
+history below uses labelled sample outcomes; no real PR was changed to produce
+these images. A stopped attempt explains what needs attention before you spend
+another attempt, while a passed repair still needs normal PR review.
 
-![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
-![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+![Eli repairs: the setup line, an empty Needs you, and History with a repair that could not fix its failure, one that needs attention and one whose checks passed, each with its pull request, its failed job and when it ran](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs: the setup line, an empty Needs you, and History with a repair that could not fix its failure, one that needs attention and one whose checks passed, each with its pull request, its failed job and when it ran](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
 From **Recent failures**, click the failure summary to inspect its failed step,
-explanation and timeline, or choose **Fix with Eli**. The repair page keeps the
-repository and failed run, finds the associated PR and checks readiness without
-invoking a model. Missing account or repository setup opens a wizard for that
+explanation and timeline, or choose **Fix with Eli**. The repair page opens on
+the failure and not on a button: it names the pull request, its branch, the
+commit and the run, each linked to GitHub, lists every failed job with the step
+it stopped at, and checks readiness without invoking a model. A person decides to
+spend an attempt once they can see what it would be spent on, so **Fix with Eli**
+is on that page. Missing account or repository setup opens a wizard for that
 failure. It reuses existing settings; an administrator can link their own GitHub
 account and enable manual repairs in one save, with five attempts per day and
 workflow edits disabled for a new policy. A personal provider is still required.
@@ -486,9 +490,11 @@ The wizard below uses a sample failure; no real PR was changed.
 
 For advanced setup across repositories:
 
-1. Open **Eli repairs** from the navigation, or **Fix with Eli**
-   beside a failed job. Paste a PR link to check readiness without invoking a model.
-2. In **Repository repair policies**, choose a GitHub installation, search its
+1. Open **Eli repairs** from the navigation and choose **Setup**, or use **Fix
+   with Eli** beside a failed job. **Repair a PR** takes a pasted PR link and
+   checks readiness without invoking a model.
+2. On the setup page, in **Repository repair policies**, choose a GitHub
+   installation, search its
    repositories and select the ones to enable together. Owner and installation
    details come from discovery. Each selected repository reports its own save result.
 3. Choose **Ask me first**, **Manual only** or **Automatic**. New setup recommends
@@ -516,8 +522,10 @@ For advanced setup across repositories:
    workflow permission and remaining allowance before choosing **Fix with Eli**.
 
 Ask me first groups failed jobs into one persistent offer per PR head. The
-Overview shows available offers; Eli repairs lets you review or dismiss them.
-Offers do not invoke a model or spend attempts. Dismissal is personal and applies
+Overview shows available offers; **Needs you** on the Eli repairs page lets you
+review or dismiss them, and says for each which pull request it is about, its
+branch, when it failed and which jobs stopped at which step. Offers do not invoke
+a model or spend attempts. Dismissal is personal and applies
 only to that commit. A bounded reconciliation every five minutes looks back at
 recent failed jobs, including failures that predate setup. Access and the pinned
 head are checked again before acceptance. Existing closed, superseded or now-green
@@ -631,15 +639,18 @@ another attempt on an Eli commit. A maintainer can request another attempt.
 
 Queued work survives restart. A repair interrupted during publication has an
 uncertain outcome, so it is marked interrupted and never replayed automatically.
-Inspect the PR before asking again. Eli repairs and Settings, Eli AI Assistant show repair history;
-ordinary users see their own requests and administrators see the whole history.
+Inspect the PR before asking again. The Eli repairs page shows repair history,
+and each repair opens a page of its own; ordinary users see their own requests
+and administrators see the whole history.
 
 The history is paged and filtered by the controller, so a repair from last month
 is as easy to reach as one from this morning. Filter it by state (all, needs
 attention, in progress or checks passed), by repository name, and by whether Eli
 was triggered automatically or by a request; any change of filter starts again
-from the first page and drops whatever was chosen. Choose repairs one at a time,
-or with the box above the list for every repair shown. Once every repair on the
+from the first page and drops whatever was chosen. Press **Select** to show a
+box on each row, so the list reads as a record until you mean to edit it, then
+choose repairs one at a time, or with the box above the list for every repair
+shown. Once every repair on the
 page is chosen and more match, **Select all** takes everything the filters match,
 up to 500 at a time, and says so when there are more than that. **Clear from
 history** asks first, saying how many repairs it will clear, and then hides them
@@ -669,3 +680,33 @@ One that calls a tool again stops the repair, and Eli's comment names the tool i
 asked for and the names of its arguments, so you can tell a model that ignores its instructions, which a
 different model or provider fixes, from a prompt that was wrong. Every model turn
 appears in the repair history.
+
+### What a repair remembers
+
+A repair keeps what it was about. When it starts it records the run whose failure
+you were looking at, and a short summary of the failure: the pull request's
+title, author and branch, the run's workflow and number, and up to ten of the
+failed jobs with the step each stopped at. Zoomies prunes its own job records
+and a pull request's title changes, so the repair page and the history can still
+say what a repair was for long after the original has gone. The summary holds no
+log text. Every title and name in it is cut to 200 characters, and an address is
+kept only if it is a plain web link of a sensible length, because the people who
+can open a pull request choose all of them. A repair
+asked for in a comment on the pull request reaches the worker with no summary,
+and the worker reads one when it picks the repair up. A repair made before
+summaries were kept shows what its own row holds and says it has no record of the
+jobs.
+
+### Error output
+
+Open a failed job on the repair page, or on the page of a repair, and Zoomies
+reads the end of its log from GitHub for you: at most twelve lines, the last
+ones, which are those that ended the job. It reads only when asked, and only for
+a person whose linked and confirmed GitHub account can write to the repository,
+because a job's log can hold anything a workflow printed. Anything that looks
+like a credential is taken out first, by the same redaction the model's evidence
+goes through. The lines are never stored and never logged. The controller keeps a
+minute's copy in memory, so opening the same job twice is one download, and a
+restart forgets it. The access check runs on every request, before that copy is
+looked at, so one person's read is never how another person reads. If GitHub no
+longer has the log, or the job printed no error lines, the page says so.

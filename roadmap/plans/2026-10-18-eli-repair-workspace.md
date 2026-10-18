@@ -4,8 +4,10 @@ Agreed in conversation on 18 October 2026, written against checkout `6efa071`.
 The design was reviewed as a mockup (hub, repair page, attempt page, and the
 phone versions of two of them) before this was written, and approved with one
 choice made by the owner: the failing job's error output is shown **on demand,
-redacted, and never stored**. Nothing here is built yet. The implementation plan
-is [2026-10-18-eli-repair-workspace-plan.md](2026-10-18-eli-repair-workspace-plan.md).
+redacted, and never stored**. All of it is built, in the pull request that carries
+this document. The implementation plan is
+[2026-10-18-eli-repair-workspace-plan.md](2026-10-18-eli-repair-workspace-plan.md),
+which says where the build departed from it.
 
 ## What was asked
 

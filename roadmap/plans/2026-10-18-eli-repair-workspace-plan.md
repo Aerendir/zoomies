@@ -10,6 +10,22 @@
 
 **Spec:** [2026-10-18-eli-repair-workspace.md](2026-10-18-eli-repair-workspace.md)
 
+> **Where the build departed from this plan.** The hub reads the failed jobs of
+> every offer's run in one `GET /jobs` and sorts them out per offer, so the offer
+> row needed no API change. A caller who may not read a job's error output is
+> answered 409, not 403, as a repair request already answers a caller without
+> write access. `checkRows` takes the repository's address, not its name, so the
+> access row links to the host the job's own address named. `isTerminal` and
+> `outcomeTone` were deleted from `journey.ts` rather than kept, because the
+> status map owns tone and `isActive` answers "finished". The setup page reads
+> its settings once and after each action, with no timer. The history card is
+> called History. Setup is audited against the real controller and the other
+> pages against a stub. The progress record is a dated Log entry, because that
+> file's Eli table is for work packages and says not to add work to it. The
+> screenshot script now says which theme and style to capture, so only the four
+> repair images were retaken. The pull request lists each decision and what it
+> costs if wrong.
+
 ## Global Constraints
 
 * Go 1.27.1 or later; Node 22 or later. No new dependency, Go or npm (`docs/dependencies.md`).
