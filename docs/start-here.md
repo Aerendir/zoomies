@@ -27,7 +27,7 @@ task table below or go straight to [advanced operations](advanced.md).
 Decide whether running your own fleet suits your workloads and your team.
 
 1. [Should you self-host?](should-i-self-host.md): responsibilities and trade-offs.
-2. [Explore the live demo](https://demo.zoomies.sh/) without signing in, or [run the local demo](quickstart.md#just-looking) to explore a fixture fleet without GitHub credentials.
+2. [Explore the live demo](https://demo.zoomies.sh/){ target=_blank rel="noopener" } without signing in, or [run the local demo](quickstart.md#just-looking) to explore a fixture fleet without GitHub credentials.
 3. [Costs](costs.md) and [alternatives](alternatives/index.md): compare the whole cost of ownership.
 </div>
 

@@ -26,7 +26,7 @@ assistant through MCP.
 
 <p class="actions" markdown>
 [Run your first job :material-arrow-right:](quickstart.md){ .md-button .md-button--primary }
-[Try the live demo](https://demo.zoomies.sh/){ .md-button }
+[Try the live demo](https://demo.zoomies.sh/){ .md-button target=_blank rel="noopener" }
 </p>
 
 <div class="zoomies-install" markdown>
