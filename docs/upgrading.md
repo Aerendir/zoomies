@@ -799,8 +799,9 @@ and one the agent's configuration dropped stays until `zoomies hosts edit --unta
 removes it.
 
 Two things in the UI are not behind a switch, because they cost nothing while the
-feature is off. A host's card and its dialog call the labels on it *tags*, and list
-beside them the ones the controller works out from the machine, `os` and `arch`;
+feature is off. A host's card (under **Details**) and its dialog call the labels on
+it *tags*, and list beside them the ones the controller works out from the
+machine, `os` and `arch`;
 what a pool's host selector matches is unchanged. And the Overview's feed gains an
 **Automatic changes** kind, on by default and empty until a switch is set, which
 **Settings → Events** turns off.

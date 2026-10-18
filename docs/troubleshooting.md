@@ -269,9 +269,12 @@ page.
 
 ## The agent is connected but new runners are held
 
-Read the host card's reason before changing a pool. **Committed** CPU and
-memory are reservations; **CPU usage** and **memory available** are recent
-measurements of the whole host, including work outside Zoomies.
+Read the host card's reason before changing a pool. Every sentence that says why
+a host takes no work is on the closed card. Under its **Details**, **Committed**
+CPU and memory are reservations; **CPU usage** and **memory available** are
+recent measurements of the whole host, including work outside Zoomies. A host
+with a slot free whose committed CPU or memory is 90% or more says so on the
+closed card, because that is what keeps a free slot empty.
 
 A host can be under pressure while the room **held back for the machine** looks
 generous, and the two do not contradict each other. The reserve is what the

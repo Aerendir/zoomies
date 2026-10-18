@@ -1175,11 +1175,12 @@ anything: load keeps counting what is queued behind the cores, so it is what
 says a host has been pushed *past* them rather than merely to them. Sampling
 reads procfs and makes no extra Docker requests.
 
-The Hosts page shows actual usage separately from **Committed** resources.
-Committed CPU is a reservation, not a measurement of CPU saturation. A fresh
-reading tightens memory admission and influences host ranking; it never raises
-the configured capacity or overrides the pool's limits and host reserves.
-Measured memory already contains running workloads, so their reservations are
+The Hosts page shows actual usage separately from **Committed** resources, both
+under a card's **Details**; the closed card says so when committed resources are
+why a free slot goes unused. Committed CPU is a reservation, not a measurement of
+CPU saturation. A fresh reading tightens memory admission and influences host
+ranking; it never raises the configured capacity or overrides the pool's limits
+and host reserves. Measured memory already contains running workloads, so their reservations are
 not subtracted from that measurement again. Runners still provisioning or
 registering, starts newer than the measurement, and all placements in the
 current pass are charged before another placement is allowed. The independent

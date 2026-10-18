@@ -486,8 +486,9 @@ measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`,
 written in terabytes from one up, unless under a tenth of a terabyte is used,
 when it stays in gigabytes as `20 / 1,024 GB` because it would round to
 `0 / 1 TB`).
-They are the shares the capacity map draws, so its newest point and the card
-never disagree. A figure turns amber, takes a warning triangle and says so in
+They are the shares the capacity map draws, so for a host that is sending
+heartbeats the newest point on that chart and the card are one figure. A figure
+turns amber, takes a warning triangle and says so in
 its label where the product itself acts on it, and that is not one line for all
 three. **CPU** turns amber from 85%, the line from which the scheduler places one
 runner at a time, counted without the CPU it has lent to runners: a host at 92%
@@ -502,12 +503,15 @@ beside the bar: a CPU of 84.6% reads 85% and is a fraction under the line, so it
 is not amber. A figure that is not measured reads
 `--`. For a host that has stopped sending heartbeats, or whose agent reports
 nothing to measure, the bars give way to one sentence saying why, because the
-agent's last disk figure would otherwise read as now.
+agent's last disk figure would otherwise read as now. The capacity map has no
+such rule, and still draws that last disk figure as the newest point of a silent
+host's line.
 
 Nothing that keeps a host from taking work is folded away. The sentence for a
-cordon, a throttle, a runtime that is recovering, an image that will not pull or
-an incompatible agent, the line naming a failed health check and the update row
-all stay on the closed card, and so does the **Backends** block, with the
+cordon, a throttle, a hold on new starts, a busy CPU, a runtime that is
+recovering, an image that will not pull, an incompatible agent or a machine that
+is draining, the line naming a failed health check and the update row all stay on
+the closed card, and so does the **Backends** block, with the
 agent's own explanation, for a host with no backend that works. A host with
 Docker and no Podman is the ordinary case and is not one of them. Two more
 sentences stay because the numbers beside them cannot say what they say. The
@@ -536,10 +540,10 @@ on sight, and forgets a host that no longer exists.
 
 Under **Details**, **Agent connected** describes the heartbeat. Recent **CPU usage**,
 **memory available** and the one-minute **load** describe the machine's actual
-load, separately from its committed resources. A pressure warning says whether
-new starts are held or limited to one at a time; recovery happens automatically
-and keeps any manual cordon. A missing or stale reading is shown as unavailable.
-See
+load, separately from its committed resources. A missing or stale reading is
+shown as unavailable. The pressure warning is not one of these lines: it is on
+the closed card, where it says whether new starts are held or limited to one at a
+time, and recovery happens automatically and keeps any manual cordon. See
 [current usage and automatic holds](hosts-and-pools.md#current-usage-and-automatic-holds)
 for the thresholds and the limits of these measurements.
 
