@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { findLostSpaces, lostSpacesUnder } from '../scripts/block-spacing.mjs';
 
 // Svelte drops the whitespace at the start and at the end of a block's body, so a
@@ -96,4 +100,67 @@ test('no page in the UI continues a sentence across the edge of a block', () => 
     found.map((f) => `${f.file}:${f.line}`),
     [],
   );
+});
+
+// `npm run lint` runs the script by its path, and the script decides it was run,
+// not imported, by comparing its own address with that path. A file URL spells a
+// space, a letter outside ASCII and a % differently from the path it came from,
+// so comparing the two as text made the check do nothing, and say nothing, in
+// any checkout whose path had one: exit 0 with the lost space still in the page.
+const script = join(import.meta.dirname, '..', 'scripts', 'block-spacing.mjs');
+
+// The plain name is the control: it shows the copy below can find a lost space
+// at all, so a failure on the others is about the path.
+for (const [kind, name] of [
+  ['nothing unusual in it', 'plain'],
+  ['a space in it', 'with space'],
+  ['a letter outside ASCII in it', 'søren'],
+  ['a percent sign in it', '100% done'],
+] as const) {
+  test(`run from a path with ${kind}, the check still finds the lost space`, () => {
+    const root = mkdtempSync(join(tmpdir(), 'zoomies-block-spacing-'));
+    try {
+      // The script lints the src/ beside its own directory and imports the
+      // compiler by name, so the copy brings a src/ and a node_modules of its own.
+      const home = join(root, name);
+      mkdirSync(join(home, 'scripts'), { recursive: true });
+      mkdirSync(join(home, 'src'));
+      copyFileSync(script, join(home, 'scripts', 'block-spacing.mjs'));
+      symlinkSync(
+        join(import.meta.dirname, '..', 'node_modules'),
+        join(home, 'node_modules'),
+        'junction',
+      );
+      writeFileSync(
+        join(home, 'src', 'Lost.svelte'),
+        '<p>\n  in use{#if a}\n    · more{/if}\n</p>\n',
+      );
+      const run = spawnSync(process.execPath, [join(home, 'scripts', 'block-spacing.mjs')], {
+        encoding: 'utf8',
+        timeout: 20000,
+      });
+      assert.equal(run.error, undefined);
+      assert.equal(
+        run.status,
+        1,
+        `the check found nothing to report; stderr was ${JSON.stringify(run.stderr)}`,
+      );
+      assert.match(run.stderr, /src\/Lost\.svelte:2:/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+// With no script path at all, as when a snippet imports it, there is nothing to
+// compare and nothing to run: the import must stay quiet rather than throw.
+test('imported from a snippet that has no script path, the check neither runs nor throws', () => {
+  const run = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', `import ${JSON.stringify(pathToFileURL(script).href)};`],
+    { encoding: 'utf8', timeout: 20000 },
+  );
+  assert.equal(run.error, undefined);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stderr, '');
 });

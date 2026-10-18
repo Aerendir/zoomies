@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/store"
@@ -145,7 +146,7 @@ func (s *Server) handleRerunJobWorkflow(w http.ResponseWriter, r *http.Request) 
 // job comes back in its GET shape, so the caller can drop it into the same
 // cache a job.updated frame goes into.
 func (s *Server) handleAcknowledgeJob(w http.ResponseWriter, r *http.Request) {
-	j, err := s.ctrl.AcknowledgeJob(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
+	j, recorded, err := s.ctrl.AcknowledgeJob(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
 	if err != nil {
 		if errors.Is(err, controller.ErrJobDidNotFail) {
 			conflict(w, err.Error()+"; only a failure waits for triage, so there is nothing to mark as known")
@@ -154,9 +155,13 @@ func (s *Server) handleAcknowledgeJob(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "acknowledging the job's failure", err)
 		return
 	}
-	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.acknowledged", "job", j.ID, map[string]any{
-		"repo": j.Repo, "run_id": j.GitHubRunID,
-	})
+	// Only the press that changed the row is an entry: a second one leaves the
+	// first name where it was, and the log must not say otherwise.
+	if recorded {
+		s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.acknowledged", "job", j.ID, map[string]any{
+			"repo": j.Repo, "run_id": j.GitHubRunID,
+		})
+	}
 	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
 }
 
@@ -164,25 +169,38 @@ func (s *Server) handleAcknowledgeJob(w http.ResponseWriter, r *http.Request) {
 // failure somebody has read back in front of whoever looks next, which is the
 // undo for a row acknowledged by mistake.
 func (s *Server) handleReopenJobAttention(w http.ResponseWriter, r *http.Request) {
-	j, err := s.ctrl.ReopenJobAttention(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
+	j, reopened, err := s.ctrl.ReopenJobAttention(r.Context(), chiURLParam(r, "id"), requestingActor(r.Context()))
 	if err != nil {
 		s.fail(w, r, "putting the job's failure back in the attention list", err)
 		return
 	}
-	s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.reopened", "job", j.ID, map[string]any{
-		"repo": j.Repo, "run_id": j.GitHubRunID,
-	})
+	if reopened {
+		s.auth.Auditor().Act(r.Context(), Identity(r.Context()), "job.reopened", "job", j.ID, map[string]any{
+			"repo": j.Repo, "run_id": j.GitHubRunID,
+		})
+	}
 	writeJSON(w, http.StatusOK, s.jobViewFor(r.Context(), j))
 }
 
-// requestingActor is the name a timeline entry credits, empty when the route
-// has no authenticated caller (an instance with authentication off). The
-// controller reads an empty name as "an operator".
+// requestingActor is the name a timeline entry credits, empty when there is no
+// account behind the request: no caller at all, or an instance with
+// authentication off, where the caller is the development identity and its
+// name is a placeholder rather than a person. The controller reads an empty
+// name as "an operator".
 func requestingActor(ctx context.Context) string {
-	if id := Identity(ctx); id != nil {
-		return id.Name
+	id := Identity(ctx)
+	if id == nil || isDevelopmentIdentity(id) {
+		return ""
 	}
-	return ""
+	return id.Name
+}
+
+// isDevelopmentIdentity reports whether id is the one every request resolves to
+// when security.disable_auth is on. It is asked of the identity itself, rather
+// than of the setting, so that the answer follows whatever resolved the caller.
+func isDevelopmentIdentity(id *auth.Identity) bool {
+	dev := auth.DevIdentity("")
+	return id.Kind == dev.Kind && id.ID == dev.ID
 }
 
 // jobResponse is one workflow job as Zoomies observed it.
@@ -258,11 +276,12 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	names := poolNames(pools)
+	visitor := isVisitor(r.Context())
 
 	if provisioning {
 		out := make([]jobResponse, 0, len(jobs))
 		for _, j := range jobs {
-			out = append(out, controller.NewJobView(j, names[j.PoolID]))
+			out = append(out, controller.NewJobView(j, names[j.PoolID]).For(visitor))
 		}
 		counts, err := s.ctrl.Store().ProvisioningCounts(r.Context(), filter)
 		if err != nil {
@@ -289,7 +308,7 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]jobResponse, 0, len(jobs))
 	for _, j := range jobs {
-		out = append(out, controller.NewJobView(j, names[j.PoolID]))
+		out = append(out, controller.NewJobView(j, names[j.PoolID]).For(visitor))
 	}
 	pg := newPage(out, total, p)
 	pg.Next = nextToken
@@ -433,8 +452,14 @@ func (s *Server) jobViewFor(ctx context.Context, j *store.Job) controller.JobVie
 			poolName = p.Name
 		}
 	}
-	return controller.NewJobView(j, poolName)
+	return controller.NewJobView(j, poolName).For(isVisitor(ctx))
 }
+
+// isVisitor reports whether this request is a public view's anonymous visitor,
+// who is told a failure was marked as known and when but never by whom. Every
+// route that renders a job, or a runner's current job, asks it of its own
+// context before the view leaves.
+func isVisitor(ctx context.Context) bool { return auth.IsVisitor(Identity(ctx)) }
 
 // jobEventResponse is one entry of a job's timeline. The store's record is the
 // documented shape: it has no derived fields, so there is nothing for a
@@ -451,9 +476,10 @@ func (s *Server) handleJobEvents(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "reading the job's timeline", err)
 		return
 	}
+	visitor := isVisitor(r.Context())
 	out := make([]jobEventResponse, 0, len(events))
 	for _, e := range events {
-		out = append(out, *e)
+		out = append(out, controller.JobEventFor(*e, visitor))
 	}
 	writeJSON(w, http.StatusOK, newList(out))
 }

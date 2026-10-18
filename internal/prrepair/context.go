@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -21,11 +22,48 @@ type allowanceError struct {
 	need, left int
 }
 
-func (e *allowanceError) Error() string {
-	if e.left <= 0 {
+func (e *allowanceError) Error() string { return e.said(e.left) }
+
+// said is the refusal as the model is told it. left is what remains when the
+// model reads it, which is less than e.left whenever a window later in the same
+// request was supplied: a model that sized its next window from the larger
+// figure was refused again, and each refusal costs one of the repair's rounds.
+func (e *allowanceError) said(left int) string {
+	if left <= 0 {
 		return fmt.Sprintf("%s was not supplied: the whole %d KiB source allowance is used up. Work from the source already supplied, or return cannot_fix.", e.path, MaxSourceBytes/1024)
 	}
-	return fmt.Sprintf("%s was not supplied: it would add %d bytes of source and %d bytes of the %d KiB allowance remain. Ask for a smaller line window of it, work from the source already supplied, or return cannot_fix.", e.path, e.need, e.left, MaxSourceBytes/1024)
+	return fmt.Sprintf("%s was not supplied: it would add %d bytes of source and %d bytes of the %d KiB allowance remain. Ask for a smaller line window of it, work from the source already supplied, or return cannot_fix.", e.path, e.need, left, MaxSourceBytes/1024)
+}
+
+// stepLimitError is what a repair ends with when its rounds run out. When the
+// allowance turned reads away it says so, because the round limit on its own
+// sends whoever reads it to the model, when it was the request that was too
+// wide: a retry sends the same snapshot and the model asks for the same reads.
+// A path counts as turned away if it was refused once, even if a window of it
+// fitted later, since the rounds spent finding that out are the rounds it ran
+// out of.
+func stepLimitError(refused []string) error {
+	if len(refused) == 0 {
+		return errors.New("the repair reached the model-step limit without a fix")
+	}
+	return fmt.Errorf("the repair reached the model-step limit without a fix; the model asked for %s, which the %d KiB source allowance had no room for: name the file and the lines to change in the request, so that it asks for a window that fits", namedFiles(refused), MaxSourceBytes/1024)
+}
+
+// namedFiles lists up to three paths and counts the rest. Each sits in a code
+// span, which a path pushed by somebody else cannot close: a backtick in it
+// becomes an apostrophe.
+func namedFiles(paths []string) string {
+	names := []string{}
+	for _, p := range paths[:min(len(paths), 3)] {
+		names = append(names, "`"+strings.ReplaceAll(p, "`", "'")+"`")
+	}
+	if more := len(paths) - len(names); more > 0 {
+		return strings.Join(names, ", ") + fmt.Sprintf(" and %d more", more)
+	}
+	if n := len(names); n > 1 {
+		return strings.Join(names[:n-1], ", ") + " and " + names[n-1]
+	}
+	return names[0]
 }
 
 type sourceSpan struct{ start, end int }
@@ -35,6 +73,9 @@ type sourceContext struct {
 	originals map[string]File
 	shown     map[string][]sourceSpan
 	bytes     int
+	// refused is the paths the allowance turned away, in the order it first did,
+	// for the error a repair ends with if it runs out of rounds.
+	refused []string
 }
 
 func newSourceContext(reader Reader, workflows bool) *sourceContext {
@@ -117,6 +158,9 @@ func (s *sourceContext) reveal(ctx context.Context, w ReadWindow) ([]File, error
 		size += v.end - v.start
 	}
 	if s.bytes+size > MaxSourceBytes {
+		if !slices.Contains(s.refused, w.Path) {
+			s.refused = append(s.refused, w.Path)
+		}
 		return nil, &allowanceError{path: w.Path, need: size, left: MaxSourceBytes - s.bytes}
 	}
 	s.bytes += size

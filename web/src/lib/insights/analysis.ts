@@ -59,7 +59,7 @@ export function stepLine(s: {
  * still waiting would have its wait counted into it. The controller clamps the
  * same way for every caller; doing it here too keeps the period the card
  * describes the one it was given. A window that does not end after it starts
- * asks nothing, because the page that holds it already says it is backwards.
+ * asks nothing, and `whyNoWindow` says why where the answer would be.
  */
 export function analysisWindow(
   since: string | undefined,
@@ -74,6 +74,34 @@ export function analysisWindow(
   return { since: new Date(start).toISOString(), until: new Date(end).toISOString() };
 }
 
+/**
+ * Why `analysisWindow` asked nothing, as the card says it in place of a
+ * finding: a titled frame with nothing under it says nothing at all. The date
+ * picker points out a range that runs backwards, in an alert of its own, and
+ * nothing points out one that has not started, where the list is merely empty,
+ * so the card names whichever it is. The future one repeats the route's own
+ * refusal of a start that is not in the past (ErrSinceNotPast), which is why
+ * the page does not ask.
+ *
+ * Only for a window `analysisWindow` gave null, with the same two bounds; any
+ * other has an answer. A bound left out is undefined, as there; one that is
+ * there and empty, or not a date, is one the page could not read (Usage's
+ * address parses to empty bounds, and does not reach `analysisWindow`).
+ */
+export function whyNoWindow(since: string | undefined, until: string | undefined): string {
+  const start = since === undefined ? Number.NEGATIVE_INFINITY : Date.parse(since);
+  // An end left out is now, which a start is after only by not having happened
+  // yet, so only an end that was written can make a range run backwards.
+  const end = until === undefined ? undefined : Date.parse(until);
+  if (Number.isNaN(start) || (end !== undefined && Number.isNaN(end))) {
+    return 'The range has a date this page cannot read, so there is no period to analyse.';
+  }
+  if (end !== undefined && start >= end) {
+    return 'The end is before the start, so there is no period to analyse.';
+  }
+  return 'This period has not started, and an analysis reads only what has already happened; choose a start in the past.';
+}
+
 /** The list's filters, as far as the queue-wait card needs to know them. */
 export interface QueueListFilters {
   pool_id: readonly string[];
@@ -86,6 +114,8 @@ export interface QueueListFilters {
   provisioning?: readonly string[];
   /** Unmatched, when an address keeps the list queued with it on. */
   unmatched?: boolean;
+  /** "Include other runners": the list holds jobs another vendor's runners ran. */
+  all?: boolean;
 }
 
 /**
@@ -95,6 +125,10 @@ export interface QueueListFilters {
  * repository would read as that repository's, and could send an operator to
  * raise the wrong pool's ceiling. So the card says its scope, and names the
  * filters it leaves out rather than borrowing their meaning.
+ *
+ * The switch for other runners is the odd one out. The list leaves another
+ * vendor's jobs out until it is on, and the analysis leaves them out always,
+ * so it is named only when on, when the list holds jobs the card does not.
  */
 export function queueWaitScope(
   f: QueueListFilters,
@@ -111,10 +145,40 @@ export function queueWaitScope(
     f.provisioning?.length ? 'provisioning' : '',
     f.unmatched ? 'unmatched' : '',
   ].filter((w) => w !== '');
+  const sentences = [
+    left.length
+      ? `The list's ${joinWords(left)} ${left.length === 1 ? 'filter is' : 'filters are'} not applied here: this analysis reads every pool, or one pool.`
+      : '',
+    f.all
+      ? "The list's Include other runners switch is not applied here: this analysis leaves out the jobs another vendor's runners ran."
+      : '',
+  ].filter((s) => s !== '');
   return {
     scope: one ? `Pool ${poolName(one)}` : 'Every pool',
-    unapplied: left.length
-      ? `The list's ${joinWords(left)} ${left.length === 1 ? 'filter is' : 'filters are'} not applied here: this analysis reads every pool, or one pool.`
+    unapplied: sentences.length ? sentences.join(' ') : null,
+  };
+}
+
+/**
+ * What the failed runners' card covers, and which of the list's filters it
+ * does not. The route reads every start in the period, narrowed to the pool
+ * and host the page chose; the list beside it also takes a search, which an
+ * analysis of starts has no use for. The fleet's answer under a list searched
+ * down to one runner would read as that runner's, so the card says what it
+ * covers and names the search it leaves out, as the Queued card does its own.
+ */
+export function startupFailuresScope(
+  f: { pool_id: string; host_id: string; q: string },
+  name: { pool: (id: string) => string; host: (id: string) => string },
+): { scope: string; unapplied: string | null } {
+  const covered = [
+    f.pool_id ? `Pool ${name.pool(f.pool_id)}` : '',
+    f.host_id ? `${f.pool_id ? 'host' : 'Host'} ${name.host(f.host_id)}` : '',
+  ].filter((w) => w !== '');
+  return {
+    scope: covered.length ? covered.join(', ') : 'Every pool and host',
+    unapplied: f.q.trim()
+      ? "The list's search filter is not applied here: this analysis reads every start in the period, narrowed only by pool and host."
       : null,
   };
 }
@@ -160,6 +224,22 @@ export function findingDescription(
 }
 
 /**
+ * The refusals whose own sentence names a remedy the page has no control for,
+ * said instead in terms of what the page does have. Too few releases tells a
+ * caller to name the releases with a and b, to widen the period, or to compare
+ * by period; the Usage card asks by version with no a and b and never compares
+ * periods, so two of the three are not on the page and the third is its range.
+ * A Map, since a code is whatever the server sent and a plain object would
+ * answer "constructor".
+ */
+const SAID_ON_THE_PAGE = new Map([
+  [
+    'analysis.too_few_releases',
+    'Fewer than two releases completed a job in this range, so there is no pair to compare; widen the range.',
+  ],
+]);
+
+/**
  * What a card shows when its analysis was not given, and whether that is a
  * refusal. A 4xx is the route declining a question it understood (a period
  * over limits.job_stats_window, too few releases to compare), in its own
@@ -169,7 +249,12 @@ export function findingDescription(
  * its request ID in `detail`, so the card says which request to quote.
  */
 export function refusalOf(cause: unknown): { message: string; refused: boolean } {
-  const c = (cause ?? {}) as { status?: unknown; message?: unknown; detail?: unknown };
+  const c = (cause ?? {}) as {
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+    detail?: unknown;
+  };
   const status = typeof c.status === 'number' ? c.status : undefined;
   const raw =
     typeof c.message === 'string' && c.message.trim()
@@ -180,10 +265,10 @@ export function refusalOf(cause: unknown): { message: string; refused: boolean }
     const said = raw.replace(supportHint(), '').trim();
     return { message: `${sentence(said)} ${supportHint(id)}`, refused: false };
   }
-  return {
-    message: sentence(raw),
-    refused: status !== undefined && status >= 400 && status < 500,
-  };
+  const refused = status !== undefined && status >= 400 && status < 500;
+  const onThePage =
+    refused && typeof c.code === 'string' ? SAID_ON_THE_PAGE.get(c.code) : undefined;
+  return { message: onThePage ?? sentence(raw), refused };
 }
 
 /** What the card hands Eli: the fields every finding shares. */
@@ -198,12 +283,47 @@ export interface FindingFacts {
   codes: readonly string[];
 }
 
+/** The pool or host a card was narrowed to, which its finding does not say. */
+export interface AnalysisNarrowing {
+  pool?: { id: string; name?: string };
+  host?: { id: string; name?: string };
+}
+
+/** A name with its id, or the id alone when the page does not know the name. */
+function namedWithId(x: { id: string; name?: string }): string {
+  return x.name && x.name !== x.id ? `${x.name} (${x.id})` : x.id;
+}
+
 /**
  * The finding as the card shows it, named one by one. The evidence stays on
  * the page: it quotes names a workflow wrote, and Eli has the analysis tools
  * to read it whole.
+ *
+ * What the card was narrowed to goes with it, and so does the instruction to
+ * pass it. The prompt tells Eli to check the snapshot with its tools, which
+ * read the last day of the whole fleet unless told otherwise, and a finding
+ * narrowed to one pool says nothing of the pool ("No start failed in this
+ * period") for Eli to repeat.
  */
-export function analysisContext(title: string, f: FindingFacts): EliContext {
+export function analysisContext(
+  title: string,
+  f: FindingFacts,
+  narrowed: AnalysisNarrowing = {},
+): EliContext {
+  const passed = joinWords(
+    [
+      narrowed.pool ? `pool_id ${narrowed.pool.id}` : '',
+      narrowed.host ? `host_id ${narrowed.host.id}` : '',
+    ].filter((a) => a !== ''),
+  );
+  const of =
+    narrowed.pool && narrowed.host
+      ? 'this pool and host'
+      : narrowed.pool
+        ? 'this pool'
+        : narrowed.host
+          ? 'this host'
+          : 'this fleet';
   return {
     kind: 'analysis',
     title,
@@ -211,6 +331,8 @@ export function analysisContext(title: string, f: FindingFacts): EliContext {
       Analysis: f.analysis,
       From: f.since,
       To: f.until,
+      Pool: narrowed.pool ? namedWithId(narrowed.pool) : undefined,
+      Host: narrowed.host ? namedWithId(narrowed.host) : undefined,
       Summary: f.summary,
       Confidence: confidenceWords(f.confidence, f.confidence_reason),
       'Next steps': f.next_steps.length
@@ -218,7 +340,10 @@ export function analysisContext(title: string, f: FindingFacts): EliContext {
         : undefined,
       Codes: f.codes.length ? f.codes.join(', ') : undefined,
     },
-    question: 'What does this analysis mean for this fleet, and what should I change first?',
+    question:
+      `What does this analysis mean for ${of}, and what should I change first? ` +
+      `To check it against the fleet now, ask for the same analysis again with since ${f.since}, until ${f.until}` +
+      `${passed ? `, ${passed}` : ''}; without them it reads the last day of the whole fleet.`,
   };
 }
 

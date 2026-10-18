@@ -46,7 +46,7 @@ export function readChoice(search: string): GalleryChoice {
  * Put the combination on the document root.
  *
  * Removing an attribute is not the same as setting the default one: Classic
- * and System are the absence of a choice, exactly as they are in index.html,
+ * and System are the absence of an attribute, exactly as they are in index.html,
  * so the token cascade follows the operating system again.
  */
 export function applyChoice({ style, mode }: GalleryChoice): void {

@@ -4,14 +4,16 @@
 // that has to agree with it.
 //
 // internal/naming's catalogue is the list of operating systems a pool may ask
-// for. Four other files have to say the same thing: the Makefile, so a
+// for. Five other files have to say the same thing: the Makefile, so a
 // contributor can build one variant by hand; both workflows, so every variant
-// is actually built and published; and docs/naming.md, so an operator can see
-// what is on offer. Kept by hand, that is four places to remember and a runner
+// is actually built and published; docs/naming.md, so an operator can see
+// what is on offer; and the runner Dockerfile, whose default base is the
+// default variant's, so that a plain build of it is not on a base the weekly
+// refresh replaced. Kept by hand, that is five places to remember and a runner
 // that will not start when somebody forgets one -- swapping Fedora 42 for
 // Fedora 43 should be a row in images.go, not an archaeology exercise.
 //
-// So the four are generated. Each file carries a begin/end marker and this
+// So the five are generated. Each file carries a begin/end marker and this
 // command rewrites what is between them, leaving everything else alone: these
 // are files people edit for other reasons, and a generator that owned the whole
 // file would own decisions it has no opinion about.
@@ -57,6 +59,7 @@ func main() {
 		{filepath.Join(".github", "workflows", "ci.yml"), matrixBlock(images)},
 		{filepath.Join(".github", "workflows", "release.yml"), matrixBlock(images)},
 		{filepath.Join("docs", "naming.md"), docsBlock(images)},
+		{filepath.Join("deploy", "Dockerfile.runner"), dockerfileBlock(naming.DefaultImage())},
 	} {
 		path := filepath.Join(root, f.path)
 		if err := rewrite(path, f.body); err != nil {
@@ -205,6 +208,14 @@ func docsBlock(images []naming.Image) string {
 		fmt.Fprintf(&b, "| `%s` | `%s` | %s | %s |\n", img.Tag(), img.Base, strings.Join(img.Arches, ", "), full)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// dockerfileBlock renders the base a plain build of the runner Dockerfile uses:
+// the default variant's, pinned by digest like every other. The weekly refresh
+// moves that digest, and a default nothing moved with it left a build run by
+// hand on a base that had been replaced weeks before.
+func dockerfileBlock(def naming.Image) string {
+	return "ARG BASE=" + def.Base
 }
 
 // repoRoot walks up from the working directory looking for go.mod, so that the

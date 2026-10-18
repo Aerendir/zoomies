@@ -61,10 +61,12 @@
   import {
     analysisWindow,
     refusalOf,
+    type AnalysisNarrowing,
     CAUSE_WORDS,
     jobWords,
     longestWaits,
     queueWaitScope,
+    whyNoWindow,
     wordFor,
   } from '$lib/insights/analysis';
   import { events } from '$lib/api/sse';
@@ -185,8 +187,13 @@
   // still the queue somebody is asking about, and the card then says it does
   // not apply the narrowing (below). The UI itself never writes such an
   // address: the "Unmatched only" switch clears the state.
+  //
+  // Never for a public view's visitor: the route refuses one before it reads
+  // anything, and a card that can only say "sign in to do this" is one more
+  // thing a visitor learns to distrust (lib/shell/sections.ts).
   const queuedShown = $derived(
-    view === 'queued' || (filters.state.length === 1 && filters.state[0] === 'queued'),
+    !session.visitor &&
+      (view === 'queued' || (filters.state.length === 1 && filters.state[0] === 'queued')),
   );
   const waitPool = $derived(filters.pool_id.length === 1 ? filters.pool_id[0] : undefined);
   // Primitives, so a change to a filter the analysis does not read (a
@@ -197,14 +204,19 @@
   $effect(() => {
     if (!queuedShown) return;
     void adviceKey;
-    const period = analysisWindow(startOfMoment(waitSince), endOfMoment(waitUntil), Date.now());
+    const since = startOfMoment(waitSince);
+    const until = endOfMoment(waitUntil);
+    const period = analysisWindow(since, until, Date.now());
     const controller = new AbortController();
     // The last window's answer goes at once: left standing while the next
     // loads, it would sit under the new dates, as HostDetail's does not.
     wait = null;
     waitError = null;
     if (!period) {
-      // A range typed backwards is the date picker's to point out.
+      // The date picker points out a range typed backwards, and nothing points
+      // out one that has not started; the card says why it asked nothing,
+      // since a titled frame with nothing under it says nothing.
+      waitError = { message: whyNoWindow(since, until), refused: true };
       waitLoading = false;
       return;
     }
@@ -241,6 +253,12 @@
       },
       (poolId) => fleet.pool(poolId)?.name ?? poolId,
     ),
+  );
+
+  // The pool the card was asked about, for Ask Eli to pass to its tool: the
+  // finding for one pool never names it unless that pool waited most.
+  const waitNarrowed = $derived<AnalysisNarrowing>(
+    waitPool ? { pool: { id: waitPool, name: fleet.pool(waitPool)?.name } } : {},
   );
 
   /** Every pool's longest waits, longest first, as one list. */
@@ -766,6 +784,7 @@
       error={waitError}
       loading={waitLoading}
       scope={waitScope.scope}
+      narrowedTo={waitNarrowed}
       note={waitScope.unapplied}
     >
       {#if wait}

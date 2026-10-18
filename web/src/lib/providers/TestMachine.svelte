@@ -12,7 +12,6 @@
   is a button an operator presses and never something that runs by itself.
 -->
 <script lang="ts">
-  import { untrack } from 'svelte';
   import { Check, CircleDashed, LoaderCircle, X } from '@lucide/svelte';
   import { listMachines, testProviderMachine } from '$lib/api/client';
   import type { Machine, Provider } from '$lib/api/types';
@@ -20,7 +19,7 @@
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import Panel from '$lib/components/Panel.svelte';
-  import { latestTest, testProgress } from './testmachine';
+  import { blocksAnotherTest, latestTest, stepStatusText, testProgress } from './testmachine';
 
   interface Props {
     provider: Pick<Provider, 'id' | 'name' | 'max_machines' | 'owned' | 'held'>;
@@ -34,14 +33,18 @@
   /** The test machine as last seen, which outlives its row once it is released. */
   let remembered = $state<Machine | null>(null);
   let starting = $state(false);
-  let loadedFor = '';
+
+  // What the effect below is keyed on, and all it is keyed on. The page replaces
+  // `provider` with a fresh object on every provider.updated frame, and an effect
+  // that read `provider.id` itself ran again for each one: its cleanup aborted the
+  // read in flight, and the run that followed found it had already been asked for.
+  const providerId = $derived(provider.id ?? '');
 
   // The newest test the controller still has a row for, so the answer is still
   // here after a reload, and after the machine itself has been deleted.
   $effect(() => {
-    const id = provider.id ?? '';
-    if (id === '' || untrack(() => loadedFor) === id) return;
-    loadedFor = id;
+    const id = providerId;
+    if (id === '') return;
     remembered = null;
     const controller = new AbortController();
     void listMachines({ provider: id, include_deleted: true, limit: 50 }, controller.signal)
@@ -72,6 +75,9 @@
 
   const progress = $derived(shown ? testProgress(shown) : null);
   const running = $derived(progress?.outcome === 'running');
+  // The controller holds the next test off until this one's machine is deleted,
+  // which is after it has passed as well as while it runs.
+  const inTheWay = $derived(shown ? blocksAnotherTest(shown) : false);
   const refusal = $derived(
     !canOperate
       ? 'Running a test needs the operator role.'
@@ -135,7 +141,7 @@
             {:else}
               <CircleDashed size={14} aria-hidden="true" />
             {/if}
-            <span>{step.label}</span>
+            <span>{step.label}<span class="sr-only">, {stepStatusText(step.status)}</span></span>
           </li>
         {/each}
       </ol>
@@ -148,18 +154,20 @@
   <div class="actions">
     <Button
       variant="secondary"
-      disabled={starting || running || refusal !== ''}
+      disabled={starting || inTheWay || refusal !== ''}
       onclick={() => void start()}
     >
       {starting
         ? 'Starting…'
         : running
           ? 'Test running…'
-          : shown
-            ? 'Run the test again'
-            : 'Run a test machine'}
+          : inTheWay
+            ? 'Releasing the test machine…'
+            : shown
+              ? 'Run the test again'
+              : 'Run a test machine'}
     </Button>
-    {#if refusal && !running}
+    {#if refusal && !inTheWay}
       <p class="note">{refusal}</p>
     {/if}
   </div>

@@ -799,8 +799,9 @@ and one the agent's configuration dropped stays until `zoomies hosts edit --unta
 removes it.
 
 Two things in the UI are not behind a switch, because they cost nothing while the
-feature is off. A host's card and its dialog call the labels on it *tags*, and list
-beside them the ones the controller works out from the machine, `os` and `arch`;
+feature is off. A host's card (under **Details**) and its dialog call the labels on
+it *tags*, and list beside them the ones the controller works out from the
+machine, `os` and `arch`;
 what a pool's host selector matches is unchanged. And the Overview's feed gains an
 **Automatic changes** kind, on by default and empty until a switch is set, which
 **Settings → Events** turns off.
@@ -1157,9 +1158,12 @@ The key is minted once, by the owner:
    zoomies release keygen --out ./release-key
    ```
 
-2. Commit the public half, the line in `release.pub`, into `internal/releasekey/default.go`
-   as `Default` and into `RELEASE_KEY` in `install.sh`, so every binary and the
-   installer trust the same key; a test fails when the two differ.
+2. Commit the public half, the line in `release.pub`, in five places, so every
+   binary and every script trust the same key: `Default` in
+   `internal/releasekey/default.go`, and `RELEASE_KEY` in `install.sh`,
+   `connect-proxmox.sh`, `deploy/instapods/fetch.sh` and
+   `internal/proxmoxsetup/release_signature.sh`. A test fails when any of them
+   differs from `Default`.
 3. Store the private half, `release.key`, as the repository secret
    `RELEASE_SIGNING_KEY`, and delete it from the machine.
 
@@ -1175,13 +1179,33 @@ running fleet to the signature in full.
 The Proxmox connector (`connect-proxmox.sh`, and the full command the provider
 wizard shows for a host that cannot reach zoomies.sh) and the InstaPods build
 script hold their downloads to the same key, and run what they download, the
-first as root. They add one rule. Releases before v1.3.6.1 were never signed, so
-there is nothing to check on those and they are taken on their checksum with a
-warning; but a release from v1.3.6 up is refused when its signature is missing,
+first as root. They add one rule, about which releases must be signed. Only two
+kinds of name are exempt: `dev`, which is whatever `main` built last, and a tag
+the script can read as a version below 1.3.6 (three numbers, each of one to four
+digits), such as `v1.2.0` or `v1.3.5`. A release that old was published before
+signing began (v1.3.6 itself was published with no files, so v1.3.6.1 is the
+first with a signature), so there is nothing to check on it, and one that is
+named outright is taken on its checksum with a warning. Every other name needs a
+signature: v1.3.6 and everything above it, and any name the script cannot read as
+three numbers of that size, because whoever publishes a release picks its name
+and a name nobody can place must not be the way out of the check. That includes
+the early tags that do not look like `vN.N.N`, `v0.1-alpha` and `V1.1.0` among
+them: they were never signed and the scripts cannot tell that they are old, so
+pinning one is refused.
+
+A release that needs a signature is refused when its signature is missing,
 cannot be read, or cannot be checked because the host has no `openssl` of 3.0 or
 later, because a script that only warned would run whatever was left after
 somebody deleted the signature. A signature that is there and does not match
-refuses in every case. `install.sh` keeps its best-effort rule for now.
+refuses in every case, whatever the release. `install.sh` keeps its best-effort
+rule for now.
+
+The InstaPods build script refuses one thing more. With no `ZOOMIES_VERSION` it
+takes the release GitHub calls the latest, which is the newest by date, under a
+name its publisher chose. If that name is one that needs no signature, the script
+stops before it downloads anything and says to set `ZOOMIES_VERSION` to a tag you
+trust. An old release that you name yourself keeps the warning and the install,
+because naming it was your decision.
 
 `release.yml` signs
 `checksums.txt` after it builds, verifies the signature
@@ -1196,10 +1220,12 @@ that transition release is signed with the old key (still the secret) and its
 binary trusts both, so an instance running an older binary still accepts it and
 one running the transition binary accepts the next release, signed with the new
 key. `zoomies release verify` says which key a signature names. Ed25519 is the
-standard library's; nothing new is depended on. `install.sh`, `connect-proxmox.sh`
-and `deploy/instapods/fetch.sh` carry the same set in their `RELEASE_KEY`, one key
-per line, and accept a signature from any key in it; a test in `internal/docs`
-keeps each of them equal to `Default`, so a rotation edits all four together.
+standard library's; nothing new is depended on. `install.sh`, `connect-proxmox.sh`,
+`deploy/instapods/fetch.sh` and `internal/proxmoxsetup/release_signature.sh` (the
+copy the provider wizard's full command is built from) carry the same set in their
+`RELEASE_KEY`, one key per line, and accept a signature from any key in it; a test
+in `internal/docs` keeps each of them equal to `Default`, so a rotation edits all
+five together.
 
 To hold one download to a different key, for a mirror or a test that builds its
 own, pass the base64 public key to `zoomies upgrade --release-key`, or set

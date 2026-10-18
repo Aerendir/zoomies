@@ -138,4 +138,16 @@
   .ceiling {
     color: var(--z-pending);
   }
+  /* Windows high contrast replaces every background with the page's own, which
+     leaves the busy part the colour of its track and the bar not there. The
+     system's Highlight keeps the picture; the live part already keeps its border. */
+  @media (forced-colors: active) {
+    .track {
+      border: var(--z-border-width) solid CanvasText;
+    }
+    .busy,
+    .capacity .busy {
+      background: Highlight;
+    }
+  }
 </style>

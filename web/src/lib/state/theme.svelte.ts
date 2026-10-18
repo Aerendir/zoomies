@@ -8,10 +8,10 @@
  *
  * The one thing an attribute on `<html>` cannot reach is the browser's own
  * chrome, which reads `<meta name="theme-color">`. The two tags in index.html
- * are media-scoped so the "system" default needs no JavaScript at all; an
- * explicit choice pins them here, because otherwise an operator on a dark
- * laptop who asks for the light theme still gets a black bar above a white
- * page.
+ * are media-scoped so "system" needs no JavaScript at all; any other choice
+ * pins them (the inline script before first paint, this module afterwards),
+ * because otherwise an operator on a dark laptop who asks for the light theme
+ * still gets a black bar above a white page.
  */
 import { storage } from './prefs.svelte';
 

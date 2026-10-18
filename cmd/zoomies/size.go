@@ -333,7 +333,7 @@ func jobsAdvice(ctx context.Context, e *env, args []string) error {
 		return err
 	}
 	// Read here as well as on the server, so a span the server would refuse
-	// is a usage error rather than a round trip that ends in one. parseAgo
+	// is a usage error rather than a round trip that ends in one. mcp.ParseAgo
 	// forgives a leading minus, because "how long ago" has no direction; a
 	// window does, and the server refuses a negative one.
 	if d, ok := mcp.ParseAgo(*window); !ok || d <= 0 || strings.HasPrefix(strings.TrimSpace(*window), "-") {

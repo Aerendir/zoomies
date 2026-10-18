@@ -12,10 +12,11 @@
  * side of them, and the two phone widths the mobile project uses.
  *
  * Two layouts are exempt, and say so where they are measured: a phone whose grids
- * are left in the row layout they start in scrolls its table inside the grid's
- * own frame, because ten columns do not divide 360 pixels. That is the trade
- * the layout exists to make and the reason Cards is one press away; what is
- * never exempt is the page, which is measured here in both layouts. The other
+ * are in the row layout scrolls its table inside the grid's own frame, because
+ * ten columns do not divide 360 pixels. That is the trade the layout exists to
+ * make and the reason Cards is one press away; what is never exempt is the page,
+ * which is measured here in both layouts, each pressed rather than assumed, since
+ * which of the two a fresh grid starts in depends on the visual style. The other
  * is a desktop layout the operator deliberately widened: that table scrolls in
  * its frame rather than silently shrinking some other column behind the
  * resize handle.
@@ -54,19 +55,24 @@ const PHONE_BREAKPOINT = 768;
 const PHONES = [412, 360] as const;
 
 /**
- * Put a phone-width grid into the card layout, the way an operator does.
+ * Put a phone-width grid into one of its two layouts, the way an operator does.
  *
- * The grids start as the table at every width, so the promise this file holds
+ * A fresh grid is Cards under Mission Control, the default, and Rows under
+ * Classic, so neither can be assumed as the start. The promise this file holds
  * -- a table that fits its frame -- is the card layout's below the phone
- * threshold. Pressed rather than written into storage, because a preference
- * set behind the UI's back is a preference this suite would keep passing on
- * after the control that sets it broke.
+ * threshold, and the row layout's is that the page holds still around it.
+ * Pressed rather than written into storage, because a preference set behind
+ * the UI's back is a preference this suite would keep passing on after the
+ * control that sets it broke.
  */
-async function chooseCards(page: Page): Promise<void> {
-  const cards = page.getByRole('button', { name: /^Cards\b/ });
-  await cards.click();
-  await expect(cards).toHaveAttribute('aria-pressed', 'true');
+async function chooseLayout(page: Page, name: 'Cards' | 'Rows'): Promise<void> {
+  const layout = page.getByRole('button', { name: new RegExp(`^${name}\\b`) });
+  await layout.click();
+  await expect(layout).toHaveAttribute('aria-pressed', 'true');
 }
+
+const chooseCards = (page: Page) => chooseLayout(page, 'Cards');
+const chooseRows = (page: Page) => chooseLayout(page, 'Rows');
 
 /**
  * How far the table overflows the frame around it, and how far the document
@@ -162,14 +168,15 @@ for (const width of WIDTHS) {
       await goto(page, path, heading);
       await waitForRows(grid(page, label));
 
-      // The page is measured in whatever layout the grid starts in: a grid that
-      // scrolls inside its own frame must not take the document with it.
-      const started = await overflow(page, label);
-      expect(started.document, `the ${heading} page scrolls sideways`).toBeLessThanOrEqual(1);
+      // The page is measured in the table layout first: a grid that scrolls
+      // inside its own frame must not take the document with it. On a phone that
+      // is the row layout, pressed, because a fresh grid starts as Cards under
+      // Mission Control. Above the threshold every grid is the table already.
+      if (phone) await chooseRows(page);
+      const rows = await overflow(page, label);
+      expect(rows.document, `the ${heading} page scrolls sideways`).toBeLessThanOrEqual(1);
 
-      // On a phone the table that fits is the card layout's, so it is chosen
-      // before the table is measured. Above the threshold there is nothing to
-      // choose -- every grid is already the table.
+      // Then the card layout, whose table is the one that has to fit its frame.
       if (phone) await chooseCards(page);
 
       // A pixel of slack: the columns are shared out by arithmetic, and a

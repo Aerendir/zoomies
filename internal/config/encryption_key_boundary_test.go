@@ -19,7 +19,6 @@ import (
 // Assigning the fields is not reading them, and the installer and the backup
 // transfer both assign; only the trimming read is the rule.
 func TestNobodyReImplementsWhichEncryptionKeyIsInForce(t *testing.T) {
-	reading := regexp.MustCompile(`TrimSpace\(\s*\w+\.Security\.EncryptionKey(File)?\s*\)`)
 	var offenders []string
 	scanned := 0
 	err := filepath.WalkDir("../..", func(path string, d fs.DirEntry, err error) error {
@@ -45,7 +44,7 @@ func TestNobodyReImplementsWhichEncryptionKeyIsInForce(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if reading.Match(body) {
+		if encryptionKeyTrimmed.Match(body) {
 			offenders = append(offenders, rel)
 		}
 		return nil
@@ -60,6 +59,59 @@ func TestNobodyReImplementsWhichEncryptionKeyIsInForce(t *testing.T) {
 	if len(offenders) > 0 {
 		t.Errorf("these files read and trim the encryption key settings themselves; call Config.EncryptionKeyOrigin or ResolveEncryptionKey instead, so there is one rule for which key wins:\n  %s",
 			strings.Join(offenders, "\n  "))
+	}
+}
+
+// encryptionKeyTrimmed finds a read of either key field that trims it, however
+// the configuration was reached: cfg.Security.EncryptionKey, but also
+// s.cfg().Security.EncryptionKey, (*cfg).Security.EncryptionKey,
+// all[i].Security.EncryptionKeyFile and the like. The shape of the chain in front
+// of the field is the one thing that differs from one copy to the next, and the
+// natural one inside internal/api calls a method on the way, so the chain is
+// matched whatever it is made of (names, dots, an index, a call with its
+// arguments) and not as one name and a dot. A pattern that only knew the
+// one-level shape passed the very copy it exists to stop.
+//
+// It cannot follow a value through a variable, so a copy that first puts
+// cfg.Security in a local is not caught, and review is the backstop for that
+// shape.
+var encryptionKeyTrimmed = regexp.MustCompile(
+	`TrimSpace\(` +
+		`(?:[\w.*&\s]|\[[^\]]*\]|\((?:[^()]|\([^()]*\))*\))*?` +
+		`\bSecurity\s*\.\s*EncryptionKey(?:File)?\s*,?\s*\)`)
+
+// The pattern is the test's whole eyesight, so what it sees is held down on its
+// own: every way of reaching the field that a person could write while meaning
+// the same trimming read, and the lookalikes that are not it, which would
+// otherwise send somebody off to remove a perfectly good line.
+func TestTheEncryptionKeyPatternSeesTheTrimmingReadHoweverTheConfigIsReached(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		code string
+		want bool
+	}{
+		{"one level", `strings.TrimSpace(cfg.Security.EncryptionKey)`, true},
+		{"the key file", `strings.TrimSpace(c.Security.EncryptionKeyFile)`, true},
+		{"space inside the call", `strings.TrimSpace( cfg.Security.EncryptionKey )`, true},
+		{"a method call on the way", `strings.TrimSpace(s.cfg().Security.EncryptionKey)`, true},
+		{"several levels and a call", `strings.TrimSpace(s.ctrl.Config().Security.EncryptionKeyFile)`, true},
+		{"a call with arguments", `strings.TrimSpace(s.configFor(ctx, id(x)).Security.EncryptionKey)`, true},
+		{"a dereference", `strings.TrimSpace((*cfg).Security.EncryptionKey)`, true},
+		{"an index", `strings.TrimSpace(configs[i].Security.EncryptionKeyFile)`, true},
+		{"a pointer taken", `strings.TrimSpace((&cfg).Security.EncryptionKey)`, true},
+		{"wrapped over lines", "strings.TrimSpace(\n\t\ts.cfg().\n\t\t\tSecurity.EncryptionKey,\n\t)", true},
+
+		{"assigning the field", `cfg.Security.EncryptionKey = strings.TrimSpace(raw)`, false},
+		{"reading it untrimmed", `if c.Security.EncryptionKey != "" {`, false},
+		{"another struct's field of the same name", `strings.TrimSpace(spec.EncryptionKey)`, false},
+		{"an untrimmed read beside an unrelated trim", `use(strings.TrimSpace(name), cfg.Security.EncryptionKey)`, false},
+		{"a trim of something else", `strings.TrimSpace(cfg.Security.AdminPassword)`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := encryptionKeyTrimmed.MatchString(tc.code); got != tc.want {
+				t.Errorf("the pattern matches %q = %v, want %v", tc.code, got, tc.want)
+			}
+		})
 	}
 }
 

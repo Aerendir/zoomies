@@ -131,10 +131,16 @@ next call is refused and it asks you to sign in again.
 An administrator sees everybody's connections, and every client (the ones they
 created, the ones that registered themselves and the metadata documents) under
 **Settings → MCP clients**, where each can be revoked. Everything is in the
-audit log: `mcp_connection.grant`, `mcp_connection.revoke`,
-`mcp_connection.replay`, `mcp_client.register`, `mcp_client.create`,
-`mcp_client.secret_rotate`, `mcp_client.revoke`, and `mcp_connection.call` for
-every tool call that changed or tried to change the fleet.
+audit log: `mcp_connection.grant`, `mcp_connection.deny`,
+`mcp_connection.revoke`, `mcp_connection.replay`, `mcp_connection.revoke_all`,
+`mcp_connection.context`, `mcp_client.register`, `mcp_client.create`,
+`mcp_client.update`, `mcp_client.secret_rotate`, `mcp_client.revoke`, and
+`mcp_connection.call` for every tool call that changed or tried to change the
+fleet. `mcp_connection.deny` is someone pressing **Deny** on the consent screen;
+`mcp_connection.revoke_all` is a password change, an administrator's password
+reset or **Sign out other sessions** ending every connection an account holds;
+and `mcp_connection.context` is a connection's owner choosing the repositories
+it may read source from and write notes to.
 
 ## What it can and cannot do
 
@@ -428,8 +434,10 @@ call them:
   (`no_room`) or no room while a host that could run the pool was throttled
   (`throttled`), runners starting (`runner_startup`), GitHub's own delay once
   the runner was ready (`github_delay`), or `unattributed`, time the fleet
-  keeps no record to explain. It answers for the fleet and for each pool, with
-  each pool's longest waits by job; `pool_id` narrows it to one pool.
+  keeps no record to explain. It reads the jobs this fleet has a hand in, so a
+  job another vendor's runners ran is never one of them. It answers for the
+  fleet and for each pool, with each pool's longest waits by job; `pool_id`
+  narrows it to one pool.
 * `compare_periods` says what got worse and what got better: by version (the
   default) between two releases' jobs, the two newest to complete a job in the
   period unless `a` and `b` name them, or by period between the period and the
@@ -518,6 +526,8 @@ and carries `truncated` and `more`, the argument that reaches what was cut.
 | --- | --- |
 | Claude says it could not reach the MCP server | The controller is not reachable from Claude, or OAuth for MCP is off and `/.well-known/oauth-protected-resource/mcp` answers 404. Check the address from outside your network, and that the problems panel shows `mcp_oauth.enabled`. |
 | The controller's page says the client asked to send you somewhere it did not register | The redirect is not one the client registered. For a client you created, add the address it uses, `https://claude.ai/api/mcp/auth_callback` for the Claude apps. |
+| The page names the client and says its redirect URIs changed after it asked to connect, and that the address it asked to send you back to is no longer one of them, so nothing was shared | An administrator edited the client's redirect URIs after you were sent here (or, for a client that publishes its own metadata document, the document changed when it was read again) and took out the address this sign-in was going to, so nothing was approved. Start the connection again from the client. If that is refused too, ask an administrator to check the client's redirect URIs under **Settings → MCP clients**. |
+| After you press **Allow** the client reports that signing in failed, and the token endpoint's answer, in the client's log, is `invalid_grant` with the message `the redirect URIs of <client> changed after this code was issued, and the address it was issued for is no longer one of them; sign in again` | The client's redirect URIs were edited (or, for a client named by a metadata document, the document changed) within the five minutes a code lasts, after you pressed **Allow** and before the client exchanged it, and the address the code was issued for is no longer one of them, so nothing was connected. Start the connection again from the client. If the controller's page then says the client asked to send you somewhere it did not register, the client is still sending the address that was taken out: an administrator puts it back under **Settings → MCP clients** if that was a mistake, and the developer of a client named by a metadata document puts it back in the document. |
 | The page says the controller does not let clients register themselves | `security.mcp_open_registration` is off: use a client ID from **Settings → MCP clients**. |
 | The consent screen only offers viewer | Your own role is viewer. Ask an administrator for operator if you need the connection to act on the fleet. |
 | Claude connected, but cannot re-run or drain | The connection is viewer. Disconnect it and connect again choosing operator. |

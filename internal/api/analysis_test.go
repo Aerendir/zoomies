@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -160,6 +161,10 @@ func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) 
 			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "longer than a release's name can be"},
 		"a b longer than a release's name can be": {query: analysisQuery(since, until, url.Values{"b": {strings.Repeat("v", maxReleaseName+1)}}),
 			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "longer than a release's name can be"},
+		// The bound is bytes, as the installer's is: a hundred characters of two
+		// bytes each is two hundred.
+		"an a of a hundred two-byte characters": {query: analysisQuery(since, until, url.Values{"a": {strings.Repeat("é", 100)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "128 bytes at most"},
 		"the same release twice": {query: analysisQuery(since, until, url.Values{"a": {"v1.3.3"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeAnalysisSameRelease, field: "a", want: controller.ErrSameRelease},
 		"a fleet with no two releases": {query: analysisQuery(since, until, nil),
@@ -184,6 +189,37 @@ func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) 
 		if !strings.Contains(env.Error.Message, c.wantSubstring) {
 			t.Errorf("%s: the refusal says %q; want it to say %q", name, env.Error.Message, c.wantSubstring)
 		}
+	}
+}
+
+// JSON Schema counts maxLength in characters and the route counts bytes, the
+// unit the installer holds a binary's version to. Declared as maxLength: 128
+// the contract promised that a name of a hundred two-byte characters would be
+// taken, and the route answered it with a 400. The two parameters say how many
+// bytes instead, and declare no maxLength for a client to read as characters.
+func TestTheContractBoundsAReleaseNameInTheBytesTheRouteCounts(t *testing.T) {
+	doc := loadSpec(t)
+	paths, _ := doc["paths"].(map[string]any)
+	compare, _ := paths["/analysis/compare"].(map[string]any)
+	get, _ := compare["get"].(map[string]any)
+	params, _ := get["parameters"].([]any)
+	found := map[string]bool{}
+	for _, p := range params {
+		param, _ := p.(map[string]any)
+		name, _ := param["name"].(string)
+		if name != "a" && name != "b" {
+			continue
+		}
+		found[name] = true
+		if schema, _ := param["schema"].(map[string]any); schema["maxLength"] != nil {
+			t.Errorf("parameter %s declares maxLength %v, which JSON Schema counts in characters; the route counts bytes", name, schema["maxLength"])
+		}
+		if d, _ := param["description"].(string); !strings.Contains(d, fmt.Sprintf("at most %d bytes", maxReleaseName)) {
+			t.Errorf("parameter %s does not say it is at most %d bytes: %q", name, maxReleaseName, d)
+		}
+	}
+	if len(found) != 2 {
+		t.Fatalf("the contract's compare operation has parameters %v; want both a and b", found)
 	}
 }
 
@@ -250,16 +286,25 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 	pool := h.pool(h.installation(), "linux")
 	host := h.host("failing")
 	_, cookie := h.user("viewer", store.RoleViewer)
+	// The route ends the window at its own instant, and the store stamps and
+	// reads whole milliseconds with a strict "<", so a runner stamped by the
+	// real clock a few microseconds before the request can share its
+	// millisecond and fall outside the window: this test counted two failures
+	// instead of three about one run in forty. The runners were asked for ten
+	// minutes ago instead.
+	asked := time.Now().Add(-10 * time.Minute)
 	for i := 0; i < 3; i++ {
 		r := h.runner(pool, host, store.RunnerProvisioning)
+		if err := h.st.SetRunnerCreatedAt(h.ctx, r.ID, asked); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := h.st.FailRunner(h.ctx, r.ID, "pull access denied for ghcr.io/acme/missing", store.FaultImage); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// The runners are stamped by the store's clock, so the window reaches a
-	// minute past now to hold them. The controller reads an until past now as
-	// now, so each read ends at its own instant, and the route's is the one
-	// the controller's answer is compared at.
+	// The window reaches a minute past now. The controller reads an until past
+	// now as now, so each read ends at its own instant, and the route's is the
+	// one the controller's answer is compared at.
 	until := time.Now().UTC().Truncate(time.Second).Add(time.Minute)
 	since := until.Add(-time.Hour)
 

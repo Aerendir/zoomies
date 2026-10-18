@@ -70,9 +70,11 @@ Build and test only:
 
 ## Runner images
 
-Runner images also carry `mawk` (apt) or `gawk` (dnf) to extract the runner's
-masked build console lines and discard verbose worker noise before it reaches
-the live relay, without adding a second runtime or buffering a build's output.
+Runner images also carry `gawk` to extract the runner's masked build console
+lines and discard verbose worker noise before it reaches the live relay, without
+adding a second runtime or buffering a build's output. It is `gawk` on the apt
+images too, in place of the `mawk` they ship as `awk`: mawk reads a pipe in large
+blocks, so a quiet build's lines would not reach the relay until it ended.
 
 ## The docs site
 
