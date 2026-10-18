@@ -352,6 +352,7 @@
     <div class="column">
       <Skeleton height="8rem" />
       <Skeleton height="14rem" />
+      <Skeleton height="18rem" />
     </div>
     <div class="column">
       <Skeleton height="18rem" />
@@ -374,12 +375,6 @@
         description="How long it spent in each state. This is a summary of the runner's life rather than an audit trail: a runner that went idle, busy and idle again shows only the most recent of those."
       >
         <RunnerTimeline entries={timeline} {running} />
-      </Panel>
-    </div>
-
-    <div class="column">
-      <Panel title="Details">
-        <RunnerFacts {runner} />
       </Panel>
 
       <Panel title="Resource usage" description="As the host's agent last reported it.">
@@ -423,6 +418,12 @@
           backend={(runner.pool ?? fleet.pool(runner.pool_id))?.backend}
           lentMemoryMb={runner.memory_resource?.lent_mb}
         />
+      </Panel>
+    </div>
+
+    <div class="column">
+      <Panel title="Details">
+        <RunnerFacts {runner} />
       </Panel>
 
       {#if memoryCards.length > 0}
