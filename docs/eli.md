@@ -581,8 +581,10 @@ Each model turn may write at most the provider's output limit. When the
 provider's form leaves it empty, which is automatic, a repair starts at 12,000
 tokens. Each time the provider reports that the model ran out of room, Eli asks
 again with twice as much, up to 65,536, and keeps that amount for the rest of the
-repair, so only one step pays to find it. A thinking model's reasoning counts
-against the limit, so such a model may need the most. Every attempt is a step in
+repair, so only one step pays to find it. If the provider later refuses the kept
+amount because the longer prompt no longer fits beside it, Eli goes back to
+12,000 from that step. A thinking model's reasoning counts against the limit, so
+such a model may need the most. Every attempt is a step in
 the repair history with the usage the provider reported, so the tokens spent
 finding the room stay visible; a cut attempt is billed by the provider, and its
 input is sent again. A provider that refuses a larger request (its model's own

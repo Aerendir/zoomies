@@ -286,7 +286,7 @@ type repairModel struct {
 	maxTokens int
 	// raised is the room an automatic repair has found it needs. It is kept for
 	// the steps after the one that needed it, so that only that step pays to find
-	// out.
+	// out, and given up if a provider refuses it beside a longer prompt.
 	raised int
 }
 
@@ -387,6 +387,11 @@ func (m *repairModel) completeWithRoom(ctx context.Context, turns []assistant.Me
 		case cutAt > 0 && refusedRoom(err):
 			m.raised = cutAt
 			return "", nil, fmt.Errorf("provider output limit reached at %d tokens, and the provider would not allow more room: lower the model's reasoning effort, choose a model with more output room, or request a smaller fix", cutAt)
+		case cutAt == 0 && m.maxTokens == 0 && m.raised > repairOutputTokens && refusedRoom(err):
+			// The room kept from an earlier step has to fit beside a prompt that is
+			// longer now. This step has not run out of room, so it starts again from
+			// where a repair starts, once: a refusal there is something else.
+			m.raised = 0
 		default:
 			return text, calls, err
 		}

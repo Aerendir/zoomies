@@ -167,6 +167,51 @@ func TestARepairKeepsTheRoomItFoundForItsNextStep(t *testing.T) {
 	}
 }
 
+// The room a repair found it needs is kept for its later steps, but their
+// prompts are longer, and the model's context window has to hold the prompt and
+// the room together. A step whose prompt no longer fits beside the kept room is
+// refused by the provider, and it is not a step that ran out of room: it needs
+// no more than it did before, so it asks again from where a repair starts and
+// is answered, where it would otherwise have ended the repair on a context limit
+// that the room it did not need had caused.
+func TestARaisedRoomIsGivenUpWhenALongerPromptNoLongerFitsBesideIt(t *testing.T) {
+	var asked []int
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked}}
+	if _, err := m.Answer(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	// By the next step the window leaves 12000 beside the prompt, and the answer
+	// needs 5000.
+	m.provider = roomProvider{needs: 5000, asked: &asked, refuse: func(limit int) error {
+		if limit > 12000 {
+			return statusFailure(400)
+		}
+		return nil
+	}}
+	if _, err := m.Answer(context.Background(), nil); err != nil {
+		t.Fatalf("the second step failed, though 12000 was room enough: %v", err)
+	}
+	if !slices.Equal(asked, []int{12000, 24000, 24000, 12000}) {
+		t.Fatalf("asked for %v", asked)
+	}
+}
+
+// Going back to the starting room is one more try and not a loop: a provider
+// that refuses the request there as well is refusing something else, and the
+// repair says what it said.
+func TestARefusalAtTheStartingRoomIsNotAskedAgain(t *testing.T) {
+	var asked []int
+	m := &repairModel{provider: roomProvider{needs: 20000, asked: &asked}}
+	if _, err := m.Answer(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	m.provider = roomProvider{needs: 5000, asked: &asked, refuse: func(int) error { return statusFailure(400) }}
+	_, err := m.Answer(context.Background(), nil)
+	if err == nil || strings.Contains(err.Error(), "output limit") || !slices.Equal(asked, []int{12000, 24000, 24000, 12000}) {
+		t.Fatalf("asked for %v, error %v", asked, err)
+	}
+}
+
 // A number on the provider is the operator's, and may be a cap on what an
 // attempt costs, so it is kept exactly and a cut ends the repair as it did.
 func TestAnOutputLimitAnOperatorSetIsNeverRaised(t *testing.T) {
