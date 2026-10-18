@@ -14208,6 +14208,40 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
+    EliRepairCaseJob:
+      type: object
+      description: >-
+        One failed job of the run a repair was started for, with the step it stopped at.
+        Every text is the workflow's own words, so it is data to draw and never markup.
+      required: [name]
+      properties:
+        name: { type: string }
+        step: { type: string, description: The first step that did not succeed. }
+        url:
+          type: string
+          description: >-
+            The job's page, on the host GitHub served it from. Present only when it is a plain
+            http or https address.
+        duration_ms: { type: integer }
+    EliRepairCase:
+      type: object
+      description: >-
+        What a repair was about, kept as it was when the repair began: Zoomies' own job records
+        are pruned and a pull request's title changes. It holds no log text. Absent on a repair
+        made before cases were kept, and a case whose jobs were already pruned names the pull
+        request alone.
+      properties:
+        pull_title: { type: string }
+        pull_url: { type: string }
+        author: { type: string }
+        branch: { type: string }
+        run_url: { type: string }
+        workflow: { type: string }
+        run_number: { type: integer }
+        jobs:
+          type: array
+          description: The failed jobs, at most ten.
+          items: { $ref: "#/components/schemas/EliRepairCaseJob" }
     EliRepairDetails:
       type: object
       properties:
@@ -14215,6 +14249,7 @@ components:
         stage: { type: string }
         failure_code: { type: string }
         source_bytes: { type: integer }
+        case: { $ref: "#/components/schemas/EliRepairCase" }
         steps:
           type: array
           nullable: true
@@ -14375,6 +14410,11 @@ components:
         pull_number: { type: integer }
         instruction: { type: string }
         head_sha: { type: string, description: PR head reviewed by the requester }
+        run_id:
+          type: integer
+          description: >-
+            The run whose failure the requester was looking at, when they came from one. The
+            repair records it and says it was started for that run.
 
     EliRepair:
       type: object

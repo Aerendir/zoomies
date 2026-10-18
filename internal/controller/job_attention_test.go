@@ -100,7 +100,7 @@ func TestRepairRequestRechecksBeforeSpendingAnAttempt(t *testing.T) {
 			if err := h.st.ConfirmEliIdentity(h.ctx, user.ID, 42, true); err != nil {
 				t.Fatal(err)
 			}
-			_, err := h.c.RequestPinnedEliRepair(h.ctx, user.ID, repo, 1, "", "old", false)
+			_, err := h.c.RequestPinnedEliRepair(h.ctx, user.ID, repo, 1, "", "old", 0, false)
 			var changed *github.RepairTargetChanged
 			if !errors.As(err, &changed) {
 				t.Fatalf("missing changed-target explanation: %v", err)

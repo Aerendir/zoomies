@@ -315,7 +315,7 @@ func (c *Controller) ActEliOpportunity(ctx context.Context, user, id, action str
 			if action != "accept" {
 				return nil, store.ErrConflict
 			}
-			row, err := c.requestPinnedEliRepair(ctx, user, o.Repo, o.PullNumber, "", o.HeadSHA, "offer:"+o.ID, admin)
+			row, err := c.requestPinnedEliRepair(ctx, user, o.Repo, o.PullNumber, "", o.HeadSHA, "offer:"+o.ID, o.RunID, admin)
 			if err != nil {
 				return nil, err
 			}

@@ -10588,11 +10588,33 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description One failed job of the run a repair was started for, with the step it stopped at. Every text is the workflow's own words, so it is data to draw and never markup. */
+        EliRepairCaseJob: {
+            name: string;
+            /** @description The first step that did not succeed. */
+            step?: string;
+            /** @description The job's page, on the host GitHub served it from. Present only when it is a plain http or https address. */
+            url?: string;
+            duration_ms?: number;
+        };
+        /** @description What a repair was about, kept as it was when the repair began: Zoomies' own job records are pruned and a pull request's title changes. It holds no log text. Absent on a repair made before cases were kept, and a case whose jobs were already pruned names the pull request alone. */
+        EliRepairCase: {
+            pull_title?: string;
+            pull_url?: string;
+            author?: string;
+            branch?: string;
+            run_url?: string;
+            workflow?: string;
+            run_number?: number;
+            /** @description The failed jobs, at most ten. */
+            jobs?: components["schemas"]["EliRepairCaseJob"][];
+        };
         EliRepairDetails: {
             model?: string;
             stage?: string;
             failure_code?: string;
             source_bytes?: number;
+            case?: components["schemas"]["EliRepairCase"];
             steps?: {
                 input_tokens: number;
                 output_tokens: number;
@@ -10702,6 +10724,8 @@ export interface components {
             instruction: string;
             /** @description PR head reviewed by the requester */
             head_sha?: string;
+            /** @description The run whose failure the requester was looking at, when they came from one. The repair records it and says it was started for that run. */
+            run_id?: number;
         };
         EliRepair: {
             details?: components["schemas"]["EliRepairDetails"];

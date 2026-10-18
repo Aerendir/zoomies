@@ -379,6 +379,9 @@ func (s *Server) handleRequestEliRepair(w http.ResponseWriter, r *http.Request) 
 		PullNumber  int    `json:"pull_number"`
 		Instruction string `json:"instruction"`
 		HeadSHA     string `json:"head_sha"`
+		// RunID is the run whose failure the person was looking at. The page
+		// that starts a repair knows it and the attempt later says it.
+		RunID int64 `json:"run_id"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -393,7 +396,7 @@ func (s *Server) handleRequestEliRepair(w http.ResponseWriter, r *http.Request) 
 		conflict(w, ready.Blockers[0].Message)
 		return
 	}
-	row, err := s.ctrl.RequestPinnedEliRepair(r.Context(), owner, in.Repo, in.PullNumber, in.Instruction, in.HeadSHA, s.isAssistantAdmin(r))
+	row, err := s.ctrl.RequestPinnedEliRepair(r.Context(), owner, in.Repo, in.PullNumber, in.Instruction, in.HeadSHA, in.RunID, s.isAssistantAdmin(r))
 	var changed *github.RepairTargetChanged
 	switch {
 	case errors.As(err, &changed):
