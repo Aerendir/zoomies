@@ -1974,6 +1974,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Installation" }
@@ -2448,6 +2450,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Pool" }
@@ -4500,6 +4504,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema:
@@ -4888,6 +4894,8 @@ paths:
       responses:
         "201":
           description: Setup command; keep private and run within one hour.
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProviderSetup" }
@@ -4990,6 +4998,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Provider" }
@@ -6673,6 +6683,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
@@ -7153,6 +7165,8 @@ paths:
       responses:
         "201":
           description: Taken
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Backup" }
@@ -7245,6 +7259,8 @@ paths:
       responses:
         "201":
           description: Upload created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TransferUpload" }
@@ -8313,6 +8329,8 @@ paths:
       responses:
         '201':
           description: Audited retained snapshot; Cache-Control is no-store.
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RetainedExperimentComparison' }
@@ -8463,6 +8481,12 @@ components:
       name: order
       in: query
       schema: { type: string, enum: [asc, desc], default: desc }
+
+  headers:
+    Location:
+      description: The URL of the resource this request created, to read it back with `GET`.
+      required: true
+      schema: { type: string }
 
   responses:
     Unauthorized:
@@ -8848,7 +8872,7 @@ components:
             code:
               type: string
               enum: [bad_request, unauthorized, forbidden, not_found, conflict, unprocessable, too_large, rate_limited, limit_reached, update.mode_off, update.check_disabled, update.helper_missing, update.in_progress, update.not_a_release, update.nothing_newer, update.host_cannot_update, update.rollout_halted, update.check_failed, assistant.provider_failed, assistant.provider_not_yours, assistant.identity_held, analysis.same_release, analysis.too_few_releases, analysis.whole_days_only, internal]
-            message: { type: string, description: Written for a person to read, and to act on. }
+            message: { type: string, description: "Written for a person to read, and to act on." }
             field: { type: string, description: "The form field at fault, or on a `limit_reached` refusal the `limits.*` setting that refused." }
             detail: { type: string }
 
