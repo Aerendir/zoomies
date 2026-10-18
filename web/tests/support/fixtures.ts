@@ -390,24 +390,48 @@ export function facetTrigger(page: Page, label: string, open = false): Locator {
 }
 
 /**
+ * Store a choice before the app runs, once for each tab.
+ *
+ * An init script runs again on every navigation, so one that wrote its value
+ * every time would put a test back on it after the test had chosen otherwise in
+ * the page and then reloaded, which is exactly what a test about choosing a
+ * style or a theme does. `sessionStorage` lasts as long as the tab and survives
+ * a reload: the first document seeds, and the ones after it leave the choice
+ * alone.
+ */
+async function seedOnce(page: Page, key: string, value: string): Promise<void> {
+  await page.addInitScript(
+    ([key, value]) => {
+      const seeded = `seeded ${key}`;
+      if (sessionStorage.getItem(seeded)) return;
+      sessionStorage.setItem(seeded, '1');
+      localStorage.setItem(key, value);
+    },
+    [key, value] as const,
+  );
+}
+
+/**
  * Start the page on Classic, the visual style these specs were written for.
  *
  * Mission Control is the default, so a test that measures Classic's type
  * scale or its history-first layout says so rather than relying on an empty
  * browser. Storage starts empty in every context, so this runs before the app.
+ * It seeds once for each tab, so a test may choose another style in the page
+ * and reload.
  */
 export async function useClassic(page: Page): Promise<void> {
-  await page.addInitScript(() => localStorage.setItem('zoomies.ui-style', 'classic'));
+  await seedOnce(page, 'zoomies.ui-style', 'classic');
 }
 
 /**
  * Start the page following the operating system's colour scheme.
  *
  * Dark is the default, so a test that flips `prefers-color-scheme` to see both
- * themes opts into System first.
+ * themes opts into System first. Seeded once for each tab, like useClassic.
  */
 export async function useSystemTheme(page: Page): Promise<void> {
-  await page.addInitScript(() => localStorage.setItem('zoomies.theme', 'system'));
+  await seedOnce(page, 'zoomies.theme', 'system');
 }
 
 /**

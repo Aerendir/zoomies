@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { goto } from './support/fixtures';
+import { goto, useClassic } from './support/fixtures';
 
 const root = (page: import('@playwright/test').Page) => page.locator('html');
 
@@ -48,11 +48,17 @@ test('style selection keeps colour mode, logo, dog vocabulary and saved grid pre
 });
 
 test('visual-style cards support native radio keyboard navigation', async ({ page }) => {
+  // Starts on Classic so that both arrows move the choice: from the default,
+  // Mission Control, the first would land on what is already chosen.
+  await useClassic(page);
   await goto(page, '/settings/appearance', 'Appearance');
   const classic = page.getByRole('radio', { name: /^Classic/ });
+  const mission = page.getByRole('radio', { name: /^Mission Control/ });
+  await expect(classic).toBeChecked();
+  await expect(root(page)).not.toHaveAttribute('data-ui-style');
   await classic.focus();
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: /^Mission Control/ })).toBeChecked();
+  await expect(mission).toBeChecked();
   await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
   await page.keyboard.press('ArrowLeft');
   await expect(classic).toBeChecked();
@@ -91,8 +97,12 @@ test('system colour changes retain Mission Control and update browser chrome', a
 });
 
 test('a phone can switch the same visual-style preference through More', async ({ page }) => {
+  // Starts on Classic: from the default the click on Mission Control would change
+  // nothing, and nothing in the test would notice a menu that did nothing.
+  await useClassic(page);
   await page.setViewportSize({ width: 375, height: 900 });
   await goto(page, '/', 'Overview');
+  await expect(root(page)).not.toHaveAttribute('data-ui-style');
   await page.getByRole('button', { name: 'More', exact: true }).click();
   const menu = page.getByRole('dialog', { name: 'All sections' });
   await menu
@@ -102,6 +112,7 @@ test('a phone can switch the same visual-style preference through More', async (
   await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
   await menu.getByRole('button', { name: 'Close the menu' }).click();
   await goto(page, '/settings/appearance', 'Appearance');
+  await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
   await expect(page.getByRole('radio', { name: /^Mission Control/ })).toBeChecked();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
 });
@@ -146,8 +157,11 @@ for (const mode of ['light', 'dark'] as const) {
 }
 
 test('changing style from More preserves an unfinished pool form', async ({ page }) => {
+  // Starts on Classic, so that the change under test happens.
+  await useClassic(page);
   await page.setViewportSize({ width: 375, height: 900 });
   await goto(page, '/pools/new', 'Create a pool');
+  await expect(root(page)).not.toHaveAttribute('data-ui-style');
   const name = page.getByRole('textbox', { name: 'Pool name' });
   await name.fill('zoomies-style-draft');
   await page.getByRole('button', { name: 'More', exact: true }).click();
@@ -156,6 +170,7 @@ test('changing style from More preserves an unfinished pool form', async ({ page
     .getByRole('group', { name: 'Visual style' })
     .getByRole('button', { name: /^Mission Control/ })
     .click();
+  await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
   await menu.getByRole('button', { name: 'Close the menu' }).click();
   await expect(page).toHaveURL(/\/pools\/new$/);
   await expect(name).toHaveValue('zoomies-style-draft');
@@ -167,10 +182,12 @@ test('changing style from More preserves an unfinished pool form', async ({ page
 // app's own links, since a fresh page load is a reload and the conversation is
 // meant to be forgotten on reload.
 test('switching style leaves an open assistant conversation alone', async ({ page }) => {
+  await useClassic(page); // so that the style really changes below
   // Wide enough that the sidebar shows its labels: a collapsed sidebar empties
   // the accessible name of every entry.
   await page.setViewportSize({ width: 1440, height: 900 });
   await goto(page, '/', 'Overview');
+  await expect(root(page)).not.toHaveAttribute('data-ui-style');
   await page.getByRole('button', { name: 'Ask Eli' }).click();
   const message = page.getByRole('dialog', { name: 'Eli assistant' }).getByLabel('Message');
   await message.fill('zoomies-style-draft');
@@ -208,24 +225,29 @@ test('blocked browser storage still allows an in-page visual-style choice', asyn
   await expect(root(page)).not.toHaveAttribute('data-ui-style');
 });
 
-test('the first-account screen honours stored style and keeps the original Zoomies artwork', async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('zoomies.ui-style', 'mission-control');
-    localStorage.setItem('zoomies.theme', 'dark');
+// Both styles are stored, Classic included: Mission Control is what an empty
+// browser gets, so only a stored Classic shows that this screen reads storage.
+for (const style of ['classic', 'mission-control'] as const) {
+  test(`the first-account screen honours a stored ${style} and keeps the original Zoomies artwork`, async ({
+    page,
+  }) => {
+    await page.addInitScript((style) => {
+      localStorage.setItem('zoomies.ui-style', style);
+      localStorage.setItem('zoomies.theme', 'dark');
+    }, style);
+    for (const width of [1440, 375]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('http://127.0.0.1:8098/');
+      await expect(page.getByRole('heading', { name: 'Create the first account' })).toBeVisible();
+      if (style === 'classic') await expect(root(page)).not.toHaveAttribute('data-ui-style');
+      else await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
+      await expect(
+        page.locator('img[src="/brand/mark-black-transparent.svg"]').first(),
+      ).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    }
   });
-  for (const width of [1440, 375]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('http://127.0.0.1:8098/');
-    await expect(page.getByRole('heading', { name: 'Create the first account' })).toBeVisible();
-    await expect(root(page)).toHaveAttribute('data-ui-style', 'mission-control');
-    await expect(
-      page.locator('img[src="/brand/mark-black-transparent.svg"]').first(),
-    ).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-  }
-});
+}
 
 // The plan's width range: full desktop, the narrow-desktop edges either side of
 // its breakpoint, the phone breakpoint itself, and the two smallest phones the
