@@ -250,16 +250,25 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 	pool := h.pool(h.installation(), "linux")
 	host := h.host("failing")
 	_, cookie := h.user("viewer", store.RoleViewer)
+	// The route ends the window at its own instant, and the store stamps and
+	// reads whole milliseconds with a strict "<", so a runner stamped by the
+	// real clock a few microseconds before the request can share its
+	// millisecond and fall outside the window: this test counted two failures
+	// instead of three about one run in forty. The runners were asked for ten
+	// minutes ago instead.
+	asked := time.Now().Add(-10 * time.Minute)
 	for i := 0; i < 3; i++ {
 		r := h.runner(pool, host, store.RunnerProvisioning)
+		if err := h.st.SetRunnerCreatedAt(h.ctx, r.ID, asked); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := h.st.FailRunner(h.ctx, r.ID, "pull access denied for ghcr.io/acme/missing", store.FaultImage); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// The runners are stamped by the store's clock, so the window reaches a
-	// minute past now to hold them. The controller reads an until past now as
-	// now, so each read ends at its own instant, and the route's is the one
-	// the controller's answer is compared at.
+	// The window reaches a minute past now. The controller reads an until past
+	// now as now, so each read ends at its own instant, and the route's is the
+	// one the controller's answer is compared at.
 	until := time.Now().UTC().Truncate(time.Second).Add(time.Minute)
 	since := until.Add(-time.Hour)
 
