@@ -229,6 +229,52 @@ test('a new window does not leave the last answer standing while it loads', asyn
   await expect(found.getByText('Working it out')).toBeVisible();
 });
 
+/** Another address without a reload, as one of the page's own controls moves it. */
+async function moveTo(page: Page, path: string): Promise<void> {
+  await page.evaluate((to) => {
+    history.pushState({}, '', to);
+    dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
+// What the Jobs card does for a new window holds for the other pages that
+// narrow a card with a control. The pool moves at once, with the chips and the
+// grid, and a card that went on saying the last answer until the next landed
+// read as this pool's: on the demo, a host blamed for failures the pool does
+// not have.
+test('a new pool does not leave the last answer standing on the failed runners', async ({
+  page,
+}) => {
+  const pools = (await page.request.get('/api/v1/pools').then((r) => r.json())) as {
+    items: { id: string }[];
+  };
+  let held = 0;
+  await page.route('**/api/v1/analysis/startup-failures**', async (route) => {
+    if (held++ === 0) await route.continue();
+  });
+  await goto(page, '/runners?state=failed', 'Runners');
+  const found = card(page, 'What keeps failing to start');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await moveTo(page, `/runners?state=failed&pool_id=${pools.items[0]!.id}`);
+  await expect.poll(() => held).toBeGreaterThan(1);
+  await expect(found.getByTestId('analysis-summary')).toHaveCount(0);
+  await expect(found.getByText('Working it out')).toBeVisible();
+});
+
+test('a new range does not leave the last comparison standing on Usage', async ({ page }) => {
+  let held = 0;
+  await page.route('**/api/v1/analysis/compare**', async (route) => {
+    if (held++ === 0) await route.continue();
+  });
+  await goto(page, '/usage?range=30d', 'Usage');
+  const found = card(page, 'What got worse and what got better');
+  await expect(found.getByTestId('analysis-summary')).toBeVisible();
+  await moveTo(page, '/usage?range=7d');
+  await expect.poll(() => held).toBeGreaterThan(1);
+  await expect(found.getByTestId('analysis-summary')).toHaveCount(0);
+  await expect(found.getByText('Working it out')).toBeVisible();
+});
+
 /** Mission Control at a phone's width, set up as operational-layout.spec.ts does. */
 async function missionControl(page: Page): Promise<void> {
   await page.setViewportSize({ width: 375, height: 900 });

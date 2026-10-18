@@ -207,10 +207,13 @@
     const period =
       compareFrom && compareTo ? analysisWindow(compareFrom, compareTo, Date.now()) : null;
     const controller = new AbortController();
+    // The last range's comparison goes at once: left standing while the next
+    // loads, it would sit under a table that has already moved on, as the Jobs
+    // card's and the host page's do not.
+    compare = null;
     compareError = null;
     if (!period) {
       // A backwards range is the page's own warning to give.
-      compare = null;
       compareLoading = false;
       return;
     }
@@ -222,7 +225,6 @@
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         // The report and the table are still true; only this card failed.
-        compare = null;
         compareError = refusalOf(cause);
       })
       .finally(() => {

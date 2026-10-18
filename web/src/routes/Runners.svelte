@@ -113,6 +113,10 @@
     const host = hostId || undefined;
     void startupKey;
     const controller = new AbortController();
+    // The last pool's answer goes at once: left standing while the next loads,
+    // it would sit under a list that has already moved on, as the Jobs card's
+    // and the host page's do not.
+    startup = null;
     startupError = null;
     const period = analysisWindow(undefined, undefined, Date.now());
     if (!period) return;
@@ -124,7 +128,6 @@
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         // The list of failed runners is still the page's; only this card failed.
-        startup = null;
         startupError = refusalOf(cause);
       })
       .finally(() => {
