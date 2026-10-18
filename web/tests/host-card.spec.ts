@@ -234,12 +234,49 @@ test('a figure past its pressure line says so in words, and the others stay quie
   await expect(
     vitals.getByRole('img', { name: /^CPU: 91% in use.*From 85% the scheduler/ }),
   ).toBeVisible();
+  // Memory has no pressure line: the scheduler holds new starts at the host's
+  // reserve, so the sentence names the reserve and not a share of the machine.
   await expect(
-    vitals.getByRole('img', { name: /^Memory: \d+% in use.*From 85% the scheduler/ }),
+    vitals.getByRole('img', {
+      name: /^Memory: \d+% in use.*at or below the .* reserve, so the scheduler holds new starts/,
+    }),
   ).toBeVisible();
   // Disk is nowhere near its line on this host, so it says nothing of one.
   await expect(vitals.getByRole('img', { name: /^Disk: \d+% full/ })).toBeVisible();
   await expect(vitals.getByRole('img', { name: /Low:/ })).toHaveCount(0);
+});
+
+test('a figure the scheduler does not act on stays calm, however high it reads', async ({
+  page,
+}) => {
+  // demo-builder-2 is a 16 GiB host with an 819 MB reserve. At 94% used it has
+  // 983 MB left, and the scheduler places as normal until that reaches the
+  // reserve. Its CPU reads 92% but 30 points of it are CPU lent to runners,
+  // which the scheduler leaves out of the pressure it judges.
+  await reshape(page, LOW_DISK, (host) => ({
+    ...host,
+    usage_fresh: true,
+    usage: {
+      cpu_percent: 92,
+      lent_cpu_percent: 30,
+      memory_available_mb: 983,
+      sampled_at: new Date().toISOString(),
+    },
+  }));
+  await goto(page, '/hosts', 'Hosts');
+  const vitals = card(page, LOW_DISK).getByRole('group', { name: `Utilisation of ${LOW_DISK}` });
+  const cpu = vitals.getByTestId('host-vital-cpu');
+  const memory = vitals.getByTestId('host-vital-memory');
+  await expect(cpu).toBeVisible();
+  await expect(memory).toBeVisible();
+  await expect(cpu).not.toHaveClass(/tight/);
+  await expect(memory).not.toHaveClass(/tight/);
+  // The reader is told why a high figure is not amber, or it looks like a fault.
+  await expect(
+    vitals.getByRole('img', { name: /^CPU: 92% in use.*30% of it is CPU lent to runners/ }),
+  ).toBeVisible();
+  await expect(vitals.getByRole('img', { name: /^Memory: 94% in use/ })).toBeVisible();
+  await expect(vitals.getByRole('img', { name: /reserve|one runner at a time/ })).toHaveCount(0);
 });
 
 test('a host that has gone quiet shows no figure as current', async ({ page }) => {

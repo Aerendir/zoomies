@@ -484,9 +484,15 @@ with **Adjust**, and three bars for how loaded the machine is. **CPU**,
 **Memory** and **Disk** are each a share of the whole machine as the agent last
 measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`).
 They are the shares the capacity map draws, so its newest point and the card
-never disagree. CPU and memory turn amber, take a warning triangle and say so in
-their label from 85%, the line from which the scheduler places one runner at a
-time, and the disk does the same when the *Work directory free space* check
+never disagree. A figure turns amber, takes a warning triangle and says so in
+its label where the product itself acts on it, and that is not one line for all
+three. **CPU** turns amber from 85%, the line from which the scheduler places one
+runner at a time, counted without the CPU it has lent to runners: a host at 92%
+with 30 points of it lent is not amber, and its label says why. **Memory** is not
+judged as a share of the machine. It turns amber when the memory still available
+is at or below the host's reserve, the point at which the scheduler holds new
+starts, so a 16 GiB host at 94% used has 983 MB left against a reserve of 819 MB
+and is not amber. **Disk** turns amber when the *Work directory free space* check
 would warn: under 10% or under 10 GiB free. A figure that is not measured reads
 `--`. For a host that has stopped sending heartbeats, or whose agent reports
 nothing to measure, the bars give way to one sentence saying why, because the

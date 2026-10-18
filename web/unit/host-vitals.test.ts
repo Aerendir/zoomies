@@ -18,6 +18,9 @@ function host(over: Partial<Host> = {}): Host {
     resources_known: true,
     cpus: 8,
     memory_mb: 16 * GIB,
+    // What the scheduler may place: the machine less the 819 MB (5%) a host of
+    // this size always holds back. The same figure the demo fleet reports.
+    allocatable_memory_mb: 16 * GIB - 819,
     disk_total_mb: 220 * GIB,
     disk_free_mb: 62 * GIB,
     usage_fresh: true,
@@ -56,50 +59,123 @@ test('a healthy host reports CPU, memory and disk as shares of the machine, in t
   assert.equal(vitals.unavailable, '', 'something is measured, so nothing needs explaining');
 });
 
-test('CPU and memory turn tight at the scheduler pressure line, and not a point before it', () => {
-  // From 85% the scheduler places one runner at a time, so that is where the
-  // figure stops being just a number. ResourceBar's 90% is a different rule.
+test('CPU turns tight at the scheduler pressure line, counted without the CPU lent to runners', () => {
+  // From 85% the scheduler places one runner at a time, but it judges CPU
+  // without what elastic CPU lent to runners: that is load the plan chose, and
+  // counting it would have a boost trip the very limit that then withdraws it
+  // (hostUnderCPUPressure reads UnlentCPUPercent). ResourceBar's 90% is a
+  // different rule.
   const cases: {
     name: string;
-    over: Partial<Host>;
-    key: VitalKey;
+    cpu: number;
+    lent?: number;
     value: string;
     tight: boolean;
   }[] = [
-    {
-      name: 'cpu at the line',
-      over: { usage: { cpu_percent: 85, memory_available_mb: 9830 } },
-      key: 'cpu',
-      value: '85%',
-      tight: true,
-    },
-    {
-      name: 'cpu a point under',
-      over: { usage: { cpu_percent: 84, memory_available_mb: 9830 } },
-      key: 'cpu',
-      value: '84%',
-      tight: false,
-    },
-    {
-      name: 'memory exactly at the line',
-      over: { memory_mb: 10000, usage: { cpu_percent: 10, memory_available_mb: 1500 } },
-      key: 'memory',
-      value: '85%',
-      tight: true,
-    },
-    {
-      name: 'memory a megabyte under it',
-      over: { memory_mb: 10000, usage: { cpu_percent: 10, memory_available_mb: 1501 } },
-      key: 'memory',
-      value: '85%',
-      tight: false,
-    },
+    { name: 'at the line', cpu: 85, value: '85%', tight: true },
+    { name: 'a point under', cpu: 84, value: '84%', tight: false },
+    { name: 'busy, with 30 of it lent to runners', cpu: 92, lent: 30, value: '92%', tight: false },
+    { name: 'busy, with only 5 of it lent', cpu: 92, lent: 5, value: '92%', tight: true },
+    { name: 'at the line, with a point of it lent', cpu: 85, lent: 1, value: '85%', tight: false },
   ];
   for (const c of cases) {
-    const found = vital(hostVitals(host(c.over), NOW), c.key);
+    const usage: Host['usage'] = { cpu_percent: c.cpu, memory_available_mb: 9830 };
+    if (c.lent !== undefined) usage.lent_cpu_percent = c.lent;
+    const found = vital(hostVitals(host({ usage }), NOW), 'cpu');
     assert.equal(found.value, c.value, c.name);
     assert.equal(found.tight, c.tight, c.name);
   }
+});
+
+test('a busy CPU that is mostly lent says why it is not amber', () => {
+  // A bar at 92% that is not amber looks like a bug unless it says what is
+  // excluded, and the capacity map beside it still draws the raw figure.
+  const lent = vital(
+    hostVitals(
+      host({ usage: { cpu_percent: 92, memory_available_mb: 9830, lent_cpu_percent: 30 } }),
+      NOW,
+    ),
+    'cpu',
+  );
+  assert.match(lent.summary, /30% of it is CPU lent to runners/);
+  assert.doesNotMatch(lent.summary, /one runner at a time/, 'it is not under pressure');
+  const pressed = vital(
+    hostVitals(
+      host({ usage: { cpu_percent: 92, memory_available_mb: 9830, lent_cpu_percent: 5 } }),
+      NOW,
+    ),
+    'cpu',
+  );
+  assert.match(pressed.summary, /one runner at a time/);
+  assert.match(pressed.summary, /not lent/, 'the line it passed leaves lent CPU out');
+});
+
+test('memory is tight at the host reserve the scheduler holds starts at, not at 85% used', () => {
+  // The scheduler has no pressure line for memory. It holds new starts when
+  // available memory is at or below the host's reserve (HostAdmissionReason),
+  // which is 5% of the machine with a 512 MB floor, and a gigabyte more on the
+  // host the controller itself runs on. A 16 GiB host at 94% used has 983 MB
+  // left against a reserve of 819 MB and places as normal.
+  const cases: {
+    name: string;
+    over: Partial<Host>;
+    available: number;
+    value: string;
+    tight: boolean;
+  }[] = [
+    { name: '94% used, above the reserve', over: {}, available: 983, value: '94%', tight: false },
+    { name: 'a megabyte above the reserve', over: {}, available: 820, value: '95%', tight: false },
+    { name: 'exactly at the reserve', over: {}, available: 819, value: '95%', tight: true },
+    { name: 'under the reserve', over: {}, available: 100, value: '99%', tight: true },
+    {
+      // memory_mb less allocatable_memory_mb is the reserve, floors included,
+      // whoever set it, so the card never has to know the floors.
+      name: 'a reserve the operator raised to 4 GB',
+      over: { allocatable_memory_mb: 16 * GIB - 4096 },
+      available: 4096,
+      value: '75%',
+      tight: true,
+    },
+    {
+      name: 'the same host just above its raised reserve',
+      over: { allocatable_memory_mb: 16 * GIB - 4096 },
+      available: 4097,
+      value: '75%',
+      tight: false,
+    },
+    {
+      name: 'the controller host, which keeps a gigabyte more back',
+      over: { allocatable_memory_mb: 16 * GIB - 1843 },
+      available: 1843,
+      value: '89%',
+      tight: true,
+    },
+    {
+      // A reserve at or past the machine leaves nothing to place on, and the
+      // API leaves allocatable_memory_mb out rather than send a zero.
+      name: 'a reserve that covers the whole machine',
+      over: { allocatable_memory_mb: undefined },
+      available: 9830,
+      value: '40%',
+      tight: true,
+    },
+  ];
+  for (const c of cases) {
+    const usage = { cpu_percent: 10, memory_available_mb: c.available };
+    const found = vital(hostVitals(host({ ...c.over, usage }), NOW), 'memory');
+    assert.equal(found.value, c.value, c.name);
+    assert.equal(found.tight, c.tight, c.name);
+  }
+});
+
+test('a memory figure at the reserve says it is the reserve, not a pressure line', () => {
+  const at = vital(
+    hostVitals(host({ usage: { cpu_percent: 10, memory_available_mb: 819 } }), NOW),
+    'memory',
+  );
+  assert.match(at.summary, /at or below the 819 MB/);
+  assert.match(at.summary, /holds new starts/);
+  assert.doesNotMatch(at.summary, /85%|one runner at a time/, 'that is the CPU rule');
 });
 
 test('disk is tight by the doctor rule for a low disk, not by the pressure line', () => {

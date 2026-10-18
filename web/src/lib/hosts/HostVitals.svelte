@@ -8,10 +8,12 @@
   figures beside them say, and the card reads as a table of three.
 
   A figure past its line is amber, takes a triangle and says so in its label.
-  The line is the scheduler's own for CPU and memory and the doctor's for the
-  disk (vitals.ts), so the colour never claims more than the product does. Each
-  row's label is a sentence that carries the same figures, and the words around
-  it are hidden from assistive technology so nothing is read twice.
+  The line is the rule the product itself acts on, one for each resource: the
+  scheduler's pressure line for CPU, its host reserve for memory and the
+  doctor's low-disk rule for the disk (vitals.ts), so the colour never claims
+  more than the product does. Each row's label is a sentence that carries the
+  same figures, and the words around it are hidden from assistive technology so
+  nothing is read twice.
 -->
 <script lang="ts">
   import { TriangleAlert } from '@lucide/svelte';
