@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { resolveUIStyle, UI_STYLE_KEY } from '../src/lib/state/ui-style';
+import { assertLook, expectedLook, storedLook } from '../tests/support/look.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const bootstrap = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
@@ -112,4 +113,32 @@ test('browser-chrome colours match the actual palette tokens in both styles', ()
       /--z-mission-bg:\s*(#[\da-f]{6});/.exec(missionScope)?.[1],
     );
   }
+});
+
+// The picture runner (tests/support/screenshots.mjs) photographs one look per
+// pass. An empty browser is dark Mission Control whatever the system says, so a
+// pass has to store the look it means, and this holds it to the bootstrap it relies
+// on: the pass that said light, or Classic, once photographed neither.
+test('a capture pass opens the page on the look it is photographing', () => {
+  for (const scheme of ['light', 'dark'] as const) {
+    for (const style of ['classic', 'mission-control'] as const) {
+      const stored = storedLook(scheme, style);
+      const { attrs } = boot(stored['zoomies.ui-style'], stored['zoomies.theme']);
+      const want = expectedLook(scheme, style);
+      assert.equal(attrs.get('data-theme') ?? null, want.theme, `${scheme} ${style}: theme`);
+      assert.equal(attrs.get('data-ui-style') ?? null, want.style, `${scheme} ${style}: style`);
+    }
+  }
+});
+
+test('a pass whose page opened on another look stops instead of filing the picture', async () => {
+  const opened = (theme: string | null, style: string | null) => ({
+    evaluate: async () => ({ theme, style }),
+  });
+  await assertLook(opened('light', null), 'overview', 'light', 'classic');
+  await assertLook(opened('dark', 'mission-control'), 'overview', 'dark', 'mission-control');
+  await assert.rejects(
+    assertLook(opened('dark', 'mission-control'), 'overview', 'light', 'classic'),
+    /overview opened on dark mission-control but this pass is light classic/,
+  );
 });
