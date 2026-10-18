@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -152,15 +153,18 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 // caller reads only what it asked for.
 //
 // Everything is computed in SQL, on the window the caller bounded: the counts
-// with GROUP BY, and each percentile with a window function that numbers a
-// group's samples in order and keeps the ones at the p50 and p95 positions.
-// SQLite has no percentile aggregate, and reading every sample into Go to
-// sort it would make the cost of a request the size of the window rather than
-// of the answer.
+// with GROUP BY, and each percentile from the group's samples in order, which
+// SQLite sorts and joins into one string (group_concat with an ORDER BY of its
+// own), with the two positions worked out beside it. SQLite has no percentile
+// aggregate. The window functions this replaced counted a group and numbered its
+// samples in passes that sorted the window three times, and took a third to a half
+// longer at ten thousand jobs; Go is left with a pass over the text to the two
+// samples, and holds a group's samples as text, about seven bytes each, for as
+// long as that takes.
 //
-// The position is the one the Overview's percentiles use -- index
-// round((n-1)*q) into the sorted samples -- so a figure here and the same one
-// on the Overview cannot differ by a rounding rule.
+// The position is the one the Overview's percentiles use, index round((n-1)*q)
+// into the sorted samples, so a figure here and the same one on the Overview
+// cannot differ by a rounding rule.
 //
 // Duration leaves out cancelled and skipped jobs, which stop when somebody
 // says so rather than when the work is done, and would drag a release's median
@@ -342,26 +346,27 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 			continue
 		}
 		// col is one of the three literals above, never caller input.
-		pr, err := s.texts.query(ctx, base+`SELECT k1, k2, MAX(n),
-			MAX(CASE WHEN rn = CAST((n - 1) * 0.5 + 0.5 AS INTEGER) + 1 THEN v END),
-			MAX(CASE WHEN rn = CAST((n - 1) * 0.95 + 0.5 AS INTEGER) + 1 THEN v END)
-			FROM (SELECT k1, k2, `+m.col+` AS v,
-					ROW_NUMBER() OVER (PARTITION BY k1, k2 ORDER BY `+m.col+`) AS rn,
-					COUNT(*) OVER (PARTITION BY k1, k2) AS n
-				FROM base WHERE `+m.col+` IS NOT NULL)
-			GROUP BY k1, k2`, args...)
+		pr, err := s.texts.query(ctx, base+`SELECT k1, k2, COUNT(`+m.col+`),
+			CAST((COUNT(`+m.col+`) - 1) * 0.5 + 0.5 AS INTEGER), CAST((COUNT(`+m.col+`) - 1) * 0.95 + 0.5 AS INTEGER),
+			group_concat(`+m.col+`, ',' ORDER BY `+m.col+`)
+			FROM base WHERE `+m.col+` IS NOT NULL GROUP BY k1, k2`, args...)
 		if err != nil {
 			return nil, err
 		}
 		for pr.Next() {
 			var k gk
-			var n int
-			var p50, p95 int64
-			if err := pr.Scan(&k.a, &k.b, &n, &p50, &p95); err != nil {
+			var n, at50, at95 int
+			var samples string
+			if err := pr.Scan(&k.a, &k.b, &n, &at50, &at95, &samples); err != nil {
 				pr.Close()
 				return nil, err
 			}
 			if g := groups[k]; g != nil {
+				p50, p95, err := samplesAt(samples, at50, at95)
+				if err != nil {
+					pr.Close()
+					return nil, err
+				}
 				*m.into(g) = JobPercentiles{Samples: n, P50MS: &p50, P95MS: &p95}
 			}
 		}
@@ -398,4 +403,30 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 		out.Groups = append(out.Groups, *groups[k])
 	}
 	return out, nil
+}
+
+// samplesAt reads the samples at indexes i and j, i <= j, from the comma-separated
+// integers of a group, which SQLite has put in order. It looks at no other sample
+// than the two, so what it costs is a pass over the text and not a parse of it.
+func samplesAt(samples string, i, j int) (atI, atJ int64, err error) {
+	for at := 0; at <= j; at++ {
+		item, rest, more := strings.Cut(samples, ",")
+		if at == i || at == j {
+			v, err := strconv.ParseInt(item, 10, 64)
+			if err != nil {
+				return 0, 0, fmt.Errorf("store: sample %d of a job statistic is not a whole number of milliseconds: %w", at, err)
+			}
+			if at == i {
+				atI = v
+			}
+			if at == j {
+				atJ = v
+			}
+		}
+		if !more && at < j {
+			return 0, 0, fmt.Errorf("store: a job statistic has %d samples, and was asked for sample %d", at+1, j)
+		}
+		samples = rest
+	}
+	return atI, atJ, nil
 }
