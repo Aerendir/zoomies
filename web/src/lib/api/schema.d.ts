@@ -3876,6 +3876,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assistant/repairs/automatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * See the repositories that repair themselves, what they have used and whether they can run
+         * @description One entry for each enabled repository policy set to Automatic, the ones that cannot run first and then by name. `used` is every attempt on the repository in the last 24 hours, by anyone and by any trigger, a repair cleared from the history included: the number the daily limit is held against. Automatic repairs have no owner, so this is an administrator's view and nobody else can read it.
+         */
+        get: operations["getEliAutomaticRepairs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/automatic/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop automatic repairs on one or more repositories
+         * @description Only ever relaxes a policy, so it needs no working provider, which is the day it is wanted. `ask_first` sets the repository to Ask me first. `off` clears the policy's enable switch and keeps its mode, so switching it back on in setup resumes Automatic as it was. A repair already queued is blocked when the worker reaches it, and one that has not pushed yet stops before it does. Each repository is answered for on its own: one that is not automatic any more is `changed: false` and no error, one with no policy has an `error`. One audit row `assistant.repair_automatic_stop` is written for each repository that changed.
+         */
+        post: operations["stopEliAutomaticRepairs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/repairs/opportunities": {
         parameters: {
             query?: never;
@@ -8669,6 +8709,8 @@ export interface components {
              * @description GitHub's own sequential number for this workflow run - the "#1009" its Actions UI shows next to the workflow name, for cross-referencing the two. Zero until a workflow_run lookup backfills it, since the webhook that recorded the job never carries it.
              */
             run_number?: number;
+            /** @description What started the run: `push`, `pull_request`, `schedule` and so on. Absent until the controller has read the run from GitHub, since the webhook that recorded the job never carries it. Eli repairs a pull request's branch and nothing else, so a failure of a run that is not a pull request's is never offered to it. */
+            run_event?: string;
             /** @description The controller version that claimed the job, stamped once and never rewritten, so jobs can be grouped by release. Absent on a job recorded before this field existed and on one no pool here claimed; neither is guessed at. Filter with `controller_version=unknown` to find them. */
             controller_version?: string;
             /** @description The install channel of that controller build. */
@@ -10709,6 +10751,11 @@ export interface components {
             remaining: number;
             /** Format: date-time */
             reset_at?: string;
+            /**
+             * @description How the repository's policy lets Eli help, so a page can say whether the repository would have started a repair itself. Present once readiness has reached the policy check, and not before.
+             * @enum {string}
+             */
+            policy_mode?: "automatic" | "ask_first" | "manual";
             /** @description What stands in the way. When the target has changed (fixed, closed or superseded) this is that alone, which is the answer to what the person asked; checks still say what each check found. */
             blockers: {
                 code: string;
@@ -10813,6 +10860,57 @@ export interface components {
         EliRepairSettings: {
             identities: components["schemas"]["EliIdentity"][];
             policies: components["schemas"]["EliRepairPolicy"][];
+        };
+        /** @description The newest automatic repair on a repository that is still in the history. */
+        EliAutomaticLast: {
+            id: string;
+            state: string;
+            pull_number: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        EliAutomaticRepository: {
+            repo: string;
+            installation_id: string;
+            /** @description Empty when the policy's provider was deleted, which leaves a policy with none. */
+            provider_id: string;
+            /** @description Empty when there is no provider. */
+            provider_name: string;
+            model: string;
+            /** @description Present only when automatic repairs here cannot run: the provider is missing, disabled or a person's. One sentence that says what to do in setup. */
+            problem?: string;
+            allow_workflows: boolean;
+            daily_limit: number;
+            /** @description Attempts on this repository in the last 24 hours, by anyone and by any trigger, cleared ones included. The same figure the daily limit is held against. */
+            used: number;
+            /**
+             * Format: date-time
+             * @description When a full allowance has a place again: the oldest of those attempts leaves the 24-hour window, or, when the limit was lowered below what is spent, the one whose leaving brings the count under it. Present when `used` is above zero.
+             */
+            next_free_at?: string;
+            /** @description Automatic repairs queued, working or waiting on checks now. */
+            running: number;
+            last?: components["schemas"]["EliAutomaticLast"];
+        };
+        EliAutomaticRepairs: {
+            repositories: components["schemas"]["EliAutomaticRepository"][];
+        };
+        EliAutomaticStopRequest: {
+            repos: string[];
+            /**
+             * @description What the repository does instead. `ask_first` offers a repair under Needs you and waits. `off` clears the policy's switch: nothing is offered, started or requested until it is switched back on in setup.
+             * @enum {string}
+             */
+            then: "ask_first" | "off";
+        };
+        EliAutomaticStopResult: {
+            repo: string;
+            /** @description False for a repository that was not automatic any more. */
+            changed: boolean;
+            error?: string;
+        };
+        EliAutomaticStopResponse: {
+            results: components["schemas"]["EliAutomaticStopResult"][];
         };
         /** @description Creating, editing and checking a provider take the same body. On a PATCH every field is optional; what is not named is left alone. */
         AssistantProviderInput: {
@@ -18540,6 +18638,51 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    getEliAutomaticRepairs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliAutomaticRepairs"];
+                };
+            };
+        };
+    };
+    stopEliAutomaticRepairs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EliAutomaticStopRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliAutomaticStopResponse"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
         };
     };

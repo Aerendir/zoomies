@@ -25,6 +25,11 @@ type EliReadiness struct {
 	AllowWorkflows bool              `json:"allow_workflows"`
 	Remaining      int               `json:"remaining"`
 	ResetAt        *time.Time        `json:"reset_at,omitempty"`
+	// PolicyMode is how the repository's policy lets Eli help: automatic,
+	// ask_first or manual. A page that offers to start a repair needs it to say
+	// whether the repository would have started one itself. It is set once
+	// readiness reaches the policy check, and not before.
+	PolicyMode string `json:"policy_mode,omitempty"`
 	// Blockers is what stands in the way, as it always has been. When the target
 	// has changed (fixed, closed, superseded) it is that alone, which is the
 	// answer to what the person asked; Checks still say what each check found.
@@ -107,6 +112,17 @@ func shortSHA(sha string) string {
 	return sha
 }
 
+// repairMode is the same distinction in the words the API uses.
+func repairMode(p *store.EliRepairPolicy) string {
+	switch {
+	case p.Automatic:
+		return "automatic"
+	case p.AskFirst:
+		return "ask_first"
+	}
+	return "manual"
+}
+
 // repairModeWords names how a repository's policy lets Eli help, for a finding.
 func repairModeWords(p *store.EliRepairPolicy) string {
 	switch {
@@ -183,6 +199,7 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 		block("policy", "policy", "An administrator needs to enable repairs for this repository.")
 	} else {
 		out.AllowWorkflows = policy.AllowWorkflows
+		out.PolicyMode = repairMode(policy)
 		checks.set("policy", EliCheckOK, repairModeWords(policy)+" is on for this repository. Workflow file edits are "+map[bool]string{true: "on", false: "off"}[policy.AllowWorkflows]+".")
 		used, personal, reset, e := c.st.EliRepairBudget(ctx, repo, user)
 		if e != nil {

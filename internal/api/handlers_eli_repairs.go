@@ -574,3 +574,76 @@ func (s *Server) handleEliRepositories(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": names[offset:end], "total": len(names), "capped": capped, "missing_permissions": missing})
 }
+
+// maxEliAutomaticStop bounds one stop. A fleet has a handful of repositories on
+// Automatic, and a request for hundreds is a mistake worth refusing.
+const maxEliAutomaticStop = 50
+
+// handleEliAutomatic answers GET /api/v1/assistant/repairs/automatic: the
+// repositories that repair themselves, with who pays, whether they can, what has
+// been spent and what the automation did last. Automatic repairs have no owner,
+// so it is an administrator's route and the gate is the same one that lets an
+// administrator read every repair.
+func (s *Server) handleEliAutomatic(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	rows, err := s.ctrl.EliAutomaticRepairs(ctx)
+	if err != nil {
+		s.internal(w, r, "reading the repositories that repair themselves", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"repositories": rows})
+}
+
+// handleStopEliAutomatic answers POST /api/v1/assistant/repairs/automatic/stop.
+// It writes one audit row for each repository it changed and none for one it
+// found already stopped, so the log says who stopped what and never claims a
+// press that changed nothing.
+func (s *Server) handleStopEliAutomatic(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Repos []string `json:"repos"`
+		Then  string   `json:"then"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	var fields []fieldError
+	repos := make([]string, 0, len(in.Repos))
+	blank := false
+	for _, repo := range in.Repos {
+		repo = strings.TrimSpace(repo)
+		if repo == "" {
+			blank = true
+			continue
+		}
+		repos = append(repos, repo)
+	}
+	switch {
+	case len(in.Repos) == 0:
+		fields = append(fields, fieldError{"repos", "choose at least one repository to stop"})
+	case len(in.Repos) > maxEliAutomaticStop:
+		fields = append(fields, fieldError{"repos", fmt.Sprintf("%d repositories is more than the %d one stop accepts; stop them in batches", len(in.Repos), maxEliAutomaticStop)})
+	case blank:
+		fields = append(fields, fieldError{"repos", "a repository name is blank"})
+	}
+	if in.Then != controller.EliStopAskFirst && in.Then != controller.EliStopOff {
+		fields = append(fields, fieldError{"then", fmt.Sprintf("say what the repository does instead: %s or %s", controller.EliStopAskFirst, controller.EliStopOff)})
+	}
+	if len(fields) > 0 {
+		unprocessable(w, "this stop could not be carried out", fields)
+		return
+	}
+
+	ctx := r.Context()
+	results, err := s.ctrl.StopEliAutomatic(ctx, repos, in.Then)
+	if err != nil {
+		s.internal(w, r, "stopping automatic repairs", err)
+		return
+	}
+	for _, res := range results {
+		if res.Changed {
+			s.auth.Auditor().Act(ctx, Identity(ctx), "assistant.repair_automatic_stop", "repository", res.Repo, map[string]any{"then": in.Then})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}

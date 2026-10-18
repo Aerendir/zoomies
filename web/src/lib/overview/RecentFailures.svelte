@@ -44,7 +44,7 @@
   import Panel from '$lib/components/Panel.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import { targetHref } from '$lib/repairs/workspace';
+  import { eliCanRepairRun, targetHref } from '$lib/repairs/workspace';
 
   interface Props {
     class?: string;
@@ -289,7 +289,7 @@
               <RelativeTime value={job.completed_at ?? job.queued_at} />
             </p>
             <div class="act">
-              {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}
+              {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id && eliCanRepairRun(job)}
                 <Button
                   size="sm"
                   href={targetHref({ repo: job.repo, run: job.github_run_id, job: job.id })}

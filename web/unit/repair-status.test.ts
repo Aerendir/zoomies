@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { repairSetupStatus, repairStatus } from '../src/lib/status.ts';
+import { automaticStatus, repairSetupStatus, repairStatus } from '../src/lib/status.ts';
 import { stateLabel } from '../src/lib/repairs/history.ts';
 
 // A repair's state is drawn the way every other status in the product is: a
@@ -78,5 +78,26 @@ test('each state of the hub’s setup bar has its tone and shape', () => {
     assert.equal(status.shape, shape, `${state} shape`);
     assert.equal(status.label, label, `${state} label`);
     assert.ok(status.icon, `${state} has no icon`);
+  }
+});
+
+// The health of a repository that repairs itself says whether a person has to do
+// something: a spent allowance clears itself, so it is the amber of waiting, and
+// a provider that cannot pay is the red of something to fix. Each has a shape of
+// its own, so colour is never the only cue.
+test('each health of an automatic repository has its tone, shape, word and hint', () => {
+  const expected: [Parameters<typeof automaticStatus>[0], string, string, string][] = [
+    ['ready', 'idle', 'filled', 'Ready'],
+    ['waiting', 'pending', 'dashed', 'Allowance used'],
+    ['problem', 'danger', 'triangle', 'Needs attention'],
+  ];
+  for (const [state, tone, shape, label] of expected) {
+    const status = automaticStatus(state);
+    assert.equal(status.key, state);
+    assert.equal(status.tone, tone, `${state} tone`);
+    assert.equal(status.shape, shape, `${state} shape`);
+    assert.equal(status.label, label, `${state} label`);
+    assert.ok(status.hint, `${state} has a hint`);
+    assert.ok(status.icon, `${state} has an icon`);
   }
 });

@@ -19,6 +19,7 @@
   import {
     ApiError,
     actEliOpportunity,
+    getEliAutomaticRepairs,
     getEliReadiness,
     listEliOpportunities,
     listEliRepairs,
@@ -30,11 +31,14 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { router } from '$lib/router';
+  import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
+  import { automaticNote, findAutomaticAttempt } from '$lib/repairs/automatic';
   import { caseFromLive } from '$lib/repairs/case';
   import { blockingRow, checkRows } from '$lib/repairs/checks';
   import { runningRepair } from '$lib/repairs/journey';
   import { changedBlocker, parseTarget, stageOf, targetHref } from '$lib/repairs/workspace';
+  import AutomaticNote from '$lib/repairs/AutomaticNote.svelte';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
@@ -60,6 +64,13 @@
   let dialogOpen = $state(false);
   let setupOpen = $state(false);
   let token = 0;
+  /**
+   * What Eli did on its own for this repository, read only for an administrator and
+   * only when the repository repairs itself: automatic repairs have no owner, so
+   * nobody else can read them, and a repository that does not repair itself has none.
+   */
+  let automaticAttempts = $state<Schemas['EliRepair'][]>([]);
+  let automaticRow = $state<Schemas['EliAutomaticRepository'] | undefined>(undefined);
 
   const hasTarget = $derived(Boolean(target.offer || (target.repo && (target.pull || target.run))));
   const view = $derived(
@@ -76,6 +87,20 @@
   const blocking = $derived(blockingRow(rows));
   const changed = $derived(readiness ? changedBlocker(readiness) : undefined);
   const setupNeeded = $derived(blocking?.action?.kind === 'setup');
+  const note = $derived(
+    readiness && (stage === 'ready' || stage === 'blocked')
+      ? automaticNote({
+          mode: readiness.policy_mode,
+          admin: session.can('admin'),
+          attempt: findAutomaticAttempt(automaticAttempts, {
+            repo: readiness.repo,
+            pull: readiness.pull_number,
+            head: readiness.head_sha,
+          }),
+          repository: automaticRow,
+        })
+      : null,
+  );
   // The log is read for somebody whose GitHub account is known to write to the
   // repository, which is what the access check found out.
   const canReadLogs = $derived(
@@ -178,6 +203,29 @@
           follow(queued);
           return;
         }
+        automaticAttempts = [];
+        automaticRow = undefined;
+        // A failure that has been fixed, closed or replaced shows no note, so reads for
+        // one would be wasted.
+        if (
+          answered.value.policy_mode === 'automatic' &&
+          session.can('admin') &&
+          !changedBlocker(answered.value)
+        ) {
+          const [made, overview] = await Promise.allSettled([
+            listEliRepairs({ repo: answered.value.repo, trigger: 'automatic', limit: 100 }),
+            getEliAutomaticRepairs(),
+          ]);
+          if (mine !== token) return;
+          // Both are courtesies: without them the note says what it can without them.
+          automaticAttempts = made.status === 'fulfilled' ? made.value.items : [];
+          automaticRow =
+            overview.status === 'fulfilled'
+              ? overview.value.repositories.find(
+                  (row) => row.repo.toLowerCase() === answered.value.repo.toLowerCase(),
+                )
+              : undefined;
+        }
       } else {
         readiness = null;
         readFailed =
@@ -259,6 +307,8 @@
     untrack(() => {
       jobs = [];
       readiness = null;
+      automaticAttempts = [];
+      automaticRow = undefined;
       readFailed = '';
       startError = '';
       instruction = '';
@@ -369,6 +419,7 @@
       {/if}
     </div>
     <aside class="decision" aria-label="Next step" bind:this={decision}>
+      {#if loaded && note}<AutomaticNote {note} />{/if}
       <DecisionCard
         {stage}
         {readiness}

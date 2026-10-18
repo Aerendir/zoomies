@@ -49,6 +49,10 @@
       <dt>Stage</dt>
       <dd>{stageWords(repair.details?.stage)}</dd>
     {/if}
+    {#if repair.trigger === 'automatic'}
+      <dt>Started by</dt>
+      <dd>Automatic repairs, by the repository’s policy</dd>
+    {/if}
     <dt>Started</dt>
     <dd class="tnum">{formatAbsolute(repair.created_at)}</dd>
     {#if took !== undefined}

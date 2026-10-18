@@ -1677,6 +1677,10 @@ type Job struct {
 	// carry it, so it arrives late, backfilled from a workflow_run lookup once
 	// one is made; zero means that lookup has not happened yet.
 	RunNumber int64 `json:"run_number,omitempty"`
+	// RunEvent is the event that started the run (`push`, `pull_request`,
+	// `schedule`...). workflow_job deliveries never carry it either, so it is
+	// backfilled from the same lookup; empty means that has not happened yet.
+	RunEvent string `json:"run_event,omitempty"`
 	// Steps are the job's steps as GitHub last reported them. The completed
 	// delivery carries every step with its conclusion, which is how a failed
 	// job can say which step it stopped at.

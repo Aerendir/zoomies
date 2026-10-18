@@ -443,6 +443,8 @@ func (s *Server) apiRoutes() chi.Router {
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Put("/assistant/repairs/consent", s.handleEliRepairConsent)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Post("/assistant/repairs", s.handleRequestEliRepair)
 		r.With(s.require(auth.ActionAssistantWrite)).Put("/assistant/repairs/policy", s.handleSetEliPolicy)
+		r.With(s.require(auth.ActionAssistantRead)).Get("/assistant/repairs/automatic", s.handleEliAutomatic)
+		r.With(s.require(auth.ActionAssistantWrite)).Post("/assistant/repairs/automatic/stop", s.handleStopEliAutomatic)
 		r.With(s.require(auth.ActionUsersWrite)).Put("/assistant/repairs/identity", s.handleSetEliIdentity)
 		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs/{id}", s.handleGetEliRepair)
 		r.With(s.require(auth.ActionAssistantChat)).Post("/assistant/chat", s.handleAssistantChat)

@@ -321,3 +321,29 @@ func TestTheAttentionLoopSaysWhyItCouldNotDoItsWork(t *testing.T) {
 		})
 	}
 }
+
+// Eli repairs a pull request's branch and nothing else, so what started a failed
+// run decides whether anyone is offered a repair. The attention loop is the one
+// place every failed run is read from GitHub, so it records the answer.
+func TestTheAttentionCheckRecordsWhatStartedAFailedRun(t *testing.T) {
+	for _, event := range []string{"push", "pull_request"} {
+		t.Run(event, func(t *testing.T) {
+			h := newHarness(t)
+			inst := h.installation()
+			fake := attentionFake{repairFake: &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: "failed"}, pullErr: github.ErrRepairUnsupported, runState: github.WorkflowRunState{Status: "completed", Conclusion: "failure", Event: event}}
+			h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+			repo := inst.Target + "/repo"
+			job := &store.Job{GitHubJobID: 1, GitHubRunID: 9, Repo: repo, State: store.JobCompleted, Conclusion: "failure", QueuedAt: h.st.Now().Add(-time.Minute)}
+			if _, err := h.st.UpsertJob(h.ctx, job); err != nil {
+				t.Fatal(err)
+			}
+
+			h.c.refreshJobAttention(h.ctx)
+
+			got, err := h.st.GetJobByGitHubID(h.ctx, 1)
+			if err != nil || got.RunEvent != event {
+				t.Fatalf("the failed run's event reads %q (%v), want %q", got.RunEvent, err, event)
+			}
+		})
+	}
+}

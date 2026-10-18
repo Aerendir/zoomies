@@ -65,6 +65,8 @@ export interface SetupSummary {
   account: string;
   /** How many repositories are on Ask me first, for an administrator and nobody else. */
   askFirst: number | null;
+  /** How many repair themselves, counted the same way and for the same people. */
+  automatic: number | null;
 }
 
 /**
@@ -86,13 +88,23 @@ export function setupSummary(input: {
       headline: 'Sign-in is off',
       account: 'Repairs need a signed-in person with a linked GitHub account',
       askFirst: null,
+      automatic: null,
     };
   }
   if (!settings)
-    return { state: 'loading', headline: 'Checking setup', account: '', askFirst: null };
+    return {
+      state: 'loading',
+      headline: 'Checking setup',
+      account: '',
+      askFirst: null,
+      automatic: null,
+    };
 
   const askFirst = admin
     ? settings.policies.filter((policy) => policy.enabled && policy.ask_first).length
+    : null;
+  const automatic = admin
+    ? settings.policies.filter((policy) => policy.enabled && policy.automatic).length
     : null;
   const own = userId
     ? settings.identities.find((identity) => identity.user_id === userId)
@@ -103,6 +115,7 @@ export function setupSummary(input: {
       headline: 'Setup needed',
       account: 'No GitHub account linked',
       askFirst,
+      automatic,
     };
   }
   if (!own.confirmed) {
@@ -111,6 +124,7 @@ export function setupSummary(input: {
       headline: 'Setup needed',
       account: `GitHub @${own.github_login} linked, repairs not allowed yet`,
       askFirst,
+      automatic,
     };
   }
   return {
@@ -118,5 +132,6 @@ export function setupSummary(input: {
     headline: 'Ready to repair',
     account: `GitHub @${own.github_login} linked`,
     askFirst,
+    automatic,
   };
 }

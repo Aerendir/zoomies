@@ -979,6 +979,8 @@ func routeTable(ids fixtureIDs) []route {
 		{method: "GET", path: "/api/v1/assistant/repairs/settings", role: store.RoleViewer, action: auth.ActionAssistantOwn},
 		{method: "POST", path: "/api/v1/assistant/repairs", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true, body: map[string]any{}},
 		{method: "PUT", path: "/api/v1/assistant/repairs/policy", role: store.RoleAdmin, action: auth.ActionAssistantWrite, body: map[string]any{}},
+		{method: "GET", path: "/api/v1/assistant/repairs/automatic", role: store.RoleAdmin, action: auth.ActionAssistantRead},
+		{method: "POST", path: "/api/v1/assistant/repairs/automatic/stop", role: store.RoleAdmin, action: auth.ActionAssistantWrite, body: map[string]any{}},
 		{method: "PUT", path: "/api/v1/assistant/repairs/identity", role: store.RoleAdmin, action: auth.ActionUsersWrite, body: map[string]any{}},
 		{method: "POST", path: "/api/v1/assistant/chat", role: store.RoleAdmin, action: auth.ActionAssistantChat,
 			body: map[string]any{"messages": []any{}}},

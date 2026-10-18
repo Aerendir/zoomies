@@ -6074,6 +6074,53 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /assistant/repairs/automatic:
+    get:
+      operationId: getEliAutomaticRepairs
+      tags: [assistant]
+      summary: See the repositories that repair themselves, what they have used and whether they can run
+      description: >-
+        One entry for each enabled repository policy set to Automatic, the ones that cannot run
+        first and then by name. `used` is every attempt on the repository in the last 24 hours, by
+        anyone and by any trigger, a repair cleared from the history included: the number the
+        daily limit is held against. Automatic repairs have no owner, so this is an
+        administrator's view and nobody else can read it.
+      x-zoomies-role: admin
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliAutomaticRepairs" }
+
+  /assistant/repairs/automatic/stop:
+    post:
+      operationId: stopEliAutomaticRepairs
+      tags: [assistant]
+      summary: Stop automatic repairs on one or more repositories
+      description: >-
+        Only ever relaxes a policy, so it needs no working provider, which is the day it is
+        wanted. `ask_first` sets the repository to Ask me first. `off` clears the policy's enable
+        switch and keeps its mode, so switching it back on in setup resumes Automatic as it was.
+        A repair already queued is blocked when the worker reaches it, and one that has not
+        pushed yet stops before it does. Each repository is answered for on its own: one that is
+        not automatic any more is `changed: false` and no error, one with no policy has an
+        `error`. One audit row `assistant.repair_automatic_stop` is written for each repository
+        that changed.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EliAutomaticStopRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliAutomaticStopResponse" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /assistant/repairs/opportunities:
     get:
       operationId: listEliOpportunities
@@ -12108,6 +12155,13 @@ components:
             shows next to the workflow name, for cross-referencing the two. Zero until a
             workflow_run lookup backfills it, since the webhook that recorded the job never
             carries it.
+        run_event:
+          type: string
+          description: >-
+            What started the run: `push`, `pull_request`, `schedule` and so on. Absent until
+            the controller has read the run from GitHub, since the webhook that recorded the
+            job never carries it. Eli repairs a pull request's branch and nothing else, so a
+            failure of a run that is not a pull request's is never offered to it.
         controller_version:
           type: string
           description: >-
@@ -14457,6 +14511,13 @@ components:
         allow_workflows: { type: boolean }
         remaining: { type: integer }
         reset_at: { type: string, format: date-time }
+        policy_mode:
+          type: string
+          enum: [automatic, ask_first, manual]
+          description: >-
+            How the repository's policy lets Eli help, so a page can say whether the repository
+            would have started a repair itself. Present once readiness has reached the policy
+            check, and not before.
         blockers:
           description: >-
             What stands in the way. When the target has changed (fixed, closed
@@ -14619,6 +14680,94 @@ components:
         policies:
           type: array
           items: { $ref: "#/components/schemas/EliRepairPolicy" }
+
+    EliAutomaticLast:
+      type: object
+      description: The newest automatic repair on a repository that is still in the history.
+      required: [id, state, pull_number, updated_at]
+      properties:
+        id: { type: string }
+        state: { type: string }
+        pull_number: { type: integer }
+        updated_at: { type: string, format: date-time }
+
+    EliAutomaticRepository:
+      type: object
+      required: [repo, installation_id, provider_id, provider_name, model, allow_workflows, daily_limit, used, running]
+      properties:
+        repo: { type: string }
+        installation_id: { type: string }
+        provider_id:
+          type: string
+          description: Empty when the policy's provider was deleted, which leaves a policy with none.
+        provider_name: { type: string, description: Empty when there is no provider. }
+        model: { type: string }
+        problem:
+          type: string
+          description: >-
+            Present only when automatic repairs here cannot run: the provider is missing,
+            disabled or a person's. One sentence that says what to do in setup.
+        allow_workflows: { type: boolean }
+        daily_limit: { type: integer }
+        used:
+          type: integer
+          description: >-
+            Attempts on this repository in the last 24 hours, by anyone and by any trigger,
+            cleared ones included. The same figure the daily limit is held against.
+        next_free_at:
+          type: string
+          format: date-time
+          description: >-
+            When a full allowance has a place again: the oldest of those attempts leaves the
+            24-hour window, or, when the limit was lowered below what is spent, the one whose
+            leaving brings the count under it. Present when `used` is above zero.
+        running:
+          type: integer
+          description: Automatic repairs queued, working or waiting on checks now.
+        last: { $ref: "#/components/schemas/EliAutomaticLast" }
+
+    EliAutomaticRepairs:
+      type: object
+      required: [repositories]
+      properties:
+        repositories:
+          type: array
+          items: { $ref: "#/components/schemas/EliAutomaticRepository" }
+
+    EliAutomaticStopRequest:
+      type: object
+      required: [repos, then]
+      properties:
+        repos:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { type: string }
+        then:
+          type: string
+          enum: [ask_first, off]
+          description: >-
+            What the repository does instead. `ask_first` offers a repair under Needs you and
+            waits. `off` clears the policy's switch: nothing is offered, started or requested
+            until it is switched back on in setup.
+
+    EliAutomaticStopResult:
+      type: object
+      required: [repo, changed]
+      properties:
+        repo: { type: string }
+        changed:
+          type: boolean
+          description: False for a repository that was not automatic any more.
+        error: { type: string }
+
+    EliAutomaticStopResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/EliAutomaticStopResult" }
 
     AssistantProviderInput:
       type: object

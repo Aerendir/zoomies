@@ -1400,6 +1400,10 @@ export const requestEliRepair = (body: Body<'requestEliRepair'>) =>
   api.post<Result<'requestEliRepair'>>('/assistant/repairs', { body });
 export const setEliRepairPolicy = (body: Body<'setEliRepairPolicy'>) =>
   api.put<Result<'setEliRepairPolicy'>>('/assistant/repairs/policy', { body });
+export const getEliAutomaticRepairs = (signal?: AbortSignal) =>
+  api.get<Result<'getEliAutomaticRepairs'>>('/assistant/repairs/automatic', { signal });
+export const stopEliAutomaticRepairs = (body: Body<'stopEliAutomaticRepairs'>) =>
+  api.post<Result<'stopEliAutomaticRepairs'>>('/assistant/repairs/automatic/stop', { body });
 export const setEliIdentity = (body: Body<'setEliIdentity'>) =>
   api.put<Result<'setEliIdentity'>>('/assistant/repairs/identity', { body });
 

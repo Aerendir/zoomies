@@ -9,6 +9,7 @@ import type { Job, Schemas } from '../src/lib/api/types.ts';
 export type Check = Schemas['EliReadinessCheck'];
 export type Readiness = Schemas['EliReadiness'];
 export type Repair = Schemas['EliRepair'];
+export type AutomaticRepository = Schemas['EliAutomaticRepository'];
 
 /** The nine checks, in the order the controller makes them. */
 export const CHECK_ORDER: Check['code'][] = [
@@ -145,6 +146,22 @@ export function repair(over: Partial<Repair> = {}): Repair {
     comment_id: 0,
     created_at: '2026-10-18T09:20:00Z',
     updated_at: '2026-10-18T09:24:00Z',
+    ...over,
+  };
+}
+
+/** A repository that repairs itself, with nothing spent and nothing running. */
+export function automaticRepository(over: Partial<AutomaticRepository> = {}): AutomaticRepository {
+  return {
+    repo: 'acme/widgets',
+    installation_id: 'ins_1',
+    provider_id: 'prv_1',
+    provider_name: 'Team provider',
+    model: 'team-model',
+    allow_workflows: false,
+    daily_limit: 5,
+    used: 0,
+    running: 0,
     ...over,
   };
 }

@@ -26,7 +26,7 @@ const jobInsertCols = `id, github_job_id, github_run_id, repo, workflow, job_nam
 const jobCols = jobInsertCols + `, peak_cpus, peak_memory_mb, oom_killed,
 	granted_cpus, granted_memory_mb, granted_source,
 	size_class, size_reason, size_basis, size_floor_mb, routed_class, routed_note, ran_class,
-	cpu_periods, cpu_throttled_periods, output_tail, scratch_peaks, acknowledged_at, acknowledged_by`
+	cpu_periods, cpu_throttled_periods, output_tail, scratch_peaks, acknowledged_at, acknowledged_by, run_event`
 
 func scanJob(sc interface{ Scan(...any) error }) (*Job, error) {
 	var j Job
@@ -43,7 +43,7 @@ func scanJob(sc interface{ Scan(...any) error }) (*Job, error) {
 		&j.GrantedCPUs, &j.GrantedMemoryMB, &j.GrantedSource,
 		&j.SizeClass, &j.SizeReason, &j.SizeBasis, &j.SizeFloorMB, &j.RoutedClass, &j.RoutedNote, &j.RanClass,
 		&j.CPUPeriods, &j.CPUThrottledPeriods, &j.OutputTail, &j.ScratchPeaks,
-		&acknowledged, &j.AcknowledgedBy)
+		&acknowledged, &j.AcknowledgedBy, &j.RunEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -445,6 +445,20 @@ func (s *Store) SetRunNumberForRun(ctx context.Context, repo string, runID, numb
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
 			`UPDATE jobs SET run_number=? WHERE repo=? AND github_run_id=? AND run_number=0`, number, repo, runID)
+		return err
+	})
+}
+
+// SetRunEventForRun records the event that started a workflow run on every job
+// of it. Unlike the run number it is overwritten, because the answer is
+// GitHub's and a later read is as good as the first.
+func (s *Store) SetRunEventForRun(ctx context.Context, repo string, runID int64, event string) error {
+	if runID == 0 || event == "" {
+		return nil
+	}
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE jobs SET run_event=? WHERE repo=? AND github_run_id=? AND run_event!=?`, event, repo, runID, event)
 		return err
 	})
 }

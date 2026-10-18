@@ -114,6 +114,7 @@ test('a linked account that has allowed repairs is ready', () => {
     headline: 'Ready to repair',
     account: 'GitHub @dana linked',
     askFirst: null,
+    automatic: null,
   });
 });
 
@@ -150,6 +151,23 @@ test('only an administrator is told how many repositories ask first', () => {
   };
   assert.equal(setupSummary(input(settings, { admin: true })).askFirst, 2);
   assert.equal(setupSummary(input(settings, { admin: false })).askFirst, null);
+});
+
+// Automation is counted the same way ask-first is, and for the same people: the
+// policies are an administrator's to read, and a switched-off one is not on.
+test('only an administrator is told how many repositories repair themselves', () => {
+  const settings: Settings = {
+    identities: [identity(true)],
+    policies: [
+      policy('acme/a', { ask_first: false, automatic: true }),
+      policy('acme/b', { ask_first: false, automatic: true }),
+      policy('acme/c', { ask_first: false, automatic: true, enabled: false }),
+      policy('acme/d'),
+    ],
+  };
+  assert.equal(setupSummary(input(settings, { admin: true })).automatic, 2);
+  assert.equal(setupSummary(input(settings, { admin: false })).automatic, null);
+  assert.equal(setupSummary(input(null, { admin: true })).automatic, null);
 });
 
 test('before the settings arrive the bar is loading, and with sign-in off it says there is nobody to repair as', () => {

@@ -99,5 +99,71 @@ func seed() error {
 			return err
 		}
 	}
+	return seedAutomatic(ctx, st, inst.ID, &clock)
+}
+
+// seedAutomatic makes two repositories repair themselves, with an installation
+// provider to pay for it and a few repairs the policy started, so the hub shows its
+// Automatic repairs panel and an attempt shows the card that says where its policy
+// stands. The repairs are recent, inside the 24-hour window the allowance counts, and
+// every one is terminal, so the worker has nothing to run.
+func seedAutomatic(ctx context.Context, st *store.Store, installation string, clock *time.Time) error {
+	provider := &store.AssistantProvider{Name: "Team provider (sample)", Kind: "fake", Model: "demo", Enabled: true}
+	if err := st.CreateAssistantProvider(ctx, provider); err != nil {
+		return err
+	}
+	for _, repo := range []string{"acme/gateway", "acme/docs"} {
+		if err := st.SetEliRepairPolicy(ctx, store.EliRepairPolicy{
+			Repo: repo, InstallationID: installation, ProviderID: provider.ID,
+			Enabled: true, Automatic: true, DailyLimit: 5,
+		}); err != nil {
+			return err
+		}
+	}
+	*clock = time.Now().Add(-5 * time.Hour)
+	for _, sample := range []struct {
+		repo                             string
+		pull                             int
+		state, message, stage, failure   string
+		commit, title, branch, job, step string
+	}{
+		{"acme/gateway", 109, "checks_failed", "Sample repair: Eli's commit did not make the checks pass. Automatic repair does not try the same commit twice; a maintainer can ask again.", "watch_ci", "",
+			"3a9e5c7d1f0b2468ace02468ace13579bdf02468", "Cap the retry budget in the gateway client", "feat/gateway-retry-cap", "Go (gateway)", "Run go test ./..."},
+		{"acme/gateway", 112, "succeeded", "Sample repair: restored the missing nil check; the PR checks passed. Normal review is still required.", "checks_passed", "",
+			"b2d4f6081a3c5e7092b4d6f8a0c2e4681a3c5e70", "Add a retry budget to the gateway client", "feat/gateway-retry-budget", "Go (gateway)", "Run go test ./..."},
+		{"acme/docs", 31, "failed", "Sample repair: Eli could not produce a fix it was willing to push.", "prepare_fix", "unsupported_fix",
+			"", "Fix the broken link check on the install page", "docs/fix-link-check", "Docs build", "mkdocs build --strict"},
+	} {
+		const run = 5210
+		// A commit that looks like one: forty hex digits with no run of zeros at the front.
+		head := fmt.Sprintf("%016x%016x%08x", uint64(sample.pull)*0x9e3779b97f4a7c15, uint64(sample.pull)*0xc2b2ae3d27d4eb4f, uint32(sample.pull)*0x85ebca6b)
+		kept := &store.EliRepairCase{
+			PullTitle: sample.title,
+			PullURL:   fmt.Sprintf("https://github.com/%s/pull/%d", sample.repo, sample.pull),
+			Author:    "alice", Branch: sample.branch,
+			RunURL:   fmt.Sprintf("https://github.com/%s/actions/runs/%d", sample.repo, run+sample.pull),
+			Workflow: "CI", RunNumber: run + int64(sample.pull),
+			Jobs: []store.EliRepairCaseJob{{
+				Name: sample.job, Step: sample.step, DurationMS: 143000,
+				URL: fmt.Sprintf("https://github.com/%s/actions/runs/%d/job/%d", sample.repo, run+sample.pull, 91000+sample.pull),
+			}},
+		}
+		r := &store.EliRepair{
+			DedupKey: "automatic:" + sample.repo + ":" + head, InstallationID: installation,
+			Repo: sample.repo, PullNumber: sample.pull, RunID: int64(run + sample.pull), HeadSHA: head,
+			ProviderID: provider.ID, Trigger: "automatic", CommitSHA: sample.commit,
+			Details: store.EliRepairDetails{Model: "demo (sample history)", Stage: sample.stage, FailureCode: sample.failure, Case: kept,
+				SourceBytes: 27648,
+				Steps:       []store.EliRepairStep{{InputTokens: 18200, OutputTokens: 1400, UsageReported: true, RequestBytes: 61440, ElapsedMS: 33000}},
+			},
+		}
+		if _, err := st.EnqueueEliRepair(ctx, r, 5); err != nil {
+			return err
+		}
+		r.State, r.Message = sample.state, sample.message
+		if err := st.SaveEliRepair(ctx, r); err != nil {
+			return err
+		}
+	}
 	return nil
 }
