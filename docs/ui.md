@@ -894,8 +894,9 @@ calls a model or spends an attempt. When nothing is in the way, the page says wh
 pays (the provider and its model), how many attempts are left today, whether Eli
 may edit workflow files and which branch it pushes to, with room to tell Eli what
 to look at, and **Fix with Eli** starts the repair and opens its page. A failure
-that has since been fixed, closed or replaced by a newer commit says so instead of
-offering a repair.
+that Eli is already repairing opens that repair instead of offering another, and
+one that has since been fixed, closed or replaced by a newer commit says so
+instead of offering a repair.
 
 ![The repair page for a pull request Eli cannot yet act on: the failure it is about, a wizard to link a GitHub account, and the checks, with the account and the model provider in the way](screenshots/eli-repair-readiness-dark.webp#only-dark){ .zoomies-shot }
 ![The repair page for a pull request Eli cannot yet act on: the failure it is about, a wizard to link a GitHub account, and the checks, with the account and the model provider in the way](screenshots/eli-repair-readiness-light.webp#only-light){ .zoomies-shot }

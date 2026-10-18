@@ -105,6 +105,31 @@ test('a running repair shows where it is, follows itself to the end and then sto
   expect(calls.attempts.length).toBe(asked);
 });
 
+// The page finds out by itself, on a timer, that the repair has moved. A stage that
+// arrives that way has no business taking keyboard focus from wherever the person has
+// gone in the meantime.
+test('a repair that finishes while the page is open leaves keyboard focus where it was', async ({
+  page,
+}) => {
+  await page.clock.install({ time: NOW });
+  const { state } = await mockRepairApi(page, { attempts: { 'rep-run': running() } });
+  await page.goto('/repairs/rep-run');
+  const openPr = page.locator('.page-header').getByRole('link', { name: /Open PR/ });
+  await expect(openPr).toBeVisible();
+  await openPr.focus();
+  await expect(openPr).toBeFocused();
+
+  state.attempts['rep-run'] = running({
+    state: 'succeeded',
+    commit_sha: COMMIT,
+    message: 'Checks passed on Eli’s commit b7d3e91.',
+    details: { stage: 'watch_ci', model: 'my-model', source_bytes: 38_912, case: keptCase() },
+  });
+  await page.clock.runFor(4500);
+  await expect(page.getByRole('region', { name: 'Checks passed' })).toBeVisible();
+  await expect(openPr).toBeFocused();
+});
+
 test('a repair that could not fix the failure says why and what to try next', async ({ page }) => {
   await mockRepairApi(page, {
     attempts: {

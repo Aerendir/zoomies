@@ -100,7 +100,7 @@
 
 <section class="next" data-stage={stage} aria-labelledby={headingId}>
   <div class="inner">
-    <h2 id={headingId}>{heading}</h2>
+    <h2 id={headingId} tabindex="-1">{heading}</h2>
     {#if error && stage !== 'error'}
       <p class="problem" role="alert">{error}</p>
     {/if}

@@ -10,7 +10,9 @@
 
   A repair already running for this failure is the process itself, so arriving
   on a failure that has one goes to it instead of offering to queue a second,
-  which the controller would refuse anyway.
+  which the controller would refuse anyway. It is found by the run the failure was
+  reached by, and, once readiness has said which pull request and commit that is,
+  by those: a repair queued for a pasted pull request records no run.
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
@@ -31,7 +33,7 @@
   import { toasts } from '$lib/state/toasts.svelte';
   import { caseFromLive } from '$lib/repairs/case';
   import { blockingRow, checkRows } from '$lib/repairs/checks';
-  import { isActive } from '$lib/repairs/history';
+  import { runningRepair } from '$lib/repairs/journey';
   import { changedBlocker, parseTarget, stageOf } from '$lib/repairs/workspace';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
@@ -99,23 +101,22 @@
     }
   });
 
-  /** A repair already on this failure, which the page follows rather than duplicates. */
-  async function followActive(repo: string, pull: number, run: number): Promise<boolean> {
+  /**
+   * The repository's repairs that are under way, read once when the page is
+   * entered, so a failure that already has one is followed rather than offered
+   * again. Only running ones are asked for: a long history could push the one in
+   * hand off the page. It is a courtesy: without it readiness still answers.
+   */
+  async function runningRepairs(repo: string): Promise<Schemas['EliRepair'][]> {
     try {
-      const page = await listEliRepairs({ repo, limit: 20 });
-      const active = page.items.find(
-        (row) =>
-          isActive(row.state) &&
-          row.repo.toLowerCase() === repo.toLowerCase() &&
-          (run > 0 ? row.run_id === run : row.pull_number === pull),
-      );
-      if (!active) return false;
-      router.navigate(`/repairs/${encodeURIComponent(active.id)}`, { replace: true });
-      return true;
+      return (await listEliRepairs({ repo, group: 'active', limit: 20 })).items;
     } catch {
-      // The history is a courtesy; without it readiness still answers.
-      return false;
+      return [];
     }
+  }
+
+  function follow(repair: Schemas['EliRepair']): void {
+    router.navigate(`/repairs/${encodeURIComponent(repair.id)}`, { replace: true });
   }
 
   async function load(arrival = false): Promise<void> {
@@ -144,8 +145,13 @@
         return;
       }
       about = { repo, pull, run };
-      if (arrival && (await followActive(repo, pull, run))) return;
+      const rows = arrival ? await runningRepairs(repo) : [];
       if (mine !== token) return;
+      const active = runningRepair(rows, { repo, pull, run });
+      if (active) {
+        follow(active);
+        return;
+      }
       const [found, answered] = await Promise.allSettled([
         run > 0 ? listJobs({ repo: [repo], run_id: [run], failed: true }) : Promise.resolve(null),
         getEliReadiness(pull > 0 ? { repo, pull_number: pull } : { repo, run_id: run }),
@@ -157,6 +163,21 @@
       jobs = found.status === 'fulfilled' && found.value ? (found.value.items ?? []) : [];
       if (answered.status === 'fulfilled') {
         readiness = answered.value;
+        // A run is only a run until readiness has said which pull request and
+        // commit it is, and those are what a repair queued for a pasted pull
+        // request is known by: it records no run, so the look by run above cannot
+        // have found it.
+        const queued = answered.value.ready
+          ? runningRepair(rows, {
+              repo: answered.value.repo,
+              pull: answered.value.pull_number,
+              head: answered.value.head_sha,
+            })
+          : undefined;
+        if (queued) {
+          follow(queued);
+          return;
+        }
       } else {
         readiness = null;
         readFailed =
@@ -243,6 +264,26 @@
     });
   });
 
+  let workspace = $state<HTMLElement | null>(null);
+  let decision = $state<HTMLElement | null>(null);
+  // Each answer replaces what the page says, and the button that was pressed can go
+  // with it: Check again leaves when the answer is that nothing is in the way.
+  // Keyboard focus went with it, to the top of the document, and whoever was working
+  // by keyboard had to find the card again. When focus was in the workspace and the
+  // element that held it is gone, it follows to the heading of the card that says
+  // what to do next. An answer that arrives while focus is elsewhere, or leaves the
+  // element where it was, touches nothing.
+  let heldFocus = false;
+  $effect.pre(() => {
+    void readiness;
+    heldFocus = workspace?.contains(document.activeElement) ?? false;
+  });
+  $effect(() => {
+    void readiness;
+    if (!heldFocus || !workspace || workspace.contains(document.activeElement)) return;
+    decision?.querySelector<HTMLElement>('h2')?.focus();
+  });
+
   $effect(() => {
     if (!loaded || !hasTarget || offerGone || !view.title) return;
     const title = view.title.length > 60 ? `${view.title.slice(0, 59)}…` : view.title;
@@ -278,7 +319,7 @@
     {/snippet}
   </NoticeCard>
 {:else}
-  <div class="cols">
+  <div class="cols" bind:this={workspace}>
     <div class="main">
       <div class="case">
         {#if loaded}
@@ -316,7 +357,7 @@
         {/if}
       {/if}
     </div>
-    <aside class="decision" aria-label="Next step">
+    <aside class="decision" aria-label="Next step" bind:this={decision}>
       <DecisionCard
         {stage}
         {readiness}

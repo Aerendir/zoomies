@@ -8,8 +8,16 @@
  * that must never happen on a read: opening the page checks readiness and starts
  * nothing, and only the button that says so spends an attempt.
  */
-import { expect, test } from '@playwright/test';
-import { blockedAt, failedJob, lintJob, mockRepairApi, readiness, SHA } from './support/repairs';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  blockedAt,
+  failedJob,
+  lintJob,
+  mockRepairApi,
+  readiness,
+  repairRow,
+  SHA,
+} from './support/repairs';
 
 const PAGE = '/repairs/new?repo=acme%2Fwidgets&run=482';
 const ACCESS = 'Your linked GitHub account needs write access to this repository.';
@@ -276,6 +284,61 @@ test('a repair already running for this failure opens its own page', async ({ pa
   await expect(page).toHaveURL(/\/repairs\/rep-active$/);
 });
 
+// A failure is reached by its run, but only a repair Eli queued itself records a
+// run: one queued for a pasted pull request, or before runs were recorded, is known
+// by its pull request and commit. Looked for by the run alone it is never found, and
+// whoever came back to the failure was offered it a second time. Once readiness has
+// said which pull request and commit the run is, the page asks again of those.
+test('arriving by run follows a repair queued for that pull request and commit', async ({
+  page,
+}) => {
+  const queued = repairRow({ id: 'rep-queued', state: 'working', run_id: 0 });
+  const { calls } = await mockRepairApi(page, {
+    jobs: [failedJob()],
+    repairs: [queued],
+    attempts: { 'rep-queued': queued },
+  });
+  await page.goto(PAGE);
+
+  await expect(page).toHaveURL(/\/repairs\/rep-queued$/);
+  await expect(page.getByRole('list', { name: 'What Eli is doing' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+  // Only the repairs that are running are asked for, so a repository with a long
+  // history cannot push the one under way off the page that is read.
+  const asked = calls.lists.map((query) => [query.get('repo'), query.get('group')]);
+  expect(asked).toEqual([['acme/widgets', 'active']]);
+});
+
+test('arriving by run still offers a repair when the one running is for another commit', async ({
+  page,
+}) => {
+  const older = repairRow({
+    id: 'rep-older',
+    state: 'working',
+    run_id: 0,
+    head_sha: 'an-older-head',
+  });
+  await mockRepairApi(page, {
+    jobs: [failedJob()],
+    repairs: [older],
+    attempts: { 'rep-older': older },
+  });
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/repairs\/new\?/);
+});
+
+test('arriving by pull request follows a repair already running for that pull request', async ({
+  page,
+}) => {
+  const running = repairRow({ id: 'rep-running', state: 'checking', run_id: 0 });
+  await mockRepairApi(page, { repairs: [running], attempts: { 'rep-running': running } });
+  await page.goto('/repairs/new?repo=acme%2Fwidgets&pull=17');
+
+  await expect(page).toHaveURL(/\/repairs\/rep-running$/);
+});
+
 test('an offer is accepted as the offer, with its own run and no note', async ({ page }) => {
   const { calls } = await mockRepairApi(page, {
     jobs: [failedJob()],
@@ -348,7 +411,7 @@ test('a refused start because the target moved re-reads readiness and explains',
 });
 
 test('Repair a different PR parses a pasted address and moves the page to it', async ({ page }) => {
-  await mockRepairApi(page, { jobs: [failedJob()], readiness: readiness() });
+  const { calls } = await mockRepairApi(page, { jobs: [failedJob()], readiness: readiness() });
   await page.goto(PAGE);
   await page.getByRole('button', { name: 'Repair a different PR' }).click();
   const dialog = page.getByRole('dialog', { name: 'Repair a different PR' });
@@ -359,4 +422,39 @@ test('Repair a different PR parses a pasted address and moves the page to it', a
   await dialog.getByRole('button', { name: 'Check this PR' }).click();
   await expect(page).toHaveURL(/\/repairs\/new\?repo=acme%2Fgadgets&pull=9$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  // One question about the pasted pull request, asked by the page it moved to. A
+  // second one is a page that was rebuilt under the first, with its check in flight.
+  await expect(page.getByRole('heading', { name: 'Ready to fix' })).toBeVisible();
+  expect(calls.readiness.filter((query) => query.get('pull_number') === '9')).toHaveLength(1);
+});
+
+/** Where keyboard focus is, named by the region it sits in (or by the element, outside any). */
+const focusedIn = (page: Page) =>
+  page.evaluate(() => {
+    const active = document.activeElement;
+    return active?.closest('aside')?.getAttribute('aria-label') ?? active?.tagName ?? 'nothing';
+  });
+
+// Checking again replaces what the card says, and the button that was pressed goes
+// with it when the answer is that nothing is in the way. Keyboard focus went with
+// it, to the top of the document, and whoever was working by keyboard had to find the
+// card again.
+test('the card keeps keyboard focus when checking again replaces the button that was pressed', async ({
+  page,
+}) => {
+  const { state } = await mockRepairApi(page, {
+    jobs: [failedJob()],
+    readiness: blockedAt('provider', 'Add an enabled personal model provider in Eli settings.'),
+  });
+  await page.goto(PAGE);
+  const card = page.getByRole('complementary', { name: 'Next step' });
+  const again = card.getByRole('button', { name: 'Check again' });
+  await expect(again).toBeVisible();
+  await again.focus();
+
+  // The provider is added in the meantime, so the check finds nothing in the way.
+  state.readiness = readiness();
+  await page.keyboard.press('Enter');
+  await expect(card.getByRole('button', { name: 'Fix with Eli', exact: true })).toBeVisible();
+  await expect.poll(() => focusedIn(page)).toBe('Next step');
 });
