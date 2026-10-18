@@ -944,6 +944,7 @@ func (c *Controller) stepMachines(ctx context.Context, env *machineEnv) {
 				c.machines.providerOperations[m.ProviderID]--
 				c.machines.mu.Unlock()
 			}()
+			defer c.recoverDetached("machine-step")
 			cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 			defer cancel()
 			c.runMachineStep(cctx, env, pr, m)

@@ -37,6 +37,7 @@ func (c *Controller) enrichOnce(ctx context.Context) {
 		wg.Add(1)
 		go func(v store.Enrichment) {
 			defer wg.Done()
+			defer c.recoverDetached("enrichment-worker")
 			cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			err := c.enrich(cctx, v)

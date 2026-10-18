@@ -226,6 +226,7 @@ func (c *Controller) sweepProviders(ctx context.Context, env *machineEnv) {
 		go func() {
 			defer c.machines.calls.Done()
 			defer func() { c.machines.mu.Lock(); delete(c.machines.sweeps, pr.row.ID); c.machines.mu.Unlock() }()
+			defer c.recoverDetached("machine-sweep")
 			c.sweepProvider(ctx, &inventory, pr)
 		}()
 	}
