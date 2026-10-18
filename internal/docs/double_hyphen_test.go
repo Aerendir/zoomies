@@ -148,6 +148,32 @@ func TestNoNewSpacedDoubleHyphenIsWrittenAsADash(t *testing.T) {
 	}
 }
 
+// A row for a file that is no longer in the repository holds a count for
+// nothing, and worse for the name: .jules/testsmith.md was recorded as
+// .Jules/testsmith.md, and a row that names a path nobody will ever write again
+// is one a new file of that name would inherit as an allowance. The ratchet
+// itself still fails only on a gain, so a row that is merely higher than the
+// file's count today is left alone (the next `-update-double-hyphen-baseline`
+// lowers it); a row for a file that is gone is a mistake to be corrected.
+func TestTheDoubleHyphenBaselineNamesNoFileThatIsGone(t *testing.T) {
+	tracked := map[string]bool{}
+	for _, file := range trackedFiles(t) {
+		tracked[file] = true
+	}
+	var gone []string
+	for file := range readDoubleHyphenBaseline(t) {
+		if !tracked[file] {
+			gone = append(gone, file)
+		}
+	}
+	sort.Strings(gone)
+	if len(gone) > 0 {
+		t.Errorf("%s has rows for files that are not in the repository, perhaps because they were renamed or deleted:\n  %s\n"+
+			"`go test ./internal/docs -run TestNoNewSpacedDoubleHyphenIsWrittenAsADash -update-double-hyphen-baseline` rewrites it from the tree as it is, or delete the rows by hand to leave every other count alone",
+			doubleHyphenBaseline, strings.Join(gone, "\n  "))
+	}
+}
+
 // The ratchet is only as good as the pattern under it, so the pattern is held
 // to the cases that decided it.
 func TestTheDoubleHyphenPatternSeparatesADashFromAnArgumentMarker(t *testing.T) {

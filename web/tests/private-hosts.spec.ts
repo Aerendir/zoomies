@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { goto, useClassic } from './support/fixtures';
+import { goto, tokenPixels } from './support/fixtures';
 
 test('private enrolment explains unavailable configuration in an auth-disabled demo', async ({
   page,
@@ -86,7 +86,6 @@ test('private hosts retain a distinct badge alongside normal health and capacity
 test('the connection chooser labels itself like every other group and rings a card only for the keyboard', async ({
   page,
 }) => {
-  await useClassic(page); // the legend's 12px is Classic's type scale
   await goto(page, '/hosts/new', 'Add a host');
   const legend = page.locator('legend', { hasText: 'How should this host connect?' });
   const weight = await page.evaluate(() =>
@@ -95,7 +94,7 @@ test('the connection chooser labels itself like every other group and rings a ca
   // Soft, so the ring below is judged on the same run.
   await expect.soft(legend).toHaveCSS('font-weight', weight);
   // --z-text-xs, which computes to pixels.
-  await expect.soft(legend).toHaveCSS('font-size', '12px');
+  await expect.soft(legend).toHaveCSS('font-size', await tokenPixels(page, '--z-text-xs'));
 
   const card = page.locator('label.connection-choice', { hasText: 'Direct connection' });
   const radio = card.getByRole('radio');

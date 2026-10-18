@@ -371,10 +371,12 @@ that adds, and what it is built not to add:
 
 * **A connection is a person's consent, at a role they choose.** The consent
   screen names the client, shows the host the code will be sent to, and warns
-  when every redirect the client registered is on the person's own machine,
-  where any program can listen. The role is viewer or operator and never above
-  the person's own; a connection whose person is later demoted is demoted with
-  them, and one whose person is disabled or deleted stops.
+  when that address is on the person's own machine, where any program can
+  listen. It judges the address this sign-in will send the person to, not the
+  client's whole list, so a client that also registered an https address is
+  still warned about on its loopback one. The role is viewer or operator and
+  never above the person's own; a connection whose person is later demoted is
+  demoted with them, and one whose person is disabled or deleted stops.
 * **The token works on `/mcp` alone.** An MCP access token presented to the
   REST API is refused with a sentence saying so. The person approved an agent's
   tools, not a general credential; `/mcp` reaches the routes it needs in
@@ -389,9 +391,14 @@ that adds, and what it is built not to add:
   token again revokes the whole connection, since only a copy explains it, and
   is audited as `mcp_connection.replay`.
 * **Redirects are exact.** A code is only ever sent to a redirect URI the client
-  registered, https, or http to loopback, where the port is allowed to differ
+  has registered, https, or http to loopback, where the port is allowed to differ
   as RFC 8252 asks. A client or redirect that cannot be trusted is refused on
-  the controller's own page and never followed.
+  the controller's own page and never followed. The list is read again when a
+  sign-in is approved and when its code is exchanged, so editing a client's
+  redirect URIs takes effect at once: the sign-ins still waiting for an address
+  that was removed, and any code issued for it that has not been exchanged, are
+  refused, with a sentence saying to start again. Connections already made keep
+  working; an edit does not end them.
 * **Registration is open, access is not.** A client may register itself or name
   itself by a client ID metadata document, and gets nothing until a person signs
   in and approves it. A client that registers again describing itself exactly as
@@ -409,12 +416,15 @@ that adds, and what it is built not to add:
   say-so. `security.mcp_open_registration: false` closes both, leaving only the
   clients an administrator creates, which may be confidential and carry a secret.
 * **Audited.** `mcp_client.register`, `mcp_client.create`,
-  `mcp_client.secret_rotate`, `mcp_client.revoke`, `mcp_connection.grant`,
-  `mcp_connection.deny`, `mcp_connection.revoke`, `mcp_connection.replay`,
+  `mcp_client.update`, `mcp_client.secret_rotate`, `mcp_client.revoke`,
+  `mcp_connection.grant`, `mcp_connection.deny`, `mcp_connection.revoke`,
+  `mcp_connection.replay`,
   `mcp_connection.revoke_all` when a password change, an administrator's
   password reset or **Sign out other sessions** ends every connection an
   account holds (a connection outlives any session, and whoever does either
-  suspects a credential of theirs is loose) and
+  suspects a credential of theirs is loose),
+  `mcp_connection.context` when the connection's owner chooses the repositories
+  it may read source from and write notes to, and
   `mcp_connection.call` for every tool call that changed or tried to change the
   fleet. The route the call reached writes its own row as well, with the
   connection as the actor.

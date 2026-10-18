@@ -113,10 +113,21 @@ const (
 	ActionProvidersRead   Action = "providers.read"
 	ActionProvidersWrite  Action = "providers.write"
 	ActionProvidersDelete Action = "providers.delete"
-	ActionProvidersPause  Action = "providers.pause"
-	ActionMachinesRead    Action = "machines.read"
-	ActionMachinesDrain   Action = "machines.drain"
-	ActionMachinesDelete  Action = "machines.delete"
+	// ActionProvidersPause is the kill switch, and the scope that goes with it
+	// also covers the preflight and discovery, which change nothing at the
+	// hypervisor. A token is given it to stop spending, so nothing that starts
+	// spending may share it.
+	ActionProvidersPause Action = "providers.pause"
+	// ActionProvidersTest is building one real machine to prove a provider
+	// works. It is the first call that shared the kill switch's scope to clone
+	// and start a machine somebody pays for, and it is audited because it spends
+	// money, so it has a scope of its own. It is an operator's, as pausing is:
+	// whoever is setting a provider up should not need an administrator to find
+	// out that it works.
+	ActionProvidersTest  Action = "providers.test"
+	ActionMachinesRead   Action = "machines.read"
+	ActionMachinesDrain  Action = "machines.drain"
+	ActionMachinesDelete Action = "machines.delete"
 )
 
 // Assistant actions cover the providers the in-UI assistant talks to. A
@@ -340,6 +351,7 @@ var actionRoles = map[Action]store.Role{
 	ActionProvidersWrite:  store.RoleAdmin,
 	ActionProvidersDelete: store.RoleAdmin,
 	ActionProvidersPause:  store.RoleOperator,
+	ActionProvidersTest:   store.RoleOperator,
 	ActionMachinesRead:    store.RoleViewer,
 	ActionMachinesDrain:   store.RoleOperator,
 	ActionMachinesDelete:  store.RoleAdmin,

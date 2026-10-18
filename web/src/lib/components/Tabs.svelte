@@ -1,7 +1,10 @@
 <!--
   Tabs with the roles and arrow-key behaviour the pattern requires. The panel is
   rendered by the caller through the `children` snippet, which receives the
-  active tab id.
+  active tab id. A caller that renders what the tabs switch between elsewhere
+  passes no `children` and gets no panel, and then the tabs name none either: an
+  `aria-controls` that points at an id which is not on the page is an error, not
+  a hint.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -95,7 +98,7 @@
         id="{id}-tab-{cssId(tab.id)}"
         class="tab"
         aria-selected={value === tab.id}
-        aria-controls="{id}-panel"
+        aria-controls={children ? `${id}-panel` : undefined}
         tabindex={value === tab.id ? 0 : -1}
         disabled={tab.disabled}
         onclick={() => select(tab.id)}

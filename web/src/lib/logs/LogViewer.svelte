@@ -49,7 +49,7 @@
   import Skeleton from '$lib/components/Skeleton.svelte';
   import Switch from '$lib/components/Switch.svelte';
   import Tabs from '$lib/components/Tabs.svelte';
-  import { BuildLog, formatBuildLog } from './build-log';
+  import { BuildLog, formatBuildLog, RECONNECT_NOTICE } from './build-log';
 
   interface Props {
     /** The runner whose output to tail. */
@@ -73,6 +73,12 @@
   const SEARCH_DEBOUNCE_MS = 150;
 
   type Status = 'starting' | 'live' | 'reconnecting' | 'ended' | 'failed';
+
+  /** The two views, named once for the tabs and for what is announced when one is chosen. */
+  const VIEWS = [
+    { id: 'build', label: 'Build log' },
+    { id: 'diagnostics', label: 'Runner diagnostics' },
+  ];
 
   /* -- reactive surface ---------------------------------------------------- */
 
@@ -294,7 +300,11 @@
     matchCount = 0;
     matchIndex = -1;
     finder?.clearDecorations();
-    setWrap(wrap);
+    redraw();
+    // Name the view. This used to go through setWrap, which announced whether long
+    // lines wrap and never said which log had just replaced the one on screen.
+    const label = VIEWS.find((item) => item.id === next)?.label ?? next;
+    announcement = `Showing the ${label.toLowerCase()}.`;
   }
 
   function saveBuildLog(): void {
@@ -341,8 +351,8 @@
     target.write(`\x1b[?25l${wrapMode(wrap)}`);
   }
 
-  function setWrap(on: boolean): void {
-    wrap = on;
+  /** Start the screen again from what is kept, in the view and wrap mode it is now in. */
+  function redraw(): void {
     if (!term) return;
     const text = replay();
     const target = term;
@@ -355,6 +365,12 @@
     };
     if (text !== '') target.write(text, settled);
     else settled();
+  }
+
+  function setWrap(on: boolean): void {
+    wrap = on;
+    if (!term) return;
+    redraw();
     announcement = on ? 'Long lines wrap.' : 'Long lines are cut off at the right edge.';
   }
 
@@ -395,8 +411,9 @@
       opens += 1;
       status = 'live';
       // A reconnect replays the backlog, so mark the seam rather than letting
-      // the same hundred lines appear twice with no explanation.
-      if (opens > 1) enqueue('\r\n\x1b[2m-- reconnected to the log stream --\x1b[0m\r\n');
+      // the same hundred lines appear twice with no explanation. The build log
+      // reads this line too, so its scrollback and the saved file carry the seam.
+      if (opens > 1) enqueue(RECONNECT_NOTICE);
       else announcement = 'Attached to the log stream.';
     });
 
@@ -680,15 +697,7 @@
 
 <div class="viewer {className}">
   {#if buildOutput}
-    <Tabs
-      label="Log source"
-      tabs={[
-        { id: 'build', label: 'Build log' },
-        { id: 'diagnostics', label: 'Runner diagnostics' },
-      ]}
-      value={view}
-      onchange={selectView}
-    />
+    <Tabs label="Log source" tabs={VIEWS} value={view} onchange={selectView} />
     <p class="source-note">
       {showingBuild
         ? 'Live workflow output, with secrets masked by the GitHub runner.'

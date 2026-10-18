@@ -9,13 +9,14 @@
 //
 // HTML stays the default. Only an explicit text/markdown entry in Accept gets
 // Markdown; anything else, including a browser's */*, is passed through to the
-// origin untouched.
+// origin with its body untouched.
 //
 // Every page answer also carries a Link header (RFC 8288) with the relations
 // an agent follows to the machine-readable resources: the API Catalog
 // (RFC 9727), the plain-text index, and the REST API's description and
 // documentation. GitHub Pages cannot set arbitrary response headers, so the
-// header is added here.
+// header is added here. So is Vary: Accept, on the HTML as on the Markdown,
+// because the choice between them is made here.
 
 const MARKDOWN_TYPE = "text/markdown";
 
@@ -65,8 +66,13 @@ export function wantsMarkdown(accept) {
 
 // The Markdown copy's address, or null where the URL is a file of its own
 // kind: an image, the catalog's JSON, a script. Those are not pages, and no
-// copy of them exists to find.
+// copy of them exists to find. Nor is a pathname that begins with two slashes
+// (the URL parser also reads "/\" that way): resolved against the site it names
+// another host.
 export function markdownPath(pathname) {
+  if (pathname.startsWith("//")) {
+    return null;
+  }
   if (pathname.endsWith("/")) {
     return pathname + "index.md";
   }
@@ -77,18 +83,68 @@ export function markdownPath(pathname) {
   return pathname + "/index.md";
 }
 
+// The address of a file on this site, or null when the path would leave it.
+//
+// The path comes from the request, so it is the requester's to choose, and
+// "//host/p" resolved against an origin is a reference to host, not a path on
+// the origin: new URL(path, origin) would send the worker to any server the
+// requester names and have it answer with that server's reply. Concatenation
+// cannot change the authority, and the parse that follows is the check that
+// it did not.
+function onThisSite(origin, path) {
+  if (path.startsWith("//")) {
+    return null;
+  }
+  const address = origin + path;
+  return new URL(address).origin === origin ? address : null;
+}
+
+// The headers of a fetched answer that a response built here may carry. The
+// body is re-sent as this site's own, so the cookies and policies of whatever
+// answered the fetch are not the worker's to pass on; what is left is what lets
+// a cache and a conditional request treat the copy as the file it is. Vary is
+// among them because it only ever narrows what a cache may reuse: it names a
+// request header, and carries nothing a client acts on. So is the origin's read
+// grant: Pages sends access-control-allow-origin on every file, the page's HTML
+// carries it, and a browser that may read a page may read its Markdown copy.
+// The credentials grant is not relayed, because a wildcard origin and
+// credentials do not combine and nothing here is read with a cookie.
+const RELAYED_HEADERS = [
+  "cache-control",
+  "etag",
+  "last-modified",
+  "vary",
+  "access-control-allow-origin",
+];
+
+function relayedHeaders(upstream) {
+  const headers = new Headers();
+  for (const name of RELAYED_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value !== null) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
 // The Markdown copy as a response, or null when this address has none, in
 // which case the origin's answer (including a real 404) stands.
 //
-// The Vary header is set even though GitHub Pages does not: the worker, not
-// the origin, chooses the format, so a cache in front of the origin has to
-// know that the choice depends on Accept.
+// Both variants of a page carry Vary: Accept, this one and the HTML the origin
+// serves (see the handler below): the worker, not the origin, chooses the
+// format, so a cache has to know that the choice depends on Accept. It is
+// appended to what the origin sends, Accept-Encoding, never put in its place.
 async function markdownResponse(request, url) {
   const path = markdownPath(url.pathname);
   if (path === null) {
     return null;
   }
-  const copy = await fetch(new URL(path, url.origin), {
+  const target = onThisSite(url.origin, path);
+  if (target === null) {
+    return null;
+  }
+  const copy = await fetch(target, {
     headers: { accept: MARKDOWN_TYPE },
     redirect: "follow",
   });
@@ -96,9 +152,9 @@ async function markdownResponse(request, url) {
     return null;
   }
   const body = await copy.text();
-  const headers = new Headers(copy.headers);
+  const headers = relayedHeaders(copy);
   headers.set("content-type", MARKDOWN_TYPE + "; charset=utf-8");
-  headers.set("vary", "Accept");
+  headers.append("vary", "Accept");
   headers.set("x-markdown-tokens", String(tokenEstimate(body)));
   headers.set("link", discoveryLinks());
   return new Response(body, { status: copy.status, headers });
@@ -120,6 +176,23 @@ async function apiCatalogResponse(url) {
   return new Response(body, { status: source.status, headers });
 }
 
+// The site's own protected-resource metadata (RFC 9728) at its well-known
+// address, for the same reason as the catalog above: the origin stores it as a
+// .json file and Pages types an extensionless one as application/octet-stream,
+// where the RFC requires application/json.
+async function protectedResourceResponse(url) {
+  const source = await fetch(new URL("/.well-known/oauth-protected-resource.json", url.origin), {
+    redirect: "follow",
+  });
+  if (!source.ok) {
+    return null;
+  }
+  const body = await source.text();
+  const headers = new Headers(source.headers);
+  headers.set("content-type", "application/json");
+  return new Response(body, { status: source.status, headers });
+}
+
 // The identity documents this site can back truthfully are the hosted
 // service's own: the portal runs an OpenID Provider whose discovery names a
 // real issuer, real endpoints and signing keys, and its authorization-server
@@ -130,7 +203,8 @@ async function apiCatalogResponse(url) {
 // and the documents say that is where they live: a mirror changes nothing
 // inside their bytes, and a client that insists on fetching at the issuer
 // itself is pointed there by everything in them. The resource's own metadata
-// is not mirrored: it is the site's to declare, and hooks/seo.py writes it.
+// is not mirrored: it is the site's to declare, hooks/seo.py writes it, and
+// protectedResourceResponse serves it.
 const ISSUER_ORIGIN = "https://portal.zoomies.sh";
 const MIRRORS = [
   { from: "/.well-known/openid-configuration",
@@ -139,14 +213,50 @@ const MIRRORS = [
     at: ["/.well-known/oauth-authorization-server"] },
 ];
 
+// How long the provider has to answer. The documents are small and nearly
+// static, so one that has not arrived in this long is not coming, and a client
+// waiting on discovery is better told so than held until the platform gives up.
+const MIRROR_TIMEOUT_MS = 5000;
+
+// What a client is told when the provider cannot be asked. It is not the
+// origin's 404: that says this site has no such document and is cached for
+// hours, so an outage at the provider would read as an absence long after the
+// provider came back.
+function providerUnavailable() {
+  return new Response(
+    "The identity provider at portal.zoomies.sh is not serving this document " +
+      "right now. Nothing was cached, so try again in a minute.\n",
+    {
+      status: 502,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+// The provider's document, null where the provider says it has none (the
+// origin's answer then stands), or a 502 where it could not be asked or did not
+// answer well: a refused connection, a timeout, a 429 or a 5xx.
 async function mirrorResponse(from) {
-  const upstream = await fetch(new URL(from, ISSUER_ORIGIN), {
-    headers: { accept: "application/json" },
-  });
-  if (!upstream.ok) {
-    return null;
+  let upstream;
+  let body;
+  try {
+    upstream = await fetch(new URL(from, ISSUER_ORIGIN), {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(MIRROR_TIMEOUT_MS),
+    });
+    if (upstream.status === 404) {
+      return null;
+    }
+    if (!upstream.ok) {
+      return providerUnavailable();
+    }
+    body = await upstream.text();
+  } catch {
+    return providerUnavailable();
   }
-  const body = await upstream.text();
   const headers = new Headers(upstream.headers);
   headers.set("content-type", "application/json");
   return new Response(body, { status: upstream.status, headers });
@@ -169,6 +279,12 @@ export default {
           return request.method === "HEAD" ? new Response(null, catalog) : catalog;
         }
       }
+      if (url.pathname === "/.well-known/oauth-protected-resource") {
+        const resource = await protectedResourceResponse(url);
+        if (resource !== null) {
+          return request.method === "HEAD" ? new Response(null, resource) : resource;
+        }
+      }
       if (wantsMarkdown(request.headers.get("accept"))) {
         const markdown = await markdownResponse(request, url);
         if (markdown !== null) {
@@ -179,10 +295,12 @@ export default {
       // A page answer announces where the machine-readable resources are. The
       // markdownPath test is the worker's existing idea of what a page is: it
       // keeps install.sh and the images from wearing links that are not
-      // about them.
+      // about them. It is also what can be answered as Markdown, so it is the
+      // HTML variant of a negotiated page and varies on Accept like the other.
       if (origin.ok && markdownPath(url.pathname) !== null) {
         const response = new Response(origin.body, origin);
         response.headers.set("link", discoveryLinks());
+        response.headers.append("vary", "Accept");
         return response;
       }
       return origin;

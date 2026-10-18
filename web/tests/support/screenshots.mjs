@@ -10,8 +10,12 @@
 //   node tests/support/screenshots.mjs DIR           writes them somewhere else
 //   node tests/support/screenshots.mjs DIR hosts,usage  only the shots named
 //
-// Set ZOOMIES_SCREENSHOT_STYLE=mission-control to capture the optional style.
-// Its default output folder is docs/screenshots/mission-control, leaving Classic intact.
+// Set ZOOMIES_SCREENSHOT_STYLE=mission-control to capture Mission Control, into
+// docs/screenshots/mission-control; without it the pass is Classic, into
+// docs/screenshots. Either way each pass stores the look it is photographing
+// (support/look.mjs) and stops if a page opens on any other: an empty browser is
+// dark Mission Control whatever the system says, so emulating a colour scheme and
+// leaving the rest to the defaults would file the wrong pictures under each name.
 //
 // Each theme gets a controller of its own. The fixture is placed relative to
 // the moment it is seeded and the scheduler starts working on it at once --
@@ -28,6 +32,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { controllerEnv } from './controller.mjs';
 import { encodeWebp } from './webp.mjs';
+import { assertLook, rememberLook, storedLook } from './look.mjs';
 import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1022,15 +1027,16 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
     locale: 'en-GB',
     timezoneId: 'Europe/London',
   };
+  // The emulated scheme above no longer reaches a browser that has chosen
+  // nothing, and an empty one is Mission Control, so the look is stored.
+  const look = storedLook(scheme, screenshotStyle);
   try {
     const desktop = await browser.newContext({
       ...common,
       viewport: DESKTOP,
       deviceScaleFactor: SCALE,
     });
-    await desktop.addInitScript((style) => {
-      if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', style);
-    }, screenshotStyle);
+    await desktop.addInitScript(rememberLook, look);
     // The first administrator, created the way the first-run form does it.
     // The 201 sets the session cookie on this context.
     const created = await desktop.request.post('/api/v1/auth/bootstrap', {
@@ -1077,9 +1083,7 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
       let context = desktop;
       if (shot.device) {
         context = await browser.newContext({ ...shot.device, ...common });
-        await context.addInitScript((style) => {
-          if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', style);
-        }, screenshotStyle);
+        await context.addInitScript(rememberLook, look);
         if (!shot.signedOut) await context.addCookies(cookies);
       }
       const address =
@@ -1089,6 +1093,7 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
       // is the one the shot is about rather than a race with it.
       if (shot.stub) await shot.stub(page);
       await page.goto(address, { waitUntil: 'domcontentloaded' });
+      await assertLook(page, `${shot.name}-${scheme}`, scheme, screenshotStyle);
       await settle(page, shot);
       if (shot.prepare) {
         await shot.prepare(page);

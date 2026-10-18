@@ -272,6 +272,47 @@ func TestJobWaitsNarrowsToAPoolOrAHost(t *testing.T) {
 	}
 }
 
+// GitHub reports every job in an installed repository, and a job whose labels
+// all name another vendor's runners is that vendor's to run, never this fleet's
+// (hosted.go). Read for the queue wait, such a job still queued at the end was
+// "no pool claimed it" and one that started on the vendor's machine was time
+// nothing here explains, so the read can be asked to keep to what JobFilter's
+// ManagedOnly keeps: a job a pool claimed, one a runner here ran, and one
+// nobody claims that nobody else hosts either.
+func TestJobWaitsCanLeaveOutTheJobsAnotherVendorRuns(t *testing.T) {
+	s := newTestStoreAt(t, func() time.Time { return analysisStart })
+	q := analysisStart.Add(time.Minute)
+	vendor := StringSlice{"blacksmith-4vcpu-ubuntu-2404"}
+	unclaimed := func(labels StringSlice) func(*Job) {
+		return func(j *Job) { j.Labels, j.Matched, j.PoolID = labels, false, "" }
+	}
+	claimed := analysisJob(t, s, 1, "pool_a", "", q, nil)
+	// A pool may claim a label GitHub also offers: then it is this fleet's.
+	claimedHosted := analysisJob(t, s, 2, "pool_a", "", q.Add(time.Minute), func(j *Job) { j.Labels = StringSlice{"ubuntu-latest"} })
+	// Unclaimed by any pool, but a runner of this fleet ran it.
+	ranHere := analysisJob(t, s, 3, "", "host_x", q.Add(2*time.Minute), func(j *Job) {
+		unclaimed(vendor)(j)
+		j.RunnerID = "run_here"
+	})
+	ours := analysisJob(t, s, 4, "", "", q.Add(3*time.Minute), unclaimed(StringSlice{"self-hosted", "linux", "gpu"}))
+	analysisJob(t, s, 5, "", "", q.Add(4*time.Minute), unclaimed(vendor))
+	analysisJob(t, s, 6, "", "", q.Add(5*time.Minute), func(j *Job) {
+		unclaimed(StringSlice{"ubuntu-latest"})(j)
+		completed(q.Add(5*time.Minute+20*time.Second), q.Add(10*time.Minute), "success")(j)
+	})
+
+	f := JobWaitFilter{Since: analysisStart, Until: analysisEnd}
+	if all, _ := readWaits(t, s, f, 10); len(all) != 6 {
+		t.Fatalf("an unnarrowed read holds %d jobs, want all 6", len(all))
+	}
+	f.ManagedOnly = true
+	jobs, _ := readWaits(t, s, f, 10)
+	want := []string{ours.ID, ranHere.ID, claimedHosted.ID, claimed.ID}
+	if got := waitIDs(jobs); !slices.Equal(got, want) {
+		t.Errorf("a managed read holds %v, want %v: the claimed, the one run here and the one nobody hosts", got, want)
+	}
+}
+
 // A host's failures are placed when they happened. A job queued the evening
 // before that failed this morning is this morning's failure, and a read by
 // queue time would leave it out of the period it belongs to (P11).
@@ -901,6 +942,8 @@ func TestTheAnalysisReadsSeekTheirIndexes(t *testing.T) {
 	}{
 		{JobWaitFilter{}, []string{"idx_jobs_queued_id"}},
 		{JobWaitFilter{PoolID: "pool_a"}, []string{"idx_jobs_pool"}},
+		{JobWaitFilter{ManagedOnly: true}, []string{"idx_jobs_queued_id"}},
+		{JobWaitFilter{PoolID: "pool_a", ManagedOnly: true}, []string{"idx_jobs_pool"}},
 		{JobWaitFilter{HostID: "host_x"}, []string{"idx_jobs_queued_id"}},
 		{JobWaitFilter{HostID: "host_x", ByActivity: true}, []string{"MULTI-INDEX OR", "idx_jobs_completed (state=? AND completed_at>? AND completed_at<?)"}},
 	} {

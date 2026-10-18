@@ -11,9 +11,10 @@ import (
 )
 
 // The catalogue in this package says which operating systems a pool may ask
-// for. Four files outside Go have to say the same thing -- both workflows, the
-// Makefile and the site -- and gen_catalogue.go writes all four, so the tests
-// here are about a file somebody edited by hand rather than regenerating.
+// for. Five files outside Go have to say the same thing (both workflows, the
+// Makefile, the site and the runner Dockerfile's defaults), and
+// gen_catalogue.go writes all five, so the tests here are about a file somebody
+// edited by hand rather than regenerating.
 //
 // They compare meaning rather than bytes, because that is the failure that
 // matters: an operating system half-added, where either a pool can name an
@@ -169,6 +170,48 @@ func TestMakefileBuildsTheCatalogue(t *testing.T) {
 			t.Errorf("the Makefile builds %q, which is not in the catalogue; %s", tag, regenerate)
 		}
 	}
+}
+
+// The Dockerfile's own defaults are what a plain `docker build -f
+// deploy/Dockerfile.runner .` uses, which is what somebody reproducing a bug
+// reaches for before the Makefile. The weekly refresh moves the digest of the
+// default variant's base and rewrote every file derived from it except this
+// one, so the build a contributor ran by hand was on a base that had been
+// replaced weeks before, and nothing compared the two. Its OS defaults are
+// held to the same row, so a change of default variant cannot leave an image
+// built on one distribution labelled as another.
+func TestTheRunnerDockerfileDefaultsToTheDefaultVariant(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "deploy", "Dockerfile.runner"))
+	if err != nil {
+		t.Fatalf("reading the runner Dockerfile: %v", err)
+	}
+	def := DefaultImage()
+	for _, want := range []struct{ arg, value string }{
+		{"BASE", def.Base},
+		{"OS_FAMILY", def.Family},
+		{"OS_ID", def.OS},
+		{"OS_VERSION", def.Version},
+	} {
+		got, ok := dockerfileDefault(string(b), want.arg)
+		switch {
+		case !ok:
+			t.Errorf("deploy/Dockerfile.runner gives ARG %s no default, so a plain build of it has no %s; %s", want.arg, def.Tag(), regenerate)
+		case got != want.value:
+			t.Errorf("deploy/Dockerfile.runner defaults ARG %s to %q, but the catalogue's default variant (%s) says %q; %s", want.arg, got, def.Tag(), want.value, regenerate)
+		}
+	}
+}
+
+// dockerfileDefault is the value an ARG line gives its argument when the build
+// is not told otherwise. An ARG redeclared without a value, as a later stage
+// must, has no default of its own and is skipped.
+func dockerfileDefault(dockerfile, arg string) (string, bool) {
+	for _, line := range strings.Split(dockerfile, "\n") {
+		if value, ok := strings.CutPrefix(line, "ARG "+arg+"="); ok {
+			return strings.TrimSpace(value), true
+		}
+	}
+	return "", false
 }
 
 // splitTag turns an image tag back into the OS and version FindImage takes.

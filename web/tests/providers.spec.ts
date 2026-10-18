@@ -230,8 +230,115 @@ test('a provider wizard stage can be clicked to jump straight to that stage', as
   await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeVisible();
   await expect(page.getByText('Step 1 of 5')).toBeVisible();
 
-  // The current stage is named as such, and is not a button that does nothing.
-  await expect(steps.getByText('Connect', { exact: true })).toHaveAttribute('aria-current', 'step');
+  // The current stage is named as such, on the list item rather than inside a
+  // button (whose children a screen reader does not take apart), and it is the
+  // one stage that cannot be pressed: a button that went nowhere would be a tab
+  // stop that does nothing.
+  const current = steps.locator('li[aria-current="step"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toContainText('Connect');
+  await expect(steps.getByRole('button', { name: /Connect/ })).toHaveCount(0);
+  await expect(steps.getByRole('button')).toHaveCount(4);
+});
+
+/**
+ * Forced-colours mode (Windows High Contrast) strips every box-shadow, and the
+ * stage buttons draw their focus ring as one. An outline survives that mode
+ * where a shadow does not, so a transparent one beside the shadow is what keeps
+ * the stage a keyboard has reached visible to someone who cannot see the
+ * difference between two colours.
+ */
+test.describe('with forced colours', () => {
+  test.use({ forcedColors: 'active' });
+
+  test('a focused wizard stage still has an outline', async ({ page }) => {
+    await goto(page, '/providers/new', 'Add a provider');
+    await page.getByRole('button', { name: 'Configure connection manually' }).click();
+    const stages = page.locator('ol.steps').getByRole('button');
+    await expect(stages.nth(1)).toBeVisible();
+
+    // From the keyboard, because a pointer would not draw a focus ring at all.
+    await stages.first().focus();
+    await page.keyboard.press('Tab');
+    await expect(stages.nth(1)).toBeFocused();
+    await expect(stages.nth(1)).toHaveCSS('outline-style', 'solid');
+    await expect(stages.nth(1)).not.toHaveCSS('outline-width', '0px');
+  });
+});
+
+/**
+ * Zero is how an operator says rent nothing, and the box under Maximum says so.
+ * The draft opens on one warm machine, which counts against the maximum, so a
+ * zero on its own was refused for the other box's figure: Next went grey and
+ * nothing said why until the Warm box was touched.
+ */
+test('typing zero in the maximum is one answer: the warm machine goes with it and Next stays on', async ({
+  page,
+}) => {
+  await goto(page, '/providers/new', 'Add a provider');
+  await page.getByRole('button', { name: 'Configure connection manually' }).click();
+  await page
+    .locator('ol.steps')
+    .getByRole('button', { name: /Limits/ })
+    .click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Limits' })).toBeVisible();
+
+  const maximum = page.getByRole('spinbutton', { name: /^Maximum machines/ });
+  const warm = page.getByRole('spinbutton', { name: /^Warm machines/ });
+  await expect(maximum).toHaveValue('2');
+  await expect(warm).toHaveValue('1');
+
+  await maximum.fill('0');
+  await expect(warm).toHaveValue('0');
+  await expect(next(page)).toBeEnabled();
+  await expect(page.getByText('No more than the maximum')).toHaveCount(0);
+
+  // Raised again, and a warm figure typed by hand: that one is the operator's,
+  // and a later maximum that is not zero does not move it.
+  await maximum.fill('5');
+  await warm.fill('2');
+  await maximum.fill('3');
+  await expect(warm).toHaveValue('2');
+});
+
+/**
+ * The stages can be visited in any order, so the last button cannot wait for a
+ * stage the operator is not on: a button that is off for a reason on another
+ * stage explains nothing from where they stand. Add stays pressable, says
+ * before it is pressed where it will take them, and takes them there without
+ * sending anything.
+ */
+test('adding with an answer still wrong takes the operator to the first stage that has one', async ({
+  page,
+}) => {
+  const creates: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/providers')
+      creates.push(request.url());
+  });
+
+  await goto(page, '/providers/new', 'Add a provider');
+  await page.getByRole('button', { name: 'Configure connection manually' }).click();
+
+  // Straight to the end with nothing filled in, as the stage list allows.
+  await page
+    .locator('ol.steps')
+    .getByRole('button', { name: /Review/ })
+    .click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Review' })).toBeVisible();
+  await expect(
+    page.getByText('Connect still has an answer to fix. Add provider takes you there.'),
+  ).toBeVisible();
+
+  const add = page.getByRole('button', { name: 'Add provider' });
+  await expect(add).toBeEnabled();
+  await add.click();
+
+  await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeVisible();
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+  // What was wrong is marked now, rather than waiting for each box to be left.
+  await expect(page.getByText('Give this provider a name you will recognise.')).toBeVisible();
+  expect(creates, 'nothing was sent for a provider with answers missing').toHaveLength(0);
 });
 
 /**
@@ -996,4 +1103,204 @@ test("a provider's own pool selector is edited beside its ceiling, and says whic
   await expect(page.getByTestId('provider-served-pools')).toContainText(
     'No pool matches this selector',
   );
+});
+
+/**
+ * A test machine as the controller describes one, in whatever state a spec
+ * needs. The panel reads its state and the phases of its timeline, and nothing
+ * else about it.
+ */
+function testMachineRow(
+  state: string,
+  phases: readonly string[],
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id: 'mach_spectest',
+    provider_id: FIXTURE.providerId,
+    name: 'zoomies-mach-spectest',
+    state,
+    labels: {},
+    safe_to_delete: false,
+    test: true,
+    timeline: phases.map((phase) => ({ phase, at: '2026-10-17T03:00:00Z' })),
+    created_at: '2026-10-17T03:00:00Z',
+    updated_at: '2026-10-17T03:10:00Z',
+    ...extra,
+  };
+}
+
+/**
+ * Put that machine in every list of machines the page asks for, and leave the
+ * rest of the answer as the controller gave it. The seeded fleet has no test
+ * machine, and building one takes a hypervisor.
+ */
+async function listTestMachine(page: Page, machine: Record<string, unknown>): Promise<void> {
+  await page.route('**/api/v1/machines?*', async (route) => {
+    try {
+      const response = await route.fetch();
+      const data = (await response.json()) as { items: unknown[] };
+      await route.fulfill({ response, json: { ...data, items: [...data.items, machine] } });
+    } catch {
+      // A request still out when the spec ends finds the page gone, and an error
+      // thrown from here would fail the run as a whole: nobody is left to answer.
+      await route.abort().catch(() => {});
+    }
+  });
+}
+
+/** The test machine panel on the provider's page. */
+const testMachinePanel = (page: Page) => page.getByRole('region', { name: 'Test machine' });
+
+/**
+ * A failed test is why the panel exists, and the step that failed is what it
+ * says. The icon and the colour that say so are drawn, which a screen reader
+ * does not read, so each step carries its own state as text as well.
+ */
+test('a failed test machine says which step failed in words, not only in its icon', async ({
+  page,
+}) => {
+  await listTestMachine(
+    page,
+    testMachineRow('failed', ['planned', 'created', 'starting'], {
+      bootstrap_error: 'the agent could not reach the controller',
+    }),
+  );
+  await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+  const panel = testMachinePanel(page);
+  await expect(panel.getByTestId('test-machine-result')).toContainText(
+    'the agent could not reach the controller',
+  );
+  await expect(panel.getByRole('listitem')).toHaveText([
+    'Cloned from the template, done',
+    'Powered on, done',
+    'Agent installed, failed',
+    'Enrolled as a host, not reached',
+    'Reported ready, not reached',
+  ]);
+});
+
+/**
+ * The page replaces `provider` with a fresh object on every provider.updated
+ * frame, and the panel reads the last test once, when it opens. That read used to
+ * be cancelled by the replacement and never asked for again, so a test that had
+ * passed and been released showed nothing whenever a frame landed while the read
+ * was still out.
+ */
+test('the last test is still shown when the provider changes while it is being read', async ({
+  page,
+}) => {
+  const passed = testMachineRow('deleted', [
+    'planned',
+    'creating',
+    'created',
+    'starting',
+    'bootstrapped',
+    'enrolled',
+    'ready',
+    'draining',
+    'deleting',
+    'deleted',
+  ]);
+  // The read is held until the provider has changed under it.
+  let readAsked!: () => void;
+  const asked = new Promise<void>((resolve) => (readAsked = resolve));
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/api\/v1\/machines\?.*include_deleted=true/, async (route) => {
+    readAsked();
+    await released;
+    await route.fulfill({ json: { items: [passed], total: 1 } }).catch(() => {});
+  });
+
+  await setRenting(page, true);
+  try {
+    await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+    await asked;
+
+    // Pausing it sends a provider.updated frame, which replaces the page's provider.
+    const paused = await page.request.post(`/api/v1/providers/${FIXTURE.providerId}/pause`, {
+      data: { reason: 'a spec changing the provider under a read' },
+    });
+    expect(paused.ok()).toBeTruthy();
+    try {
+      // The panel has seen the new provider: its own note changes with it.
+      await expect(testMachinePanel(page)).toContainText('is paused');
+      release();
+      await expect(testMachinePanel(page).getByTestId('test-machine-result')).toContainText(
+        'The test passed and its machine has been released.',
+      );
+    } finally {
+      await page.request.post(`/api/v1/providers/${FIXTURE.providerId}/resume`);
+    }
+  } finally {
+    release();
+    await setRenting(page, false);
+  }
+});
+
+/**
+ * The controller starts one test at a time and counts a test as still there
+ * until its machine has been deleted, so one that has passed is in the way while
+ * it is being released. The button used to offer the next test at once, and
+ * pressing it was a certain refusal.
+ */
+test('a test that has passed holds the button until its machine has been released', async ({
+  page,
+}) => {
+  await setRenting(page, true);
+  try {
+    await listTestMachine(
+      page,
+      testMachineRow('draining', [
+        'planned',
+        'created',
+        'starting',
+        'bootstrapped',
+        'enrolled',
+        'ready',
+        'draining',
+      ]),
+    );
+    await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+    const panel = testMachinePanel(page);
+    await expect(panel.getByTestId('test-machine-result')).toContainText(
+      'The test passed. The machine is being released.',
+    );
+    await expect(panel.getByRole('button')).toBeDisabled();
+    await expect(panel.getByRole('button')).toHaveText('Releasing the test machine…');
+  } finally {
+    await setRenting(page, false);
+  }
+});
+
+test('a test whose machine has been released can be run again', async ({ page }) => {
+  await setRenting(page, true);
+  try {
+    await listTestMachine(
+      page,
+      testMachineRow('deleted', [
+        'planned',
+        'created',
+        'starting',
+        'bootstrapped',
+        'enrolled',
+        'ready',
+        'draining',
+        'deleting',
+        'deleted',
+      ]),
+    );
+    await goto(page, `/providers/${FIXTURE.providerId}`, FIXTURE.provider);
+
+    const panel = testMachinePanel(page);
+    await expect(panel.getByTestId('test-machine-result')).toContainText(
+      'The test passed and its machine has been released.',
+    );
+    await expect(panel.getByRole('button', { name: 'Run the test again' })).toBeEnabled();
+  } finally {
+    await setRenting(page, false);
+  }
 });

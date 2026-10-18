@@ -33,8 +33,13 @@ func refuseTest(format string, args ...any) error {
 // loop to build it.
 //
 // Only one runs at a time per provider: two would race for the same ceiling and
-// each would leave the operator unsure which machine the answer was about.
+// each would leave the operator unsure which machine the answer was about. The
+// checks read what exists and the reservation writes after, so a second request
+// arriving between them would see nothing on the way; one lock holds them
+// together, and a request that waits for it is answered by what the first made.
 func (c *Controller) StartTestMachine(ctx context.Context, row *store.Provider) (*store.Machine, error) {
+	c.machines.testMu.Lock()
+	defer c.machines.testMu.Unlock()
 	now := c.Now()
 	if held := c.provisioningHeld(row, now); held != "" {
 		return nil, refuseTest("%s", held)
@@ -56,19 +61,21 @@ func (c *Controller) StartTestMachine(ctx context.Context, row *store.Provider) 
 		return nil, refuseTest("%s may own %s and already has %d, so there is no room for a test machine; "+
 			"raise its maximum machines first", row.Name, plural(row.MaxMachines, "machine"), owned)
 	}
-	if limit := c.cfg().Provider.MaxMachines; limit > 0 {
-		counts, err := c.st.CountOwnedMachines(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("counting owned machines: %w", err)
-		}
-		fleet := 0
-		for _, n := range counts {
-			fleet += n
-		}
-		if fleet >= limit {
-			return nil, refuseTest("the fleet already owns %d of the %s provider.max_machines allows; "+
-				"raise it or release a machine first", fleet, plural(limit, "machine"))
-		}
+	// A maximum of none is none, as it is for the planner: provider.max_machines
+	// is 0 until somebody sets it, and a fleet that rents nothing has no room
+	// for a machine that is billed like any other.
+	limits := MachineLimits{MaxMachines: c.cfg().Provider.MaxMachines}
+	counts, err := c.st.CountOwnedMachines(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counting owned machines: %w", err)
+	}
+	fleet := 0
+	for _, n := range counts {
+		fleet += n
+	}
+	if fleet >= limits.MaxMachines {
+		what, how := fleetMachineCeiling(limits, fleet)
+		return nil, refuseTest("%s; %s", what, how)
 	}
 
 	expires := now.Add(c.cfg().Provider.CreateTimeout)

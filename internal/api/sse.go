@@ -353,6 +353,29 @@ func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
 		}
 		data = filtered
 	}
+	if ev.Kind == events.KindJobUpdated || ev.Kind == events.KindRunnerCreated || ev.Kind == events.KindRunnerUpdated {
+		// The same job GET /jobs/{id} serves this caller, or the one a runner
+		// frame carries as its current job: the bus holds the form that names
+		// who marked a failure as known, and a visitor is not told. Only a
+		// frame that names somebody is looked at, and only then is the caller
+		// resolved, because job frames are the busiest on the stream and
+		// almost none of them name anyone. Resolved per frame, replay
+		// included, like the others; a caller who cannot be resolved is
+		// answered as a visitor, because the name is what is withheld.
+		if bytes.Contains(data, []byte(`"acknowledged_by"`)) {
+			id, err := s.resolveIdentity(r)
+			if err != nil || id == nil || auth.IsVisitor(id) {
+				filtered, ok := withoutAcknowledger(data)
+				if !ok {
+					// Unfilterable, so possibly carrying exactly what is
+					// withheld. The page keeps what it had until the next
+					// change, and GET /jobs/{id} repairs it on any reload.
+					return nil, false
+				}
+				data = filtered
+			}
+		}
+	}
 	if ev.Kind == events.KindAudit {
 		// The same row GET /audit serves this caller, resolved per
 		// frame for the reason the others are. A frame that will not
@@ -714,6 +737,34 @@ func hostsFor(data []byte, platform bool) ([]byte, bool) {
 	out, err := json.Marshal(frame)
 	if err != nil {
 		return data, false
+	}
+	return out, true
+}
+
+// withoutAcknowledger drops who marked a failure as known from an
+// already-rendered job frame, and from the job a runner frame carries as its
+// current_job. The acknowledgement's time stays: a visitor is told that a
+// failure was marked, and when.
+//
+// It re-encodes the frame as a map of its raw fields, as hostsFor does, so that
+// nothing else in it is rewritten. ok is false when the frame will not decode,
+// and the caller drops it rather than send what it could not look through.
+func withoutAcknowledger(data []byte) ([]byte, bool) {
+	var frame map[string]json.RawMessage
+	if err := json.Unmarshal(data, &frame); err != nil {
+		return nil, false
+	}
+	delete(frame, "acknowledged_by")
+	if raw, ok := frame["current_job"]; ok && string(raw) != "null" {
+		job, ok := withoutAcknowledger(raw)
+		if !ok {
+			return nil, false
+		}
+		frame["current_job"] = job
+	}
+	out, err := json.Marshal(frame)
+	if err != nil {
+		return nil, false
 	}
 	return out, true
 }

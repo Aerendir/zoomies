@@ -19,9 +19,13 @@ family="${1:?usage: runner-packages.sh <apt|dnf>}"
 
 case "${family}" in
   apt)
+    # gawk, not the mawk these distributions ship as awk. The entrypoint filters
+    # the runner's output through awk, and mawk holds a pipe's lines back until a
+    # large block has arrived, so a build's live log stays empty until the build
+    # ends. Installing gawk makes it the awk; both package families carry it.
     "$(dirname "$0")/runner-apt.sh" \
       ca-certificates curl git jq unzip zip tar gzip xz-utils \
-      sudo gosu tzdata locales openssh-client rsync mawk
+      sudo gosu tzdata locales openssh-client rsync gawk
     # A runner without a UTF-8 locale mangles any non-ASCII line a job prints,
     # which is a confusing thing to debug from a workflow log.
     # The alias file is optional to localedef, and Ubuntu 26.04's packages

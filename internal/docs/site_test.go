@@ -3,8 +3,11 @@ package docs
 import (
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // The partial's own comment explains the attribute it leaves out, so the check
@@ -53,6 +56,49 @@ func TestTheSiteIsRebuiltAndPublishedWhenAReleaseIsPublished(t *testing.T) {
 	} {
 		if !strings.Contains(body, want.needle) {
 			t.Errorf("docs.yml has no %q: %s", want.needle, want.why)
+		}
+	}
+}
+
+// The site is built from more than docs/. The hook publishes the skills under
+// /.well-known/agent-skills and digests them, the worker's tests run in the
+// build, and the installers are copied to the site root. A change to one of
+// them that does not start the build is not published until the daily rebuild,
+// and a pull request that breaks one is not checked at all.
+func TestTheSiteWorkflowStartsForEveryInputToTheBuild(t *testing.T) {
+	var workflow struct {
+		On struct {
+			Push struct {
+				Paths []string `yaml:"paths"`
+			} `yaml:"push"`
+			PullRequest struct {
+				Paths []string `yaml:"paths"`
+			} `yaml:"pull_request"`
+		} `yaml:"on"`
+	}
+	if err := yaml.Unmarshal([]byte(workflowFiles(t)["docs.yml"]), &workflow); err != nil {
+		t.Fatalf("parsing docs.yml: %v", err)
+	}
+	events := map[string][]string{
+		"push":         workflow.On.Push.Paths,
+		"pull_request": workflow.On.PullRequest.Paths,
+	}
+	for _, want := range []struct{ path, why string }{
+		{"docs/**", "the pages"},
+		{"overrides/**", "the theme's templates"},
+		{"hooks/**", "the hooks that write llms.txt, the discovery documents and auth.md"},
+		{"site-worker/**", "the edge worker, whose tests run in this build"},
+		{"skills/**", "the skills the hook publishes under /.well-known/agent-skills and pins by digest"},
+		{"mkdocs.yml", "the site's configuration"},
+		{"install.sh", "copied to the site root"},
+		{"install.ps1", "copied to the site root"},
+		{"connect-proxmox.sh", "copied to the site root"},
+		{".github/workflows/docs.yml", "the workflow itself"},
+	} {
+		for event, paths := range events {
+			if !slices.Contains(paths, want.path) {
+				t.Errorf("docs.yml does not list %q under %s, so a change to it does not start the build: %s", want.path, event, want.why)
+			}
 		}
 	}
 }

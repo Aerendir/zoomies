@@ -256,3 +256,45 @@ func TestRelayBufferAccountsForEveryByteAgainstASlowWriter(t *testing.T) {
 		t.Fatalf("%d bytes delivered or counted as dropped, but the runner said %d", got, want)
 	}
 }
+
+// An add that lands between next finding the buffer empty and next waiting must
+// still wake it. The wake channel holds one token for exactly that gap
+// (newRelayBuffer); made unbuffered, or signalled only to a reader that is
+// already parked, the writer sleeps with a chunk queued until the next add or
+// the close, and a quiet runner's last lines are held back. Every other test
+// here passes with an unbuffered channel, so this one stands alone for the
+// property.
+func TestRelayBufferNextNeverSleepsThroughAnAdd(t *testing.T) {
+	b := newRelayBuffer()
+	// The mechanism, asserted directly because the gap it closes is a few
+	// nanoseconds wide and the loop below finds a lost token most of the time,
+	// not every time.
+	if cap(b.wake) < 1 {
+		t.Fatal("the wake channel holds no token, so an add that lands before the writer waits wakes nobody")
+	}
+	got := make(chan struct{}, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := b.next(); !ok {
+				return
+			}
+			got <- struct{}{}
+		}
+	}()
+	// Released on failure too, so a lost wake-up leaves no goroutine behind.
+	defer func() {
+		b.close()
+		<-done
+	}()
+
+	for i := 0; i < 50000; i++ {
+		b.add([]byte("x"))
+		select {
+		case <-got:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("add %d was slept through: the writer was not woken for a chunk that was queued", i)
+		}
+	}
+}

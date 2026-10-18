@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/backend"
+	"github.com/eyupio/zoomies/internal/cryptox"
 	"github.com/eyupio/zoomies/internal/hosttune"
 	"github.com/eyupio/zoomies/internal/machine"
 	"github.com/eyupio/zoomies/internal/store"
@@ -111,6 +112,14 @@ const (
 	// virtual clock makes the real value here cost nothing to wait out.
 	createBusyRetries = 3
 	createBusyBackoff = 10 * time.Second
+	// fallbackBackoff is how long a host that was refused for good, and has no
+	// join token left to offer, waits before Run gives the refusal back. The
+	// service manager restarts the agent at once, so without the wait a stale
+	// host asks the controller about a row that is gone every few seconds, for
+	// as long as nobody notices. It stays well under systemd's default ninety
+	// seconds to start, which a Type=notify unit that never reaches READY=1 is
+	// held to.
+	fallbackBackoff = 30 * time.Second
 )
 
 // HostDoctor is the part of hosttune.Monitor the agent uses: the periodic
@@ -198,8 +207,11 @@ type Options struct {
 	// host holding a token the controller will never accept again, and a
 	// service that restarts for ever is not a way out of that. The token is
 	// spent once, only after such a refusal, and never touches a credential
-	// that still works. Empty, for the embedded agent and every host nobody
-	// handed a token, it changes nothing.
+	// that still works. "Once" is once for the token and not for the process:
+	// the state file remembers, as hashes, which token made its credentials and
+	// which was last offered, and a token matching either is not offered again,
+	// since the controller can only turn it away. Empty, for the embedded agent
+	// and every host nobody handed a token, it changes nothing.
 	FallbackJoinToken string
 }
 
@@ -250,6 +262,8 @@ type Agent struct {
 	// resolveRetry is how long a create waits between attempts to ask the
 	// host whether its runner already exists; tests shorten it.
 	resolveRetry []time.Duration
+	// fallbackWait is fallbackBackoff, which tests shorten.
+	fallbackWait time.Duration
 
 	mu sync.Mutex
 	// hostID is empty until Join or a restored state file provides one.
@@ -513,6 +527,7 @@ func New(opts Options) (*Agent, error) {
 		retention:        opts.FinishedRetention,
 		sem:              make(chan struct{}, opts.Capacity),
 		resolveRetry:     resolveRetryDelays,
+		fallbackWait:     fallbackBackoff,
 		runners:          make(map[string]*tracked),
 		inflight:         make(map[string]bool),
 		running:          make(map[string]TaskKind),
@@ -656,7 +671,10 @@ func (a *Agent) Join(ctx context.Context, joinToken string) error {
 		return fmt.Errorf("agent: joining %s: %w", a.tr.Describe(), err)
 	}
 
-	creds := Credentials{HostID: resp.HostID, AgentToken: resp.AgentToken, Controller: a.tr.Describe()}
+	creds := Credentials{
+		HostID: resp.HostID, AgentToken: resp.AgentToken, Controller: a.tr.Describe(),
+		JoinTokenHash: joinTokenHash(joinToken),
+	}
 	if t, ok := a.tr.(interface{ TailcatAddress() string }); ok {
 		creds.TailcatAddress = t.TailcatAddress()
 	}
@@ -752,20 +770,104 @@ func (a *Agent) ensureCredentials() error {
 // one fatal error Run answers itself, when it holds a fallback join token: the
 // credential is spent and the loops start again, because a service that
 // restarts for ever against a row the controller no longer has is the failure
-// this host can least afford to wait a person out on.
+// this host can least afford to wait a person out on. Each token is spent once;
+// see fallBack.
 func (a *Agent) Run(ctx context.Context) error {
 	err := a.run(ctx)
 	if refusedForGood(err) && a.opts.FallbackJoinToken != "" {
-		if jerr := a.Join(ctx, a.opts.FallbackJoinToken); jerr != nil {
-			a.notify.close()
-			return errors.Join(err, fmt.Errorf(
-				"the controller refused this host's saved credentials, and the join token it was handed could not replace them: %w", jerr))
-		}
-		a.log.Info("the controller refused this host's saved credentials; it re-joined with the token it was handed")
-		err = a.run(ctx)
+		err = a.fallBack(ctx, err)
 	}
 	a.notify.close()
 	return err
+}
+
+// fallBack replaces credentials the controller refused for good with the join
+// token this host was handed, if that token has not been used.
+//
+// ZOOMIES_JOIN_TOKEN stays in the environment file after it has enrolled the
+// host, so the token a deleted host is handed on every restart is, as often as
+// not, the one that made the credentials being refused. Offered again it can
+// only be turned away, and each offer is an anonymous call to the join route,
+// whose per-address limit a stale host restarting every few seconds would use
+// up for every machine behind the same address. So the state file remembers, as
+// hashes, the token that made the credentials and the last one offered after a
+// refusal, and a token matching either is left alone.
+//
+// An offer counts as a use when the controller answered and turned the token
+// away: the next start has the same token and would get the same answer, and a
+// fresh one is the way on, as the error says. An offer that could not be made
+// (no route yet at boot, a timeout, a stopped service, a 5xx or a 429) is not
+// held against the token. A machine cloned from a template is most likely to
+// fail that way, because it starts before its network is up, and a host that
+// wrote off its only token for that would stay stranded until a person came.
+func (a *Agent) fallBack(ctx context.Context, refusal error) error {
+	token := a.opts.FallbackJoinToken
+	hash := joinTokenHash(token)
+	saved, _ := a.previousCredentials()
+	if hash == saved.JoinTokenHash || hash == saved.FallbackTokenHash {
+		a.log.Warn("the controller refused this host's saved credentials, and the join token it was handed has been used already, so it is not offered again",
+			"wait", a.fallbackWait)
+		a.backOff(ctx)
+		return errors.Join(refusal, errors.New(
+			"the join token this host was handed has been used already, so it was not offered again: mint a fresh one under Hosts -> Add a host and run `zoomies agent join` with it"))
+	}
+	if jerr := a.Join(ctx, token); jerr != nil {
+		if tokenTurnedAway(jerr) {
+			a.rememberFallback(saved, hash)
+		}
+		a.backOff(ctx)
+		return errors.Join(refusal, fmt.Errorf(
+			"the controller refused this host's saved credentials, and the join token it was handed could not replace them: %w", jerr))
+	}
+	a.log.Info("the controller refused this host's saved credentials; it re-joined with the token it was handed")
+	return a.run(ctx)
+}
+
+// tokenTurnedAway reports whether err is the controller answering a join with a
+// refusal it would give again: the 422 the join route gives a spent or unknown
+// token (which the transport reports as ErrUnauthorized), or any other answer
+// that says retrying cannot help. An error with no answer behind it, or one the
+// transport marks as worth retrying, is not.
+func tokenTurnedAway(err error) bool {
+	if errors.Is(err, ErrUnauthorized) {
+		return true
+	}
+	var refusal *HTTPError
+	return errors.As(err, &refusal) && !refusal.Retry
+}
+
+// rememberFallback records that the join token with this hash has been offered
+// and failed, beside the credentials it failed to replace. It is written the way
+// Join writes them: a hash is all that is kept of the token.
+func (a *Agent) rememberFallback(saved Credentials, hash string) {
+	if saved.HostID == "" {
+		return
+	}
+	saved.FallbackTokenHash = hash
+	if err := Save(StatePath(a.opts.WorkDir), saved); err != nil {
+		a.log.Warn("could not record that the join token this host was handed has been tried, so the next start will offer it again", "error", err)
+	}
+}
+
+// backOff holds a host the controller has refused, and that has no join token
+// left to offer, before Run gives the refusal back. The service manager starts
+// the agent again at once, and without the wait a stale host asks the
+// controller about a row that is gone every few seconds. It ends early when ctx
+// does, which is what a stop from the operator is.
+func (a *Agent) backOff(ctx context.Context) {
+	t := time.NewTimer(a.fallbackWait)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
+}
+
+// joinTokenHash is how the state file remembers a join token without keeping
+// it. Join tokens carry full entropy, so the fast hash the controller stores
+// them under is enough.
+func joinTokenHash(token string) string {
+	return cryptox.HashToken(strings.TrimSpace(token))
 }
 
 // refusedForGood is the pair of answers that mean a credential is never coming
@@ -844,8 +946,12 @@ func (a *Agent) run(ctx context.Context) error {
 	// A host the controller has disowned has nothing left to flush: the last
 	// report would be sent on the credential that was just refused, and a run
 	// that is about to re-join must not tell systemd it is stopping on its way
-	// to starting.
-	if !refusedForGood(err) {
+	// to starting. What it admitted is still finished and its log streams still
+	// ended, since a host with no token to fall back on exits here, and exiting
+	// halfway through a create strands its sidecar.
+	if refusedForGood(err) {
+		a.drain(ctx)
+	} else {
 		a.shutdown(ctx)
 	}
 	return err
@@ -854,12 +960,7 @@ func (a *Agent) run(ctx context.Context) error {
 // shutdown finishes what is in flight and leaves the host's runners running.
 func (a *Agent) shutdown(ctx context.Context) {
 	a.notify.send("STOPPING=1")
-	a.log.Info("agent shutting down; runners on this host are left running")
-
-	if !a.waitForTasks(ctx, shutdownGrace) {
-		a.log.Warn("shutdown grace expired with lifecycle tasks still unfinished", "grace", shutdownGrace)
-	}
-	a.logs.stopAll()
+	a.drain(ctx)
 
 	// The controller cannot see this host again until it restarts, so the last
 	// thing the agent does is tell it what the runners looked like.
@@ -872,6 +973,17 @@ func (a *Agent) shutdown(ctx context.Context) {
 	if err := a.tr.ReportRunners(rctx, reports); err != nil {
 		a.log.Warn("could not flush a final runner report", "runners", len(reports), "error", err)
 	}
+}
+
+// drain waits for the lifecycle tasks the agent has admitted, within the
+// shutdown grace, and then ends its log streams. The runners are left running.
+func (a *Agent) drain(ctx context.Context) {
+	a.log.Info("agent shutting down; runners on this host are left running")
+
+	if !a.waitForTasks(ctx, shutdownGrace) {
+		a.log.Warn("shutdown grace expired with lifecycle tasks still unfinished", "grace", shutdownGrace)
+	}
+	a.logs.stopAll()
 }
 
 // heartbeatLoop keeps the host marked online and carries the agent's view of

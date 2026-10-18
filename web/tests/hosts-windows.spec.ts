@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { goto } from './support/fixtures';
+import { goto, useSystemTheme } from './support/fixtures';
 
 const LINUX =
   "curl -fsSL https://zoomies.sh/install.sh | sh -s -- --mode agent --controller 'https://zoomies.example.com' --join-token 'zoojoin_fixture_only'";
@@ -161,10 +161,15 @@ test('an older controller without a Windows command says so instead of showing n
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`the Windows panel fits a phone and reads in the ${colorScheme} theme`, async ({ page }) => {
+    // An empty browser is dark whatever scheme is emulated, so follow the system.
+    await useSystemTheme(page);
     await page.emulateMedia({ colorScheme });
     await page.setViewportSize({ width: 360, height: 740 });
     await mockJoinToken(page, WINDOWS);
     await getTheCommand(page);
+    // The theme the test is named for: a page that ignored the emulated scheme
+    // would be read in the same one twice.
+    await expect(page.locator('html')).toHaveCSS('color-scheme', colorScheme);
     await page.getByRole('radio', { name: 'Windows' }).check({ force: true });
     await expect(page.getByText('Run this in PowerShell as administrator.')).toBeVisible();
     // The page's own footer can be wider than a phone in some environments, so

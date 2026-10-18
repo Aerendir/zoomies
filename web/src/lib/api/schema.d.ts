@@ -533,7 +533,7 @@ export interface paths {
         };
         /**
          * Why jobs waited
-         * @description Every second the jobs queued in the period waited, each put down to exactly one cause, for the fleet or for one pool. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
+         * @description Every second the jobs queued in the period waited, each put down to exactly one cause, for the fleet or for one pool. Only the jobs this fleet has a hand in are read: one whose labels all name another vendor's runners, and that no pool here claimed and no runner here ran, is left out, as the Jobs page's default view leaves it out. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
          */
         get: operations["analyseQueueWait"];
         put?: never;
@@ -907,7 +907,7 @@ export interface paths {
         put?: never;
         /**
          * Approve an MCP connection
-         * @description Creates the connection at the role chosen and returns the client's redirect carrying a single-use authorisation code, for the browser to follow. Audited as `mcp_connection.grant`.
+         * @description Creates the connection at the role chosen and returns the client's redirect carrying a single-use authorisation code, for the browser to follow. The client is read again here and not only when the sign-in began, up to fifteen minutes earlier, so an edit to its redirect URIs since then still reaches a request that is waiting. When the address the sign-in was going to is no longer one of them, nothing is created and the answer is a 422 rather than a redirect, so the person stays on the consent screen, which shows its message as it is: `<client>'s redirect URIs changed after it asked to connect, and the address it asked to send you back to is no longer one of them, so nothing was shared; start the connection again from <client>, and if that is refused too, ask an administrator to check its redirect URIs in Settings, MCP clients`, with the client's name for `<client>`. Audited as `mcp_connection.grant`.
          */
         post: operations["approveMCPRequest"];
         delete?: never;
@@ -3233,7 +3233,7 @@ export interface paths {
         put?: never;
         /**
          * Run the live preflight
-         * @description Asks the provider what it would refuse, changing nothing there. The result is recorded on the row as well as returned, so a check run in a terminal quiets the warning the UI is showing. Audited, because it uses the credential.
+         * @description Asks the provider what it would refuse, changing nothing there. The result is recorded on the row as well as returned, so a check run in a terminal quiets the warning the UI is showing. Audited, because it uses the credential. A token narrowed by scopes needs `providers:pause`, the kill switch's scope; the test machine has a scope of its own, `providers:test`.
          */
         post: operations["checkProvider"];
         delete?: never;
@@ -3256,7 +3256,7 @@ export interface paths {
         put?: never;
         /**
          * Build one machine to prove the provider works
-         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential.
+         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential. Requires the operator role and, for a token narrowed by scopes, `providers:test`. The kill switch's scope, `providers:pause`, does not cover it: a token minted to stop spending cannot start a machine somebody pays for.
          */
         post: operations["testProviderMachine"];
         delete?: never;
@@ -3277,7 +3277,7 @@ export interface paths {
         };
         /**
          * What this credential can actually see
-         * @description The nodes, storages, bridges and templates a provider offers, so the form presents a menu rather than asking somebody to go and look an identifier up. A driver that cannot list them answers 409 and the form asks for the identifiers instead.
+         * @description The nodes, storages, bridges and templates a provider offers, so the form presents a menu rather than asking somebody to go and look an identifier up. A driver that cannot list them answers 409 and the form asks for the identifiers instead. A token narrowed by scopes needs `providers:pause`, the kill switch's scope; the test machine has a scope of its own, `providers:test`.
          */
         get: operations["getProviderDiscovery"];
         put?: never;
@@ -3325,7 +3325,7 @@ export interface paths {
         put?: never;
         /**
          * Stop this provider buying new machines
-         * @description The kill switch. It blocks new machines only: draining, deleting, recovering and verifying ownership all continue, because a switch that stopped those would strand running machines nobody is watching. Pressing it twice is not an error.
+         * @description The kill switch. It blocks new machines only: draining, deleting, recovering and verifying ownership all continue, because a switch that stopped those would strand running machines nobody is watching. Pressing it twice is not an error. A token narrowed by scopes needs `providers:pause`, which also covers resume, the live preflight and discovery, and not the test machine, which has `providers:test`.
          */
         post: operations["pauseProvider"];
         delete?: never;
@@ -4482,7 +4482,7 @@ export interface paths {
         head?: never;
         /**
          * Edit an MCP client's name and redirect URIs
-         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended, and the client ID and secret stay as they were. Audited as `mcp_client.update`.
+         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended and keep working, and the client ID and secret stay as they were. Removing a redirect URI does reach what has not finished yet: a sign-in still waiting for consent, and an authorisation code not yet exchanged, are refused when the address they carry is no longer one of the client's, with a sentence saying to start the connection again. Audited as `mcp_client.update`.
          */
         patch: operations["updateMCPClient"];
         trace?: never;
@@ -8723,10 +8723,10 @@ export interface components {
             fault_fix?: string;
             /**
              * Format: date-time
-             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Null on a failure nobody has triaged, which is the ordinary state.
+             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Absent on a failure nobody has triaged, which is the ordinary state.
              */
             acknowledged_at?: string | null;
-            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Empty when nobody has, and on an instance with authentication off, where there is no account behind the action. */
+            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Absent when nobody has acknowledged the failure, on an instance with authentication off, where there is no account behind the action, and for a visitor to a public view, who is told a failure was marked as known and when but never by whom. */
             acknowledged_by?: string;
             /** Format: date-time */
             queued_at?: string;
@@ -9537,10 +9537,10 @@ export interface components {
          */
         FaultKind: "host_lost" | "out_of_memory" | "out_of_disk" | "removed" | "image" | "registration" | "backend" | "backend_busy" | "container_conflict" | "config" | "runner_exited";
         /**
-         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits. `acknowledged` and `reopened` are the fleet's triage of a failure: somebody said they had read it, and somebody put it back in front of whoever looks next. Neither changes the job, which is why they are entries here rather than a move of the job.
+         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits. `sized` is the controller's sizing of a waiting job: it put the job in a size class, sent it to the pool of another class, or took that back when `scheduler.size_routing` was switched `off`, with the sentence that says why; a fleet that leaves size routing `off` writes none. `acknowledged` and `reopened` are the fleet's triage of a failure: somebody said they had read it, and somebody put it back in front of whoever looks next. Neither changes the job, which is why they are entries here rather than a move of the job.
          * @enum {string}
          */
-        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed" | "acknowledged" | "reopened";
+        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed" | "sized" | "acknowledged" | "reopened";
         JobEvent: {
             id?: string;
             job_id?: string;
@@ -10847,11 +10847,11 @@ export interface components {
             label?: string;
             /** @description What picking it means */
             consequence?: string;
-            /** @description The processors a node has or a template gives */
+            /** @description The processors a node has or a template gives, when the provider said. The limits step's recommendation is arithmetic on it. */
             cpus?: number;
             /**
              * Format: int64
-             * @description The memory in MiB a node has or a template gives
+             * @description The memory in MiB a node has or a template gives, when the provider said.
              */
             memory_mb?: number;
         };
@@ -10923,7 +10923,7 @@ export interface components {
             labels: {
                 [key: string]: string;
             };
-            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready */
+            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready, and the provider page reads the result of the test from it. */
             test?: boolean;
             /**
              * @description The operation in flight
@@ -11174,7 +11174,7 @@ export interface components {
             redirect_uri: string;
             /** @description Where approving sends you */
             redirect_host: string;
-            /** @description Every redirect the client registered is on your own machine */
+            /** @description Whether `redirect_uri`, the address approving sends you back to, is on your own machine, where any program could listen and claim to be the client. It judges that one address, not every address the client registered. */
             loopback_only: boolean;
             /** @example https://zoomies.example.com/mcp */
             resource: string;
@@ -11334,7 +11334,7 @@ export interface components {
         UpdatesDevelopment: {
             /** @description The commit in the running build. */
             current: string;
-            /** @description The last observed commit on main */
+            /** @description The last observed commit on main, or empty before a successful check. */
             latest: string;
             /** @enum {string} */
             state: "unknown" | "current" | "available";
@@ -13250,9 +13250,9 @@ export interface operations {
                 until?: components["parameters"]["AnalysisUntil"];
                 /** @description `version` compares two releases, `period` the period with the one before it. Anything else is a 400. */
                 by?: "version" | "period";
-                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400, and so is one longer than a release's name can be. */
+                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400. A release's name is at most 128 bytes, and a longer one is a 400 too. */
                 a?: string;
-                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400, and so is one longer than a release's name can be. */
+                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400. A release's name is at most 128 bytes, and a longer one is a 400 too. */
                 b?: string;
             };
             header?: never;
@@ -19461,7 +19461,6 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
         };
     };

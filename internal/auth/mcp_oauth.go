@@ -459,17 +459,17 @@ func clientAllowsRedirect(c *store.OAuthClient, uri string) bool {
 	return slices.ContainsFunc(c.RedirectURIs, func(r string) bool { return redirectMatches(r, uri) })
 }
 
-// LoopbackOnly reports whether every redirect a client registered is on the
-// person's own machine, which the consent screen says, because any program on
-// that machine can listen there and claim to be the client.
-func LoopbackOnly(c *store.OAuthClient) bool {
-	for _, r := range c.RedirectURIs {
-		u, err := url.Parse(r)
-		if err != nil || !loopbackRedirect(u) {
-			return false
-		}
-	}
-	return len(c.RedirectURIs) > 0
+// LoopbackOnly reports whether a redirect is on the person's own machine, which
+// the consent screen says, because any program on that machine can listen there
+// and claim to be the client.
+//
+// It judges the address a request will send the person to and not the client's
+// list. A client that also registered an https address is no safer on its
+// loopback one, and the list may have been edited since the request began, so
+// reading it described a different place from the one the code was going to.
+func LoopbackOnly(redirect string) bool {
+	u, err := url.Parse(redirect)
+	return err == nil && loopbackRedirect(u)
 }
 
 // resolveClient finds the client a client_id names. An https client_id with a
@@ -715,7 +715,7 @@ func (s *Service) DescribeAuthorization(ctx context.Context, id *Identity, reque
 		return nil, err
 	}
 	u, _ := url.Parse(r.RedirectURI)
-	v := &ConsentView{Request: r, Client: c, LoopbackOnly: LoopbackOnly(c)}
+	v := &ConsentView{Request: r, Client: c, LoopbackOnly: LoopbackOnly(r.RedirectURI)}
 	if u != nil {
 		v.RedirectHost = u.Host
 	}
@@ -780,6 +780,15 @@ func (s *Service) ApproveAuthorization(ctx context.Context, p OAuthPolicy, id *I
 		return nil, Invalid("this controller stopped accepting self-registered clients (security.mcp_open_registration is off) "+
 			"after %s asked to connect, so nothing was shared; ask an administrator for a client ID from Settings, MCP clients, "+
 			"and connect again with it", c.Name)
+	}
+	// An edit that removed a redirect URI meant the requests already waiting for
+	// it too. A fresh request for the address is refused, so without this look
+	// the edit closed the door on the front and left every sign-in begun in the
+	// last fifteen minutes free to deliver its code to the address it took away.
+	if !clientAllowsRedirect(c, r.RedirectURI) {
+		return nil, Invalid("%s's redirect URIs changed after it asked to connect, and the address it asked to send you back to "+
+			"is no longer one of them, so nothing was shared; start the connection again from %s, and if that is refused too, "+
+			"ask an administrator to check its redirect URIs in Settings, MCP clients", c.Name, c.Name)
 	}
 	code := MCPCodePrefix + store.NewSecret(secretBytes)
 	g := &store.OAuthGrant{
@@ -985,6 +994,14 @@ func (s *Service) exchangeCode(ctx context.Context, p OAuthPolicy, c *store.OAut
 	}
 	if in.RedirectURI != "" && in.RedirectURI != t.RedirectURI {
 		return nil, bad("redirect_uri does not match the one the code was issued for")
+	}
+	// The same edit reaches a code issued before it: this checks the address the
+	// code carries, not the one the exchange names, which may be left out, and a
+	// code is good for five minutes. Connections already made are not asked
+	// again; a refresh names no redirect, and an edit does not end them.
+	if !clientAllowsRedirect(c, t.RedirectURI) {
+		return nil, bad("the redirect URIs of %s changed after this code was issued, and the address it was issued for "+
+			"is no longer one of them; sign in again", c.Name)
 	}
 	if !verifyPKCE(in.CodeVerifier, t.CodeChallenge) {
 		return nil, bad("the code_verifier does not match the code_challenge sent with the authorization request")
