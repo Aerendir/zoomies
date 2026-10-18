@@ -133,8 +133,9 @@ created, the ones that registered themselves and the metadata documents) under
 **Settings → MCP clients**, where each can be revoked. Everything is in the
 audit log: `mcp_connection.grant`, `mcp_connection.revoke`,
 `mcp_connection.replay`, `mcp_client.register`, `mcp_client.create`,
-`mcp_client.secret_rotate`, `mcp_client.revoke`, and `mcp_connection.call` for
-every tool call that changed or tried to change the fleet.
+`mcp_client.update`, `mcp_client.secret_rotate`, `mcp_client.revoke`, and
+`mcp_connection.call` for every tool call that changed or tried to change the
+fleet.
 
 ## What it can and cannot do
 
@@ -518,6 +519,7 @@ and carries `truncated` and `more`, the argument that reaches what was cut.
 | --- | --- |
 | Claude says it could not reach the MCP server | The controller is not reachable from Claude, or OAuth for MCP is off and `/.well-known/oauth-protected-resource/mcp` answers 404. Check the address from outside your network, and that the problems panel shows `mcp_oauth.enabled`. |
 | The controller's page says the client asked to send you somewhere it did not register | The redirect is not one the client registered. For a client you created, add the address it uses, `https://claude.ai/api/mcp/auth_callback` for the Claude apps. |
+| The page names the client and says its redirect URIs changed after it asked to connect, and that the address it asked to send you back to is no longer one of them, so nothing was shared | An administrator edited the client's redirect URIs after you were sent here and took out the address this sign-in was going to, so nothing was approved. Start the connection again from the client. If that is refused too, ask an administrator to check the client's redirect URIs under **Settings → MCP clients**. |
 | The page says the controller does not let clients register themselves | `security.mcp_open_registration` is off: use a client ID from **Settings → MCP clients**. |
 | The consent screen only offers viewer | Your own role is viewer. Ask an administrator for operator if you need the connection to act on the fleet. |
 | Claude connected, but cannot re-run or drain | The connection is viewer. Disconnect it and connect again choosing operator. |

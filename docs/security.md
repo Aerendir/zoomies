@@ -422,7 +422,9 @@ that adds, and what it is built not to add:
   `mcp_connection.revoke_all` when a password change, an administrator's
   password reset or **Sign out other sessions** ends every connection an
   account holds (a connection outlives any session, and whoever does either
-  suspects a credential of theirs is loose) and
+  suspects a credential of theirs is loose),
+  `mcp_connection.context` when the connection's owner chooses the repositories
+  it may read source from and write notes to, and
   `mcp_connection.call` for every tool call that changed or tried to change the
   fleet. The route the call reached writes its own row as well, with the
   connection as the actor.
