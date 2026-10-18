@@ -5812,7 +5812,7 @@ export interface components {
             error: {
                 /** @enum {string} */
                 code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "assistant.identity_held" | "analysis.same_release" | "analysis.too_few_releases" | "analysis.whole_days_only" | "internal";
-                /** @description Written for a person to read */
+                /** @description Written for a person to read, and to act on. */
                 message: string;
                 /** @description The form field at fault, or on a `limit_reached` refusal the `limits.*` setting that refused. */
                 field?: string;
@@ -12282,7 +12282,10 @@ export interface components {
         Order: "asc" | "desc";
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description The URL of the resource this request created, to read it back with `GET`. */
+        Location: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -14360,6 +14363,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14882,6 +14886,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16765,6 +16770,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17169,6 +17175,7 @@ export interface operations {
             /** @description Setup command; keep private and run within one hour. */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17277,6 +17284,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -19064,6 +19072,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -19639,6 +19648,7 @@ export interface operations {
             /** @description Taken */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -19756,6 +19766,7 @@ export interface operations {
             /** @description Upload created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -20914,6 +20925,7 @@ export interface operations {
             /** @description Audited retained snapshot; Cache-Control is no-store. */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
