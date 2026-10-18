@@ -193,6 +193,12 @@ jobs:
           poppy = load(".well-known/poppy.json")
           assert poppy["organization"]["domain"] == "zoomies.sh"
           assert poppy["protocol_version"]
+          agent = load(".well-known/agent-card.json")
+          assert agent["name"] == "Zoomies" and agent["version"] and agent["version"] != "0.0.0", "the agent card names no release"
+          assert agent["url"] == "https://demo.zoomies.sh/mcp", "the agent card does not name the demo's MCP endpoint"
+          assert agent["capabilities"] is not None and agent["skills"], "the agent card has no capabilities or skills"
+          for skill in agent["skills"]:
+              assert skill["id"] and skill["name"] and skill["description"], skill["id"]
           api_catalog = load("api-catalog.json")
           entry = api_catalog["linkset"][0]
           assert entry["status"][0]["href"] == "https://demo.zoomies.sh/readyz", entry
