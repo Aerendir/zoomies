@@ -255,6 +255,37 @@ func IsOlderSetupWorkflow(key RepositoryKey, config Config, content string) bool
 	return false
 }
 
+// olderGeneratorLocks are the generator lockfiles earlier releases put in
+// installed repositories, newest first. An installed lockfile is verified byte
+// for byte like the workflow, so a template change that left the one it replaced
+// unrecognised would read every installed copy as somebody's edit and close the
+// access gate of its repository until somebody ran a repair. Keep the file being
+// replaced here, in the same change that replaces it. They are kept under a name
+// that is not package-lock.json, because nothing installs them and a dependency
+// scanner has no reason to read a tree that exists only to be recognised.
+var olderGeneratorLocks = []string{
+	// handlebars 4.7.9, which carried two critical advisories; 4.7.10 is the fix.
+	"templates/older_package-lock.json",
+}
+
+// PreviousGeneratorLock is the lockfile immediately before the current one.
+func PreviousGeneratorLock() (string, error) {
+	older, err := setupTemplates.ReadFile(olderGeneratorLocks[0])
+	return string(older), err
+}
+
+// IsOlderGeneratorLock reports whether content is exactly a lockfile an earlier
+// Zoomies release wrote. Such a file is still owned and still installs the
+// version of Repomix it names; it is merely due a repair.
+func IsOlderGeneratorLock(content string) bool {
+	for _, name := range olderGeneratorLocks {
+		if older, err := setupTemplates.ReadFile(name); err == nil && string(older) == content {
+			return true
+		}
+	}
+	return false
+}
+
 // PlanManagedSetup adds executable workflow/toolchain files only when they are
 // absent or byte-for-byte owned. User edits never become silent upgrades.
 func PlanManagedSetup(key RepositoryKey, name string, config Config, files []SetupFile) ([]SetupChange, error) {

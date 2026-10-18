@@ -176,7 +176,10 @@ func (c *Controller) trustedAIContext(ctx context.Context, r *store.AIContextRep
 		switch file.Path {
 		case aicontext.ConfigPath, aicontext.WorkflowPath, aicontext.GeneratorPackagePath, aicontext.GeneratorLockPath:
 			if files[file.Path] != file.Content {
-				if file.Path == aicontext.WorkflowPath && aicontext.IsOlderSetupWorkflow(r.Key, r.Config, files[file.Path]) {
+				// An earlier release's workflow or generator lockfile is still
+				// owned, and due a repair; anything else is somebody's edit.
+				if file.Path == aicontext.WorkflowPath && aicontext.IsOlderSetupWorkflow(r.Key, r.Config, files[file.Path]) ||
+					file.Path == aicontext.GeneratorLockPath && aicontext.IsOlderGeneratorLock(files[file.Path]) {
 					outdated = true
 					continue
 				}

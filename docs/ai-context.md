@@ -636,10 +636,12 @@ fixes it), Repomix altering source it was given, a repository where nothing
 eligible remains, and more than 5,000 omitted files, which means the exclusions
 need work.
 
-A workflow written by an earlier Zoomies release keeps working: Zoomies recognises
-it as out of date rather than edited, marks the repository **Workflow out of
-date** on the AI Context page with **Reinstall / repair** as the first action, and
-**Reinstall / repair** moves it to the current generator. The badge is set by the
+A workflow, or the generator's lockfile, written by an earlier Zoomies release
+keeps working: Zoomies recognises it as out of date rather than edited, marks the
+repository **Workflow out of date** on the AI Context page with **Reinstall /
+repair** as the first action, and **Reinstall / repair** moves it to the current
+generator. A lockfile changes when a dependency of Repomix needs a fix, which is
+why it can be behind while the workflow is current. The badge is set by the
 last verification that reached the workflow, so after you merge a repair it
 clears at the next check rather than the moment of the merge. Until then it behaves as it did, so a text file over 1 MiB
 stops that run with `A source file exceeds the context size limit; add an

@@ -151,6 +151,85 @@ func TestEveryOlderWorkflowGenerationStaysRecognisedAndDistinct(t *testing.T) {
 	}
 }
 
+// The generator's lockfile is verified byte for byte as well, so a bump to it,
+// such as the one that took handlebars to 4.7.10, has to leave the file it
+// replaced recognised: otherwise every installed copy reads as an edit and its
+// repository's access gate closes.
+func TestEveryOlderGeneratorLockStaysRecognisedAndDistinct(t *testing.T) {
+	current, err := setupTemplates.ReadFile("templates/package-lock.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{"current": string(current)}
+	for _, name := range olderGeneratorLocks {
+		older, err := setupTemplates.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for other, content := range seen {
+			if content == string(older) {
+				t.Errorf("%s is identical to %s: nothing to recognise", name, other)
+			}
+		}
+		seen[name] = string(older)
+		if !IsOlderGeneratorLock(string(older)) {
+			t.Errorf("%s was not recognised", name)
+		}
+		if IsOlderGeneratorLock(string(older) + " ") {
+			t.Errorf("an edited copy of %s was recognised", name)
+		}
+	}
+	if IsOlderGeneratorLock(string(current)) || IsOlderGeneratorLock("") {
+		t.Error("the current lockfile, or no file, was treated as an older one")
+	}
+	if previous, err := PreviousGeneratorLock(); err != nil || previous == string(current) {
+		t.Errorf("the previous lockfile must be a different file from the current one: %v", err)
+	}
+}
+
+func TestRepairUpgradesAnEarlierGeneratorLockInsteadOfRefusingIt(t *testing.T) {
+	key, config := setupInputs()
+	files, err := PlanManagedSetup(key, "owner/repo", config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, err := PreviousGeneratorLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var installed []SetupFile
+	var current string
+	for _, f := range files {
+		content := f.Content
+		if f.Path == GeneratorLockPath {
+			current, content = f.Content, previous
+		}
+		installed = append(installed, SetupFile{Path: f.Path, SHA: strings.Repeat("b", 40), Mode: "100644", Content: content})
+	}
+	changes, err := PlanMaintenance(key, "owner/repo", config, config, installed, nil, false)
+	if err != nil {
+		t.Fatalf("a lockfile an earlier Zoomies release wrote was refused as unowned: %v", err)
+	}
+	upgraded := false
+	for _, c := range changes {
+		if c.Path == GeneratorLockPath {
+			upgraded = c.Content == current
+		}
+	}
+	if !upgraded {
+		t.Fatal("repair did not move the lockfile to the current one")
+	}
+	// An edit is still an edit.
+	for i := range installed {
+		if installed[i].Path == GeneratorLockPath {
+			installed[i].Content = previous + " "
+		}
+	}
+	if _, err := PlanMaintenance(key, "owner/repo", config, config, installed, nil, false); err == nil {
+		t.Fatal("an edited lockfile was taken for an earlier release's")
+	}
+}
+
 func TestMaintenanceAmendsAndRemovesTheGuideWhilePreservingCustomText(t *testing.T) {
 	key, config := setupInputs()
 	changes, err := PlanManagedSetup(key, "owner/repo", config, nil)
