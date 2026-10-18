@@ -673,13 +673,17 @@ Where machines come from. A provider is one place Zoomies may rent a machine,
 a hypervisor, today [Proxmox VE](proxmox.md), and its card leads with what is
 being spent: the machines it holds against the ceiling it may not pass, the
 shape it builds, and, in the controller's own sentence, why no new machine may
-be bought this moment. A new provider starts at a ceiling of zero and rents
-nothing, so turning a provider on and saying how much of it you are willing to
-pay for are the same act. *Check* runs the preflight against the real provider
-(read-only there, audited here) and a provider nobody has ever checked says
-so rather than looking healthy. Under the cards is every machine across every
-provider, narrowed by a state filter that lives in the URL, so a link to one
-part of the lifecycle is a link somebody else can open.
+be bought this moment. The wizard opens a new provider on a maximum of two
+machines with one kept warm, and for a Proxmox provider replaces both with a
+recommendation worked out from its nodes: as many machines as they hold, up to
+eight, with one kept warm. Saving creates nothing, and nothing is rented while
+**Rent machines** (`provider.enabled`) is off, which it is until an
+administrator turns it on, or while the fleet's own ceiling
+(`provider.max_machines`) is zero. *Check* runs the preflight against the real
+provider (read-only there, audited here) and a provider nobody has ever checked
+says so rather than looking healthy. Under the cards is every machine across
+every provider, narrowed by a state filter that lives in the URL, so a link to
+one part of the lifecycle is a link somebody else can open.
 
 An administrator can tick machines in that list, or in a provider's own
 Machines tab, and delete them together. It exists for the pile a wrong template
@@ -752,11 +756,21 @@ host Zoomies rented says so on its card, and its remove action sends you to
 delete the machine instead: removing the host here would leave the machine
 running, and on the bill.
 
-There is no way to make a machine by hand, here or anywhere else. A machine
-exists because a pool had queued work and nowhere to put it, and a second
-source of supply would be a second thing the reconciler would then decide to
-delete. An operator who wants more machines raises a ceiling. [What a provider
-has to implement](providers.md) is the contract behind all of this.
+There is one way to ask for a machine by hand, and it is a test. **Run a test
+machine**, in the **Test machine** panel on a provider's own page, builds a
+single real machine and follows it through each step a first job would depend
+on (cloned, powered on, agent installed, enrolled as a host, reported ready),
+then releases it; one that fails is left in place so that what it said can be
+read. It is held to the rules every machine is: it counts against the
+provider's maximum and the fleet's, it is refused while renting is off or the
+provider is paused, disabled or standing down, and only one runs at a time.
+Starting one needs the operator role, and [Proxmox
+VE](proxmox.md#proving-it-works-the-test-machine) has the rest. Every other
+machine exists because a pool had queued work and nowhere to put it, or because
+a provider's warm minimum asked for one, and a second source of supply would be
+a second thing the reconciler would then decide to delete. An operator who wants
+more machines raises a ceiling. [What a provider has to
+implement](providers.md) is the contract behind all of this.
 
 ## Installations
 
