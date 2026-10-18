@@ -1,7 +1,8 @@
 // The negotiation rules and the handler's decisions, against an in-memory
-// origin. The Markdown copies the worker serves are written by hooks/seo.py,
-// so a change to their address or their shape fails here rather than at the
-// edge. Plain node:test, so no dependency beyond the binary runs it.
+// asset binding. The Markdown copies, the catalog and the identity documents
+// the worker serves are written by hooks/seo.py, so a change to their address
+// or their shape fails here rather than at the edge. Plain node:test, so no
+// dependency beyond the binary runs it.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +22,9 @@ const HTML = "<!doctype html><html><body><p>the page</p></body></html>";
 const MARKDOWN = "# The page\n\nIts body as Markdown.\n";
 
 // `seen` collects the address of every fetch the worker makes, so a test can
-// say which hosts it was sent to as well as what it answered.
+// say which hosts it was sent to as well as what it answered. Only fetches to
+// other hosts run through here: everything on this site comes from the asset
+// binding below.
 //
 // An entry may carry a `respond` function instead of a body, to behave the way
 // a body cannot: it receives the fetch's init and returns (or throws) the
@@ -53,11 +56,40 @@ function originFor(paths, seen = []) {
   };
 }
 
+// The asset binding: what the deployment shipped. The same map the mirror
+// tests use for other hosts, keyed by pathname; a path with no asset answers
+// the not-found page the assets pipeline serves, at 404. Every ask is pushed
+// into `seen` like a fetch, so a test can say what the worker went to.
+function assetsFor(paths, seen = []) {
+  return {
+    ASSETS: {
+      fetch: async (input) => {
+        const url = new URL(typeof input === "string" ? input : input.url ?? input.href);
+        seen.push(url.href);
+        const found = paths.get(url.pathname);
+        if (found === undefined) {
+          return new Response(HTML, {
+            status: 404,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        }
+        if (found.respond !== undefined) {
+          return found.respond({});
+        }
+        return new Response(found.body, {
+          status: found.status ?? 200,
+          headers: found.headers ?? { "content-type": found.type },
+        });
+      },
+    },
+  };
+}
+
 async function handle(url, paths, init = {}, seen = []) {
   const previous = globalThis.fetch;
   globalThis.fetch = originFor(new Map([...paths]), seen);
   try {
-    return await worker.fetch(new Request(url, init));
+    return await worker.fetch(new Request(url, init), assetsFor(new Map([...paths]), seen));
   } finally {
     globalThis.fetch = previous;
   }

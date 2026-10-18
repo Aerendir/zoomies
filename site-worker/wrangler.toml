@@ -1,19 +1,27 @@
-# The edge of zoomies.sh: content negotiation for agents.
+# The edge of zoomies.sh: the site and its content negotiation, in one worker.
 #
-# GitHub Pages cannot read an Accept header, so a request that asks for
-# text/markdown is answered by worker.js, from the Markdown copies the docs
-# build writes beside every page. Deploying it needs the zone's DNS records for
-# the site proxied through Cloudflare and a token with Workers edit rights:
+# The site is served from this deployment's static assets (the directory the
+# docs build writes), so no request in the chain dials an origin server: the
+# resolution flake that took discovery and pages dark for minutes at a time
+# has nothing left to resolve. The worker runs first on every request, for
+# the content negotiation and the response headers the assets pipeline cannot
+# add, and answers from the asset binding what it does not rewrite.
+#
+# Deploying needs the zone's DNS records for the site proxied through
+# Cloudflare and a token with Workers edit rights:
 #
 #     CLOUDFLARE_API_TOKEN=... npx wrangler deploy
 #
-# A Pro plan zone can instead enable Markdown for Agents in the zone's AI
-# Crawl Control, which converts the origin's HTML on the fly. The worker works
-# on every plan and serves the copies the documentation was written in.
-
 name = "zoomies-site"
 main = "worker.js"
 compatibility_date = "2026-09-01"
+
+[assets]
+directory = "../site"
+binding = "ASSETS"
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"
+run_worker_first = true
 
 routes = [
   { pattern = "zoomies.sh/*", zone_name = "zoomies.sh" },

@@ -229,8 +229,10 @@ overrides/          the site's theme overrides: sharing tags, structured data, s
                     the header's repository facts
 hooks/              the site's build-time metadata: git dates, llms.txt, and the
                     latest release and star count the header shows
-site-worker/        the Cloudflare Worker in front of zoomies.sh: answers
-                    Accept: text/markdown with the page's Markdown copy
+site-worker/        the edge that serves zoomies.sh: the built site as the
+                    worker's static assets, content negotiation for agents,
+                    the discovery mirrors and every response header the
+                    assets pipeline cannot set
 weekly-seo/         the weekly search check for zoomies.sh: its config, notes and
                     the report and memory files the .claude/agents/weekly-seo.md
                     agent writes

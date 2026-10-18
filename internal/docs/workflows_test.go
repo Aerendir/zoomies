@@ -607,10 +607,16 @@ func TestReleasesAndDeploysAreNeverCancelled(t *testing.T) {
 	if release := files["release.yml"]; strings.Contains(release, "cancel-in-progress: true") {
 		t.Error("release.yml cancels in-progress runs; a cancelled release can leave a tag with half its assets")
 	}
+	// The site is deployed to the edge by the build job itself, so the deploy
+	// has no job or group of its own to hold: what keeps a deployment from
+	// being cancelled is the workflow's group, which may cancel a pull
+	// request's build and nothing else.
 	var docs struct {
+		Concurrency struct {
+			CancelInProgress string `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
 		Jobs map[string]struct {
 			Concurrency struct {
-				Group            string `yaml:"group"`
 				CancelInProgress string `yaml:"cancel-in-progress"`
 			} `yaml:"concurrency"`
 		} `yaml:"jobs"`
@@ -618,11 +624,14 @@ func TestReleasesAndDeploysAreNeverCancelled(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(files["docs.yml"]), &docs); err != nil {
 		t.Fatalf("parsing docs.yml: %v", err)
 	}
-	deploy := docs.Jobs["deploy"].Concurrency
-	if deploy.Group != "pages" || deploy.CancelInProgress != "false" {
-		t.Errorf("docs.yml's deploy job has concurrency group %q with cancel-in-progress %q, want pages and false; "+
-			"Pages takes one deployment at a time and a cancelled one leaves the site on the version before",
-			deploy.Group, deploy.CancelInProgress)
+	const pullRequestsOnly = "${{ github.event_name == 'pull_request' }}"
+	if got := docs.Concurrency.CancelInProgress; got != pullRequestsOnly {
+		t.Errorf("docs.yml's cancel-in-progress is %q, want %q; a cancelled deployment leaves the site on the version before", got, pullRequestsOnly)
+	}
+	for name, job := range docs.Jobs {
+		if job.Concurrency.CancelInProgress != "" && job.Concurrency.CancelInProgress != "false" {
+			t.Errorf("docs.yml's %s job sets cancel-in-progress %q; only the workflow's group may cancel, and only pull requests", name, job.Concurrency.CancelInProgress)
+		}
 	}
 }
 
