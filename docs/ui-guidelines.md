@@ -35,7 +35,9 @@ Visual style stays in this browser under `zoomies.ui-style` and is applied befor
 first paint, including sign-in and the first-account form. Missing or unknown
 values get Mission Control; only a stored `classic` opts a browser out, so
 choosing Mission Control again simply clears the key.
-The separate public `/status` document retains Classic.
+The separate public `/status` document retains Classic. It is dark unless its
+reader stored Light or System, and the dark is written on its `<html>` element,
+because its policy allows no inline script of its own to apply it.
 
 Selecting a style updates root tokens without replacing the route or its state.
 It preserves the original Zoomies artwork and logo treatment, Eli, dog/paw
