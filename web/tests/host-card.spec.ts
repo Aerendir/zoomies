@@ -339,6 +339,130 @@ test('a throttled host whose usage has gone stale does not say it cannot be thro
 });
 
 /**
+ * Every sentence that explains why a host is not taking work, on a card that has
+ * not been opened. The fold may hide detail and never a reason, and a spec that
+ * opens the card first proves nothing about it: the sentence would be there
+ * either way. The cordon, the low disk, a host with no working backend and one
+ * with no heartbeat are held above; these are the rest, and the throttle is
+ * held by hosts.spec.ts and diagnostics.spec.ts against a real agent.
+ */
+const NOW_ISO = () => new Date().toISOString();
+const REASONS: {
+  name: string;
+  change: (host: Record<string, unknown>) => Record<string, unknown>;
+  /** A machine for the host to be, for the one reason that is about its machine. */
+  machine?: 'draining';
+  sentence: string | RegExp;
+}[] = [
+  {
+    name: 'a runtime that is recovering',
+    change: (host) => ({
+      ...host,
+      runtime_recovering: {
+        failures: 3,
+        kind: 'unavailable',
+        error: 'no socket at /var/run/docker.sock',
+        retry_at: new Date(Date.now() + 40_000).toISOString(),
+        since: NOW_ISO(),
+        observed_at: NOW_ISO(),
+      },
+      runtime_reason:
+        'Runtime recovering: third failure in a row, the container runtime could not be reached. New starts here are held until one recovery attempt; running jobs continue.',
+    }),
+    sentence: /Runtime recovering: third failure in a row.*Retrying in \d+s/s,
+  },
+  {
+    name: 'a hold on new starts',
+    change: (host) => ({
+      ...host,
+      usage_fresh: true,
+      usage: { cpu_percent: 20, memory_available_mb: 100, sampled_at: NOW_ISO() },
+      admission_reason: 'new starts held because available memory is at or below the host reserve',
+    }),
+    sentence:
+      'new starts held because available memory is at or below the host reserve. Running jobs continue.',
+  },
+  {
+    name: 'a CPU that is busy',
+    change: (host) => ({
+      ...host,
+      usage_fresh: true,
+      usage: { cpu_percent: 91, memory_available_mb: 20000, sampled_at: NOW_ISO() },
+    }),
+    sentence: 'CPU is busy. New runners start one at a time while pressure clears.',
+  },
+  {
+    name: 'an image that will not pull',
+    change: (host) => ({
+      ...host,
+      image_pull_failed: {
+        pool_id: 'pool_amd64',
+        pool: 'linux-amd64',
+        image: 'ghcr.io/acme/runner:1',
+        registry: 'ghcr.io',
+        source: 'start',
+        since: NOW_ISO(),
+        observed_at: NOW_ISO(),
+      },
+    }),
+    sentence: "Cannot pull pool linux-amd64's image from ghcr.io",
+  },
+  {
+    name: 'an agent the controller cannot talk to',
+    change: (host) => ({
+      ...host,
+      incompatible: true,
+      incompatible_reason:
+        'This agent speaks protocol 0 and this controller speaks 1, so no new runner is placed here. Its running work finishes and is drained as normal.',
+    }),
+    sentence: 'This agent speaks protocol 0 and this controller speaks 1',
+  },
+  {
+    name: 'a machine that is draining',
+    change: (host) => host,
+    machine: 'draining',
+    sentence: 'It is draining because the pools it serves have had no queued work',
+  },
+];
+
+for (const reason of REASONS) {
+  test(`${reason.name} is said on the closed card, not behind Details`, async ({ page }) => {
+    await reshape(page, BUILDER, reason.change);
+    if (reason.machine) {
+      // The host a machine is comes from the machines the page also asks for.
+      const hosts = (await page.request.get('/api/v1/hosts').then((r) => r.json())) as {
+        items: { id: string; name: string }[];
+      };
+      const hostId = hosts.items.find((host) => host.name === BUILDER)?.id;
+      await page.route(/\/api\/v1\/machines(?:\?.*)?$/, (route) =>
+        route.fulfill({
+          json: {
+            items: [
+              {
+                id: 'mach_draining1',
+                provider_id: 'prov_demo',
+                name: 'zoomies-mach-draining',
+                state: reason.machine,
+                host_id: hostId,
+                labels: {},
+                safe_to_delete: false,
+              },
+            ],
+          },
+        }),
+      );
+    }
+    await goto(page, '/hosts', 'Hosts');
+    await settle(page);
+    await expect(toggle(page, BUILDER)).toHaveAttribute('aria-expanded', 'false');
+    await expect(
+      card(page, BUILDER).locator('p.cordoned', { hasText: reason.sentence }),
+    ).toBeVisible();
+    for (const region of folded(page, BUILDER)) await expect(region).toHaveCount(0);
+  });
+}
+
+/**
  * What a bar is drawn in: the computed background of its fill and of the track
  * behind it. Windows high contrast replaces every author colour with the
  * system's, so a bar is only seen where it is told to take a system colour of

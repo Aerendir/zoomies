@@ -505,6 +505,20 @@ export async function openHostCard(
   return card;
 }
 
+/**
+ * Close a host card's Details again, for a test that has looked at what is behind
+ * it and then needs to see what the card says without it: a reason is meant to be
+ * there with the fold shut, and a spec that left it open could not tell.
+ *
+ * Idempotent, like openHostCard, and returns the card.
+ */
+export async function closeHostCard(card: Locator): Promise<Locator> {
+  const toggle = card.getByRole('button', { name: /^Details for / });
+  if ((await toggle.getAttribute('aria-expanded')) === 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  return card;
+}
+
 /** True when the element currently holds focus. */
 export function isFocused(locator: Locator): Promise<boolean> {
   return locator.evaluate((element) => element === document.activeElement);
