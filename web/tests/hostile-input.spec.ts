@@ -14,7 +14,15 @@
  * that it did before asserting what it did not do.
  */
 import { expect, test, type Dialog, type Page } from '@playwright/test';
-import { FIXTURE, goto } from './support/fixtures';
+import { expectNoSidewaysScroll, FIXTURE, goto } from './support/fixtures';
+import {
+  failedJob,
+  keptCase,
+  mockRepairWorld,
+  offerRow,
+  readiness,
+  repairRow,
+} from './support/repairs';
 
 /** Collected rather than dismissed quietly: a dialog here is the bug. */
 function watchForDialogs(page: Page): Dialog[] {
@@ -117,4 +125,123 @@ test("a runner's output cannot retitle the page or clear it", async ({ page }) =
 
   expect(dialogs, 'a dialog opened, so something in the output ran').toHaveLength(0);
   expect(page.url(), 'the page went somewhere a log line chose').toContain('/runners/');
+});
+
+test('what a pull request, a job and its log say stays text on every Eli repair page', async ({
+  page,
+}) => {
+  const dialogs = watchForDialogs(page);
+
+  // Everything here was written by whoever can open a pull request or edit a
+  // workflow: the pull request's title and branch, the job's name and step, the
+  // addresses GitHub reported, and the job's log. Each is shaped to run if it is
+  // ever parsed, or to be followed if it is ever made a link, and the log line is
+  // ten thousand characters with nowhere to break.
+  const title = '<img src=x onerror=alert(1)>';
+  const step = '<script>alert(2)</script>';
+  const address = 'javascript:alert(3)';
+  const branch = '"><svg onload=alert(5)>';
+  const line = `<svg onload=alert(4)>${'x'.repeat(10_000)}`;
+  const kept = keptCase({
+    pull_title: title,
+    pull_url: address,
+    run_url: address,
+    author: '<b>dana</b>',
+    branch,
+    // The job's own address is a real one, because its id is what the log is asked for by;
+    // an address that is not one has no id and the page says its log cannot be read.
+    jobs: [{ name: title, step, url: 'https://github.com/acme/widgets/actions/runs/482/job/9001' }],
+  });
+  const attempt = repairRow({
+    id: 'rep-x',
+    state: 'failed',
+    message: '<b>bold</b> message',
+    github_login: '<i>mallory</i>',
+    details: { stage: 'prepare_fix', failure_code: 'unsupported_fix', case: kept },
+  });
+  await mockRepairWorld(page, {
+    jobs: [
+      failedJob({
+        job_name: title,
+        head_branch: branch,
+        html_url: address,
+        failed_step: { number: 7, name: step, status: 'completed', conclusion: 'failure' },
+      }),
+    ],
+    offers: [offerRow({ title })],
+    readiness: readiness({
+      pull: {
+        number: 17,
+        title,
+        author: '<b>dana</b>',
+        branch,
+        base: '<i>main</i>',
+        url: address,
+        open: true,
+      },
+    }),
+    repairs: [attempt],
+    attempts: { 'rep-x': attempt },
+    errorOutput: { '9001': { lines: [line] } },
+  });
+
+  /** Nothing was parsed or made a link, and the page still fits the screen. */
+  const asText = async (where: string) => {
+    await expect(page.locator('img[src="x"]'), `${where}: an img was parsed`).toHaveCount(0);
+    await expect(page.locator('main svg[onload]'), `${where}: an svg was parsed`).toHaveCount(0);
+    await expect(page.locator('main b, main i'), `${where}: markup was parsed`).toHaveCount(0);
+    await expect(
+      page.locator('script:has-text("alert(")'),
+      `${where}: a script was parsed`,
+    ).toHaveCount(0);
+    await expect(
+      page.locator('a[href^="javascript:" i]'),
+      `${where}: a script address became a link`,
+    ).toHaveCount(0);
+    await expectNoSidewaysScroll(page, where);
+  };
+  /** The job opened, unless it is the only one and open already, and its log read. */
+  const readTheLog = async () => {
+    const job = page.locator('details.job').first();
+    if (!(await job.evaluate((el) => (el as HTMLDetailsElement).open)))
+      await job.locator('summary').first().click();
+    await expect(page.locator('pre').getByText(/^<svg onload=alert\(4\)>x+$/)).toBeVisible();
+  };
+
+  // The hub: an offer, and a row of the history. The payloads really arrived.
+  await goto(page, '/repairs', 'Eli repairs');
+  await expect(
+    page.getByRole('region', { name: 'Needs you' }).getByRole('heading', { name: `${title} #17` }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'History' }).getByRole('link', { name: title }),
+  ).toBeVisible();
+  await asText('the hub');
+
+  // The repair page, with the log of the job read.
+  await goto(page, '/repairs/new?repo=acme%2Fsite&run=9', 'Repair a failed check');
+  await expect(page.getByRole('heading', { name: title }).first()).toBeVisible();
+  await readTheLog();
+  await asText('the repair page');
+
+  // The attempt, with the same job opened.
+  await goto(page, '/repairs/rep-x', title);
+  await expect(page.getByRole('region', { name: 'Could not repair' })).toContainText(
+    '<b>bold</b> message',
+  );
+  await readTheLog();
+  await asText('the attempt');
+  // The pull request's and the run's addresses were not web addresses, so the page
+  // sends nobody to them. It builds the pull request's link on the job's own address,
+  // which was one, and has no run link to build, so it shows none.
+  const head = page.locator('.page-header');
+  await expect(head.getByRole('link', { name: /Open PR/ })).toHaveAttribute(
+    'href',
+    'https://github.com/acme/widgets/pull/17',
+  );
+  await expect(head.getByRole('link', { name: /Open run/ })).toHaveCount(0);
+
+  expect(dialogs, 'a dialog opened, so something a pull request or a job wrote ran').toHaveLength(
+    0,
+  );
 });

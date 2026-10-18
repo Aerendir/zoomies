@@ -438,6 +438,12 @@ func TestReadinessExplainsAClosedPRAndDistinguishesGitHubFailure(t *testing.T) {
 			if !found {
 				t.Fatalf("missing actionable blocker: %+v", ready.Blockers)
 			}
+			assertEveryBlockedCheckSaysWhy(t, ready)
+			for _, c := range ready.Checks {
+				if c.Code == "pull" && c.Blocker != tc.code {
+					t.Errorf("the pull request check says it was stopped by %q, want %q", c.Blocker, tc.code)
+				}
+			}
 			_, left, err := h.st.ListJobs(h.ctx, store.JobFilter{AttentionOnly: true}, store.Page{})
 			if want := map[bool]int{true: 0, false: 1}[tc.settles]; err != nil || left != want {
 				t.Fatalf("%d failures still need attention (error %v), want %d: a changed target settles the failure it was asked about, and nothing else does", left, err, want)
@@ -507,5 +513,219 @@ func TestReadinessTellsTheAttentionListWhatItLearnedAboutTheFailure(t *testing.T
 				t.Fatalf("%d failures still need attention (error %v), want %d", left, err, want)
 			}
 		})
+	}
+}
+
+// readinessSetup is a person who could repair: linked and confirmed, with a
+// provider of their own, on a repository whose policy allows repairs. A test
+// then breaks the one thing it is about.
+func readinessSetup(t *testing.T) *commandSetup {
+	t.Helper()
+	s := newCommandSetup(t, 5)
+	s.link(t, true)
+	personal := &store.AssistantProvider{Name: "Personal", OwnerID: s.user.ID, Kind: "openai", Enabled: true}
+	if err := s.h.st.CreateAssistantProvider(s.h.ctx, personal); err != nil {
+		t.Fatal(err)
+	}
+	s.fake.check = "failed"
+	return s
+}
+
+// checkSummary is "code:status" for each check, in the order readiness makes them.
+func checkSummary(r EliReadiness) []string {
+	out := make([]string, 0, len(r.Checks))
+	for _, c := range r.Checks {
+		out = append(out, c.Code+":"+c.Status)
+	}
+	return out
+}
+
+// A blocked check says which blocker stopped it, because the check alone cannot: GitHub
+// not answering is folded into whichever check it was making, and a page that reads only
+// the check would send the person to choose another pull request. A check that passed, or
+// was never reached, says nothing of the kind. (When the target has changed, the answer's
+// blockers hold that change alone, so a check blocked earlier names a blocker that is no
+// longer among them, and that is right: it is what stopped that check.)
+func assertEveryBlockedCheckSaysWhy(t *testing.T, r EliReadiness) {
+	t.Helper()
+	for _, c := range r.Checks {
+		switch {
+		case c.Status == EliCheckBlocked && c.Blocker == "":
+			t.Errorf("blocked check %q does not say which blocker stopped it", c.Code)
+		case c.Status != EliCheckBlocked && c.Blocker != "":
+			t.Errorf("%s check %q names a blocker, %q", c.Status, c.Code, c.Blocker)
+		}
+	}
+}
+
+func blockerCodes(r EliReadiness) []string {
+	out := []string{}
+	for _, b := range r.Blockers {
+		out = append(out, b.Code)
+	}
+	return out
+}
+
+const nineOK = "identity:ok provider:ok installation:ok access:ok policy:ok budget:ok pull:ok checks:ok permissions:ok"
+
+// A page that says what Eli can do needs the pull request's own words and a
+// finding for every check, so a person sees what passed and not only what failed.
+func TestReadinessReturnsThePullRequestAndEveryCheckWhenReady(t *testing.T) {
+	s := readinessSetup(t)
+	s.fake.title, s.fake.author, s.fake.url, s.fake.base = "Retry transient 502s", "dana", "https://github.com/acme/repo/pull/1", "main"
+	ready := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0)
+	if !ready.Ready || len(ready.Blockers) != 0 {
+		t.Fatalf("not ready: %+v", ready)
+	}
+	if got := strings.Join(checkSummary(ready), " "); got != nineOK {
+		t.Fatalf("checks: %s", got)
+	}
+	for _, c := range ready.Checks {
+		if c.Message == "" || c.Message == "Not checked yet." {
+			t.Errorf("an ok check has no finding: %+v", c)
+		}
+	}
+	want := &EliReadinessPull{Number: 1, Title: "Retry transient 502s", Author: "dana", Branch: "feature", Base: "main", URL: "https://github.com/acme/repo/pull/1", Open: true}
+	if ready.Pull == nil || *ready.Pull != *want {
+		t.Fatalf("pull: %+v, want %+v", ready.Pull, want)
+	}
+}
+
+// A person whose GitHub account cannot write to the repository is not told what
+// is in it, so the pull request is not looked up for them, and the checks after
+// the one that stopped them say they were never reached.
+func TestReadinessStopsAtWriteAccessAndLeavesTheRestUnchecked(t *testing.T) {
+	s := readinessSetup(t)
+	s.fake.noWrite = true
+	s.fake.title = "A private title"
+	ready := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0)
+	assertEveryBlockedCheckSaysWhy(t, ready)
+	want := "identity:ok provider:ok installation:ok access:blocked policy:unchecked budget:unchecked pull:unchecked checks:unchecked permissions:unchecked"
+	if got := strings.Join(checkSummary(ready), " "); got != want {
+		t.Fatalf("checks: %s", got)
+	}
+	if ready.Ready || ready.Pull != nil {
+		t.Fatalf("readiness gave a pull request to someone who cannot write: %+v", ready)
+	}
+	if len(ready.Blockers) != 1 || ready.Blockers[0] != (EliBlocker{"access", "Your linked GitHub account needs write access to this repository."}) {
+		t.Fatalf("blockers changed: %+v", ready.Blockers)
+	}
+	if ready.Checks[3].Message != ready.Blockers[0].Message {
+		t.Fatalf("the blocked check does not carry the blocker's words: %q", ready.Checks[3].Message)
+	}
+	if ready.Checks[4].Message != "Not checked yet." {
+		t.Fatalf("an unreached check should say so: %q", ready.Checks[4].Message)
+	}
+}
+
+// With no linked account the provider and the installation are still looked at,
+// because they are separate things to fix and a person should fix them in one go.
+func TestReadinessWithNoLinkedAccountBlocksIdentityAndStillChecksProvider(t *testing.T) {
+	s := newCommandSetup(t, 5)
+	personal := &store.AssistantProvider{Name: "Personal", OwnerID: s.user.ID, Kind: "openai", Enabled: true}
+	if err := s.h.st.CreateAssistantProvider(s.h.ctx, personal); err != nil {
+		t.Fatal(err)
+	}
+	ready := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0)
+	assertEveryBlockedCheckSaysWhy(t, ready)
+	want := "identity:blocked provider:ok installation:ok access:unchecked policy:unchecked budget:unchecked pull:unchecked checks:unchecked permissions:unchecked"
+	if got := strings.Join(checkSummary(ready), " "); got != want {
+		t.Fatalf("checks: %s", got)
+	}
+	if ready.Pull != nil || len(ready.Blockers) != 1 || ready.Blockers[0] != (EliBlocker{"identity", "Link and confirm your GitHub account in repair setup."}) {
+		t.Fatalf("blockers or pull changed: %+v", ready)
+	}
+}
+
+type closedRepairPull struct{ *repairFake }
+
+func (closedRepairPull) RepairPull(context.Context, string, int) (github.RepairPull, error) {
+	return github.RepairPull{Number: 7, Title: "Old work", Author: "dana", Branch: "feature", HeadSHA: "old"},
+		&github.RepairTargetChanged{Code: "closed", Message: "PR #7 is closed or merged."}
+}
+
+// A closed pull request is the answer to what the person asked, and it reads
+// better with its title. The blockers keep their old shape: the changed target
+// stands alone, as it always has.
+func TestReadinessKeepsThePullRequestWhenItIsClosed(t *testing.T) {
+	s := readinessSetup(t)
+	s.h.c.clients.entries[s.inst.ID] = &clientEntry{client: closedRepairPull{s.fake}, updatedAt: s.inst.UpdatedAt.Truncate(time.Millisecond)}
+	ready := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 7, 0)
+	assertEveryBlockedCheckSaysWhy(t, ready)
+	if ready.Pull == nil || ready.Pull.Title != "Old work" || ready.Pull.Open {
+		t.Fatalf("the closed pull request was lost: %+v", ready.Pull)
+	}
+	want := "identity:ok provider:ok installation:ok access:ok policy:ok budget:ok pull:blocked checks:unchecked permissions:unchecked"
+	if got := strings.Join(checkSummary(ready), " "); got != want {
+		t.Fatalf("checks: %s", got)
+	}
+	if len(ready.Blockers) != 1 || ready.Blockers[0] != (EliBlocker{"closed", "PR #7 is closed or merged."}) {
+		t.Fatalf("blockers: %+v", ready.Blockers)
+	}
+}
+
+// Checks that have passed, or have not finished, are not a failure to repair,
+// and the checklist says which of the two it is on the check that decided it.
+func TestReadinessSaysWhetherTheChecksHavePassedOrAreStillRunning(t *testing.T) {
+	for _, tc := range []struct{ check, code string }{{"passed", "fixed"}, {"waiting", "checks_pending"}} {
+		t.Run(tc.check, func(t *testing.T) {
+			s := readinessSetup(t)
+			s.fake.check = tc.check
+			ready := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0)
+			if ready.Ready || ready.Pull == nil {
+				t.Fatalf("readiness: %+v", ready)
+			}
+			var checks EliCheck
+			for _, c := range ready.Checks {
+				if c.Code == "checks" {
+					checks = c
+				}
+			}
+			if checks.Status != EliCheckBlocked || checks.Message == "" {
+				t.Fatalf("the checks check: %+v", checks)
+			}
+			assertEveryBlockedCheckSaysWhy(t, ready)
+			if checks.Blocker != tc.code {
+				t.Fatalf("the checks check says it was stopped by %q, want %q", checks.Blocker, tc.code)
+			}
+			if !slices.Contains(blockerCodes(ready), tc.code) {
+				t.Fatalf("blockers %v lack %s", blockerCodes(ready), tc.code)
+			}
+		})
+	}
+}
+
+// GitHub failing to say whether the checks have passed is not the checks failing, and not
+// a pull request to choose: the check says that GitHub did not answer, so a page can offer
+// to ask again.
+func TestReadinessSaysGitHubDidNotAnswerWhenItCannotReadTheChecks(t *testing.T) {
+	s := readinessSetup(t)
+	s.fake.checkErr = errors.New("transport failed")
+	ready := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0)
+	want := "identity:ok provider:ok installation:ok access:ok policy:ok budget:ok pull:ok checks:blocked permissions:unchecked"
+	if got := strings.Join(checkSummary(ready), " "); got != want {
+		t.Fatalf("checks: %s", got)
+	}
+	if got := blockerCodes(ready); len(got) != 1 || got[0] != "github" {
+		t.Fatalf("blockers: %v", got)
+	}
+	assertEveryBlockedCheckSaysWhy(t, ready)
+	if ready.Checks[7].Blocker != "github" {
+		t.Fatalf("the checks check says it was stopped by %q, want github", ready.Checks[7].Blocker)
+	}
+}
+
+// A missing App permission is a check of its own, with the sentence it always had.
+func TestReadinessNamesAMissingAppPermission(t *testing.T) {
+	s := readinessSetup(t)
+	s.h.gh.SetPermissions(map[string]string{"contents": "read", "pull_requests": "write", "actions": "write"})
+	ready := s.h.c.EliReadiness(s.h.ctx, s.user.ID, s.repo, 1, 0)
+	assertEveryBlockedCheckSaysWhy(t, ready)
+	last := ready.Checks[len(ready.Checks)-1]
+	if last.Code != "permissions" || last.Status != EliCheckBlocked || last.Message != "Update the GitHub App permission: contents write" {
+		t.Fatalf("permissions check: %+v", last)
+	}
+	if got := blockerCodes(ready); len(got) != 1 || got[0] != "permissions" {
+		t.Fatalf("blockers: %v", got)
 	}
 }

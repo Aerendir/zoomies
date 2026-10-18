@@ -967,9 +967,11 @@ func routeTable(ids fixtureIDs) []route {
 		// A chat with nothing to say is a 422 before any model is asked.
 		{method: "GET", path: "/api/v1/assistant/repairs/repositories", role: store.RoleAdmin, action: auth.ActionAssistantWrite},
 		{method: "GET", path: "/api/v1/assistant/repairs/readiness", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true},
+		{method: "GET", path: "/api/v1/assistant/repairs/error-output?repo=a/b&job_id=1", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true},
 		{method: "GET", path: "/api/v1/assistant/repairs/opportunities", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true},
 		{method: "POST", path: "/api/v1/assistant/repairs/opportunities/missing", role: store.RoleViewer, action: auth.ActionAssistantOwn, accountOnly: true, body: map[string]any{"action": "dismiss"}},
 		{method: "GET", path: "/api/v1/assistant/repairs", role: store.RoleViewer, action: auth.ActionAssistantOwn},
+		{method: "GET", path: "/api/v1/assistant/repairs/missing", role: store.RoleViewer, action: auth.ActionAssistantOwn},
 		{method: "GET", path: "/api/v1/assistant/repairs/selection", role: store.RoleViewer, action: auth.ActionAssistantOwn},
 		{method: "POST", path: "/api/v1/assistant/repairs/bulk", role: store.RoleViewer, action: auth.ActionAssistantOwn,
 			body: map[string]any{"action": "clear", "ids": []string{"missing"}}},

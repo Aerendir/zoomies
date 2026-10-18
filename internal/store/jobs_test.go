@@ -960,3 +960,49 @@ func TestAJobKeepsAtMostFortyLinesOfOutput(t *testing.T) {
 		t.Fatalf("a runner with no job: %q, %v; want nothing and no error", id, err)
 	}
 }
+
+// A pull request is not a run: when a repair is started from a pull request
+// alone, the jobs that failed for it are the ones that ran its head commit, and
+// nothing a neighbouring commit or another repository did may be read as its
+// case.
+func TestJobFilterNarrowsToAHeadCommit(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	seed := []*Job{
+		{GitHubJobID: 1, Repo: "acme/widgets", JobName: "unit", HeadSHA: "aaa111", State: JobCompleted, Conclusion: "failure", QueuedAt: now},
+		{GitHubJobID: 2, Repo: "acme/widgets", JobName: "lint", HeadSHA: "aaa111", State: JobCompleted, Conclusion: "success", QueuedAt: now.Add(time.Second)},
+		{GitHubJobID: 3, Repo: "acme/widgets", JobName: "unit", HeadSHA: "bbb222", State: JobCompleted, Conclusion: "failure", QueuedAt: now.Add(2 * time.Second)},
+		{GitHubJobID: 4, Repo: "acme/widgets", JobName: "unit", State: JobCompleted, Conclusion: "failure", QueuedAt: now.Add(3 * time.Second)},
+		{GitHubJobID: 5, Repo: "acme/gadgets", JobName: "unit", HeadSHA: "aaa111", State: JobCompleted, Conclusion: "failure", QueuedAt: now.Add(4 * time.Second)},
+	}
+	for _, j := range seed {
+		if _, err := s.UpsertJob(ctx, j); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, tc := range map[string]struct {
+		f    JobFilter
+		want []int64
+	}{
+		"the head commit alone":        {JobFilter{HeadSHA: "aaa111"}, []int64{1, 2, 5}},
+		"with a repository":            {JobFilter{HeadSHA: "aaa111", Repos: []string{"acme/widgets"}}, []int64{1, 2}},
+		"with a conclusion":            {JobFilter{HeadSHA: "aaa111", Repos: []string{"acme/widgets"}, Conclusions: []string{"failure"}}, []int64{1}},
+		"another commit":               {JobFilter{HeadSHA: "bbb222"}, []int64{3}},
+		"a commit nothing ran":         {JobFilter{HeadSHA: "ccc333"}, nil},
+		"an unset commit is no filter": {JobFilter{Repos: []string{"acme/widgets"}}, []int64{1, 2, 3, 4}},
+	} {
+		got, total, err := s.ListJobs(ctx, tc.f, Page{Limit: 50, Sort: "queued_at"})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var ids []int64
+		for _, j := range got {
+			ids = append(ids, j.GitHubJobID)
+		}
+		slices.Sort(ids)
+		if !slices.Equal(ids, tc.want) || total != len(tc.want) {
+			t.Errorf("%s: jobs %v of %d, want %v", name, ids, total, tc.want)
+		}
+	}
+}

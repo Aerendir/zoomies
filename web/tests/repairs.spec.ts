@@ -4,8 +4,7 @@ import { goto } from './support/fixtures';
 test('repair setup discovers repositories and saves a manual policy without a shared payer', async ({
   page,
 }) => {
-  await goto(page, '/repairs', 'Eli repairs');
-  await page.locator('#repair-setup > summary').click();
+  await goto(page, '/repairs/setup', 'Repair setup');
   const policies = page
     .locator('details')
     .filter({ has: page.locator('#policy-installation') })
@@ -29,4 +28,57 @@ test('repair setup discovers repositories and saves a manual policy without a sh
     expect(policy.ask_first).toBe(false);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+// Setup is a page of its own, listed ahead of the page that opens one repair by its
+// id, or "setup" would be looked up as a repair that does not exist.
+test('the setup page holds the account card, the repository policies and the link form', async ({
+  page,
+}) => {
+  await goto(page, '/repairs/setup', 'Repair setup');
+  await expect(page.getByRole('heading', { name: 'Your GitHub account' })).toBeVisible();
+  await expect(page.getByText('Repository repair policies')).toBeVisible();
+  await expect(page.getByText('Link a GitHub account', { exact: true })).toBeVisible();
+  await expect(page.getByText('This repair is not in your history')).toHaveCount(0);
+  // The way back to the hub is the breadcrumb, and the hub's own list is not here.
+  await expect(
+    page.locator('.page-header').getByRole('link', { name: 'Eli repairs' }),
+  ).toHaveAttribute('href', '/repairs');
+  await expect(page.getByRole('region', { name: 'History' })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+// Settings keeps what is about the model, and sends repairs to the pages that are about them.
+test('Settings, Eli AI Assistant links to the hub and to setup and no longer lists repairs', async ({
+  page,
+}) => {
+  await goto(page, '/settings/assistant', 'Eli AI Assistant');
+  const card = page.getByRole('region', { name: 'PR repairs' });
+  await expect(card.getByRole('link', { name: 'Open Eli repairs' })).toHaveAttribute(
+    'href',
+    '/repairs',
+  );
+  await expect(card.getByRole('link', { name: 'Repair setup' })).toHaveAttribute(
+    'href',
+    '/repairs/setup',
+  );
+  await expect(page.getByRole('region', { name: 'History' })).toHaveCount(0);
+  await expect(page.getByText('Repository repair policies')).toHaveCount(0);
+  await expect(page.getByText('Link a GitHub account', { exact: true })).toHaveCount(0);
+});
+
+// Arriving from a failure names a repository, and the forms start with it chosen, so
+// the person fixes that one and does not have to find it again.
+test('a repository named in the address is ready in the policy and link forms', async ({
+  page,
+}) => {
+  await goto(page, '/repairs/setup?repo=acme%2Fsite', 'Repair setup');
+  const repositories = page.getByRole('group', { name: 'Select repositories', exact: true });
+  await expect(
+    repositories.getByRole('checkbox', { name: 'acme/site', exact: true }),
+  ).toBeChecked();
+  await expect(
+    repositories.getByRole('checkbox', { name: 'acme/widgets', exact: true }),
+  ).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Save for 1 repositories' })).toBeVisible();
 });

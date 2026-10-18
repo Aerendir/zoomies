@@ -146,11 +146,13 @@ tools; a code repair uses the separate workflow below.
 
 ### From diagnosis to a PR repair
 
-For a failed job on an existing PR, open **Fix with Eli** beside the job, or
-paste the PR URL into **Eli repairs**. Review readiness, the model, who pays and
-the remaining attempt budget before choosing **Fix with Eli**.
-Repository repair policy, GitHub App permissions and requester consent must
-be in place; [set up PR repairs](eli.md#set-up-pr-repairs) covers them.
+For a failed job on an existing PR, choose **Fix with Eli** beside the job, or
+choose **Repair a PR** on **Eli repairs** and paste the PR URL. The repair page
+shows the failure first, then whether Eli can act on it: the model, who pays and
+the remaining attempt budget are on it, and nothing is spent until you choose
+**Fix with Eli** there. Repository repair policy, GitHub App permissions and
+requester consent must be in place; [set up PR repairs](eli.md#set-up-pr-repairs)
+covers them.
 
 A linked maintainer can also request a repair in a new PR comment:
 

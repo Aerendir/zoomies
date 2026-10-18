@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -30,7 +31,13 @@ func seed() error {
 		return fmt.Errorf("refusing to seed a database outside the screenshot fixture")
 	}
 	ctx := context.Background()
-	st, err := store.Open(ctx, store.Options{Path: path})
+	// A clock that moves on each time it is read, so the samples began some time ago and
+	// took a while, as repairs do, instead of all starting and ending in one instant.
+	clock := time.Now().Add(-26 * time.Hour)
+	st, err := store.Open(ctx, store.Options{Path: path, Now: func() time.Time {
+		clock = clock.Add(41 * time.Second)
+		return clock
+	}})
 	if err != nil {
 		return err
 	}
@@ -44,17 +51,45 @@ func seed() error {
 		return err
 	}
 	for _, sample := range []struct {
-		pull                           int
-		state, message, stage, failure string
+		pull                             int
+		state, message, stage, failure   string
+		commit, title, branch, job, step string
 	}{
-		{42, "succeeded", "Sample repair: corrected a failing assertion; the PR checks passed. Normal review is still required.", "checks_passed", ""},
-		{43, "blocked", "Sample repair: workflow edits are disabled for this repository. Review the policy before another attempt.", "prepare_fix", "unsupported_fix"},
+		{42, "succeeded", "Sample repair: corrected a failing assertion; the PR checks passed. Normal review is still required.", "checks_passed", "",
+			"7c0d1ab9e3f24b6a1d8c5e0f7a2b4c6d8e1f3a5b", "Retry transient 502s in the registry client", "fix/registry-retry", "Go (api-2)", "Run go test -race ./internal/..."},
+		{43, "blocked", "Sample repair: workflow edits are disabled for this repository. Review the policy before another attempt.", "prepare_fix", "unsupported_fix",
+			"", "Pin the base image digest in the runner Dockerfile", "chore/pin-base-digest", "Build runner image", "docker build"},
+		{44, "failed", "Sample repair: Eli could not produce a fix it was willing to push.", "prepare_fix", "unsupported_fix",
+			"", "Show the retention window on the Usage page", "feat/usage-retention", "UI (e2e)", "Playwright"},
 	} {
+		// What the repair was about, kept as it was when it began, so the pages show the
+		// pull request and the job that failed and not only a number.
+		const run = 4820
+		kept := &store.EliRepairCase{
+			PullTitle: sample.title,
+			PullURL:   fmt.Sprintf("https://github.com/acme/widgets/pull/%d", sample.pull),
+			Author:    "alice", Branch: sample.branch,
+			RunURL:   fmt.Sprintf("https://github.com/acme/widgets/actions/runs/%d", run),
+			Workflow: "CI", RunNumber: run,
+			Jobs: []store.EliRepairCaseJob{{
+				Name: sample.job, Step: sample.step, DurationMS: 192000,
+				URL: fmt.Sprintf("https://github.com/acme/widgets/actions/runs/%d/job/%d", run, 90000+sample.pull),
+			}},
+		}
 		r := &store.EliRepair{
 			DedupKey: fmt.Sprintf("screenshots:%d", sample.pull), InstallationID: inst.ID,
-			Repo: "acme/widgets", PullNumber: sample.pull, UserID: user.ID,
-			GitHubLogin: "alice", Trigger: "manual",
-			Details: store.EliRepairDetails{Model: "demo (sample history)", Stage: sample.stage, FailureCode: sample.failure},
+			Repo: "acme/widgets", PullNumber: sample.pull, RunID: run, UserID: user.ID,
+			GitHubLogin: "alice", Trigger: "manual", CommitSHA: sample.commit,
+			Details: store.EliRepairDetails{Model: "demo (sample history)", Stage: sample.stage, FailureCode: sample.failure, Case: kept},
+		}
+		// A repair that got as far as the model made calls, and one provider did not report usage
+		// for, which the page says is unknown and never shows as zero.
+		if sample.state != "blocked" {
+			r.Details.SourceBytes = 38912
+			r.Details.Steps = []store.EliRepairStep{
+				{InputTokens: 21400, OutputTokens: 1800, UsageReported: true, RequestBytes: 80312, ElapsedMS: 41000},
+				{RequestBytes: 91234, ElapsedMS: 9000},
+			}
 		}
 		if _, err := st.EnqueueEliRepair(ctx, r, 5); err != nil {
 			return err

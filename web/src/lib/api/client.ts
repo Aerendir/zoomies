@@ -1416,6 +1416,11 @@ export const listEliRepairRepositories = (
   });
 export const getEliReadiness = (query: Query<'getEliReadiness'>, signal?: AbortSignal) =>
   api.get<Result<'getEliReadiness'>>('/assistant/repairs/readiness', { query, signal });
+export const getEliRepair = (id: string, signal?: AbortSignal) =>
+  api.get<Result<'getEliRepair'>>(`/assistant/repairs/${enc(id)}`, { signal });
+/** The error lines of one failed job, read from GitHub when asked and kept nowhere. */
+export const getEliErrorOutput = (query: Query<'getEliErrorOutput'>, signal?: AbortSignal) =>
+  api.get<Result<'getEliErrorOutput'>>('/assistant/repairs/error-output', { query, signal });
 export const listEliOpportunities = () =>
   api.get<Result<'listEliOpportunities'>>('/assistant/repairs/opportunities');
 export const actEliOpportunity = (id: string, body: Body<'actEliOpportunity'>) =>

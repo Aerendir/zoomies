@@ -172,6 +172,9 @@ type Controller struct {
 	prDelayMu       sync.Mutex
 	prDelayReads    *auth.RateLimiter
 	prDelayInFlight map[string]bool
+	// errorOutput is the last few reads of a failed job's error lines, held in
+	// memory for a minute; see eli_error_output.go.
+	errorOutput errorOutputCache
 	// openProvider, when set, stands in for kinds.Open: a test puts a scripted
 	// model behind a provider row and runs the same path the worker runs.
 	openProvider func(row *store.AssistantProvider, apiKey string) (assistant.Provider, error)

@@ -449,35 +449,51 @@ const SHOTS = [
     },
   },
   {
+    // The hub: the setup bar, and the history with what each repair was about.
     name: 'eli-repairs',
     path: '/repairs',
     heading: 'Eli repairs',
     repairs: true,
     device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
     async prepare(page) {
+      await page.getByRole('region', { name: 'Repair setup' }).waitFor();
       await page.locator('.history').getByText('Checks passed', { exact: true }).waitFor();
       await page.getByText('Needs attention', { exact: true }).last().waitFor();
     },
   },
   {
+    // The repair page for a failure Eli cannot yet act on: the failure it is about,
+    // what stands in the way, and what to do about it.
     name: 'eli-repair-readiness',
-    path: '/repairs?repo=acme/widgets&pull=42',
-    heading: 'Eli repairs',
+    path: '/repairs/new?repo=acme/widgets&pull=42',
+    heading: 'Repair a failed check',
     repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
     async prepare(page) {
       await page
+        .getByRole('region', { name: 'Can Eli act on this?' })
         .getByText('Link and confirm your GitHub account in repair setup.', { exact: true })
         .waitFor();
     },
   },
   {
+    // One repair, after it has ended: how, what to try next and what Eli used.
+    name: 'eli-repair-attempt',
+    path: (api) => repairAttemptPath(api, 44),
+    heading: 'Show the retention window on the Usage page',
+    repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1500 }, deviceScaleFactor: SCALE },
+    async prepare(page) {
+      await page.getByRole('region', { name: 'What to try next' }).waitFor();
+    },
+  },
+  {
     name: 'eli-repair-setup',
-    path: '/repairs',
-    heading: 'Eli repairs',
+    path: '/repairs/setup',
+    heading: 'Repair setup',
     repairs: true,
     device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
     async prepare(page) {
-      await page.locator('#repair-setup > summary').click();
       await page
         .getByRole('group', { name: 'Select repositories', exact: true })
         .getByRole('checkbox', { name: 'acme/widgets', exact: true })
@@ -841,6 +857,14 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  * seeded fleet's repositories are not named here, so a shot asks for one by what
  * it concluded, which is also what the shot is of.
  */
+/** The page of the sample repair made for a pull request, whose id is not known until the fixture is seeded. */
+async function repairAttemptPath(api, pull) {
+  const { items } = await (await api.get('/api/v1/assistant/repairs?limit=50')).json();
+  const row = items?.find((repair) => repair.pull_number === pull);
+  if (!row) throw new Error(`there is no sample repair for pull request ${pull} to photograph`);
+  return `/repairs/${row.id}`;
+}
+
 async function kennelRepositoryPath(api, state) {
   const { items } = await (await api.get(`/api/v1/kennel/repositories?state=${state}`)).json();
   if (!items?.length) {

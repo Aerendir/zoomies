@@ -650,7 +650,11 @@ fixed, because muscle memory is the point:
 7. **Hosts**: where runners can go
 8. **Providers**: the infrastructure that machines are rented from
 9. **Installations**: GitHub App connections
-10. **Eli repairs**: review failed PR offers, configure repository policies and follow repair outcomes.
+10. **Eli repairs**: review failed PR offers, follow what is running and what
+    happened, and set up the accounts and repositories behind them. It is one
+    entry for four pages under `/repairs`: the hub, a failure at `/repairs/new`,
+    one repair at `/repairs/<id>` and setup at `/repairs/setup`. The entry is lit
+    on all four.
 11. **Migrate repositories**: move repositories off GitHub's runners onto this
     fleet. The navigation shortens it to *Migrate*, because a nav label has to
     fit beside an icon in a 232px column; every other place that names the page

@@ -6040,6 +6040,40 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /assistant/repairs/error-output:
+    get:
+      operationId: getEliErrorOutput
+      tags: [assistant]
+      summary: Read the error lines of one failed job, when asked
+      description: >-
+        The lines of the job's log that say why it failed, read from GitHub when the request is
+        made and passed through the same credential redaction a repair's evidence gets. They are
+        kept nowhere: held in memory for a minute so a second look is not a second download, and
+        never stored or logged. Personal accounts only, like readiness, and only for a caller
+        whose confirmed GitHub account can write to the repository; anyone else is a 409 that
+        says what is needed. A log GitHub no longer has, or a job that printed no error lines,
+        is an empty `lines` with a `note`.
+      x-zoomies-role: viewer
+      parameters:
+        - name: repo
+          in: query
+          required: true
+          description: The repository, as `owner/name`.
+          schema: { type: string, maxLength: 200 }
+        - name: job_id
+          in: query
+          required: true
+          description: GitHub's id for the job.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliErrorOutput" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /assistant/repairs/opportunities:
     get:
       operationId: listEliOpportunities
@@ -6125,6 +6159,30 @@ paths:
               schema: { $ref: "#/components/schemas/EliRepair" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/{id}:
+    get:
+      operationId: getEliRepair
+      tags: [assistant]
+      summary: Read one repair
+      description: >-
+        One repair by id, in the shape the list returns. Administrators reach any repair and
+        everyone else their own; a repair that is not the caller's is a 404 word for word the
+        same as one that does not exist. A repair cleared from the history still opens, so a
+        link someone kept keeps working.
+      x-zoomies-role: viewer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliRepair" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /assistant/repairs/selection:
     get:
@@ -14268,6 +14326,40 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
+    EliRepairCaseJob:
+      type: object
+      description: >-
+        One failed job of the run a repair was started for, with the step it stopped at.
+        Every text is the workflow's own words, so it is data to draw and never markup.
+      required: [name]
+      properties:
+        name: { type: string }
+        step: { type: string, description: The first step that did not succeed. }
+        url:
+          type: string
+          description: >-
+            The job's page, on the host GitHub served it from. Present only when it is a plain
+            http or https address.
+        duration_ms: { type: integer }
+    EliRepairCase:
+      type: object
+      description: >-
+        What a repair was about, kept as it was when the repair began: Zoomies' own job records
+        are pruned and a pull request's title changes. It holds no log text. Absent on a repair
+        made before cases were kept, and a case whose jobs were already pruned names the pull
+        request alone.
+      properties:
+        pull_title: { type: string }
+        pull_url: { type: string }
+        author: { type: string }
+        branch: { type: string }
+        run_url: { type: string }
+        workflow: { type: string }
+        run_number: { type: integer }
+        jobs:
+          type: array
+          description: The failed jobs, at most ten.
+          items: { $ref: "#/components/schemas/EliRepairCaseJob" }
     EliRepairDetails:
       type: object
       properties:
@@ -14275,6 +14367,7 @@ components:
         stage: { type: string }
         failure_code: { type: string }
         source_bytes: { type: integer }
+        case: { $ref: "#/components/schemas/EliRepairCase" }
         steps:
           type: array
           nullable: true
@@ -14295,20 +14388,80 @@ components:
         total: { type: integer }
         capped: { type: boolean }
         missing_permissions: { type: array, items: { type: string } }
+    EliErrorOutput:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          description: >-
+            The error lines of the job's log, redacted: at most twelve, each at most 300 bytes,
+            the last ones being those that ended the job.
+          items: { type: string }
+        note:
+          type: string
+          description: A sentence for the person when there are no lines to show.
+    EliReadinessPull:
+      type: object
+      description: >-
+        The pull request a readiness answer is about, in its own words. Present
+        only after the caller's linked GitHub account has been shown to write to
+        the repository, so a person who may not see the repository is never told
+        what is in it. The url is the server's, so a GitHub Enterprise Server
+        link points at the right host.
+      required: [number, title, author, branch, base, url, open]
+      properties:
+        number: { type: integer }
+        title: { type: string }
+        author: { type: string }
+        branch: { type: string, description: The branch the pull request comes from. }
+        base: { type: string, description: The branch it would merge into. }
+        url: { type: string }
+        open: { type: boolean }
+    EliReadinessCheck:
+      type: object
+      description: >-
+        One thing readiness looks at and what it found. A check readiness never
+        reached because an earlier one stopped it is unchecked, which is not the
+        same as passed.
+      required: [code, status, message]
+      properties:
+        code:
+          type: string
+          enum: [identity, provider, installation, access, policy, budget, pull, checks, permissions]
+        status: { type: string, enum: [ok, blocked, unchecked] }
+        message: { type: string }
+        blocker:
+          type: string
+          description: >-
+            On a blocked check, the code of the blocker that stopped it, as it
+            appears in `blockers`. The check says where readiness stopped and the
+            blocker says why, and they are not the same: GitHub not answering
+            (`github`) or the allowance not being readable (`budget_unavailable`)
+            is reported on whichever check it was making. When the target has
+            changed, `blockers` holds that change alone, and a check blocked
+            before it was found still names what stopped it. Absent on a check
+            that passed or was not reached, and from a controller older than
+            this field.
     EliReadiness:
       type: object
-      required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers]
+      required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers, checks]
       properties:
         ready: { type: boolean }
         repo: { type: string }
         pull_number: { type: integer }
         head_sha: { type: string }
+        pull: { $ref: "#/components/schemas/EliReadinessPull" }
         provider: { type: string }
         model: { type: string }
         allow_workflows: { type: boolean }
         remaining: { type: integer }
         reset_at: { type: string, format: date-time }
         blockers:
+          description: >-
+            What stands in the way. When the target has changed (fixed, closed
+            or superseded) this is that alone, which is the answer to what the
+            person asked; checks still say what each check found.
           type: array
           items:
             type: object
@@ -14316,6 +14469,12 @@ components:
             properties:
               code: { type: string }
               message: { type: string }
+        checks:
+          description: >-
+            Every check readiness makes, always the same nine in the order they
+            are made, so a page can show what passed as well as what did not.
+          type: array
+          items: { $ref: "#/components/schemas/EliReadinessCheck" }
     EliOpportunity:
       type: object
       required: [id, repo, installation_id, pull_number, head_sha, run_id, title, state, created_at, updated_at]
@@ -14394,6 +14553,11 @@ components:
         pull_number: { type: integer }
         instruction: { type: string }
         head_sha: { type: string, description: PR head reviewed by the requester }
+        run_id:
+          type: integer
+          description: >-
+            The run whose failure the requester was looking at, when they came from one. The
+            repair records it and says it was started for that run.
 
     EliRepair:
       type: object

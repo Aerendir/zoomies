@@ -80,6 +80,14 @@ type repairFake struct {
 	comments []string
 	// sourceErr, when set, is what reading the PR's source fails with.
 	sourceErr error
+	// checkErr, when set, is what asking GitHub for the PR's checks fails with.
+	checkErr error
+	// title, author, url and base are what the pull request says about itself,
+	// for the tests that read it back.
+	title, author, url, base string
+	// onFailures, when set, answers a read of a job's error output, so a test
+	// chooses what comes back and counts the reads.
+	onFailures func(jobID int64) ([]string, error)
 }
 
 func (f *repairFake) RepairActor(context.Context, string, string) (github.RepairActor, error) {
@@ -90,7 +98,7 @@ func (f *repairFake) RepairPull(context.Context, string, int) (github.RepairPull
 	if f.commits > 0 {
 		head = "fixed"
 	}
-	return github.RepairPull{Number: 1, Branch: "feature", HeadSHA: head, Open: true}, nil
+	return github.RepairPull{Number: 1, Branch: "feature", HeadSHA: head, Open: true, Title: f.title, Author: f.author, URL: f.url, Base: f.base}, nil
 }
 func (f *repairFake) RepairPullForRun(ctx context.Context, repo string, _ int64) (github.RepairPull, error) {
 	if f.unsupportedRun {
@@ -107,7 +115,10 @@ func (f *repairFake) RepairSource(context.Context, string, github.RepairPull, bo
 	}
 	return &github.RepairSource{Snapshot: prrepair.Snapshot{Files: []prrepair.File{{Path: "main.go", Content: "old", Mode: "100644"}}}}, nil
 }
-func (f *repairFake) RepairFailures(context.Context, string, github.RepairPull, int64) ([]string, error) {
+func (f *repairFake) RepairFailures(_ context.Context, _ string, _ github.RepairPull, jobID int64) ([]string, error) {
+	if f.onFailures != nil {
+		return f.onFailures(jobID)
+	}
 	return []string{"main.go: test failed"}, nil
 }
 func (f *repairFake) CommitRepair(_ context.Context, _ string, p github.RepairPull, plan prrepair.Plan) (string, error) {
@@ -133,7 +144,7 @@ func (f *repairFake) RepairReact(_ context.Context, _ string, id int64, content 
 	return nil
 }
 func (f *repairFake) RepairChecks(context.Context, string, string) (string, error) {
-	return f.check, nil
+	return f.check, f.checkErr
 }
 func TestRepairWorkerSelectsTheHybridProviderAndRecordsRealCheckOutcome(t *testing.T) {
 	for _, trigger := range []string{"mention", "automatic", "revoked", "expired-lease", "cancelled", "queued-old"} {

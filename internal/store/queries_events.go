@@ -465,7 +465,12 @@ type JobFilter struct {
 	// RunIDs narrows to the jobs of particular workflow runs, by GitHub's run
 	// ID. It is how the Workflows page opens a run to the jobs inside it; sent
 	// with the repository as well, because a run ID keys a run only within one.
-	RunIDs      []int64
+	RunIDs []int64
+	// HeadSHA keeps the jobs that ran one commit. A repair started from a pull
+	// request alone has no run to name, and the commit its checks failed on is
+	// what ties the jobs to it; sent with the repository, because two
+	// repositories can share a commit.
+	HeadSHA     string
 	PoolIDs     []string
 	RunnerIDs   []string
 	States      []JobState
@@ -712,6 +717,10 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 			args = append(args, id)
 		}
 		cond = append(cond, `github_run_id IN (`+strings.Join(ph, ",")+`)`)
+	}
+	if f.HeadSHA != "" {
+		cond = append(cond, `head_sha = ?`)
+		args = append(args, f.HeadSHA)
 	}
 	inClause("pool_id", f.PoolIDs)
 	inClause("runner_id", f.RunnerIDs)

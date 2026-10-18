@@ -91,6 +91,29 @@ evidence.
 
 ## Log
 
+* 2026-10-18: Eli repairs are four pages that say what is being repaired, in the
+  one pull request that carries them: [the spec](plans/2026-10-18-eli-repair-workspace.md)
+  and [the plan](plans/2026-10-18-eli-repair-workspace-plan.md). The hub lists
+  offers with the failing jobs, the repairs that are running, and a history whose
+  rows say what each repair was about; the repair page shows the failure before
+  anything is spent, with the pull request, branch, commit and run linked to GitHub
+  (on the host the job's own address names, so Enterprise Server links are right),
+  every failed job and its step, the error output on demand, and the nine
+  readiness checks in order; a repair has its own page that follows it to its
+  outcome; and setup has a page of its own, with a short card left in Settings.
+  The API changes are additive and need no migration: readiness gains `pull` and
+  `checks`, `GET /assistant/repairs/{id}` reads one repair, a repair keeps its run
+  and a `details.case` summary of what it was about, and
+  `GET /assistant/repairs/error-output` reads a job's error lines when asked,
+  redacted and never stored. The log of a job is read only for a person whose
+  linked GitHub account writes to the repository. The Go, unit and browser suites
+  cover it on a desktop and on a phone, with the accessibility, hostile-input and
+  navigation passes and the component gallery in both themes. The audits found
+  two faults, since fixed: a red count of zero failed jobs, and job names squeezed
+  or pushed off the edge of a phone. The screenshot script now says which theme and
+  style to capture, since the app opens dark and in Mission Control, and the four
+  repair images were retaken; the others were not.
+
 * 2026-10-13: ZF-237 browser import sends ciphertext in 8 MiB chunks and polls
   background verification, avoiding whole-archive proxy limits and long
   verification response waits. Uploads are identity-owned, capped and expiring;

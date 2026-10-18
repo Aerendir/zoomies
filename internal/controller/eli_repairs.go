@@ -687,6 +687,13 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		return
 	}
 	r.HeadSHA = pull.HeadSHA
+	// A repair asked for in a comment reaches the worker with no case: the
+	// webhook knew the pull request and nothing more. Reading it here gives the
+	// attempt page the same facts as one started from the UI. A case a request
+	// already recorded is the failure the person saw and is left as it was.
+	if r.Details.Case == nil {
+		r.Details.Case = c.repairCase(ctx, r.Repo, pull, r.RunID)
+	}
 	stillNeeded := func() bool {
 		state, err := client.RepairChecks(ctx, r.Repo, pull.HeadSHA)
 		if err != nil {
@@ -923,12 +930,16 @@ func (c *Controller) checkEliRepairs(ctx context.Context) {
 
 // RequestEliRepair is the same owner-scoped operation as a GitHub mention, reachable from the UI.
 func (c *Controller) RequestEliRepair(ctx context.Context, userID, repo string, pull int, instruction string, requesterAdmin bool) (*store.EliRepair, error) {
-	return c.RequestPinnedEliRepair(ctx, userID, repo, pull, instruction, "", requesterAdmin)
+	return c.RequestPinnedEliRepair(ctx, userID, repo, pull, instruction, "", 0, requesterAdmin)
 }
-func (c *Controller) RequestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead string, requesterAdmin bool) (*store.EliRepair, error) {
-	return c.requestPinnedEliRepair(ctx, userID, repo, pull, instruction, expectedHead, "", requesterAdmin)
+
+// RequestPinnedEliRepair is the request the repair page makes. runID is the run
+// whose failure the person was looking at, or 0 when they came from the pull
+// request alone; it is what the attempt later says the repair was started for.
+func (c *Controller) RequestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead string, runID int64, requesterAdmin bool) (*store.EliRepair, error) {
+	return c.requestPinnedEliRepair(ctx, userID, repo, pull, instruction, expectedHead, "", runID, requesterAdmin)
 }
-func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead, dedup string, requesterAdmin bool) (*store.EliRepair, error) {
+func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead, dedup string, runID int64, requesterAdmin bool) (*store.EliRepair, error) {
 	repo = normaliseRepairRepo(repo)
 	if pull < 1 || len(instruction) > 4000 {
 		return nil, store.ErrConflict
@@ -998,7 +1009,8 @@ func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo st
 	if instruction == "" {
 		instruction = "Fix the underlying issue in this PR using the failed-job evidence."
 	}
-	row := &store.EliRepair{Repo: repo, InstallationID: inst.ID, PullNumber: pull, HeadSHA: pr.HeadSHA, UserID: userID, GitHubUserID: identity.GitHubUserID, GitHubLogin: identity.GitHubLogin, ProviderID: provider.ID, Trigger: "mention", RequesterAdmin: requesterAdmin, Instruction: instruction, DedupKey: fmt.Sprintf("ui:%s:%d:%s:%s", repo, pull, pr.HeadSHA, userID)}
+	row := &store.EliRepair{Repo: repo, InstallationID: inst.ID, PullNumber: pull, HeadSHA: pr.HeadSHA, RunID: runID, UserID: userID, GitHubUserID: identity.GitHubUserID, GitHubLogin: identity.GitHubLogin, ProviderID: provider.ID, Trigger: "mention", RequesterAdmin: requesterAdmin, Instruction: instruction, DedupKey: fmt.Sprintf("ui:%s:%d:%s:%s", repo, pull, pr.HeadSHA, userID)}
+	row.Details.Case = c.repairCase(ctx, repo, pr, runID)
 	if dedup != "" {
 		row.DedupKey = dedup
 	}

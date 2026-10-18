@@ -3856,6 +3856,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assistant/repairs/error-output": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the error lines of one failed job, when asked
+         * @description The lines of the job's log that say why it failed, read from GitHub when the request is made and passed through the same credential redaction a repair's evidence gets. They are kept nowhere: held in memory for a minute so a second look is not a second download, and never stored or logged. Personal accounts only, like readiness, and only for a caller whose confirmed GitHub account can write to the repository; anyone else is a 409 that says what is needed. A log GitHub no longer has, or a job that printed no error lines, is an empty `lines` with a `note`.
+         */
+        get: operations["getEliErrorOutput"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/repairs/opportunities": {
         parameters: {
             query?: never;
@@ -3905,6 +3925,26 @@ export interface paths {
         put?: never;
         /** Request a repair using the caller’s personal provider */
         post: operations["requestEliRepair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one repair
+         * @description One repair by id, in the shape the list returns. Administrators reach any repair and everyone else their own; a repair that is not the caller's is a 404 word for word the same as one that does not exist. A repair cleared from the history still opens, so a link someone kept keeps working.
+         */
+        get: operations["getEliRepair"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10588,11 +10628,33 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description One failed job of the run a repair was started for, with the step it stopped at. Every text is the workflow's own words, so it is data to draw and never markup. */
+        EliRepairCaseJob: {
+            name: string;
+            /** @description The first step that did not succeed. */
+            step?: string;
+            /** @description The job's page, on the host GitHub served it from. Present only when it is a plain http or https address. */
+            url?: string;
+            duration_ms?: number;
+        };
+        /** @description What a repair was about, kept as it was when the repair began: Zoomies' own job records are pruned and a pull request's title changes. It holds no log text. Absent on a repair made before cases were kept, and a case whose jobs were already pruned names the pull request alone. */
+        EliRepairCase: {
+            pull_title?: string;
+            pull_url?: string;
+            author?: string;
+            branch?: string;
+            run_url?: string;
+            workflow?: string;
+            run_number?: number;
+            /** @description The failed jobs, at most ten. */
+            jobs?: components["schemas"]["EliRepairCaseJob"][];
+        };
         EliRepairDetails: {
             model?: string;
             stage?: string;
             failure_code?: string;
             source_bytes?: number;
+            case?: components["schemas"]["EliRepairCase"];
             steps?: {
                 input_tokens: number;
                 output_tokens: number;
@@ -10607,21 +10669,53 @@ export interface components {
             capped: boolean;
             missing_permissions: string[];
         };
+        EliErrorOutput: {
+            /** @description The error lines of the job's log, redacted: at most twelve, each at most 300 bytes, the last ones being those that ended the job. */
+            lines: string[];
+            /** @description A sentence for the person when there are no lines to show. */
+            note?: string;
+        };
+        /** @description The pull request a readiness answer is about, in its own words. Present only after the caller's linked GitHub account has been shown to write to the repository, so a person who may not see the repository is never told what is in it. The url is the server's, so a GitHub Enterprise Server link points at the right host. */
+        EliReadinessPull: {
+            number: number;
+            title: string;
+            author: string;
+            /** @description The branch the pull request comes from. */
+            branch: string;
+            /** @description The branch it would merge into. */
+            base: string;
+            url: string;
+            open: boolean;
+        };
+        /** @description One thing readiness looks at and what it found. A check readiness never reached because an earlier one stopped it is unchecked, which is not the same as passed. */
+        EliReadinessCheck: {
+            /** @enum {string} */
+            code: "identity" | "provider" | "installation" | "access" | "policy" | "budget" | "pull" | "checks" | "permissions";
+            /** @enum {string} */
+            status: "ok" | "blocked" | "unchecked";
+            message: string;
+            /** @description On a blocked check, the code of the blocker that stopped it, as it appears in `blockers`. The check says where readiness stopped and the blocker says why, and they are not the same: GitHub not answering (`github`) or the allowance not being readable (`budget_unavailable`) is reported on whichever check it was making. When the target has changed, `blockers` holds that change alone, and a check blocked before it was found still names what stopped it. Absent on a check that passed or was not reached, and from a controller older than this field. */
+            blocker?: string;
+        };
         EliReadiness: {
             ready: boolean;
             repo: string;
             pull_number: number;
             head_sha: string;
+            pull?: components["schemas"]["EliReadinessPull"];
             provider: string;
             model: string;
             allow_workflows: boolean;
             remaining: number;
             /** Format: date-time */
             reset_at?: string;
+            /** @description What stands in the way. When the target has changed (fixed, closed or superseded) this is that alone, which is the answer to what the person asked; checks still say what each check found. */
             blockers: {
                 code: string;
                 message: string;
             }[];
+            /** @description Every check readiness makes, always the same nine in the order they are made, so a page can show what passed as well as what did not. */
+            checks: components["schemas"]["EliReadinessCheck"][];
         };
         EliOpportunity: {
             id: string;
@@ -10678,6 +10772,8 @@ export interface components {
             instruction: string;
             /** @description PR head reviewed by the requester */
             head_sha?: string;
+            /** @description The run whose failure the requester was looking at, when they came from one. The repair records it and says it was started for that run. */
+            run_id?: number;
         };
         EliRepair: {
             details?: components["schemas"]["EliRepairDetails"];
@@ -18420,6 +18516,33 @@ export interface operations {
             422: components["responses"]["Unprocessable"];
         };
     };
+    getEliErrorOutput: {
+        parameters: {
+            query: {
+                /** @description The repository, as `owner/name`. */
+                repo: string;
+                /** @description GitHub's id for the job. */
+                job_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliErrorOutput"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
     listEliOpportunities: {
         parameters: {
             query?: never;
@@ -18525,6 +18648,29 @@ export interface operations {
             };
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    getEliRepair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliRepair"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     selectEliRepairs: {

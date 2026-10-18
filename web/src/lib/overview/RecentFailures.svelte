@@ -44,6 +44,7 @@
   import Panel from '$lib/components/Panel.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
+  import { targetHref } from '$lib/repairs/workspace';
 
   interface Props {
     class?: string;
@@ -291,7 +292,7 @@
               {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}
                 <Button
                   size="sm"
-                  href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
+                  href={targetHref({ repo: job.repo, run: job.github_run_id, job: job.id })}
                   >Fix with Eli</Button
                 >
               {/if}

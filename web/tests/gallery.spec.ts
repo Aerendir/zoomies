@@ -35,6 +35,7 @@ const SECTIONS = [
   'Overlays',
   'Notices',
   'Data grid',
+  'Eli repairs',
 ];
 
 function open(page: Page, style: string, mode: string): Promise<unknown> {
@@ -316,4 +317,250 @@ test('a toast lands in the region with the tone it was raised with', async ({ pa
   const refusal = page.getByText('The drain was refused');
   await expect(refusal).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open your account' })).toBeVisible();
+});
+
+test('the Eli repair components show every state they can be in', async ({ page }) => {
+  await open(page, 'mission-control', 'dark');
+  const region = page.getByRole('region', { name: 'Eli repairs', exact: true });
+  await expect(region).toBeVisible();
+
+  // The case, with the pull request looked up and without it.
+  const withPull = region.locator('[data-gallery="case-pull"]');
+  await expect(
+    withPull.getByRole('heading', { name: 'Retry transient 502s in the registry client' }),
+  ).toBeVisible();
+  await expect(withPull.getByRole('link', { name: /eyupio\/zoomies #1131/ })).toHaveAttribute(
+    'href',
+    'https://github.com/eyupio/zoomies/pull/1131',
+  );
+  await expect(withPull.getByRole('link', { name: 'a41c9e2' })).toHaveAttribute(
+    'href',
+    /\/commit\/a41c9e2f0b7d/,
+  );
+  await expect(region.locator('[data-gallery="case-no-pull"]')).toContainText(
+    'Pull request not looked up yet',
+  );
+
+  // The job the person opened is open and its error output has been read.
+  const loaded = region.locator('[data-gallery="jobs-loaded"]');
+  await expect(loaded.getByText('You opened this one')).toBeVisible();
+  await expect(loaded.getByText('Error output, 4 lines')).toBeVisible();
+  await expect(loaded.getByText('client_test.go:88: got 1 attempt, want 3')).toBeVisible();
+  await expect(loaded.getByText('Nothing here is stored', { exact: false })).toBeVisible();
+  // A fleet fault says a repair is unlikely to help, and says what to do.
+  await loaded.locator('details', { hasText: 'Integration (shard 3)' }).locator('summary').click();
+  await expect(loaded.getByText('A repair is unlikely to help')).toBeVisible();
+  await expect(loaded.getByText('Out of memory').first()).toBeVisible();
+
+  // Without verified write access the log is not read, and the page says why.
+  const locked = region.locator('[data-gallery="jobs-locked"]');
+  await expect(locked.getByText('Error output needs write access')).toBeVisible();
+  await expect(locked.getByText('Error output, ')).toHaveCount(0);
+
+  // A log that is gone is an answer, and a very long line wraps.
+  await expect(region.locator('[data-gallery="jobs-gone"]')).toContainText(
+    'GitHub no longer has this log',
+  );
+  const long = region.locator('[data-gallery="jobs-long"] pre');
+  await expect(long).toContainText('<script>alert("an error line is text")</script>');
+  expect(await long.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+  // The checklist names what blocked and what was never reached.
+  const blocked = region.locator('[data-gallery="checks-blocked"]');
+  await expect(blocked.getByRole('listitem').filter({ hasText: 'Write access' })).toContainText(
+    'Your linked GitHub account needs write access',
+  );
+  await expect(blocked.getByText('Not checked yet.')).toHaveCount(5);
+  await expect(blocked.getByRole('link', { name: /Manage access on GitHub/ })).toHaveAttribute(
+    'href',
+    'https://github.com/eyupio/zoomies/settings/access',
+  );
+  await expect(region.locator('[data-gallery="checks-passed"]')).toContainText(
+    'All 9 checks passed',
+  );
+
+  // The decision card at each stage.
+  await expect(
+    region
+      .locator('[data-gallery="decision-blocked"]')
+      .getByRole('heading', { name: 'Fix write access first' }),
+  ).toBeVisible();
+  await expect(
+    region
+      .locator('[data-gallery="decision-blocked"]')
+      .getByRole('button', { name: 'Check access again' }),
+  ).toBeVisible();
+  await expect(
+    region.locator('[data-gallery="decision-ready"]').getByRole('button', { name: 'Fix with Eli' }),
+  ).toBeEnabled();
+  await expect(region.locator('[data-gallery="decision-ready"]')).toContainText('never merges');
+  const changed = region.locator('[data-gallery="decision-changed"]');
+  await expect(
+    changed.getByRole('heading', { name: 'A newer commit replaced this failure' }),
+  ).toBeVisible();
+  await expect(changed.getByRole('button', { name: 'Check the current PR' })).toBeVisible();
+  await expect(changed.getByRole('link', { name: /original run/i })).toBeVisible();
+  await expect(region.locator('[data-gallery="decision-checking"]')).toContainText('Checking');
+  await expect(region.locator('[data-gallery="decision-error"]').getByRole('alert')).toContainText(
+    'The controller did not answer',
+  );
+
+  // The progress track puts its mark on the step the worker is on, and the steps
+  // either side say what is done and what is to come.
+  const track = (name: string) =>
+    region
+      .locator(`[data-gallery="${name}"]`)
+      .getByRole('list', { name: 'What Eli is doing' })
+      .getByRole('listitem');
+  await expect(track('progress-queued').nth(0)).toHaveAttribute('aria-current', 'step');
+  await expect(track('progress-preparing').nth(2)).toHaveAttribute('aria-current', 'step');
+  await expect(track('progress-preparing').nth(1)).toContainText('Done');
+  await expect(track('progress-preparing').nth(3)).toContainText('Not started');
+  await expect(track('progress-watching').nth(4)).toHaveAttribute('aria-current', 'step');
+  await expect(region.locator('[data-gallery="progress-preparing"]')).toContainText(
+    'Elapsed 1m 03s',
+  );
+  await expect(region.locator('[data-gallery="progress-preparing"]')).toContainText(
+    'You can leave this page',
+  );
+
+  // Each kind of ending is named by its state, and a state from a newer controller keeps its own name.
+  const outcomes = region.locator('[data-gallery="outcomes"]');
+  for (const heading of [
+    'Could not repair',
+    'Checks passed',
+    'Checks failed',
+    'Needs attention',
+    'a-state-from-a-newer-controller',
+  ]) {
+    await expect(outcomes.getByRole('heading', { name: heading })).toBeVisible();
+  }
+
+  // Technical details: open once finished, shut while going, and a call whose usage
+  // was never reported is unknown rather than zero.
+  const finished = region.locator('[data-gallery="tech-finished"]');
+  await expect(finished.locator('details.tech')).toHaveAttribute('open', '');
+  await expect(finished.getByRole('row').nth(2).getByRole('cell')).toHaveText([
+    'Unknown',
+    'Unknown',
+    '89 KB',
+    '9.0s',
+  ]);
+  await expect(region.locator('[data-gallery="tech-running"] details.tech')).not.toHaveAttribute(
+    'open',
+    '',
+  );
+  await expect(region.locator('[data-gallery="tech-none"]')).toContainText(
+    'No model call was recorded',
+  );
+
+  // What to try next: the advice for the code, a short list for a success, and the generic advice otherwise.
+  await expect(region.locator('[data-gallery="next-failed"]')).toContainText(
+    'Add a note that points at the file or the test',
+  );
+  await expect(
+    region
+      .locator('[data-gallery="next-failed"]')
+      .getByRole('link', { name: 'Try another attempt' }),
+  ).toBeVisible();
+  const passedNext = region.locator('[data-gallery="next-passed"]');
+  await expect(passedNext.getByRole('heading', { name: 'What to do next' })).toBeVisible();
+  await expect(passedNext.getByRole('link', { name: 'Try another attempt' })).toHaveCount(0);
+  await expect(region.locator('[data-gallery="next-unknown"]')).toContainText(
+    'Add a note that points at the file or the test',
+  );
+  await expect(
+    region
+      .locator('[data-gallery="next-unknown"]')
+      .getByRole('link', { name: /Open pull request/ }),
+  ).toHaveCount(0);
+
+  // The facts leave out what the row does not have, and the timeline holds the moments it recorded.
+  const running = region.locator('[data-gallery="facts-running"]');
+  await expect(running).toContainText('Preparing the fix');
+  await expect(running).not.toContainText('Commit pushed');
+  const done = region.locator('[data-gallery="facts-finished"]');
+  await expect(done.getByRole('link', { name: /b7d3e91/ })).toHaveAttribute(
+    'href',
+    /\/commit\/b7d3e9150c2a/,
+  );
+  await expect(done).toContainText('Took');
+  await expect(done.getByRole('region', { name: 'Timeline' })).toContainText(
+    'Pushed commit b7d3e91',
+  );
+
+  // The hub's setup bar says whether the person can repair, in each state it can be in.
+  const bars = region
+    .locator('[data-gallery="setup-bars"]')
+    .getByRole('region', { name: 'Repair setup' });
+  await expect(bars.nth(0)).toContainText('Ready to repair');
+  await expect(bars.nth(0)).toContainText('GitHub @dana linked');
+  await expect(bars.nth(0)).toContainText('Ask me first on 3 repositories');
+  await expect(bars.nth(1)).toContainText('Setup needed');
+  await expect(bars.nth(1)).toContainText('repairs not allowed yet');
+  await expect(bars.nth(1)).not.toContainText('Ask me first');
+  await expect(bars.nth(2)).toContainText('No GitHub account linked');
+  await expect(bars.nth(3)).toContainText('Sign-in is off');
+  await expect(bars.nth(4)).toContainText('Checking setup');
+  await expect(bars.nth(0).getByRole('link', { name: /Manage setup/ })).toHaveAttribute(
+    'href',
+    '/repairs/setup',
+  );
+
+  // Offers say what failed and where, and a title or a job name with no break points wraps.
+  const offers = region.locator('[data-gallery="offers"]');
+  await expect(offers.getByRole('article')).toHaveCount(3);
+  await expect(offers.getByRole('article').first()).toContainText('UI (e2e)');
+  await expect(offers.getByRole('article').first()).toContainText('step 4, Install browsers');
+  await expect(offers.getByRole('article').nth(1)).toContainText('step 5, Run the unit tests');
+  await expect(
+    offers.getByRole('link', { name: 'Review repair for eyupio/zoomies #1142' }),
+  ).toHaveAttribute('href', /\/repairs\/new\?.*offer=opp_1/);
+  expect(await offers.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+  // Running repairs say which step they are on, and Follow opens the attempt.
+  const going = region.locator('[data-gallery="active"]');
+  await expect(going).toContainText('Preparing the fix');
+  await expect(going).toContainText('Queued');
+  await expect(going.getByRole('img', { name: 'Step 3 of 5: Preparing the fix' })).toBeVisible();
+  await expect(
+    going.getByRole('link', { name: /Follow the repair for eyupio\/zoomies #1131/ }),
+  ).toHaveAttribute('href', '/repairs/eli_run1');
+
+  // History rows open the attempt, name the failed jobs, and keep their boxes for Select mode.
+  const rows = region.locator('[data-gallery="rows"]');
+  await expect(rows.getByRole('checkbox')).toHaveCount(0);
+  await expect(
+    rows.getByRole('link', { name: 'Add a status line to the repairs page' }),
+  ).toHaveAttribute('href', '/repairs/eli_pass');
+  await expect(rows.getByRole('article').nth(3)).toContainText('+1 more');
+  await expect(rows.getByRole('article').nth(1)).toContainText('Fix commit');
+  // A repair from before cases were kept says less and does not guess.
+  await expect(rows.getByRole('article').nth(4)).toContainText(
+    'Pull request #1002 in eyupio/zoomies',
+  );
+  expect(await rows.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const picking = region.locator('[data-gallery="rows-selecting"]');
+  await expect(picking.getByRole('checkbox')).toHaveCount(3);
+  await expect(picking.getByRole('checkbox').nth(1)).toBeChecked();
+  // The running repair's box says why it cannot be ticked.
+  await expect(picking.getByRole('checkbox').nth(0)).toBeDisabled();
+
+  // Every state a repair can end in has its word, and one this build does not know keeps its own.
+  const badges = region.locator('[data-gallery="repair-status"]');
+  for (const label of [
+    'Queued',
+    'Investigating',
+    'Waiting for CI',
+    'Checks passed',
+    'Checks failed',
+    'Could not repair',
+    'Needs attention',
+    'Interrupted',
+    'Newer commit',
+    'Unverified',
+    'a-state-from-a-newer-controller',
+  ]) {
+    await expect(badges.getByText(label, { exact: true })).toBeVisible();
+  }
 });
