@@ -88,6 +88,13 @@ func (c *Controller) jobAttentionOnGitHub(ctx context.Context, repo string, run 
 	if err != nil {
 		return "", false, limited(err)
 	}
+	if state != nil && state.Event != "" {
+		// The failure's trigger decides whether Eli is offered it at all, and
+		// this is the one place every failed run is read from GitHub.
+		if err := c.st.SetRunEventForRun(ctx, repo, run, state.Event); err != nil {
+			c.log.Warn("could not record what started a failed run", "repo", repo, "run", run, "error", err)
+		}
+	}
 	if state != nil && state.Status == "completed" && state.Conclusion == "success" {
 		return "fixed", true, false
 	}

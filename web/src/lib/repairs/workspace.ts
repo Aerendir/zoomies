@@ -54,6 +54,18 @@ export function targetHref(target: Partial<RepairTarget>): string {
   return parts.length ? `/repairs/new?${parts.join('&')}` : '/repairs/new';
 }
 
+/**
+ * Whether a failed job can be offered to Eli at all. Eli pushes one commit to an
+ * existing pull request's branch and never raises one, so the failure of a push,
+ * merge or scheduled run has nothing to repair. A run whose trigger the
+ * controller has not read yet is still offered: the repair page says why if it
+ * turns out not to be one.
+ */
+export function eliCanRepairRun(job: { run_event?: string }): boolean {
+  const event = job.run_event ?? '';
+  return event === '' || event === 'pull_request' || event === 'pull_request_target';
+}
+
 const CHANGED = ['fixed', 'closed', 'superseded'] as const;
 
 /**

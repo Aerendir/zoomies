@@ -210,6 +210,8 @@ type WorkflowRunState struct {
 	// name. workflow_job deliveries never carry it, which is what this lookup
 	// is for.
 	RunNumber int64
+	// Event is what started the run: push, pull_request, schedule and so on.
+	Event string
 }
 
 // Cancelled reports whether GitHub has finished the whole run as cancelled.

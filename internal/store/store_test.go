@@ -791,7 +791,7 @@ func TestTheJobsRebuildKeepsEveryRowAndItsIndexes(t *testing.T) {
 			 '0054_jobs_run_index.sql', '0060_job_versions.sql', '0061_job_usage.sql',
 			 '0062_job_indexes_for_scans.sql', '0071_job_granted_size.sql',
 			 '0075_job_size_routing.sql', '0085_job_output_tail.sql', '0098_job_scratch_peaks.sql',
-			 '0111_job_attention.sql')`,
+			 '0111_job_attention.sql', '0113_job_run_event.sql')`,
 		`DROP INDEX runners_provisioning_order`,
 		`ALTER TABLE runner_sessions DROP COLUMN controller_version`,
 		`ALTER TABLE runner_sessions DROP COLUMN controller_channel`,
