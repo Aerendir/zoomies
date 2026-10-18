@@ -566,6 +566,46 @@ test('the failed runners card says what it covers, and that the list’s search 
   await expect(found.getByText(`Pool ${pool.name}, `)).toBeVisible();
 });
 
+// When a pool fails on one host while it starts on others, the route reports the
+// pool and, beside it, that host counting the pool's starts alone (pool_id set):
+// the host's trouble, not the pool's. Drawn as a bare host row, "6 of 8 starts
+// failed" reads as the host's own tally across every pool, which is the one
+// thing the route says it is not, and the two rows look like two findings. The
+// demo's seed does not produce this case, so the answer is the demo's own with
+// its groups replaced by the pair the schema describes.
+test('a host group that counts one pool’s starts alone says which pool', async ({ page }) => {
+  const pools = (await page.request.get('/api/v1/pools').then((r) => r.json())) as {
+    items: { id: string; name: string }[];
+  };
+  const pool = pools.items[0]!;
+  await page.route('**/api/v1/analysis/startup-failures**', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      evidence: { groups: Record<string, unknown>[] };
+    };
+    const host = body.evidence.groups[0]!;
+    body.evidence.groups = [
+      { ...host, scope: 'pool', id: pool.id, name: pool.name, pool_id: '' },
+      { ...host, scope: 'host', pool_id: pool.id, starts: 8, failures: 6 },
+    ];
+    await route.fulfill({ response, json: body });
+  });
+  await goto(page, '/runners?state=failed', 'Runners');
+  const found = card(page, 'What keeps failing to start');
+  await found.getByText('Evidence', { exact: true }).click();
+  const rows = found.getByRole('list', { name: 'Where they fail' }).getByRole('listitem');
+  await expect(rows).toHaveCount(2);
+  // The pool's own row is the pool's tally, and says nothing more.
+  await expect(rows.nth(0)).toContainText(`Pool ${pool.name}`);
+  await expect(rows.nth(0)).not.toContainText('alone');
+  // The host's row says whose starts it counts, and links the pool.
+  await expect(rows.nth(1)).toContainText(`(starts of pool ${pool.name} alone)`);
+  await expect(rows.nth(1).getByRole('link', { name: pool.name })).toHaveAttribute(
+    'href',
+    `/pools/${pool.id}`,
+  );
+});
+
 test("a refusal is the route's own sentence, and the page's facts stand", async ({ page }) => {
   // A refusal the route gives, with its code; the card shows the sentence
   // rather than a generic failure, because the sentence says what to change.

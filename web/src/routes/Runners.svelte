@@ -643,6 +643,16 @@
                 <span>
                   {g.scope === 'host' ? 'Host' : 'Pool'}
                   <a href="/{g.scope === 'host' ? 'hosts' : 'pools'}/{g.id}">{g.name || g.id}</a>
+                  {#if g.pool_id}
+                    <!-- A host's group that counts one pool's starts alone. Bare, its
+                         figures read as the host's own across every pool, which is the
+                         one thing the route says they are not. -->
+                    <span class="muted">
+                      (starts of pool <a href="/pools/{g.pool_id}"
+                        >{fleet.pool(g.pool_id)?.name ?? g.pool_id}</a
+                      > alone)
+                    </span>
+                  {/if}
                 </span>
                 <span class="figure muted">
                   {g.failures} of {pluralise(g.starts, 'start')} failed, failing since {formatAbsolute(
