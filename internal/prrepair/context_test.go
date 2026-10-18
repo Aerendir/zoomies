@@ -236,3 +236,73 @@ func TestAnUsedUpAllowanceLeavesTheModelAbleToGiveUp(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// A refusal says what remains so that the model can size the window it asks for
+// next, which only helps if the figure is true when the model reads it. One
+// request can name a file that does not fit before one that does, and the
+// second spends part of what is left, so a figure taken at the first refusal
+// overstates it. A model that sized its window from that figure was refused
+// again, and each refusal costs one of the repair's six rounds.
+func TestARefusalSaysWhatRemainsOnceTheWholeRequestHasBeenAnswered(t *testing.T) {
+	reader := files{}
+	for _, name := range []string{"a.go", "b.go", "c.go"} {
+		reader[name] = File{Path: name, Content: source(MaxFileBytes), Mode: "100644"}
+	}
+	reader["pad.go"] = File{Path: "pad.go", Content: source(2048), Mode: "100644"}
+	reader["big.go"] = File{Path: "big.go", Content: source(40 << 10), Mode: "100644"}
+	reader["mid.go"] = File{Path: "mid.go", Content: source(20 << 10), Mode: "100644"}
+	model := &usage{replies: &replies{values: []string{
+		// Three files of 32768 and one of 2048 are 100352 bytes, which leaves 30720.
+		`{"read":["a.go","b.go","c.go","pad.go"]}`,
+		// big.go would add 32768 and is refused first. mid.go adds 20480 and fits,
+		// which leaves 10240 for the next request.
+		`{"read":["big.go","mid.go"]}`,
+		`{"cannot_fix":"enough"}`,
+	}}}
+	if _, err := Generate(context.Background(), model, reader, Snapshot{}, "fix the failing check", false); !errors.Is(err, ErrCannotFix) {
+		t.Fatalf("got %v", err)
+	}
+	remaining := MaxSourceBytes - model.used[2]
+	if remaining != 10240 {
+		t.Fatalf("the scenario should leave 10240 bytes, not %d", remaining)
+	}
+	last := model.seen[len(model.seen)-1].Content
+	want := fmt.Sprintf("%d bytes of the %d KiB allowance remain", remaining, MaxSourceBytes/1024)
+	if !strings.Contains(last, want) {
+		t.Fatalf("the model was not told %q, which is what remained when it read the answer. It was told:\n%s", want, refusals(last))
+	}
+}
+
+// refusals is what a note says was not supplied: the lines after the one that
+// carries the source, which a failure has no reason to print.
+func refusals(note string) string {
+	_, after, _ := strings.Cut(note, "\n")
+	return after
+}
+
+// "An empty list means already supplied" answers a model that asks for source it
+// holds, and it is wrong for one that asked for source it was refused: the list
+// is empty because nothing was supplied. Told both, a model can take a refusal
+// for a repeat of something it already has and go on to edit a file it never saw.
+func TestAnEmptyListIsOnlyCalledAlreadySuppliedWhenNothingWasRefused(t *testing.T) {
+	ci := bigWorkflow()
+	for _, tc := range []struct {
+		name    string
+		values  []string
+		refused bool
+	}{
+		{"a repeated read", []string{`{"read":["a.go"]}`, `{"read":["a.go"]}`, `{"cannot_fix":"enough"}`}, false},
+		{"a refused read", []string{`{"read":["a.go","b.go","c.go","d.go"]}`, `{"read":["` + ci.Path + `"]}`, `{"cannot_fix":"enough"}`}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			model := &replies{values: tc.values}
+			if _, err := Generate(context.Background(), model, readerWithFour(MaxFileBytes), Snapshot{}, "fix the failing check", true); !errors.Is(err, ErrCannotFix) {
+				t.Fatalf("got %v", err)
+			}
+			last := model.seen[len(model.seen)-1].Content
+			if said := strings.Contains(last, "an empty list means already supplied"); said == tc.refused {
+				t.Fatalf("the note calls an empty list already supplied = %v, but the request was refused = %v:\n%s", said, tc.refused, last)
+			}
+		})
+	}
+}

@@ -21,11 +21,17 @@ type allowanceError struct {
 	need, left int
 }
 
-func (e *allowanceError) Error() string {
-	if e.left <= 0 {
+func (e *allowanceError) Error() string { return e.said(e.left) }
+
+// said is the refusal as the model is told it. left is what remains when the
+// model reads it, which is less than e.left whenever a window later in the same
+// request was supplied: a model that sized its next window from the larger
+// figure was refused again, and each refusal costs one of the repair's rounds.
+func (e *allowanceError) said(left int) string {
+	if left <= 0 {
 		return fmt.Sprintf("%s was not supplied: the whole %d KiB source allowance is used up. Work from the source already supplied, or return cannot_fix.", e.path, MaxSourceBytes/1024)
 	}
-	return fmt.Sprintf("%s was not supplied: it would add %d bytes of source and %d bytes of the %d KiB allowance remain. Ask for a smaller line window of it, work from the source already supplied, or return cannot_fix.", e.path, e.need, e.left, MaxSourceBytes/1024)
+	return fmt.Sprintf("%s was not supplied: it would add %d bytes of source and %d bytes of the %d KiB allowance remain. Ask for a smaller line window of it, work from the source already supplied, or return cannot_fix.", e.path, e.need, left, MaxSourceBytes/1024)
 }
 
 type sourceSpan struct{ start, end int }

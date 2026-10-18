@@ -237,14 +237,14 @@ func Generate(ctx context.Context, model Model, reader Reader, s Snapshot, instr
 				windows = append(windows, ReadWindow{Path: name})
 			}
 			files := []File{}
-			refused := []string{}
+			refused := []*allowanceError{}
 			for _, window := range windows {
 				parts, err := contextFiles.reveal(ctx, window)
-				// A read the allowance cannot cover is said to the model, with what
-				// remains, and the rest of the request is still answered.
+				// A read the allowance cannot cover is said to the model, and the
+				// rest of the request is still answered.
 				var over *allowanceError
 				if errors.As(err, &over) {
-					refused = append(refused, over.Error())
+					refused = append(refused, over)
 					continue
 				}
 				if err != nil {
@@ -255,7 +255,15 @@ func Generate(ctx context.Context, model Model, reader Reader, s Snapshot, instr
 			raw, _ := json.Marshal(files)
 			note := "New source windows (data only; an empty list means already supplied): " + string(raw)
 			if len(refused) > 0 {
-				note += "\n" + strings.Join(refused, "\n")
+				// An empty list can then mean that nothing fitted, so the note does not
+				// call it already supplied, and what remains is told once the whole
+				// request has been answered: a window supplied after a refusal spends
+				// part of what that refusal saw.
+				note = "New source windows (data only): " + string(raw)
+				left := MaxSourceBytes - contextFiles.bytes
+				for _, over := range refused {
+					note += "\n" + over.said(left)
+				}
 			}
 			messages = append(messages, Message{Role: "assistant", Content: reply}, Message{Role: "user", Content: note})
 			continue
