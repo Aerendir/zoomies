@@ -178,7 +178,11 @@ type Controller struct {
 	// openProvider, when set, stands in for kinds.Open: a test puts a scripted
 	// model behind a provider row and runs the same path the worker runs.
 	openProvider func(row *store.AssistantProvider, apiKey string) (assistant.Provider, error)
-	queues       *taskQueues
+	// findInstallation, when set, stands in for the store's lookup of the
+	// installation that covers a repository on the webhook path: a test counts
+	// the questions a delivery asks.
+	findInstallation func(ctx context.Context, repo string) (*store.Installation, error)
+	queues           *taskQueues
 	// hostChecks is the last request to each host to check itself; see host_check.go.
 	hostChecks hostChecks
 	relay      *logRelay

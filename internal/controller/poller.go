@@ -333,7 +333,7 @@ func (c *Controller) ingestStartedJob(ctx context.Context, q github.QueuedJob) {
 	if q.StartedAt != nil {
 		started.StartedAt = *q.StartedAt
 	}
-	if err := c.applyWorkflowJob(ctx, started, sourcePoller); err != nil {
+	if err := c.applyWorkflowJob(ctx, started, sourcePoller, nil); err != nil {
 		c.log.Warn("could not record a polled running job", "github_job_id", q.ID, "error", err)
 	}
 }
@@ -498,7 +498,7 @@ func (c *Controller) reconcileKnownJobs(ctx context.Context, now time.Time) {
 		if remote.State() != store.JobCompleted && remote.State() != store.JobInProgress {
 			continue
 		}
-		if err := c.applyWorkflowJob(ctx, remote, sourcePoller); err != nil {
+		if err := c.applyWorkflowJob(ctx, remote, sourcePoller, nil); err != nil {
 			c.log.Warn("could not update reconciled workflow job", "job", j.ID, "error", err)
 		}
 	}

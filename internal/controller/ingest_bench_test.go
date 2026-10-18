@@ -60,7 +60,7 @@ func benchClaimed(b *testing.B, h *harness, id int64, pools []*store.Pool) {
 }
 
 // BenchmarkWebhookJob is one signed workflow_job delivery through HandleWebhook,
-// from the signature check to the 202: the installation found twice, a secret
+// from the signature check to the 202: the installation found, a secret
 // unsealed, the pools read and one of them chosen, the job and its timeline
 // written, the delivery logged and the browsers told. The request is built and
 // signed inside the loop, because each delivery is a different job; that is a

@@ -116,7 +116,8 @@ func (c *Controller) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	env := parseEnvelope(body)
 	d.Repo, d.Action = env.Repo, env.Action
 
-	inst, note, err := c.verifyDelivery(ctx, body, signature, env.Repo)
+	owners := c.newDeliveryOwner()
+	inst, note, err := c.verifyDelivery(ctx, body, signature, env.Repo, owners)
 	if err != nil {
 		c.rejectDelivery(ctx, w, r, d, event, env.Repo, err)
 		return
@@ -136,7 +137,7 @@ func (c *Controller) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 			"message": "Zoomies received the ping; webhook delivery to this controller works",
 		})
 	case event == "workflow_job":
-		if err := c.handleWorkflowJob(ctx, body); err != nil {
+		if err := c.handleWorkflowJob(ctx, body, owners); err != nil {
 			if errors.Is(err, errMalformedDelivery) {
 				// A body that verified but is not a workflow_job event is
 				// GitHub's problem or a mistaken sender's, not a failure on
@@ -267,12 +268,12 @@ func (c *Controller) rejectDelivery(ctx context.Context, w http.ResponseWriter, 
 // registered in its organisation with its own App credentials. Nor did the
 // wider net ever help the case it was written for: a stale secret for this
 // installation cannot be recovered by matching a different installation's.
-func (c *Controller) verifyDelivery(ctx context.Context, body []byte, signature, repo string) (*store.Installation, string, error) {
+func (c *Controller) verifyDelivery(ctx context.Context, body []byte, signature, repo string, owners *deliveryOwner) (*store.Installation, string, error) {
 	var firstErr error
 
 	var owner *store.Installation
 	if repo != "" {
-		if inst, err := c.st.FindInstallationByTarget(ctx, repo); err == nil {
+		if inst, err := owners.of(ctx, repo); err == nil {
 			owner = inst
 			secret, serr := c.unsealString(inst.WebhookSecretEnc, "webhook secret for installation "+inst.ID)
 			if serr != nil {
@@ -323,23 +324,79 @@ func (c *Controller) verifyDelivery(ctx context.Context, body []byte, signature,
 		"check that the App's webhook secret matches the one Zoomies holds", repo, tried)
 }
 
+// installationCovering is the store's answer to which installation covers a
+// repository, unless a test has put its own in the way.
+func (c *Controller) installationCovering(ctx context.Context, repo string) (*store.Installation, error) {
+	if c.findInstallation != nil {
+		return c.findInstallation(ctx, repo)
+	}
+	return c.st.FindInstallationByTarget(ctx, repo)
+}
+
+// deliveryOwner remembers which installation covers a repository for the length
+// of one delivery. Verifying a delivery asks, to find the secret its signature
+// was made with, and applying the job asks, to say which installation it belongs
+// to: the same question about the same repository a few hundred microseconds
+// apart, and in a profile about 3% of a delivery for each asking.
+//
+// Only an answer is kept, as the poller's repoOwners keeps only an answer: an
+// installation, or that none covers the repository. A lookup that failed for any
+// other reason says nothing about the repository, so the next question goes to
+// the store, as both always did. It is for one delivery on one goroutine, and it
+// remembers one repository, because a delivery names one; a question about
+// another goes to the store.
+type deliveryOwner struct {
+	ask     func(ctx context.Context, repo string) (*store.Installation, error)
+	repo    string
+	inst    *store.Installation // nil once settled means no installation covers repo
+	settled bool
+}
+
+func (c *Controller) newDeliveryOwner() *deliveryOwner {
+	return &deliveryOwner{ask: c.installationCovering}
+}
+
+// of is the installation covering repo, or an error wrapping store.ErrNotFound
+// when none does.
+func (o *deliveryOwner) of(ctx context.Context, repo string) (*store.Installation, error) {
+	if o.settled && o.repo == repo {
+		if o.inst == nil {
+			return nil, store.ErrNotFound
+		}
+		return o.inst, nil
+	}
+	inst, err := o.ask(ctx, repo)
+	switch {
+	case err == nil:
+		o.repo, o.inst, o.settled = repo, inst, true
+	case errors.Is(err, store.ErrNotFound):
+		o.repo, o.inst, o.settled = repo, nil, true
+	}
+	return inst, err
+}
+
 // handleWorkflowJob is the path that actually scales the fleet.
 // errMalformedDelivery marks a verified delivery whose body is not a
 // workflow_job event, which is answered with a 400 rather than a 500 so that
 // GitHub does not redeliver it for ever.
 var errMalformedDelivery = errors.New("malformed workflow_job delivery")
 
-func (c *Controller) handleWorkflowJob(ctx context.Context, body []byte) error {
+func (c *Controller) handleWorkflowJob(ctx context.Context, body []byte, owners *deliveryOwner) error {
 	e, err := github.ParseWorkflowJob(body)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errMalformedDelivery, err)
 	}
-	return c.applyWorkflowJob(ctx, e, sourceWebhook)
+	return c.applyWorkflowJob(ctx, e, sourceWebhook, owners)
 }
 
 // applyWorkflowJob gives polling and webhooks the same monotonic state updates.
-func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJobEvent, source string) error {
+// owners is what the delivery has already learned about which installation
+// covers its repository, or nil for a caller that has learned nothing.
+func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJobEvent, source string, owners *deliveryOwner) error {
 	job := e.ToJob()
+	if owners == nil {
+		owners = c.newDeliveryOwner()
+	}
 
 	// Which installation owns this work is the job's repository's question,
 	// not the delivery's. Verification deliberately falls back to any secret
@@ -348,7 +405,7 @@ func (c *Controller) applyWorkflowJob(ctx context.Context, e *github.WorkflowJob
 	// that would mint runners in the wrong GitHub target. A repository no
 	// installation covers is recorded with none, and the eligibility rule says
 	// so rather than the delivery being rejected.
-	if owner, err := c.st.FindInstallationByTarget(ctx, job.Repo); err == nil {
+	if owner, err := owners.of(ctx, job.Repo); err == nil {
 		job.InstallationID = owner.ID
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("resolving the installation covering %s: %w", job.Repo, err)
