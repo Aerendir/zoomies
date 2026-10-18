@@ -62,7 +62,7 @@ func (s *Server) handleCaptureComparison(w http.ResponseWriter, r *http.Request)
 		s.comparisonError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, out)
+	writeCreated(w, r, out.ID, out)
 }
 func (s *Server) handleGetComparison(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
