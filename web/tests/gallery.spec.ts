@@ -405,6 +405,90 @@ test('the Eli repair components show every state they can be in', async ({ page 
     'The controller did not answer',
   );
 
+  // The progress track puts its mark on the step the worker is on, and the steps
+  // either side say what is done and what is to come.
+  const track = (name: string) =>
+    region
+      .locator(`[data-gallery="${name}"]`)
+      .getByRole('list', { name: 'What Eli is doing' })
+      .getByRole('listitem');
+  await expect(track('progress-queued').nth(0)).toHaveAttribute('aria-current', 'step');
+  await expect(track('progress-preparing').nth(2)).toHaveAttribute('aria-current', 'step');
+  await expect(track('progress-preparing').nth(1)).toContainText('Done');
+  await expect(track('progress-preparing').nth(3)).toContainText('Not started');
+  await expect(track('progress-watching').nth(4)).toHaveAttribute('aria-current', 'step');
+  await expect(region.locator('[data-gallery="progress-preparing"]')).toContainText(
+    'Elapsed 1m 03s',
+  );
+  await expect(region.locator('[data-gallery="progress-preparing"]')).toContainText(
+    'You can leave this page',
+  );
+
+  // Each kind of ending is named by its state, and a state from a newer controller keeps its own name.
+  const outcomes = region.locator('[data-gallery="outcomes"]');
+  for (const heading of [
+    'Could not repair',
+    'Checks passed',
+    'Checks failed',
+    'Needs attention',
+    'a-state-from-a-newer-controller',
+  ]) {
+    await expect(outcomes.getByRole('heading', { name: heading })).toBeVisible();
+  }
+
+  // Technical details: open once finished, shut while going, and a call whose usage
+  // was never reported is unknown rather than zero.
+  const finished = region.locator('[data-gallery="tech-finished"]');
+  await expect(finished.locator('details.tech')).toHaveAttribute('open', '');
+  await expect(finished.getByRole('row').nth(2).getByRole('cell')).toHaveText([
+    'Unknown',
+    'Unknown',
+    '89 KB',
+    '9.0s',
+  ]);
+  await expect(region.locator('[data-gallery="tech-running"] details.tech')).not.toHaveAttribute(
+    'open',
+    '',
+  );
+  await expect(region.locator('[data-gallery="tech-none"]')).toContainText(
+    'No model call was recorded',
+  );
+
+  // What to try next: the advice for the code, a short list for a success, and the generic advice otherwise.
+  await expect(region.locator('[data-gallery="next-failed"]')).toContainText(
+    'Add a note that points at the file or the test',
+  );
+  await expect(
+    region
+      .locator('[data-gallery="next-failed"]')
+      .getByRole('link', { name: 'Try another attempt' }),
+  ).toBeVisible();
+  const passedNext = region.locator('[data-gallery="next-passed"]');
+  await expect(passedNext.getByRole('heading', { name: 'What to do next' })).toBeVisible();
+  await expect(passedNext.getByRole('link', { name: 'Try another attempt' })).toHaveCount(0);
+  await expect(region.locator('[data-gallery="next-unknown"]')).toContainText(
+    'Add a note that points at the file or the test',
+  );
+  await expect(
+    region
+      .locator('[data-gallery="next-unknown"]')
+      .getByRole('link', { name: /Open pull request/ }),
+  ).toHaveCount(0);
+
+  // The facts leave out what the row does not have, and the timeline holds the moments it recorded.
+  const running = region.locator('[data-gallery="facts-running"]');
+  await expect(running).toContainText('Preparing the fix');
+  await expect(running).not.toContainText('Commit pushed');
+  const done = region.locator('[data-gallery="facts-finished"]');
+  await expect(done.getByRole('link', { name: /b7d3e91/ })).toHaveAttribute(
+    'href',
+    /\/commit\/b7d3e9150c2a/,
+  );
+  await expect(done).toContainText('Took');
+  await expect(done.getByRole('region', { name: 'Timeline' })).toContainText(
+    'Pushed commit b7d3e91',
+  );
+
   // Every state a repair can end in has its word, and one this build does not know keeps its own.
   const badges = region.locator('[data-gallery="repair-status"]');
   for (const label of [

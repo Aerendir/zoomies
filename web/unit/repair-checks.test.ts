@@ -4,6 +4,10 @@ import type { Schemas } from '../src/lib/api/types.ts';
 import { blockedHeadline, blockingRow, checkRows } from '../src/lib/repairs/checks.ts';
 import { CHECK_ORDER, allOk, readiness, stoppedAt, withoutChecks } from './repair-fixtures.ts';
 
+// A pause written as two hyphens between spaces is not a dash either; the check is built
+// from parts so this file does not carry the very thing it forbids.
+const SPACED_DOUBLE_HYPHEN = [' ', '-', '-', ' '].join('');
+
 const REPO_URL = 'https://github.com/acme/widgets';
 const ACCESS = 'Your linked GitHub account needs write access to this repository.';
 
@@ -206,7 +210,7 @@ test('each blocked check has a headline for the decision card', () => {
     const headline = blockedHeadline(code);
     assert.notEqual(headline, '', code);
     assert.notEqual(headline, code, `${code} has no wording`);
-    assert.ok(!headline.includes('\u2014') && !headline.includes(' -- '), headline);
+    assert.ok(!headline.includes('\u2014') && !headline.includes(SPACED_DOUBLE_HYPHEN), headline);
   }
   assert.equal(blockedHeadline('access'), 'Fix write access first');
   assert.equal(blockedHeadline('quantum'), 'Something needs your attention');

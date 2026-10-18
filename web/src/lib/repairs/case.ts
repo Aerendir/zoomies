@@ -1,6 +1,6 @@
 import type { Job, Schemas } from '../api/types';
 import { faultDomain, faultLabel } from '../faults';
-import { commitUrl, linksFromJobUrl, pullUrl, safeHttpUrl } from './links';
+import { commitUrl, githubJobIdFromUrl, linksFromJobUrl, pullUrl, safeHttpUrl } from './links';
 
 /*
   The case: what a repair is about, as the page draws it. There are two ways to
@@ -231,6 +231,8 @@ export function caseFromSnapshot(repair: Repair): CaseView {
       const url = safeHttpUrl(job.url);
       if (url) out.url = url;
       if (job.duration_ms) out.durationMs = job.duration_ms;
+      const githubJobId = githubJobIdFromUrl(job.url);
+      if (githubJobId) out.githubJobId = githubJobId;
       return out;
     }),
   };

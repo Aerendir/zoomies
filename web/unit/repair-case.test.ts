@@ -411,3 +411,13 @@ test('with no jobs, the pull request address gives the repository, run and commi
   });
   assert.equal(both.runUrl, RUN);
 });
+
+// A snapshot job has its address and no id of its own, and the page that follows
+// a repair asks GitHub for its log by id, so the id is read off the address.
+test('a snapshot job gets GitHub\u2019s id from its address', () => {
+  const view = caseFromSnapshot(
+    repair({ details: { case: { jobs: [{ name: 'unit', url: JOB_URL }, { name: 'lint' }] } } }),
+  );
+  assert.equal(view.jobs[0]?.githubJobId, 9001);
+  assert.equal(view.jobs[1]?.githubJobId, undefined);
+});

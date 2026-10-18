@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { commitUrl, linksFromJobUrl, pullUrl, safeHttpUrl } from '../src/lib/repairs/links.ts';
+import {
+  commitUrl,
+  githubJobIdFromUrl,
+  linksFromJobUrl,
+  pullUrl,
+  safeHttpUrl,
+} from '../src/lib/repairs/links.ts';
 import { JOB_URL, SHA } from './repair-fixtures.ts';
 
 // Every address on a repair page was written by somebody: a job's address comes
@@ -87,4 +93,22 @@ test('nothing is built without a repository address, or from something that is n
   assert.equal(commitUrl('https://github.com/acme/widgets', '../../etc'), undefined);
   assert.equal(pullUrl('https://github.com/acme/widgets', 0), undefined);
   assert.equal(pullUrl('https://github.com/acme/widgets', 1.5), undefined);
+});
+
+// A repair keeps its jobs by address, and GitHub's own id for a job is what its
+// log is asked for by, so the id is read back off the address it was kept with.
+test('GitHub\u2019s job id is read off a job address', () => {
+  assert.equal(githubJobIdFromUrl(JOB_URL), 9001);
+  assert.equal(githubJobIdFromUrl('https://ghe.example.com/acme/site/actions/runs/9/job/3'), 3);
+  for (const not of [
+    'https://github.com/acme/widgets/actions/runs/482',
+    'https://github.com/acme/widgets/actions/runs/482/job/abc',
+    'https://github.com/acme/widgets/actions/runs/482/job/99999999999999999999',
+    'javascript:alert(1)/job/9',
+    '',
+    null,
+    undefined,
+  ]) {
+    assert.equal(githubJobIdFromUrl(not), undefined, String(not));
+  }
 });

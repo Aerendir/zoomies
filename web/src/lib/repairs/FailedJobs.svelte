@@ -32,6 +32,8 @@
     /** Why not, when it is not. */
     logsBlockedReason?: string;
     description?: string;
+    /** What the card says when there are no jobs to list. */
+    none?: string;
   }
 
   let {
@@ -40,6 +42,7 @@
     canReadLogs,
     logsBlockedReason = '',
     description = 'From GitHub’s report, as Zoomies recorded it.',
+    none = 'Zoomies has no record of the jobs that failed here, so their names and steps are not shown. The pull request and its checks are read afresh from GitHub.',
   }: Props = $props();
 
   const failed = jobStatus('completed', 'failure');
@@ -84,10 +87,7 @@
   {/snippet}
 
   {#if jobs.length === 0}
-    <p class="none">
-      Zoomies has no record of the jobs that failed here, so their names and steps are not shown.
-      The pull request and its checks are read afresh from GitHub.
-    </p>
+    <p class="none">{none}</p>
   {:else}
     <div class="jobs">
       {#each jobs as job (job.key)}
@@ -107,17 +107,24 @@
             <span class="title">
               <span class="name">
                 <span class="text">{job.name || 'A job'}</span>
-                <Badge
-                  tone={job.domain === 'fleet' ? 'pending' : 'neutral'}
-                  label={blameLabel(job)}
-                  size="sm"
-                  dot={false}
-                />
+                {#if job.domain}
+                  <Badge
+                    tone={job.domain === 'fleet' ? 'pending' : 'neutral'}
+                    label={blameLabel(job)}
+                    size="sm"
+                    dot={false}
+                  />
+                {/if}
                 {#if job.opened}<Badge tone="accent" label="You opened this one" size="sm" />{/if}
               </span>
               {#if job.step}
                 <span class="step">
-                  Failed at step {job.stepNumber ?? '?'}: <span class="mono">{job.step}</span>
+                  {#if job.stepNumber}
+                    Failed at step {job.stepNumber}:
+                  {:else}
+                    Failed at step:
+                  {/if}
+                  <span class="mono">{job.step}</span>
                 </span>
               {/if}
             </span>

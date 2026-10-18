@@ -105,6 +105,45 @@ export function trackIndex(repair: {
   return Math.min(index, REPAIR_TRACK.length - 1);
 }
 
+/**
+ * The track with each step's place against the mark, which is what draws it:
+ * the steps behind the mark are done, the one on it is current, the rest are
+ * still to come. A repair that has finished is not drawn on the track at all
+ * (its outcome is), so this answers for a repair that is still going.
+ */
+export function trackSteps(repair: Parameters<typeof trackIndex>[0]): {
+  id: (typeof REPAIR_TRACK)[number]['id'];
+  label: string;
+  state: StepState;
+}[] {
+  const at = trackIndex(repair);
+  return REPAIR_TRACK.map((step, index) => ({
+    id: step.id,
+    label: step.label,
+    state: index < at ? 'done' : index === at ? 'current' : 'todo',
+  }));
+}
+
+const STAGE_WORDS: Record<string, string> = {
+  evidence: REPAIR_TRACK[1].label,
+  source: 'Reading the source',
+  prepare_fix: REPAIR_TRACK[2].label,
+  publish: REPAIR_TRACK[3].label,
+  watch_ci: REPAIR_TRACK[4].label,
+};
+
+/**
+ * A stage the worker recorded, in words. The technical details say which stage a
+ * repair reached, and a stage a newer worker invented is still readable: its id
+ * is made into a sentence rather than hidden or shown as a code.
+ */
+export function stageWords(stage: string | null | undefined): string {
+  if (!stage) return 'Not recorded';
+  if (Object.hasOwn(STAGE_WORDS, stage)) return STAGE_WORDS[stage]!;
+  const spaced = stage.replace(/_+/g, ' ').trim();
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : 'Not recorded';
+}
+
 /** A state the worker will not move on from, which is when following stops. */
 export const isTerminal = (state: string): boolean => !isActive(state);
 

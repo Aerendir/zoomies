@@ -30,11 +30,18 @@
     view: CaseView;
     /** The line above the title. The attempt page says what Eli was asked instead. */
     failedLabel?: string;
+    /** What the dashed chip says when no pull request is known. A kept case says it was not kept. */
+    pullNote?: string;
     /** More rows for the facts, as `<dt>` and `<dd>` pairs. */
     children?: Snippet;
   }
 
-  let { view, failedLabel = 'Failed check', children }: Props = $props();
+  let {
+    view,
+    failedLabel = 'Failed check',
+    pullNote = 'Pull request not looked up yet',
+    children,
+  }: Props = $props();
 
   const headingId = $props.id();
   const failed = jobStatus('completed', 'failure');
@@ -130,9 +137,7 @@
       {/if}
     {/if}
     {#if !view.hasPull}
-      <span class="chip pending"
-        ><GitPullRequest size={14} aria-hidden="true" />Pull request not looked up yet</span
-      >
+      <span class="chip pending"><GitPullRequest size={14} aria-hidden="true" />{pullNote}</span>
     {/if}
   </div>
 

@@ -1,8 +1,11 @@
 <!--
-  The Eli repair page's components, in the states the page can be in: a failure
+  The Eli repair pages' components, in the states they can be in: a failure
   with and without its pull request, failed jobs with their error output
   locked, loaded, empty and absurdly long, the readiness checklist blocked and
-  passed, the decision card at every stage, and every state a repair can end in.
+  passed, the decision card at every stage, and every state a repair can end in;
+  then the attempt page's own: the progress track at three points, the outcome
+  of each kind of ending, the technical details with usage the provider never
+  reported, what to try next and the facts and timeline of one attempt.
 
   The error output is read from the controller when a job's disclosure opens,
   so this section answers that one request itself rather than needing a
@@ -13,10 +16,16 @@
   import Panel from '$lib/components/Panel.svelte';
   import type { Schemas } from '$lib/api/types';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
+  import AttemptFacts from '$lib/repairs/AttemptFacts.svelte';
+  import AttemptTimeline from '$lib/repairs/AttemptTimeline.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
+  import NextSteps from '$lib/repairs/NextSteps.svelte';
+  import OutcomeBanner from '$lib/repairs/OutcomeBanner.svelte';
+  import ProgressTrack from '$lib/repairs/ProgressTrack.svelte';
   import ReadinessChecklist from '$lib/repairs/ReadinessChecklist.svelte';
   import RepairStatusBadge from '$lib/repairs/RepairStatusBadge.svelte';
+  import TechnicalDetails from '$lib/repairs/TechnicalDetails.svelte';
   import type { CaseJob, CaseView } from '$lib/repairs/case';
   import { checkRows } from '$lib/repairs/checks';
 
@@ -267,6 +276,103 @@
 
   let instruction = $state('');
 
+  // One repair in each of the shapes the attempt page draws. The clock is fixed so
+  // the elapsed time reads the same in every capture.
+  const NOW = Date.now();
+  const iso = (ms: number): string => new Date(ms).toISOString();
+  const repair = (over: Partial<Schemas['EliRepair']>): Schemas['EliRepair'] => ({
+    id: 'eli_01hz8k3m7qfx',
+    installation_id: 'ins_1',
+    repo: 'eyupio/zoomies',
+    head_sha: SHA,
+    commit_sha: '',
+    user_id: 'usr_1',
+    github_login: 'dana',
+    provider_id: 'prv_1',
+    trigger: 'mention',
+    state: 'working',
+    message: '',
+    pull_number: 1131,
+    job_id: 0,
+    run_id: 482,
+    github_user_id: 42,
+    comment_id: 0,
+    created_at: iso(NOW - 63_000),
+    updated_at: iso(NOW - 2000),
+    ...over,
+  });
+  const PUSHED = 'b7d3e9150c2a4f8e6d1b0a93c5e7f2a4d6b8c0e1';
+  const queued = repair({ state: 'queued' });
+  const preparing = repair({ details: { stage: 'prepare_fix', model: 'claude-sonnet' } });
+  const watching = repair({
+    state: 'checking',
+    commit_sha: PUSHED,
+    details: { stage: 'watch_ci', model: 'claude-sonnet' },
+  });
+  const calls = [
+    {
+      input_tokens: 21_400,
+      output_tokens: 1800,
+      usage_reported: true,
+      request_bytes: 80_312,
+      elapsed_ms: 41_000,
+    },
+    {
+      input_tokens: 0,
+      output_tokens: 0,
+      usage_reported: false,
+      request_bytes: 91_234,
+      elapsed_ms: 9000,
+    },
+  ];
+  const finish = (over: Partial<Schemas['EliRepair']>): Schemas['EliRepair'] =>
+    repair({
+      created_at: iso(NOW - 68_000),
+      updated_at: iso(NOW),
+      details: {
+        stage: 'prepare_fix',
+        model: 'claude-sonnet',
+        source_bytes: 38_912,
+        steps: calls,
+      },
+      ...over,
+    });
+  const couldNot = finish({
+    state: 'failed',
+    message: 'Eli could not produce a fix it was willing to push.',
+    details: {
+      stage: 'prepare_fix',
+      failure_code: 'unsupported_fix',
+      model: 'claude-sonnet',
+      source_bytes: 38_912,
+      steps: calls,
+    },
+  });
+  const passed = finish({
+    state: 'succeeded',
+    commit_sha: PUSHED,
+    message: 'Checks passed on Eli’s commit b7d3e91.',
+    details: { stage: 'watch_ci', model: 'claude-sonnet', source_bytes: 38_912, steps: calls },
+  });
+  const stillFailing = finish({
+    state: 'checks_failed',
+    commit_sha: PUSHED,
+    message: 'Eli pushed b7d3e91 and the checks on it still fail.',
+    details: {
+      stage: 'watch_ci',
+      failure_code: 'checks_failed',
+      model: 'claude-sonnet',
+      steps: calls,
+    },
+  });
+  const noCalls = finish({
+    state: 'blocked',
+    message: 'The pull request is closed.',
+    details: { stage: 'evidence' },
+  });
+  const newer = finish({ state: 'a-state-from-a-newer-controller', message: '' });
+  const OUTCOMES = [couldNot, passed, stillFailing, noCalls, newer];
+
   const STATES = [
     'queued',
     'working',
@@ -413,6 +519,49 @@
       </div>
     </div>
 
+    <h3>Progress</h3>
+    <div class="trio">
+      <div data-gallery="progress-queued"><ProgressTrack repair={queued} now={NOW} /></div>
+      <div data-gallery="progress-preparing"><ProgressTrack repair={preparing} now={NOW} /></div>
+      <div data-gallery="progress-watching"><ProgressTrack repair={watching} now={NOW} /></div>
+    </div>
+
+    <h3>How it ended</h3>
+    <div class="pair" data-gallery="outcomes">
+      {#each OUTCOMES as outcome (outcome.state)}
+        <OutcomeBanner repair={outcome} />
+      {/each}
+    </div>
+
+    <h3>Technical details</h3>
+    <div class="pair">
+      <div data-gallery="tech-finished"><TechnicalDetails repair={couldNot} /></div>
+      <div data-gallery="tech-running"><TechnicalDetails repair={preparing} /></div>
+    </div>
+    <div class="pair">
+      <div data-gallery="tech-none"><TechnicalDetails repair={noCalls} /></div>
+    </div>
+
+    <h3>What to try next</h3>
+    <div class="pair">
+      <div data-gallery="next-failed"><NextSteps repair={couldNot} view={withPull} /></div>
+      <div data-gallery="next-passed"><NextSteps repair={passed} view={withPull} /></div>
+    </div>
+    <div class="pair">
+      <div data-gallery="next-unknown">
+        <NextSteps repair={newer} view={{ ...withoutPull, pullUrl: undefined }} />
+      </div>
+    </div>
+
+    <h3>This attempt</h3>
+    <div class="pair">
+      <div data-gallery="facts-running"><AttemptFacts repair={preparing} view={withPull} /></div>
+      <div data-gallery="facts-finished">
+        <AttemptFacts repair={passed} view={withPull} />
+        <AttemptTimeline repair={passed} />
+      </div>
+    </div>
+
     <h3>A repair's state</h3>
     <div class="badges" data-gallery="repair-status">
       {#each STATES as state (state)}<RepairStatusBadge {state} />{/each}
@@ -439,13 +588,20 @@
     gap: var(--z-space-4);
     align-items: start;
   }
+  .trio {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--z-space-4);
+    align-items: start;
+  }
   .badges {
     display: flex;
     flex-wrap: wrap;
     gap: var(--z-space-2);
   }
   @media (max-width: 960px) {
-    .pair {
+    .pair,
+    .trio {
       grid-template-columns: minmax(0, 1fr);
     }
   }

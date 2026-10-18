@@ -36,6 +36,7 @@
   import CaseCard from '$lib/repairs/CaseCard.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
+  import NoticeCard from '$lib/repairs/NoticeCard.svelte';
   import ReadinessChecklist from '$lib/repairs/ReadinessChecklist.svelte';
   import RepairSetup from '$lib/repairs/RepairSetup.svelte';
   import RepairTargetDialog from '$lib/repairs/RepairTargetDialog.svelte';
@@ -261,23 +262,21 @@
 <output class="sr-only" aria-live="polite">{spoken}</output>
 
 {#if offerGone}
-  <section class="gone" aria-labelledby="gone-heading">
-    <h2 id="gone-heading">This offer is no longer available</h2>
-    <p>
-      It may have been dismissed, accepted already, or replaced because the pull request has a newer
-      commit. Offers that still need you are on the Eli repairs page.
-    </p>
-    <Button href="/repairs">Back to Eli repairs</Button>
-  </section>
+  <NoticeCard heading="This offer is no longer available">
+    It may have been dismissed, accepted already, or replaced because the pull request has a newer
+    commit. Offers that still need you are on the Eli repairs page.
+    {#snippet action()}
+      <Button href="/repairs">Back to Eli repairs</Button>
+    {/snippet}
+  </NoticeCard>
 {:else if !hasTarget}
-  <section class="gone" aria-labelledby="none-heading">
-    <h2 id="none-heading">Which pull request should Eli repair?</h2>
-    <p>
-      Paste the address of a pull request, or open a failed run from the Overview and choose Fix
-      with Eli.
-    </p>
-    <Button onclick={() => (dialogOpen = true)}>Paste a pull request link</Button>
-  </section>
+  <NoticeCard heading="Which pull request should Eli repair?">
+    Paste the address of a pull request, or open a failed run from the Overview and choose Fix with
+    Eli.
+    {#snippet action()}
+      <Button onclick={() => (dialogOpen = true)}>Paste a pull request link</Button>
+    {/snippet}
+  </NoticeCard>
 {:else}
   <div class="cols">
     <div class="main">
@@ -371,27 +370,6 @@
   .failed,
   .checks {
     min-width: 0;
-  }
-  .gone {
-    display: grid;
-    justify-items: start;
-    gap: var(--z-space-3);
-    max-width: var(--z-measure-prose);
-    padding: var(--z-space-6);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-md);
-    background: var(--z-surface);
-  }
-  .gone h2 {
-    margin: 0;
-    font-size: var(--z-text-lg);
-    font-weight: var(--z-weight-semibold);
-  }
-  .gone p {
-    margin: 0;
-    color: var(--z-text-muted);
-    font-size: var(--z-text-sm);
-    line-height: var(--z-leading-sm);
   }
   @media (min-width: 1180px) {
     .cols {

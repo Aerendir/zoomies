@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { guidanceFor } from '../src/lib/repairs/guidance.ts';
 import { repair } from './repair-fixtures.ts';
 
+// A pause written as two hyphens between spaces is not a dash either; the check is built
+// from parts so this file does not carry the very thing it forbids.
+const SPACED_DOUBLE_HYPHEN = [' ', '-', '-', ' '].join('');
+
 const failed = (code: string) => guidanceFor({ state: 'failed', details: { failure_code: code } });
 const text = (g: { headline: string; steps: string[] }) => [g.headline, ...g.steps].join(' ');
 
@@ -97,7 +101,7 @@ test('the copy follows the repository voice', () => {
   for (const g of all) {
     const copy = text(g);
     assert.ok(!copy.includes('\u2014'), `an em dash in: ${copy}`);
-    assert.ok(!copy.includes(' -- '), `a double hyphen in: ${copy}`);
+    assert.ok(!copy.includes(SPACED_DOUBLE_HYPHEN), `a double hyphen in: ${copy}`);
     for (const american of ['behavior', 'authoriz', 'organiz', 'utiliz']) {
       assert.ok(!copy.toLowerCase().includes(american), `${american} in: ${copy}`);
     }

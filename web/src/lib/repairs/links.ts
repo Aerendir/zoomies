@@ -49,6 +49,20 @@ export function linksFromJobUrl(jobUrl: string | null | undefined): {
   return { job, run: `${repo}/actions/runs/${match[3]}`, repo };
 }
 
+/**
+ * GitHub's id for a job, read off the job's own address. A repair keeps the
+ * addresses of the jobs it was asked about and not their ids, and a job's log is
+ * asked for by id, so the id comes back out of the address it was kept with.
+ */
+export function githubJobIdFromUrl(jobUrl: string | null | undefined): number | undefined {
+  const job = safeHttpUrl(jobUrl);
+  if (!job) return undefined;
+  const match = JOB_PATH.exec(new URL(job).pathname);
+  if (!match) return undefined;
+  const id = Number(match[4]);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
 /** A commit's page, built on the repository's address. Nothing without both. */
 export function commitUrl(repoUrl: string | undefined, sha: string): string | undefined {
   const repo = safeHttpUrl(repoUrl);

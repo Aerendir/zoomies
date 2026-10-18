@@ -35,6 +35,13 @@ export interface RepairApiState {
   offers: Schemas['EliOpportunity'][];
   /** What starting a repair answers: a status and a body. */
   start: { status: number; body: unknown } | (() => { status: number; body: unknown });
+  /**
+   * What `GET /assistant/repairs/{id}` answers, by id: the repair, or the status
+   * the controller answers with. An id named nowhere here is a 404, which is what
+   * a repair that does not exist and one that is not yours both get. A test moves
+   * a repair on by replacing its entry and letting the page ask again.
+   */
+  attempts: Record<string, Repair | { status: number; message: string }>;
 }
 
 export interface RepairApiCalls {
@@ -45,6 +52,8 @@ export interface RepairApiCalls {
   starts: unknown[];
   /** The offer ids and bodies of every accept or dismiss. */
   offerActions: { id: string; body: unknown }[];
+  /** The id of every `GET /assistant/repairs/{id}`, in the order they were asked. */
+  attempts: string[];
 }
 
 export const SHA = 'a41c9e2f0b7d5c3e8a1f6d4b2c9e7a5f3d1b8c6e';
@@ -199,6 +208,7 @@ export async function mockRepairApi(
     repairs: [],
     offers: [],
     start: { status: 202, body: { id: 'rep-1' } },
+    attempts: {},
     ...options,
   };
   const calls: RepairApiCalls = {
@@ -207,6 +217,7 @@ export async function mockRepairApi(
     errorOutput: [],
     starts: [],
     offerActions: [],
+    attempts: [],
   };
 
   await page.route('**/api/v1/**', async (route) => {
@@ -266,8 +277,77 @@ export async function mockRepairApi(
     if (path === '/assistant/repairs/settings') {
       return json({ identities: [], policies: [] });
     }
+    const attempt = /^\/assistant\/repairs\/([^/]+)$/.exec(path);
+    if (attempt && method === 'GET') {
+      const id = decodeURIComponent(attempt[1]!);
+      calls.attempts.push(id);
+      const answer = state.attempts[id];
+      if (!answer) {
+        return json(
+          { error: { code: 'not_found', message: 'there is no repair with that id' } },
+          404,
+        );
+      }
+      if ('status' in answer) {
+        return json({ error: { code: 'internal', message: answer.message } }, answer.status);
+      }
+      return json(answer);
+    }
     return json({ items: [] });
   });
 
   return { state, calls };
+}
+
+/** A repair as `GET /assistant/repairs/{id}` answers: a person's request, still failing. */
+export function repairRow(over: Partial<Repair> = {}): Repair {
+  return {
+    id: 'rep-1',
+    installation_id: 'ins_1',
+    repo: 'acme/widgets',
+    head_sha: SHA,
+    commit_sha: '',
+    user_id: 'user-1',
+    github_login: 'dana',
+    provider_id: 'prv_1',
+    trigger: 'mention',
+    state: 'failed',
+    message: '',
+    pull_number: 17,
+    job_id: 0,
+    run_id: 482,
+    github_user_id: 42,
+    comment_id: 0,
+    created_at: '2026-10-18T09:20:00Z',
+    updated_at: '2026-10-18T09:21:08Z',
+    ...over,
+  };
+}
+
+/** What a repair kept of the failure it was asked about: the pull request, the run and two jobs. */
+export function keptCase(over: Partial<NonNullable<NonNullable<Repair['details']>['case']>> = {}) {
+  return {
+    pull_title: 'Retry transient 502s',
+    pull_url: 'https://github.com/acme/widgets/pull/17',
+    author: 'dana',
+    branch: 'fix/registry-retry',
+    run_url: 'https://github.com/acme/widgets/actions/runs/482',
+    workflow: 'CI',
+    run_number: 482,
+    jobs: [
+      {
+        name: 'Go (api-2)',
+        step: 'Run go test -race ./internal/...',
+        url: 'https://github.com/acme/widgets/actions/runs/482/job/9001',
+        duration_ms: 192_000,
+      },
+      {
+        name: 'Lint',
+        step: 'Run staticcheck ./...',
+        url: 'https://github.com/acme/widgets/actions/runs/482/job/9002',
+        duration_ms: 41_000,
+      },
+    ],
+    ...over,
+  };
 }

@@ -861,7 +861,7 @@ export function poolStatus(pool: Pick<Pool, 'enabled'>): StatusMeta {
     : meta('enabled', 'Enabled', 'idle', 'hollow', Circle);
 }
 
-/* -- Eli repairs ------------------------------------------------------------ */
+/* Eli repairs ---------------------------------------------------------------- */
 
 /*
  * A repair's state, drawn as every other status is. The words are the history's

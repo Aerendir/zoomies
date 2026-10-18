@@ -57,6 +57,12 @@ export const ROUTES: readonly RouteDef[] = [
     load: () => import('../routes/EliRepairNew.svelte'),
   },
   {
+    name: 'eli-repair',
+    path: '/repairs/:id',
+    title: 'Repair',
+    load: () => import('../routes/EliRepairAttempt.svelte'),
+  },
+  {
     name: 'overview',
     path: '/',
     title: 'Overview',
