@@ -11,6 +11,7 @@ package scheduler
 
 import (
 	"cmp"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"slices"
@@ -446,10 +447,19 @@ type tick struct {
 
 // assign maps every queued job onto the pool that will run it, and collects the
 // ones nothing claims, each with the reason it went unclaimed.
+//
+// A pool is chosen for what a job asks, not for the job: a burst is mostly jobs of
+// the same workflows, asking for the same labels of the same installation, and
+// choosing set every one of them against every pool (100,000 comparisons for a
+// thousand jobs and a hundred pools, 75% of Decide on such a burst in a profile).
+// So the answer is kept for the next job that asks the same thing, and only a job
+// that asks something new is set against the pools.
 func assign(pools []*store.Pool, jobs []*store.Job, targets map[string]string) (map[string][]*store.Job, []UnmatchedJob) {
 	demand := make(map[string][]*store.Job, len(pools))
 	var unmatched []UnmatchedJob
 	var prepared [][]string
+	var answers map[string]claim
+	key := make([]byte, 0, 128)
 	for _, j := range sortedJobs(jobs) {
 		if j.State != store.JobQueued || j.Provisioning != "" {
 			continue
@@ -458,16 +468,52 @@ func assign(pools []*store.Pool, jobs []*store.Job, targets map[string]string) (
 			// Prepared for the first job that needs it. Most passes find nothing
 			// waiting, and they should not pay to get the pools ready for a
 			// comparison that never happens.
-			prepared = preparedLabels(pools)
+			prepared, answers = preparedLabels(pools), map[string]claim{}
 		}
-		p, reason := bestOf(pools, prepared, j, labelsOf(store.NormalizeLabels(j.Labels)), targets)
-		if p == nil {
-			unmatched = append(unmatched, UnmatchedJob{Job: j, Reason: reason})
+		names := store.NormalizeLabels(j.Labels)
+		key = appendClaimKey(key[:0], names, j)
+		c, known := answers[string(key)]
+		if !known {
+			p, reason := bestOf(pools, prepared, j, labelsOf(names), targets)
+			c = claim{pool: p, reason: reason}
+			answers[string(key)] = c
+		}
+		if c.pool == nil {
+			unmatched = append(unmatched, UnmatchedJob{Job: j, Reason: c.reason})
 			continue
 		}
-		demand[p.ID] = append(demand[p.ID], j)
+		demand[c.pool.ID] = append(demand[c.pool.ID], j)
 	}
 	return demand, unmatched
+}
+
+// claim is the pool a kind of job goes to, or why none does.
+type claim struct {
+	pool   *store.Pool
+	reason string
+}
+
+// appendClaimKey appends what bestOf reads of a job: its normalised labels, the
+// installation it belongs to and the class it was routed to, and, where no
+// installation covers it, the repository, which the explanation names. Two jobs
+// with the same key are given the same answer by bestOf, whatever else differs
+// between them. Each part is written with its length, so that no choice of label
+// can make two different questions the same bytes.
+func appendClaimKey(key []byte, names []string, j *store.Job) []byte {
+	key = binary.AppendUvarint(key, uint64(len(names)))
+	for _, l := range names {
+		key = appendKeyPart(key, l)
+	}
+	key = appendKeyPart(key, j.InstallationID)
+	key = appendKeyPart(key, string(j.RoutedClass))
+	if j.InstallationID == "" {
+		key = appendKeyPart(key, j.Repo)
+	}
+	return key
+}
+
+func appendKeyPart(key []byte, s string) []byte {
+	return append(binary.AppendUvarint(key, uint64(len(s))), s...)
 }
 
 // targetsOf indexes installations by identifier so that an explanation can
