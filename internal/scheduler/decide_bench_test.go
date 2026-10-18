@@ -42,8 +42,9 @@ type benchFleet struct {
 	// idle is how many of each pool's runners are idle; the rest hold a job.
 	idle int
 	// queued says each pool has jobs waiting for it, and stray that as many
-	// again wait for a label no pool advertises.
-	queued, stray bool
+	// again wait for a label no pool advertises. Distinct gives each of those a
+	// label of its own, so that no two jobs ask the same thing.
+	queued, stray, distinct bool
 	// spare is the slots every host has beyond the runners already on it.
 	spare int
 	// sized gives the hosts measured CPUs, memory and disk and the pools a limit
@@ -114,7 +115,11 @@ func (f benchFleet) snapshot(sc benchScale) Snapshot {
 		}
 		if f.stray {
 			for k := range sc.jobsPerPool {
-				jobs = append(jobs, benchJob(queued(fmt.Sprintf("job_%s_stray%02d", name, k), time.Minute, "self-hosted", "no-such-pool")))
+				label := "no-such-pool"
+				if f.distinct {
+					label = fmt.Sprintf("no-such-pool-%s-%02d", name, k)
+				}
+				jobs = append(jobs, benchJob(queued(fmt.Sprintf("job_%s_stray%02d", name, k), time.Minute, "self-hosted", label)))
 			}
 		}
 	}
@@ -183,15 +188,43 @@ var benchSituations = []struct {
 	{
 		// Jobs asking for labels no pool has: the pass has to try every pool
 		// before it can say so.
-		name:  "stray_jobs",
-		fleet: benchFleet{stray: true, spare: 4},
-		expect: func(sc benchScale, plan Plan) string {
-			if want := sc.pools * sc.jobsPerPool; len(plan.Unmatched) != want {
-				return fmt.Sprintf("%d unmatched jobs, want %d", len(plan.Unmatched), want)
-			}
-			return ""
-		},
+		name:   "stray_jobs",
+		fleet:  benchFleet{stray: true, spare: 4},
+		expect: expectUnmatched,
 	},
+	{
+		// The same jobs, each asking for a label of its own, so that none can be
+		// given another's answer: a pass that answers a kind of job once pays for
+		// every job here, and this is what it costs when that never helps.
+		name:   "distinct_jobs",
+		fleet:  benchFleet{stray: true, distinct: true, spare: 4},
+		expect: expectDistinct,
+	},
+}
+
+// expectUnmatched is what a pass over jobs no pool will take must do: say so of
+// every one of them.
+func expectUnmatched(sc benchScale, plan Plan) string {
+	if want := sc.pools * sc.jobsPerPool; len(plan.Unmatched) != want {
+		return fmt.Sprintf("%d unmatched jobs, want %d", len(plan.Unmatched), want)
+	}
+	return ""
+}
+
+// expectDistinct is expectUnmatched for jobs of which no two ask for the same.
+func expectDistinct(sc benchScale, plan Plan) string {
+	if msg := expectUnmatched(sc, plan); msg != "" {
+		return msg
+	}
+	asked := map[string]bool{}
+	for _, u := range plan.Unmatched {
+		key := fmt.Sprint(u.Job.Labels)
+		if asked[key] {
+			return fmt.Sprintf("two jobs ask for %s", key)
+		}
+		asked[key] = true
+	}
+	return ""
 }
 
 // expectCreates is what a burst on hosts with room must do: start as many

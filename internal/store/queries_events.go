@@ -3,9 +3,11 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -93,12 +95,66 @@ var (
 		VALUES (?,?,?,?,?,?,?,?,?)`)
 )
 
+// jobUpdateArgs are the arguments of updateJobQuery, in its order. They are made
+// in one place so that what ApplyJob compares to find it has nothing to write is
+// exactly what it would write, and a column added to the statement is compared
+// as soon as it is added here.
+func jobUpdateArgs(j *Job) []any {
+	return []any{
+		j.GitHubRunID, j.Repo, j.Workflow, j.JobName, j.Labels, string(j.State),
+		j.Conclusion, j.InstallationID, j.PoolID, j.RunnerID, j.RunnerName, j.HTMLURL,
+		msp(j.StartedAt), msp(j.CompletedAt), boolInt(j.Matched), msp(j.EligibleAt),
+		j.HeadBranch, j.HeadSHA, j.RunAttempt, j.RunNumber, j.Steps,
+		j.RunnerFault, j.FaultKind, ms(j.QueuedAt), j.ID,
+	}
+}
+
+// sameArguments reports whether two lists of arguments bind the same values. A
+// JSON document is compared as the text it is written as: a nil list and an
+// empty one are the same, and a step's time written in another zone is not,
+// because it would be stored differently.
+func sameArguments(a, b []any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	// The documents last. Each is encoded to be compared, and a delivery that
+	// changes something has usually changed something that costs nothing to see.
+	for _, documents := range [...]bool{false, true} {
+		for i := range a {
+			if _, isDocument := a[i].(driver.Valuer); isDocument == documents && !sameArgument(a[i], b[i]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func sameArgument(a, b any) bool {
+	if va, ok := a.(driver.Valuer); ok {
+		vb, ok := b.(driver.Valuer)
+		if !ok {
+			return false
+		}
+		x, errA := va.Value()
+		y, errB := vb.Value()
+		return errA == nil && errB == nil && sameArgument(x, y)
+	}
+	if t := reflect.TypeOf(a); t != nil && !t.Comparable() {
+		return reflect.DeepEqual(a, b)
+	}
+	return a == b
+}
+
 // ApplyJob is UpsertJob that also says what changed.
 //
 // The change is worked out inside the write transaction, against the row as it
 // was, so two deliveries for the same job arriving together cannot both be
 // told they moved it: exactly one of them did. That is what lets the caller
 // write a job's timeline from deliveries GitHub may send twice.
+//
+// A delivery that leaves the row as it is writes nothing. Most of what a job is
+// sent after its first delivery is that: GitHub sends at least once, and the
+// poller finds jobs the webhook already announced.
 func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 	var out *Job
 	var change JobChange
@@ -215,15 +271,16 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 			merged.EligibleAt = &now
 		}
 
-		_, err = s.hotTx(tx).Exec(ctx, updateJobQuery,
-			merged.GitHubRunID, merged.Repo, merged.Workflow, merged.JobName, merged.Labels,
-			string(merged.State), merged.Conclusion, merged.InstallationID, merged.PoolID,
-			merged.RunnerID, merged.RunnerName, merged.HTMLURL, msp(merged.StartedAt),
-			msp(merged.CompletedAt), boolInt(merged.Matched), msp(merged.EligibleAt),
-			merged.HeadBranch, merged.HeadSHA, merged.RunAttempt, merged.RunNumber, merged.Steps,
-			merged.RunnerFault, merged.FaultKind, ms(merged.QueuedAt), merged.ID)
-		if err != nil {
-			return err
+		// Putting back what the row already holds is a write transaction's worth
+		// of work for nothing: a third of a poller sweep over known jobs, and on
+		// disk most of what a redelivery cost. The row was read a moment ago under
+		// the writer, so nothing can have moved it since. A job that moved on has
+		// something to write, which is the one answer that costs nothing to find.
+		args := jobUpdateArgs(&merged)
+		if merged.State != existing.State || !sameArguments(args, jobUpdateArgs(existing)) {
+			if _, err = s.hotTx(tx).Exec(ctx, updateJobQuery, args...); err != nil {
+				return err
+			}
 		}
 		out = &merged
 		change = JobChange{

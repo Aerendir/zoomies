@@ -29,31 +29,6 @@ func hostUnderCPUPressure(h *store.Host, now time.Time) bool {
 	return h.Usage.Fresh(now) && v != nil && *v >= 85
 }
 
-func (hs *hostSet) pending(h *store.Host, pools []*store.Pool, runners map[string][]*store.Runner) Reservation {
-	var out Reservation
-	for _, p := range pools {
-		if p == nil {
-			continue
-		}
-		for _, r := range runners[p.ID] {
-			if r == nil || r.HostID != h.ID || !r.State.Live() {
-				continue
-			}
-			starting := r.State == store.RunnerProvisioning || r.State == store.RunnerRegistering
-			if starting {
-				hs.warming[h.ID]++
-			}
-			if starting || r.CreatedAt.After(h.Usage.SampledAt) ||
-				(r.ContainerStartedAt != nil && r.ContainerStartedAt.After(h.Usage.SampledAt)) {
-				res := RunnerCharge(p, h, r)
-				out.CPUs += res.CPUs
-				out.MemoryMB += res.MemoryMB
-			}
-		}
-	}
-	return out
-}
-
 func (hs *hostSet) score(h *store.Host, p *store.Pool) float64 {
 	if h.Slots() <= 0 {
 		return -1

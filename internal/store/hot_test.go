@@ -359,7 +359,7 @@ func TestClosingAStoreReleasesItsPreparedStatements(t *testing.T) {
 func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	inst, pool, _ := seedPool(t, s)
+	inst, pool, host := seedPool(t, s)
 
 	newJob := func(id int64) *Job {
 		return &Job{GitHubJobID: id, GitHubRunID: 77, Repo: "acme/widgets", Workflow: "CI", JobName: "build",
@@ -386,10 +386,16 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 			_, _, err := s.ApplyJob(ctx, newJob(int64(1000+n)))
 			must(err)
 		}},
-		{"ApplyJob of a job it knows", 2, func(int) {
+		// A delivery that says something new reads the row and writes it back. One
+		// that does not only reads it: the write is skipped (see ApplyJob).
+		{"ApplyJob of a job it knows, with news each time", 2, func(n int) {
 			j := newJob(1)
-			j.State = JobInProgress
+			j.RunAttempt = 2 + n
 			_, _, err := s.ApplyJob(ctx, j)
+			must(err)
+		}},
+		{"ApplyJob of a job it knows, with nothing new", 1, func(int) {
+			_, _, err := s.ApplyJob(ctx, newJob(1))
 			must(err)
 		}},
 		{"StampJobVersions", 2, func(int) {
@@ -440,9 +446,22 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 			_, err := s.ListPools(ctx)
 			must(err)
 		}},
-		{"ListHosts", 2, func(int) {
+		// The hosts, the runners on them and, for the acceptances of the hosts it
+		// has read, one statement whether there is one host or many.
+		{"ListHosts", 3, func(int) {
 			_, err := s.ListHosts(ctx)
 			must(err)
+		}},
+		{"GetHost", 2, func(int) {
+			_, err := s.GetHost(ctx, host.ID)
+			must(err)
+		}},
+		{"RecordUsageCapacityBatch of a hundred pools", 1, func(int) {
+			batch := make([]UsageCapacitySample, 100)
+			for i := range batch {
+				batch[i] = UsageCapacitySample{PoolID: fmt.Sprintf("pool_%03d", i), At: time.Now(), Blocked: i%9 == 0}
+			}
+			must(s.RecordUsageCapacityBatch(ctx, batch))
 		}},
 		{"ListInstallations", 1, func(int) {
 			_, err := s.ListInstallations(ctx)

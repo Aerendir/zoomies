@@ -283,11 +283,11 @@ func share(total float64, capacity int) float64 {
 
 // Reserved is what the live runners already on h have promised away.
 //
-// It is the same sum newHostSet seeds a pass with, and it is exported because
-// the Hosts page has to show it: an operator can see what a machine is and
-// what it has left, and without this cannot see what the fleet has committed
-// on it -- which is the number that explains why a host with free slots is
-// taking nothing.
+// It is the same sum newHostSet seeds a pass with, and the Hosts page has to show
+// it (ReservedByHost gives it for every host at once): an operator can see what a
+// machine is and what it has left, and without this cannot see what the fleet has
+// committed on it -- which is the number that explains why a host with free slots
+// is taking nothing.
 //
 // Only live rows count, exactly as the slot count does: the snapshot keeps
 // failed runners so the Runners page can show them, and charging a host for a
@@ -297,21 +297,105 @@ func share(total float64, capacity int) float64 {
 // it is now, so what the runners already there have written is in the figure
 // already; adding their reservations to it would charge the same bytes twice.
 func Reserved(h *store.Host, pools []*store.Pool, runners map[string][]*store.Runner) Reservation {
-	var out Reservation
 	if h == nil {
-		return out
+		return Reservation{}
+	}
+	return totalsByHost([]*store.Host{h}, pools, runners)[0].reserved
+}
+
+// hostTotals is what the live runners of a fleet add up to on one host.
+type hostTotals struct {
+	// ours says a live runner of any pool is on the host, including a pool the
+	// snapshot no longer lists, whose runners still hold their hosts.
+	ours bool
+	// warming is how many of the runners are still starting.
+	warming int
+	// reserved is what they have been promised: the figure Reserved gives.
+	reserved Reservation
+	// pending is what the host's last sample cannot yet contain, the runners
+	// still starting and those created or started since it was taken.
+	pending Reservation
+}
+
+// add counts one live runner of the pool p, which is on h.
+func (t *hostTotals) add(p *store.Pool, h *store.Host, r *store.Runner) {
+	res := RunnerCharge(p, h, r)
+	t.reserved.CPUs += res.CPUs
+	t.reserved.MemoryMB += res.MemoryMB
+	starting := r.State == store.RunnerProvisioning || r.State == store.RunnerRegistering
+	if starting {
+		t.warming++
+	}
+	if starting || r.CreatedAt.After(h.Usage.SampledAt) ||
+		(r.ContainerStartedAt != nil && r.ContainerStartedAt.After(h.Usage.SampledAt)) {
+		t.pending.CPUs += res.CPUs
+		t.pending.MemoryMB += res.MemoryMB
+	}
+}
+
+// totalsByHost adds up the fleet's live runners by the host each is on, in one pass
+// over them, and gives the totals by the host's position in hosts. A host that is
+// nil, or that nothing is on, has none.
+//
+// Reserved asked this of one host by looking through all of the fleet for it, and
+// newHostSet asked two more questions of each host the same way. Each host's runners
+// are added in the order the pools are listed and then the order of each pool's
+// runners, which is the order every sum over them has always been taken in: the sums
+// are floating point, and their order is part of the answer. Hosts sharing an ID,
+// which a fleet does not have, are given the same totals as the first of them.
+func totalsByHost(hosts []*store.Host, pools []*store.Pool, runners map[string][]*store.Runner) []hostTotals {
+	out := make([]hostTotals, len(hosts))
+	index := make(map[string]int, len(hosts))
+	for i, h := range hosts {
+		if h == nil {
+			continue
+		}
+		if _, dup := index[h.ID]; !dup {
+			index[h.ID] = i
+		}
+	}
+
+	for _, rs := range runners {
+		for _, r := range rs {
+			if r == nil || !r.State.Live() {
+				continue
+			}
+			if i, ok := index[r.HostID]; ok {
+				out[i].ours = true
+			}
+		}
 	}
 	for _, p := range pools {
 		if p == nil {
 			continue
 		}
 		for _, r := range runners[p.ID] {
-			if r == nil || r.HostID != h.ID || !r.State.Live() {
+			if r == nil || !r.State.Live() {
 				continue
 			}
-			res := RunnerCharge(p, h, r)
-			out.CPUs += res.CPUs
-			out.MemoryMB += res.MemoryMB
+			if i, ok := index[r.HostID]; ok {
+				out[i].add(p, hosts[i], r)
+			}
+		}
+	}
+
+	for i, h := range hosts {
+		if h != nil && index[h.ID] != i {
+			out[i] = out[index[h.ID]]
+		}
+	}
+	return out
+}
+
+// ReservedByHost is Reserved for every host at once, keyed by host ID. It adds up
+// the fleet's runners in one pass where Reserved looks through all of them for each
+// host it is asked about, and gives the same figure for each.
+func ReservedByHost(hosts []*store.Host, pools []*store.Pool, runners map[string][]*store.Runner) map[string]Reservation {
+	totals := totalsByHost(hosts, pools, runners)
+	out := make(map[string]Reservation, len(hosts))
+	for i, h := range hosts {
+		if h != nil {
+			out[h.ID] = totals[i].reserved
 		}
 	}
 	return out
