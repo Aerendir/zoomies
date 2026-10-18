@@ -171,6 +171,10 @@ test('a readiness with no checks falls back to rows made from its blockers', () 
         { code: 'access', message: ACCESS },
         { code: 'provider', message: 'Add an enabled personal model provider in Eli settings.' },
         { code: 'closed', message: 'This pull request is closed.' },
+        {
+          code: 'github',
+          message: 'GitHub could not check whether this failure still needs fixing.',
+        },
       ],
     }),
   );
@@ -181,8 +185,14 @@ test('a readiness with no checks falls back to rows made from its blockers', () 
       ['provider', 'blocked'],
       ['access', 'blocked'],
       ['pull', 'blocked'],
+      ['github', 'blocked'],
     ],
   );
+  // GitHub not answering is a reason to look again, not a missing installation.
+  const outage = rows.find((row) => row.code === 'github');
+  assert.equal(outage?.label, 'GitHub');
+  assert.deepEqual(outage?.action, { kind: 'recheck' });
+  assert.equal(blockedHeadline('github'), 'GitHub did not answer');
   assert.equal(rows[0]?.message, 'Add an enabled personal model provider in Eli settings.');
   assert.equal(blockingRow(rows)?.code, 'provider');
 

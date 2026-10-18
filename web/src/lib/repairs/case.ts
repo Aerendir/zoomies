@@ -138,16 +138,32 @@ function lastCompleted(jobs: readonly Job[]): string | undefined {
   return best;
 }
 
+const RUN_PAGE = /^\/([^/]+)\/([^/]+)\/actions\/runs\/\d+\/?$/;
+const PULL_PAGE = /^\/([^/]+)\/([^/]+)\/pull\/\d+\/?$/;
+
+/** The repository's address, read off a run's or a pull request's when no job gave it. */
+function repoFromPage(page: string | undefined, pattern: RegExp): string | undefined {
+  if (!page) return undefined;
+  const url = new URL(page);
+  const match = pattern.exec(url.pathname);
+  return match ? `${url.origin}/${match[1]}/${match[2]}` : undefined;
+}
+
 export function caseFromLive(input: {
   repo: string;
   jobs: readonly Job[];
   readiness: Readiness | null;
   openedJobId?: string;
+  /** GitHub's id for the run the address names, which is all there is to say of it without jobs. */
+  run?: number;
 }): CaseView {
-  const { repo, jobs, readiness, openedJobId } = input;
+  const { repo, jobs, readiness, openedJobId, run } = input;
   const first = jobs[0];
   const links = linksFromJobUrl(first?.html_url);
   const pull = readiness?.pull;
+  // A job's own address says which host the repository is on. With no job on
+  // record, the pull request's does.
+  const repoUrl = links.repo ?? repoFromPage(safeHttpUrl(pull?.url), PULL_PAGE);
   const pullNumber =
     pull?.number || (readiness && readiness.pull_number > 0 ? readiness.pull_number : undefined);
   const sha = readiness?.head_sha || first?.head_sha || undefined;
@@ -163,21 +179,22 @@ export function caseFromLive(input: {
     hasPull: Boolean(pull),
     jobs: jobs.map((job, index) => liveJob(job, index, openedJobId)),
   };
-  if (links.repo) view.repoUrl = links.repo;
+  if (repoUrl) view.repoUrl = repoUrl;
   if (pullNumber) view.pullNumber = pullNumber;
-  const pullLink = safeHttpUrl(pull?.url) ?? pullUrl(links.repo, pullNumber ?? 0);
+  const pullLink = safeHttpUrl(pull?.url) ?? pullUrl(repoUrl, pullNumber ?? 0);
   if (pullLink) view.pullUrl = pullLink;
   if (pull?.author) view.author = pull.author;
   if (branch) view.branch = branch;
   if (pull?.base) view.base = pull.base;
   if (sha) {
     view.sha = sha;
-    const commit = commitUrl(links.repo, sha);
+    const commit = commitUrl(repoUrl, sha);
     if (commit) view.commitUrl = commit;
   }
-  const label = runLabel(first?.workflow, first?.run_number);
+  const label = runLabel(first?.workflow, first?.run_number) ?? (run ? `Run ${run}` : undefined);
   if (label) view.runLabel = label;
-  if (links.run) view.runUrl = links.run;
+  const runLink = links.run ?? (repoUrl && run ? `${repoUrl}/actions/runs/${run}` : undefined);
+  if (runLink) view.runUrl = runLink;
   const failedAt = lastCompleted(jobs);
   if (failedAt) view.failedAt = failedAt;
   if (ranOn) {
@@ -188,17 +205,6 @@ export function caseFromLive(input: {
     if (ranOn.runner_id) view.ran.runnerId = ranOn.runner_id;
   }
   return view;
-}
-
-const RUN_PAGE = /^\/([^/]+)\/([^/]+)\/actions\/runs\/\d+\/?$/;
-const PULL_PAGE = /^\/([^/]+)\/([^/]+)\/pull\/\d+\/?$/;
-
-/** The repository's address, read off a run's or a pull request's when no job gave it. */
-function repoFromPage(page: string | undefined, pattern: RegExp): string | undefined {
-  if (!page) return undefined;
-  const url = new URL(page);
-  const match = pattern.exec(url.pathname);
-  return match ? `${url.origin}/${match[1]}/${match[2]}` : undefined;
 }
 
 export function caseFromSnapshot(repair: Repair): CaseView {

@@ -335,3 +335,79 @@ test('a job with no steps reported, and a job read from a snapshot, have none', 
   const snapshot = caseFromSnapshot(repair({ details: { case: { jobs: [{ name: 'unit' }] } } }));
   assert.equal(snapshot.jobs[0]?.steps, undefined);
 });
+
+// The address names the run by its id, which is all that is known of it once
+// Zoomies has pruned its jobs. It is shown as that, without a link: there is no
+// host to build one on.
+test('a run with no jobs on record is still named by its id', () => {
+  const view = caseFromLive({ repo: 'acme/widgets', jobs: [], readiness: null, run: 1234 });
+  assert.equal(view.runLabel, 'Run 1234');
+  assert.equal(view.runUrl, undefined);
+  // The jobs name the run better than its id does.
+  const named = caseFromLive({
+    repo: 'acme/widgets',
+    jobs: [failedJob()],
+    readiness: null,
+    run: 1234,
+  });
+  assert.equal(named.runLabel, 'CI #482');
+  assert.equal(
+    caseFromLive({ repo: 'acme/widgets', jobs: [], readiness: null }).runLabel,
+    undefined,
+  );
+});
+
+// When Zoomies has pruned the jobs, the pull request's own address still says
+// which host the repository is on, so the repository, the run and the commit
+// stay links on the right host, and an Enterprise Server user is not sent to
+// github.com for want of a job to read it off.
+test('with no jobs, the pull request address gives the repository, run and commit links', () => {
+  const view = caseFromLive({
+    repo: 'acme/widgets',
+    jobs: [],
+    readiness: readinessWithPull(),
+    run: 1234,
+  });
+  assert.equal(view.repoUrl, REPO);
+  assert.equal(view.runUrl, `${REPO}/actions/runs/1234`);
+  assert.equal(view.commitUrl, `${REPO}/commit/${SHA}`);
+
+  const enterprise = readinessWithPull({
+    pull: {
+      number: 17,
+      title: 'Retry transient 502s',
+      author: 'dana',
+      branch: 'fix/retry-502',
+      base: 'main',
+      url: 'https://ghe.example.com/acme/widgets/pull/17',
+      open: true,
+    },
+  });
+  const there = caseFromLive({ repo: 'acme/widgets', jobs: [], readiness: enterprise, run: 1234 });
+  assert.equal(there.runUrl, 'https://ghe.example.com/acme/widgets/actions/runs/1234');
+
+  // A pull request address that is not a web link gives nothing to build on.
+  const hostile = readinessWithPull({
+    pull: {
+      number: 17,
+      title: 't',
+      author: 'a',
+      branch: 'b',
+      base: 'main',
+      url: 'javascript:alert(1)',
+      open: true,
+    },
+  });
+  const none = caseFromLive({ repo: 'acme/widgets', jobs: [], readiness: hostile, run: 1234 });
+  assert.equal(none.repoUrl, undefined);
+  assert.equal(none.runUrl, undefined);
+
+  // A job's own address wins over the pull request's.
+  const both = caseFromLive({
+    repo: 'acme/widgets',
+    jobs: [failedJob()],
+    readiness: readinessWithPull(),
+    run: 482,
+  });
+  assert.equal(both.runUrl, RUN);
+});

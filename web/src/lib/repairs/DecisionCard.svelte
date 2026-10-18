@@ -65,7 +65,7 @@
 
   const CHANGED_HEADLINES = {
     fixed: 'Already fixed',
-    closed: 'This pull request is closed',
+    closed: 'This PR is closed',
     superseded: 'A newer commit replaced this failure',
   } as const;
 
@@ -101,6 +101,9 @@
 <section class="next" data-stage={stage} aria-labelledby={headingId}>
   <div class="inner">
     <h2 id={headingId}>{heading}</h2>
+    {#if error && stage !== 'error'}
+      <p class="problem" role="alert">{error}</p>
+    {/if}
 
     {#if stage === 'checking'}
       <div role="status" aria-busy="true" class="stack">
@@ -177,6 +180,12 @@
       </p>
     {:else}
       {#if blocking}<p class="muted">{blocking.message}</p>{/if}
+      {#if blocking?.code === 'pull'}
+        <p class="muted">
+          Eli repairs open PR branches in this repository. Choose or paste a pull request if this
+          run has no eligible PR.
+        </p>
+      {/if}
       <div class="buttons">
         {#if action?.kind === 'setup'}
           <Button variant="primary" full onclick={onsetup}>Open repair setup</Button>
@@ -248,6 +257,12 @@
     font-size: var(--z-text-sm);
     line-height: var(--z-leading-sm);
     overflow-wrap: anywhere;
+  }
+  .problem {
+    padding: var(--z-space-2) var(--z-space-3);
+    border: var(--z-border-width) solid var(--z-danger-border);
+    border-radius: var(--z-radius-sm);
+    background: var(--z-danger-subtle);
   }
   .stack {
     display: grid;

@@ -85,8 +85,8 @@
 
   {#if jobs.length === 0}
     <p class="none">
-      Zoomies no longer has the jobs of this run, so their names and steps are not available. The
-      pull request and the checks are read afresh from GitHub.
+      Zoomies has no record of the jobs that failed here, so their names and steps are not shown.
+      The pull request and its checks are read afresh from GitHub.
     </p>
   {:else}
     <div class="jobs">

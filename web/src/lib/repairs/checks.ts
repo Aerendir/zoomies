@@ -53,23 +53,26 @@ const LABELS: Record<string, string> = {
   provider: 'Model provider',
   installation: 'GitHub App installation',
   access: 'Write access',
-  policy: 'Repair policy',
+  policy: 'Repository policy',
   budget: 'Attempts left',
   pull: 'Pull request',
   checks: 'Failing checks',
   permissions: 'App permissions',
+  github: 'GitHub',
 };
 
 /**
  * The check each blocker belongs to, for an answer with no checks in it. A
  * blocker about the target changing says what became of the pull request or of
- * the checks, so it sits with the check that found it.
+ * the checks, so it sits with the check that found it. GitHub not answering
+ * belongs to none of them, so it is a row of its own, and the way forward from
+ * it is to look again.
  */
 const CHECK_OF_BLOCKER: Record<string, string> = {
   identity: 'identity',
   provider: 'provider',
   installation: 'installation',
-  github: 'installation',
+  github: 'github',
   access: 'access',
   policy: 'policy',
   budget: 'budget',
@@ -162,6 +165,7 @@ const HEADLINES: Record<string, string> = {
   pull: 'Choose a pull request',
   checks: 'Wait for the checks',
   permissions: 'Grant the GitHub App its permissions',
+  github: 'GitHub did not answer',
 };
 
 /** What the decision card says about the check that blocks, as the one thing to do. */

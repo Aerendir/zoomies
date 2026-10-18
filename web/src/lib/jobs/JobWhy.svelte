@@ -32,6 +32,7 @@
   import AskEli from '$lib/assistant/AskEli.svelte';
   import { session } from '$lib/state/session.svelte';
   import { jobContext } from '$lib/assistant/contexts';
+  import { targetHref } from '$lib/repairs/workspace';
 
   interface Props {
     job: Job;
@@ -189,7 +190,7 @@
          the job's own facts are, and Eli can fetch the explanation itself. -->
     <AskEli context={jobContext(job, why, mode)} />
     {#if failed && session.can('operator') && !session.authDisabled && job.repo && job.github_run_id}<Button
-        href={`/repairs?${new URLSearchParams({ repo: job.repo, run: String(job.github_run_id) })}`}
+        href={targetHref({ repo: job.repo, run: job.github_run_id, job: job.id })}
         >Fix with Eli</Button
       >{/if}
 

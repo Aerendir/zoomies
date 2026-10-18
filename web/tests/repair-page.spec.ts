@@ -1,0 +1,358 @@
+/**
+ * The repair page, /repairs/new: one failure, what is in the way of repairing it,
+ * and the one button that starts a repair.
+ *
+ * It runs on a desktop and a phone, because looking at a failure from a phone is
+ * a stated requirement. Every test says what the controller answered, through
+ * `mockRepairApi`, and checks what the page did with it, including the writes
+ * that must never happen on a read: opening the page checks readiness and starts
+ * nothing, and only the button that says so spends an attempt.
+ */
+import { expect, test } from '@playwright/test';
+import { blockedAt, failedJob, lintJob, mockRepairApi, readiness, SHA } from './support/repairs';
+
+const PAGE = '/repairs/new?repo=acme%2Fwidgets&run=482';
+const ACCESS = 'Your linked GitHub account needs write access to this repository.';
+
+test('blocked on access shows the failure, names the jobs and keeps the rest unchecked', async ({
+  page,
+}) => {
+  const { calls } = await mockRepairApi(page, {
+    jobs: [failedJob(), lintJob()],
+    readiness: blockedAt('access', ACCESS),
+  });
+  await page.goto(`${PAGE}&job=job_unit`);
+
+  const failure = page.getByRole('region', { name: 'CI #482 failed on fix/registry-retry' });
+  await expect(failure).toBeVisible();
+  await expect(failure.getByRole('link', { name: /acme\/widgets/ })).toHaveAttribute(
+    'href',
+    'https://github.com/acme/widgets',
+  );
+  await expect(failure.getByText('fix/registry-retry', { exact: true })).toBeVisible();
+  await expect(failure.getByRole('link', { name: /a41c9e2/ })).toHaveAttribute(
+    'href',
+    `https://github.com/acme/widgets/commit/${SHA}`,
+  );
+  await expect(failure.getByRole('link', { name: /CI #482/ })).toHaveAttribute(
+    'href',
+    'https://github.com/acme/widgets/actions/runs/482',
+  );
+  await expect(failure.getByText('Pull request not looked up yet')).toBeVisible();
+
+  const failed = page.getByRole('region', { name: 'What failed' });
+  await expect(failed.locator('details.job', { hasText: 'Go (api-2)' })).toContainText(
+    'Failed at step 7: Run go test -race ./internal/...',
+  );
+  await expect(failed.locator('details.job', { hasText: 'Lint' })).toContainText(
+    'Failed at step 5: Run staticcheck ./...',
+  );
+  await expect(failed.getByText('You opened this one')).toBeVisible();
+
+  const checks = page.getByRole('region', { name: 'Can Eli act on this?' });
+  await expect(checks.getByRole('listitem').filter({ hasText: 'Write access' })).toContainText(
+    ACCESS,
+  );
+  await expect(checks.getByRole('listitem').filter({ hasText: 'Repository policy' })).toContainText(
+    'Not checked yet.',
+  );
+  await expect(page.getByRole('heading', { name: 'Fix write access first' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+
+  expect(calls.readiness).toHaveLength(1);
+  expect(calls.readiness[0]?.get('run_id')).toBe('482');
+  expect(calls.starts).toEqual([]);
+});
+
+test('ready shows the pull request, loads error output when the job opens and starts one repair', async ({
+  page,
+}) => {
+  const { calls } = await mockRepairApi(page, {
+    jobs: [failedJob(), lintJob()],
+    readiness: readiness(),
+    errorOutput: {
+      '9001': {
+        lines: [
+          '--- FAIL: TestRegistryRetries (0.31s)',
+          'client_test.go:88: got 1 attempt, want 3',
+        ],
+      },
+    },
+  });
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('heading', { name: 'Retry transient 502s' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /acme\/widgets #17/ })).toHaveAttribute(
+    'href',
+    'https://github.com/acme/widgets/pull/17',
+  );
+  await expect(page.getByText('Opened by @dana, merging into main')).toBeVisible();
+
+  // A log is read when somebody opens a job, and not before.
+  expect(calls.errorOutput).toHaveLength(0);
+  await page.locator('details.job', { hasText: 'Go (api-2)' }).locator('summary').first().click();
+  await expect(page.getByText('client_test.go:88: got 1 attempt, want 3')).toBeVisible();
+  await expect(page.getByText('nothing here is stored', { exact: false })).toBeVisible();
+  expect(calls.errorOutput).toHaveLength(1);
+  expect(calls.errorOutput[0]?.get('repo')).toBe('acme/widgets');
+  expect(calls.errorOutput[0]?.get('job_id')).toBe('9001');
+
+  expect(calls.starts).toEqual([]);
+  await page.getByLabel('Tell Eli what to look at').fill('Look at the retry loop');
+  await page.getByRole('button', { name: 'Fix with Eli', exact: true }).click();
+  await expect(page).toHaveURL(/\/repairs\/rep-1$/);
+  expect(calls.starts).toEqual([
+    {
+      repo: 'acme/widgets',
+      pull_number: 17,
+      head_sha: SHA,
+      instruction: 'Look at the retry loop',
+      run_id: 482,
+    },
+  ]);
+});
+
+test('a fleet fault says a repair is unlikely to help', async ({ page }) => {
+  await mockRepairApi(page, {
+    jobs: [
+      failedJob({
+        fault_domain: 'fleet',
+        fault_kind: 'out_of_memory',
+        fault_fix: 'Give this pool runners with more memory, then re-run the job.',
+      }),
+    ],
+    readiness: readiness(),
+  });
+  await page.goto(PAGE);
+
+  const job = page.locator('details.job', { hasText: 'Go (api-2)' });
+  await expect(job).toContainText('Fleet fault: Out of memory');
+  // A job that is the only one there is starts open.
+  await expect(job.getByText('A repair is unlikely to help', { exact: false })).toBeVisible();
+  await expect(job.getByText('Give this pool runners with more memory')).toBeVisible();
+});
+
+test('a closed pull request replaces the card and offers no start', async ({ page }) => {
+  const message = 'PR #17 is closed or merged. This failure no longer needs a PR repair.';
+  const { calls } = await mockRepairApi(page, {
+    jobs: [failedJob()],
+    readiness: blockedAt('pull', message, { blockers: [{ code: 'closed', message }] }),
+  });
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('heading', { name: 'This PR is closed' })).toBeVisible();
+  // The words are on the card, in the checklist and in the live region.
+  await expect(page.getByRole('complementary', { name: 'Next step' })).toContainText(message);
+  await expect(page.getByRole('link', { name: /original run on GitHub/ })).toHaveAttribute(
+    'href',
+    'https://github.com/acme/widgets/actions/runs/482',
+  );
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+  expect(calls.starts).toEqual([]);
+});
+
+test('a run with no recorded jobs still explains itself', async ({ page }) => {
+  await mockRepairApi(page, {
+    jobs: [],
+    readiness: blockedAt('access', ACCESS),
+  });
+  await page.goto(PAGE);
+
+  const failure = page.getByRole('region', { name: 'A repair in acme/widgets' });
+  await expect(failure.getByText('acme/widgets', { exact: true })).toBeVisible();
+  await expect(failure.getByText('Run 482')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'What failed' })).toContainText(
+    'Zoomies has no record of the jobs',
+  );
+  await expect(page.getByRole('heading', { name: 'Fix write access first' })).toBeVisible();
+});
+
+test('the old address still works', async ({ page }) => {
+  await mockRepairApi(page, { jobs: [failedJob()] });
+  await page.goto('/repairs?repo=acme/site&run=9');
+  await expect(page).toHaveURL(/\/repairs\/new\?repo=acme%2Fsite&run=9$/);
+  await expect(page.getByRole('heading', { name: 'Repair a failed check' })).toBeVisible();
+  // A pasted pull request takes the same road.
+  await page.goto('/repairs?repo=acme/site&pull=3');
+  await expect(page).toHaveURL(/\/repairs\/new\?repo=acme%2Fsite&pull=3$/);
+});
+
+// Everything on the page was written by somebody who can open a pull request or
+// edit a workflow. A title with markup in it is text, and a job address that is
+// not a web address is not a link.
+test('hostile text renders as text', async ({ page }) => {
+  page.on('dialog', (dialog) => {
+    throw new Error(`the page ran script: ${dialog.message()}`);
+  });
+  await mockRepairApi(page, {
+    jobs: [
+      failedJob({
+        job_name: '<img src=x onerror=alert(2)>',
+        html_url: 'javascript:alert(1)',
+      }),
+    ],
+    readiness: readiness({
+      pull: {
+        number: 17,
+        title: '<img src=x onerror=alert(1)>',
+        author: 'dana',
+        branch: 'fix/registry-retry',
+        base: 'main',
+        url: 'javascript:alert(3)',
+        open: true,
+      },
+    }),
+  });
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('heading', { name: '<img src=x onerror=alert(1)>' })).toBeVisible();
+  await expect(page.locator('img[src="x"]')).toHaveCount(0);
+  const job = page.locator('details.job').first();
+  await expect(job).toContainText('<img src=x onerror=alert(2)>');
+  await expect(job.getByRole('link', { name: /Open job on GitHub/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /acme\/widgets #17/ })).toHaveCount(0);
+});
+
+test('no horizontal scroll with a very long branch name and error line', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  const branch = `fix/${'a-very-long-branch-name-'.repeat(5)}end`;
+  await mockRepairApi(page, {
+    jobs: [failedJob({ head_branch: branch })],
+    readiness: readiness({
+      pull: {
+        number: 17,
+        title: 'Retry transient 502s',
+        author: 'dana',
+        branch,
+        base: 'main',
+        url: 'https://github.com/acme/widgets/pull/17',
+        open: true,
+      },
+    }),
+    errorOutput: { '9001': { lines: [`Error: ${'x'.repeat(300)}`] } },
+  });
+  await page.goto(PAGE);
+  await expect(page.getByText(`Error: ${'x'.repeat(300)}`)).toBeVisible();
+  const { scrollWidth, inner } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    inner: window.innerWidth,
+  }));
+  expect(scrollWidth).toBeLessThanOrEqual(inner);
+});
+
+// A repair already running for a failure is the process itself, so the page that
+// would offer to queue a second one takes the person to the one that exists.
+test('a repair already running for this failure opens its own page', async ({ page }) => {
+  await mockRepairApi(page, {
+    jobs: [failedJob()],
+    repairs: [
+      {
+        id: 'rep-active',
+        installation_id: 'ins_1',
+        repo: 'acme/widgets',
+        head_sha: SHA,
+        commit_sha: '',
+        user_id: 'user-1',
+        github_login: 'dana',
+        provider_id: 'prv_1',
+        trigger: 'mention',
+        state: 'working',
+        message: '',
+        pull_number: 17,
+        job_id: 0,
+        run_id: 482,
+        github_user_id: 42,
+        comment_id: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ],
+  });
+  await page.goto(PAGE);
+  await expect(page).toHaveURL(/\/repairs\/rep-active$/);
+});
+
+test('an offer is accepted as the offer, with its own run and no note', async ({ page }) => {
+  const { calls } = await mockRepairApi(page, {
+    jobs: [failedJob()],
+    offers: [
+      {
+        id: 'opp-1',
+        repo: 'acme/widgets',
+        installation_id: 'ins_1',
+        pull_number: 17,
+        head_sha: SHA,
+        run_id: 482,
+        title: 'Retry transient 502s',
+        state: 'open',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ],
+  });
+  await page.goto('/repairs/new?offer=opp-1');
+  await expect(page.getByRole('heading', { name: 'Retry transient 502s' })).toBeVisible();
+  expect(calls.readiness[0]?.get('pull_number')).toBe('17');
+  await expect(page.getByLabel('Tell Eli what to look at')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fix with Eli', exact: true }).click();
+  await expect(page).toHaveURL(/\/repairs\/rep-offer$/);
+  expect(calls.offerActions).toEqual([{ id: 'opp-1', body: { action: 'accept' } }]);
+  expect(calls.starts).toEqual([]);
+});
+
+test('an offer that is gone says so and sends the person back', async ({ page }) => {
+  await mockRepairApi(page, { offers: [] });
+  await page.goto('/repairs/new?offer=opp-missing');
+  await expect(
+    page.getByRole('heading', { name: 'This offer is no longer available' }),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to Eli repairs' })).toHaveAttribute(
+    'href',
+    '/repairs',
+  );
+});
+
+test('a refused start because the target moved re-reads readiness and explains', async ({
+  page,
+}) => {
+  const message = 'PR #17 has newer commits than this failed run.';
+  // The controller refuses the start and, from then on, says the pull request moved.
+  const { state, calls } = await mockRepairApi(page, {
+    jobs: [failedJob()],
+    readiness: readiness(),
+    start: () => {
+      state.readiness = blockedAt('pull', message, { blockers: [{ code: 'superseded', message }] });
+      return {
+        status: 409,
+        body: {
+          error: {
+            code: 'conflict',
+            message: 'The PR has a newer commit since you reviewed this failure.',
+          },
+        },
+      };
+    },
+  });
+  await page.goto(PAGE);
+  await page.getByRole('button', { name: 'Fix with Eli', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'A newer commit replaced this failure' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toHaveCount(0);
+  expect(calls.starts).toHaveLength(1);
+  expect(calls.readiness.length).toBeGreaterThanOrEqual(2);
+});
+
+test('Repair a different PR parses a pasted address and moves the page to it', async ({ page }) => {
+  await mockRepairApi(page, { jobs: [failedJob()], readiness: readiness() });
+  await page.goto(PAGE);
+  await page.getByRole('button', { name: 'Repair a different PR' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Repair a different PR' });
+  await dialog.getByLabel('Pull request').fill('not an address');
+  await dialog.getByRole('button', { name: 'Check this PR' }).click();
+  await expect(dialog.getByText('Paste a GitHub pull request URL')).toBeVisible();
+  await dialog.getByLabel('Pull request').fill('https://github.com/acme/gadgets/pull/9');
+  await dialog.getByRole('button', { name: 'Check this PR' }).click();
+  await expect(page).toHaveURL(/\/repairs\/new\?repo=acme%2Fgadgets&pull=9$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
