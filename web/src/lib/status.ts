@@ -1018,6 +1018,45 @@ export function repairSetupStatus(state: 'ready' | 'needed' | 'off' | 'loading')
   }
 }
 
+/**
+ * The health of a repository that repairs itself, in the rows of the hub's
+ * Automatic repairs panel. Ready is the healthy green, a spent allowance is the
+ * amber of something that will start again by itself, and a provider that cannot
+ * pay is the red of something a person has to fix, because nothing will change
+ * until they do.
+ */
+export function automaticStatus(state: 'ready' | 'waiting' | 'problem'): StatusMeta {
+  switch (state) {
+    case 'ready':
+      return meta(
+        'ready',
+        'Ready',
+        'idle',
+        'filled',
+        CircleCheck,
+        'Automatic repairs can start here when a check fails.',
+      );
+    case 'waiting':
+      return meta(
+        'waiting',
+        'Allowance used',
+        'pending',
+        'dashed',
+        Hourglass,
+        'Every attempt in the last 24 hours is used. Automatic repairs here start again when a place frees.',
+      );
+    default:
+      return meta(
+        'problem',
+        'Needs attention',
+        'danger',
+        'triangle',
+        TriangleAlert,
+        'Automatic repairs cannot start here until this is fixed.',
+      );
+  }
+}
+
 /* -- problems and deliveries ---------------------------------------------- */
 
 export function severityStatus(severity: Severity | undefined): StatusMeta {

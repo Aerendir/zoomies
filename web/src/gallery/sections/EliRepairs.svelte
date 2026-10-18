@@ -9,16 +9,24 @@
   hub's: the setup bar in each state, offers with the jobs that failed, the
   repairs that are running, and history rows with and without their boxes.
 
+  The automatic repairs panel is here too: a repository ready to repair, one
+  whose provider cannot pay, one whose allowance is spent, one with a repair
+  running, its read failing with and without rows to keep, and the dialog that
+  stops them for one repository, for several and when the stop did not go
+  through.
+
   The error output is read from the controller when a job's disclosure opens,
   so this section answers that one request itself rather than needing a
   controller. Everything else passes through.
 -->
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import Button from '$lib/components/Button.svelte';
   import Panel from '$lib/components/Panel.svelte';
   import type { Schemas } from '$lib/api/types';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
   import ActiveRepairs from '$lib/repairs/ActiveRepairs.svelte';
+  import AutomaticRepairs from '$lib/repairs/AutomaticRepairs.svelte';
   import AttemptFacts from '$lib/repairs/AttemptFacts.svelte';
   import AttemptTimeline from '$lib/repairs/AttemptTimeline.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
@@ -31,6 +39,7 @@
   import RepairRow from '$lib/repairs/RepairRow.svelte';
   import RepairStatusBadge from '$lib/repairs/RepairStatusBadge.svelte';
   import SetupBar from '$lib/repairs/SetupBar.svelte';
+  import StopAutomaticDialog from '$lib/repairs/StopAutomaticDialog.svelte';
   import TechnicalDetails from '$lib/repairs/TechnicalDetails.svelte';
   import type { CaseJob, CaseView } from '$lib/repairs/case';
   import { checkRows } from '$lib/repairs/checks';
@@ -395,6 +404,74 @@
     policies: [policy('eyupio/zoomies'), policy('eyupio/site'), policy('eyupio/docs')],
   });
   const nobody: Schemas['EliRepairSettings'] = { identities: [], policies: [] };
+  // Repositories that repair themselves: settings for the setup line, and the
+  // overview's rows in each state the panel can draw.
+  const automaticPolicy = (repo: string): Schemas['EliRepairPolicy'] => ({
+    ...policy(repo),
+    automatic: true,
+    ask_first: false,
+  });
+  const withAutomatic: Schemas['EliRepairSettings'] = {
+    identities: linked(true).identities,
+    policies: [
+      automaticPolicy('eyupio/zoomies'),
+      automaticPolicy('eyupio/site'),
+      policy('eyupio/docs'),
+    ],
+  };
+  const automaticRow = (
+    over: Partial<Schemas['EliAutomaticRepository']>,
+  ): Schemas['EliAutomaticRepository'] => ({
+    repo: 'eyupio/zoomies',
+    installation_id: 'ins_1',
+    provider_id: 'prv_1',
+    provider_name: 'Team provider',
+    model: 'claude-sonnet-5-5',
+    allow_workflows: false,
+    daily_limit: 5,
+    used: 2,
+    running: 0,
+    ...over,
+  });
+  const automaticRows: Schemas['EliAutomaticRepository'][] = [
+    automaticRow({
+      repo: 'eyupio/site',
+      provider_id: '',
+      provider_name: '',
+      model: '',
+      used: 0,
+      problem:
+        'No installation provider is set for this repository, so automatic repairs cannot start. Choose one in setup.',
+    }),
+    automaticRow({
+      repo: 'eyupio/docs-with-a-very-long-repository-name-that-keeps-going',
+      provider_name: 'A provider with a rather long name',
+      model: 'a-model-with-a-long-name-4-5-20261018',
+      used: 5,
+      next_free_at: iso(NOW + 40 * 60_000),
+      last: {
+        id: 'eli_docs',
+        state: 'checks_failed',
+        pull_number: 88,
+        updated_at: iso(NOW - 50 * 60_000),
+      },
+    }),
+    automaticRow({
+      repo: 'eyupio/zoomies',
+      used: 3,
+      running: 1,
+      allow_workflows: true,
+      last: {
+        id: 'eli_pass',
+        state: 'succeeded',
+        pull_number: 1127,
+        updated_at: iso(NOW - 2 * 3_600_000),
+      },
+    }),
+  ];
+  let stopOne = $state(false);
+  let stopMany = $state(false);
+  let stopFailed = $state(false);
 
   // Offers, each with the jobs that failed in its run.
   const offer = (over: Partial<Schemas['EliOpportunity']>): Schemas['EliOpportunity'] => ({
@@ -750,6 +827,7 @@
       <SetupBar settings={nobody} admin={false} userId="usr_1" />
       <SetupBar settings={nobody} admin={false} userId="usr_1" authDisabled={true} />
       <SetupBar settings={null} admin={false} userId="usr_1" />
+      <SetupBar settings={withAutomatic} admin={true} userId="usr_1" />
     </div>
 
     <h3>Needs you</h3>
@@ -759,6 +837,41 @@
 
     <h3>In progress</h3>
     <div data-gallery="active"><ActiveRepairs items={[goingNow, goingQueued]} total={2} /></div>
+
+    <h3>Automatic repairs</h3>
+    <div class="stack">
+      <div data-gallery="automatic">
+        <AutomaticRepairs repositories={automaticRows} onstop={noop} />
+      </div>
+      <div class="pair">
+        <div data-gallery="automatic-one">
+          <AutomaticRepairs repositories={[automaticRows[2]!]} onstop={noop} />
+        </div>
+        <div data-gallery="automatic-stale">
+          <AutomaticRepairs repositories={[automaticRows[2]!]} error={true} onstop={noop} />
+        </div>
+      </div>
+      <div data-gallery="automatic-unread">
+        <AutomaticRepairs repositories={[]} error={true} onstop={noop} />
+      </div>
+      <div class="badges" data-gallery="automatic-dialogs">
+        <Button variant="secondary" onclick={() => (stopOne = true)}>Stop one repository</Button>
+        <Button variant="secondary" onclick={() => (stopMany = true)}>Stop several</Button>
+        <Button variant="secondary" onclick={() => (stopFailed = true)}>Stop that fails</Button>
+      </div>
+    </div>
+    <StopAutomaticDialog bind:open={stopOne} repos={['eyupio/zoomies']} onconfirm={noop} />
+    <StopAutomaticDialog
+      bind:open={stopMany}
+      repos={['eyupio/zoomies', 'eyupio/site', 'eyupio/docs', 'eyupio/web', 'eyupio/api']}
+      onconfirm={noop}
+    />
+    <StopAutomaticDialog
+      bind:open={stopFailed}
+      repos={['eyupio/zoomies']}
+      error="eyupio/zoomies: Could not save this repository’s policy. Try again."
+      onconfirm={noop}
+    />
 
     <h3>History</h3>
     <div class="pair">

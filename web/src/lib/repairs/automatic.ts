@@ -1,5 +1,5 @@
 import type { Schemas } from '../api/types';
-import { formatAbsolute, pluralise, relativeTime } from '../format';
+import { pluralise, relativeTime } from '../format';
 import { stateLabel } from './history';
 
 /*
@@ -39,14 +39,26 @@ export function allowanceOf(repo: Pick<Repository, 'used' | 'daily_limit'>): All
   return { used, limit, full, ratio, words };
 }
 
-/** When automatic repairs resume, for a repository with no place left. Empty otherwise. */
+const CLOCK = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * When automatic repairs resume, for a repository with no place left. Empty
+ * otherwise. A place frees within a day of the attempt that holds it, so it is
+ * said as a time of day, with "tomorrow" when midnight comes first, and how long
+ * that is as well, because "in 40m" is the part somebody acts on.
+ */
 export function waitsUntil(
   repo: Pick<Repository, 'used' | 'daily_limit' | 'next_free_at'>,
   now: number = Date.now(),
 ): string {
   if (!allowanceOf(repo).full) return '';
-  if (!repo.next_free_at) return 'Automatic repairs here wait until a place frees.';
-  return `Automatic repairs here wait until ${formatAbsolute(repo.next_free_at)} (${relativeTime(repo.next_free_at, now)}).`;
+  const free = repo.next_free_at ? new Date(repo.next_free_at) : null;
+  if (!free || Number.isNaN(free.getTime())) {
+    return 'Automatic repairs here wait until a place frees.';
+  }
+  const time = CLOCK.format(free);
+  const today = new Date(now).toDateString() === free.toDateString();
+  return `Automatic repairs here wait until ${today ? time : `tomorrow ${time}`} (${relativeTime(free.getTime(), now)}).`;
 }
 
 /** The newest automatic repair still in the history, as a row of the overview shows it. */

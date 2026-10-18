@@ -38,6 +38,17 @@ test('an allowance reads as used of limit, and a full one says when a place free
   assert.equal(allowanceOf(spent).full, true);
   assert.equal(allowanceOf(spent).words, 'All 5 attempts used in the last 24 hours');
   assert.match(waitsUntil(spent, NOW), /^Automatic repairs here wait until .+ \(in 40m\)\.$/);
+  // A place frees within a day, so it is said as a time of day: no year, no seconds.
+  assert.doesNotMatch(waitsUntil(spent, NOW), /2026|:\d\d:\d\d/);
+  // One that frees after midnight says so.
+  const evening = new Date(2026, 9, 18, 20, 0).getTime();
+  const overnight = automaticRepository({
+    used: 5,
+    daily_limit: 5,
+    next_free_at: new Date(2026, 9, 19, 1, 5).toISOString(),
+  });
+  assert.match(waitsUntil(overnight, evening), /wait until tomorrow .+ \(in 5h\)\.$/);
+  assert.doesNotMatch(waitsUntil(spent, NOW), /tomorrow/);
   // A place that is not named is not invented.
   assert.equal(
     waitsUntil(automaticRepository({ used: 5, daily_limit: 5 }), NOW),

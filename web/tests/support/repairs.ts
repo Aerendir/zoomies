@@ -47,6 +47,18 @@ export interface RepairApiState {
    * a repair on by replacing its entry and letting the page ask again.
    */
   attempts: Record<string, Repair | { status: number; message: string }>;
+  /**
+   * What `GET /assistant/repairs/automatic` answers: the repositories that repair
+   * themselves, or the status the controller refuses with.
+   */
+  automatic: Schemas['EliAutomaticRepository'][] | { status: number; message: string };
+  /**
+   * What `POST /assistant/repairs/automatic/stop` answers. Left null, the stub does
+   * what the controller does: each repository that is automatic stops being, and
+   * leaves the overview and the policies' automatic count; one that is not is
+   * `changed: false`.
+   */
+  stop: ((body: { repos: string[]; then: string }) => { status: number; body: unknown }) | null;
 }
 
 export interface RepairApiCalls {
@@ -63,6 +75,10 @@ export interface RepairApiCalls {
   lists: URLSearchParams[];
   /** How many times the offers were read. */
   offerReads: number;
+  /** How many times the automatic repairs overview was read. */
+  automaticReads: number;
+  /** The body of every stop. */
+  stops: { repos: string[]; then: string }[];
 }
 
 const ACTIVE = ['queued', 'working', 'checking'];
@@ -232,6 +248,8 @@ export async function mockRepairApi(
     start: { status: 202, body: { id: 'rep-1' } },
     attempts: {},
     settings: { identities: [], policies: [] },
+    automatic: [],
+    stop: null,
     ...options,
   };
   const calls: RepairApiCalls = {
@@ -243,6 +261,8 @@ export async function mockRepairApi(
     attempts: [],
     lists: [],
     offerReads: 0,
+    automaticReads: 0,
+    stops: [],
   };
 
   await page.route('**/api/v1/**', async (route) => {
@@ -314,6 +334,41 @@ export async function mockRepairApi(
       if (body?.action === 'dismiss')
         state.offers = state.offers.filter((offer) => offer.id !== id);
       return json({ repair: { id: 'rep-offer' } });
+    }
+    if (path === '/assistant/repairs/automatic' && method === 'GET') {
+      calls.automaticReads += 1;
+      if (!Array.isArray(state.automatic)) {
+        return json(
+          { error: { code: 'internal', message: state.automatic.message } },
+          state.automatic.status,
+        );
+      }
+      return json({ repositories: state.automatic });
+    }
+    if (path === '/assistant/repairs/automatic/stop' && method === 'POST') {
+      const body = request.postDataJSON() as { repos: string[]; then: string };
+      calls.stops.push(body);
+      if (state.stop) {
+        const answer = state.stop(body);
+        return json(answer.body, answer.status);
+      }
+      const before = Array.isArray(state.automatic) ? state.automatic : [];
+      const results = body.repos.map((repo) => ({
+        repo,
+        changed: before.some((row) => row.repo === repo),
+      }));
+      state.automatic = before.filter((row) => !body.repos.includes(row.repo));
+      state.settings = {
+        ...state.settings,
+        policies: state.settings.policies.map((policy) =>
+          !body.repos.includes(policy.repo) || !policy.automatic
+            ? policy
+            : body.then === 'off'
+              ? { ...policy, enabled: false }
+              : { ...policy, automatic: false, ask_first: true },
+        ),
+      };
+      return json({ results });
     }
     if (path === '/assistant/repairs/settings') {
       return json(state.settings);
@@ -416,6 +471,47 @@ export function linkedAs(login: string, confirmed = true): Schemas['EliRepairSet
     identities: [{ user_id: 'user-1', github_user_id: 42, github_login: login, confirmed }],
     policies: [],
   };
+}
+
+/** A repository that repairs itself, as `GET /assistant/repairs/automatic` lists it. */
+export function automaticRow(
+  over: Partial<Schemas['EliAutomaticRepository']> = {},
+): Schemas['EliAutomaticRepository'] {
+  return {
+    repo: 'acme/widgets',
+    installation_id: 'ins_1',
+    provider_id: 'prv_1',
+    provider_name: 'Team provider',
+    model: 'team-model',
+    allow_workflows: false,
+    daily_limit: 5,
+    used: 2,
+    running: 0,
+    ...over,
+  };
+}
+
+/** The policy behind such a row, as `GET /assistant/repairs/settings` lists it for an administrator. */
+export function automaticPolicy(
+  repo: string,
+  over: Partial<Schemas['EliRepairPolicy']> = {},
+): Schemas['EliRepairPolicy'] {
+  return {
+    repo,
+    installation_id: 'ins_1',
+    provider_id: 'prv_1',
+    enabled: true,
+    automatic: true,
+    ask_first: false,
+    allow_workflows: false,
+    daily_limit: 5,
+    ...over,
+  };
+}
+
+/** Settings for an administrator who is linked and has these repositories on Automatic. */
+export function settingsWithAutomatic(...repos: string[]): Schemas['EliRepairSettings'] {
+  return { ...linkedAs('dana'), policies: repos.map((repo) => automaticPolicy(repo)) };
 }
 
 /**

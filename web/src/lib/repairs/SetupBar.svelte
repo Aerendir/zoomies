@@ -1,7 +1,7 @@
 <!--
   The hub's one line about setup: whether the person looking can repair, which
   GitHub account that rests on, and, for an administrator, how many repositories
-  ask first. The sentence about what is missing names the next thing to do, and
+  repair themselves and how many ask first. The sentence about what is missing names the next thing to do, and
   Manage setup is where it is done.
 
   It is about whoever is looking. Somebody else's linked account does not make
@@ -36,6 +36,11 @@
     <strong>{summary.headline}</strong>
   </span>
   {#if summary.account}<span class="item">{summary.account}</span>{/if}
+  {#if summary.automatic}
+    <span class="item">
+      Automatic on <strong>{pluralise(summary.automatic, 'repository', 'repositories')}</strong>
+    </span>
+  {/if}
   {#if summary.askFirst !== null}
     <span class="item">
       Ask me first on <strong>{pluralise(summary.askFirst, 'repository', 'repositories')}</strong>
