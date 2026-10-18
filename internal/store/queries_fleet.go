@@ -235,6 +235,12 @@ const poolCols = `id, name, installation_id, labels, runner_group, backend, os, 
 	cost_per_runner_hour, runner_settings, cpu_burst, no_default_labels, size_from_profile, tmpfs,
 	auto_key, auto_min, auto_cap, auto_paused, memory_burst, provider_selector`
 
+// What each of a pool's struct-valued documents holds until somebody sets it.
+var (
+	zeroResources, zeroCache, zeroRunnerSettings = zeroDoc[Resources](), zeroDoc[CacheConfig](), zeroDoc[RunnerSettings]()
+	zeroCPUBurst, zeroTmpfs, zeroMemoryBurst     = zeroDoc[CPUBurstPolicy](), zeroDoc[TmpfsConfig](), zeroDoc[MemoryBurstPolicy]()
+)
+
 func scanPool(sc interface{ Scan(...any) error }) (*Pool, error) {
 	var p Pool
 	var idle, created, updated int64
@@ -256,22 +262,22 @@ func scanPool(sc interface{ Scan(...any) error }) (*Pool, error) {
 	p.IdleTimeout = Duration(time.Duration(idle) * time.Millisecond)
 	p.Ephemeral, p.RunAsRoot, p.Enabled = ephemeral == 1, runAsRoot == 1, enabled == 1
 	p.CreatedAt, p.UpdatedAt = at(created), at(updated)
-	if err := unmarshalJSON(resources, &p.Resources); err != nil {
+	if err := decodeFresh(resources, zeroResources, &p.Resources); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding resources: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(cache, &p.Cache); err != nil {
+	if err := decodeFresh(cache, zeroCache, &p.Cache); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding cache: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(runnerSettings, &p.RunnerSettings); err != nil {
+	if err := decodeFresh(runnerSettings, zeroRunnerSettings, &p.RunnerSettings); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding runner settings: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(cpuBurst, &p.CPUBurst); err != nil {
+	if err := decodeFresh(cpuBurst, zeroCPUBurst, &p.CPUBurst); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding CPU burst policy: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(tmpfs, &p.Tmpfs); err != nil {
+	if err := decodeFresh(tmpfs, zeroTmpfs, &p.Tmpfs); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding tmpfs settings: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(memoryBurst, &p.MemoryBurst); err != nil {
+	if err := decodeFresh(memoryBurst, zeroMemoryBurst, &p.MemoryBurst); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding memory burst policy: %w", p.ID, err)
 	}
 	return &p, nil
@@ -391,6 +397,55 @@ func (s *Store) ListPools(ctx context.Context) ([]*Pool, error) {
 			return nil, err
 		}
 		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// poolClaimCols are the columns ClaimView keeps, in the order ListPoolsForClaim
+// scans them.
+const poolClaimCols = `id, name, installation_id, labels, backend, arch, enabled, no_default_labels, auto_key`
+
+// ClaimView is a pool with only the fields a claim reads, and every other field
+// zero. Which pool takes a job is decided by whether a pool is enabled, which
+// installation it belongs to, the labels it advertises and whether it advertises
+// the ones every runner does, and, where two fit equally, by name, by ID, by
+// whether the controller keeps the pool from its hosts (the auto key) and by its
+// architecture. The backend is there because the queued-to-started histogram is
+// labelled with it. The labels are shared with the pool, not copied.
+//
+// It is what ListPoolsForClaim returns, and the one place that says which fields
+// those are: a test in internal/scheduler fills the others in with values of
+// their own and checks that no claim depends on them.
+func ClaimView(p *Pool) *Pool {
+	return &Pool{
+		ID: p.ID, Name: p.Name, InstallationID: p.InstallationID, Labels: p.Labels,
+		Backend: p.Backend, Platform: Platform{Arch: p.Platform.Arch},
+		Enabled: p.Enabled, NoDefaultLabels: p.NoDefaultLabels, AutoKey: p.AutoKey,
+	}
+}
+
+// ListPoolsForClaim returns every pool ordered by name, as ClaimView sees it. A
+// webhook delivery or a poller sweep reads the pools to claim a job, and a pool
+// row is thirty-nine columns and ten JSON documents, of which a claim reads nine
+// columns and one document: at a hundred pools that was nearly half of a
+// delivery. The pools it returns are for a claim and for naming a job's pool,
+// and for nothing else; any other reader wants ListPools.
+func (s *Store) ListPoolsForClaim(ctx context.Context) ([]*Pool, error) {
+	rows, err := s.read.QueryContext(ctx, `SELECT `+poolClaimCols+` FROM pools ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Pool
+	for rows.Next() {
+		var p Pool
+		var enabled, noDefaultLabels int
+		if err := rows.Scan(&p.ID, &p.Name, &p.InstallationID, &p.Labels, &p.Backend, &p.Platform.Arch,
+			&enabled, &noDefaultLabels, &p.AutoKey); err != nil {
+			return nil, err
+		}
+		p.Enabled, p.NoDefaultLabels = enabled == 1, noDefaultLabels == 1
+		out = append(out, &p)
 	}
 	return out, rows.Err()
 }

@@ -261,9 +261,19 @@ func (s *StringSlice) Scan(v any) error {
 		if len(t) == 0 {
 			return nil
 		}
+		if string(t) == "[]" {
+			*s = StringSlice{}
+			return nil
+		}
 		return json.Unmarshal(t, s)
 	case string:
 		if t == "" {
+			return nil
+		}
+		if t == "[]" {
+			// What the decoder makes of it, without calling it: an empty list
+			// that is not nil. A list is empty far oftener than not.
+			*s = StringSlice{}
 			return nil
 		}
 		return json.Unmarshal([]byte(t), s)
@@ -291,9 +301,19 @@ func (m *StringMap) Scan(v any) error {
 		if len(t) == 0 {
 			return nil
 		}
+		if string(t) == "{}" {
+			*m = StringMap{}
+			return nil
+		}
 		return json.Unmarshal(t, m)
 	case string:
 		if t == "" {
+			return nil
+		}
+		if t == "{}" {
+			// An empty map that is not nil, as the decoder makes it. A map is
+			// empty far oftener than not.
+			*m = StringMap{}
 			return nil
 		}
 		return json.Unmarshal([]byte(t), m)

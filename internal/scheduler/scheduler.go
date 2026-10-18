@@ -460,7 +460,7 @@ func assign(pools []*store.Pool, jobs []*store.Job, targets map[string]string) (
 			// comparison that never happens.
 			prepared = preparedLabels(pools)
 		}
-		p, reason := bestOf(pools, prepared, j, store.NormalizeLabels(j.Labels), targets)
+		p, reason := bestOf(pools, prepared, j, labelsOf(store.NormalizeLabels(j.Labels)), targets)
 		if p == nil {
 			unmatched = append(unmatched, UnmatchedJob{Job: j, Reason: reason})
 			continue
