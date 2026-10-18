@@ -12,11 +12,14 @@ import { expect, test } from '@playwright/test';
 import {
   automaticPolicy,
   automaticRow,
+  failedJob,
   keptCase,
   linkedAs,
   mockRepairApi,
+  readiness,
   repairRow,
   settingsWithAutomatic,
+  stoppedAt,
 } from './support/repairs';
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -320,18 +323,20 @@ test.describe('stopping', () => {
   });
 });
 
+/** A repair Eli started by itself on acme/widgets #17, which has since failed its checks. */
+const automaticAttempt = (over: Parameters<typeof repairRow>[0] = {}) =>
+  repairRow({
+    id: 'rep-auto',
+    trigger: 'automatic',
+    github_login: '',
+    user_id: '',
+    state: 'checks_failed',
+    message: 'Checks failed on Eli’s commit b7d3e91.',
+    details: { case: keptCase() },
+    ...over,
+  });
+
 test.describe('the attempt page', () => {
-  const automaticAttempt = (over: Parameters<typeof repairRow>[0] = {}) =>
-    repairRow({
-      id: 'rep-auto',
-      trigger: 'automatic',
-      github_login: '',
-      user_id: '',
-      state: 'checks_failed',
-      message: 'Checks failed on Eli’s commit b7d3e91.',
-      details: { case: keptCase() },
-      ...over,
-    });
   const card = (page: import('@playwright/test').Page) =>
     page.getByRole('region', { name: 'Automatic repairs on acme/widgets' });
 
@@ -469,5 +474,184 @@ test.describe('the attempt page', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(card(page)).toHaveCount(0);
     expect(calls.automaticReads).toBe(0);
+  });
+});
+
+test.describe('the repair page', () => {
+  const FAILURE = '/repairs/new?repo=acme%2Fwidgets&run=482';
+  const note = (page: import('@playwright/test').Page) =>
+    page.getByRole('complementary', { name: 'Next step' });
+  const automatic = () => readiness({ policy_mode: 'automatic' });
+
+  test('tells an administrator Eli already tried this failure on its own, and shows the attempt', async ({
+    page,
+  }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      jobs: [failedJob()],
+      readiness: automatic(),
+      repairs: [automaticAttempt()],
+      automatic: [automaticRow()],
+    });
+    await page.goto(FAILURE);
+    const aside = note(page);
+    await expect(
+      aside.getByRole('heading', { name: 'Eli already tried this on its own' }),
+    ).toBeVisible();
+    await expect(aside).toContainText('Checks failed.');
+    await expect(aside).toContainText('starting another attempt here is the retry');
+    await expect(aside.getByRole('link', { name: 'View the attempt' })).toHaveAttribute(
+      'href',
+      '/repairs/rep-auto',
+    );
+    // The attempt does not take the button away: starting again is the retry.
+    await expect(aside.getByRole('button', { name: 'Fix with Eli' })).toBeVisible();
+  });
+
+  test('tells an administrator nothing started, and why, when the overview knows', async ({
+    page,
+  }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      jobs: [failedJob()],
+      readiness: automatic(),
+      automatic: [automaticRow({ used: 1 })],
+    });
+    await page.goto(FAILURE);
+    const aside = note(page);
+    await expect(
+      aside.getByRole('heading', { name: 'Nothing has started on its own for this failure' }),
+    ).toBeVisible();
+    await expect(aside).toContainText('GitHub’s report of a failed job');
+    await expect(aside.getByRole('button', { name: 'Fix with Eli' })).toBeVisible();
+  });
+
+  test('names a spent allowance as the reason, with when it frees', async ({ page }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      jobs: [failedJob()],
+      readiness: readiness({
+        policy_mode: 'automatic',
+        ready: false,
+        remaining: 0,
+        blockers: [{ code: 'budget', message: 'The repair allowance is exhausted.' }],
+        checks: stoppedAt('budget', 'The repair allowance is exhausted.', 'budget'),
+      }),
+      automatic: [
+        automaticRow({
+          used: 5,
+          daily_limit: 5,
+          next_free_at: new Date(Date.now() + 40 * 60_000).toISOString(),
+        }),
+      ],
+    });
+    await page.goto(FAILURE);
+    const aside = note(page);
+    await expect(aside).toContainText('allowance is used up');
+    await expect(aside).toContainText(/wait until .+ \(in (39|40)m\)/);
+    await expect(aside).not.toContainText('GitHub’s report of a failed job');
+  });
+
+  test('names a provider that cannot pay as the reason', async ({ page }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      jobs: [failedJob()],
+      readiness: automatic(),
+      automatic: [
+        automaticRow({
+          provider_id: '',
+          provider_name: '',
+          model: '',
+          problem:
+            'No installation provider is set for this repository, so automatic repairs cannot start.',
+        }),
+      ],
+    });
+    await page.goto(FAILURE);
+    await expect(note(page)).toContainText('No installation provider is set for this repository');
+    await expect(note(page)).toContainText('That is why nothing has started');
+  });
+
+  test('gives anyone else one neutral sentence and reads nothing about what Eli has done', async ({
+    page,
+  }) => {
+    const { calls } = await mockRepairApi(page, {
+      role: 'viewer',
+      settings: linkedAs('dana'),
+      jobs: [failedJob()],
+      readiness: automatic(),
+      repairs: [automaticAttempt()],
+      automatic: [automaticRow()],
+    });
+    await page.goto(FAILURE);
+    const aside = note(page);
+    await expect(
+      aside.getByRole('heading', { name: 'This repository repairs itself' }),
+    ).toBeVisible();
+    await expect(aside).toContainText('An administrator can see what it has done.');
+    await expect(aside).not.toContainText('Eli already tried');
+    await expect(aside).not.toContainText('Nothing has started');
+    expect(calls.automaticReads).toBe(0);
+    expect(calls.lists.some((query) => query.get('trigger') === 'automatic')).toBe(false);
+  });
+
+  test('says nothing for a repository that asks first, or is manual, or whose failure has been fixed', async ({
+    page,
+  }) => {
+    for (const answer of [
+      readiness({ policy_mode: 'ask_first' }),
+      readiness({ policy_mode: 'manual' }),
+      readiness({
+        policy_mode: 'automatic',
+        ready: false,
+        blockers: [
+          {
+            code: 'fixed',
+            message:
+              'The latest checks on this PR have passed. This failure has already been fixed; no repair is needed.',
+          },
+        ],
+        checks: stoppedAt('checks', 'The latest checks have passed.', 'fixed'),
+      }),
+    ]) {
+      const { calls } = await mockRepairApi(page, {
+        settings: settingsWithAutomatic('acme/widgets'),
+        jobs: [failedJob()],
+        readiness: answer,
+        automatic: [automaticRow()],
+      });
+      await page.goto(FAILURE);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await expect(note(page)).toBeVisible();
+      await expect(note(page)).not.toContainText('repairs itself');
+      await expect(note(page)).not.toContainText('on its own');
+      expect(calls.automaticReads).toBe(0);
+      await page.unroute('**/api/v1/**');
+    }
+  });
+
+  test('still opens the repair that is running, with no note', async ({ page }) => {
+    await mockRepairApi(page, {
+      settings: settingsWithAutomatic('acme/widgets'),
+      jobs: [failedJob()],
+      readiness: automatic(),
+      repairs: [
+        automaticAttempt({
+          state: 'working',
+          message: '',
+          details: { stage: 'prepare_fix', case: keptCase() },
+        }),
+      ],
+      attempts: {
+        'rep-auto': automaticAttempt({
+          state: 'working',
+          message: '',
+          details: { stage: 'prepare_fix', case: keptCase() },
+        }),
+      },
+      automatic: [automaticRow({ running: 1 })],
+    });
+    await page.goto(FAILURE);
+    await expect(page).toHaveURL(/\/repairs\/rep-auto$/);
   });
 });

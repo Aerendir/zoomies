@@ -24,12 +24,14 @@
   import Button from '$lib/components/Button.svelte';
   import Panel from '$lib/components/Panel.svelte';
   import type { Schemas } from '$lib/api/types';
+  import { automaticNote } from '$lib/repairs/automatic';
   import CaseCard from '$lib/repairs/CaseCard.svelte';
   import ActiveRepairs from '$lib/repairs/ActiveRepairs.svelte';
   import AutomaticRepairs from '$lib/repairs/AutomaticRepairs.svelte';
   import AttemptFacts from '$lib/repairs/AttemptFacts.svelte';
   import AttemptTimeline from '$lib/repairs/AttemptTimeline.svelte';
   import AutomaticCard from '$lib/repairs/AutomaticCard.svelte';
+  import AutomaticNote from '$lib/repairs/AutomaticNote.svelte';
   import DecisionCard from '$lib/repairs/DecisionCard.svelte';
   import FailedJobs from '$lib/repairs/FailedJobs.svelte';
   import NextSteps from '$lib/repairs/NextSteps.svelte';
@@ -477,6 +479,28 @@
       },
     }),
   ];
+  // What the repair page says about a repository that repairs itself, for each
+  // reader and each reason.
+  const aboutAutomatic = (
+    over: Partial<Parameters<typeof automaticNote>[0]>,
+  ): NonNullable<ReturnType<typeof automaticNote>> =>
+    automaticNote({
+      mode: 'automatic',
+      admin: true,
+      attempt: undefined,
+      repository: undefined,
+      now: NOW,
+      ...over,
+    })!;
+  const notes = {
+    tried: aboutAutomatic({
+      attempt: repair({ id: 'eli_tried', trigger: 'automatic', state: 'checks_failed' }),
+    }),
+    none: aboutAutomatic({}),
+    spent: aboutAutomatic({ repository: automaticRows[1] }),
+    broken: aboutAutomatic({ repository: automaticRows[0] }),
+    neutral: aboutAutomatic({ admin: false }),
+  };
   let stopOne = $state(false);
   let stopMany = $state(false);
   let stopFailed = $state(false);
@@ -825,6 +849,19 @@
       <div data-gallery="facts-finished">
         <AttemptFacts repair={passed} view={withPull} />
         <AttemptTimeline repair={passed} />
+      </div>
+    </div>
+
+    <h3>The repair page's note about automatic repairs</h3>
+    <div class="pair">
+      <div class="stack" data-gallery="automatic-notes-a">
+        <AutomaticNote note={notes.tried} />
+        <AutomaticNote note={notes.none} />
+        <AutomaticNote note={notes.neutral} />
+      </div>
+      <div class="stack" data-gallery="automatic-notes-b">
+        <AutomaticNote note={notes.spent} />
+        <AutomaticNote note={notes.broken} />
       </div>
     </div>
 
