@@ -80,10 +80,12 @@
     line-height: var(--z-leading-base);
     overflow-wrap: anywhere;
   }
+  /* The provider, the model and the sentence built from them were named by people. */
   p {
     margin: var(--z-space-3) 0 0;
     font-size: var(--z-text-sm);
     line-height: var(--z-leading-sm);
+    overflow-wrap: anywhere;
   }
   .muted {
     color: var(--z-text-muted);

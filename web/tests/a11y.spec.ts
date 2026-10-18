@@ -664,3 +664,39 @@ for (const { path, heading, stubbed, ready } of REPAIR_PAGES) {
     expect(audit.unlabelled, `${path}: every image role says what it shows`).toEqual([]);
   });
 }
+
+// The panel of repositories that repair themselves and the dialog that stops them
+// are held to the same checks as the pages around them, and to the keyboard: every
+// control and every meter has a name, the dialog takes focus in and gives it back,
+// and arrow keys choose between its two answers.
+test('the Automatic repairs panel and its stop dialog can be used by a keyboard alone', async ({
+  page,
+}) => {
+  await mockRepairWorld(page);
+  await goto(page, '/repairs', 'Eli repairs');
+  const panel = page.getByRole('region', { name: 'Automatic repairs' });
+  await expect(panel.getByRole('article')).toHaveCount(3);
+  await expect(panel.getByRole('meter', { name: /^Allowance used on / })).toHaveCount(3);
+  await expect(panel.getByRole('button', { name: /^$/ })).toHaveCount(0);
+  await expect(panel.getByRole('link', { name: /^$/ })).toHaveCount(0);
+  // The headings of a row are below the panel's own.
+  await expect(panel.getByRole('heading', { level: 2 })).toHaveCount(1);
+  await expect(panel.getByRole('heading', { level: 3 })).toHaveCount(3);
+
+  const open = panel.getByRole('button', { name: 'Stop automatic repairs on acme/site' });
+  await open.focus();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'Stop automatic repairs' });
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+
+  const group = dialog.getByRole('group', { name: 'What should happen instead?' });
+  await group.getByRole('radio', { name: /Ask me first/ }).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(group.getByRole('radio', { name: /Turn repairs off/ })).toBeChecked();
+  await expect(group.getByRole('radio', { name: /Turn repairs off/ })).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(open).toBeFocused();
+});

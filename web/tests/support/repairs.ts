@@ -560,13 +560,68 @@ export async function mockRepairWorld(page: Page, over: Partial<RepairApiState> 
       ],
     },
   });
+  // A repair the repository's own policy started, which has since failed its checks.
+  const automatic = repairRow({
+    id: 'rep-auto',
+    trigger: 'automatic',
+    github_login: '',
+    user_id: '',
+    state: 'checks_failed',
+    head_sha: EARLIER_HEAD,
+    commit_sha: 'b7d3e9150c2a4f8e6d1b0a93c5e7f2a4d6b8c0e1',
+    message: 'Checks failed on Eli’s commit b7d3e91.',
+    details: { stage: 'watch_ci', model: 'my-model', source_bytes: 21_000, case: case_ },
+  });
   return mockRepairApi(page, {
     role: 'admin',
-    settings: linkedAs('dana'),
+    settings: {
+      ...linkedAs('dana'),
+      policies: [
+        automaticPolicy('acme/widgets'),
+        automaticPolicy('acme/site'),
+        automaticPolicy('acme/docs'),
+      ],
+    },
     jobs: [failedJob(), lintJob()],
     offers: [offerRow()],
-    repairs: [running, done],
-    attempts: { 'rep-run': running, 'rep-done': done },
+    repairs: [running, done, automatic],
+    attempts: { 'rep-run': running, 'rep-done': done, 'rep-auto': automatic },
+    readiness: readiness({ policy_mode: 'automatic' }),
+    // One of each thing the panel can say: a repository that cannot run, one whose
+    // allowance is spent, and one that is working and has a repair going.
+    automatic: [
+      automaticRow({
+        repo: 'acme/site',
+        provider_id: '',
+        provider_name: '',
+        model: '',
+        used: 0,
+        problem:
+          'No installation provider is set for this repository, so automatic repairs cannot start. Choose one in setup.',
+      }),
+      automaticRow({
+        repo: 'acme/docs',
+        used: 5,
+        next_free_at: new Date(Date.now() + 40 * 60_000).toISOString(),
+        last: {
+          id: 'rep-auto',
+          state: 'checks_failed',
+          pull_number: 88,
+          updated_at: new Date(Date.now() - 50 * 60_000).toISOString(),
+        },
+      }),
+      automaticRow({
+        repo: 'acme/widgets',
+        used: 3,
+        running: 1,
+        last: {
+          id: 'rep-auto',
+          state: 'checks_failed',
+          pull_number: 17,
+          updated_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+        },
+      }),
+    ],
     errorOutput: {
       '9001': {
         lines: ['--- FAIL: TestRegistryRetries (0.31s)', 'client_test.go:88: got 1, want 3'],
@@ -609,6 +664,13 @@ export const REPAIR_PAGES = [
     heading: 'Retry transient 502s',
     stubbed: true,
     ready: (page: Page) => page.getByRole('region', { name: 'What to try next' }),
+  },
+  {
+    // A repair the repository's policy started, with the card that says where that stands.
+    path: '/repairs/rep-auto',
+    heading: 'Retry transient 502s',
+    stubbed: true,
+    ready: (page: Page) => page.getByRole('region', { name: 'Automatic repairs on acme/widgets' }),
   },
   {
     path: '/repairs/setup',

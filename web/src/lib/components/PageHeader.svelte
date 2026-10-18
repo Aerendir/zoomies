@@ -89,6 +89,7 @@
   }
   nav ol {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--z-space-1);
     margin: 0;
@@ -97,10 +98,16 @@
     font-size: var(--z-text-xs);
     color: var(--z-text-subtle);
   }
+  /* A trail is made of names people chose (a repository, a pull request's number), and
+     one with nowhere to break pushed a phone's whole page sideways. The labels wrap
+     where they must, and the trail wraps between them. */
   nav li {
     display: inline-flex;
     align-items: center;
     gap: var(--z-space-1);
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
   nav a {
     color: var(--z-text-muted);

@@ -16,8 +16,11 @@
 import { expect, test, type Dialog, type Page } from '@playwright/test';
 import { expectNoSidewaysScroll, FIXTURE, goto } from './support/fixtures';
 import {
+  automaticPolicy,
+  automaticRow,
   failedJob,
   keptCase,
+  linkedAs,
   mockRepairWorld,
   offerRow,
   readiness,
@@ -244,4 +247,76 @@ test('what a pull request, a job and its log say stays text on every Eli repair 
   expect(dialogs, 'a dialog opened, so something a pull request or a job wrote ran').toHaveLength(
     0,
   );
+});
+
+// The repository, provider and model named on the automatic repair pages are written by
+// people (an installation names a provider, a provider names a model), and the sentence
+// that says why a provider cannot pay is built from one of them. Each is text.
+test('a repository, provider and model named with markup read as text on the automatic repair pages', async ({
+  page,
+}) => {
+  const dialogs = watchForDialogs(page);
+  const repo = 'acme/<img src=x onerror=alert(1)>';
+  const provider = '<script>alert(2)</script>';
+  const model = '"><svg onload=alert(3)>';
+  const problem = `The installation provider ${provider} is disabled <b>so</b> automatic repairs cannot start.`;
+  const attempt = repairRow({
+    id: 'rep-auto',
+    repo,
+    // An earlier commit, so the repair page has no attempt of Eli's to point to and says
+    // why nothing started, which is the sentence built from the provider's name.
+    head_sha: 'f'.repeat(40),
+    trigger: 'automatic',
+    github_login: '',
+    user_id: '',
+    state: 'failed',
+    details: { stage: 'prepare_fix', case: keptCase() },
+  });
+  await mockRepairWorld(page, {
+    settings: { ...linkedAs('dana'), policies: [automaticPolicy(repo)] },
+    readiness: readiness({ repo, policy_mode: 'automatic' }),
+    repairs: [attempt],
+    attempts: { 'rep-auto': attempt },
+    automatic: [
+      automaticRow({
+        repo,
+        provider_name: provider,
+        model,
+        problem,
+        last: { id: 'rep-auto', state: 'failed', pull_number: 17, updated_at: attempt.updated_at },
+      }),
+    ],
+  });
+
+  const asText = async (where: string) => {
+    await expect(page.locator('img[src="x"]'), `${where}: an img was parsed`).toHaveCount(0);
+    await expect(page.locator('main svg[onload]'), `${where}: an svg was parsed`).toHaveCount(0);
+    await expect(page.locator('main b'), `${where}: markup was parsed`).toHaveCount(0);
+    await expect(
+      page.locator('script:has-text("alert(")'),
+      `${where}: a script was parsed`,
+    ).toHaveCount(0);
+    await expectNoSidewaysScroll(page, where);
+  };
+
+  // The hub's panel: the payloads really arrived, as words.
+  await goto(page, '/repairs', 'Eli repairs');
+  const panel = page.getByRole('region', { name: 'Automatic repairs' });
+  await expect(panel).toContainText(provider);
+  await expect(panel).toContainText(model);
+  await expect(panel).toContainText('<b>so</b>');
+  await expect(panel.getByRole('heading', { level: 3 })).toContainText(repo);
+  await asText('the automatic repairs panel');
+
+  // The attempt's card.
+  await goto(page, '/repairs/rep-auto', /./);
+  await expect(page.getByRole('region', { name: `Automatic repairs on ${repo}` })).toBeVisible();
+  await asText('the automatic repair card');
+
+  // The repair page's note, which repeats the sentence about the provider.
+  await goto(page, `/repairs/new?repo=${encodeURIComponent(repo)}&run=9`, 'Repair a failed check');
+  await expect(page.getByRole('complementary', { name: 'Next step' })).toContainText('<b>so</b>');
+  await asText('the repair page note');
+
+  expect(dialogs, 'a dialog opened, so something an installation wrote ran').toHaveLength(0);
 });

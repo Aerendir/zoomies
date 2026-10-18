@@ -29,9 +29,12 @@ import {
   expectNoSidewaysScroll,
 } from './support/fixtures';
 import {
+  automaticPolicy,
+  automaticRow,
   EARLIER_HEAD,
   failedJob,
   keptCase,
+  linkedAs,
   mockRepairWorld,
   offerRow,
   readiness,
@@ -1215,6 +1218,16 @@ test('a title, a branch and a job with nowhere to break stay inside the screen o
         message: `Error: ${'x'.repeat(400)}`,
         details: { stage: 'prepare_fix', failure_code: 'unsupported_fix', case: kept },
       }),
+      // The one the repository's policy started, which the world audits as well.
+      'rep-auto': repairRow({
+        id: 'rep-auto',
+        trigger: 'automatic',
+        github_login: '',
+        user_id: '',
+        state: 'checks_failed',
+        head_sha: EARLIER_HEAD,
+        details: { stage: 'watch_ci', case: kept },
+      }),
     },
     errorOutput: { '9001': { lines: [`Error: ${'x'.repeat(400)}`] } },
   });
@@ -1273,5 +1286,79 @@ test('the setup page stays inside the screen at 375 and 360px', async ({ page })
     await goto(page, '/repairs/setup', 'Repair setup');
     await expect(page.getByRole('heading', { name: 'Your GitHub account' })).toBeVisible();
     await expectNoSidewaysScroll(page, `/repairs/setup at ${width}px`);
+  }
+});
+
+test('the automatic repair panel, card, note and dialog stay inside the screen with names that have nowhere to break', async ({
+  page,
+}) => {
+  test.slow();
+  const long = `Name${'x'.repeat(170)}End`;
+  const repo = `acme/${long}`;
+  const kept = keptCase({ pull_title: long });
+  const attempt = repairRow({
+    id: 'rep-auto',
+    repo,
+    trigger: 'automatic',
+    github_login: '',
+    user_id: '',
+    state: 'working',
+    head_sha: EARLIER_HEAD,
+    details: { stage: 'prepare_fix', case: kept },
+  });
+  await mockRepairWorld(page, {
+    settings: {
+      ...linkedAs('dana'),
+      policies: [automaticPolicy(repo), automaticPolicy('acme/short')],
+    },
+    readiness: readiness({ repo, policy_mode: 'automatic' }),
+    repairs: [attempt],
+    attempts: { 'rep-auto': attempt },
+    automatic: [
+      automaticRow({
+        repo,
+        provider_name: long,
+        model: long,
+        used: 5,
+        running: 1,
+        problem: `The installation provider ${long} is disabled, so automatic repairs cannot start.`,
+        next_free_at: new Date(Date.now() + 40 * 60_000).toISOString(),
+        last: { id: 'rep-auto', state: 'failed', pull_number: 17, updated_at: attempt.updated_at },
+      }),
+      automaticRow({ repo: 'acme/short' }),
+    ],
+  });
+
+  for (const width of [375, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await goto(page, '/repairs', 'Eli repairs');
+    const panel = page.getByRole('region', { name: 'Automatic repairs' });
+    await expect(panel.getByRole('article')).toHaveCount(2);
+    await expectNoSidewaysScroll(page, `the hub at ${width}px with a long repository name`);
+
+    // The dialog names every repository it will stop, so it has the most to wrap.
+    await panel.getByRole('button', { name: 'Stop all' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expectNoSidewaysScroll(page, `the stop dialog at ${width}px with a long repository name`);
+    const box = await dialog.boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= width, 'the dialog fits the screen').toBe(
+      true,
+    );
+    await page.keyboard.press('Escape');
+
+    await goto(page, '/repairs/rep-auto', /./);
+    await expect(page.getByRole('region', { name: `Automatic repairs on ${repo}` })).toBeVisible();
+    await expectNoSidewaysScroll(page, `the attempt at ${width}px with a long repository name`);
+
+    await goto(
+      page,
+      `/repairs/new?repo=${encodeURIComponent(repo)}&run=9`,
+      'Repair a failed check',
+    );
+    await expect(
+      page.getByRole('complementary', { name: 'Next step' }).getByRole('heading', { level: 3 }),
+    ).toBeVisible();
+    await expectNoSidewaysScroll(page, `the repair page at ${width}px with a long repository name`);
   }
 });
