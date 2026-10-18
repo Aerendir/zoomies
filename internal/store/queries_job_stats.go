@@ -223,6 +223,42 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 		return map[string]int{}
 	}
 
+	// The percentiles. col is one of the three literals below, never caller input.
+	type figure struct {
+		col  string
+		is   JobMeasures
+		into func(*JobStatsGroup) *JobPercentiles
+		// common is true for the figures that nearly every job has. A job without
+		// one still goes through a statement over every job.
+		common bool
+	}
+	figures := []figure{
+		{"dur", MeasureDuration, func(g *JobStatsGroup) *JobPercentiles { return &g.Duration }, true},
+		{"wait", MeasureQueueWait, func(g *JobStatsGroup) *JobPercentiles { return &g.QueueWait }, true},
+		{"startup", MeasureStartup, func(g *JobStatsGroup) *JobPercentiles { return &g.Startup }, false},
+	}
+	spread := func(g *JobStatsGroup, f *figure, n, at50, at95 int, samples string) error {
+		if n == 0 {
+			return nil
+		}
+		p50, p95, err := samplesAt(samples, at50, at95)
+		if err != nil {
+			return err
+		}
+		*f.into(g) = JobPercentiles{Samples: n, P50MS: &p50, P95MS: &p95}
+		return nil
+	}
+	// lone is the figure asked for when it is the only one and a common one. The
+	// statement that names the groups groups every job, so it gathers the samples
+	// as well, and the groups are named for nothing extra: asking again for the
+	// samples would be a second pass over the window to find what the first has.
+	var lone *figure
+	for i := range figures {
+		if f := &figures[i]; f.common && want == f.is {
+			lone = f
+		}
+	}
+
 	// The groups come from this statement whatever is asked for, so which groups
 	// an answer has, their order and where it is cut short do not depend on the
 	// figures. Counting is most of what it costs, so when the counts are not wanted
@@ -255,7 +291,11 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 			return nil, err
 		}
 	} else {
-		rows, err := s.texts.query(ctx, base+`SELECT k1, k2, MIN(q) FROM base GROUP BY k1, k2`, args...)
+		gather := ""
+		if lone != nil {
+			gather = ", " + spreadColumns(lone.col)
+		}
+		rows, err := s.texts.query(ctx, base+`SELECT k1, k2, MIN(q)`+gather+` FROM base GROUP BY k1, k2`, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -263,10 +303,22 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 		for rows.Next() {
 			var k gk
 			var firstQueued int64
-			if err := rows.Scan(&k.a, &k.b, &firstQueued); err != nil {
+			var n, at50, at95 int
+			var samples string
+			dest := []any{&k.a, &k.b, &firstQueued}
+			if lone != nil {
+				dest = append(dest, &n, &at50, &at95, &samples)
+			}
+			if err := rows.Scan(dest...); err != nil {
 				return nil, err
 			}
-			groups[k], first[k] = &JobStatsGroup{Keys: keyMap(k), FleetFailedByKind: byKind()}, firstQueued
+			g := &JobStatsGroup{Keys: keyMap(k), FleetFailedByKind: byKind()}
+			if lone != nil {
+				if err := spread(g, lone, n, at50, at95, samples); err != nil {
+					return nil, err
+				}
+			}
+			groups[k], first[k] = g, firstQueued
 		}
 		if err := rows.Err(); err != nil {
 			return nil, err
@@ -333,22 +385,12 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 		}
 	}
 
-	for _, m := range []struct {
-		col  string
-		is   JobMeasures
-		into func(*JobStatsGroup) *JobPercentiles
-	}{
-		{"dur", MeasureDuration, func(g *JobStatsGroup) *JobPercentiles { return &g.Duration }},
-		{"wait", MeasureQueueWait, func(g *JobStatsGroup) *JobPercentiles { return &g.QueueWait }},
-		{"startup", MeasureStartup, func(g *JobStatsGroup) *JobPercentiles { return &g.Startup }},
-	} {
-		if want&m.is == 0 {
+	for i := range figures {
+		m := &figures[i]
+		if want&m.is == 0 || m == lone {
 			continue
 		}
-		// col is one of the three literals above, never caller input.
-		pr, err := s.texts.query(ctx, base+`SELECT k1, k2, COUNT(`+m.col+`),
-			CAST((COUNT(`+m.col+`) - 1) * 0.5 + 0.5 AS INTEGER), CAST((COUNT(`+m.col+`) - 1) * 0.95 + 0.5 AS INTEGER),
-			group_concat(`+m.col+`, ',' ORDER BY `+m.col+`)
+		pr, err := s.texts.query(ctx, base+`SELECT k1, k2, `+spreadColumns(m.col)+`
 			FROM base WHERE `+m.col+` IS NOT NULL GROUP BY k1, k2`, args...)
 		if err != nil {
 			return nil, err
@@ -362,12 +404,10 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 				return nil, err
 			}
 			if g := groups[k]; g != nil {
-				p50, p95, err := samplesAt(samples, at50, at95)
-				if err != nil {
+				if err := spread(g, m, n, at50, at95, samples); err != nil {
 					pr.Close()
 					return nil, err
 				}
-				*m.into(g) = JobPercentiles{Samples: n, P50MS: &p50, P95MS: &p95}
 			}
 		}
 		err = pr.Err()
@@ -403,6 +443,14 @@ func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, w
 		out.Groups = append(out.Groups, *groups[k])
 	}
 	return out, nil
+}
+
+// spreadColumns are the columns that give a percentile of col: how many samples a
+// group has, the index of the two that are wanted, which is worked out here so that
+// there is one spelling of the rounding rule, and the samples in order.
+func spreadColumns(col string) string {
+	return `COUNT(` + col + `), CAST((COUNT(` + col + `) - 1) * 0.5 + 0.5 AS INTEGER), CAST((COUNT(` + col + `) - 1) * 0.95 + 0.5 AS INTEGER),
+		COALESCE(group_concat(` + col + `, ',' ORDER BY ` + col + `), '')`
 }
 
 // samplesAt reads the samples at indexes i and j, i <= j, from the comma-separated

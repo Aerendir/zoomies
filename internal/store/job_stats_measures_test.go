@@ -221,10 +221,16 @@ func TestAskingForSomeOfTheJobFiguresGivesThoseAndLeavesTheRestAtZero(t *testing
 	}{
 		{"nothing but the groups", 0, 1},
 		{"the counts", MeasureCounts, 1},
-		{"the duration", MeasureDuration, 2},
-		{"the queue wait", MeasureQueueWait, 2},
+		// A figure nearly every job has is gathered by the statement that names
+		// the groups when it is the only one, because that statement goes through
+		// every job anyway.
+		{"the duration alone", MeasureDuration, 1},
+		{"the queue wait alone", MeasureQueueWait, 1},
+		{"the startup alone, which few jobs have", MeasureStartup, 2},
 		{"the peaks", MeasurePeaks, 2},
 		{"the fault kinds", MeasureFaultKinds, 2},
+		{"the counts and the duration", MeasureCounts | MeasureDuration, 2},
+		{"the duration and the queue wait", MeasureDuration | MeasureQueueWait, 3},
 		{"queue wait and startup", MeasureQueueWait | MeasureStartup, 3},
 		{"everything", MeasureAll, 6},
 	} {
