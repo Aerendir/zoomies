@@ -386,10 +386,16 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 			_, _, err := s.ApplyJob(ctx, newJob(int64(1000+n)))
 			must(err)
 		}},
-		{"ApplyJob of a job it knows", 2, func(int) {
+		// A delivery that says something new reads the row and writes it back. One
+		// that does not only reads it: the write is skipped (see ApplyJob).
+		{"ApplyJob of a job it knows, with news each time", 2, func(n int) {
 			j := newJob(1)
-			j.State = JobInProgress
+			j.RunAttempt = 2 + n
 			_, _, err := s.ApplyJob(ctx, j)
+			must(err)
+		}},
+		{"ApplyJob of a job it knows, with nothing new", 1, func(int) {
+			_, _, err := s.ApplyJob(ctx, newJob(1))
 			must(err)
 		}},
 		{"StampJobVersions", 2, func(int) {

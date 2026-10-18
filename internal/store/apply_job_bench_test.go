@@ -132,7 +132,7 @@ func benchApplyInsert(b *testing.B, s *Store) {
 // benchApplyRedelivery is the same state arriving again. GitHub delivers at
 // least once, and the poller finds jobs the webhook already told the
 // controller about, so this is routine rather than a corner. Nothing changes,
-// but the row is still read, merged and rewritten.
+// so the row is read and merged and then left as it is.
 func benchApplyRedelivery(b *testing.B, s *Store) {
 	ctx := context.Background()
 	if _, _, err := s.ApplyJob(ctx, benchDelivery(1, JobQueued)); err != nil {
@@ -153,7 +153,7 @@ func benchApplyRedelivery(b *testing.B, s *Store) {
 // benchApplyStale is a delivery that arrives after the job has moved on, a
 // queued one after the completed: the merge that must not take the row
 // backwards. The row is a finished job's, steps included, so it reads and
-// rewrites more than the redelivery's row does, and part of the gap between
+// compares more than the redelivery's row does, and part of the gap between
 // the two is that.
 func benchApplyStale(b *testing.B, s *Store) {
 	ctx := context.Background()
