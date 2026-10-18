@@ -116,11 +116,12 @@ func (c *Controller) ToolchainScanResult() ToolchainScan {
 // organisation is minutes of GitHub calls: far longer than a request should
 // hold a connection open, so the scan is detached from the request.
 func (c *Controller) StartToolchainScan(ctx context.Context) error {
-	return c.startToolchainScan(ctx, true)
+	return c.startToolchainScan(ctx)
 }
 
-// startToolchainScan runs a scan in the background, on ctx or detached from it.
-func (c *Controller) startToolchainScan(ctx context.Context, detach bool) error {
+// startToolchainScan runs a scan in the background. It outlives the request or
+// pass that asked for it and ends with the controller; see goTracked.
+func (c *Controller) startToolchainScan(ctx context.Context) error {
 	c.toolchains.mu.Lock()
 	if c.toolchains.running {
 		c.toolchains.mu.Unlock()
@@ -129,19 +130,27 @@ func (c *Controller) startToolchainScan(ctx context.Context, detach bool) error 
 	c.toolchains.running = true
 	c.toolchains.mu.Unlock()
 
-	if detach {
-		ctx = context.WithoutCancel(ctx)
-	}
-	go func() {
+	c.goTracked(ctx, "toolchain-scan", func(ctx context.Context) {
+		// A scan that panics must not leave the next one refused as already
+		// running for the rest of the process's life.
+		finished := false
+		defer func() {
+			if !finished {
+				c.toolchains.mu.Lock()
+				c.toolchains.running = false
+				c.toolchains.mu.Unlock()
+			}
+		}()
 		scan := c.scanToolchains(ctx)
 		c.toolchains.mu.Lock()
 		c.toolchains.latest = scan
 		c.toolchains.running = false
 		c.toolchains.mu.Unlock()
-		// What the scan found is what the pools' caches are filled with,
-		// so every scan -- scheduled or asked for -- is followed by a fill.
+		finished = true
+		// What the scan found is what the pools' caches are filled with, so
+		// every scan, scheduled or asked for, is followed by a fill.
 		c.fillToolCaches(ctx, scan)
-	}()
+	})
 	return nil
 }
 
@@ -211,7 +220,7 @@ func (c *Controller) scanInstallation(ctx context.Context, inst *store.Installat
 	report.Repositories = len(repos)
 
 	var out []scannedRequirement
-	for _, src := range readWorkflows(ctx, client, repos) {
+	for _, src := range readWorkflows(ctx, client, repos, c.log) {
 		if src.err != "" {
 			if report.Unreadable == nil {
 				report.Unreadable = map[string]string{}

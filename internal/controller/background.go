@@ -86,13 +86,12 @@ func (c *Controller) housekeep(ctx context.Context, last *housekeeping) {
 		last.updateCheck = now
 		c.checkForRelease(ctx)
 	}
-	// In the background, on the loop's own context so shutdown stops it: a
-	// scan takes minutes on a large organisation, and this pass must not.
-	// One already running -- started by hand -- is the answer, and this tick
-	// is not retried.
+	// In the background, and it ends with the controller: a scan takes minutes
+	// on a large organisation, and this pass must not. One already running,
+	// started by hand, is the answer, and this tick is not retried.
 	if d := c.cfg().GitHub.ToolchainScanInterval; d > 0 && now.Sub(last.toolchainScan) >= d {
 		last.toolchainScan = now
-		if err := c.startToolchainScan(ctx, false); err != nil && !errors.Is(err, ErrToolchainScanRunning) {
+		if err := c.startToolchainScan(ctx); err != nil && !errors.Is(err, ErrToolchainScanRunning) {
 			c.log.Warn("could not start the scheduled toolchain scan", "error", err)
 		}
 	}
