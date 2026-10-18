@@ -1282,17 +1282,26 @@ func newHostSet(hosts []*store.Host, pools []*store.Pool, runners map[string][]*
 		hs.alloc[h.ID] = a
 		hs.left[h.ID] = Reservation{CPUs: a.CPUs, MemoryMB: a.MemoryMB, DiskMB: a.DiskMB}
 	}
-	for _, h := range hs.hosts {
+	// What the live runners add up to on each host, found in one pass over them.
+	// Each of the three questions asked of every host below used to look through
+	// every pool and every runner for the ones on it, which is hosts times runners
+	// three times over: 73% of Decide on a quiet fleet of a hundred pools in a
+	// profile.
+	totals := totalsByHost(hs.hosts, pools, runners)
+	for i, h := range hs.hosts {
+		t := totals[i]
 		// One sum, shared with the host view: what the page shows a host has
 		// promised away and what a pass starts from must be the same number,
 		// or an operator reads one figure and the scheduler acts on another.
-		res := Reserved(h, pools, runners)
 		l := hs.left[h.ID]
-		l.CPUs -= res.CPUs
-		l.MemoryMB -= res.MemoryMB
+		l.CPUs -= t.reserved.CPUs
+		l.MemoryMB -= t.reserved.MemoryMB
 		hs.promisedMemory[h.ID] = l.MemoryMB
-		hs.ours[h.ID] = hostRunsOurs(h, runners)
-		pending := hs.pending(h, pools, runners)
+		hs.ours[h.ID] = t.ours
+		if t.warming > 0 {
+			hs.warming[h.ID] += t.warming
+		}
+		pending := t.pending
 		if h.Usage.Fresh(now) {
 			if v := h.Usage.MemoryAvailableMB; v != nil {
 				// The host sample already includes running work, and what the
@@ -1538,18 +1547,6 @@ func (hs *hostSet) memoryLeft(h *store.Host, p *store.Pool) int64 {
 		return hs.promisedMemory[h.ID]
 	}
 	return hs.left[h.ID].MemoryMB
-}
-
-// hostRunsOurs reports whether any live runner of ours is on h, in any pool.
-func hostRunsOurs(h *store.Host, runners map[string][]*store.Runner) bool {
-	for _, rs := range runners {
-		for _, r := range rs {
-			if r != nil && r.HostID == h.ID && r.State.Live() {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // HostCanRun is the placement rule, in one place: a host may take a runner for

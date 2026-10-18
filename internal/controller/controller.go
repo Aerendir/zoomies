@@ -1490,13 +1490,7 @@ func (c *Controller) setLastPlan(p scheduler.Plan) {
 // setReserved records what each host had promised away in the snapshot the
 // pass just decided on.
 func (c *Controller) setReserved(snap scheduler.Snapshot) {
-	out := make(map[string]scheduler.Reservation, len(snap.Hosts))
-	for _, h := range snap.Hosts {
-		if h == nil {
-			continue
-		}
-		out[h.ID] = scheduler.Reserved(h, snap.Pools, snap.Runners)
-	}
+	out := scheduler.ReservedByHost(snap.Hosts, snap.Pools, snap.Runners)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.reserved = out
