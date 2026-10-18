@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func newTestStore(t *testing.T) *Store {
+func newTestStore(t testing.TB) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), Options{Path: ":memory:"})
 	if err != nil {
@@ -23,7 +23,7 @@ func newTestStore(t *testing.T) *Store {
 
 // newTestStoreAt is newTestStore with the clock in the test's hands, for the
 // rows whose value is a moment rather than a fact.
-func newTestStoreAt(t *testing.T, now func() time.Time) *Store {
+func newTestStoreAt(t testing.TB, now func() time.Time) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), Options{Path: ":memory:", Now: now})
 	if err != nil {

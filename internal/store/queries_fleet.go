@@ -235,6 +235,12 @@ const poolCols = `id, name, installation_id, labels, runner_group, backend, os, 
 	cost_per_runner_hour, runner_settings, cpu_burst, no_default_labels, size_from_profile, tmpfs,
 	auto_key, auto_min, auto_cap, auto_paused, memory_burst, provider_selector`
 
+// What each of a pool's struct-valued documents holds until somebody sets it.
+var (
+	zeroResources, zeroCache, zeroRunnerSettings = zeroDoc[Resources](), zeroDoc[CacheConfig](), zeroDoc[RunnerSettings]()
+	zeroCPUBurst, zeroTmpfs, zeroMemoryBurst     = zeroDoc[CPUBurstPolicy](), zeroDoc[TmpfsConfig](), zeroDoc[MemoryBurstPolicy]()
+)
+
 func scanPool(sc interface{ Scan(...any) error }) (*Pool, error) {
 	var p Pool
 	var idle, created, updated int64
@@ -256,22 +262,22 @@ func scanPool(sc interface{ Scan(...any) error }) (*Pool, error) {
 	p.IdleTimeout = Duration(time.Duration(idle) * time.Millisecond)
 	p.Ephemeral, p.RunAsRoot, p.Enabled = ephemeral == 1, runAsRoot == 1, enabled == 1
 	p.CreatedAt, p.UpdatedAt = at(created), at(updated)
-	if err := unmarshalJSON(resources, &p.Resources); err != nil {
+	if err := decodeFresh(resources, zeroResources, &p.Resources); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding resources: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(cache, &p.Cache); err != nil {
+	if err := decodeFresh(cache, zeroCache, &p.Cache); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding cache: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(runnerSettings, &p.RunnerSettings); err != nil {
+	if err := decodeFresh(runnerSettings, zeroRunnerSettings, &p.RunnerSettings); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding runner settings: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(cpuBurst, &p.CPUBurst); err != nil {
+	if err := decodeFresh(cpuBurst, zeroCPUBurst, &p.CPUBurst); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding CPU burst policy: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(tmpfs, &p.Tmpfs); err != nil {
+	if err := decodeFresh(tmpfs, zeroTmpfs, &p.Tmpfs); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding tmpfs settings: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(memoryBurst, &p.MemoryBurst); err != nil {
+	if err := decodeFresh(memoryBurst, zeroMemoryBurst, &p.MemoryBurst); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding memory burst policy: %w", p.ID, err)
 	}
 	return &p, nil
