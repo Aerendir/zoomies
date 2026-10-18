@@ -10607,21 +10607,45 @@ export interface components {
             capped: boolean;
             missing_permissions: string[];
         };
+        /** @description The pull request a readiness answer is about, in its own words. Present only after the caller's linked GitHub account has been shown to write to the repository, so a person who may not see the repository is never told what is in it. The url is the server's, so a GitHub Enterprise Server link points at the right host. */
+        EliReadinessPull: {
+            number: number;
+            title: string;
+            author: string;
+            /** @description The branch the pull request comes from. */
+            branch: string;
+            /** @description The branch it would merge into. */
+            base: string;
+            url: string;
+            open: boolean;
+        };
+        /** @description One thing readiness looks at and what it found. A check readiness never reached because an earlier one stopped it is unchecked, which is not the same as passed. */
+        EliReadinessCheck: {
+            /** @enum {string} */
+            code: "identity" | "provider" | "installation" | "access" | "policy" | "budget" | "pull" | "checks" | "permissions";
+            /** @enum {string} */
+            status: "ok" | "blocked" | "unchecked";
+            message: string;
+        };
         EliReadiness: {
             ready: boolean;
             repo: string;
             pull_number: number;
             head_sha: string;
+            pull?: components["schemas"]["EliReadinessPull"];
             provider: string;
             model: string;
             allow_workflows: boolean;
             remaining: number;
             /** Format: date-time */
             reset_at?: string;
+            /** @description What stands in the way. When the target has changed (fixed, closed or superseded) this is that alone, which is the answer to what the person asked; checks still say what each check found. */
             blockers: {
                 code: string;
                 message: string;
             }[];
+            /** @description Every check readiness makes, always the same nine in the order they are made, so a page can show what passed as well as what did not. */
+            checks: components["schemas"]["EliReadinessCheck"][];
         };
         EliOpportunity: {
             id: string;

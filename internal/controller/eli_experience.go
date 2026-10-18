@@ -12,20 +12,99 @@ import (
 )
 
 type EliReadiness struct {
-	Ready          bool         `json:"ready"`
-	Repo           string       `json:"repo"`
-	PullNumber     int          `json:"pull_number"`
-	HeadSHA        string       `json:"head_sha"`
-	Provider       string       `json:"provider"`
-	Model          string       `json:"model"`
-	AllowWorkflows bool         `json:"allow_workflows"`
-	Remaining      int          `json:"remaining"`
-	ResetAt        *time.Time   `json:"reset_at,omitempty"`
-	Blockers       []EliBlocker `json:"blockers"`
+	Ready      bool   `json:"ready"`
+	Repo       string `json:"repo"`
+	PullNumber int    `json:"pull_number"`
+	HeadSHA    string `json:"head_sha"`
+	// Pull is the pull request in its own words. It is set only after the
+	// caller's linked GitHub account has been shown to write to the repository,
+	// so a person who may not see the repository is never told what is in it.
+	Pull           *EliReadinessPull `json:"pull,omitempty"`
+	Provider       string            `json:"provider"`
+	Model          string            `json:"model"`
+	AllowWorkflows bool              `json:"allow_workflows"`
+	Remaining      int               `json:"remaining"`
+	ResetAt        *time.Time        `json:"reset_at,omitempty"`
+	// Blockers is what stands in the way, as it always has been. When the target
+	// has changed (fixed, closed, superseded) it is that alone, which is the
+	// answer to what the person asked; Checks still say what each check found.
+	Blockers []EliBlocker `json:"blockers"`
+	// Checks is every check readiness makes, in the order it makes them, so a
+	// page can show what passed as well as what did not.
+	Checks []EliCheck `json:"checks"`
 }
 type EliBlocker struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// EliReadinessPull is the pull request a readiness answer is about.
+type EliReadinessPull struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	Branch string `json:"branch"`
+	Base   string `json:"base"`
+	URL    string `json:"url"`
+	Open   bool   `json:"open"`
+}
+
+// EliCheck is one thing readiness looks at and what it found. Status is
+// EliCheckOK, EliCheckBlocked, or EliCheckUnchecked for a check readiness never
+// reached because an earlier one stopped it: a check that was not made is not a
+// check that passed, and the page must not draw it as one.
+type EliCheck struct {
+	Code    string `json:"code"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+const (
+	EliCheckOK        = "ok"
+	EliCheckBlocked   = "blocked"
+	EliCheckUnchecked = "unchecked"
+)
+
+// eliCheckCodes are the checks in the order readiness makes them, which is the
+// order a page lists them in.
+var eliCheckCodes = []string{"identity", "provider", "installation", "access", "policy", "budget", "pull", "checks", "permissions"}
+
+// eliChecks records what readiness found as it goes. Anything it never reached
+// is reported as not checked, whichever way the function returned.
+type eliChecks map[string]EliCheck
+
+func (c eliChecks) set(code, status, message string) {
+	c[code] = EliCheck{Code: code, Status: status, Message: message}
+}
+
+func (c eliChecks) list() []EliCheck {
+	out := make([]EliCheck, 0, len(eliCheckCodes))
+	for _, code := range eliCheckCodes {
+		check, ok := c[code]
+		if !ok {
+			check = EliCheck{Code: code, Status: EliCheckUnchecked, Message: "Not checked yet."}
+		}
+		out = append(out, check)
+	}
+	return out
+}
+
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
+// repairModeWords names how a repository's policy lets Eli help, for a finding.
+func repairModeWords(p *store.EliRepairPolicy) string {
+	switch {
+	case p.Automatic:
+		return "Automatic repair"
+	case p.AskFirst:
+		return "Ask me first"
+	}
+	return "Manual repair"
 }
 
 func (c *Controller) eliIdentity(ctx context.Context, user string) (*store.EliIdentity, error) {
@@ -40,56 +119,70 @@ func (c *Controller) eliIdentity(ctx context.Context, user string) (*store.EliId
 	}
 	return nil, store.ErrNotFound
 }
-func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull int, run int64) EliReadiness {
-	out := EliReadiness{Repo: repo, PullNumber: pull, Blockers: []EliBlocker{}}
-	block := func(code, message string) { out.Blockers = append(out.Blockers, EliBlocker{code, message}) }
+func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull int, run int64) (out EliReadiness) {
+	out = EliReadiness{Repo: repo, PullNumber: pull, Blockers: []EliBlocker{}}
+	checks := eliChecks{}
+	defer func() { out.Checks = checks.list() }()
+	// block records a blocker exactly as before and marks the check it belongs to.
+	block := func(check, code, message string) {
+		out.Blockers = append(out.Blockers, EliBlocker{code, message})
+		checks.set(check, EliCheckBlocked, message)
+	}
 	id, err := c.eliIdentity(ctx, user)
 	if err != nil {
-		block("identity", "Link and confirm your GitHub account in repair setup.")
+		block("identity", "identity", "Link and confirm your GitHub account in repair setup.")
+	} else {
+		checks.set("identity", EliCheckOK, "@"+id.GitHubLogin+" is linked and has allowed repairs.")
 	}
 	provider, err := c.personalChatProvider(ctx, "", user)
 	if err != nil {
-		block("provider", "Add an enabled personal model provider in Eli settings.")
+		block("provider", "provider", "Add an enabled personal model provider in Eli settings.")
 	} else {
 		out.Provider = provider.Name
 		out.Model = provider.Model
+		checks.set("provider", EliCheckOK, provider.Name+" is enabled. Eli uses your provider, never a shared one.")
 	}
 	inst, err := c.st.FindInstallationByTarget(ctx, repo)
 	if err != nil {
-		block("installation", "Connect the GitHub installation that serves this repository.")
+		block("installation", "installation", "Connect the GitHub installation that serves this repository.")
 		return out
 	}
+	checks.set("installation", EliCheckOK, repo+" is served by the "+inst.Target+" GitHub installation.")
 	if id == nil {
 		return out
 	}
 	raw, err := c.ClientFor(ctx, inst.ID)
 	if err != nil {
-		block("github", "The GitHub installation is unavailable.")
+		block("installation", "github", "The GitHub installation is unavailable.")
 		return out
 	}
 	client, ok := raw.(github.RepairClient)
 	if !ok {
-		block("github", "This installation cannot repair PRs.")
+		block("installation", "github", "This installation cannot repair PRs.")
 		return out
 	}
 	actor, err := client.RepairActor(ctx, repo, id.GitHubLogin)
 	if err != nil || !actor.CanWrite || actor.ID != id.GitHubUserID {
-		block("access", "Your linked GitHub account needs write access to this repository.")
+		block("access", "access", "Your linked GitHub account needs write access to this repository.")
 		return out
 	}
+	checks.set("access", EliCheckOK, "@"+id.GitHubLogin+" can write to "+repo+".")
 	policy, err := c.repairPolicy(ctx, repo, inst.ID)
 	if err != nil {
-		block("policy", "An administrator needs to enable repairs for this repository.")
+		block("policy", "policy", "An administrator needs to enable repairs for this repository.")
 	} else {
 		out.AllowWorkflows = policy.AllowWorkflows
+		checks.set("policy", EliCheckOK, repairModeWords(policy)+" is on for this repository. Workflow file edits are "+map[bool]string{true: "on", false: "off"}[policy.AllowWorkflows]+".")
 		used, personal, reset, e := c.st.EliRepairBudget(ctx, repo, user)
 		if e != nil {
-			block("budget_unavailable", "Repair allowance could not be checked. Try again.")
+			block("budget", "budget_unavailable", "Repair allowance could not be checked. Try again.")
 		} else {
 			out.Remaining = max(0, min(policy.DailyLimit-used, store.EliPersonDailyLimit-personal))
 			out.ResetAt = reset
 			if out.Remaining == 0 {
-				block("budget", "The repair allowance is exhausted. Wait until an attempt leaves the 24-hour window.")
+				block("budget", "budget", "The repair allowance is exhausted. Wait until an attempt leaves the 24-hour window.")
+			} else {
+				checks.set("budget", EliCheckOK, plural(out.Remaining, "attempt")+" left in the 24-hour window.")
 			}
 		}
 	}
@@ -100,17 +193,21 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 	} else if pull > 0 {
 		pr, err = client.RepairPull(ctx, repo, pull)
 	} else {
-		block("pull", "Choose an open pull request or paste its GitHub URL.")
+		block("pull", "pull", "Choose an open pull request or paste its GitHub URL.")
 		return out
 	}
 	out.PullNumber = pr.Number
 	out.HeadSHA = pr.HeadSHA
+	if pr.Number > 0 {
+		out.Pull = &EliReadinessPull{Number: pr.Number, Title: pr.Title, Author: pr.Author, Branch: pr.Branch, Base: pr.Base, URL: pr.URL, Open: pr.Open}
+	}
 	if err != nil {
 		var changed *github.RepairTargetChanged
 		if errors.As(err, &changed) {
 			// A changed target is the answer to the person's original question,
 			// even when their provider or repository setup is also incomplete.
 			out.Blockers = []EliBlocker{{Code: changed.Code, Message: changed.Message}}
+			checks.set("pull", EliCheckBlocked, changed.Message)
 			if run > 0 {
 				_ = c.st.RecordJobAttentionRun(ctx, repo, run, changed.Code, checked, true)
 			}
@@ -119,15 +216,16 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 			if message == github.ErrRepairUnsupported.Error() {
 				message = "Choose an open PR in this repository at its current head; forks cannot be repaired."
 			}
-			block("pull", message)
+			block("pull", "pull", message)
 		} else {
-			block("github", "GitHub could not resolve this repair target. Try checking readiness again.")
+			block("pull", "github", "GitHub could not resolve this repair target. Try checking readiness again.")
 		}
 		return out
 	}
+	checks.set("pull", EliCheckOK, fmt.Sprintf("#%d is open on %s and still at %s.", pr.Number, pr.Branch, shortSHA(pr.HeadSHA)))
 	state, err := client.RepairChecks(ctx, repo, pr.HeadSHA)
 	if err != nil {
-		block("github", "GitHub could not check whether this failure still needs fixing. Try checking readiness again.")
+		block("checks", "github", "GitHub could not check whether this failure still needs fixing. Try checking readiness again.")
 		return out
 	}
 	if state == "passed" {
@@ -135,23 +233,34 @@ func (c *Controller) EliReadiness(ctx context.Context, user, repo string, pull i
 			_ = c.st.RecordJobAttentionRun(ctx, repo, run, "fixed", checked, true)
 		}
 		out.Blockers = []EliBlocker{{Code: "fixed", Message: "The latest checks on this PR have passed. This failure has already been fixed; no repair is needed."}}
+		checks.set("checks", EliCheckBlocked, out.Blockers[0].Message)
 		return out
 	}
 	if run > 0 {
 		_ = c.st.RecordJobAttentionRun(ctx, repo, run, "", checked, state == "failed")
 	}
 	if state != "failed" {
-		block("checks_pending", "No current failed check is available to repair. Checks may still be running, cancelled or skipped. Check the PR on GitHub, then check readiness again.")
+		block("checks", "checks_pending", "No current failed check is available to repair. Checks may still be running, cancelled or skipped. Check the PR on GitHub, then check readiness again.")
+	} else {
+		checks.set("checks", EliCheckOK, "The checks on "+shortSHA(pr.HeadSHA)+" are failing.")
 	}
 	info, err := raw.Probe(ctx)
 	if err != nil {
-		block("permissions", "GitHub App permissions could not be checked.")
+		block("permissions", "permissions", "GitHub App permissions could not be checked.")
 	} else {
+		var missing []string
 		for _, permission := range []string{"contents", "pull_requests", "actions"} {
 			value := info.Permissions[permission]
 			if value != "write" && (permission != "actions" || value != "read") {
-				block("permissions", "Update the GitHub App permission: "+permission+map[bool]string{true: " read", false: " write"}[permission == "actions"])
+				message := "Update the GitHub App permission: " + permission + map[bool]string{true: " read", false: " write"}[permission == "actions"]
+				out.Blockers = append(out.Blockers, EliBlocker{"permissions", message})
+				missing = append(missing, message)
 			}
+		}
+		if len(missing) > 0 {
+			checks.set("permissions", EliCheckBlocked, strings.Join(missing, " "))
+		} else {
+			checks.set("permissions", EliCheckOK, "Contents, pull requests and actions are granted.")
 		}
 	}
 	out.Ready = len(out.Blockers) == 0

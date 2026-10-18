@@ -14235,20 +14235,55 @@ components:
         total: { type: integer }
         capped: { type: boolean }
         missing_permissions: { type: array, items: { type: string } }
+    EliReadinessPull:
+      type: object
+      description: >-
+        The pull request a readiness answer is about, in its own words. Present
+        only after the caller's linked GitHub account has been shown to write to
+        the repository, so a person who may not see the repository is never told
+        what is in it. The url is the server's, so a GitHub Enterprise Server
+        link points at the right host.
+      required: [number, title, author, branch, base, url, open]
+      properties:
+        number: { type: integer }
+        title: { type: string }
+        author: { type: string }
+        branch: { type: string, description: The branch the pull request comes from. }
+        base: { type: string, description: The branch it would merge into. }
+        url: { type: string }
+        open: { type: boolean }
+    EliReadinessCheck:
+      type: object
+      description: >-
+        One thing readiness looks at and what it found. A check readiness never
+        reached because an earlier one stopped it is unchecked, which is not the
+        same as passed.
+      required: [code, status, message]
+      properties:
+        code:
+          type: string
+          enum: [identity, provider, installation, access, policy, budget, pull, checks, permissions]
+        status: { type: string, enum: [ok, blocked, unchecked] }
+        message: { type: string }
     EliReadiness:
       type: object
-      required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers]
+      required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers, checks]
       properties:
         ready: { type: boolean }
         repo: { type: string }
         pull_number: { type: integer }
         head_sha: { type: string }
+        pull: { $ref: "#/components/schemas/EliReadinessPull" }
         provider: { type: string }
         model: { type: string }
         allow_workflows: { type: boolean }
         remaining: { type: integer }
         reset_at: { type: string, format: date-time }
         blockers:
+          description: >-
+            What stands in the way. When the target has changed (fixed, closed
+            or superseded) this is that alone, which is the answer to what the
+            person asked; checks still say what each check found.
           type: array
           items:
             type: object
@@ -14256,6 +14291,12 @@ components:
             properties:
               code: { type: string }
               message: { type: string }
+        checks:
+          description: >-
+            Every check readiness makes, always the same nine in the order they
+            are made, so a page can show what passed as well as what did not.
+          type: array
+          items: { $ref: "#/components/schemas/EliReadinessCheck" }
     EliOpportunity:
       type: object
       required: [id, repo, installation_id, pull_number, head_sha, run_id, title, state, created_at, updated_at]

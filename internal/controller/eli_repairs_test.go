@@ -80,6 +80,9 @@ type repairFake struct {
 	comments []string
 	// sourceErr, when set, is what reading the PR's source fails with.
 	sourceErr error
+	// title, author, url and base are what the pull request says about itself,
+	// for the tests that read it back.
+	title, author, url, base string
 }
 
 func (f *repairFake) RepairActor(context.Context, string, string) (github.RepairActor, error) {
@@ -90,7 +93,7 @@ func (f *repairFake) RepairPull(context.Context, string, int) (github.RepairPull
 	if f.commits > 0 {
 		head = "fixed"
 	}
-	return github.RepairPull{Number: 1, Branch: "feature", HeadSHA: head, Open: true}, nil
+	return github.RepairPull{Number: 1, Branch: "feature", HeadSHA: head, Open: true, Title: f.title, Author: f.author, URL: f.url, Base: f.base}, nil
 }
 func (f *repairFake) RepairPullForRun(ctx context.Context, repo string, _ int64) (github.RepairPull, error) {
 	if f.unsupportedRun {

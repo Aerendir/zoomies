@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/store"
 	"testing"
 )
@@ -41,4 +42,46 @@ func TestEliReadinessExplainsMissingSetupWithoutChargingAnAttempt(t *testing.T) 
 	if err != nil || len(rows) != 0 {
 		t.Fatal("readiness spent an attempt")
 	}
+}
+
+// The readiness answer is read by the UI through a client generated from the
+// OpenAPI document, so a check or a pull request field the document does not
+// describe is one the page cannot see. The checks are always the same nine, in
+// the order they are made, whatever stopped the run.
+func TestEliReadinessAlwaysReturnsNineChecksInTheSpecsShape(t *testing.T) {
+	h := newHarness(t)
+	_, viewer := h.user("repair-viewer", store.RoleViewer)
+	response := h.do(request{method: "GET", path: "/api/v1/assistant/repairs/readiness?repo=acme/repo&pull_number=1", cookie: viewer})
+	response.mustStatus(t, 200, "readiness is a diagnosis")
+	doc := loadSpec(t)
+	assertShape(t, doc, "EliReadiness", json.RawMessage(response.body))
+	var answer struct {
+		Pull   *json.RawMessage  `json:"pull"`
+		Checks []json.RawMessage `json:"checks"`
+	}
+	if err := json.Unmarshal(response.body, &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Pull != nil {
+		t.Fatal("a pull request was returned to someone whose GitHub account was never verified")
+	}
+	want := []string{"identity", "provider", "installation", "access", "policy", "budget", "pull", "checks", "permissions"}
+	if len(answer.Checks) != len(want) {
+		t.Fatalf("%d checks, want %d: %s", len(answer.Checks), len(want), response.body)
+	}
+	for i, raw := range answer.Checks {
+		assertShape(t, doc, "EliReadinessCheck", raw)
+		var check struct{ Code, Status string }
+		if err := json.Unmarshal(raw, &check); err != nil {
+			t.Fatal(err)
+		}
+		if check.Code != want[i] || check.Status == "" {
+			t.Errorf("check %d is %+v, want code %s", i, check, want[i])
+		}
+	}
+	pull, err := json.Marshal(controller.EliReadinessPull{Number: 1, Title: "t", Author: "a", Branch: "b", Base: "main", URL: "https://github.com/acme/repo/pull/1", Open: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertShape(t, doc, "EliReadinessPull", pull)
 }

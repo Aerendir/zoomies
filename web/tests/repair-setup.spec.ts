@@ -18,6 +18,7 @@ const ready: Schemas['EliReadiness'] = {
   allow_workflows: false,
   remaining: 5,
   blockers: [],
+  checks: [],
 };
 
 async function mockFailure(page: Page, role: 'admin' | 'operator' = 'admin') {
