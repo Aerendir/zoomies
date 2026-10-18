@@ -13247,9 +13247,9 @@ export interface operations {
                 until?: components["parameters"]["AnalysisUntil"];
                 /** @description `version` compares two releases, `period` the period with the one before it. Anything else is a 400. */
                 by?: "version" | "period";
-                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400, and so is one longer than a release's name can be. */
+                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400. A release's name is at most 128 bytes, and a longer one is a 400 too. */
                 a?: string;
-                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400, and so is one longer than a release's name can be. */
+                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400. A release's name is at most 128 bytes, and a longer one is a 400 too. */
                 b?: string;
             };
             header?: never;
