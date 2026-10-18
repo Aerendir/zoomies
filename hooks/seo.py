@@ -553,13 +553,30 @@ def _write_agent_discovery(config, site_url: str) -> None:
                     "tags": ["github-actions", "workflows"],
                 },
             ],
+            # An OAuth 2.0 authorization server with RFC 8414 metadata, as the MCP
+            # server card above says, and not an OpenID provider: it issues no ID
+            # tokens and publishes no /.well-known/openid-configuration (see
+            # handleAuthorizationServer in internal/api), so an openIdConnect
+            # scheme would send a client to the demo's HTML page.
             "securitySchemes": {
-                "demoOidc": {
-                    "type": "openIdConnect",
-                    "openIdConnectUrl": f"{_DEMO}/.well-known/openid-configuration",
+                "demoOAuth": {
+                    "type": "oauth2",
+                    "description": "Sign in to the demo with the authorization code flow and PKCE.",
+                    "oauth2MetadataUrl": f"{_DEMO}/.well-known/oauth-authorization-server",
+                    "flows": {
+                        "authorizationCode": {
+                            "authorizationUrl": f"{_DEMO}/oauth/authorize",
+                            "tokenUrl": f"{_DEMO}/oauth/token",
+                            "refreshUrl": f"{_DEMO}/oauth/token",
+                            "scopes": {
+                                "mcp:read": "Read the fleet. The viewer role.",
+                                "mcp:operate": "Act on the fleet, each action audited. The operator role, which includes mcp:read.",
+                            },
+                        }
+                    },
                 }
             },
-            "security": [{"demoOidc": ["mcp:read", "mcp:operate"]}],
+            "security": [{"demoOAuth": ["mcp:read", "mcp:operate"]}],
         }, fh, indent=2)
         fh.write("\n")
 

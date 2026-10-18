@@ -21,8 +21,9 @@ type AIContextRepository struct {
 	Diagnosis  *aicontext.Diagnosis `json:"diagnosis,omitempty"`
 	SetupState string               `json:"setup_state,omitempty"`
 	SetupPRURL string               `json:"setup_pr_url,omitempty"`
-	// WorkflowOutdated is true while the installed workflow is exactly one an
-	// earlier release wrote: still trusted, but due a repair to pick up fixes.
+	// WorkflowOutdated is true while the installed workflow, or the generator's
+	// lockfile, is exactly one an earlier release wrote: still trusted, but due a
+	// repair to pick up fixes.
 	WorkflowOutdated bool                    `json:"workflow_outdated"`
 	ID               string                  `json:"id"`
 	Key              aicontext.RepositoryKey `json:"repository"`
