@@ -42,6 +42,7 @@ test('a chart panel titles itself at the size every other card does', async ({ p
       });
 
   await goto(page, '/', 'Overview');
+  await page.locator('#history > summary').click();
   await expect(title('Activity matrix').first()).toBeVisible();
   const panel = await measure('Activity matrix');
 
