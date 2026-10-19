@@ -21,9 +21,8 @@
   default back.
 -->
 <script lang="ts">
-  import { NO_VALUE } from '$lib/format';
   import { untrack } from 'svelte';
-  import { capitalise } from '$lib/format';
+  import { capitalise, formatNumber, NO_VALUE } from '$lib/format';
   import { SvelteMap } from 'svelte/reactivity';
   import { EyeOff, Search, Trophy } from '@lucide/svelte';
   import {
@@ -33,7 +32,7 @@
     listKennelRepositories,
   } from '$lib/api/client';
   import { events } from '$lib/api/sse';
-  import type { KennelCatalogueEntry, KennelRepository } from '$lib/api/types';
+  import type { KennelCatalogueEntry, KennelOverview, KennelRepository } from '$lib/api/types';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import DataGrid from '$lib/components/DataGrid.svelte';
@@ -69,7 +68,8 @@
   /* -- whether there is anything to list ------------------------------------- */
 
   let known = $state(false);
-  let enabled = $state(true);
+  let overview = $state<KennelOverview | null>(null);
+  const enabled = $derived(overview?.enabled ?? true);
   let reload = $state(0);
 
   $effect(() => {
@@ -78,8 +78,8 @@
     void kennelClub.epoch;
     const controller = new AbortController();
     void getKennelOverview(controller.signal)
-      .then((overview) => {
-        enabled = overview.enabled;
+      .then((next) => {
+        overview = next;
         known = true;
       })
       .catch((cause: unknown) => {
@@ -144,6 +144,60 @@
       tracking !== 'tracked',
     ),
   );
+
+  // The five questions the Overview already counts, one press away. Each one
+  // opens every repository it counted, so a number and the rows behind it agree.
+  const views = $derived.by(() => {
+    if (!overview) return [];
+    return [
+      {
+        id: 'all',
+        label: 'All',
+        count: overview.repositories,
+        active: !standing && !incomplete && !waived && tracking === 'tracked',
+      },
+      {
+        id: 'attention',
+        label: 'Needs attention',
+        count: overview.states.attention,
+        active: standing === 'attention',
+      },
+      {
+        id: 'best',
+        label: 'No open findings',
+        count: overview.states.best_in_show,
+        active: standing === 'best_in_show',
+      },
+      {
+        id: 'partial',
+        label: 'Partly checked',
+        count: overview.states.partial + overview.states.pending,
+        active: incomplete,
+      },
+      {
+        id: 'untracked',
+        label: 'Not tracked',
+        count: overview.not_tracked,
+        active: tracking === 'untracked',
+      },
+    ];
+  });
+
+  function chooseView(id: string): void {
+    const clear = {
+      state: null,
+      incomplete: null,
+      waived: null,
+      tracked: null,
+      active: 'all',
+      offset: null,
+    };
+    if (id === 'attention') router.setQuery({ ...clear, state: 'attention' });
+    else if (id === 'best') router.setQuery({ ...clear, state: 'best_in_show' });
+    else if (id === 'partial') router.setQuery({ ...clear, incomplete: 'true' });
+    else if (id === 'untracked') router.setQuery({ ...clear, tracked: 'false' });
+    else router.setQuery(clear);
+  }
 
   let searchField = $state<HTMLInputElement | null>(null);
   $effect(() => registerSearch(searchField));
@@ -414,7 +468,7 @@
     },
     {
       id: 'findings',
-      header: 'Open',
+      header: 'Open findings',
       value: (row) => openFindingsText(row.counts),
       cell: findingsCell,
     },
@@ -423,6 +477,7 @@
       header: 'Visibility',
       priority: 'wide',
       width: '8rem',
+      hiddenByDefault: true,
       value: (row) => capitalise(row.visibility) || NO_VALUE,
     },
     {
@@ -477,7 +532,6 @@
   <PageHeader
     title="Repositories"
     subtitle="Every repository Kennel Club has looked at, and what is open on it."
-    breadcrumb={[{ label: 'Kennel Club', href: '/kennel' }]}
     onrefresh={() => {
       reload += 1;
       liveKey += 1;
@@ -500,6 +554,22 @@
     {:else if !known}
       <Skeleton lines={6} />
     {:else}
+      {#if views.length > 0}
+        <div class="views" role="group" aria-label="Repository views">
+          {#each views as view (view.id)}
+            <button
+              type="button"
+              class="view"
+              class:current={view.active}
+              aria-pressed={view.active}
+              onclick={() => chooseView(view.id)}
+            >
+              {view.label}
+              <span class="count">{formatNumber(view.count)}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
       <FilterBar {chips} onclear={anyFilter ? clearFilters : undefined}>
         <div class="search">
           <Input
@@ -517,45 +587,50 @@
               })}
           />
         </div>
-        <Select
-          value={standing}
-          options={stateOptions}
-          size="sm"
-          ariaLabel="Filter by standing"
-          onchange={(value) =>
-            router.setQuery({ state: value || null, incomplete: null, offset: null })}
-        />
-        <Select
-          value={severity}
-          options={severityOptions}
-          size="sm"
-          ariaLabel="Filter by the worst severity open"
-          onchange={(value) => router.setQuery({ severity: value || null, offset: null })}
-        />
-        <Select
-          value={code}
-          options={codeOptions}
-          size="sm"
-          ariaLabel="Filter by check"
-          onchange={(value) => router.setQuery({ code: value || null, offset: null })}
-        />
-        <Select
-          value={trackedParam === 'false' || trackedParam === 'all' ? trackedParam : ''}
-          options={trackingOptions}
-          size="sm"
-          ariaLabel="Filter by tracking"
-          onchange={(value) => router.setQuery({ tracked: value || null, offset: null })}
-        />
-        {#if installations.length > 1}
+        <div class="filter">
           <Select
-            value={installation}
-            options={installationOptions}
+            value={severity}
+            options={severityOptions}
             size="sm"
-            ariaLabel="Filter by installation"
-            onchange={(value) => router.setQuery({ installation: value || null, offset: null })}
+            ariaLabel="Filter by the worst severity open"
+            onchange={(value) => router.setQuery({ severity: value || null, offset: null })}
           />
+        </div>
+        <div class="filter">
+          <Select
+            value={code}
+            options={codeOptions}
+            size="sm"
+            ariaLabel="Filter by check"
+            onchange={(value) => router.setQuery({ code: value || null, offset: null })}
+          />
+        </div>
+        <div class="filter">
+          <Select
+            value={trackedParam === 'false' || trackedParam === 'all' ? trackedParam : ''}
+            options={trackingOptions}
+            size="sm"
+            ariaLabel="Filter by tracking"
+            onchange={(value) => router.setQuery({ tracked: value || null, offset: null })}
+          />
+        </div>
+        {#if installations.length > 1}
+          <div class="filter">
+            <Select
+              value={installation}
+              options={installationOptions}
+              size="sm"
+              ariaLabel="Filter by installation"
+              onchange={(value) => router.setQuery({ installation: value || null, offset: null })}
+            />
+          </div>
         {/if}
-        <Switch checked={activeOnly} label="Active on Zoomies" onchange={chooseActiveOnly} />
+        <Switch
+          checked={activeOnly}
+          label="Active on Zoomies"
+          size="sm"
+          onchange={chooseActiveOnly}
+        />
       </FilterBar>
 
       <p class="scope">
@@ -633,6 +708,73 @@
     display: flex;
     flex-direction: column;
     gap: var(--z-space-4);
+  }
+  .views {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-2);
+  }
+  .view {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--z-space-2);
+    min-height: var(--z-space-8);
+    padding: 0 var(--z-space-3);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-full);
+    background: var(--z-surface);
+    color: var(--z-text-muted);
+    font-family: inherit;
+    font-size: var(--z-text-xs);
+    cursor: pointer;
+  }
+  .view:hover {
+    border-color: var(--z-accent-border);
+    color: var(--z-text);
+  }
+  .view.current {
+    border-color: var(--z-accent-border);
+    background: var(--z-accent-subtle);
+    color: var(--z-accent);
+    font-weight: var(--z-weight-medium);
+  }
+  .view .count {
+    color: var(--z-text-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .view.current .count {
+    color: var(--z-accent);
+  }
+  .search {
+    flex: 1 1 15rem;
+    min-width: 12rem;
+  }
+  .filter {
+    flex: 0 1 10rem;
+    min-width: 8.5rem;
+  }
+  @media (pointer: coarse) {
+    .view {
+      min-height: var(--z-control-touch);
+    }
+  }
+  @media (max-width: 768px) {
+    .search,
+    .filter {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+    /* The five views are one line on a phone, so they do not push the filters
+       they narrow below the fold. The row scrolls itself; the page does not. */
+    .views {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding-bottom: var(--z-space-1);
+    }
+    .view {
+      flex: none;
+    }
   }
   .name {
     font-family: var(--z-font-mono);

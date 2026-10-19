@@ -72,6 +72,7 @@
   <Switch
     bind:checked={shown}
     label={TRACK_SWITCH_LABEL}
+    size="sm"
     disabled={!mayPress || busy}
     describedBy="track-state"
     onchange={pressed}
@@ -86,8 +87,10 @@
 <style>
   .track {
     display: flex;
-    flex-direction: column;
-    gap: var(--z-space-1);
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-1) var(--z-space-2);
     min-width: 0;
   }
   .state {

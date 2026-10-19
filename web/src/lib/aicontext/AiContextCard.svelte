@@ -13,6 +13,7 @@
   import type { AIContextRepository } from '$lib/api/types';
   import { formatAbsolute } from '$lib/format';
   import { aiContextStatus } from '$lib/status';
+  import { aiContextItemState } from '$lib/aicontext/state';
   import { toasts } from '$lib/state/toasts.svelte';
   import type { AiContextItem, KnownInstallation } from '$lib/aicontext/types';
   import NotesPanel from '$lib/aicontext/NotesPanel.svelte';
@@ -36,6 +37,14 @@
   let checking = $state(false);
   let regenerating = $state(false);
   let checkFailure = $state<{ cause: unknown; retry: 'recheck' | 'regenerate' } | null>(null);
+
+  const itemState = $derived(aiContextItemState(item));
+  // The control that fixes the diagnosis is the one that stands out. The rest
+  // stay one press away, so a card is not a wall of equally weighted buttons.
+  const repairPromoted = $derived(
+    'config' in item && (item.workflow_outdated || item.diagnosis?.action === 'repair'),
+  );
+  const amendPromoted = $derived('config' in item && item.diagnosis?.action === 'exclusions');
 
   type Diagnosis = NonNullable<AIContextRepository['diagnosis']>;
 
@@ -92,19 +101,7 @@
     {#if named}<h2>{item.full_name}</h2>{/if}
     <div class="badges">
       <Badge
-        status={aiContextStatus(
-          'config' in item
-            ? item.freshness?.state
-              ? item.freshness.state
-              : item.available
-                ? 'available'
-                : item.setup_state === 'awaiting_merge'
-                  ? 'awaiting_merge'
-                  : item.setup_state === 'pending'
-                    ? 'working'
-                    : 'draft'
-            : 'available',
-        )}
+        status={aiContextStatus(itemState)}
         label={'config' in item
           ? item.config.disabled
             ? 'Removed from Zoomies'
@@ -195,30 +192,42 @@
         >{item.setup_state ? 'View setup' : 'Resume setup'}</Button
       >
       {#if item.setup_state}
-        {#each ['reinstall', 'amend', 'remove'] as mode (mode)}
-          <Button
-            size="sm"
-            variant={(mode === 'reinstall' &&
-              (item.workflow_outdated || item.diagnosis?.action === 'repair')) ||
-            (mode === 'amend' && item.diagnosis?.action === 'exclusions')
-              ? 'primary'
-              : 'secondary'}
-            href="/kennel/ai-context/setup?draft_id={encodeURIComponent(item.id)}&mode={mode}"
-            >{mode === 'reinstall'
-              ? 'Reinstall / repair'
-              : mode === 'amend'
-                ? 'Amend'
-                : 'Remove'}</Button
-          >
-        {/each}
+        <Button
+          size="sm"
+          variant={repairPromoted ? 'primary' : 'secondary'}
+          href="/kennel/ai-context/setup?draft_id={encodeURIComponent(item.id)}&mode=reinstall"
+          >Reinstall / repair</Button
+        >
+      {/if}
+      {#if amendPromoted}
+        <Button
+          size="sm"
+          variant="primary"
+          href="/kennel/ai-context/setup?draft_id={encodeURIComponent(item.id)}&mode=amend"
+          >Amend</Button
+        >
       {/if}
     </div>
+    {#if item.setup_state}
+      <details class="more-actions">
+        <summary>More actions</summary>
+        <div class="actions">
+          {#if !amendPromoted}
+            <Button
+              size="sm"
+              href="/kennel/ai-context/setup?draft_id={encodeURIComponent(item.id)}&mode=amend"
+              >Amend</Button
+            >
+          {/if}
+          <Button
+            size="sm"
+            href="/kennel/ai-context/setup?draft_id={encodeURIComponent(item.id)}&mode=remove"
+            >Remove</Button
+          >
+        </div>
+      </details>
+    {/if}
   {:else}<Button size="sm" href="/settings/connections">Choose connection access</Button>{/if}
-  {#if item.instructions}
-    <div class="actions assistant-prompt">
-      <CopyButton value={item.instructions} label="Copy AI instructions" showLabel />
-    </div>
-  {/if}
   {#if !('config' in item) || item.available}<NotesPanel repositoryId={item.id} />{/if}
   <details class="assistant-guidance">
     <summary>AI instructions and README badge</summary>
@@ -228,6 +237,11 @@
       explain which route is available and how to check freshness.
     </p>
     <div class="actions">
+      {#if item.instructions}<CopyButton
+          value={item.instructions}
+          label="Copy AI instructions"
+          showLabel
+        />{/if}
       {#if item.badge_markdown}<CopyButton
           value={item.badge_markdown}
           label="Copy badge Markdown"
@@ -248,8 +262,31 @@
 </section>
 
 <style>
-  .assistant-prompt {
-    margin-top: var(--z-space-4);
+  .more-actions {
+    margin-top: var(--z-space-2);
+  }
+  .more-actions summary {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--z-space-6);
+    padding: 0 var(--z-space-2);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-sm);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+    cursor: pointer;
+  }
+  .more-actions summary:hover {
+    color: var(--z-text);
+  }
+  .more-actions[open] summary {
+    border-color: var(--z-accent-border);
+    background: var(--z-accent-subtle);
+    color: var(--z-accent);
+  }
+  .more-actions .actions {
+    justify-content: flex-start;
+    margin-top: var(--z-space-2);
   }
   .assistant-guidance {
     margin-top: var(--z-space-4);

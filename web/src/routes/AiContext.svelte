@@ -18,6 +18,12 @@
   import AiContextCard from '$lib/aicontext/AiContextCard.svelte';
   import OwnersDialog from '$lib/aicontext/OwnersDialog.svelte';
   import type { AiContextItem, KnownInstallation } from '$lib/aicontext/types';
+  import {
+    aiContextInSetup,
+    aiContextItemState,
+    aiContextNeedsAttention,
+    aiContextReady,
+  } from '$lib/aicontext/state';
   import Select from '$lib/components/Select.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
 
@@ -37,6 +43,41 @@
   let loading = $state(true);
   let failure = $state<unknown>(null);
   let reload = $state(0);
+
+  // A view of the repositories already on this page. The API pages by fifty,
+  // so the counts are honest for what is drawn and the pager still names the
+  // whole list.
+  type View = 'all' | 'setup' | 'ready' | 'attention';
+  let view = $state<View>('all');
+
+  const counts = $derived.by(() => {
+    const next = { total: items.length, setup: 0, ready: 0, attention: 0 };
+    for (const item of items) {
+      const state = aiContextItemState(item);
+      if (aiContextInSetup(state)) next.setup += 1;
+      if (aiContextReady(state)) next.ready += 1;
+      if (aiContextNeedsAttention(state)) next.attention += 1;
+    }
+    return next;
+  });
+
+  const views = $derived([
+    { id: 'all' as const, label: 'All', count: counts.total },
+    { id: 'setup' as const, label: 'In setup', count: counts.setup },
+    { id: 'ready' as const, label: 'Ready', count: counts.ready },
+    { id: 'attention' as const, label: 'Needs attention', count: counts.attention },
+  ]);
+
+  const shown = $derived(
+    view === 'all'
+      ? items
+      : items.filter((item) => {
+          const state = aiContextItemState(item);
+          if (view === 'setup') return aiContextInSetup(state);
+          if (view === 'ready') return aiContextReady(state);
+          return aiContextNeedsAttention(state);
+        }),
+  );
 
   $effect(() => {
     if (!installationsLoaded) return;
@@ -100,7 +141,135 @@
       >{/if}
   </PageHeader>
 
-  <section class="context-benefits" aria-label="AI Context benefits">
+  {#if installationsLoaded && !loading && !failure}
+    <div class="context-summary">
+      <dl class="summary-stats">
+        <div>
+          <dt>Repositories</dt>
+          <dd>{counts.total}</dd>
+        </div>
+        <div>
+          <dt>In setup</dt>
+          <dd>{counts.setup}</dd>
+        </div>
+        <div>
+          <dt>Ready</dt>
+          <dd>{counts.ready}</dd>
+        </div>
+        <div>
+          <dt>Needs attention</dt>
+          <dd class:danger={counts.attention > 0}>{counts.attention}</dd>
+        </div>
+      </dl>
+      <div class="views" role="group" aria-label="AI Context views">
+        {#each views as entry (entry.id)}
+          <button
+            type="button"
+            class="view"
+            class:current={view === entry.id}
+            aria-pressed={view === entry.id}
+            onclick={() => (view = entry.id)}
+          >
+            {entry.label}
+            <span class="count">{entry.count}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  <div class="filters">
+    <Field label="Search repositories" hideLabel>
+      {#snippet children({ id, describedBy })}<Input
+          {id}
+          {describedBy}
+          type="search"
+          value={query}
+          placeholder="Search repositories"
+          oninput={(event) =>
+            router.setQuery({ q: (event.target as HTMLInputElement).value || null, offset: null })}
+        />{/snippet}
+    </Field>
+    {#if canConfigure}
+      <Field label="Installation" hideLabel>
+        {#snippet children({ id, describedBy })}<Select
+            {id}
+            {describedBy}
+            value={installationId}
+            options={[
+              { value: '', label: 'All installations' },
+              ...installations.map((i) => ({ value: i.id, label: i.target })),
+            ]}
+            onchange={(value) => router.setQuery({ installation_id: value || null, offset: null })}
+          />{/snippet}
+      </Field>
+    {/if}
+  </div>
+
+  {#if loading || !installationsLoaded}<Skeleton lines={4} />
+  {:else if failure}<ErrorState
+      error={failure}
+      title="Repositories could not be loaded"
+      onretry={() => {
+        reload += 1;
+      }}
+    />
+  {:else if items.length === 0}
+    <EmptyState
+      icon={BookOpenText}
+      title={query || installationId
+        ? 'No matching repositories'
+        : canConfigure
+          ? 'Prepare your first repository'
+          : 'No shared repositories yet'}
+      description={query || installationId
+        ? 'Try another search or clear the filters to see all repositories.'
+        : canConfigure
+          ? 'Choose repositories, output and source readers. Save your setup drafts, then review repository changes before context is published.'
+          : 'Repositories appear here only after an administrator or installation owner makes them available and explicitly adds you as a source reader.'}
+    >
+      {#if query || installationId}<Button
+          onclick={() => router.setQuery({ q: null, installation_id: null, offset: null })}
+          >Clear filters</Button
+        >{:else if canConfigure}<Button variant="primary" href="/kennel/ai-context/setup"
+          >Enable repositories</Button
+        >{:else}<Button href="/settings/connections">MCP connections</Button>{/if}
+    </EmptyState>
+  {:else if shown.length === 0}
+    <EmptyState
+      icon={BookOpenText}
+      title="Nothing in this view"
+      description="No repository on this page is in that state. Show them all to keep the filters you have."
+    >
+      <Button onclick={() => (view = 'all')}>Show all</Button>
+    </EmptyState>
+  {:else}
+    <div class="repositories">
+      {#each shown as item (item.id)}
+        <AiContextCard
+          {item}
+          {installations}
+          onchange={(updated) => (items = items.map((i) => (i.id === updated.id ? updated : i)))}
+        />
+      {/each}
+    </div>
+    {#if view === 'all'}
+      <nav class="paging" aria-label="AI Context repository pages">
+        <Button
+          size="sm"
+          disabled={offset === 0}
+          onclick={() => router.setQuery({ offset: String(Math.max(0, offset - 50)) })}
+          >Previous</Button
+        ><span>{offset + 1}–{Math.min(offset + 50, total)} of {total}</span><Button
+          size="sm"
+          disabled={offset + 50 >= total}
+          onclick={() => router.setQuery({ offset: String(offset + 50) })}>Next</Button
+        >
+      </nav>
+    {/if}
+  {/if}
+  <details class="context-benefits">
+    <summary>How AI Context works</summary>
     <div class="benefit-grid">
       <div>
         <h2>Less token overhead</h2>
@@ -170,7 +339,7 @@
       explicit choice for each person and connection.
       <a href="/settings/connections">Manage connection access</a>
     </p>
-  </section>
+  </details>
 
   {#if isAdmin && installations.length > 0}
     <details class="owners">
@@ -193,91 +362,81 @@
     </details>
     <OwnersDialog bind:open={ownersOpen} installation={ownersFor} />
   {/if}
-
-  <div class="filters">
-    <Field label="Search repositories" hideLabel>
-      {#snippet children({ id, describedBy })}<Input
-          {id}
-          {describedBy}
-          type="search"
-          value={query}
-          placeholder="Search repositories"
-          oninput={(event) =>
-            router.setQuery({ q: (event.target as HTMLInputElement).value || null, offset: null })}
-        />{/snippet}
-    </Field>
-    {#if canConfigure}
-      <Field label="Installation" hideLabel>
-        {#snippet children({ id, describedBy })}<Select
-            {id}
-            {describedBy}
-            value={installationId}
-            options={[
-              { value: '', label: 'All installations' },
-              ...installations.map((i) => ({ value: i.id, label: i.target })),
-            ]}
-            onchange={(value) => router.setQuery({ installation_id: value || null, offset: null })}
-          />{/snippet}
-      </Field>
-    {/if}
-  </div>
-
-  {#if loading || !installationsLoaded}<Skeleton lines={4} />
-  {:else if failure}<ErrorState
-      error={failure}
-      title="Repositories could not be loaded"
-      onretry={() => {
-        reload += 1;
-      }}
-    />
-  {:else if items.length === 0}
-    <EmptyState
-      icon={BookOpenText}
-      title={query || installationId
-        ? 'No matching repositories'
-        : canConfigure
-          ? 'Prepare your first repository'
-          : 'No shared repositories yet'}
-      description={query || installationId
-        ? 'Try another search or clear the filters to see all repositories.'
-        : canConfigure
-          ? 'Choose repositories, output and source readers. Save your setup drafts, then review repository changes before context is published.'
-          : 'Repositories appear here only after an administrator or installation owner makes them available and explicitly adds you as a source reader.'}
-    >
-      {#if query || installationId}<Button
-          onclick={() => router.setQuery({ q: null, installation_id: null, offset: null })}
-          >Clear filters</Button
-        >{:else if canConfigure}<Button variant="primary" href="/kennel/ai-context/setup"
-          >Enable repositories</Button
-        >{:else}<Button href="/settings/connections">MCP connections</Button>{/if}
-    </EmptyState>
-  {:else}
-    <div class="repositories">
-      {#each items as item (item.id)}
-        <AiContextCard
-          {item}
-          {installations}
-          onchange={(updated) => (items = items.map((i) => (i.id === updated.id ? updated : i)))}
-        />
-      {/each}
-    </div>
-    <nav class="paging" aria-label="AI Context repository pages">
-      <Button
-        size="sm"
-        disabled={offset === 0}
-        onclick={() => router.setQuery({ offset: String(Math.max(0, offset - 50)) })}
-        >Previous</Button
-      ><span>{offset + 1}–{Math.min(offset + 50, total)} of {total}</span><Button
-        size="sm"
-        disabled={offset + 50 >= total}
-        onclick={() => router.setQuery({ offset: String(offset + 50) })}>Next</Button
-      >
-    </nav>
-  {/if}
 </KennelShell>
 
 <style>
+  .context-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--z-space-4);
+    margin-bottom: var(--z-space-4);
+    padding: var(--z-space-4) var(--z-space-5);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+  }
+  .summary-stats {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-5);
+    margin: 0;
+  }
+  .summary-stats dt {
+    color: var(--z-text-muted);
+    font-size: var(--z-text-2xs);
+  }
+  .summary-stats dd {
+    margin: var(--z-space-1) 0 0;
+    font-size: var(--z-text-xl);
+    line-height: var(--z-leading-xl);
+    font-weight: var(--z-weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+  .summary-stats dd.danger {
+    color: var(--z-danger);
+  }
+  .views {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-2);
+  }
+  .view {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--z-space-2);
+    min-height: var(--z-space-8);
+    padding: 0 var(--z-space-3);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-full);
+    background: var(--z-surface);
+    color: var(--z-text-muted);
+    font-family: inherit;
+    font-size: var(--z-text-xs);
+    cursor: pointer;
+  }
+  .view:hover {
+    border-color: var(--z-accent-border);
+    color: var(--z-text);
+  }
+  .view.current {
+    border-color: var(--z-accent-border);
+    background: var(--z-accent-subtle);
+    color: var(--z-accent);
+    font-weight: var(--z-weight-medium);
+  }
+  .view .count {
+    color: var(--z-text-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .view.current .count {
+    color: var(--z-accent);
+  }
   .context-benefits {
+    margin-top: var(--z-space-5);
     margin-bottom: var(--z-space-5);
     padding: var(--z-space-5);
     background: var(--z-surface);
@@ -292,6 +451,15 @@
   }
   .benefit-grid > div {
     min-width: 0;
+  }
+  .context-benefits > summary {
+    cursor: pointer;
+    color: var(--z-text);
+    font-size: var(--z-text-lg);
+    font-weight: var(--z-weight-semibold);
+  }
+  .context-benefits[open] > summary {
+    margin-bottom: var(--z-space-4);
   }
   .context-benefits p {
     margin: var(--z-space-2) 0 0;
@@ -356,9 +524,18 @@
   }
   /* Right-aligned buttons that wrap leave each row ragged on the left and
      the first one floating; on a phone they read as a list from the edge. */
+  @media (pointer: coarse) {
+    .view {
+      min-height: var(--z-control-touch);
+    }
+  }
   @media (max-width: 768px) {
     .actions {
       justify-content: flex-start;
+    }
+    .context-summary {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
   .paging {

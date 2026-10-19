@@ -1,7 +1,9 @@
 # 0008: The repository page leads with what the fleet knows
 
-**Status**: accepted. Taken on 7 October 2026 on the owner's instruction, in
-answer to which per-repository runtime data the page should show.
+**Status**: superseded by [0013](0013-the-kennel-pages-answer-first-and-fold-the-depth.md).
+Taken on 7 October 2026 on the owner's instruction, in answer to which
+per-repository runtime data the page should show. Decision 0013 moved the default
+section from the Overview to Findings when a repository has something open.
 
 ## Context
 
