@@ -209,6 +209,9 @@ const SHOTS = [
     // taken after it would be photographed showing a year.
     device: { viewport: DESKTOP, deviceScaleFactor: SCALE },
     async prepare(page) {
+      // The matrix lives in the History disclosure, which opens closed: the
+      // page is a calm first screen and history is a thing an operator asks for.
+      await page.locator('#history > summary').click();
       const matrix = page.getByRole('region', { name: 'Activity matrix', exact: true });
       // The matrix opens on today, hour by hour, and this shot is of a day
       // and the hours inside it -- so it takes the range that draws days.
