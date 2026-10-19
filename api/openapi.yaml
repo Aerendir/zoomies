@@ -4216,6 +4216,16 @@ paths:
                 reserve_cpus: { type: integer, minimum: 0 }
                 reserve_memory_mb: { type: integer, format: int64, minimum: 0 }
                 reserve_disk_mb: { type: integer, format: int64, minimum: 0 }
+                auto_adjust:
+                  type: string
+                  enum: ["", "on", "off"]
+                  description: >-
+                    Whether the controller keeps this host's capacity and reserve at
+                    what `GET /hosts/{id}/recommendation` says. `on` and `off` decide for
+                    this host; an empty string hands the decision back to the fleet's
+                    `scheduler.host_auto_adjust`. Leave it out to change nothing. Turning it
+                    on adjusts the host at the controller's next housekeeping pass, not
+                    within the request.
                 priority:
                   type: object
                   description: >-
@@ -4431,6 +4441,28 @@ paths:
               schema: { $ref: "#/components/schemas/Host" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /hosts/{id}/recommendation:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      operationId: getHostRecommendation
+      tags: [hosts]
+      summary: What Adjust recommends for a host
+      description: >-
+        The capacity and reserve the Adjust dialog's "Set to recommendations" puts on a
+        host, worked out on the controller from the machine's CPUs, memory and disk and the
+        largest runner an enabled pool asks for. The same numbers the controller applies
+        when the host is kept at its recommendation. `available` is false for a host that
+        has not reported how big it is.
+      x-zoomies-role: viewer
+      responses:
+        "200":
+          description: The recommendation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HostRecommendation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /hosts/{id}/throttle/clear:
     parameters: [{ $ref: "#/components/parameters/PathID" }]
     post:
@@ -13817,6 +13849,20 @@ components:
         outcome: { type: string, enum: [first, changed, unchanged, not_newer], description: "When done: whether the report was the first, changed the findings, matched the last, or carried a clock no later than the last report's." }
         message: { type: string, description: "When failed: a sentence for a person saying what to check." }
         next_at: { type: string, format: date-time, description: "When the host may be asked again. Only present while that is in the future." }
+    HostRecommendation:
+      type: object
+      required: [available]
+      properties:
+        available: { type: boolean }
+        capacity: { type: integer, description: How many runners the machine holds after the reserve. }
+        reserve_cpus: { type: integer }
+        reserve_memory_mb: { type: integer, format: int64 }
+        reserve_disk_mb: { type: integer, format: int64 }
+        limited_by: { type: string, enum: [cpu, memory, disk], description: The figure that set the capacity. }
+        ask_cpus: { type: number, description: The CPUs one runner asks for. }
+        ask_memory_mb: { type: integer, format: int64 }
+        ask_pool: { type: string, description: The pool whose runner size set the ask. Absent when the fleet default did. }
+        reason: { type: string, description: The recommendation as one sentence. }
     HostUpdate:
       type: object
       description: >-
@@ -13900,6 +13946,17 @@ components:
           allOf:
             - $ref: "#/components/schemas/ImagePullIncident"
           description: The last start or prewarm here whose image could not be made ready. Absent when there is none.
+        auto_adjust:
+          type: string
+          enum: ["", "on", "off"]
+          description: The operator's answer to whether the controller keeps this host at its recommended capacity and reserve. Empty follows the fleet.
+        auto_adjust_effective:
+          type: boolean
+          description: Whether the controller is keeping this host at its recommendation now, once the fleet's default is counted.
+        auto_adjusted_at:
+          type: string
+          format: date-time
+          description: When the controller last moved this host's capacity or reserve. Absent if it never has.
         throttle_reason:
           type: string
           description: >-

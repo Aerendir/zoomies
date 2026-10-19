@@ -272,6 +272,7 @@ scheduler:
   max_creates_per_tick: 10      # ZOOMIES_MAX_CREATES_PER_TICK
   default_runner_limits: true   # ZOOMIES_DEFAULT_RUNNER_LIMITS -- a pool with no cpus or memory_mb gets one slot's share of its host; off is warned about
   host_throttling: true         # ZOOMIES_HOST_THROTTLING -- step an overwhelmed host down and lift it after calm; off is warned about
+  host_auto_adjust: false       # ZOOMIES_HOST_AUTO_ADJUST -- keep every host at its recommended capacity and reserve; a host can override
   auto_rerun: false             # ZOOMIES_AUTO_RERUN -- re-run a job whose runner died under it; on is warned about
   auto_rerun_limit: 1           # ZOOMIES_AUTO_RERUN_LIMIT -- automatic re-runs per workflow run, 1–5
 
@@ -680,6 +681,7 @@ the validator says so with `limits.loopback`.
 | `scheduler.default_runner_limits` | `ZOOMIES_DEFAULT_RUNNER_LIMITS` | at once | Default runner limits: Give a runner whose pool sets no CPU or memory limit one slot's share of its host as a real limit. Off, a host's worth of them can each take every core. |
 | `scheduler.drain_timeout` | `ZOOMIES_DRAIN_TIMEOUT` | at once | Drain timeout: Fail a runner that has been draining this long with no job left on it. A runner still finishing a job is never touched by it. |
 | `scheduler.host_throttling` | `ZOOMIES_HOST_THROTTLING` | at once | Throttle hosts under pressure: Let the controller throttle a host its measurements say is overwhelmed, and step it back up after a stretch of calm. |
+| `scheduler.host_auto_adjust` | `ZOOMIES_HOST_AUTO_ADJUST` | at once | Keep hosts at their recommended size: Let the controller keep every host's capacity and reserve at what Zoomies recommends for its machine, disk and the pools' runner size, and re-work them as the host reports and the pools change. This covers hosts the fleet rents from a provider. A host can be set on or off by itself. Off by default, because it replaces figures an operator typed. |
 | `scheduler.host_order` | `ZOOMIES_HOST_ORDER` | at once | Host placement order: Which host a runner prefers once the spec score has decided. `headroom` (default) picks the one with the most CPU and memory left afterwards, which spreads work. `largest_standard` picks the one whose runner of the pool is biggest, which suits a mixed fleet sized by runner profile. `best_fit` picks the one with the least left, filling one host before starting the next. Hosts are ranked first by what their agents report (more and faster CPU, memory and disk score higher) and by any operator's pin, so the order only chooses between hosts of the same priority. It only ever chooses among hosts that already fit, so it moves where runners go and never whether they start. |
 | `scheduler.history_sizing` | `ZOOMIES_HISTORY_SIZING` | at once | Job-history placement, `shadow` (default) records where it would place differently, `on` places each runner only on a host with room for what the jobs waiting on its pool used on their recent runs (the ninetieth percentile of their peaks, memory with a fifth more) and sizes it up to that where the pool leaves its size to the host, `off` ignores history. See [Sizing from job history](hosts-and-pools.md#sizing-from-job-history). |
 | `scheduler.size_routing` | `ZOOMIES_SIZE_ROUTING` | at once | Route jobs by size class, `off` (default) classes nothing. `shadow` classes each job small, medium or large from what its recent runs used and records the class and where the job ran, and sends nothing anywhere. `on` sends each job to the pool for its class. A workflow that writes `zoomies-large` in `runs-on` is always honoured and never moved; a job that writes only `zoomies` is routed best effort, because GitHub decides which waiting job a runner takes. Changing it puts the jobs already waiting through the new mode. See [size classes and automatic pools](auto-pools.md). |
@@ -1605,6 +1607,37 @@ allocations](hosts-and-pools.md#default-allocations) has the rules in full.
 `scheduler.default_runner_limits_off` at startup and in the problems drawer
 for as long as it stands. Set `cpus` and `memory_mb` on every pool if you turn
 it off; a fleet whose pools all set their own limits is unaffected either way.
+
+### `scheduler.host_auto_adjust`
+
+Whether the controller keeps hosts at the figures **Adjust** recommends. On a host's
+card, **Adjust** shows how many runners the machine can hold, and what it should keep
+for itself, worked out from its CPUs, memory and disk and from what a runner in this
+fleet asks for; **Set to recommendations** puts the numbers there. With this on, the
+controller does that by itself and keeps doing it: the capacity (how many runners),
+and the CPU, memory and disk reserves, are re-worked as the host reports a different
+machine and as the pools' runner sizes change.
+
+It exists for hosts that nobody sized. A rented machine with a small disk and a
+capacity typed for a bigger one fills its disk and fails jobs part-way through. The
+recommendation for the number of runners is the smallest of what the CPUs, the memory
+and the disk allow (the disk gets 10 GiB of working room per runner beyond its
+reserve), and the page says which one set it.
+
+Off by default, because it replaces figures an operator typed. Turn it on for the
+fleet here, which includes hosts a provider rents, or per host in **Adjust**, where
+**Follow the fleet**, **Keep at recommendations** and **Never adjust** choose. A host
+set to never adjust keeps whatever was typed. Care is taken not to surprise anyone:
+
+* A host at capacity 0 is paused, and is never un-paused. Only a person does that.
+* A host that has not reported how big it is, or has not been heard from lately, is
+  left alone.
+* A move is audited under the system's name, and a host is moved at most every five
+  minutes, so a pool being edited does not make a host's capacity flap.
+* A change that would leave a pool with nowhere to run is refused, as it is for a
+  person, and the host is left as it was.
+* Running jobs are never stopped. Lowering capacity only stops new runners starting
+  until the host is under it.
 
 ### `scheduler.host_throttling`
 

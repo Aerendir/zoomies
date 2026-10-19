@@ -2724,6 +2724,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hosts/{id}/recommendation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What Adjust recommends for a host
+         * @description The capacity and reserve the Adjust dialog's "Set to recommendations" puts on a host, worked out on the controller from the machine's CPUs, memory and disk and the largest runner an enabled pool asks for. The same numbers the controller applies when the host is kept at its recommendation. `available` is false for a host that has not reported how big it is.
+         */
+        get: operations["getHostRecommendation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hosts/{id}/throttle/clear": {
         parameters: {
             query?: never;
@@ -10162,6 +10185,29 @@ export interface components {
              */
             next_at?: string;
         };
+        HostRecommendation: {
+            available: boolean;
+            /** @description How many runners the machine holds after the reserve. */
+            capacity?: number;
+            reserve_cpus?: number;
+            /** Format: int64 */
+            reserve_memory_mb?: number;
+            /** Format: int64 */
+            reserve_disk_mb?: number;
+            /**
+             * @description The figure that set the capacity.
+             * @enum {string}
+             */
+            limited_by?: "cpu" | "memory" | "disk";
+            /** @description The CPUs one runner asks for. */
+            ask_cpus?: number;
+            /** Format: int64 */
+            ask_memory_mb?: number;
+            /** @description The pool whose runner size set the ask. Absent when the fleet default did. */
+            ask_pool?: string;
+            /** @description The recommendation as one sentence. */
+            reason?: string;
+        };
         /** @description The host's part in updating Zoomies from the web UI: whether it can be updated from here, why in a sentence, and its latest attempt while that attempt still says something about the host. Nothing in it moves with the clock or with a heartbeat. */
         HostUpdate: {
             /**
@@ -10219,6 +10265,18 @@ export interface components {
             runtime_reason?: string;
             /** @description The last start or prewarm here whose image could not be made ready. Absent when there is none. */
             image_pull_failed?: components["schemas"]["ImagePullIncident"];
+            /**
+             * @description The operator's answer to whether the controller keeps this host at its recommended capacity and reserve. Empty follows the fleet.
+             * @enum {string}
+             */
+            auto_adjust?: "" | "on" | "off";
+            /** @description Whether the controller is keeping this host at its recommendation now, once the fleet's default is counted. */
+            auto_adjust_effective?: boolean;
+            /**
+             * Format: date-time
+             * @description When the controller last moved this host's capacity or reserve. Absent if it never has.
+             */
+            auto_adjusted_at?: string;
             /**
              * @description The operator sentence for the throttle: what it took, why, what it is doing to the jobs already running, and how it ends. Empty when the host is not throttled.
              * @example throttled to 2 of 4 slots (step 2 of 3) after sustained pressure: the 1-minute load average is 30.0, at least twice the host's 8 CPUs; running jobs continue, the 1 runner with a CPU limit at 50% of it, and the throttle lifts one step after 5m of calm
@@ -16878,6 +16936,11 @@ export interface operations {
                     reserve_memory_mb?: number;
                     /** Format: int64 */
                     reserve_disk_mb?: number;
+                    /**
+                     * @description Whether the controller keeps this host's capacity and reserve at what `GET /hosts/{id}/recommendation` says. `on` and `off` decide for this host; an empty string hands the decision back to the fleet's `scheduler.host_auto_adjust`. Leave it out to change nothing. Turning it on adjusts the host at the controller's next housekeeping pass, not within the request.
+                     * @enum {string}
+                     */
+                    auto_adjust?: "" | "on" | "off";
                     /** @description Where this host stands in placement. Leave the whole field out to change nothing; send `{ "override": null }` to hand the ranking back to the score the reported specs earn; send a number on the 0..100 scale to pin the host above every host with a lower one while its specs stay out of the decision. */
                     priority?: {
                         override: number | null;
@@ -17066,6 +17129,32 @@ export interface operations {
                     "application/json": components["schemas"]["Host"];
                 };
             };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getHostRecommendation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The recommendation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostRecommendation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

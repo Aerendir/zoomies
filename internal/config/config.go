@@ -892,6 +892,12 @@ type Scheduler struct {
 	// pressure holds still refuse new starts while the pressure is acute, and
 	// nothing outlasts them.
 	HostThrottling bool `yaml:"host_throttling"`
+	// HostAutoAdjust is the fleet's default for whether the controller keeps a
+	// host's capacity and reserve at what it recommends for the machine and the
+	// pools' runner size, re-working the figures as the machine's reports and the
+	// pools change. A host's own setting, on or off, overrides it. Off by
+	// default: it replaces numbers an operator may have typed.
+	HostAutoAdjust bool `yaml:"host_auto_adjust"`
 }
 
 // Log configures structured logging.

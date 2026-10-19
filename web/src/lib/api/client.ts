@@ -1475,3 +1475,12 @@ export const setOptimisationEnablement = (enabled: boolean) =>
   api.put<import('./types').OptimisationEnablement>('/optimisations/enablement', {
     body: { enabled },
   });
+
+/** What Adjust recommends for a host, worked out where the controller applies it. */
+export const getHostRecommendation = (id: string, signal?: AbortSignal) =>
+  api.get<import('./types').HostRecommendation>(
+    '/hosts/' + encodeURIComponent(id) + '/recommendation',
+    {
+      signal,
+    },
+  );

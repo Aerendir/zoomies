@@ -695,6 +695,10 @@ var registry = buildRegistry([]Setting{
 		Summary: "Let the controller throttle a host its measurements say is overwhelmed, and step it back up after a stretch of calm.",
 	},
 	{
+		Key: "scheduler.host_auto_adjust", Label: "Keep hosts at their recommended size", Env: "ZOOMIES_HOST_AUTO_ADJUST", Kind: KindBool, Scope: ScopeInstance, Live: true,
+		Summary: "Let the controller keep every host's capacity and reserve at what Zoomies recommends for its machine, disk and the pools' runner size, and re-work them as the host reports and the pools change. This covers hosts the fleet rents from a provider. A host can be set on or off by itself. Off by default, because it replaces figures an operator typed.",
+	},
+	{
 		Key: "scheduler.auto_rerun", Label: "Re-run jobs the fleet broke", Env: "ZOOMIES_AUTO_RERUN", Kind: KindBool, Scope: ScopeInstance, Live: true,
 		Summary: "Ask GitHub to run a job again when this fleet is what broke it -- a runner that died under it, never a test that failed. Off by default: it spends GitHub minutes without asking.",
 	},

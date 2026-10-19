@@ -51,6 +51,7 @@ func (c *Controller) housekeep(ctx context.Context, last *housekeeping) {
 	c.sweepTasks(ctx, now)
 	c.checkHostHealth(ctx)
 	c.settleThrottles(ctx, now)
+	c.autoAdjustHosts(ctx, now)
 	c.expireStaleQueuedJobs(ctx, now)
 	// A host going quiet is a problem and a capacity change, and neither
 	// waits for the next reconcile pass to be told about.
