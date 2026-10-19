@@ -72,6 +72,17 @@ const (
 	// logStreamCloseWait bounds how long Close waits for the controller to
 	// acknowledge a finished log stream before abandoning the request.
 	logStreamCloseWait = 30 * time.Second
+	// defaultPingAfter is how long the agent may receive nothing on its
+	// connection to the controller before it sends an HTTP/2 PING, and
+	// defaultPingTimeout how long that PING may go unanswered before the
+	// connection is closed. Together they bound how long a connection that died
+	// silently can hold up the agent's calls: far inside the 90 seconds of
+	// silence after which the controller calls the host unhealthy, and the five
+	// minutes after which it gives the host's runners up as lost. A long poll is
+	// silent for its whole wait, so an idle agent pings about once per poll, a
+	// frame of a few bytes.
+	defaultPingAfter   = 15 * time.Second
+	defaultPingTimeout = 10 * time.Second
 
 	maxResponseBytes = 8 << 20
 	maxErrorBytes    = 4 << 10
@@ -107,6 +118,10 @@ type HTTPOptions struct {
 	// leaves it nil so that the TLS settings above take effect.
 	HTTPClient *http.Client
 	Logger     *slog.Logger
+
+	// pingAfter and pingTimeout shorten the connection health check for tests,
+	// which cannot wait for the real one; production leaves them zero.
+	pingAfter, pingTimeout time.Duration
 }
 
 // HTTPTransport is the Transport a standalone agent uses: every call is an
@@ -182,6 +197,13 @@ func NewHTTPTransport(opts HTTPOptions) (*HTTPTransport, error) {
 
 	client := opts.HTTPClient
 	if client == nil {
+		ping := &http.HTTP2Config{SendPingTimeout: defaultPingAfter, PingTimeout: defaultPingTimeout}
+		if opts.pingAfter > 0 {
+			ping.SendPingTimeout = opts.pingAfter
+		}
+		if opts.pingTimeout > 0 {
+			ping.PingTimeout = opts.pingTimeout
+		}
 		// No Client.Timeout on purpose. A global timeout would abort a task
 		// long poll and a followed log stream, both of which are idle for
 		// minutes by design; every call sets its own deadline on the context
@@ -197,6 +219,17 @@ func NewHTTPTransport(opts HTTPOptions) (*HTTPTransport, error) {
 				TLSHandshakeTimeout:   10 * time.Second,
 				ExpectContinueTimeout: time.Second,
 				ForceAttemptHTTP2:     true,
+				// HTTP/2 puts every call on one connection, and a call's deadline
+				// resets only its own stream, so a connection that dies without a
+				// reset (a NAT or firewall on the path forgetting the flow, say)
+				// takes every heartbeat, poll and report down with it. Without a
+				// health check Go moves to a new connection only once as many calls
+				// have timed out on this one as the server allows concurrent
+				// streams, and the kernel retransmits for a quarter of an hour
+				// before it gives up. A silent connection is pinged instead, and
+				// closed when the ping goes unanswered, so the next call dials a
+				// fresh one.
+				HTTP2: ping,
 			},
 		}
 	}
