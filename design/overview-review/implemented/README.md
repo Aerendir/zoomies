@@ -13,7 +13,7 @@ state and can change as the fixture runs.
 | Mission Control dark | [Capture](mission-control-dark-1440.png) | [Capture](mission-control-dark-375.png) |
 
 These captures show only the visible viewport, so the position of floating
-controls is unambiguous. Eli starts at the bottom left and stays there when
+controls is unambiguous. Eli starts at the bottom right and stays there when
 the page scrolls, above the phone navigation. An explicitly saved side remains
 available. Compare the Mission Control dark captures with the
 [desktop after scrolling](mission-control-dark-1440-scrolled.png) and
@@ -21,7 +21,7 @@ available. Compare the Mission Control dark captures with the
 
 ## Implemented behaviour
 
-- Eli defaults to the bottom left of the viewport, retaining saved side choices.
+- Eli defaults to the bottom right of the viewport, retaining saved side choices.
 - Both styles share the order: first-run guidance when needed, attention,
   four live metrics, pools, active jobs, recent events and supporting detail.
 - One page scope selector controls job figures and links. Infrastructure and

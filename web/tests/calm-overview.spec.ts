@@ -42,7 +42,9 @@ for (const style of ['classic', 'mission-control']) {
       ).toHaveCount(3);
       const launcher = page.getByRole('button', { name: 'Ask Eli', exact: true });
       const before = (await launcher.boundingBox())!;
-      expect(before.x).toBeLessThan(32);
+      const rightClearance = width - before.x - before.width;
+      expect(rightClearance).toBeGreaterThanOrEqual(16);
+      expect(rightClearance).toBeLessThan(32);
       const clearance = 900 - before.y - before.height;
       expect(clearance).toBeGreaterThanOrEqual(16);
       expect(clearance).toBeLessThanOrEqual(96);
@@ -220,18 +222,14 @@ test('a silenced preview keeps category settings reachable', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
 });
 
-// A new default must not override an explicit side chosen in this browser.
+// The default must not override an explicit side chosen in this browser.
 test('Eli retains an explicitly saved side', async ({ page }) => {
   await page.addInitScript(() =>
-    localStorage.setItem('zoomies.eli.layout', JSON.stringify({ side: 'right' })),
+    localStorage.setItem('zoomies.eli.layout', JSON.stringify({ side: 'left' })),
   );
   await goto(page, '/', 'Overview');
   const launcher = page.getByRole('button', { name: 'Ask Eli', exact: true });
-  await expect
-    .poll(async () => (await launcher.boundingBox())!.x)
-    .toBeGreaterThan(page.viewportSize()!.width / 2);
+  await expect.poll(async () => (await launcher.boundingBox())!.x).toBeLessThan(32);
   await page.reload();
-  await expect
-    .poll(async () => (await launcher.boundingBox())!.x)
-    .toBeGreaterThan(page.viewportSize()!.width / 2);
+  await expect.poll(async () => (await launcher.boundingBox())!.x).toBeLessThan(32);
 });

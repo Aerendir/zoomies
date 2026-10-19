@@ -25,7 +25,7 @@
 
   let phone = $state(false);
   let size = $state('comfortable');
-  let side = $state('left');
+  let side = $state('right');
   let full = $state(false);
   const modal = $derived(full || phone);
   let loading = $state(false);
