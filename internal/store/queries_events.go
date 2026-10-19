@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -762,6 +763,45 @@ func (s *Store) ListJobsAfter(ctx context.Context, f JobFilter, after *JobCursor
 	return out, total, next, nil
 }
 
+// jobStateTerm is the condition that keeps the jobs in one of states, and the
+// states it is asked of.
+//
+// A list that includes completed, the state nearly every job in a history is in,
+// and another state besides is written with a unary plus, which tells SQLite not
+// to read the term through an index. Left to itself it does, because a state is
+// something an index can seek; but a list like that narrows almost nothing, and
+// having sought each state SQLite has most of the table in hand and still has to
+// put it in order, which it does by reading every row whole and sorting. The
+// listing is ordered by queued_at, and the index that serves that order,
+// idx_jobs_queued_id, stops after the page's fifty rows when the states are only
+// a test each row passes. That was 61 ms against 5.7 ms for the Jobs page's All
+// view over 10,000 jobs, and the first grows with the table where the second
+// grows with its count.
+//
+// Every other list is left to the index. Without completed the states are few,
+// an index finds them at once, and walking the whole history for the rare job
+// that is in one would cost far more than the plus saves. Completed alone is the
+// state index too: it reads that in queued order with no sort of the rows, and
+// with a window of dates it reads only the window.
+func jobStateTerm(states []JobState) (string, []any) {
+	var distinct []JobState
+	for _, st := range states {
+		if !slices.Contains(distinct, st) {
+			distinct = append(distinct, st)
+		}
+	}
+	ph := make([]string, len(distinct))
+	args := make([]any, len(distinct))
+	for i, st := range distinct {
+		ph[i], args[i] = "?", string(st)
+	}
+	term := `state IN (` + strings.Join(ph, ",") + `)`
+	if len(distinct) > 1 && slices.Contains(distinct, JobCompleted) {
+		term = "+" + term
+	}
+	return term, args
+}
+
 func jobWhere(f JobFilter, now time.Time) (string, []any) {
 	var cond []string
 	var args []any
@@ -852,12 +892,9 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 		}
 	}
 	if len(f.States) > 0 {
-		ph := make([]string, len(f.States))
-		for i, st := range f.States {
-			ph[i] = "?"
-			args = append(args, string(st))
-		}
-		cond = append(cond, `state IN (`+strings.Join(ph, ",")+`)`)
+		term, stateArgs := jobStateTerm(f.States)
+		cond = append(cond, term)
+		args = append(args, stateArgs...)
 	}
 	// Labels are stored as a JSON array; a LIKE on the quoted label is exact
 	// because NormalizeLabels guarantees no embedded quotes and likeEscape
