@@ -349,7 +349,7 @@ test('the navigation says which build of Zoomies is running', async ({ page }) =
   await goto(page, '/', 'Overview');
   const meta = await page.request.get('/api/v1/meta').then((r) => r.json());
   if (test.info().project.use.isMobile) {
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'More', exact: true }).click();
   }
   const build = page.locator('p.build');
   await expect(build).toBeVisible();
