@@ -376,6 +376,8 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	runner := &Runner{PoolID: pool.ID, HostID: host.ID, Name: "zoomies-hot-1", State: RunnerProvisioning, Ephemeral: true}
+	must(s.CreateRunner(ctx, runner))
 
 	for _, op := range []struct {
 		name string
@@ -454,6 +456,20 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 		}},
 		{"GetHost", 2, func(int) {
 			_, err := s.GetHost(ctx, host.ID)
+			must(err)
+		}},
+		{"GetRunner", 1, func(int) {
+			_, err := s.GetRunner(ctx, runner.ID)
+			must(err)
+		}},
+		// With no state named it is the list a heartbeat reads; with some, it is built
+		// around them and is not hot.
+		{"ListRunnersForHost", 1, func(int) {
+			_, err := s.ListRunnersForHost(ctx, host.ID)
+			must(err)
+		}},
+		{"ListRunnersForHost naming states", 0, func(int) {
+			_, err := s.ListRunnersForHost(ctx, host.ID, RunnerIdle, RunnerBusy)
 			must(err)
 		}},
 		{"RecordUsageCapacityBatch of a hundred pools", 1, func(int) {

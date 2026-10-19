@@ -1196,9 +1196,13 @@ func (s *Store) SetRunnerCreatedAt(ctx context.Context, id string, at time.Time)
 	return err
 }
 
+// runnerByIDQuery is read for every runner an agent reports on, twice, on every
+// heartbeat; see hot.go.
+var runnerByIDQuery = hot(`SELECT ` + runnerCols + ` FROM runners WHERE id = ?`)
+
 // GetRunner returns one runner by ID.
 func (s *Store) GetRunner(ctx context.Context, id string) (*Runner, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+runnerCols+` FROM runners WHERE id = ?`, id)
+	row := s.hotRead().QueryRow(ctx, runnerByIDQuery, id)
 	r, err := scanRunner(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("runner %s: %w", id, ErrNotFound)
@@ -1324,22 +1328,29 @@ func (s *Store) ListRunnersForPool(ctx context.Context, poolID string) ([]*Runne
 	return out, rows.Err()
 }
 
+// runnersForHostQuery is the list a host's runners are asked for without naming
+// a state, which a heartbeat does three times; see hot.go. A list of states is
+// built around them and is a new statement for each length of it, so it is not
+// hot.
+var runnersForHostQuery = hot(`SELECT ` + runnerCols + ` FROM runners
+	WHERE host_id = ? AND state != 'removed' ORDER BY created_at`)
+
 // ListRunnersForHost returns the runners an agent is responsible for.
 func (s *Store) ListRunnersForHost(ctx context.Context, hostID string, states ...RunnerState) ([]*Runner, error) {
-	q := `SELECT ` + runnerCols + ` FROM runners WHERE host_id = ?`
-	args := []any{hostID}
-	if len(states) > 0 {
+	var rows *sql.Rows
+	var err error
+	if len(states) == 0 {
+		rows, err = s.hotRead().Query(ctx, runnersForHostQuery, hostID)
+	} else {
 		ph := make([]string, len(states))
+		args := []any{hostID}
 		for i, st := range states {
 			ph[i] = "?"
 			args = append(args, string(st))
 		}
-		q += ` AND state IN (` + strings.Join(ph, ",") + `)`
-	} else {
-		q += ` AND state != 'removed'`
+		rows, err = s.read.QueryContext(ctx, `SELECT `+runnerCols+` FROM runners WHERE host_id = ? AND state IN (`+
+			strings.Join(ph, ",")+`) ORDER BY created_at`, args...)
 	}
-	q += ` ORDER BY created_at`
-	rows, err := s.read.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
