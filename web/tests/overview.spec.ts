@@ -13,6 +13,13 @@ import { expect, test, type Page } from '@playwright/test';
 import { FIXTURE, goto, reload, useClassic } from './support/fixtures';
 
 test.beforeEach(async ({ page }) => {
+  // These checks exercise the detailed panels. Default disclosure state and
+  // the compact monitoring layout have their own Calm operations tests.
+  await page.addInitScript(() => {
+    for (const id of ['history', 'failures'])
+      localStorage.setItem(`zoomies.overview.${id}.open`, 'true');
+    localStorage.setItem('zoomies.overview.events.expanded', 'true');
+  });
   await goto(page, '/', 'Overview');
 });
 
@@ -74,17 +81,17 @@ test("the metric tiles are this fleet's work, and the switch widens them", async
   // The page header's own switch, not one of the panels': it governs the whole
   // page, and the tiles are the part of it nothing else controls.
   const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
-  const toggle = header.getByRole('switch', { name: 'Other runners' });
+  const toggle = header.getByRole('combobox', { name: 'Overview scope' });
 
   await expect(toggle, 'the Overview carries the toggle its panels have').toBeVisible();
-  await expect(toggle).not.toBeChecked();
+  await expect(toggle).toHaveValue('fleet');
 
   const ours = Number((await running.getByText(COUNT).innerText()).replace(/,/g, ''));
 
   // The fixture has one job running on a hosted-runner vendor. With the switch
   // off it is not in the tile; with it on it is.
-  await toggle.click();
-  await expect(toggle).toBeChecked();
+  await toggle.selectOption('all');
+  await expect(toggle).toHaveValue('all');
   await expect
     .poll(async () => Number((await running.getByText(COUNT).innerText()).replace(/,/g, '')), {
       message: "the tile did not widen to include somebody else's running job",
@@ -95,15 +102,13 @@ test("the metric tiles are this fleet's work, and the switch widens them", async
   // list it leads to disagree.
   await expect(running).toHaveAttribute('href', /all=true/);
 
-  // One preference, so the panels below moved with it.
-  await expect(
-    page
-      .getByRole('region', { name: 'Active jobs', exact: true })
-      .getByRole('switch', { name: 'Other runners' }),
-  ).toBeChecked();
+  // The single page scope controls the list and the headline together.
+  await expect(page.getByRole('region', { name: 'Active jobs', exact: true })).toContainText(
+    'Wherever it is running.',
+  );
 
-  await toggle.click();
-  await expect(toggle).not.toBeChecked();
+  await toggle.selectOption('fleet');
+  await expect(toggle).toHaveValue('fleet');
   await expect(running).toHaveAttribute('href', /^\/jobs\?state=in_progress$/);
   await expect
     .poll(async () => Number((await running.getByText(COUNT).innerText()).replace(/,/g, '')))
@@ -127,13 +132,13 @@ test('the queued tile leads to the queue it just counted', async ({ page }) => {
   await expect(queued).toHaveAttribute('href', '/queue');
 
   const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
-  const toggle = header.getByRole('switch', { name: 'Other runners' });
-  await toggle.click();
-  await expect(toggle).toBeChecked();
+  const toggle = header.getByRole('combobox', { name: 'Overview scope' });
+  await toggle.selectOption('all');
+  await expect(toggle).toHaveValue('all');
   await expect(queued).toHaveAttribute('href', '/jobs?state=queued&all=true');
 
-  await toggle.click();
-  await expect(toggle).not.toBeChecked();
+  await toggle.selectOption('fleet');
+  await expect(toggle).toHaveValue('fleet');
   await expect(queued).toHaveAttribute('href', '/queue');
 });
 
@@ -442,6 +447,7 @@ test('an empty feed says when it is the operator’s own choices that emptied it
 
   const feed = page.getByRole('region', { name: 'Recent events', exact: true });
   await expect(feed).toContainText('Nothing in the kinds you are watching');
+  await expect(feed.getByRole('link', { name: 'Choose' })).toBeVisible();
   // Every kind, counted from the page rather than written down: how many a
   // release ships is not what this is about.
   await expect(feed).toContainText(
@@ -483,20 +489,11 @@ test('the events feed sits beside the pools and the running jobs, never under th
   expect(jobsBox.x + jobsBox.width, "the jobs share the pools' column").toBeLessThanOrEqual(
     feedBox.x,
   );
-  // The feed ends where that column ends. A pixel of slack for rounding.
-  expect(feedBox.y + feedBox.height, 'the feed is no taller than its column').toBeLessThanOrEqual(
-    jobsBox.y + jobsBox.height + 1,
-  );
-  // And the fixture's ten decisions do not all fit in that height, so the
-  // ones off the end are reachable by scrolling the panel, not gone.
-  const list = feed.getByRole('list');
-  const hidden = await list.evaluate(
-    (el) => (el.parentElement?.scrollHeight ?? 0) - (el.parentElement?.clientHeight ?? 0),
-  );
-  expect(hidden, 'the decisions that do not fit are a scroll away').toBeGreaterThan(0);
+  await feed.getByRole('button', { name: 'Show fewer events' }).click();
+  await expect(feed.getByRole('listitem')).toHaveCount(3);
+  await feed.getByRole('button', { name: 'Expand events' }).click();
+  await expect.poll(() => feed.getByRole('listitem').count()).toBeGreaterThan(3);
   await feed.getByRole('listitem').last().scrollIntoViewIfNeeded();
-  const scrolled = await list.evaluate((el) => el.parentElement?.scrollTop ?? 0);
-  expect(scrolled, 'the panel itself scrolls to reach the oldest').toBeGreaterThan(0);
 });
 
 test('refreshing the Overview leaves it saying exactly what it said', async ({ page }) => {
@@ -535,7 +532,7 @@ test("the job panels are this fleet's work, and say so when they are not", async
 
   // By default both panels are the fleet's own work: the fixture's two vendor
   // jobs, one running and one finished, are not on the page at all.
-  await expect(active).toContainText('What this fleet is running at this moment.');
+  await expect(page.getByRole('combobox', { name: 'Overview scope' })).toHaveValue('fleet');
   await expect(active).not.toContainText('blacksmith');
   await expect(
     feed,
@@ -544,9 +541,9 @@ test("the job panels are this fleet's work, and say so when they are not", async
   await expect(active.getByText('Elsewhere')).toHaveCount(0);
 
   // One switch, shared: flipping it on either panel widens both.
-  await active.getByRole('switch', { name: 'Other runners' }).click();
+  await page.getByRole('combobox', { name: 'Overview scope' }).selectOption('all');
 
-  await expect(active).toContainText('wherever it is running');
+  await expect(active).toContainText('Wherever it is running');
   const vendor = active.getByRole('listitem').filter({ hasText: 'blacksmith' });
   await expect(vendor).toHaveCount(1);
   // And it is marked, because the row above it is this fleet's and looks the
@@ -556,17 +553,8 @@ test("the job panels are this fleet's work, and say so when they are not", async
   // The choice is the operator's, and it survives a reload.
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
-  await expect(
-    page
-      .getByRole('region', { name: 'Active jobs', exact: true })
-      .getByRole('switch', { name: 'Other runners' }),
-  ).toBeChecked();
-
-  // Off again, and the page is the fleet's own once more.
-  await page
-    .getByRole('region', { name: 'Active jobs', exact: true })
-    .getByRole('switch', { name: 'Other runners' })
-    .click();
+  await expect(page.getByRole('combobox', { name: 'Overview scope' })).toHaveValue('all');
+  await page.getByRole('combobox', { name: 'Overview scope' }).selectOption('fleet');
   await expect(page.getByRole('region', { name: 'Active jobs', exact: true })).not.toContainText(
     'blacksmith',
   );
@@ -600,7 +588,7 @@ test('the subtitle names the window the figures actually cover', async ({ page }
   );
 
   await goto(page, '/', 'Overview');
-  const subtitle = page.locator('.subtitle').first();
+  const subtitle = page.locator('.coverage');
   await expect(subtitle).toContainText('the last 6 hours');
   await expect(subtitle, 'the sparklines are still an hour, and say so separately').toContainText(
     'Trends cover the last hour',
@@ -614,11 +602,10 @@ test('the subtitle names the window the figures actually cover', async ({ page }
  * walk it, and selecting a day leads to that day's jobs -- and that it sits
  * above the numbers, where the operator asked for it.
  */
-test('the activity matrix heads the page, and every square says what it holds', async ({
+test('the activity matrix follows current work, and every square says what it holds', async ({
   page,
 }) => {
-  // Mission Control, the default, leads with the pools; the matrix-first order
-  // is Classic's, and operational-layout.spec.ts holds Mission Control's.
+  // Classic and Mission Control both put current work before history.
   await useClassic(page);
   await goto(page, '/', 'Overview');
   await yearOfDays(page);
@@ -633,7 +620,7 @@ test('the activity matrix heads the page, and every square says what it holds', 
   const tileBox = await tile.boundingBox();
   expect(matrixBox).not.toBeNull();
   expect(tileBox).not.toBeNull();
-  expect(matrixBox!.y, 'the matrix comes before the tiles').toBeLessThan(tileBox!.y);
+  expect(matrixBox!.y, 'current figures come before history').toBeGreaterThan(tileBox!.y);
 
   // The seed's morning of jobs is in the newest squares. A square's
   // accessible name is the whole sentence the tooltip shows, so nothing
@@ -1088,9 +1075,9 @@ test("the failures panel's link to the rest keeps the scope the panel counted", 
   await expect(more).toHaveAttribute('href', '/jobs?attention=true');
 
   const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
-  const toggle = header.getByRole('switch', { name: 'Other runners' });
-  await toggle.click();
-  await expect(toggle).toBeChecked();
+  const toggle = header.getByRole('combobox', { name: 'Overview scope' });
+  await toggle.selectOption('all');
+  await expect(toggle).toHaveValue('all');
   await expect(more).toHaveAttribute('href', '/jobs?attention=true&all=true');
 
   await more.click();
@@ -1115,9 +1102,9 @@ test("the one-line failures panel's link to the failed view keeps the scope", as
   await expect(history).toHaveAttribute('href', '/jobs?failed=true');
 
   const header = page.locator('header').filter({ has: page.getByRole('heading', { level: 1 }) });
-  const toggle = header.getByRole('switch', { name: 'Other runners' });
-  await toggle.click();
-  await expect(toggle).toBeChecked();
+  const toggle = header.getByRole('combobox', { name: 'Overview scope' });
+  await toggle.selectOption('all');
+  await expect(toggle).toHaveValue('all');
   await expect(history).toHaveAttribute('href', '/jobs?failed=true&all=true');
 });
 
