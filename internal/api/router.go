@@ -304,6 +304,11 @@ func (s *Server) apiRoutes() chi.Router {
 
 		r.With(s.require(auth.ActionComparisonsWrite), s.require(auth.ActionJobsRead), s.refuseVisitors).Post("/comparisons", s.handleCaptureComparison)
 		r.With(s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/comparisons/{id}", s.handleGetComparison)
+		r.With(s.require(auth.ActionOptimisationsRead), s.refuseVisitors).Get("/optimisations/enablement", s.handleGetOptimisationEnablement)
+		r.With(s.require(auth.ActionSettingsWrite), s.refuseVisitors).Put("/optimisations/enablement", s.handleSetOptimisationEnablement)
+		r.With(s.require(auth.ActionOptimisationsWrite), s.require(auth.ActionJobsRead), s.refuseVisitors).Post("/optimisations/checkout/inspections", s.handleInspectCheckout)
+		r.With(s.require(auth.ActionOptimisationsWrite), s.require(auth.ActionJobsRead), s.refuseVisitors).Post("/optimisations/checkout/previews", s.handleCaptureCheckoutPreview)
+		r.With(s.require(auth.ActionOptimisationsRead), s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/optimisations/checkout/previews/{id}", s.handleGetCheckoutPreview)
 
 		// Jobs.
 		r.With(s.require(auth.ActionUsageRead)).Get("/usage", s.handleUsage)
@@ -350,6 +355,7 @@ func (s *Server) apiRoutes() chi.Router {
 			// Before /{id}, or chi would look for a host whose id is "samples".
 			r.With(s.require(auth.ActionHostsRead)).Get("/samples", s.handleListHostSamples)
 			r.With(s.require(auth.ActionHostsRead)).Get("/{id}", s.handleGetHost)
+			r.With(s.require(auth.ActionHostsRead)).Get("/{id}/recommendation", s.handleGetHostRecommendation)
 			r.With(s.require(auth.ActionHostsWrite)).Patch("/{id}", s.handleUpdateHost)
 			r.With(s.require(auth.ActionHostsCordon)).Post("/{id}/cordon", s.handleCordonHost)
 			r.With(s.require(auth.ActionHostsWrite)).Post("/{id}/throttle/clear", s.handleClearHostThrottle)

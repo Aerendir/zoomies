@@ -114,6 +114,12 @@ export const ROUTES: readonly RouteDef[] = [
     title: 'Comparisons',
     load: () => import('../routes/Comparisons.svelte'),
   },
+  {
+    name: 'checkout-preview',
+    path: '/optimisations/checkout',
+    title: 'Checkout preview',
+    load: () => import('../routes/CheckoutPreview.svelte'),
+  },
   { name: 'jobs', path: '/jobs', title: 'Jobs', load: () => import('../routes/Jobs.svelte') },
   { name: 'usage', path: '/usage', title: 'Usage', load: () => import('../routes/Usage.svelte') },
   { name: 'hosts', path: '/hosts', title: 'Hosts', load: () => import('../routes/Hosts.svelte') },

@@ -3,6 +3,8 @@
   import {
     ApiError,
     getEliRepairSettings,
+    getOptimisationEnablement,
+    setOptimisationEnablement,
     listInstallations,
     setEliIdentity,
     setEliRepairConsent,
@@ -14,6 +16,7 @@
   import Field from '$lib/components/Field.svelte';
   import Input from '$lib/components/Input.svelte';
   import Select from '$lib/components/Select.svelte';
+  import Checkbox from '$lib/components/Checkbox.svelte';
 
   let { repo, oncomplete }: { repo: string; oncomplete: () => Promise<void> } = $props();
   let identity = $state<Schemas['EliIdentity'] | undefined>();
@@ -21,6 +24,11 @@
   let installations = $state<Installation[]>([]);
   let installation = $state('');
   let login = $state('');
+  // Offered, never assumed: ticking it is the consent to let Zoomies read a
+  // workflow file and keep a proposed edit, which repairing a pull request
+  // does not need.
+  let previewsOff = $state(false);
+  let enablePreviews = $state(false);
   let loading = $state(true);
   let busy = $state(false);
   let error = $state('');
@@ -36,10 +44,12 @@
     loading = true;
     error = '';
     try {
-      const [settings, installs] = await Promise.all([
+      const [settings, installs, previews] = await Promise.all([
         getEliRepairSettings(),
         admin ? listInstallations() : Promise.resolve({ items: [] }),
+        admin ? getOptimisationEnablement().catch(() => undefined) : Promise.resolve(undefined),
       ]);
+      previewsOff = !!previews && !previews.enabled && previews.can_change;
       identity = settings.identities.find((item) => item.user_id === session.identity?.id);
       policy = settings.policies.find((item) => item.repo.toLowerCase() === repo.toLowerCase());
       installations = installs.items ?? [];
@@ -86,6 +96,10 @@
           allow_workflows: policy?.allow_workflows ?? false,
           daily_limit: policy?.daily_limit ?? 5,
         });
+      }
+      if (enablePreviews && admin && previewsOff) {
+        await setOptimisationEnablement(true);
+        previewsOff = false;
       }
       await oncomplete();
     } catch (cause) {
@@ -140,6 +154,13 @@
             : 'disabled'}.
         </p>
       {:else}<p>An administrator needs to enable repairs for {repo}.</p>{/if}
+    {/if}
+    {#if previewsOff}
+      <Checkbox
+        bind:checked={enablePreviews}
+        label="Also let Zoomies preview workflow speed-ups"
+        description="Lets it read one workflow file at a run's commit and keep a proposed change for 14 days. Nothing is published and no model sees the file. Repairs do not need this."
+      />
     {/if}
     <p>
       Eli checks this failed run again after setup. You review the target PR before starting a

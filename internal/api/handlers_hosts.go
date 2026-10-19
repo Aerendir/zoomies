@@ -88,6 +88,10 @@ type hostUpdateRequest struct {
 	ReserveCPUs     *int   `json:"reserve_cpus"`
 	ReserveMemoryMB *int64 `json:"reserve_memory_mb"`
 	ReserveDiskMB   *int64 `json:"reserve_disk_mb"`
+	// AutoAdjust says whether the controller keeps the capacity and reserve at
+	// their recommendation: "on", "off", or "" to follow the fleet. Leave it
+	// out to change nothing.
+	AutoAdjust *string `json:"auto_adjust"`
 	// RunnerProfile replaces the host's whole runner profile. Leave it out to
 	// change nothing; send an empty object, {}, to clear it so the host follows
 	// the fleet's settings again. A field left out of a profile that is sent
@@ -204,6 +208,9 @@ func (s *Server) applyHostUpdate(w http.ResponseWriter, r *http.Request, id stri
 			fields = append(fields, fieldError{"reserve_disk_mb", fmt.Sprintf("this host's work directory has %d MB of disk; a reserve of %d would leave nothing to place on", h.DiskTotalMB, *req.ReserveDiskMB)})
 		}
 	}
+	if req.AutoAdjust != nil && *req.AutoAdjust != "" && *req.AutoAdjust != store.AutoAdjustOn && *req.AutoAdjust != store.AutoAdjustOff {
+		fields = append(fields, fieldError{"auto_adjust", `use "on" to keep this host at its recommendation, "off" to leave it alone, or "" to follow the fleet`})
+	}
 	if req.RunnerProfile != nil {
 		fields = append(fields, validateRunnerProfile(h, *req.RunnerProfile)...)
 	}
@@ -272,6 +279,12 @@ func (s *Server) applyHostUpdate(w http.ResponseWriter, r *http.Request, id stri
 	if err := s.ctrl.Store().PatchHost(r.Context(), id, changes); err != nil {
 		s.fail(w, r, "saving the host", err)
 		return
+	}
+	if req.AutoAdjust != nil {
+		if err := s.ctrl.Store().SetHostAutoAdjust(r.Context(), id, *req.AutoAdjust); err != nil {
+			s.fail(w, r, "saving whether the host is kept at its recommendation", err)
+			return
+		}
 	}
 	h, err = s.ctrl.Store().GetHost(r.Context(), id)
 	if err != nil {
@@ -1030,4 +1043,39 @@ func (s *Server) handleRevokeHostCheck(w http.ResponseWriter, r *http.Request) {
 		_ = s.auth.Auditor().Record(r.Context(), Identity(r.Context()), "host.check_revoked", "host", id, acceptanceAudit(ended), nil)
 	}
 	writeJSON(w, http.StatusOK, v.For(isPlatform(r)))
+}
+
+// HostRecommendationView is what the Adjust dialog shows as the recommendation.
+type HostRecommendationView struct {
+	Available       bool    `json:"available"`
+	Capacity        int     `json:"capacity,omitempty"`
+	ReserveCPUs     int     `json:"reserve_cpus,omitempty"`
+	ReserveMemoryMB int64   `json:"reserve_memory_mb,omitempty"`
+	ReserveDiskMB   int64   `json:"reserve_disk_mb,omitempty"`
+	LimitedBy       string  `json:"limited_by,omitempty"`
+	AskCPUs         float64 `json:"ask_cpus,omitempty"`
+	AskMemoryMB     int64   `json:"ask_memory_mb,omitempty"`
+	AskPool         string  `json:"ask_pool,omitempty"`
+	Reason          string  `json:"reason,omitempty"`
+}
+
+// handleGetHostRecommendation answers with the numbers the controller itself
+// would keep the host at, so the dialog and the automatic adjustment cannot
+// disagree about what is recommended.
+func (s *Server) handleGetHostRecommendation(w http.ResponseWriter, r *http.Request) {
+	h, err := s.ctrl.Store().GetHost(r.Context(), chiURLParam(r, "id"))
+	if err != nil {
+		s.fail(w, r, "reading the host", err)
+		return
+	}
+	rec, ok := s.ctrl.HostRecommendation(r.Context(), h)
+	if !ok {
+		writeJSON(w, http.StatusOK, HostRecommendationView{})
+		return
+	}
+	writeJSON(w, http.StatusOK, HostRecommendationView{
+		Available: true, Capacity: rec.Capacity, ReserveCPUs: rec.ReserveCPUs, ReserveMemoryMB: rec.ReserveMemoryMB,
+		ReserveDiskMB: rec.ReserveDiskMB, LimitedBy: rec.LimitedBy, AskCPUs: rec.Ask.CPUs, AskMemoryMB: rec.Ask.MemoryMB,
+		AskPool: rec.Ask.Pool, Reason: rec.Reason(),
+	})
 }

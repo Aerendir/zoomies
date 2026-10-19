@@ -27,7 +27,20 @@ type CheckoutSelection struct {
 	GitHubJobID int64
 	JobIndex    int
 	StepIndex   int
+	// Locate asks the reader to find the one previewable checkout step in the
+	// selected job from the source it reads, so nobody counts positions in a
+	// file. The positions must be zero when it is set, and the evidence that
+	// comes back carries the ones it found with Locate cleared.
+	Locate bool
 }
+
+// ErrCheckoutNotFound and ErrCheckoutAmbiguous are what a Locate read says when
+// the job has no single step that can be previewed.
+var (
+	ErrCheckoutNotFound  = workflow.ErrCheckoutNotFound
+	ErrCheckoutAmbiguous = workflow.ErrCheckoutAmbiguous
+)
+
 type CheckoutEvidenceReader interface {
 	ReadCheckoutEvidence(context.Context, string, CheckoutSelection) (*CheckoutEvidence, error)
 }
@@ -54,6 +67,9 @@ func checkoutEvidenceID(s CheckoutSelection, number int64) string {
 	return fmt.Sprintf("checkout:%d:%d:%d:%d", s.RunID, s.Attempt, s.GitHubJobID, number)
 }
 func ValidCheckoutSelection(s CheckoutSelection) bool {
+	if s.Locate && (s.JobIndex != 0 || s.StepIndex != 0) {
+		return false
+	}
 	return s.RunID > 0 && s.Attempt > 0 && s.GitHubJobID > 0 && s.JobIndex >= 0 && s.JobIndex <= 20000 && s.StepIndex >= 0 && s.StepIndex <= 20000
 }
 func ValidCheckoutEvidence(e *CheckoutEvidence, repo string, s CheckoutSelection) bool {
@@ -138,6 +154,13 @@ func (c *appClient) ReadCheckoutEvidence(ctx context.Context, repo string, selec
 	data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(raw, "\n", ""))
 	if err != nil || len(data) != f.GetSize() || !utf8.Valid(data) || contextGitBlobSHA(string(data)) != f.GetSHA() {
 		return nil, fmt.Errorf("github: checkout source failed content integrity validation")
+	}
+	if selected.Locate {
+		selected.JobIndex, selected.StepIndex, err = workflow.FindCheckout(data, job.GetName())
+		if err != nil {
+			return nil, err
+		}
+		selected.Locate = false
 	}
 	jobName, stepName, err := workflow.CheckoutNames(data, selected.JobIndex, selected.StepIndex)
 	if err != nil || job.GetName() != jobName {

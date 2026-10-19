@@ -392,3 +392,11 @@ export type KennelGuidancePreview = Schemas['KennelGuidancePreview'];
 
 export type ComparisonCaptureRequest = Schemas['ComparisonCaptureRequest'];
 export type RetainedComparison = Schemas['RetainedExperimentComparison'];
+
+export type CheckoutSelection = Schemas['CheckoutSelection'];
+export type CheckoutInspection = Schemas['CheckoutInspection'];
+export type CheckoutPreview = Schemas['CheckoutPreview'];
+export type CheckoutInspectionRequest = Schemas['CheckoutInspectionRequest'];
+export type CheckoutPreviewRequest = Schemas['CheckoutPreviewRequest'];
+export type OptimisationEnablement = Schemas['OptimisationEnablement'];
+export type HostRecommendation = Schemas['HostRecommendation'];

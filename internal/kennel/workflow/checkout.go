@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"errors"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -113,4 +114,50 @@ func CheckoutNames(data []byte, jobIndex, stepIndex int) (jobName, stepName stri
 		}
 	}
 	return jobName, stepName, nil
+}
+
+// ErrCheckoutNotFound and ErrCheckoutAmbiguous say why FindCheckout could not
+// choose, so a caller can tell somebody whether to look at another job or to name
+// the step themselves.
+var (
+	ErrCheckoutNotFound  = errors.New("workflow: no checkout step in that job can be previewed")
+	ErrCheckoutAmbiguous = errors.New("workflow: more than one checkout step in that job can be previewed")
+)
+
+// FindCheckout locates the one previewable checkout step in the job GitHub
+// reports under jobName, so nobody has to count positions in a file. Every
+// condition CheckoutNames and CheckoutDepthChange impose still applies to the
+// step it returns; this only does the counting. Two candidates is an error, not a
+// guess.
+func FindCheckout(data []byte, jobName string) (jobIndex, stepIndex int, err error) {
+	root, parseErr := parseRoot(data)
+	if parseErr != nil {
+		return 0, 0, parseErr
+	}
+	jobs := field(root, "jobs")
+	if jobs == nil {
+		return 0, 0, ErrCheckoutNotFound
+	}
+	found := 0
+	for j := 0; j < len(jobs.Content)/2; j++ {
+		steps := field(jobs.Content[j*2+1], "steps")
+		if steps == nil {
+			continue
+		}
+		for s := range steps.Content {
+			name, _, namesErr := CheckoutNames(data, j, s)
+			if namesErr != nil || name != jobName {
+				continue
+			}
+			jobIndex, stepIndex = j, s
+			found++
+		}
+	}
+	switch found {
+	case 0:
+		return 0, 0, ErrCheckoutNotFound
+	case 1:
+		return jobIndex, stepIndex, nil
+	}
+	return 0, 0, ErrCheckoutAmbiguous
 }

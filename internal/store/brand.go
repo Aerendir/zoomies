@@ -70,6 +70,27 @@ func NewRunnerName(p *Pool) string {
 	return naming.RunnerName(runnerBase(p), naming.KennelWord()+"-"+NewSecret(runnerNameEntropy))
 }
 
+// NewRunnerNameOn is NewRunnerName for a runner that is going to a known host:
+// the host's name takes the place of the kennel word, because "which machine"
+// is the question a failed job raises and a handle cannot answer it. The pool's
+// shape still comes first and the random token still ends the name, so it stays
+// unique and stays this fleet's. A host with nothing nameable gets the kennel
+// word as before.
+func NewRunnerNameOn(p *Pool, h *Host) string {
+	if h == nil {
+		return NewRunnerName(p)
+	}
+	machine := h.Name
+	if parsed, ok := naming.Parse(machine); ok {
+		machine = parsed.Suffix
+	}
+	segment := naming.HostSegment(machine)
+	if segment == "" {
+		return NewRunnerName(p)
+	}
+	return naming.RunnerName(runnerBase(p), segment+"-"+NewSecret(runnerNameEntropy))
+}
+
 // runnerBase is the part of a runner's name that says what it is.
 //
 // The pool's shape wins over the pool's name because the shape is the half a

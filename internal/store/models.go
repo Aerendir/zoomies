@@ -1197,6 +1197,13 @@ type Host struct {
 	// -- every host until somebody sets one -- changes nothing about how the
 	// host is sized.
 	RunnerProfile RunnerProfile `json:"runner_profile,omitzero"`
+	// AutoAdjust is the operator's answer to whether the controller keeps this
+	// host's capacity and reserve at what it recommends: AutoAdjustOn,
+	// AutoAdjustOff, or empty to follow the fleet's default
+	// (scheduler.host_auto_adjust). AutoAdjustedAt is when the controller last
+	// moved them, zero if it never has.
+	AutoAdjust     string    `json:"auto_adjust,omitempty"`
+	AutoAdjustedAt time.Time `json:"auto_adjusted_at,omitzero"`
 	// PriorityOverride is the operator's answer to where this host stands in
 	// placement, on the 0..100 scale the scheduler's spec score uses.
 	// It is theirs alone, written through PatchHost and by no heartbeat, and
@@ -1272,6 +1279,12 @@ func (h *Host) Platform() Platform {
 	}
 	return Platform{OS: os, OSVersion: h.OSVersion, Arch: h.Arch}.Normalized()
 }
+
+// The values of Host.AutoAdjust. Empty means the host follows the fleet.
+const (
+	AutoAdjustOn  = "on"
+	AutoAdjustOff = "off"
+)
 
 // Spec is the host in the naming grammar's terms: how much machine it is, what
 // it runs, and which machine it is.
