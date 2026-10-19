@@ -12,7 +12,14 @@
  */
 import { randomBytes } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { goto, openAccountMenu, pageHeading, dialog, useSystemTheme } from './support/fixtures';
+import {
+  goto,
+  openAccountMenu,
+  openEventsFeed,
+  pageHeading,
+  dialog,
+  useSystemTheme,
+} from './support/fixtures';
 
 /**
  * A name nothing else in the suite will collide with. Random bytes rather than
@@ -550,7 +557,7 @@ test('the Events page decides what the Overview’s feed carries', async ({ page
   await expect(scaling).toHaveAttribute('aria-checked', 'false');
 
   await goto(page, '/', 'Overview');
-  const feed = page.getByRole('region', { name: 'Recent events', exact: true });
+  const feed = await openEventsFeed(page);
   await expect(feed.getByRole('listitem').first()).toBeVisible();
   await expect(feed, 'the decisions are gone').not.toContainText('scaled zoomies-demo-');
   // Counted out loud rather than omitted silently: a panel that quietly left
@@ -567,6 +574,7 @@ test('the Events page decides what the Overview’s feed carries', async ({ page
   await again.click();
 
   await goto(page, '/', 'Overview');
+  await openEventsFeed(page);
   await expect(feed).toContainText(/scaled zoomies-demo-/);
   await expect(feed).toContainText(`${on} of ${kinds} kinds`);
 });
