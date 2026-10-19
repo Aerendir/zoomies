@@ -6,7 +6,7 @@
   GitHub's settings and not the repository's files, so the fix for each is a
   setting on GitHub, and a finding here links to the page that setting is on.
 
-  The findings are the same ones the CI tab lists, with the same waivers; this
+  The findings are the same ones the Findings tab lists, with the same waivers; this
   tab gathers them with the coverage of the two sources they read, which is
   where an operator learns that the App lacks the Administration permission.
 -->
@@ -119,7 +119,7 @@
         </Finding>
       {/each}
       {#if findings.length > 0}
-        <p>Findings can be waived from the CI tab.</p>
+        <p>Findings can be waived from the Findings tab.</p>
       {/if}
     {/if}
   </div>

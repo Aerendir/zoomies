@@ -297,13 +297,13 @@
 
   <Panel
     title="What Kennel Club says"
-    description={tracked ? 'Its conclusions are on the CI tab.' : TRACKING_OVERVIEW.description}
+    description={tracked ? 'Its conclusions are in Findings.' : TRACKING_OVERVIEW.description}
   >
     <p class="standing">
       <Badge {status} size="sm" />
       {#if tracked}
         <span>{openFindingsText(repo.counts)}</span>
-        <a href="/kennel/repositories/{encodeURIComponent(repo.id)}/ci">Open the CI tab</a>
+        <a href="/kennel/repositories/{encodeURIComponent(repo.id)}/ci">Open findings</a>
       {:else}
         <span>{TRACKING_OVERVIEW.detail}</span>
       {/if}

@@ -102,7 +102,7 @@ for (const { path, heading } of PAGES) {
     // At least one navigation landmark, and the sections one is named so it
     // can be told apart from the grid's pagination.
     expect(await page.getByRole('navigation').count()).toBeGreaterThanOrEqual(1);
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Sections', exact: true })).toHaveCount(1);
   });
 }
 
@@ -612,7 +612,7 @@ for (const { path, heading, stubbed, ready } of REPAIR_PAGES) {
 
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Sections', exact: true })).toHaveCount(1);
     await expect(
       page.getByRole('button', { name: /^$/ }),
       `${path}: buttons are named`,

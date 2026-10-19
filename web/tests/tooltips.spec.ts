@@ -266,7 +266,7 @@ test.describe('the shared tooltip', () => {
     // belongs to the sheet.
     await page.setViewportSize({ width: 390, height: 844 });
     await goto(page, '/', 'Overview');
-    const more = nav(page).getByRole('button', { name: 'More' });
+    const more = nav(page).getByRole('button', { name: 'More', exact: true });
     await more.click();
     const tag = navMenu(page).locator('p.build');
     const bubble = tag.locator('xpath=..').locator('.bubble');

@@ -13,10 +13,10 @@
     progress?: number | null;
     tone?: 'neutral' | 'success' | 'danger' | 'warning' | 'accent' | 'busy';
   }
-  let { items }: { items: Metric[] } = $props();
+  let { items, compact = false }: { items: Metric[]; compact?: boolean } = $props();
 </script>
 
-<dl class="metrics">
+<dl class="metrics" class:compact>
   {#each items as item (item.label)}
     <div class="metric" data-tone={item.tone ?? 'neutral'}>
       <dt>
@@ -51,6 +51,22 @@
     grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
     gap: var(--z-space-3);
     margin: 0 0 var(--z-space-5);
+  }
+  .metrics.compact {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--z-space-2);
+    margin-bottom: 0;
+  }
+  .metrics.compact .metric {
+    padding: var(--z-space-3);
+  }
+  .metrics.compact .value {
+    margin: var(--z-space-1) 0;
+    font-size: var(--z-text-xl);
+  }
+  .metrics.compact .detail {
+    font-size: var(--z-text-2xs);
+    line-height: var(--z-leading-2xs);
   }
   .metric {
     position: relative;
