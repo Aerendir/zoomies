@@ -614,6 +614,9 @@ func parseJobFilter(w http.ResponseWriter, r *http.Request) (store.JobFilter, bo
 	if attention := queryBoolPtr(r, "attention"); attention != nil {
 		filter.AttentionOnly = *attention
 	}
+	if repairable := queryBoolPtr(r, "eli_repairable"); repairable != nil {
+		filter.EliRepairableOnly = *repairable
+	}
 	if faulted := queryBoolPtr(r, "faulted"); faulted != nil {
 		filter.FaultedOnly = *faulted
 	}
