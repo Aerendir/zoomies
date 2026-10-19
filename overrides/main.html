@@ -47,6 +47,15 @@
 
 {% block extrahead %}
   {#
+    Cloudflare Web Analytics: a cookieless page-view counter that sets nothing
+    on the reader's device and keeps no per-visitor profile. It is the only
+    third-party script the site loads, so docs/privacy.md names it and
+    site-worker/worker.js allows exactly its two origins and no others. The
+    token identifies the site and is public by design.
+  #}
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon='{"token": "0c3c36183dc3e0714e8de12c040ba3d5"}'></script>
+  {#
     The page's own title, not the abbreviation the sidebar uses: a navigation
     entry is trimmed to fit a column, and "FAQ -- Zoomies" is a worse thing to
     find in a search result than the sentence the page opens with.
