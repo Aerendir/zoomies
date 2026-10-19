@@ -3539,6 +3539,15 @@ paths:
             this list without changing the failure; a re-run that passes is what settles
             the failure itself.
           schema: { type: boolean }
+        - name: eli_repairable
+          in: query
+          description: >-
+            Only the jobs of runs a pull request started, plus those whose trigger the
+            controller has not read yet. Eli repairs a pull request's branch and
+            nothing else, so the failure of a push, merge or scheduled run is left out.
+            The Overview's failures panel sends it with `attention` so that every row it
+            lists is one Eli can be offered.
+          schema: { type: boolean }
         - name: faulted
           in: query
           description: >-

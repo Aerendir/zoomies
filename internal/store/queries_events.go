@@ -621,6 +621,12 @@ type JobFilter struct {
 	// attention" view and the Overview's failures panel, answered in one
 	// place so the two cannot disagree about what is still owed.
 	AttentionOnly bool
+	// EliRepairableOnly keeps the jobs of a run a pull request started, or whose
+	// trigger has not been read yet. Eli pushes one commit to an existing PR's
+	// branch and never raises one, so a failed push, merge or scheduled run is
+	// not something it can be asked to fix; the Overview's failures panel offers
+	// Eli on every row and so asks for only these.
+	EliRepairableOnly bool
 	// FaultedOnly keeps only the jobs whose runner stopped under them. This is
 	// the fleet's own failure rate, as distinct from the workflows'.
 	FaultedOnly bool
@@ -933,6 +939,9 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 		// a test's injected one decides what "recent" means.
 		cond = append(cond, failedJobSQL(), `acknowledged_at IS NULL`, attentionJobSQL(), `queued_at >= ?`)
 		args = append(args, ms(now.Add(-AttentionWindow)))
+	}
+	if f.EliRepairableOnly {
+		cond = append(cond, `run_event IN ('', 'pull_request', 'pull_request_target')`)
 	}
 	if f.Cancelling != nil {
 		if *f.Cancelling {
