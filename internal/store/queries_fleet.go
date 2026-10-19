@@ -1193,9 +1193,13 @@ func (s *Store) SetRunnerCreatedAt(ctx context.Context, id string, at time.Time)
 	return err
 }
 
+// runnerByIDQuery is read for every runner an agent reports on, twice, on every
+// heartbeat; see hot.go.
+var runnerByIDQuery = hot(`SELECT ` + runnerCols + ` FROM runners WHERE id = ?`)
+
 // GetRunner returns one runner by ID.
 func (s *Store) GetRunner(ctx context.Context, id string) (*Runner, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+runnerCols+` FROM runners WHERE id = ?`, id)
+	row := s.hotRead().QueryRow(ctx, runnerByIDQuery, id)
 	r, err := scanRunner(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("runner %s: %w", id, ErrNotFound)
