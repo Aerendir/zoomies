@@ -43,7 +43,7 @@ const (
 // within the window.
 func (c *Controller) poolsUnderPressure(ctx context.Context) (map[string]bool, error) {
 	since := c.Now().Add(-pressureWindow)
-	res, err := c.st.JobStats(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool})
+	res, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since}, []string{store.GroupByPool}, store.MeasureQueueWait)
 	if err != nil {
 		return nil, fmt.Errorf("reading how long jobs waited: %w", err)
 	}
@@ -70,11 +70,11 @@ func floorTo(v, step float64) float64 { return math.Floor(v/step+1e-9) * step }
 // waiting, with the size that would give it the capacity -- if every pool that
 // reaches it keeps the room it has and the host gains some.
 func (c *Controller) hostCapacityAdviceProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -205,7 +205,7 @@ func (c *Controller) hostSizeKillsJobs(ctx context.Context, reaching []*store.Po
 		return "", nil
 	}
 	since := c.Now().Add(-minimumEvidenceWindow)
-	stats, err := c.st.JobStats(ctx, store.JobFilter{Since: &since, PoolIDs: ids}, []string{store.GroupByPool})
+	stats, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since, PoolIDs: ids}, []string{store.GroupByPool}, store.MeasurePeaks)
 	if err != nil {
 		return "", fmt.Errorf("reading what jobs used: %w", err)
 	}
@@ -283,7 +283,7 @@ func (c *Controller) hostConcentrationProblems(ctx context.Context, out *[]Probl
 	if order != "" && order != "headroom" {
 		return nil
 	}
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -303,7 +303,7 @@ func (c *Controller) hostConcentrationProblems(ctx context.Context, out *[]Probl
 	if len(pinned) == 0 || len(idle) == 0 {
 		return nil
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}

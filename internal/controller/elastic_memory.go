@@ -383,7 +383,7 @@ func (c *Controller) noteMemoryValve(ctx context.Context, r *store.Runner, rep a
 // They are the only place an operator learns that the valve ran dry: the runner
 // that was refused says so in its own view, and nothing else adds those up.
 func (c *Controller) memoryValveProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -415,7 +415,7 @@ func (c *Controller) memoryValveProblems(ctx context.Context, out *[]Problem) er
 	if len(states) == 0 {
 		return nil
 	}
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}

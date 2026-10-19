@@ -126,7 +126,7 @@ func (c *Controller) jobsSlowerProblems(ctx context.Context, out *[]Problem) err
 	now := c.Now()
 	recentFrom, baseFrom := now.Add(-slowerRecent), now.Add(-slowerRecent-slowerBase)
 	read := func(from, until time.Time) (map[string]store.JobStatsGroup, error) {
-		res, err := c.st.JobStats(ctx, store.JobFilter{Since: &from, Until: &until, ManagedOnly: true}, []string{store.GroupByJobName})
+		res, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &from, Until: &until, ManagedOnly: true}, []string{store.GroupByJobName}, store.MeasureDuration)
 		if err != nil {
 			return nil, fmt.Errorf("reading how long jobs took: %w", err)
 		}

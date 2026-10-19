@@ -385,6 +385,7 @@ func agentUpgradeFix(then string, rented bool) string {
 }
 
 func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
+	ctx = withFleetReads(ctx)
 	out := make([]Problem, 0, 8)
 
 	// Configuration: every warning and error the validator produced. These are
@@ -424,7 +425,7 @@ func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
 	}
 
 	gather("pool settings", func(ctx context.Context, out *[]Problem) error {
-		pools, err := c.st.ListPools(ctx)
+		pools, err := c.fleetPools(ctx)
 		if err != nil {
 			return fmt.Errorf("listing pools: %w", err)
 		}
@@ -544,7 +545,7 @@ func (c *Controller) machineProblems(ctx context.Context, out *[]Problem) error 
 	if len(providers) == 0 {
 		return nil
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -914,7 +915,7 @@ func severityRank(s config.Severity) int {
 }
 
 func (c *Controller) hostProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -922,7 +923,7 @@ func (c *Controller) hostProblems(ctx context.Context, out *[]Problem) error {
 	if err != nil {
 		return fmt.Errorf("listing queued jobs: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -1029,7 +1030,7 @@ func (c *Controller) hostProblems(ctx context.Context, out *[]Problem) error {
 // telling an operator to upgrade the agent would be telling them to make it
 // worse.
 func (c *Controller) hostSkewProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -1241,11 +1242,11 @@ func agentTemplateFix(provider, target string) string {
 // does not oversubscribe -- but the room is bookkeeping, and a job that runs
 // away takes the host with it.
 func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -1414,11 +1415,11 @@ func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) e
 // runnerProfileProblems is profileProblems over the fleet as it stands, with
 // the pools sized as the scheduler sizes them.
 func (c *Controller) runnerProfileProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -3098,7 +3099,7 @@ func problemSentence(s string) string {
 // nothing else. Neither problem carries a Remedy: the autopilot applies every
 // remedy it finds, and an update must never be one it applies.
 func (c *Controller) hostUpdateProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}

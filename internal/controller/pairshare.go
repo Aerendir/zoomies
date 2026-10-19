@@ -429,7 +429,7 @@ func shareHelps(now, candidate PoolRoom, r *resourceAdvice, share int) bool {
 // slot. Recomputed every pass, so it stays while the window shows it and clears
 // itself when the split is changed, or the work is.
 func (c *Controller) daemonShareAdviceProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
