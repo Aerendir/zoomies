@@ -8511,6 +8511,61 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
+  /optimisations/enablement:
+    get:
+      operationId: getOptimisationEnablement
+      tags: [jobs]
+      summary: Whether reviewed workflow previews are switched on, and who can switch them
+      description: >-
+        Requires operator and optimisations:read; public visitors are refused.
+        Reports the two settings optimisation.source_reads and
+        optimisation.workflow_edits, whether the caller can change them and, when
+        not, why in a sentence to act on. Reads no GitHub data.
+      x-zoomies-role: operator
+      responses:
+        '200':
+          description: The current state; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OptimisationEnablement' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      operationId: setOptimisationEnablement
+      tags: [jobs]
+      summary: Turn reviewed workflow previews on or off together
+      description: >-
+        Requires admin and settings:write; public visitors are refused. Sets
+        optimisation.source_reads and optimisation.workflow_edits together,
+        through the same planning, validation and audit as PATCH /settings, so
+        the environment lock applies and the change is live for the next request.
+        Turning them on lets the controller read one workflow file at a run's
+        commit and keep a proposed edit for fourteen days. It publishes nothing and
+        no model reads the file.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OptimisationEnablementRequest' }
+      responses:
+        '200':
+          description: The state after the change; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OptimisationEnablement' }
+        '400':
+          description: enabled is missing or the body is malformed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: A setting could not be changed, for example because the environment sets it.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /optimisations/checkout/inspections:
     post:
       operationId: inspectCheckoutOptimisation
@@ -16150,6 +16205,22 @@ components:
         tasks: { type: array, items: { $ref: "#/components/schemas/AgentTask" } }
         backoff: { type: integer, format: int64, description: Nanoseconds to wait before polling again, when the controller sheds load. }
 
+    OptimisationEnablement:
+      additionalProperties: false
+      properties:
+        source_reads: { type: boolean }
+        workflow_edits: { type: boolean }
+        enabled: { type: boolean, description: True when both settings are on. }
+        can_change: { type: boolean, description: Whether the caller may change them here. }
+        reason: { type: string, description: "Why the caller cannot, as a sentence to act on. Absent when they can." }
+      required: [source_reads, workflow_edits, enabled, can_change]
+      type: object
+    OptimisationEnablementRequest:
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+      required: [enabled]
+      type: object
     CheckoutSelection:
       additionalProperties: false
       description: One exact run, attempt and GitHub job, and the job and step positions in the workflow file. IDs are decimal strings.

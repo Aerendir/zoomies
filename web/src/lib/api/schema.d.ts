@@ -5610,6 +5610,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/optimisations/enablement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether reviewed workflow previews are switched on, and who can switch them
+         * @description Requires operator and optimisations:read; public visitors are refused. Reports the two settings optimisation.source_reads and optimisation.workflow_edits, whether the caller can change them and, when not, why in a sentence to act on. Reads no GitHub data.
+         */
+        get: operations["getOptimisationEnablement"];
+        /**
+         * Turn reviewed workflow previews on or off together
+         * @description Requires admin and settings:write; public visitors are refused. Sets optimisation.source_reads and optimisation.workflow_edits together, through the same planning, validation and audit as PATCH /settings, so the environment lock applies and the change is live for the next request. Turning them on lets the controller read one workflow file at a run's commit and keep a proposed edit for fourteen days. It publishes nothing and no model reads the file.
+         */
+        put: operations["setOptimisationEnablement"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/optimisations/checkout/inspections": {
         parameters: {
             query?: never;
@@ -12142,6 +12166,19 @@ export interface components {
              * @description Nanoseconds to wait before polling again
              */
             backoff?: number;
+        };
+        OptimisationEnablement: {
+            source_reads: boolean;
+            workflow_edits: boolean;
+            /** @description True when both settings are on. */
+            enabled: boolean;
+            /** @description Whether the caller may change them here. */
+            can_change: boolean;
+            /** @description Why the caller cannot, as a sentence to act on. Absent when they can. */
+            reason?: string;
+        };
+        OptimisationEnablementRequest: {
+            enabled: boolean;
         };
         /** @description One exact run, attempt and GitHub job, and the job and step positions in the workflow file. IDs are decimal strings. */
         CheckoutSelection: {
@@ -21448,6 +21485,72 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description Stored content integrity cannot be verified. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getOptimisationEnablement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current state; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptimisationEnablement"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setOptimisationEnablement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptimisationEnablementRequest"];
+            };
+        };
+        responses: {
+            /** @description The state after the change; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptimisationEnablement"];
+                };
+            };
+            /** @description enabled is missing or the body is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A setting could not be changed, for example because the environment sets it. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

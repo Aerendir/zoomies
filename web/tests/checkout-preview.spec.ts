@@ -63,6 +63,19 @@ const retained = {
   },
 };
 
+const enablement = (over: object = {}) => ({
+  source_reads: true,
+  workflow_edits: true,
+  enabled: true,
+  can_change: true,
+  ...over,
+});
+async function previewsOn(page: import('@playwright/test').Page) {
+  await page.route('**/api/v1/optimisations/enablement', (route) =>
+    route.fulfill({ json: enablement() }),
+  );
+}
+
 async function fill(page: import('@playwright/test').Page) {
   await page.getByLabel('Installation ID').first().fill('ins_fixture');
   await page.getByLabel('Repository').first().fill('acme/repo');
@@ -74,6 +87,7 @@ async function fill(page: import('@playwright/test').Page) {
 test('review comes before retention: source is escaped, the declaration gates the button, exact IDs travel as strings', async ({
   page,
 }) => {
+  await previewsOn(page);
   let inspectBody: unknown, retainBody: Record<string, unknown> | undefined;
   await page.route('**/api/v1/optimisations/checkout/inspections', async (route) => {
     inspectBody = route.request().postDataJSON();
@@ -111,6 +125,7 @@ test('review comes before retention: source is escaped, the declaration gates th
 test('editing the selection drops the review so it cannot ride onto other source', async ({
   page,
 }) => {
+  await previewsOn(page);
   await page.route('**/api/v1/optimisations/checkout/inspections', (route) =>
     route.fulfill({ json: inspection }),
   );
@@ -123,6 +138,7 @@ test('editing the selection drops the review so it cannot ride onto other source
 });
 
 test('a refusal names the setting an administrator must turn on', async ({ page }) => {
+  await previewsOn(page);
   await page.route('**/api/v1/optimisations/checkout/inspections', (route) =>
     route.fulfill({
       status: 403,
@@ -159,4 +175,53 @@ test('a retained preview opens from its link without any GitHub request and the 
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(overflow).toBe(false);
+});
+
+test('an administrator turns the previews on in one press, from the page that needs them', async ({
+  page,
+}) => {
+  let on = false;
+  let put: unknown;
+  await page.route('**/api/v1/optimisations/enablement', async (route) => {
+    if (route.request().method() === 'PUT') {
+      put = route.request().postDataJSON();
+      on = true;
+    }
+    await route.fulfill({
+      json: on
+        ? enablement()
+        : enablement({ source_reads: false, workflow_edits: false, enabled: false }),
+    });
+  });
+  await goto(page, '/optimisations/checkout', 'Checkout preview');
+  await fill(page);
+  const read = page.getByRole('button', { name: 'Read workflow source' });
+  await expect(read).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByText('no model sees the file', { exact: false }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Turn on workflow previews' }).click();
+  await expect(page.getByRole('heading', { name: 'Turn on workflow previews' })).toHaveCount(0);
+  expect(put).toEqual({ enabled: true });
+  await expect(read).toBeEnabled();
+});
+
+test('someone who cannot turn them on is told whom to ask and offered the words', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/optimisations/enablement', (route) =>
+    route.fulfill({
+      json: enablement({
+        source_reads: false,
+        workflow_edits: false,
+        enabled: false,
+        can_change: false,
+        reason: 'Only an administrator can turn this on. Ask one to press the button on this page.',
+      }),
+    }),
+  );
+  await goto(page, '/optimisations/checkout', 'Checkout preview');
+  await expect(page.getByText('Only an administrator can turn this on.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Turn on workflow previews' })).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: /Copy a request for an administrator/ }),
+  ).toBeVisible();
 });

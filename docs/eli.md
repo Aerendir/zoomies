@@ -356,11 +356,19 @@ which line would change and keep that preview for review. It publishes nothing: 
 pull request, no approval and no job. Eli is not involved and no model reads the
 file.
 
-An administrator turns on two settings first, both off by default:
-`optimisation.source_reads` lets the controller read one workflow file, and
-`optimisation.workflow_edits` lets it compute and keep a proposed edit. They are
-separate grants and are read again at every step, so turning one off stops the next
-request at once.
+Both are off until someone asks for them, and nobody has to find Settings to do it.
+The Checkout preview page opens with a short card saying what turning them on
+allows. An administrator presses **Turn on workflow previews** and carries straight
+on; anyone else is told whom to ask and can copy the request. Repair setup offers the
+same choice as an unticked box, **Also let Zoomies preview workflow speed-ups**,
+because repairing a pull request does not need it. Nothing turns it on silently, and
+you can turn it off in Settings, under Optimisation.
+
+Underneath are two settings, `optimisation.source_reads` (read one workflow file) and
+`optimisation.workflow_edits` (compute and keep a proposed edit). They are separate
+grants that the button sets together, and they are read again at every step, so
+turning one off stops the next request at once. If the environment sets one, the page
+says so rather than pretending the press worked.
 
 1. **Read the workflow.** Give the installation, the repository, a successful push
    run's ID and attempt, the GitHub job ID, and the zero-based position of the job

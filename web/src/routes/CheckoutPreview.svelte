@@ -6,7 +6,12 @@
     getCheckoutPreview,
     ApiError,
   } from '$lib/api/client';
-  import type { CheckoutInspection, CheckoutPreview, CheckoutSelection } from '$lib/api/types';
+  import type {
+    CheckoutInspection,
+    CheckoutPreview,
+    CheckoutSelection,
+    OptimisationEnablement,
+  } from '$lib/api/types';
   import { parseCheckoutSelection, checkoutSeconds } from '$lib/optimisations/input';
   import { router } from '$lib/router';
   import { session } from '$lib/state/session.svelte';
@@ -17,6 +22,7 @@
   import Checkbox from '$lib/components/Checkbox.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import CheckoutPreviewCard from '$lib/optimisations/CheckoutPreviewCard.svelte';
+  import OptimisationGate from '$lib/optimisations/OptimisationGate.svelte';
 
   let installation = $state(''),
     repo = $state(''),
@@ -26,6 +32,11 @@
     jobId = $state(''),
     jobIndex = $state('0'),
     stepIndex = $state('0');
+  let enablement = $state<OptimisationEnablement | undefined>();
+  let gateRefresh = $state(0);
+  // Unknown is not off: until the state is read the form stays usable and the
+  // server's own refusal, which names the setting, is the backstop.
+  const previewsOff = $derived(enablement !== undefined && !enablement.enabled);
   let inspection = $state<CheckoutInspection | null>(null);
   let reviewed = $state(false);
   let preview = $state<CheckoutPreview | null>(null);
@@ -68,6 +79,7 @@
         : e instanceof Error
           ? e.message
           : 'The request could not be completed.';
+    if (e instanceof ApiError && e.status === 403) gateRefresh++;
     if (e instanceof ApiError && e.status === 429) {
       retryAt = e.retryAt ?? Date.now() + 60000;
       retryBlocked = true;
@@ -229,6 +241,7 @@
     </section>
 
     {#if canCapture}
+      <OptimisationGate bind:enablement refreshKey={gateRefresh} />
       <section class="card" aria-labelledby="inspect-title">
         <h2 id="inspect-title">1. Read the workflow</h2>
         <p>
@@ -295,7 +308,11 @@
                 />{/snippet}</Field
             >
           </div>
-          <Button type="submit" loading={busy && !inspection} disabled={busy || retryBlocked}
+          <Button
+            type="submit"
+            loading={busy && !inspection}
+            disabled={busy || retryBlocked || previewsOff}
+            reason={previewsOff ? 'Turn on workflow previews above first.' : undefined}
             >Read workflow source</Button
           >
         </form>

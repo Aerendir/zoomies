@@ -398,3 +398,4 @@ export type CheckoutInspection = Schemas['CheckoutInspection'];
 export type CheckoutPreview = Schemas['CheckoutPreview'];
 export type CheckoutInspectionRequest = Schemas['CheckoutInspectionRequest'];
 export type CheckoutPreviewRequest = Schemas['CheckoutPreviewRequest'];
+export type OptimisationEnablement = Schemas['OptimisationEnablement'];

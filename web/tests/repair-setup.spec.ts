@@ -393,3 +393,41 @@ test('a GitHub outage offers a status retry and never claims the failure is fixe
   await expect(page.getByRole('heading', { name: 'Already fixed' })).toHaveCount(0);
   expect(model.repairs).toEqual([]);
 });
+
+for (const ticked of [false, true]) {
+  test(`workflow previews are offered during setup and turned on only when ${ticked ? 'ticked' : 'left unticked'}`, async ({
+    page,
+  }) => {
+    await mockFailure(page);
+    await page.route('**/api/v1/assistant/repairs/settings', (route) =>
+      route.fulfill({ json: { identities: [], policies: [] } }),
+    );
+    await page.route('**/api/v1/assistant/repairs/identity', (route) =>
+      route.fulfill({ json: { ...identity, confirmed: false } }),
+    );
+    await page.route('**/api/v1/assistant/repairs/consent', (route) =>
+      route.fulfill({ status: 204 }),
+    );
+    const puts: unknown[] = [];
+    await page.route('**/api/v1/optimisations/enablement', (route) => {
+      if (route.request().method() === 'PUT') puts.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: {
+          source_reads: false,
+          workflow_edits: false,
+          enabled: false,
+          can_change: true,
+        },
+      });
+    });
+    await page.goto(PAGE);
+    const setup = page.getByRole('region', { name: 'Set up Eli for this failure' });
+    const offer = setup.getByLabel('Also let Zoomies preview workflow speed-ups');
+    await expect(offer).not.toBeChecked();
+    await setup.getByLabel('Your GitHub username').fill('octocat');
+    if (ticked) await offer.check();
+    await setup.getByRole('button', { name: 'Save setup and check this failure' }).click();
+    await expect(page.getByRole('button', { name: 'Fix with Eli', exact: true })).toBeVisible();
+    expect(puts).toEqual(ticked ? [{ enabled: true }] : []);
+  });
+}

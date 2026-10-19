@@ -30,6 +30,23 @@ is published, approved or run.
   `jobs:read` also required, public visitors refused.
 * **IDs.** GitHub run and job IDs are decimal strings on the wire and in the form.
 
+## Enablement is part of the flow
+
+The owner asked that nobody be sent to Settings. The switches are turned on at the
+point of need, never silently:
+
+* `GET /optimisations/enablement` tells any operator the state and, when they cannot
+  change it, why. `PUT` (administrator) sets both settings together through the
+  settings planner, so the environment lock, validation and audit row are the Settings
+  page's own.
+* The Checkout preview page opens with a card that says in plain words what it allows,
+  with one press for an administrator and a copyable request for everyone else. A 403
+  re-reads the state, so a switch turned off elsewhere is noticed.
+* Repair setup offers it as an unticked box for an administrator. It is not on by
+  default because repairing a pull request does not need source previews, and the
+  handoff keeps each mode's grant separate.
+* Eli has no mutation tools and gains none: it can point at the page, not press it.
+
 ## Not in this slice
 
 Approval, draft publication, E2 verification of a published change, CLI, MCP and

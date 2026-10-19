@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/store"
@@ -253,4 +254,83 @@ func (s *Server) optimisationError(w http.ResponseWriter, r *http.Request, err e
 	default:
 		s.fail(w, r, "processing a checkout preview", err)
 	}
+}
+
+// OptimisationEnablement is whether this instance lets Zoomies read workflow
+// source and keep a proposed edit, and whether the caller can change that. The
+// two settings are separate grants in the registry; the page asks for them
+// together because one is no use without the other, and says so in words.
+type OptimisationEnablement struct {
+	SourceReads   bool   `json:"source_reads"`
+	WorkflowEdits bool   `json:"workflow_edits"`
+	Enabled       bool   `json:"enabled"`
+	CanChange     bool   `json:"can_change"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+type OptimisationEnablementRequest struct {
+	Enabled *bool `json:"enabled"`
+}
+
+const optimisationSourceKey, optimisationEditsKey = "optimisation.source_reads", "optimisation.workflow_edits"
+
+func (s *Server) optimisationEnablement(r *http.Request) OptimisationEnablement {
+	cfg := s.cfg()
+	out := OptimisationEnablement{SourceReads: cfg.Optimisation.SourceReads, WorkflowEdits: cfg.Optimisation.WorkflowEdits, CanChange: true}
+	out.Enabled = out.SourceReads && out.WorkflowEdits
+	role := callerRole(r)
+	if !role.AtLeast(store.RoleAdmin) {
+		out.CanChange, out.Reason = false, "Only an administrator can turn this on. Ask one to press the button on this page, or to switch on optimisation.source_reads and optimisation.workflow_edits in Settings."
+		return out
+	}
+	for _, key := range []string{optimisationSourceKey, optimisationEditsKey} {
+		st, ok := config.LookupSetting(key)
+		if !ok {
+			continue
+		}
+		if editable, reason := s.editable(st, cfg, role); !editable {
+			out.CanChange, out.Reason = false, reason
+			break
+		}
+	}
+	return out
+}
+
+func (s *Server) handleGetOptimisationEnablement(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, s.optimisationEnablement(r))
+}
+
+// handleSetOptimisationEnablement is the settings write, narrowed to the one
+// question this page asks. It plans and applies through the same path as
+// PATCH /settings, so the environment lock, validation and audit row are the
+// settings page's own, and a change is live for the very next request.
+func (s *Server) handleSetOptimisationEnablement(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var in OptimisationEnablementRequest
+	if !decodeOptimisationBody(w, r, &in) {
+		return
+	}
+	if in.Enabled == nil {
+		badRequest(w, "Say whether to turn workflow previews on or off with enabled: true or false.")
+		return
+	}
+	current := s.cfg()
+	flat := map[string]any{optimisationSourceKey: *in.Enabled, optimisationEditsKey: *in.Enabled}
+	candidate, staged, fields := s.planSettings(current, flat, callerRole(r))
+	if len(fields) > 0 {
+		unprocessable(w, "these settings could not be changed", fields)
+		return
+	}
+	if len(staged) > 0 {
+		if fields := validatePlan(current, candidate, staged); len(fields) > 0 {
+			unprocessable(w, "that would leave a controller that will not start", fields)
+			return
+		}
+		if err := s.applyPlan(r.Context(), Identity(r.Context()), staged); err != nil {
+			s.internal(w, r, "storing the optimisation settings", err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, s.optimisationEnablement(r))
 }

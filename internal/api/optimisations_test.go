@@ -219,3 +219,52 @@ func TestCheckoutOptimisationQuotaAndReadFailuresSayWhatToDo(t *testing.T) {
 		t.Fatalf("a permission failure must name the permission: %s", resp.body)
 	}
 }
+
+func TestOptimisationEnablementIsOnePressForAnAdministratorAndAudited(t *testing.T) {
+	h, _, f, body := checkoutAPIHarness(t, false)
+	admin := h.token("admin", store.RoleAdmin, "*")
+	state := func(token string) OptimisationEnablement {
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/optimisations/enablement", token: token})
+		resp.mustStatus(t, 200, "state")
+		var out OptimisationEnablement
+		if err := json.Unmarshal(resp.body, &out); err != nil {
+			t.Fatal(err)
+		}
+		assertShape(t, loadSpec(t), "OptimisationEnablement", resp.body)
+		return out
+	}
+	if s := state(admin); s.Enabled || !s.CanChange {
+		t.Fatalf("a fresh instance is off and an administrator can change it: %+v", s)
+	}
+	op := h.token("operator", store.RoleOperator, "jobs:read", "optimisations:read", "optimisations:write")
+	if s := state(op); s.CanChange || !strings.Contains(s.Reason, "administrator") {
+		t.Fatalf("an operator is told whom to ask: %+v", s)
+	}
+	// The operator is refused until the administrator presses the button, and
+	// then the very next request goes through with no restart.
+	h.do(request{method: http.MethodPost, path: "/api/v1/optimisations/checkout/inspections", token: op, body: body}).mustStatus(t, 403, "off")
+	h.do(request{method: http.MethodPut, path: "/api/v1/optimisations/enablement", token: op, body: map[string]any{"enabled": true}}).mustStatus(t, 403, "operator cannot enable")
+	put := h.do(request{method: http.MethodPut, path: "/api/v1/optimisations/enablement", token: admin, body: map[string]any{"enabled": true}})
+	put.mustStatus(t, 200, "enable")
+	var after OptimisationEnablement
+	if err := json.Unmarshal(put.body, &after); err != nil || !after.Enabled || !after.SourceReads || !after.WorkflowEdits {
+		t.Fatalf("both switches must come on together: %s", put.body)
+	}
+	h.do(request{method: http.MethodPost, path: "/api/v1/optimisations/checkout/inspections", token: op, body: body}).mustStatus(t, 200, "on")
+	if f.reads.Load() != 1 {
+		t.Fatal("the enabled instance did not read source")
+	}
+	if auditCount(t, h, "settings.update") != 1 {
+		t.Fatal("turning the switches on must leave one settings audit row")
+	}
+	h.do(request{method: http.MethodPut, path: "/api/v1/optimisations/enablement", token: admin, body: map[string]any{"enabled": false}}).mustStatus(t, 200, "disable")
+	h.do(request{method: http.MethodPost, path: "/api/v1/optimisations/checkout/inspections", token: op, body: body}).mustStatus(t, 403, "off again")
+	h.do(request{method: http.MethodPut, path: "/api/v1/optimisations/enablement", token: admin, body: map[string]any{}}).mustStatus(t, 400, "missing enabled")
+	h.do(request{method: http.MethodPut, path: "/api/v1/optimisations/enablement", token: admin, body: map[string]any{"enabled": true, "extra": 1}}).mustStatus(t, 400, "unknown field")
+}
+
+func TestOptimisationEnablementRefusesVisitorsAndAnonymous(t *testing.T) {
+	h, _, _, _ := checkoutAPIHarness(t, false, func(c *config.Config) { c.Security.PublicView = true })
+	h.do(request{method: http.MethodGet, path: "/api/v1/optimisations/enablement"}).mustStatus(t, 403, "visitor read")
+	h.do(request{method: http.MethodPut, path: "/api/v1/optimisations/enablement", body: map[string]any{"enabled": true}}).mustStatus(t, 403, "visitor write")
+}
