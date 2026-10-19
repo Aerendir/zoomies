@@ -462,6 +462,16 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 			_, err := s.GetRunner(ctx, runner.ID)
 			must(err)
 		}},
+		// With no state named it is the list a heartbeat reads; with some, it is built
+		// around them and is not hot.
+		{"ListRunnersForHost", 1, func(int) {
+			_, err := s.ListRunnersForHost(ctx, host.ID)
+			must(err)
+		}},
+		{"ListRunnersForHost naming states", 0, func(int) {
+			_, err := s.ListRunnersForHost(ctx, host.ID, RunnerIdle, RunnerBusy)
+			must(err)
+		}},
 		{"RecordUsageCapacityBatch of a hundred pools", 1, func(int) {
 			batch := make([]UsageCapacitySample, 100)
 			for i := range batch {
