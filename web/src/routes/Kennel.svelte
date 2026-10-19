@@ -269,6 +269,7 @@
 
   <div class="content">
     <LoadingBoundary
+      class="sections"
       loading={loading && !loaded}
       error={loaded ? null : error}
       onretry={() => (reload += 1)}
@@ -632,7 +633,8 @@
 </KennelShell>
 
 <style>
-  .content {
+  /* LoadingBoundary puts what it holds in a div of its own, so the gap has to be on that div. */
+  .content :global(.sections) {
     display: flex;
     flex-direction: column;
     gap: var(--z-space-4);

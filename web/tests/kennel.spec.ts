@@ -2666,6 +2666,35 @@ test.describe('the side menu and the switch', () => {
     expect(standardsBox!.y).toBeLessThanOrEqual(assistantsBox!.y);
   });
 
+  test('the switch label wraps inside the rail, and does not run out of its box', async ({
+    page,
+  }) => {
+    // Wide enough for the rail to sit beside the page, which is where the switch is a column.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await goto(page, '/kennel', 'Kennel Club');
+    const box = await rail(page).locator('.rail-switch').boundingBox();
+    const label = await rail(page)
+      .getByText('Check repository standards', { exact: true })
+      .boundingBox();
+    expect(box).not.toBeNull();
+    expect(label).not.toBeNull();
+    expect(label!.x + label!.width).toBeLessThanOrEqual(box!.x + box!.width);
+  });
+
+  test('the sections of the overview are set apart, not flush against each other', async ({
+    page,
+  }) => {
+    await patchSettings(page, on);
+    await untilRead(page);
+    await goto(page, '/kennel', 'Kennel Club');
+    const summary = await page.locator('#summary').boundingBox();
+    const counts = await page.locator('section.counts').boundingBox();
+    expect(summary).not.toBeNull();
+    expect(counts).not.toBeNull();
+    // The page's gap is one space-4, which is 16 pixels at the default text size.
+    expect(counts!.y - (summary!.y + summary!.height)).toBeGreaterThanOrEqual(16);
+  });
+
   test('the rail takes you between the pages', async ({ page }) => {
     await patchSettings(page, on);
     await untilRead(page);
