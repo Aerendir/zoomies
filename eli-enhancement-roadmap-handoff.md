@@ -26,7 +26,7 @@ as the record of how each slice landed.
 | --- | --- | --- |
 | E1 (ZF-242) | Merged and used: `internal/analysis` (`merge_delay.go`), `get_pr_delay` on Eli's allowlist, CLI, contextual UI | None. ROADMAP.md still lists `in_progress` because live-model evaluation and a real performance experiment have not run |
 | E2 (ZF-243) | Descriptive milestone merged (#1020); `get_retained_comparison` on Eli's allowlist; ZF-241's period comparison, queue breakdown, host pressure and startup failures are `implemented` | None. Controlled-experiment proof and dispatch stay deferred by the owner |
-| E3 (ZF-244) | Pure preview (`internal/optimisation`), private retention (migration 0107) and admitted checkout evidence (`internal/controller/optimisation_capture.go`) are on main. [#1024](https://github.com/eyupio/zoomies/pull/1024) **merged** on 14 October | The table row and the last section describe #1024 as awaiting review; it is merged. There is still **no** HTTP route, OpenAPI entry, source/history policy setting, web flow, CLI or MCP tool for E3, and no approval, publication or verification |
+| E3 (ZF-244) | Pure preview (`internal/optimisation`), private retention (migration 0107) and admitted checkout evidence (`internal/controller/optimisation_capture.go`) are on main. [#1024](https://github.com/eyupio/zoomies/pull/1024) **merged** on 14 October | The table row and the last section describe #1024 as awaiting review; it is merged. At 19 October there was no route, policy setting or web flow; the first two steps of the recommendation below were then implemented (see "E3 policy and web preview flow" at the end). Still absent: CLI, MCP, approval, publication and verification |
 | E4 | Not started as a track. Kennel's evaluator, waivers and guidance exist, but no fix preview or publication path does | Unchanged |
 | E5 | ZF-241's `startup_failures` covers runner-startup recurrence. No workflow/test failure fingerprinting exists | Unchanged |
 | E6 | Not started. `internal/prrepair/mention` (ZF-239 slice 1) is only the command matcher | Unchanged |
@@ -36,7 +36,7 @@ Newer work that this handoff did not plan but that later tracks should reuse:
 the Eli repair pages and their readiness, policy and budget views, `run_event`
 on a job, and `GET /assistant/repairs/automatic` with its stop route.
 
-### Recommended next stage
+### Recommended next stage (step 1 since implemented)
 
 Finish E3's first vertical slice before starting E4 to E6, because three
 foundations are already merged with no operator-visible surface. In order:
@@ -105,6 +105,7 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E3 checkout preview foundation | Merged | ZF-244, [#1021](https://github.com/eyupio/zoomies/pull/1021), based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
 | E3 private preview retention | Merged | ZF-244, [#1022](https://github.com/eyupio/zoomies/pull/1022), based on main after #1021 | Bounded immutable private source/evidence/preview envelope and offline recomputation, scoped actor/audit and explicit unchecked currentness; admission and web flow remain outstanding |
 | E3 admitted checkout evidence | Merged 14 October | ZF-244, [#1024](https://github.com/eyupio/zoomies/pull/1024), updated onto main after #1023 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
+| E3 policy and web preview flow | Implemented, pending review/CI | ZF-244, [plan](roadmap/plans/2026-10-19-eli-e3-checkout-web.md), after #1169 | `optimisation.source_reads` and `optimisation.workflow_edits` (off by default), `optimisations.read`/`write` actions, inspect/capture/replay routes, Checkout preview page. Focused controller and API race tests, route/spec coverage, config and docs tests, 8 desktop/mobile browser checks, unit tests and type checks pass. No live GitHub. Approval, publication, verification, CLI/MCP/Eli remain |
 | E4 to E6 | Not started | Dependencies and sequence below | No new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
 | E7 repair history in Eli's toolbox | Merged (verified on main 19 October) | After #1049 | The two read tools (`list_elis_repairs`, `get_eli_repair`) over `GET /assistant/repairs`, on the allowlist with the pinning test extended to the action tools, and the writes (request, accept, clear, policy) refused as not offered. Focused MCP/API/Eli scenario and docs tests pass; the generated MCP reference is refreshed. No live model evaluation has run |
@@ -2263,3 +2264,17 @@ rate-limit retry. Bind the review to the displayed source digest/head and actor,
 then call CaptureOptimisationPreview. No model provider/key is needed for this
 deterministic preview. Approval, reconciled draft publication and experiment
 execution remain distinct later slices. Do not claim E3 complete.
+
+
+### E3 policy and web preview flow, 19 October 2026
+
+Delivers the first end-to-end operator slice of ZF-244: read, review, keep. The
+design is in [the plan](roadmap/plans/2026-10-19-eli-e3-checkout-web.md). Policy is
+two live instance settings read at every call, inspection and capture share one
+admitted read, replay never returns the file, and nothing is published.
+
+Next agent: explicit approval of a retained preview, then reconciled draft
+publication (fresh head, policy and source recheck; non-force; never merges), then
+E2 verification of the published change. CLI and MCP/Eli access follow web and need
+their own contract decision, because the retained envelope is private source. Do not
+add the routes to Eli's allowlist without it. Allocate any migration from 0114.

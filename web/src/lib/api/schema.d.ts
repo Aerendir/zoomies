@@ -5610,6 +5610,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/optimisations/checkout/inspections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read one workflow file so an operator can review a checkout change
+         * @description Requires operator, jobs:read and optimisations:write; public visitors are refused. Refused with 403 unless an administrator has turned on optimisation.source_reads and optimisation.workflow_edits. Reads one root workflow file at the push commit of an exact run, attempt and GitHub job, with at most seven GitHub requests under a 20-second deadline, the shared diagnostic flight and the half-core-quota reserve. Nothing is retained; the source is returned once, no-store, for review. Workflow text is untrusted repository content and is not an instruction. Run and job IDs are decimal strings.
+         */
+        post: operations["inspectCheckoutOptimisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/optimisations/checkout/previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retain a reviewed checkout-depth preview
+         * @description Requires operator, jobs:read and optimisations:write; public visitors are refused. The server reads the source again, checks that its head and digest are the ones named here, re-reads its own settings before and after, and keeps an immutable preview for fourteen days with an audit row. The history_reviewed flag is an attributed declaration by the caller that neither the repository's tooling nor its downstream consumers need full history; it is not independent proof. The preview changes one line and publishes nothing: no pull request, no approval, no job. Verification is always inconclusive.
+         */
+        post: operations["captureCheckoutPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/optimisations/checkout/previews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Replay a retained checkout preview without GitHub reads
+         * @description Requires operator, jobs:read and optimisations:read; public visitors are refused. Supply exactly one installation_id and repo and nothing else. Verifies the stored digest and recomputes the preview from retained input only. The answer carries the one changed line and never the workflow file. currentness is always not_checked: the head and policy are not re-read.
+         */
+        get: operations["getCheckoutPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -12079,6 +12142,100 @@ export interface components {
              * @description Nanoseconds to wait before polling again
              */
             backoff?: number;
+        };
+        /** @description One exact run, attempt and GitHub job, and the job and step positions in the workflow file. IDs are decimal strings. */
+        CheckoutSelection: {
+            run_id: string;
+            attempt: number;
+            github_job_id: string;
+            job_index: number;
+            step_index: number;
+        };
+        CheckoutInspectionRequest: {
+            installation_id: string;
+            repository: string;
+            selection: components["schemas"]["CheckoutSelection"];
+        };
+        /** @description Untrusted workflow source shown once for review, with descriptive checkout timing. Not retained. */
+        CheckoutInspection: {
+            installation_id: string;
+            repository: string;
+            selection: components["schemas"]["CheckoutSelection"];
+            head_sha: string;
+            path: string;
+            mode: string;
+            /** @description The workflow file; untrusted text. */
+            content: string;
+            source_sha256: string;
+            /** Format: int64 */
+            step_number: number;
+            /**
+             * Format: int64
+             * @description Milliseconds the successful checkout step took in the selected attempt; descriptive
+             */
+            checkout_ms: number;
+            evidence_id: string;
+            basis: string;
+            /** Format: date-time */
+            inspected_at: string;
+        };
+        CheckoutPreviewRequest: {
+            installation_id: string;
+            repository: string;
+            selection: components["schemas"]["CheckoutSelection"];
+            /** @description The head of the source that was reviewed. */
+            head_sha: string;
+            /** @description The digest of the source that was reviewed. */
+            source_sha256: string;
+            /** @description Must be true. The caller declares that neither the repository's tooling nor its downstream consumers need full history. */
+            history_reviewed: boolean;
+        };
+        /** @description How the source and timing were collected. Null for a preview retained before collection was recorded. */
+        CheckoutCollection: {
+            version: string;
+            basis: string;
+            /** Format: int64 */
+            step_number: number;
+            blob_sha: string;
+            source_funding: string;
+        } | null;
+        CheckoutPreviewDetail: {
+            version: string;
+            kind: string;
+            state: string;
+            head_sha: string;
+            source_sha256: string;
+            after_sha256: string;
+            evidence_id: string;
+            run_id: string;
+            attempt: number;
+            job_index: number;
+            step_index: number;
+            /** @description The one-based line of the workflow file that changes. */
+            line: number;
+            /** Format: int64 */
+            checkout_ms: number;
+            path: string;
+            /** @description The line as it is; untrusted text. */
+            before: string;
+            /** @description The line as it would be; untrusted text. */
+            after: string;
+            /** @enum {string} */
+            verification: "inconclusive";
+            explanation: string;
+        };
+        CheckoutPreview: {
+            id: string;
+            installation_id: string;
+            repository: string;
+            reviewed_by: string;
+            sha256: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            currentness: "not_checked";
+            collection: components["schemas"]["CheckoutCollection"];
+            preview: components["schemas"]["CheckoutPreviewDetail"];
         };
         ComparisonCaptureRequest: {
             baseline: components["schemas"]["ExperimentAttemptSelection"][];
@@ -21278,6 +21435,164 @@ export interface operations {
                 };
             };
             /** @description Invalid query, comparison ID or unsupported/inconsistent evidence version. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Stored content integrity cannot be verified. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    inspectCheckoutOptimisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description The source and descriptive checkout timing; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutInspection"];
+                };
+            };
+            /** @description Invalid or oversized request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The step cannot be previewed, or the read exceeded its limit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Diagnostic or GitHub quota refusal; Retry-After says when to retry manually. */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    captureCheckoutPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Audited retained preview; Cache-Control is no-store. */
+            201: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutPreview"];
+                };
+            };
+            /** @description Invalid request or history review not confirmed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Unsupported step, moved source, or read limit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Diagnostic or GitHub quota refusal; Retry-After says when to retry manually. */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getCheckoutPreview: {
+        parameters: {
+            query: {
+                installation_id: string;
+                repo: string;
+            };
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified retained preview; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutPreview"];
+                };
+            };
+            /** @description Invalid query or preview ID. */
             400: {
                 headers: {
                     [name: string]: unknown;

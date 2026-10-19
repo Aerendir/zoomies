@@ -51,6 +51,7 @@ type Config struct {
 	UI             UI             `yaml:"ui"`
 	Backup         Backup         `yaml:"backup"`
 	Assistant      Assistant      `yaml:"assistant"`
+	Optimisation   Optimisation   `yaml:"optimisation"`
 
 	// Bootstrap is the first identity an unattended install asks for. It is
 	// read from the environment only -- see Bootstrap.
@@ -560,6 +561,19 @@ type Assistant struct {
 	// resolves to a public address, so that nothing the assistant is told
 	// can leave the machine or the LAN whatever a provider row says.
 	LocalOnly bool `yaml:"local_only"`
+}
+
+// Optimisation holds the two switches that gate reviewed workflow
+// optimisations. Both default to off: reading a repository's workflow source and
+// previewing an edit to it are separate grants, and neither is implied by
+// Eli being enabled.
+type Optimisation struct {
+	// SourceReads lets the controller read a workflow file at a run's commit so
+	// an operator can review it.
+	SourceReads bool `yaml:"source_reads"`
+	// WorkflowEdits lets the controller compute and retain a proposed change to
+	// a workflow file. It publishes nothing.
+	WorkflowEdits bool `yaml:"workflow_edits"`
 }
 
 type Security struct {

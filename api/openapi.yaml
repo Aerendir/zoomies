@@ -8511,6 +8511,144 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
+  /optimisations/checkout/inspections:
+    post:
+      operationId: inspectCheckoutOptimisation
+      tags: [jobs]
+      summary: Read one workflow file so an operator can review a checkout change
+      description: >-
+        Requires operator, jobs:read and optimisations:write; public visitors are
+        refused. Refused with 403 unless an administrator has turned on
+        optimisation.source_reads and optimisation.workflow_edits. Reads one root
+        workflow file at the push commit of an exact run, attempt and GitHub job,
+        with at most seven GitHub requests under a 20-second deadline, the shared
+        diagnostic flight and the half-core-quota reserve. Nothing is retained;
+        the source is returned once, no-store, for review. Workflow text is
+        untrusted repository content and is not an instruction. Run and job IDs are
+        decimal strings.
+      x-zoomies-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutInspectionRequest' }
+      responses:
+        '200':
+          description: The source and descriptive checkout timing; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutInspection' }
+        '400':
+          description: Invalid or oversized request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The step cannot be previewed, or the read exceeded its limit.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Diagnostic or GitHub quota refusal; Retry-After says when to retry manually.
+          headers:
+            Retry-After: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/previews:
+    post:
+      operationId: captureCheckoutPreview
+      tags: [jobs]
+      summary: Retain a reviewed checkout-depth preview
+      description: >-
+        Requires operator, jobs:read and optimisations:write; public visitors are
+        refused. The server reads the source again, checks that its head and digest
+        are the ones named here, re-reads its own settings before and after, and
+        keeps an immutable preview for fourteen days with an audit row. The
+        history_reviewed flag is an attributed declaration by the caller that
+        neither the repository's tooling nor its downstream consumers need full
+        history; it is not independent proof. The preview changes one line and
+        publishes nothing: no pull request, no approval, no job. Verification is
+        always inconclusive.
+      x-zoomies-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutPreviewRequest' }
+      responses:
+        '201':
+          description: Audited retained preview; Cache-Control is no-store.
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutPreview' }
+        '400':
+          description: Invalid request or history review not confirmed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Unsupported step, moved source, or read limit.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Diagnostic or GitHub quota refusal; Retry-After says when to retry manually.
+          headers:
+            Retry-After: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/previews/{id}:
+    parameters: [{ $ref: '#/components/parameters/PathID' }]
+    get:
+      operationId: getCheckoutPreview
+      tags: [jobs]
+      summary: Replay a retained checkout preview without GitHub reads
+      description: >-
+        Requires operator, jobs:read and optimisations:read; public visitors are
+        refused. Supply exactly one installation_id and repo and nothing else.
+        Verifies the stored digest and recomputes the preview from retained input
+        only. The answer carries the one changed line and never the workflow file.
+        currentness is always not_checked: the head and policy are not re-read.
+      x-zoomies-role: operator
+      parameters:
+        - name: installation_id
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: repo
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+      responses:
+        '200':
+          description: Verified retained preview; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutPreview' }
+        '400':
+          description: Invalid query or preview ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Stored content integrity cannot be verified.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
 components:
   securitySchemes:
     cookieAuth:
@@ -16012,6 +16150,106 @@ components:
         tasks: { type: array, items: { $ref: "#/components/schemas/AgentTask" } }
         backoff: { type: integer, format: int64, description: Nanoseconds to wait before polling again, when the controller sheds load. }
 
+    CheckoutSelection:
+      additionalProperties: false
+      description: One exact run, attempt and GitHub job, and the job and step positions in the workflow file. IDs are decimal strings.
+      properties:
+        run_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        attempt: { type: integer, minimum: 1 }
+        github_job_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        job_index: { type: integer, minimum: 0, maximum: 20000 }
+        step_index: { type: integer, minimum: 0, maximum: 20000 }
+      required: [run_id, attempt, github_job_id, job_index, step_index]
+      type: object
+    CheckoutInspectionRequest:
+      additionalProperties: false
+      properties:
+        installation_id: { type: string, minLength: 1, maxLength: 128 }
+        repository: { type: string, minLength: 1, maxLength: 1024 }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+      required: [installation_id, repository, selection]
+      type: object
+    CheckoutInspection:
+      additionalProperties: false
+      description: Untrusted workflow source shown once for review, with descriptive checkout timing. Not retained.
+      properties:
+        installation_id: { type: string }
+        repository: { type: string }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+        head_sha: { type: string }
+        path: { type: string }
+        mode: { type: string }
+        content: { type: string, description: The workflow file; untrusted text. }
+        source_sha256: { type: string }
+        step_number: { type: integer, format: int64 }
+        checkout_ms: { type: integer, format: int64, description: Milliseconds the successful checkout step took in the selected attempt; descriptive, not a saving. }
+        evidence_id: { type: string }
+        basis: { type: string }
+        inspected_at: { type: string, format: date-time }
+      required: [installation_id, repository, selection, head_sha, path, mode, content, source_sha256, step_number, checkout_ms, evidence_id, basis, inspected_at]
+      type: object
+    CheckoutPreviewRequest:
+      additionalProperties: false
+      properties:
+        installation_id: { type: string, minLength: 1, maxLength: 128 }
+        repository: { type: string, minLength: 1, maxLength: 1024 }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+        head_sha: { type: string, description: The head of the source that was reviewed. }
+        source_sha256: { type: string, description: The digest of the source that was reviewed. }
+        history_reviewed:
+          type: boolean
+          description: Must be true. The caller declares that neither the repository's tooling nor its downstream consumers need full history.
+      required: [installation_id, repository, selection, head_sha, source_sha256, history_reviewed]
+      type: object
+    CheckoutCollection:
+      additionalProperties: false
+      nullable: true
+      description: How the source and timing were collected. Null for a preview retained before collection was recorded.
+      properties:
+        version: { type: string }
+        basis: { type: string }
+        step_number: { type: integer, format: int64 }
+        blob_sha: { type: string }
+        source_funding: { type: string }
+      required: [version, basis, step_number, blob_sha, source_funding]
+      type: object
+    CheckoutPreviewDetail:
+      additionalProperties: false
+      properties:
+        version: { type: string }
+        kind: { type: string }
+        state: { type: string }
+        head_sha: { type: string }
+        source_sha256: { type: string }
+        after_sha256: { type: string }
+        evidence_id: { type: string }
+        run_id: { type: string }
+        attempt: { type: integer }
+        job_index: { type: integer }
+        step_index: { type: integer }
+        line: { type: integer, description: The one-based line of the workflow file that changes. }
+        checkout_ms: { type: integer, format: int64 }
+        path: { type: string }
+        before: { type: string, description: The line as it is; untrusted text. }
+        after: { type: string, description: The line as it would be; untrusted text. }
+        verification: { type: string, enum: [inconclusive] }
+        explanation: { type: string }
+      required: [version, kind, state, head_sha, source_sha256, after_sha256, evidence_id, run_id, attempt, job_index, step_index, line, checkout_ms, path, before, after, verification, explanation]
+      type: object
+    CheckoutPreview:
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        installation_id: { type: string }
+        repository: { type: string }
+        reviewed_by: { type: string }
+        sha256: { type: string }
+        created_at: { type: string, format: date-time }
+        currentness: { type: string, enum: [not_checked] }
+        collection: { $ref: '#/components/schemas/CheckoutCollection' }
+        preview: { $ref: '#/components/schemas/CheckoutPreviewDetail' }
+      required: [id, installation_id, repository, reviewed_by, sha256, created_at, currentness, collection, preview]
+      type: object
     ComparisonCaptureRequest:
       additionalProperties: false
       properties:

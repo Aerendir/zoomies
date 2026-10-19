@@ -548,6 +548,13 @@ if you set `keep: 0` and never expect the page to say what is there.
 | `kennel.workflow_checks` | `ZOOMIES_KENNEL_WORKFLOW_CHECKS` | at once | Check workflow best practices: Whether Kennel Club reads default-branch workflow contents for timeouts, concurrency, action pins and token permission declarations. Off by default. Needs Contents read for private repositories; changes no files or App permissions. |
 | `kennel.scope` | `ZOOMIES_KENNEL_SCOPE` | at once | Repositories to check, served checks the repositories this fleet has run a job for; installation checks every repository the GitHub App can see, up to 500. installation multiplies the requests Kennel Club makes, so it is a choice and not the default. |
 
+### `optimisation`
+
+| Key | Environment | Takes effect | What it is |
+| --- | --- | --- | --- |
+| `optimisation.source_reads` | `ZOOMIES_OPTIMISATION_SOURCE_READS` | at once | Read workflow source for optimisation previews: Let the controller read one workflow file at a run's commit, through the installation's own GitHub access, so an operator can review it before a checkout optimisation is previewed. Off, no source is read. It does not turn on workflow edits and no model sees the file. |
+| `optimisation.workflow_edits` | `ZOOMIES_OPTIMISATION_WORKFLOW_EDITS` | at once | Preview workflow edits: Let the controller compute and keep, for fourteen days, a proposed change to a workflow file, such as reading one commit instead of the full history. Nothing is published, no pull request is opened and no job is run. Needs optimisation.source_reads as well. |
+
 ### `limits`
 
 | Key | Environment | Takes effect | What it is |

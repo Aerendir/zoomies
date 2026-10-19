@@ -1867,7 +1867,7 @@ Depends on ZF-242 and ZF-243's descriptive milestone. Size M.
 [private retention/replay](roadmap/plans/2026-10-14-eli-e3-preview-retention.md),
 [admitted checkout evidence](roadmap/plans/2026-10-14-eli-e3-checkout-evidence.md).
 The preview foundation merged in #1021 and private retention in #1022.
-Admitted evidence precedes the web surface; source-bearing history needs its own authorisation boundary.
+The web surface and its policy now exist: see [the 19 October plan](roadmap/plans/2026-10-19-eli-e3-checkout-web.md). Approval, draft publication and verification are still to do.
 
 ## 9. Kept for the day somebody asks
 

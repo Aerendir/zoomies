@@ -348,6 +348,44 @@ planted in the target branch. These scenarios prove the tool/transport path and
 evidence fences; they do not measure an unscripted model's reasoning. Live model
 evaluation remains a separate recorded check.
 
+## Previewing a checkout change
+
+A workflow that fetches full history it does not use spends time on every run.
+Under **Checkout preview** (`/optimisations/checkout`) an operator can see exactly
+which line would change and keep that preview for review. It publishes nothing: no
+pull request, no approval and no job. Eli is not involved and no model reads the
+file.
+
+An administrator turns on two settings first, both off by default:
+`optimisation.source_reads` lets the controller read one workflow file, and
+`optimisation.workflow_edits` lets it compute and keep a proposed edit. They are
+separate grants and are read again at every step, so turning one off stops the next
+request at once.
+
+1. **Read the workflow.** Give the installation, the repository, a successful push
+   run's ID and attempt, the GitHub job ID, and the zero-based position of the job
+   and of its `actions/checkout` step. The file is shown once, as untrusted text,
+   with the time that checkout took in that run.
+2. **Review it.** Confirm that neither the repository's tooling nor its downstream
+   consumers need full history: tags, `git describe`, diffs against older commits
+   and other repositories that build from this one are the usual reasons. The
+   confirmation is recorded against your name. It is a declaration, not proof.
+3. **Keep the preview.** It stays for 14 days and shows the one changed line,
+   `fetch-depth: 0` to `fetch-depth: 1`.
+
+The step must use a commit-pinned `actions/checkout` with a literal
+`fetch-depth: 0`, in a root workflow with literal job and step names. Matrix,
+generated or reusable names are refused rather than guessed. If the file changed
+between your review and the keep, the preview is refused and you read it again.
+
+A preview says nothing about savings. Its verification is always `inconclusive` and
+its currentness `not_checked`: nothing re-reads the commit or your settings after it
+is kept. The time shown is one run's checkout, not a promise. Approving a change,
+opening a pull request for it and measuring the result are separate steps that are
+not built yet. Reading source and keeping previews spend GitHub requests from the
+installation's own quota, share the PR check delay allowance, and wait for a manual
+retry when it is exhausted.
+
 ## Measuring Eli
 
 A prompt change is measured before it is trusted. `internal/api/eli_eval_test.go`
