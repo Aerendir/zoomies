@@ -503,6 +503,10 @@ func TestEveryStatementMadeHotIsRunAsAHotQuery(t *testing.T) {
 			_, _, err := s.RepositoryJobCounts(ctx)
 			must(err)
 		}},
+		{"RunnersWithAJob", 1, func(int) {
+			_, err := s.RunnersWithAJob(ctx)
+			must(err)
+		}},
 	} {
 		t.Run(op.name, func(t *testing.T) {
 			// Twice to warm up: a statement first run in a transaction is prepared

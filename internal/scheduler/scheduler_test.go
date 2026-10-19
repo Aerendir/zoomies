@@ -3,6 +3,7 @@ package scheduler
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -2055,6 +2056,36 @@ func TestAFailedRunnerStillRunningAJobIsNotReaped(t *testing.T) {
 	pp = only(t, Decide(snap([]*store.Pool{p}, []*store.Runner{r}, []*store.Job{running}, hosts)))
 	if got := actionsOf(pp.Actions, ActionRemove); len(got) != 1 || got[0].RunnerID != "r1" {
 		t.Fatalf("the failed runner was not removed once its job had finished: %+v", pp.Actions)
+	}
+}
+
+// The controller names the runners a job is running on apart from the queue,
+// because everything else it hands a snapshot's jobs to reads them as waiting.
+// A runner named there has to be spared exactly as one an in-progress job in
+// Jobs points at, or the guard is only ever armed in this package's tests.
+func TestAFailedRunnerNamedAsHavingAJobIsNotReaped(t *testing.T) {
+	p := testPool("linux-x64", "linux")
+	r := testRunner("r1", p, store.RunnerFailed, 11*time.Minute)
+	hosts := []*store.Host{testHost("host_a", 8, 1)}
+	elsewhere := &store.Job{ID: "job_2", PoolID: p.ID, RunnerID: "r2", State: store.JobInProgress,
+		Repo: "acme/widgets", InstallationID: testInstallation}
+
+	s := snap([]*store.Pool{p}, []*store.Runner{r}, []*store.Job{elsewhere}, hosts)
+	s.RunnersWithAJob = map[string]bool{"r1": true}
+	pp := only(t, Decide(s))
+	if got := actionsOf(pp.Actions, ActionRemove); len(got) != 0 {
+		t.Fatalf("a failed runner named as having a job was removed: %+v", got)
+	}
+	// Decide is pure: the in-progress job in Jobs counts towards the guard
+	// without being written into the caller's set.
+	if want := map[string]bool{"r1": true}; !maps.Equal(s.RunnersWithAJob, want) {
+		t.Fatalf("RunnersWithAJob = %v after Decide, want %v", s.RunnersWithAJob, want)
+	}
+
+	s.RunnersWithAJob = nil
+	pp = only(t, Decide(s))
+	if got := actionsOf(pp.Actions, ActionRemove); len(got) != 1 || got[0].RunnerID != "r1" {
+		t.Fatalf("the failed runner was not removed once nothing named it: %+v", pp.Actions)
 	}
 }
 
