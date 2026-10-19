@@ -1304,11 +1304,12 @@ setting it to 20 across two hosts of capacity 4 buys nothing.
 
 **Adjust** on a host's card recommends how many runners the machine can hold and what
 it should keep for itself, and **Set to recommendations** puts those numbers there.
-A host can also be kept there by the controller, so a machine nobody sized stops
-being a problem: choose **Keep at recommendations** in **Adjust**, or turn on
-[`scheduler.host_auto_adjust`](configuration.md#schedulerhost_auto_adjust) for the
-whole fleet, which includes hosts a provider rents. **Never adjust** keeps a host's
-typed figures whatever the fleet says.
+By default the controller keeps every host there, so a machine nobody sized stops
+being a problem. That is the fleet setting
+[`scheduler.host_auto_adjust`](configuration.md#schedulerhost_auto_adjust), on unless
+turned off, and it includes hosts a provider rents. In **Adjust**, **Keep at
+recommendations** and **Never adjust** decide for one host: **Never adjust** keeps a
+host's typed figures whatever the fleet says.
 
 The recommendation is the smallest of three counts of runners:
 
