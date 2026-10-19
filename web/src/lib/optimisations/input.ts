@@ -4,12 +4,9 @@ export interface CheckoutSelectionText {
   runId: string;
   attempt: string;
   jobId: string;
-  jobIndex: string;
-  stepIndex: string;
 }
 
 const DECIMAL_ID = /^[1-9][0-9]{0,18}$/;
-const WHOLE = /^(0|[1-9][0-9]{0,4})$/;
 const INT64_MAX = 9223372036854775807n;
 
 /**
@@ -24,13 +21,10 @@ function githubId(text: string, what: string): string {
   return value;
 }
 
-function position(text: string, what: string): number {
-  const value = text.trim();
-  if (!WHOLE.test(value) || Number(value) > 20000)
-    throw new Error(`Enter ${what} as a whole number from 0 to 20000.`);
-  return Number(value);
-}
-
+/**
+ * A run, attempt and job only. The server finds the checkout step in the file
+ * itself, so nobody counts positions.
+ */
 export function parseCheckoutSelection(text: CheckoutSelectionText): CheckoutSelection {
   const attempt = text.attempt.trim();
   if (!/^[1-9][0-9]{0,8}$/.test(attempt))
@@ -39,8 +33,6 @@ export function parseCheckoutSelection(text: CheckoutSelectionText): CheckoutSel
     run_id: githubId(text.runId, 'the run ID'),
     attempt: Number(attempt),
     github_job_id: githubId(text.jobId, 'the GitHub job ID'),
-    job_index: position(text.jobIndex, 'the job position'),
-    step_index: position(text.stepIndex, 'the step position'),
   };
 }
 

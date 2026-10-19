@@ -118,6 +118,16 @@
    * Overview's failures panel writes the same two, through the same routes.
    */
   const canAcknowledge = $derived(session.can('operator') && Boolean(job?.id) && failed);
+  // A successful job that a push started is the only kind whose workflow can be
+  // read at the commit that ran it, so it is the only kind that offers this.
+  const canPreviewCheckout = $derived(
+    session.can('operator') &&
+      !session.visitor &&
+      job?.state === 'completed' &&
+      job?.conclusion === 'success' &&
+      job?.run_event === 'push' &&
+      Boolean(job?.installation_id),
+  );
   const acknowledged = $derived(job?.acknowledged_at != null);
   let rerunning = $state(false);
   let acking = $state(false);
@@ -473,6 +483,14 @@
             Mark as known
           </Button>
         {/if}
+      {/if}
+      {#if canPreviewCheckout && job}
+        <Button
+          variant="secondary"
+          href={`/optimisations/checkout?installation_id=${encodeURIComponent(job.installation_id ?? '')}&repo=${encodeURIComponent(job.repo ?? '')}&run_id=${job.github_run_id}&attempt=${job.run_attempt ?? 1}&job_id=${job.github_job_id}`}
+        >
+          Preview a checkout change
+        </Button>
       {/if}
       {#if canCancel}
         <Button variant="danger" icon={CircleX} onclick={() => (cancelOpen = true)}>

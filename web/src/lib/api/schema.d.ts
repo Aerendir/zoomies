@@ -12180,13 +12180,13 @@ export interface components {
         OptimisationEnablementRequest: {
             enabled: boolean;
         };
-        /** @description One exact run, attempt and GitHub job, and the job and step positions in the workflow file. IDs are decimal strings. */
+        /** @description One exact run, attempt and GitHub job. IDs are decimal strings. Leave both positions out and the server finds the job's one previewable checkout step in the workflow file; name both to choose a step yourself. Naming only one is refused. Responses always carry the positions that were used. */
         CheckoutSelection: {
             run_id: string;
             attempt: number;
             github_job_id: string;
-            job_index: number;
-            step_index: number;
+            job_index?: number;
+            step_index?: number;
         };
         CheckoutInspectionRequest: {
             installation_id: string;
@@ -12206,6 +12206,10 @@ export interface components {
             source_sha256: string;
             /** Format: int64 */
             step_number: number;
+            /** @description The literal name the workflow gives the job. */
+            job_name: string;
+            /** @description The literal name of the checkout step that was found. */
+            step_name: string;
             /**
              * Format: int64
              * @description Milliseconds the successful checkout step took in the selected attempt; descriptive

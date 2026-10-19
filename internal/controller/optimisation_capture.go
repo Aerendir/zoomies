@@ -30,7 +30,7 @@ func (c *Controller) CaptureOptimisationPreview(ctx context.Context, actor *stor
 	if err != nil {
 		return nil, err
 	}
-	collection := &OptimisationCheckoutProvenance{Version: evidence.Version, Basis: evidence.Basis, Selection: selection, StepNumber: evidence.StepNumber, BlobSHA: evidence.BlobSHA, JobNameSHA256: evidence.JobNameSHA256, StepNameSHA256: evidence.StepNameSHA256, SourceFunding: "installation_github_read"}
+	collection := &OptimisationCheckoutProvenance{Version: evidence.Version, Basis: evidence.Basis, Selection: evidence.Selection, StepNumber: evidence.StepNumber, BlobSHA: evidence.BlobSHA, JobNameSHA256: evidence.JobNameSHA256, StepNameSHA256: evidence.StepNameSHA256, SourceFunding: "installation_github_read"}
 	return c.retainOptimisationPreview(ctx, actor, installation, repo, evidence.Source, evidence.Timing, review, policy, collection)
 }
 
@@ -91,7 +91,13 @@ func (c *Controller) readCheckoutEvidence(ctx context.Context, installation, rep
 		c.holdIfRateLimited(installation, err, c.Now(), "reading checkout preview evidence")
 		return nil, none, err
 	}
-	if !github.ValidCheckoutEvidence(evidence, repo, selection) {
+	// A Locate read returns the positions it found; everything else the caller
+	// named must come back exactly as named.
+	if evidence == nil {
+		return nil, none, ErrOptimisationPreview
+	}
+	resolved := evidence.Selection
+	if resolved.RunID != selection.RunID || resolved.Attempt != selection.Attempt || resolved.GitHubJobID != selection.GitHubJobID || resolved.Locate || !selection.Locate && (resolved.JobIndex != selection.JobIndex || resolved.StepIndex != selection.StepIndex) || !github.ValidCheckoutEvidence(evidence, repo, resolved) {
 		return nil, none, ErrOptimisationPreview
 	}
 	policy, err = check(ctx)

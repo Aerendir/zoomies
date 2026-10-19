@@ -24,8 +24,8 @@ type CheckoutSelectionBody struct {
 	RunID       string `json:"run_id"`
 	Attempt     int    `json:"attempt"`
 	GitHubJobID string `json:"github_job_id"`
-	JobIndex    int    `json:"job_index"`
-	StepIndex   int    `json:"step_index"`
+	JobIndex    *int   `json:"job_index,omitempty"`
+	StepIndex   *int   `json:"step_index,omitempty"`
 }
 
 type CheckoutInspectionRequest struct {
@@ -57,6 +57,8 @@ type CheckoutInspectionView struct {
 	Content        string                `json:"content"`
 	SourceSHA256   string                `json:"source_sha256"`
 	StepNumber     int64                 `json:"step_number"`
+	JobName        string                `json:"job_name"`
+	StepName       string                `json:"step_name"`
 	CheckoutMS     int64                 `json:"checkout_ms"`
 	EvidenceID     string                `json:"evidence_id"`
 	Basis          string                `json:"basis"`
@@ -107,15 +109,23 @@ type CheckoutPreviewView struct {
 	Preview        CheckoutPreviewDetail   `json:"preview"`
 }
 
+// parse reads a selection. Both positions omitted means "find the checkout step
+// in this job for me"; naming one without the other is a mistake, not a guess.
 func (b CheckoutSelectionBody) parse() (github.CheckoutSelection, bool) {
 	run, err1 := strconv.ParseInt(b.RunID, 10, 64)
 	job, err2 := strconv.ParseInt(b.GitHubJobID, 10, 64)
-	sel := github.CheckoutSelection{RunID: run, Attempt: b.Attempt, GitHubJobID: job, JobIndex: b.JobIndex, StepIndex: b.StepIndex}
+	if (b.JobIndex == nil) != (b.StepIndex == nil) {
+		return github.CheckoutSelection{}, false
+	}
+	sel := github.CheckoutSelection{RunID: run, Attempt: b.Attempt, GitHubJobID: job, Locate: b.JobIndex == nil}
+	if b.JobIndex != nil {
+		sel.JobIndex, sel.StepIndex = *b.JobIndex, *b.StepIndex
+	}
 	return sel, err1 == nil && err2 == nil && strconv.FormatInt(run, 10) == b.RunID && strconv.FormatInt(job, 10) == b.GitHubJobID && github.ValidCheckoutSelection(sel)
 }
 
 func selectionBody(s github.CheckoutSelection) CheckoutSelectionBody {
-	return CheckoutSelectionBody{RunID: strconv.FormatInt(s.RunID, 10), Attempt: s.Attempt, GitHubJobID: strconv.FormatInt(s.GitHubJobID, 10), JobIndex: s.JobIndex, StepIndex: s.StepIndex}
+	return CheckoutSelectionBody{RunID: strconv.FormatInt(s.RunID, 10), Attempt: s.Attempt, GitHubJobID: strconv.FormatInt(s.GitHubJobID, 10), JobIndex: &s.JobIndex, StepIndex: &s.StepIndex}
 }
 
 func checkoutPreviewView(p *controller.RetainedOptimisationPreview) CheckoutPreviewView {
@@ -179,7 +189,7 @@ func (s *Server) handleInspectCheckout(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, CheckoutInspectionView{
 		InstallationID: in.InstallationID, Repository: out.Repository, Selection: selectionBody(out.Selection), HeadSHA: out.HeadSHA,
-		Path: out.Path, Mode: out.Mode, Content: out.Content, SourceSHA256: out.SourceSHA256, StepNumber: out.StepNumber,
+		Path: out.Path, Mode: out.Mode, Content: out.Content, SourceSHA256: out.SourceSHA256, StepNumber: out.StepNumber, JobName: out.JobName, StepName: out.StepName,
 		CheckoutMS: out.CheckoutMS, EvidenceID: out.EvidenceID, Basis: out.Basis, InspectedAt: out.InspectedAt,
 	})
 }
@@ -247,6 +257,10 @@ func (s *Server) optimisationError(w http.ResponseWriter, r *http.Request, err e
 		forbidden(w, "The installation cannot read this repository's contents or Actions metadata; check the App's Contents and Actions read permissions.")
 	case errors.Is(err, store.ErrNotFound):
 		notFound(w, "The preview or installation is unavailable; a preview is kept for fourteen days and the oldest are evicted first.")
+	case errors.Is(err, github.ErrCheckoutNotFound):
+		conflict(w, "That job has no checkout step that can be previewed. It needs a commit-pinned actions/checkout with a literal fetch-depth: 0, in a job with a literal name, and the same line must not appear twice in the file.")
+	case errors.Is(err, github.ErrCheckoutAmbiguous):
+		conflict(w, "That job has more than one checkout step that could be previewed, and Zoomies will not guess which. Choose a job with a single full-history checkout.")
 	case errors.Is(err, controller.ErrOptimisationPreview):
 		conflict(w, "This step cannot be previewed. It needs a successful run on a push commit, a root workflow file with literal job and step names, a commit-pinned actions/checkout with fetch-depth: 0, and a source that has not changed since you reviewed it.")
 	case errors.Is(err, context.DeadlineExceeded):

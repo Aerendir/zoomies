@@ -47,6 +47,20 @@ point of need, never silently:
   handoff keeps each mode's grant separate.
 * Eli has no mutation tools and gains none: it can point at the page, not press it.
 
+## Nobody calls an endpoint
+
+The owner's rule: customers and users use the web UI, never URLs. So every route in
+this slice has a screen that drives it, and the screens ask for as little as possible.
+
+* **No positions.** A selection is a run, an attempt and a job. A `Locate` read finds
+  the job's one previewable checkout step from the source it already reads, within the
+  same seven requests, and returns the positions it found. Two candidates or none is an
+  explained refusal, never a guess. Capture is sent the positions the reviewer saw.
+* **A picker, not a form.** The page lists a repository's recent successful push jobs
+  from the existing jobs list; the job drawer has a **Preview a checkout change**
+  button on exactly those jobs. Typing IDs survives only as a collapsed fallback.
+* **Names, not numbers.** The review step says which step in which job was found.
+
 ## Not in this slice
 
 Approval, draft publication, E2 verification of a published change, CLI, MCP and

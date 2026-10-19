@@ -16223,14 +16223,18 @@ components:
       type: object
     CheckoutSelection:
       additionalProperties: false
-      description: One exact run, attempt and GitHub job, and the job and step positions in the workflow file. IDs are decimal strings.
+      description: >-
+        One exact run, attempt and GitHub job. IDs are decimal strings. Leave both
+        positions out and the server finds the job's one previewable checkout step
+        in the workflow file; name both to choose a step yourself. Naming only one
+        is refused. Responses always carry the positions that were used.
       properties:
         run_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
         attempt: { type: integer, minimum: 1 }
         github_job_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
         job_index: { type: integer, minimum: 0, maximum: 20000 }
         step_index: { type: integer, minimum: 0, maximum: 20000 }
-      required: [run_id, attempt, github_job_id, job_index, step_index]
+      required: [run_id, attempt, github_job_id]
       type: object
     CheckoutInspectionRequest:
       additionalProperties: false
@@ -16253,11 +16257,13 @@ components:
         content: { type: string, description: The workflow file; untrusted text. }
         source_sha256: { type: string }
         step_number: { type: integer, format: int64 }
+        job_name: { type: string, description: The literal name the workflow gives the job. }
+        step_name: { type: string, description: The literal name of the checkout step that was found. }
         checkout_ms: { type: integer, format: int64, description: Milliseconds the successful checkout step took in the selected attempt; descriptive, not a saving. }
         evidence_id: { type: string }
         basis: { type: string }
         inspected_at: { type: string, format: date-time }
-      required: [installation_id, repository, selection, head_sha, path, mode, content, source_sha256, step_number, checkout_ms, evidence_id, basis, inspected_at]
+      required: [installation_id, repository, selection, head_sha, path, mode, content, source_sha256, step_number, job_name, step_name, checkout_ms, evidence_id, basis, inspected_at]
       type: object
     CheckoutPreviewRequest:
       additionalProperties: false

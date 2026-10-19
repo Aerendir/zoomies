@@ -370,10 +370,14 @@ grants that the button sets together, and they are read again at every step, so
 turning one off stops the next request at once. If the environment sets one, the page
 says so rather than pretending the press worked.
 
-1. **Read the workflow.** Give the installation, the repository, a successful push
-   run's ID and attempt, the GitHub job ID, and the zero-based position of the job
-   and of its `actions/checkout` step. The file is shown once, as untrusted text,
-   with the time that checkout took in that run.
+1. **Choose a run.** Open **Preview a checkout change** on a successful job that a
+   push started (in the job's drawer), or pick the repository on the Checkout preview
+   page and choose from its recent successful runs. Nobody types GitHub IDs or counts
+   positions in a file: Zoomies reads the workflow at that push's commit and finds the
+   job's one full-history checkout itself. If the job has none, or two, it says so and
+   does not guess. The file is shown once, as untrusted text, with the time that
+   checkout took in that run. Reading source spends the installation's own GitHub
+   requests, so it only happens when you press **Review** or **Read this workflow**.
 2. **Review it.** Confirm that neither the repository's tooling nor its downstream
    consumers need full history: tags, `git describe`, diffs against older commits
    and other repositories that build from this one are the usual reasons. The

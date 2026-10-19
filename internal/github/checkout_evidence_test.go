@@ -154,9 +154,25 @@ func TestCheckoutEvidenceRefusesAmbiguousUnsupportedForeignAndMovingFacts(t *tes
 	for _, mode := range []string{"redirect", "foreign_repo", "non_push", "mutable_path", "missing_run_time", "moved_run", "foreign_attempt", "foreign_head", "wrong_job_name", "step_failed", "missing_step_time", "negative_time", "outside_job", "moved_step", "duplicate_name", "duplicate_number", "corrupt_source", "large_source", "matrix", "unnamed", "foreign_commit", "truncated_tree", "unknown_tree", "symlink", "foreign_blob", "foreign_tree"} {
 		t.Run(mode, func(t *testing.T) {
 			c, calls := checkoutReaderFixture(t, mode)
-			if e, err := c.ReadCheckoutEvidence(context.Background(), "acme/repo", CheckoutSelection{10, 2, 100, 0, 0}); err == nil || e != nil || *calls > CheckoutEvidenceMaximumRequests {
+			if e, err := c.ReadCheckoutEvidence(context.Background(), "acme/repo", CheckoutSelection{RunID: 10, Attempt: 2, GitHubJobID: 100}); err == nil || e != nil || *calls > CheckoutEvidenceMaximumRequests {
 				t.Fatal("unsupported source/timing accepted", err, fmt.Sprint(*calls))
 			}
 		})
+	}
+}
+
+func TestCheckoutEvidenceLocatesTheStepWithinTheSameRequestBudget(t *testing.T) {
+	c, calls := checkoutReaderFixture(t, "valid")
+	located := CheckoutSelection{RunID: 10, Attempt: 2, GitHubJobID: 100, Locate: true}
+	e, err := c.ReadCheckoutEvidence(context.Background(), "acme/repo", located)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := CheckoutSelection{RunID: 10, Attempt: 2, GitHubJobID: 100}
+	if *calls != CheckoutEvidenceMaximumRequests || e.Selection != want || e.Selection.Locate || !ValidCheckoutEvidence(e, "acme/repo", want) || e.StepNumber != 42 {
+		t.Fatalf("a located read must cost the same and name the positions it found: %+v calls=%d", e.Selection, *calls)
+	}
+	if ValidCheckoutSelection(CheckoutSelection{RunID: 10, Attempt: 2, GitHubJobID: 100, StepIndex: 1, Locate: true}) {
+		t.Fatal("a located selection must not also name a position")
 	}
 }

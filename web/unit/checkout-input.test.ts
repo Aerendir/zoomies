@@ -2,13 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCheckoutSelection, checkoutSeconds } from '../src/lib/optimisations/input.ts';
 
-const ok = { runId: '9007199254740993', attempt: '2', jobId: '100', jobIndex: '0', stepIndex: '3' };
+const ok = { runId: '9007199254740993', attempt: '2', jobId: '100' };
 
 test('GitHub identities stay exact strings and are never rounded through a number', () => {
   const s = parseCheckoutSelection(ok);
   assert.equal(s.run_id, '9007199254740993');
   assert.equal(typeof s.run_id, 'string');
-  assert.deepEqual([s.attempt, s.job_index, s.step_index], [2, 0, 3]);
+  assert.equal(s.attempt, 2);
+  assert.equal(
+    'job_index' in s,
+    false,
+    'the server finds the step; the page never sends positions',
+  );
 });
 
 test('a selection the server would refuse is refused before any request', () => {
@@ -21,9 +26,6 @@ test('a selection the server would refuse is refused before any request', () => 
     { jobId: '-1' },
     { attempt: '0' },
     { attempt: 'x' },
-    { jobIndex: '-1' },
-    { jobIndex: '20001' },
-    { stepIndex: '1e2' },
   ])
     assert.throws(() => parseCheckoutSelection({ ...ok, ...bad }), Error, JSON.stringify(bad));
 });

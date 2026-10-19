@@ -10,6 +10,7 @@
     CheckoutInspection,
     CheckoutPreview,
     CheckoutSelection,
+    Job,
     OptimisationEnablement,
   } from '$lib/api/types';
   import { parseCheckoutSelection, checkoutSeconds } from '$lib/optimisations/input';
@@ -22,19 +23,28 @@
   import Checkbox from '$lib/components/Checkbox.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import CheckoutPreviewCard from '$lib/optimisations/CheckoutPreviewCard.svelte';
+  import CheckoutRunPicker from '$lib/optimisations/CheckoutRunPicker.svelte';
   import OptimisationGate from '$lib/optimisations/OptimisationGate.svelte';
 
-  let installation = $state(''),
-    repo = $state(''),
-    previewId = $state('');
-  let runId = $state(''),
+  // What was chosen: always an installation, a repository and one exact job.
+  let chosen = $state<{
+    installation: string;
+    repo: string;
+    selection: CheckoutSelection;
+    label: string;
+  } | null>(null);
+  let repo = $state('');
+  let manualInstallation = $state(''),
+    manualRepo = $state(''),
+    runId = $state(''),
     attempt = $state('1'),
-    jobId = $state(''),
-    jobIndex = $state('0'),
-    stepIndex = $state('0');
+    jobId = $state('');
+  let previewId = $state(''),
+    openInstallation = $state(''),
+    openRepo = $state('');
   let enablement = $state<OptimisationEnablement | undefined>();
   let gateRefresh = $state(0);
-  // Unknown is not off: until the state is read the form stays usable and the
+  // Unknown is not off: until the state is read the page stays usable and the
   // server's own refusal, which names the setting, is the backstop.
   const previewsOff = $derived(enablement !== undefined && !enablement.enabled);
   let inspection = $state<CheckoutInspection | null>(null);
@@ -55,23 +65,6 @@
     if (error) alertElement?.focus();
   });
 
-  function scope() {
-    if (
-      !/^ins_[a-zA-Z0-9_-]{1,124}$/.test(installation) ||
-      !/^[^\s/\\?#]+\/[^\s/\\?#]+$/.test(repo) ||
-      repo.length > 1024
-    )
-      throw new Error('Supply an installation ID starting ins_ and repository OWNER/REPO.');
-  }
-  function selection(): CheckoutSelection {
-    return parseCheckoutSelection({ runId, attempt, jobId, jobIndex, stepIndex });
-  }
-  // What was reviewed belongs to the exact selection it was read for. Editing
-  // any field drops the review rather than letting it ride onto other source.
-  function forgetReview() {
-    inspection = null;
-    reviewed = false;
-  }
   function failed(e: unknown) {
     error =
       e instanceof ApiError && e.isNotFound
@@ -100,16 +93,23 @@
     error = '';
     return current;
   }
-  async function inspect(event: SubmitEvent) {
-    event.preventDefault();
+  const validRepo = (value: string) =>
+    /^[^\s/\\?#]+\/[^\s/\\?#]+$/.test(value) && value.length <= 1024;
+
+  async function inspect(target: NonNullable<typeof chosen>) {
     if (busy || retryBlocked || !canCapture) return;
     const current = begin();
-    forgetReview();
+    chosen = target;
+    inspection = null;
+    reviewed = false;
     preview = null;
     try {
-      scope();
       const result = await inspectCheckout(
-        { installation_id: installation, repository: repo, selection: selection() },
+        {
+          installation_id: target.installation,
+          repository: target.repo,
+          selection: target.selection,
+        },
         controller?.signal,
       );
       if (current !== operation) return;
@@ -121,16 +121,45 @@
       if (current === operation) busy = false;
     }
   }
+  function pick(job: Job) {
+    void inspect({
+      installation: job.installation_id ?? '',
+      repo: job.repo ?? '',
+      selection: {
+        run_id: String(job.github_run_id),
+        attempt: job.run_attempt ?? 1,
+        github_job_id: String(job.github_job_id),
+      },
+      label: `${job.workflow || 'Workflow'}, job ${job.job_name}`,
+    });
+  }
+  function manual(event: SubmitEvent) {
+    event.preventDefault();
+    try {
+      if (!/^ins_[a-zA-Z0-9_-]{1,124}$/.test(manualInstallation) || !validRepo(manualRepo))
+        throw new Error('Supply an installation ID starting ins_ and repository OWNER/REPO.');
+      const selection = parseCheckoutSelection({ runId, attempt, jobId });
+      void inspect({
+        installation: manualInstallation,
+        repo: manualRepo,
+        selection,
+        label: `Run ${selection.run_id}, job ${selection.github_job_id}`,
+      });
+    } catch (e) {
+      failed(e);
+    }
+  }
   async function retain() {
-    if (busy || retryBlocked || !canCapture || !inspection || !reviewed) return;
+    if (busy || retryBlocked || !canCapture || !inspection || !reviewed || !chosen) return;
     const current = begin();
     try {
-      scope();
       const result = await retainCheckoutPreview(
         {
-          installation_id: installation,
-          repository: repo,
-          selection: selection(),
+          installation_id: chosen.installation,
+          repository: chosen.repo,
+          // The positions the server found and the reviewer was shown, so the
+          // preview is of exactly that step.
+          selection: inspection.selection,
           head_sha: inspection.head_sha,
           source_sha256: inspection.source_sha256,
           history_reviewed: true,
@@ -140,44 +169,71 @@
       if (current !== operation) return;
       preview = result;
       previewId = result.id;
-      loadedKey = `${result.id}|${installation}|${repo}`;
-      forgetReview();
-      router.setQuery({ id: result.id, installation_id: installation, repo });
+      loadedKey = `${result.id}|${chosen.installation}|${chosen.repo}`;
+      router.setQuery({ id: result.id, installation_id: chosen.installation, repo: chosen.repo });
+      inspection = null;
+      reviewed = false;
     } catch (e) {
       if (current === operation) failed(e);
     } finally {
       if (current === operation) busy = false;
     }
   }
-  async function read(readId = previewId, inst = installation, repository = repo) {
+  async function read(readId = previewId, inst = openInstallation, repository = openRepo) {
     const current = begin();
     preview = null;
+    inspection = null;
     try {
-      installation = inst;
-      repo = repository;
+      openInstallation = inst;
+      openRepo = repository;
       previewId = readId;
-      scope();
-      if (!/^opv_[a-zA-Z0-9_-]{1,124}$/.test(previewId))
+      if (!/^ins_[a-zA-Z0-9_-]{1,124}$/.test(inst) || !validRepo(repository))
+        throw new Error('Supply an installation ID starting ins_ and repository OWNER/REPO.');
+      if (!/^opv_[a-zA-Z0-9_-]{1,124}$/.test(readId))
         throw new Error('Supply a preview ID starting opv_.');
-      const result = await getCheckoutPreview(previewId, installation, repo, controller?.signal);
+      const result = await getCheckoutPreview(readId, inst, repository, controller?.signal);
       if (current !== operation) return;
       preview = result;
-      loadedKey = `${previewId}|${installation}|${repo}`;
-      router.setQuery({ id: previewId, installation_id: installation, repo });
+      loadedKey = `${readId}|${inst}|${repository}`;
+      router.setQuery({ id: readId, installation_id: inst, repo: repository });
     } catch (e) {
       if (current === operation) failed(e);
     } finally {
       if (current === operation) busy = false;
     }
   }
+  // A link from a job, or to a kept preview. A job link prefills the run and
+  // waits for a press: reading source spends GitHub requests, so nothing is
+  // read just because a page opened.
   $effect(() => {
     const readId = router.param('id'),
       inst = router.param('installation_id'),
-      repository = router.param('repo');
-    if (readId && inst && repository && !session.visitor)
-      untrack(() => {
+      repository = router.param('repo'),
+      run = router.param('run_id'),
+      job = router.param('job_id'),
+      tries = router.param('attempt');
+    if (session.visitor) return;
+    untrack(() => {
+      if (readId && inst && repository) {
         if (`${readId}|${inst}|${repository}` !== loadedKey) void read(readId, inst, repository);
-      });
+      } else if (run && job && inst && repository && !chosen) {
+        try {
+          const selection = parseCheckoutSelection({
+            runId: run,
+            attempt: tries || '1',
+            jobId: job,
+          });
+          chosen = {
+            installation: inst,
+            repo: repository,
+            selection,
+            label: `Run ${selection.run_id}, job ${selection.github_job_id}`,
+          };
+        } catch (e) {
+          failed(e);
+        }
+      }
+    });
   });
   onDestroy(() => {
     operation++;
@@ -188,7 +244,7 @@
 
 <PageHeader
   title="Checkout preview"
-  subtitle="Review one workflow's full-history checkout. A preview changes nothing on GitHub."
+  subtitle="See whether a workflow fetches history it does not need. A preview changes nothing on GitHub."
   ><Button href="/comparisons" variant="secondary">Compare runs</Button></PageHeader
 >
 {#if session.visitor}
@@ -198,127 +254,98 @@
   />
 {:else}
   <div class="page">
-    <section class="card" aria-labelledby="open-title">
-      <h2 id="open-title">Open a retained preview</h2>
-      <form
-        onsubmit={(e) => {
-          e.preventDefault();
-          if (!busy && !retryBlocked) void read();
-        }}
-      >
-        <div class="fields">
-          <Field label="Installation ID" required
-            >{#snippet children(f)}<Input
-                {...f}
-                bind:value={installation}
-                disabled={busy}
-                required
-                placeholder="ins_…"
-              />{/snippet}</Field
-          >
-          <Field label="Repository" required
-            >{#snippet children(f)}<Input
-                {...f}
-                bind:value={repo}
-                disabled={busy}
-                required
-                placeholder="OWNER/REPO"
-              />{/snippet}</Field
-          >
-          <Field label="Preview ID"
-            >{#snippet children(f)}<Input
-                {...f}
-                bind:value={previewId}
-                disabled={busy}
-                placeholder="opv_…"
-              />{/snippet}</Field
-          >
-        </div>
-        <Button type="submit" variant="secondary" disabled={busy || retryBlocked}
-          >Open preview</Button
-        >
-      </form>
-    </section>
-
     {#if canCapture}
       <OptimisationGate bind:enablement refreshKey={gateRefresh} />
-      <section class="card" aria-labelledby="inspect-title">
-        <h2 id="inspect-title">1. Read the workflow</h2>
+      <section class="card" aria-labelledby="choose-title">
+        <h2 id="choose-title">1. Choose a run</h2>
         <p>
-          Zoomies reads the workflow file at the commit of a successful push run, using the
-          installation's own GitHub access. Nothing is saved at this step, no model sees the file,
-          and administrators must have turned on <code>optimisation.source_reads</code> and
-          <code>optimisation.workflow_edits</code> in Settings.
+          Pick a recent successful run that a push started. Zoomies reads the workflow file at that
+          push's commit, finds the full-history checkout in the job you choose, and shows it to you
+          before anything is kept. Nothing is saved at this step and no model sees the file.
         </p>
-        <form onsubmit={inspect}>
-          <div class="fields">
-            <Field label="Run ID" required hint="The GitHub run ID, exactly as GitHub shows it."
-              >{#snippet children(f)}<Input
-                  {...f}
-                  bind:value={runId}
-                  oninput={forgetReview}
-                  disabled={busy}
-                  required
-                  inputmode="numeric"
-                  mono
-                />{/snippet}</Field
+        {#if chosen && !inspection && !busy}
+          <p>
+            Ready to read <strong>{chosen.label}</strong> in {chosen.repo}.
+            <Button
+              variant="primary"
+              disabled={previewsOff || retryBlocked}
+              reason={previewsOff ? 'Turn on workflow previews above first.' : undefined}
+              onclick={() => chosen && void inspect(chosen)}>Read this workflow</Button
             >
-            <Field label="Run attempt" required
-              >{#snippet children(f)}<Input
-                  {...f}
-                  bind:value={attempt}
-                  oninput={forgetReview}
-                  disabled={busy}
-                  required
-                  inputmode="numeric"
-                />{/snippet}</Field
+          </p>
+        {/if}
+        <CheckoutRunPicker
+          bind:repo
+          disabled={busy || retryBlocked}
+          actionsDisabled={previewsOff}
+          onpick={pick}
+        />
+        <details class="more">
+          <summary>Enter a run by its IDs instead</summary>
+          <form onsubmit={manual}>
+            <div class="fields">
+              <Field label="Installation ID" required
+                >{#snippet children(f)}<Input
+                    {...f}
+                    bind:value={manualInstallation}
+                    disabled={busy}
+                    required
+                    placeholder="ins_..."
+                  />{/snippet}</Field
+              >
+              <Field label="Repository" required
+                >{#snippet children(f)}<Input
+                    {...f}
+                    bind:value={manualRepo}
+                    disabled={busy}
+                    required
+                    placeholder="OWNER/REPO"
+                  />{/snippet}</Field
+              >
+              <Field label="Run ID" required hint="The GitHub run ID, exactly as GitHub shows it."
+                >{#snippet children(f)}<Input
+                    {...f}
+                    bind:value={runId}
+                    disabled={busy}
+                    required
+                    inputmode="numeric"
+                    mono
+                  />{/snippet}</Field
+              >
+              <Field label="Run attempt" required
+                >{#snippet children(f)}<Input
+                    {...f}
+                    bind:value={attempt}
+                    disabled={busy}
+                    required
+                    inputmode="numeric"
+                  />{/snippet}</Field
+              >
+              <Field label="GitHub job ID" required
+                >{#snippet children(f)}<Input
+                    {...f}
+                    bind:value={jobId}
+                    disabled={busy}
+                    required
+                    inputmode="numeric"
+                    mono
+                  />{/snippet}</Field
+              >
+            </div>
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={busy || retryBlocked || previewsOff}
+              reason={previewsOff ? 'Turn on workflow previews above first.' : undefined}
+              >Read workflow source</Button
             >
-            <Field label="GitHub job ID" required
-              >{#snippet children(f)}<Input
-                  {...f}
-                  bind:value={jobId}
-                  oninput={forgetReview}
-                  disabled={busy}
-                  required
-                  inputmode="numeric"
-                  mono
-                />{/snippet}</Field
-            >
-            <Field label="Job position" required hint="Zero-based position of the job in the file."
-              >{#snippet children(f)}<Input
-                  {...f}
-                  bind:value={jobIndex}
-                  oninput={forgetReview}
-                  disabled={busy}
-                  required
-                  inputmode="numeric"
-                />{/snippet}</Field
-            >
-            <Field
-              label="Step position"
-              required
-              hint="Zero-based position of the checkout step in that job."
-              >{#snippet children(f)}<Input
-                  {...f}
-                  bind:value={stepIndex}
-                  oninput={forgetReview}
-                  disabled={busy}
-                  required
-                  inputmode="numeric"
-                />{/snippet}</Field
-            >
-          </div>
-          <Button
-            type="submit"
-            loading={busy && !inspection}
-            disabled={busy || retryBlocked || previewsOff}
-            reason={previewsOff ? 'Turn on workflow previews above first.' : undefined}
-            >Read workflow source</Button
-          >
-        </form>
+          </form>
+        </details>
       </section>
     {:else}
-      <p>Reading a retained preview and creating one both need an operator.</p>
+      <p>
+        Creating a preview needs an operator. Anyone who can read jobs can open one that was kept.
+      </p>
     {/if}
 
     {#if busy}<p role="status">Working…</p>{/if}
@@ -331,6 +358,10 @@
     {#if inspection}
       <section class="card" aria-labelledby="review-title">
         <h2 id="review-title" tabindex="-1" bind:this={sourceHeading}>2. Review the source</h2>
+        <p>
+          Found the checkout step <strong>{inspection.step_name}</strong> in job
+          <strong>{inspection.job_name}</strong>. It fetches the full history of the repository.
+        </p>
         <dl class="facts">
           <div>
             <dt>File</dt>
@@ -345,9 +376,9 @@
             <dd class="mono">{inspection.source_sha256}</dd>
           </div>
           <div>
-            <dt>Checkout step took</dt>
+            <dt>This checkout took</dt>
             <dd>
-              {checkoutSeconds(inspection.checkout_ms)} in this run (descriptive, not a saving)
+              {checkoutSeconds(inspection.checkout_ms)} in this run (a measurement, not a saving)
             </dd>
           </div>
         </dl>
@@ -376,6 +407,49 @@
     {/if}
 
     {#if preview}<CheckoutPreviewCard {preview} />{/if}
+
+    <details class="more card">
+      <summary>Open a kept preview</summary>
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          if (!busy && !retryBlocked) void read();
+        }}
+      >
+        <div class="fields">
+          <Field label="Installation ID" required
+            >{#snippet children(f)}<Input
+                {...f}
+                bind:value={openInstallation}
+                disabled={busy}
+                required
+                placeholder="ins_..."
+              />{/snippet}</Field
+          >
+          <Field label="Repository" required
+            >{#snippet children(f)}<Input
+                {...f}
+                bind:value={openRepo}
+                disabled={busy}
+                required
+                placeholder="OWNER/REPO"
+              />{/snippet}</Field
+          >
+          <Field label="Preview ID" required
+            >{#snippet children(f)}<Input
+                {...f}
+                bind:value={previewId}
+                disabled={busy}
+                required
+                placeholder="opv_..."
+              />{/snippet}</Field
+          >
+        </div>
+        <Button type="submit" variant="secondary" disabled={busy || retryBlocked}
+          >Open preview</Button
+        >
+      </form>
+    </details>
   </div>
 {/if}
 
@@ -420,6 +494,13 @@
   dd {
     overflow-wrap: anywhere;
     min-width: 0;
+  }
+  .more {
+    min-width: 0;
+  }
+  summary {
+    cursor: pointer;
+    font-weight: var(--z-weight-semibold);
   }
   .mono {
     font-family: var(--z-font-mono);

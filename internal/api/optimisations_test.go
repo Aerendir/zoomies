@@ -268,3 +268,21 @@ func TestOptimisationEnablementRefusesVisitorsAndAnonymous(t *testing.T) {
 	h.do(request{method: http.MethodGet, path: "/api/v1/optimisations/enablement"}).mustStatus(t, 403, "visitor read")
 	h.do(request{method: http.MethodPut, path: "/api/v1/optimisations/enablement", body: map[string]any{"enabled": true}}).mustStatus(t, 403, "visitor write")
 }
+
+func TestCheckoutOptimisationFindsTheStepWhenNoPositionsAreGiven(t *testing.T) {
+	h, _, _, body := checkoutAPIHarness(t, true)
+	token := h.token("operator", store.RoleOperator, "jobs:read", "optimisations:write")
+	located := map[string]any{"installation_id": body["installation_id"], "repository": body["repository"], "selection": map[string]any{"run_id": "10", "attempt": 2, "github_job_id": "100"}}
+	resp := h.do(request{method: http.MethodPost, path: "/api/v1/optimisations/checkout/inspections", token: token, body: located})
+	resp.mustStatus(t, 200, "located")
+	var got CheckoutInspectionView
+	if err := json.Unmarshal(resp.body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.JobName != "Build" || got.StepName != "Checkout" || got.Selection.JobIndex == nil || got.Selection.StepIndex == nil {
+		t.Fatalf("a person should see names and the positions used: %s", resp.body)
+	}
+	assertShape(t, loadSpec(t), "CheckoutInspection", resp.body)
+	half := map[string]any{"installation_id": body["installation_id"], "repository": body["repository"], "selection": map[string]any{"run_id": "10", "attempt": 2, "github_job_id": "100", "job_index": 0}}
+	h.do(request{method: http.MethodPost, path: "/api/v1/optimisations/checkout/inspections", token: token, body: half}).mustStatus(t, 400, "one position without the other")
+}

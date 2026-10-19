@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/github"
+	"github.com/eyupio/zoomies/internal/kennel/workflow"
 	"github.com/eyupio/zoomies/internal/optimisation"
 )
 
@@ -40,6 +41,11 @@ type CheckoutInspection struct {
 	Basis          string
 	InspectedAt    time.Time
 	ReviewDeclared string
+	// JobName and StepName are the literal names the source gives the job and
+	// the checkout step that was found, so a person sees "Build, Checkout"
+	// instead of two positions in a file.
+	JobName  string
+	StepName string
 }
 
 // InspectCheckoutEvidence performs the same admitted read as a capture, under
@@ -57,8 +63,13 @@ func (c *Controller) InspectCheckoutEvidence(ctx context.Context, installation, 
 	if e.Timing.CheckoutMS == nil {
 		return nil, ErrOptimisationPreview
 	}
+	jobName, stepName, err := workflow.CheckoutNames([]byte(e.Source.File.Content), e.Selection.JobIndex, e.Selection.StepIndex)
+	if err != nil {
+		return nil, ErrOptimisationPreview
+	}
 	return &CheckoutInspection{
-		Repository: repo, Selection: selection, HeadSHA: e.Source.HeadSHA, Path: e.Source.File.Path, Mode: e.Source.File.Mode,
+		JobName: jobName, StepName: stepName,
+		Repository: repo, Selection: e.Selection, HeadSHA: e.Source.HeadSHA, Path: e.Source.File.Path, Mode: e.Source.File.Mode,
 		Content: e.Source.File.Content, SourceSHA256: e.Timing.SourceSHA256, StepNumber: e.StepNumber,
 		CheckoutMS: *e.Timing.CheckoutMS, EvidenceID: e.Timing.EvidenceID, Basis: e.Basis, InspectedAt: c.Now().UTC(),
 		ReviewDeclared: "repository_and_downstream_consumers",
