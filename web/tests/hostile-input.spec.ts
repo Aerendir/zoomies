@@ -205,6 +205,13 @@ test('what a pull request, a job and its log say stays text on every Eli repair 
   };
   /** The job opened, unless it is the only one and open already, and its log read. */
   const readTheLog = async () => {
+    const asked = page.getByRole('region', { name: 'What Eli was asked to fix' });
+    if (await asked.count()) {
+      const outer = asked.locator('details').first();
+      if (!(await outer.evaluate((el) => (el as HTMLDetailsElement).open))) {
+        await outer.locator('summary').first().click();
+      }
+    }
     const job = page.locator('details.job').first();
     if (!(await job.evaluate((el) => (el as HTMLDetailsElement).open)))
       await job.locator('summary').first().click();
@@ -216,9 +223,12 @@ test('what a pull request, a job and its log say stays text on every Eli repair 
   await expect(
     page.getByRole('region', { name: 'Needs you' }).getByRole('heading', { name: `${title} #17` }),
   ).toBeVisible();
-  await expect(
-    page.getByRole('region', { name: 'History' }).getByRole('link', { name: title }),
-  ).toBeVisible();
+  const history = page.getByRole('region', { name: 'History' });
+  const historyDetails = history.locator('details').first();
+  await historyDetails.evaluate((el) => {
+    (el as HTMLDetailsElement).open = true;
+  });
+  await expect(history.getByRole('link', { name: title })).toBeVisible();
   await asText('the hub');
 
   // The repair page, with the log of the job read.

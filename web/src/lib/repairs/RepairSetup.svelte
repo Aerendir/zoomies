@@ -98,7 +98,7 @@
 </script>
 
 <section aria-label="Set up Eli for this failure" class="setup">
-  <h4>Set up Eli for {repo}</h4>
+  <h2>Set up Eli for {repo}</h2>
   {#if loading}<p role="status">Checking existing setup…</p>
   {:else if error}<p role="alert">{error}</p>
     <Button onclick={() => void load()}>Reload setup</Button>
@@ -159,7 +159,7 @@
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-md);
   }
-  h4,
+  h2,
   p {
     margin: 0;
   }

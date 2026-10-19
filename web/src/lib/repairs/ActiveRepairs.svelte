@@ -22,24 +22,18 @@
     items: Schemas['EliRepair'][];
     /** How many are running in all, which is more than `items` holds when there are very many. */
     total: number;
+    /** Render only the rows, for a section that supplies its own heading. */
+    bare?: boolean;
   }
 
-  let { items, total }: Props = $props();
+  let { items, total, bare = false }: Props = $props();
 
   const busy = repairStatus('working');
   let now = $state(Date.now());
   $effect(() => onClockTick((t) => (now = t)));
 </script>
 
-<Panel
-  title="In progress"
-  description="Repairs Eli is working on now. You can leave: the result appears here and in History."
-  flush
->
-  {#snippet actions()}
-    <Badge status={busy} label="{total} running" />
-  {/snippet}
-
+{#snippet rows()}
   {#each items as repair (repair.id)}
     {@const view = caseFromSnapshot(repair)}
     {@const at = trackIndex(repair)}
@@ -73,7 +67,22 @@
       </div>
     </article>
   {/each}
-</Panel>
+{/snippet}
+
+{#if bare}
+  {@render rows()}
+{:else}
+  <Panel
+    title="In progress"
+    description="Repairs Eli is working on now. You can leave: the result appears here and in History."
+    flush
+  >
+    {#snippet actions()}
+      <Badge status={busy} label="{total} running" />
+    {/snippet}
+    {@render rows()}
+  </Panel>
+{/if}
 
 <style>
   .row {

@@ -20,7 +20,7 @@
   import { ApiError, bulkEliRepairAction, listEliRepairs, selectEliRepairs } from '$lib/api/client';
   import type { Schemas } from '$lib/api/types';
   import { formatNumber } from '$lib/format';
-  import { prefs } from '$lib/state/prefs.svelte';
+  import { prefs, remember, remembered } from '$lib/state/prefs.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import Button from '$lib/components/Button.svelte';
   import Checkbox from '$lib/components/Checkbox.svelte';
@@ -50,6 +50,16 @@
   } from './history';
   import ClearOutcome from './ClearOutcome.svelte';
   import RepairRow from './RepairRow.svelte';
+  import type { RepairHistorySummary } from './history';
+
+  interface Props {
+    /** Render only the card's contents, for a section that supplies its heading. */
+    bare?: boolean;
+    /** What a closed History section can say about the list it last read. */
+    onsummary?: (summary: RepairHistorySummary) => void;
+  }
+
+  let { bare = false, onsummary }: Props = $props();
 
   const GRID = 'eli-repairs';
   /** Long enough that a word is typed before it is searched for. */
@@ -75,6 +85,15 @@
   let answered = $state<RepairFilters>({ ...NO_REPAIR_FILTERS });
   let loaded = $state(false);
   let error = $state('');
+  /** The filter fields are a disclosure, not a permanent row of three controls. */
+  const FILTERS_KEY = 'zoomies.repairs.filters.open';
+  let showFilterFields = $state(
+    remembered(FILTERS_KEY, false, (value): value is boolean => typeof value === 'boolean'),
+  );
+  function toggleFilterFields(): void {
+    showFilterFields = !showFilterFields;
+    remember(FILTERS_KEY, showFilterFields);
+  }
   let pause: ReturnType<typeof setTimeout> | undefined;
   let reading: AbortController | null = null;
   /**
@@ -320,6 +339,18 @@
   /** What a screen reader hears of the selection: the count and nothing to press. */
   const counted = $derived(chosen.size > 0 ? howMany : '');
 
+  // The closed section's line reads from the same list the page does, so it
+  // cannot say a different number from the rows behind it.
+  $effect(() => {
+    onsummary?.({
+      loaded,
+      error,
+      total,
+      latest: items[0]?.created_at,
+      filtered: filtered(answered),
+    });
+  });
+
   onMount(() => {
     void load();
     const timer = setInterval(() => void load(), 10000);
@@ -334,16 +365,7 @@
   });
 </script>
 
-<Panel
-  title="History"
-  description="Every attempt on the repositories you can see. Open one for the failure, the outcome and what Eli used."
-  flush
->
-  {#snippet actions()}
-    {#if loaded && total > 0}
-      <Button variant="ghost" onclick={toggleSelecting}>{selecting ? 'Done' : 'Select'}</Button>
-    {/if}
-  {/snippet}
+{#snippet content()}
   <!--
     The card's two live regions, in the page from the start and empty until there
     is something to say. A region that is inserted already holding its words is
@@ -355,43 +377,64 @@
   <output class="sr-only" aria-live="polite">{counted}</output>
   <output class="sr-only" aria-live="polite">{announcement}</output>
   {#if showFilters}
-    <div class="filters pad">
-      <Field id="repair-filter" label="Show"
-        ><Select
-          id="repair-filter"
-          value={filters.group}
-          onchange={(value) => refilter({ group: value as RepairGroup })}
-          options={[
-            { value: 'all', label: 'All repairs' },
-            { value: 'attention', label: 'Needs attention' },
-            { value: 'active', label: 'In progress' },
-            { value: 'passed', label: 'Checks passed' },
-          ]}
-        /></Field
+    <div class="history-toolbar pad">
+      <Button
+        variant="secondary"
+        size="sm"
+        ariaExpanded={showFilterFields}
+        onclick={toggleFilterFields}>Filters</Button
       >
-      <Field id="repair-repository" label="Repository"
-        ><Input
-          id="repair-repository"
-          bind:value={repoText}
-          oninput={(event) => typed((event.currentTarget as HTMLInputElement).value)}
-          placeholder="acme/site"
-          autocomplete="off"
-          spellcheck={false}
-        /></Field
-      >
-      <Field id="repair-trigger" label="Triggered by"
-        ><Select
-          id="repair-trigger"
-          value={filters.trigger}
-          onchange={(value) => refilter({ trigger: value as RepairTrigger })}
-          options={[
-            { value: 'any', label: 'Any' },
-            { value: 'automatic', label: 'Automatic' },
-            { value: 'requested', label: 'Requested' },
-          ]}
-        /></Field
-      >
+      {#if filtered(answered)}
+        <button class="active-filter" type="button" onclick={clearFilters}
+          >Filters active <span aria-hidden="true">×</span><span class="sr-only"
+            >Clear the filters</span
+          ></button
+        >
+      {/if}
+      <span class="toolbar-spacer"></span>
+      {#if bare && loaded && total > 0}
+        <Button variant="ghost" onclick={toggleSelecting}>{selecting ? 'Done' : 'Select'}</Button>
+      {/if}
     </div>
+    {#if showFilterFields}
+      <div class="filters pad">
+        <Field id="repair-filter" label="Show"
+          ><Select
+            id="repair-filter"
+            value={filters.group}
+            onchange={(value) => refilter({ group: value as RepairGroup })}
+            options={[
+              { value: 'all', label: 'All repairs' },
+              { value: 'attention', label: 'Needs attention' },
+              { value: 'active', label: 'In progress' },
+              { value: 'passed', label: 'Checks passed' },
+            ]}
+          /></Field
+        >
+        <Field id="repair-repository" label="Repository"
+          ><Input
+            id="repair-repository"
+            bind:value={repoText}
+            oninput={(event) => typed((event.currentTarget as HTMLInputElement).value)}
+            placeholder="acme/site"
+            autocomplete="off"
+            spellcheck={false}
+          /></Field
+        >
+        <Field id="repair-trigger" label="Triggered by"
+          ><Select
+            id="repair-trigger"
+            value={filters.trigger}
+            onchange={(value) => refilter({ trigger: value as RepairTrigger })}
+            options={[
+              { value: 'any', label: 'Any' },
+              { value: 'automatic', label: 'Automatic' },
+              { value: 'requested', label: 'Requested' },
+            ]}
+          /></Field
+        >
+      </div>
+    {/if}
   {/if}
   {#if error}<p role="alert" class="error pad">{error}</p>{/if}
   {#if report}
@@ -498,7 +541,24 @@
       />
     </div>
   {/if}
-</Panel>
+{/snippet}
+
+{#if bare}
+  {@render content()}
+{:else}
+  <Panel
+    title="History"
+    description="Every attempt on the repositories you can see. Open one for the failure, the outcome and what Eli used."
+    flush
+  >
+    {#snippet actions()}
+      {#if loaded && total > 0}
+        <Button variant="ghost" onclick={toggleSelecting}>{selecting ? 'Done' : 'Select'}</Button>
+      {/if}
+    {/snippet}
+    {@render content()}
+  </Panel>
+{/if}
 
 <!--
   It says what clearing leaves alone because that is the part that surprises: the
@@ -520,6 +580,32 @@
   }
   .pad:last-child {
     padding-bottom: var(--z-space-4);
+  }
+  .history-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-2);
+    padding-top: var(--z-space-2);
+    padding-bottom: var(--z-space-2);
+    border-bottom: var(--z-border-width) solid var(--z-border);
+    background: var(--z-surface-sunken);
+  }
+  .history-toolbar .toolbar-spacer {
+    flex: 1;
+  }
+  .active-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--z-space-1);
+    min-height: var(--z-control-touch);
+    padding: 0 var(--z-space-2);
+    border: var(--z-border-width) solid var(--z-accent-border);
+    border-radius: var(--z-radius-full);
+    background: var(--z-accent-subtle);
+    color: var(--z-accent);
+    font-size: var(--z-text-2xs);
+    cursor: pointer;
   }
   .filters {
     display: grid;

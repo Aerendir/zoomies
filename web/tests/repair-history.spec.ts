@@ -1,4 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
+
+// These tests are about the list, so the section is opened as a person would.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zoomies.repairs.history.open', 'true');
+    localStorage.setItem('zoomies.repairs.filters.open', 'true');
+  });
+});
 import { goto, reload } from './support/fixtures';
 
 /*

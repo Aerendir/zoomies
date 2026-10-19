@@ -34,6 +34,8 @@
     description?: string;
     /** What the card says when there are no jobs to list. */
     none?: string;
+    /** Render only the job disclosures, for a section that supplies its heading. */
+    bare?: boolean;
   }
 
   let {
@@ -43,6 +45,7 @@
     logsBlockedReason = '',
     description = 'From GitHub’s report, as Zoomies recorded it.',
     none = 'Zoomies has no record of the jobs that failed here, so their names and steps are not shown. The pull request and its checks are read afresh from GitHub.',
+    bare = false,
   }: Props = $props();
 
   const failed = jobStatus('completed', 'failure');
@@ -81,11 +84,7 @@
       : 'Workflow failure';
 </script>
 
-<Panel title="What failed" {description}>
-  {#snippet actions()}
-    {#if jobs.length}<Badge tone="danger" label={pluralise(jobs.length, 'failed job')} />{/if}
-  {/snippet}
-
+{#snippet body()}
   {#if jobs.length === 0}
     <p class="none">{none}</p>
   {:else}
@@ -209,7 +208,18 @@
       {/each}
     </div>
   {/if}
-</Panel>
+{/snippet}
+
+{#if bare}
+  {@render body()}
+{:else}
+  <Panel title="What failed" {description}>
+    {#snippet actions()}
+      {#if jobs.length}<Badge tone="danger" label={pluralise(jobs.length, 'failed job')} />{/if}
+    {/snippet}
+    {@render body()}
+  </Panel>
+{/if}
 
 <style>
   .jobs {

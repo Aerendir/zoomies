@@ -1122,11 +1122,23 @@ test('fleet activity is read by touch', async ({ page }) => {
  */
 async function widestState(page: Page, path: string): Promise<void> {
   if (path === '/repairs') {
-    await page
-      .getByRole('region', { name: 'History' })
-      .getByRole('button', { name: 'Select', exact: true })
-      .click();
-  } else if (path !== '/repairs/rep-run') {
+    const history = page.getByRole('region', { name: 'History' });
+    const details = history.locator('details').first();
+    await details.evaluate((el) => {
+      (el as HTMLDetailsElement).open = true;
+    });
+    await history.getByRole('button', { name: 'Select', exact: true }).click();
+  } else if (
+    path.startsWith('/repairs/') &&
+    !path.startsWith('/repairs/new') &&
+    !path.startsWith('/repairs/setup') &&
+    path !== '/repairs/rep-run'
+  ) {
+    const asked = page.getByRole('region', { name: 'What Eli was asked to fix' });
+    const details = asked.locator('details').first();
+    await details.evaluate((el) => {
+      (el as HTMLDetailsElement).open = true;
+    });
     // A job that is the only one is open already, and clicking it again would shut it.
     const job = page.locator('details.job').first();
     if (!(await job.evaluate((el) => (el as HTMLDetailsElement).open)))

@@ -14,7 +14,6 @@
   import CopyButton from '$lib/components/CopyButton.svelte';
   import { formatBytes, formatDuration, formatNumber, NO_VALUE } from '$lib/format';
   import { investigationText } from './attempt';
-  import { isActive } from './history';
   import { stageWords } from './journey';
 
   interface Props {
@@ -26,10 +25,20 @@
   const details = $derived(repair.details);
   const steps = $derived(details?.steps ?? []);
   const unknownUsage = $derived(steps.some((step) => !step.usage_reported));
+  const elapsed = $derived(steps.reduce((sum, step) => sum + step.elapsed_ms, 0));
+  const summary = $derived.by(() => {
+    const call = steps.length
+      ? `${formatNumber(steps.length)} model ${steps.length === 1 ? 'call' : 'calls'}`
+      : 'No model calls';
+    const source = details?.source_bytes ? `${formatBytes(details.source_bytes)} source` : '';
+    const took = elapsed ? formatDuration(elapsed) : '';
+    return [call, source, took].filter(Boolean).join(' · ');
+  });
 
-  // Open once it has finished, unless the reader has opened or shut it themselves.
+  // Supporting evidence is closed until somebody asks for it, even after a
+  // repair stops: the outcome and the next action are what the page is for.
   let touched = $state<boolean | null>(null);
-  const open = $derived(touched ?? !isActive(repair.state));
+  const open = $derived(touched ?? false);
   const headingId = $props.id();
 </script>
 
@@ -44,7 +53,7 @@
     <ChevronRight size={16} class="chev" aria-hidden="true" />
     <span class="titles">
       <h2 id={headingId}>Technical details</h2>
-      <span class="sub">Model calls, source supplied and timings.</span>
+      <span class="sub">{summary}</span>
     </span>
   </summary>
 

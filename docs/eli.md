@@ -453,8 +453,14 @@ history below uses labelled sample outcomes; no real PR was changed to produce
 these images. A stopped attempt explains what needs attention before you spend
 another attempt, while a passed repair still needs normal PR review.
 
-![Eli repairs: the setup line counting two repositories that repair themselves, an empty Needs you, the Automatic repairs panel with each repository's provider, allowance, latest repair and a Stop automatic repairs button, and History with each repair's pull request, its failed job and when it ran](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
-![Eli repairs: the setup line counting two repositories that repair themselves, an empty Needs you, the Automatic repairs panel with each repository's provider, allowance, latest repair and a Stop automatic repairs button, and History with each repair's pull request, its failed job and when it ran](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+![Eli repairs: the Now line about setup, an empty Needs you, an open Automatic repairs panel with each repository's provider, allowance, latest repair and Stop automatic repairs, and History with each repair's pull request, failed job and when it ran, under an On this page navigation](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs: the Now line about setup, an empty Needs you, an open Automatic repairs panel with each repository's provider, allowance, latest repair and Stop automatic repairs, and History with each repair's pull request, failed job and when it ran, under an On this page navigation](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+
+The hub opens on **Now**, with a sticky **On this page** navigation counting the
+offers, the running repairs and the automatic repositories. **Needs you** and
+**In progress** open when they hold work; **Automatic repairs** and **History**
+are closed summaries that say what is inside, and History opens by itself when
+nothing else needs a person. History's filter fields sit behind **Filters**.
 
 From **Recent failures**, click the failure summary to inspect its failed step,
 explanation and timeline, or choose **Fix with Eli**. Eli repairs a pull
@@ -463,17 +469,19 @@ offered for a failure of a run that no pull request started (a push to the
 default branch, a merge, a schedule or a manual run). The controller reads what
 started each failed run from GitHub, so a failure it has not read yet is still
 offered, and the repair page says why if it turns out not to be a pull request's.
-The repair page opens on
-the failure and not on a button: it names the pull request, its branch, the
-commit and the run, each linked to GitHub, lists every failed job with the step
-it stopped at, and checks readiness without invoking a model. A person decides to
-spend an attempt once they can see what it would be spent on, so **Fix with Eli**
-is on that page. Missing account or repository setup opens a wizard for that
-failure. It reuses existing settings; an administrator can link their own GitHub
-account and enable manual repairs in one save, with five attempts per day and
-workflow edits disabled for a new policy. A personal provider is still required.
-Setup checks the same run again before offering the repair. Runs without an
-eligible open PR explain why they cannot be repaired.
+The repair page opens with the next step first and an **On this page**
+navigation for the next step, the setup when it is needed, the failure and the
+checks. It names the pull request, its branch, the commit and the run, each
+linked to GitHub, lists every failed job with the step it stopped at, and checks
+readiness without invoking a model. The checks show the blocked rows first, with
+**Show all 9 checks** for the rest. A person decides to spend an attempt once
+they can see what it would be spent on, so **Fix with Eli** is on that page.
+Missing account or repository setup opens the missing setup inline, under the
+decision that needs it. It reuses existing settings; an administrator can link
+their own GitHub account and enable manual repairs in one save, with five
+attempts per day and workflow edits disabled for a new policy. A personal
+provider is still required. Setup checks the same run again before offering the
+repair. Runs without an eligible open PR explain why they cannot be repaired.
 
 Recent failures is an inbox of unresolved work, rather than a history of red
 runs. Newer attempts and runs replace older failures of the same job and
@@ -508,6 +516,8 @@ For advanced setup across repositories:
 3. Choose **Ask me first**, **Manual only** or **Automatic**. New setup recommends
    Ask me first; existing policies retain their behaviour. The enable switch turns
    a policy off. Only Automatic requires an installation provider.
+   The setup page has its own **On this page** navigation for the account, the
+   repositories, the allowance and the account link.
 4. Set the attempt budget, from 1 to 50 per rolling 24 hours. Explicit and
    automatic attempts share this repository budget. Each personal account also
    has a limit of 10 explicit attempts per rolling 24 hours.
@@ -583,8 +593,9 @@ the Eli repairs page shows it, to an administrator and to nobody else: automatic
 repairs have no owner, so no one else can read them. A repository that is not
 automatic adds nothing to any page.
 
-The hub's **Automatic repairs** panel appears when at least one enabled policy is
-Automatic. Each repository has a row, and the ones that cannot run come first:
+The hub's **Automatic repairs** summary appears when at least one enabled policy
+is Automatic. Open it for each repository's row, and the ones that cannot run
+come first:
 
 * **Who pays, and whether they can.** A provider that was deleted (which leaves
   the policy with none), is disabled or belongs to a person cannot pay for an
@@ -624,8 +635,8 @@ GitHub's report that a job failed, so a failure reported before Automatic was
 switched on, or whose report never arrived, is not picked up on its own. Anyone
 else who opens that page sees one sentence saying the repository repairs itself.
 
-![An automatic repair that did not fix its failure: Started by Automatic repairs, and the Automatic repairs card for the repository with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-dark.webp#only-dark){ .zoomies-shot }
-![An automatic repair that did not fix its failure: Started by Automatic repairs, and the Automatic repairs card for the repository with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-light.webp#only-light){ .zoomies-shot }
+![An automatic repair that did not fix its failure: Started automatically, the outcome and next steps, and the Automatic repairs card with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-dark.webp#only-dark){ .zoomies-shot }
+![An automatic repair that did not fix its failure: Started automatically, the outcome and next steps, and the Automatic repairs card with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-light.webp#only-light){ .zoomies-shot }
 
 The panel reads `GET /api/v1/assistant/repairs/automatic` and the stop is
 `POST /api/v1/assistant/repairs/automatic/stop`, both for administrators; the

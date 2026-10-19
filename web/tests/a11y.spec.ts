@@ -607,6 +607,10 @@ test('a pool editor section opens and shuts from the keyboard', async ({ page })
 for (const { path, heading, stubbed, ready } of REPAIR_PAGES) {
   test(`${path.split('?')[0]} can be used by a screen reader and a keyboard`, async ({ page }) => {
     if (stubbed) await mockRepairWorld(page);
+    await page.addInitScript(() => {
+      localStorage.setItem('zoomies.repairs.automatic.open', 'true');
+      localStorage.setItem('zoomies.repairs.history.open', 'true');
+    });
     await goto(page, path, heading);
     await expect(ready(page)).toBeVisible();
 
@@ -673,6 +677,9 @@ test('the Automatic repairs panel and its stop dialog can be used by a keyboard 
   page,
 }) => {
   await mockRepairWorld(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('zoomies.repairs.automatic.open', 'true');
+  });
   await goto(page, '/repairs', 'Eli repairs');
   const panel = page.getByRole('region', { name: 'Automatic repairs' });
   await expect(panel.getByRole('article')).toHaveCount(3);

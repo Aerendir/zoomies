@@ -642,8 +642,7 @@ export const REPAIR_PAGES = [
     path: '/repairs',
     heading: 'Eli repairs',
     stubbed: true,
-    ready: (page: Page) =>
-      page.getByRole('region', { name: 'History' }).getByRole('article').first(),
+    ready: (page: Page) => page.getByRole('region', { name: 'Needs you' }),
   },
   {
     // A run nothing is repairing: arriving on one that is moves the page to that repair.

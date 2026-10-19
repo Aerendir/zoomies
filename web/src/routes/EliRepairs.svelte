@@ -1,13 +1,11 @@
 <!--
   The hub: what needs the person, what is running, and what happened.
 
-  Three sections under one line about setup. Needs you holds the offers, each with
-  the failure it is about, so the decision to look is made from here; In progress
-  holds the repairs Eli is working on; History holds the rest, with its filters,
-  paging and clearing. An administrator whose fleet has repositories that repair
-  themselves also gets Automatic repairs between the two, with the way to stop
-  them, and nobody else is told about them. Each repair opens its own page, and a failure opens the
-  repair page, which is where one is started.
+  One line of setup and two attention rails say whether anything is owed. The
+  sections below keep their counts and their latest sentence when closed, so the
+  History and an administrator's Automatic repairs do not compete with live work
+  for the first screen. A section that holds work opens; a quiet section says so
+  in one line.
 
   It reads on a ten-second timer, as the history does, and reads the offers at
   most once a minute: they rarely change, and the check behind them asks GitHub
@@ -15,7 +13,14 @@
   right now, so it reads them at once.
 -->
 <script lang="ts">
-  import { GitPullRequest, Settings2 } from '@lucide/svelte';
+  import {
+    ArrowRight,
+    CircleCheck,
+    GitPullRequest,
+    Play,
+    Settings2,
+    TriangleAlert,
+  } from '@lucide/svelte';
   import { onMount, tick } from 'svelte';
   import {
     ApiError,
@@ -28,13 +33,16 @@
   } from '$lib/api/client';
   import type { Schemas } from '$lib/api/types';
   import Button from '$lib/components/Button.svelte';
+  import Disclosure from '$lib/components/Disclosure.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import Panel from '$lib/components/Panel.svelte';
+  import SectionNav from '$lib/components/SectionNav.svelte';
+  import { formatNumber, pluralise, relativeTime } from '$lib/format';
   import { router } from '$lib/router';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import type { StopChoice } from '$lib/repairs/automatic';
   import type { CaseView } from '$lib/repairs/case';
+  import type { RepairHistorySummary } from '$lib/repairs/history';
   import { RUNNING_LIMIT, offerCases } from '$lib/repairs/hub';
   import { stopAutomatic } from '$lib/repairs/stop';
   import { parseTarget, targetHref } from '$lib/repairs/workspace';
@@ -75,6 +83,13 @@
   let dismissing = $state(false);
   let dialogOpen = $state(false);
   let history = $state<RepairHistory | null>(null);
+  /** What the closed History section says about the list it last read. */
+  let historySummary = $state<RepairHistorySummary>({
+    loaded: false,
+    error: '',
+    total: 0,
+    filtered: false,
+  });
   let offersReadAt = 0;
   /** The offers the cases were last read for, so an unchanged set is not read again. */
   let casesFor = '';
@@ -89,6 +104,47 @@
     automatic.length > 0 ||
       (automaticFailed && Boolean(settings?.policies.some((p) => p.enabled && p.automatic))),
   );
+  const automaticProblem = $derived(automatic.some((repo) => Boolean(repo.problem)));
+  const automaticUsed = $derived(automatic.reduce((sum, repo) => sum + Math.max(0, repo.used), 0));
+  const automaticLimit = $derived(
+    automatic.reduce((sum, repo) => sum + Math.max(0, repo.daily_limit), 0),
+  );
+  const automaticWords = $derived.by(() => {
+    if (automaticFailed) return 'Could not read automatic repairs';
+    if (automaticProblem) {
+      const problems = automatic.filter((repo) => repo.problem).length;
+      return `${problems} of ${automatic.length} ${
+        automatic.length === 1 ? 'repository' : 'repositories'
+      } cannot repair`;
+    }
+    return `${pluralise(automatic.length, 'repository', 'repositories')} · ${automaticUsed} of ${automaticLimit} attempts used`;
+  });
+  const historyOpen = $derived(
+    historySummary.loaded &&
+      !historySummary.error &&
+      offers.length === 0 &&
+      running.length === 0 &&
+      settings !== null,
+  );
+  const historyWords = $derived.by(() => {
+    if (!historySummary.loaded) return historySummary.error ? 'Could not read' : 'Loading history';
+    if (historySummary.error) return 'Could not read the history';
+    if (historySummary.total === 0)
+      return historySummary.filtered ? 'No matching repairs' : 'No repairs';
+    const latest = historySummary.latest ? ` · latest ${relativeTime(historySummary.latest)}` : '';
+    return `${formatNumber(historySummary.total)} ${
+      historySummary.total === 1 ? 'repair' : 'repairs'
+    }${historySummary.filtered ? ' matching' : ''}${latest}`;
+  });
+  const navItems = $derived([
+    { id: 'now', label: 'Now' },
+    { id: 'needs', label: 'Needs you', count: offers.length },
+    { id: 'running', label: 'In progress', count: running.length },
+    ...(administrator && showAutomatic
+      ? [{ id: 'automatic', label: 'Automatic', count: automatic.length, secondary: true }]
+      : []),
+    { id: 'history', label: 'History', secondary: true },
+  ]);
 
   const failure = (cause: unknown): string =>
     cause instanceof ApiError ? cause.message : 'Could not read PR repairs.';
@@ -202,6 +258,20 @@
     }
   }
 
+  /** Open a closed destination before moving to it, and leave focus on its heading. */
+  function jumpTo(id: string): void {
+    const target = document.getElementById(id);
+    if (!target) return;
+    for (let node: HTMLElement | null = target; node; node = node.parentElement) {
+      if (node instanceof HTMLDetailsElement) node.open = true;
+    }
+    target.scrollIntoView({ block: 'start' });
+    const focusable =
+      target instanceof HTMLDetailsElement ? target.querySelector<HTMLElement>('summary') : target;
+    focusable?.focus({ preventScroll: true });
+    if (location.hash !== `#${id}`) window.history.replaceState(null, '', `#${id}`);
+  }
+
   onMount(() => {
     if (forwarding) {
       router.navigate(targetHref(legacy), { replace: true });
@@ -218,40 +288,121 @@
 {#if !forwarding}
   <PageHeader
     title="Eli repairs"
-    subtitle="Catch failed PR checks, review repair offers and follow the result."
+    subtitle="Review failed PR checks, follow each repair, and see what Eli is doing on its own."
     onrefresh={reload}
   >
     <Button icon={GitPullRequest} onclick={() => (dialogOpen = true)}>Repair a PR</Button>
     <Button variant="ghost" icon={Settings2} href="/repairs/setup">Setup</Button>
   </PageHeader>
 
-  <SetupBar
-    {settings}
-    admin={session.can('admin')}
-    userId={session.identity?.id}
-    authDisabled={session.authDisabled}
-  />
+  <SectionNav items={navItems} label="On this page" />
+
   {#if error}<p role="alert" class="error">{error}</p>{/if}
 
   <div class="stack">
+    <section id="now" class="now" aria-label="Now">
+      {#if offers.length || running.length}
+        <div class="attention">
+          {#if offers.length}
+            <a
+              class="rail danger"
+              href="#needs"
+              onclick={(event) => {
+                event.preventDefault();
+                jumpTo('needs');
+              }}
+            >
+              <span class="rail-icon"><TriangleAlert size={16} aria-hidden="true" /></span>
+              <span class="rail-body">
+                <strong>{pluralise(offers.length, 'offer needs', 'offers need')} review</strong>
+                <span>Failed PR checks on Ask me first repositories.</span>
+              </span>
+              <span class="rail-go">Review offers <ArrowRight size={14} aria-hidden="true" /></span>
+            </a>
+          {/if}
+          {#if running.length}
+            <a
+              class="rail busy"
+              href="#running"
+              onclick={(event) => {
+                event.preventDefault();
+                jumpTo('running');
+              }}
+            >
+              <span class="rail-icon"><Play size={16} aria-hidden="true" /></span>
+              <span class="rail-body">
+                <strong>{pluralise(runningTotal, 'repair is', 'repairs are')} running now</strong>
+                <span>Eli is reading the failed checks or preparing a fix.</span>
+              </span>
+              <span class="rail-go">Follow <ArrowRight size={14} aria-hidden="true" /></span>
+            </a>
+          {/if}
+        </div>
+      {/if}
+      <SetupBar
+        {settings}
+        admin={session.can('admin')}
+        userId={session.identity?.id}
+        authDisabled={session.authDisabled}
+      />
+    </section>
+
     {#if offering && offers.length}
-      <OfferList {offers} {cases} busy={dismissing} ondismiss={(id) => void dismiss(id)} />
+      <Disclosure
+        id="needs"
+        title="Needs you"
+        summary="{pluralise(offers.length, 'offer')} · reviewing never calls a model"
+        tone="danger"
+        open
+        flush
+      >
+        <OfferList {offers} {cases} busy={dismissing} ondismiss={(id) => void dismiss(id)} bare />
+      </Disclosure>
     {:else if offering && offersLoaded}
-      <Panel title="Needs you">
-        <p class="quiet">
-          <strong>Nothing needs you right now.</strong> When a pull request's checks fail on a repository
-          set to Ask me first, Eli offers to look at it here. To repair a pull request yourself, use Repair
-          a PR.
+      <section id="needs" class="clear" aria-label="Needs you">
+        <CircleCheck size={16} aria-hidden="true" />
+        <p>
+          <strong>Nothing needs you right now.</strong> Offers appear when a pull request's checks
+          fail on a repository set to Ask me first.
+          <a href="/repairs/new">Repair a pull request</a> to start one yourself.
         </p>
-      </Panel>
+      </section>
     {/if}
+
     {#if running.length}
-      <ActiveRepairs items={running} total={runningTotal} />
+      <Disclosure
+        id="running"
+        title="In progress"
+        summary="{pluralise(runningTotal, 'repair')} running"
+        tone="busy"
+        open
+        flush
+      >
+        <ActiveRepairs items={running} total={runningTotal} bare />
+      </Disclosure>
     {/if}
+
     {#if administrator && showAutomatic}
-      <AutomaticRepairs repositories={automatic} error={automaticFailed} onstop={askToStop} />
+      <Disclosure
+        id="automatic"
+        title="Automatic repairs"
+        summary={automaticWords}
+        tone={automaticProblem ? 'pending' : ''}
+        open={automaticProblem || automaticFailed}
+        flush
+      >
+        <AutomaticRepairs
+          repositories={automatic}
+          error={automaticFailed}
+          onstop={askToStop}
+          bare
+        />
+      </Disclosure>
     {/if}
-    <RepairHistory bind:this={history} />
+
+    <Disclosure id="history" title="History" summary={historyWords} open={historyOpen} flush>
+      <RepairHistory bind:this={history} bare onsummary={(summary) => (historySummary = summary)} />
+    </Disclosure>
   </div>
 
   <RepairTargetDialog bind:open={dialogOpen} />
@@ -265,17 +416,108 @@
 {/if}
 
 <style>
-  .stack {
+  .stack,
+  .now {
     display: grid;
-    gap: var(--z-space-5);
+    gap: var(--z-space-3);
   }
-  .quiet {
-    margin: 0;
+  .now {
+    scroll-margin-top: calc(var(--z-topbar-height) + var(--z-control-touch) + var(--z-space-3));
+  }
+  .attention {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--z-space-3);
+  }
+  .rail {
+    display: flex;
+    align-items: center;
+    gap: var(--z-space-3);
+    min-height: 4.25rem;
+    padding: var(--z-space-3) var(--z-space-4);
+    border: var(--z-border-width) solid var(--z-border);
+    border-left: var(--z-border-width-rail) solid var(--z-pending);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+    color: var(--z-text);
+    text-decoration: none;
+    box-shadow: var(--z-shadow-sm);
+  }
+  .rail.danger {
+    border-left-color: var(--z-danger);
+  }
+  .rail.busy {
+    border-left-color: var(--z-busy);
+  }
+  .rail:hover {
+    background: var(--z-surface-hover);
+  }
+  .rail-icon {
+    display: grid;
+    place-items: center;
+    width: var(--z-space-8);
+    height: var(--z-space-8);
+    border-radius: var(--z-radius-sm);
+    background: var(--z-pending-subtle);
+    color: var(--z-pending);
+    flex: none;
+  }
+  .rail.danger .rail-icon {
+    background: var(--z-danger-subtle);
+    color: var(--z-danger);
+  }
+  .rail.busy .rail-icon {
+    background: var(--z-busy-subtle);
+    color: var(--z-busy);
+  }
+  .rail-body {
+    min-width: 0;
+  }
+  .rail-body strong {
+    display: block;
+    font-size: var(--z-text-base);
+    font-weight: var(--z-weight-semibold);
+    line-height: var(--z-leading-base);
+    overflow-wrap: anywhere;
+  }
+  .rail-body span {
+    display: block;
+    margin-top: var(--z-nudge-1);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+    line-height: var(--z-leading-xs);
+    overflow-wrap: anywhere;
+  }
+  .rail-go {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--z-space-1);
+    margin-left: auto;
+    color: var(--z-accent);
+    font-size: var(--z-text-xs);
+    white-space: nowrap;
+  }
+  .clear {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--z-space-2);
+    padding: var(--z-space-3) var(--z-space-4);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
     color: var(--z-text-muted);
     font-size: var(--z-text-sm);
+  }
+  .clear :global(svg) {
+    flex: none;
+    margin-top: var(--z-nudge-2);
+    color: var(--z-idle);
+  }
+  .clear p {
+    margin: 0;
     line-height: var(--z-leading-sm);
   }
-  .quiet strong {
+  .clear strong {
     color: var(--z-text);
     font-weight: var(--z-weight-semibold);
   }
@@ -283,5 +525,16 @@
     margin: 0 0 var(--z-space-4);
     color: var(--z-danger);
     font-size: var(--z-text-sm);
+  }
+  @media (max-width: 768px) {
+    .attention {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .rail {
+      min-height: var(--z-control-touch);
+    }
+    .rail-go {
+      display: none;
+    }
   }
 </style>
