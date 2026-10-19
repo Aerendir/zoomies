@@ -694,12 +694,12 @@ const hostCols = `id, name, address, embedded, capacity, backends, backend_info,
 	protocol_version, incompatible, connection, usage, throttle, features, incidents, doctor,
 	runner_profile, priority_override, size_class, doctor_checked_at`
 
-const hostReadCols = hostCols + `, EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND (completed_at IS NULL OR retired_at IS NOT NULL)), EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL)`
+const hostReadCols = hostCols + `, EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND (completed_at IS NULL OR retired_at IS NOT NULL)), EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL), COALESCE((SELECT mode FROM host_auto_adjust WHERE host_id=hosts.id),''), COALESCE((SELECT adjusted_at FROM host_auto_adjust WHERE host_id=hosts.id),0)`
 
 func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
 	var embedded, cordoned, incompatible int
-	var heartbeat, created, doctorAt int64
+	var heartbeat, created, doctorAt, adjustedAt int64
 	var altAt sql.NullInt64
 	var override sql.NullInt64
 	err := sc.Scan(&h.ID, &h.Name, &h.Address, &embedded, &h.Capacity, &h.Backends,
@@ -707,7 +707,7 @@ func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 		&h.MemoryMB, &h.CPUMHz, &h.MemoryMTs, &h.DiskKind, &h.Version, &cordoned, &h.TokenHash, &heartbeat, &created,
 		&h.AgentSessionID, &h.AgentSessionPrev, &h.AgentSessionAlternations, &altAt,
 		&h.DiskTotalMB, &h.DiskFreeMB, &h.ReserveCPUs, &h.ReserveMemoryMB, &h.ReserveDiskMB,
-		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &override, &h.SizeClass, &doctorAt, &h.RecoveryRequired, &h.Retired)
+		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &override, &h.SizeClass, &doctorAt, &h.RecoveryRequired, &h.Retired, &h.AutoAdjust, &adjustedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -727,6 +727,9 @@ func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 	h.Embedded, h.Cordoned, h.Incompatible = embedded == 1, cordoned == 1, incompatible == 1
 	h.LastHeartbeat, h.CreatedAt = at(heartbeat), at(created)
 	h.AgentSessionAltAt = atp(altAt)
+	if adjustedAt > 0 {
+		h.AutoAdjustedAt = at(adjustedAt)
+	}
 	return &h, nil
 }
 

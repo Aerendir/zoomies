@@ -12,6 +12,11 @@
     attention  the repositories to open first, and the checks behind them
     best       the repositories with nothing open
 
+  The answer comes first. A verdict band says what needs attention and what is
+  clean, the full counts follow as a compact strip, and the depth is below it:
+  the checks with nothing open and the sources that were read are one press
+  away, not another row of equal cards.
+
   It works with Kennel Club off, because GET /kennel answers 200 with
   enabled:false: the page needs a document to explain itself from, and "off" is
   a state it describes, not a failure it reports.
@@ -32,6 +37,7 @@
   import RelativeTime from '$lib/components/RelativeTime.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import ChecksTable from '$lib/kennel/ChecksTable.svelte';
+  import KennelPageNav from '$lib/kennel/KennelPageNav.svelte';
   import KennelShell from '$lib/kennel/KennelShell.svelte';
   import KennelTurnOn from '$lib/kennel/KennelTurnOn.svelte';
   import { kennelListHref, type KennelListFilter } from '$lib/kennel/pages';
@@ -130,6 +136,7 @@
   const floor = $derived(overview ? countsAreAFloor(overview) : false);
   const floorText = $derived(overview ? floorSentence(overview) : '');
   const bestWord = $derived(kennelStatus('best_in_show', undefined, prefs.quirkyStatus).label);
+  const firstAttention = $derived(overview?.attention[0]);
 
   // A card opens the repositories it counts, and only when it counts some: a link
   // to an empty list is a click that finds nothing. "Partly checked" adds two
@@ -204,6 +211,43 @@
       },
     ];
   });
+
+  // What is affecting a repository now leads; a check with nothing open is still
+  // checked, and folds away so the two are not read as equal.
+  const affectedChecks = $derived(
+    (overview?.checks ?? []).filter((check) => check.repositories > 0),
+  );
+  // A check somebody turned off has nothing open because it never ran. It is
+  // kept in its own fold, so "nothing open" and "not running" cannot be read as
+  // the same sentence.
+  const quietChecks = $derived(
+    (overview?.checks ?? []).filter((check) => check.repositories === 0 && !check.disabled),
+  );
+  const offChecks = $derived((overview?.checks ?? []).filter((check) => check.disabled));
+
+  // The worst state across every source, for the confidence badge and the bar.
+  const coverageStates = $derived.by(() => {
+    const merged: Record<string, number> = {};
+    for (const source of overview?.coverage ?? []) {
+      for (const [state, count] of Object.entries(source.states)) {
+        merged[state] = (merged[state] ?? 0) + count;
+      }
+    }
+    return merged;
+  });
+  const coverageWorst = $derived(worstCoverageState(coverageStates));
+  const coverageStatus = $derived(kennelCoverageStatus(coverageWorst ?? 'not_read'));
+  const sourcesRead = $derived(
+    (overview?.coverage ?? []).filter((source) => worstCoverageState(source.states) === 'ok')
+      .length,
+  );
+
+  const navItems = $derived([
+    { id: 'summary', label: 'Summary' },
+    { id: 'attention', label: 'Attention', count: overview?.states.attention },
+    { id: 'checks', label: 'Checks', count: affectedChecks.length },
+    { id: 'confidence', label: 'Read confidence' },
+  ]);
 </script>
 
 <KennelShell current="overview">
@@ -326,7 +370,79 @@
             <p class="floor" role="note">{floorText}</p>
           {/if}
 
-          <MetricGrid items={metrics} />
+          <KennelPageNav items={navItems} />
+
+          <section id="summary" class="verdict anchor" aria-labelledby="verdict-heading">
+            <div
+              class="verdict-main"
+              data-tone={overview.states.attention > 0 ? 'danger' : 'success'}
+            >
+              <div>
+                <p class="eyebrow">
+                  {overview.states.attention > 0 ? 'Needs attention' : 'Nothing needs attention'}
+                </p>
+                <h2 id="verdict-heading">
+                  {#if overview.states.attention === 0}
+                    No repository needs attention
+                  {:else}
+                    {formatNumber(overview.states.attention)}
+                    {overview.states.attention === 1 ? 'repository needs' : 'repositories need'} attention
+                  {/if}
+                </h2>
+                {#if firstAttention}
+                  <p>
+                    <strong>{firstAttention.name}</strong>
+                    has {openFindingsText(firstAttention.counts)} open.
+                    {#if firstAttention.visibility === 'public'}
+                      It is public, so a pull request from a stranger can reach this fleet.
+                    {/if}
+                    {#if overview.states.attention > overview.attention.length}
+                      {formatNumber(overview.states.attention - overview.attention.length)} more
+                      {overview.states.attention - overview.attention.length === 1
+                        ? 'repository needs'
+                        : 'repositories need'} attention.
+                    {/if}
+                  </p>
+                {:else}
+                  <p>No repository has an error or a warning open.</p>
+                {/if}
+              </div>
+              <div class="verdict-actions">
+                {#if firstAttention}
+                  <Button href={`/kennel/repositories/${encodeURIComponent(firstAttention.id)}/ci`}>
+                    Review {firstAttention.name}
+                  </Button>
+                {/if}
+                <a href={kennelListHref({ state: 'attention', everything: true })}
+                  >See all findings</a
+                >
+              </div>
+            </div>
+            <dl class="verdict-stats">
+              <div>
+                <dt>Best in show</dt>
+                <dd class="value success">{formatNumber(overview.states.best_in_show)}</dd>
+                <dd class="detail">Nothing open</dd>
+              </div>
+              <div>
+                <dt>Partly checked</dt>
+                <dd class="value warning">
+                  {formatNumber(overview.states.partial + overview.states.pending)}
+                </dd>
+                <dd class="detail">Reads that were cut short</dd>
+              </div>
+              <div>
+                <dt>Repositories</dt>
+                <dd class="value">{formatNumber(overview.repositories)}</dd>
+                <dd class="detail">This fleet has run jobs for</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="counts" aria-labelledby="counts-heading">
+            <h2 id="counts-heading" class="section-title">All counts</h2>
+            <MetricGrid items={metrics} compact />
+          </section>
 
           {#each overview.unavailable as note (note.installation_id)}
             {@const status = kennelCoverageStatus(note.state)}
@@ -339,88 +455,176 @@
             </div>
           {/each}
 
-          <Panel
-            title="Needs attention"
-            description="The repositories with the worst findings open, worst first."
-            flush
-          >
-            {#snippet actions()}
-              <a href={kennelListHref({ state: 'attention', everything: true })}>See all</a>
-            {/snippet}
-            {#if overview.attention.length === 0}
-              <EmptyState
-                compact
-                title="Nothing needs attention"
-                description="No repository has an error or a warning open."
-              />
-            {:else}
-              <ul class="rows">
-                {#each overview.attention as row (row.id)}
-                  <li>
-                    <a href="/kennel/repositories/{encodeURIComponent(row.id)}/ci">
-                      <span class="name">{row.name}</span>
-                      <Badge
-                        status={kennelStatus(
-                          row.state,
-                          worstSeverity(row.counts),
-                          prefs.quirkyStatus,
-                        )}
-                        size="sm"
-                      />
-                      {#if row.visibility}
-                        <Badge
-                          tone="neutral"
-                          label={capitalise(row.visibility)}
-                          size="sm"
-                          dot={false}
-                        />
-                      {/if}
-                      <span class="counts">{openFindingsText(row.counts)}</span>
-                    </a>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          </Panel>
+          <div class="overview-grid">
+            <div class="stack">
+              <div id="attention" class="anchor">
+                <Panel
+                  title="Needs attention"
+                  description="The repositories with the worst findings open, worst first."
+                  flush
+                >
+                  {#snippet actions()}
+                    <a href={kennelListHref({ state: 'attention', everything: true })}>See all</a>
+                  {/snippet}
+                  {#if overview.attention.length === 0}
+                    <EmptyState
+                      compact
+                      title="Nothing needs attention"
+                      description="No repository has an error or a warning open."
+                    />
+                  {:else}
+                    <ul class="rows">
+                      {#each overview.attention as row (row.id)}
+                        <li>
+                          <a href="/kennel/repositories/{encodeURIComponent(row.id)}/ci">
+                            <span class="name">{row.name}</span>
+                            <Badge
+                              status={kennelStatus(
+                                row.state,
+                                worstSeverity(row.counts),
+                                prefs.quirkyStatus,
+                              )}
+                              size="sm"
+                            />
+                            {#if row.visibility}
+                              <Badge
+                                tone="neutral"
+                                label={capitalise(row.visibility)}
+                                size="sm"
+                                dot={false}
+                              />
+                            {/if}
+                            <span class="counts">{openFindingsText(row.counts)}</span>
+                          </a>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                </Panel>
+              </div>
 
-          <Panel
-            title="By check"
-            description="Which repositories have each check open: the way to ask which of them have no job timeouts, say."
-            flush
-          >
-            <ChecksTable
-              rows={overview.checks}
-              label="Checks and the repositories that have each open"
-            />
-          </Panel>
+              <div id="checks" class="anchor">
+                <Panel
+                  title="What is open by check"
+                  description="Which checks are affecting a repository right now. Everything else is quiet."
+                  flush
+                >
+                  {#snippet actions()}
+                    <Badge
+                      tone="neutral"
+                      label="{affectedChecks.length} affected of {overview?.checks.length ?? 0}"
+                      size="sm"
+                      dot={false}
+                    />
+                  {/snippet}
+                  {#if affectedChecks.length === 0}
+                    <EmptyState
+                      compact
+                      title="No check is affecting a repository"
+                      description="Every check that is turned on ran, and nothing is open."
+                    />
+                  {:else}
+                    <ChecksTable
+                      rows={affectedChecks}
+                      label="Checks and the repositories that have each open"
+                    />
+                  {/if}
+                  {#if quietChecks.length > 0}
+                    <details class="quiet-checks">
+                      <summary>
+                        Show {quietChecks.length} checks with nothing open
+                      </summary>
+                      <ChecksTable rows={quietChecks} label="Checks with nothing open" />
+                    </details>
+                  {/if}
+                  {#if offChecks.length > 0}
+                    <details class="quiet-checks">
+                      <summary>
+                        Show {offChecks.length} checks turned off
+                      </summary>
+                      <ChecksTable rows={offChecks} label="Checks turned off" />
+                    </details>
+                  {/if}
+                  <div class="panel-foot">
+                    A check with nothing open is still checked. The number is repositories, not
+                    findings.
+                  </div>
+                </Panel>
+              </div>
+            </div>
 
-          <Panel
-            title="What Kennel Club can see"
-            description="Each source of facts, and how far it could be read for the repositories above."
-          >
-            {#if overview.coverage.length === 0}
-              <p class="note">Nothing has been read yet.</p>
-            {:else}
-              <ul class="coverage">
-                {#each overview.coverage as source (source.source)}
-                  {@const worst = worstCoverageState(source.states)}
-                  <li>
-                    <div class="head">
-                      <strong>{source.label}</strong>
-                      <Badge status={kennelCoverageStatus(worst)} size="sm" />
+            <div class="stack">
+              <div id="confidence" class="anchor">
+                <Panel
+                  title="What Kennel Club can see"
+                  description="Each source of facts, and how far it could be read for the repositories above."
+                >
+                  {#snippet actions()}
+                    <Badge status={coverageStatus} size="sm" />
+                  {/snippet}
+                  {#if overview.coverage.length === 0}
+                    <p class="note">Nothing has been read yet.</p>
+                  {:else}
+                    <p class="coverage-summary">
+                      {sourcesRead} of {overview.coverage.length} sources read
+                      {coverageWorst === 'ok' ? 'in full' : 'for these repositories'}.
+                    </p>
+                    <div class="coverage-bar" aria-hidden="true">
+                      {#each overview.coverage as source (source.source)}
+                        {@const worst = worstCoverageState(source.states)}
+                        <span data-state={worst ?? 'not_read'}></span>
+                      {/each}
                     </div>
-                    <p>{coverageStatesText(source.states)}</p>
-                    {#if source.permission && worst !== 'ok'}
-                      <p class="permission">
-                        Needs the App's <strong>{source.permission}</strong> permission.
-                        {#if canAdmin}<a href="/installations">Open installations</a>{/if}
-                      </p>
-                    {/if}
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          </Panel>
+                    <ul class="coverage">
+                      {#each overview.coverage as source (source.source)}
+                        {@const worst = worstCoverageState(source.states)}
+                        <li>
+                          <div class="head">
+                            <strong>{source.label}</strong>
+                            <Badge status={kennelCoverageStatus(worst ?? 'not_read')} size="sm" />
+                          </div>
+                          <p>{coverageStatesText(source.states)}</p>
+                          {#if source.permission && worst !== 'ok'}
+                            <p class="permission">
+                              Needs the App's <strong>{source.permission}</strong> permission.
+                              {#if canAdmin}<a href="/installations">Open installations</a>{/if}
+                            </p>
+                          {/if}
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                </Panel>
+              </div>
+
+              <Panel title="Scope" description="What the numbers above cover.">
+                <dl class="scope">
+                  <div>
+                    <dt>Scope</dt>
+                    <dd>
+                      {overview.scope === 'served'
+                        ? 'Repositories this fleet has run jobs for'
+                        : 'Every repository the App can see'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Repositories</dt>
+                    <dd>{formatNumber(overview.repositories)} tracked</dd>
+                  </div>
+                  {#if overview.not_tracked > 0}
+                    <div>
+                      <dt>Not tracked</dt>
+                      <dd>{formatNumber(overview.not_tracked)}</dd>
+                    </div>
+                  {/if}
+                  <div>
+                    <dt>List</dt>
+                    <dd><a href="/kennel/repositories?active=all">Open repositories</a></dd>
+                  </div>
+                </dl>
+              </Panel>
+            </div>
+          </div>
         {/if}
       {/if}
     </LoadingBoundary>
@@ -431,7 +635,7 @@
   .content {
     display: flex;
     flex-direction: column;
-    gap: var(--z-space-5);
+    gap: var(--z-space-4);
   }
   .summary {
     margin: 0;
@@ -504,6 +708,136 @@
     font-size: var(--z-text-sm);
     color: var(--z-text-subtle);
   }
+
+  /* In-page targets clear the sticky bar above them. */
+  .anchor {
+    scroll-margin-top: calc(var(--z-topbar-height) + var(--z-space-4));
+  }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(20rem, 0.9fr);
+    gap: var(--z-space-4);
+    align-items: stretch;
+  }
+  .verdict-main {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--z-space-4);
+    padding: var(--z-space-5);
+    border: var(--z-border-width) solid var(--z-border);
+    border-left-width: var(--z-border-width-rail);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+  }
+  .verdict-main[data-tone='danger'] {
+    border-color: var(--z-danger-border);
+    border-left-color: var(--z-danger);
+    background: var(--z-danger-subtle);
+  }
+  .verdict-main[data-tone='success'] {
+    border-color: var(--z-idle-border);
+    border-left-color: var(--z-idle);
+    background: var(--z-idle-subtle);
+  }
+  .eyebrow {
+    margin: 0;
+    color: var(--z-text-muted);
+    font-size: var(--z-text-2xs);
+    font-weight: var(--z-weight-semibold);
+    letter-spacing: var(--z-tracking-wide);
+    text-transform: uppercase;
+  }
+  .verdict-main[data-tone='danger'] .eyebrow {
+    color: var(--z-danger);
+  }
+  .verdict-main[data-tone='success'] .eyebrow {
+    color: var(--z-idle);
+  }
+  .verdict-main h2 {
+    margin: var(--z-space-1) 0 0;
+    font-size: var(--z-text-2xl);
+    line-height: var(--z-leading-2xl);
+    letter-spacing: var(--z-tracking-tight);
+    color: var(--z-text);
+  }
+  .verdict-main p {
+    max-width: 62ch;
+    margin: var(--z-space-2) 0 0;
+    font-size: var(--z-text-sm);
+    line-height: var(--z-leading-sm);
+    color: var(--z-text);
+  }
+  .verdict-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--z-space-3);
+  }
+  .verdict-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 0;
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+    overflow: hidden;
+  }
+  .verdict-stats > div {
+    display: flex;
+    flex-direction: column;
+    padding: var(--z-space-4);
+    border-right: var(--z-border-width) solid var(--z-border);
+  }
+  .verdict-stats > div:last-child {
+    border-right: 0;
+  }
+  .verdict-stats dt {
+    color: var(--z-text-muted);
+    font-size: var(--z-text-2xs);
+    line-height: var(--z-leading-2xs);
+  }
+  .verdict-stats dd {
+    margin: 0;
+  }
+  .verdict-stats .value {
+    margin-top: var(--z-space-1);
+    font-size: var(--z-text-xl);
+    line-height: var(--z-leading-xl);
+    font-weight: var(--z-weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+  .verdict-stats .value.success {
+    color: var(--z-idle);
+  }
+  .verdict-stats .value.warning {
+    color: var(--z-pending);
+  }
+  .verdict-stats .detail {
+    margin-top: var(--z-space-1);
+    color: var(--z-text-subtle);
+    font-size: var(--z-text-2xs);
+    line-height: var(--z-leading-2xs);
+  }
+  .section-title {
+    margin: 0 0 var(--z-space-2);
+    font-size: var(--z-text-lg);
+    line-height: var(--z-leading-lg);
+    font-weight: var(--z-weight-semibold);
+  }
+  .overview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 0.9fr);
+    gap: var(--z-space-4);
+    align-items: start;
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--z-space-4);
+    min-width: 0;
+  }
   .rows {
     margin: 0;
     padding: 0;
@@ -534,10 +868,60 @@
     font-size: var(--z-text-xs);
     color: var(--z-text-muted);
   }
+  .quiet-checks {
+    border-top: var(--z-border-width) solid var(--z-border);
+  }
+  .quiet-checks summary {
+    padding: var(--z-space-3) var(--z-space-5);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+    cursor: pointer;
+  }
+  .quiet-checks summary:hover {
+    color: var(--z-text);
+  }
+  .panel-foot {
+    padding: var(--z-space-3) var(--z-space-5);
+    border-top: var(--z-border-width) solid var(--z-border);
+    color: var(--z-text-subtle);
+    font-size: var(--z-text-xs);
+  }
+  .coverage-summary {
+    margin: 0 0 var(--z-space-2);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+  }
+  .coverage-bar {
+    display: flex;
+    gap: var(--z-space-1);
+    margin-bottom: var(--z-space-4);
+  }
+  .coverage-bar span {
+    flex: 1;
+    height: var(--z-space-1);
+    border-radius: var(--z-radius-full);
+    background: var(--z-border-strong);
+  }
+  .coverage-bar span[data-state='ok'] {
+    background: var(--z-idle);
+  }
+  .coverage-bar span[data-state='partial'] {
+    background: var(--z-pending);
+  }
+  .coverage-bar span[data-state='held'] {
+    background: var(--z-draining);
+  }
+  .coverage-bar span[data-state='denied'],
+  .coverage-bar span[data-state='unavailable'] {
+    background: var(--z-neutral);
+  }
+  .coverage-bar span[data-state='error'] {
+    background: var(--z-danger);
+  }
   .coverage {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--z-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--z-space-3);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -562,10 +946,44 @@
   .permission {
     color: var(--z-text);
   }
+  .scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--z-space-2);
+    margin: 0;
+  }
+  .scope > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--z-space-3);
+  }
+  .scope dt {
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+  }
+  .scope dd {
+    margin: 0;
+    font-size: var(--z-text-xs);
+    text-align: right;
+  }
+  @media (max-width: 980px) {
+    .verdict,
+    .overview-grid {
+      grid-template-columns: 1fr;
+    }
+  }
   @media (max-width: 768px) {
     .counts {
       margin-left: 0;
       flex-basis: 100%;
+    }
+    .verdict-main h2 {
+      font-size: var(--z-text-xl);
+      line-height: var(--z-leading-xl);
+    }
+    .verdict-stats > div {
+      padding: var(--z-space-3);
     }
   }
 </style>

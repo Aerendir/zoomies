@@ -31,6 +31,11 @@ test('blocked on access shows the failure, names the jobs and keeps the rest unc
   });
   await page.goto(`${PAGE}&job=job_unit`);
 
+  const nav = page.getByRole('navigation', { name: 'On this page' });
+  await expect(nav.getByRole('link', { name: 'Next step' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /What failed/ })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /Checks/ })).toBeVisible();
+
   const failure = page.getByRole('region', { name: 'CI #482 failed on fix/registry-retry' });
   await expect(failure).toBeVisible();
   await expect(failure.getByRole('link', { name: /acme\/widgets/ })).toHaveAttribute(
@@ -61,6 +66,8 @@ test('blocked on access shows the failure, names the jobs and keeps the rest unc
   await expect(checks.getByRole('listitem').filter({ hasText: 'Write access' })).toContainText(
     ACCESS,
   );
+  // Only the blocked rows are on show; the rest are one press away.
+  await checks.getByText('Show all 9 checks').click();
   await expect(checks.getByRole('listitem').filter({ hasText: 'Repository policy' })).toContainText(
     'Not checked yet.',
   );

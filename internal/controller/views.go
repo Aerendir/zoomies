@@ -99,6 +99,13 @@ type HostView struct {
 	// decision.
 	Throttle       *store.HostThrottle `json:"throttle,omitempty"`
 	ThrottleReason string              `json:"throttle_reason"`
+	// AutoAdjust is the host's own answer to whether the controller keeps it at
+	// its recommendation (empty follows the fleet), AutoAdjustEffective what is
+	// true once the fleet's default is counted, and AutoAdjustedAt when the
+	// controller last moved it.
+	AutoAdjust          string     `json:"auto_adjust"`
+	AutoAdjustEffective bool       `json:"auto_adjust_effective"`
+	AutoAdjustedAt      *time.Time `json:"auto_adjusted_at,omitempty"`
 	// RuntimeRecovering is the container-runtime cooldown the agent last
 	// reported, absent when there is none, and RuntimeReason the card's
 	// sentence for it. The times are carried rather than written into the
@@ -292,58 +299,60 @@ func (c *Controller) HostView(h *store.Host) HostView {
 		Retired:       h.Retired,
 		// Judged, not raw: the page, the problems and the metrics must read one
 		// answer about what counts.
-		Doctor:             doctorView(h.JudgedDoctor(c.Now())),
-		HealthCheck:        c.hostCheckView(h),
-		ID:                 h.ID,
-		Name:               h.Name,
-		Address:            h.Address,
-		Embedded:           h.Embedded,
-		Connection:         h.Connection,
-		Capacity:           h.Capacity,
-		ActiveRunners:      h.ActiveRunners,
-		Free:               h.Free(),
-		EffectiveCapacity:  h.EffectiveCapacity(),
-		EffectiveProfile:   EffectiveProfile(h, c.cfg().Runners),
-		Priority:           priority.Score,
-		PrioritySource:     string(priority.Source),
-		PriorityReason:     scheduler.HostPriorityReason(h),
-		Tags:               emptySlice(scheduler.HostTags(h, c.tracksClasses())),
-		SizeClass:          c.hostSizeClassView(h),
-		AutoPool:           c.hostAutoPoolView(h),
-		UnlimitedRunners:   h.UnlimitedRunners,
-		ThrottleReason:     scheduler.ThrottleReason(h),
-		Backends:           emptySlice(h.Backends),
-		Labels:             emptyMap(h.Labels),
-		OS:                 h.OS,
-		Distro:             h.Distro,
-		OSVersion:          h.OSVersion,
-		Arch:               h.Arch,
-		CPUs:               h.CPUs,
-		MemoryMB:           h.MemoryMB,
-		UsageFresh:         h.Usage.Fresh(c.Now()),
-		AdmissionReason:    scheduler.HostAdmissionReason(h, c.Now()),
-		DiskTotalMB:        h.DiskTotalMB,
-		DiskFreeMB:         h.DiskFreeMB,
-		ReserveCPUs:        h.ReserveCPUs,
-		ReserveMemoryMB:    h.ReserveMemoryMB,
-		ReserveDiskMB:      h.ReserveDiskMB,
-		Platform:           h.Platform(),
-		PlatformLabel:      h.Platform().Describe(),
-		CanonicalName:      h.CanonicalName(),
-		Version:            h.Version,
-		VersionChannel:     version.Channel(h.Version),
-		Features:           emptySlice(h.Features),
-		ElasticCPU:         h.Supports(agent.FeatureElasticCPU),
-		ElasticMemory:      h.Supports(agent.FeatureElasticMemory),
-		MemoryPool:         c.memoryPoolView(h),
-		Cordoned:           h.Cordoned,
-		ProtocolVersion:    h.ProtocolVersion,
-		Incompatible:       h.Incompatible,
-		IncompatibleReason: incompatibleReason(h),
-		VersionSkew:        string(version.CompareBuilds(h.Version, version.Version)),
-		Healthy:            h.Healthy(c.Now()),
-		LastHeartbeat:      h.LastHeartbeat,
-		CreatedAt:          h.CreatedAt,
+		Doctor:              doctorView(h.JudgedDoctor(c.Now())),
+		HealthCheck:         c.hostCheckView(h),
+		ID:                  h.ID,
+		Name:                h.Name,
+		Address:             h.Address,
+		Embedded:            h.Embedded,
+		Connection:          h.Connection,
+		Capacity:            h.Capacity,
+		ActiveRunners:       h.ActiveRunners,
+		Free:                h.Free(),
+		EffectiveCapacity:   h.EffectiveCapacity(),
+		EffectiveProfile:    EffectiveProfile(h, c.cfg().Runners),
+		Priority:            priority.Score,
+		PrioritySource:      string(priority.Source),
+		PriorityReason:      scheduler.HostPriorityReason(h),
+		Tags:                emptySlice(scheduler.HostTags(h, c.tracksClasses())),
+		SizeClass:           c.hostSizeClassView(h),
+		AutoPool:            c.hostAutoPoolView(h),
+		UnlimitedRunners:    h.UnlimitedRunners,
+		ThrottleReason:      scheduler.ThrottleReason(h),
+		AutoAdjust:          h.AutoAdjust,
+		AutoAdjustEffective: c.AutoAdjustEffective(h),
+		Backends:            emptySlice(h.Backends),
+		Labels:              emptyMap(h.Labels),
+		OS:                  h.OS,
+		Distro:              h.Distro,
+		OSVersion:           h.OSVersion,
+		Arch:                h.Arch,
+		CPUs:                h.CPUs,
+		MemoryMB:            h.MemoryMB,
+		UsageFresh:          h.Usage.Fresh(c.Now()),
+		AdmissionReason:     scheduler.HostAdmissionReason(h, c.Now()),
+		DiskTotalMB:         h.DiskTotalMB,
+		DiskFreeMB:          h.DiskFreeMB,
+		ReserveCPUs:         h.ReserveCPUs,
+		ReserveMemoryMB:     h.ReserveMemoryMB,
+		ReserveDiskMB:       h.ReserveDiskMB,
+		Platform:            h.Platform(),
+		PlatformLabel:       h.Platform().Describe(),
+		CanonicalName:       h.CanonicalName(),
+		Version:             h.Version,
+		VersionChannel:      version.Channel(h.Version),
+		Features:            emptySlice(h.Features),
+		ElasticCPU:          h.Supports(agent.FeatureElasticCPU),
+		ElasticMemory:       h.Supports(agent.FeatureElasticMemory),
+		MemoryPool:          c.memoryPoolView(h),
+		Cordoned:            h.Cordoned,
+		ProtocolVersion:     h.ProtocolVersion,
+		Incompatible:        h.Incompatible,
+		IncompatibleReason:  incompatibleReason(h),
+		VersionSkew:         string(version.CompareBuilds(h.Version, version.Version)),
+		Healthy:             h.Healthy(c.Now()),
+		LastHeartbeat:       h.LastHeartbeat,
+		CreatedAt:           h.CreatedAt,
 	}
 	rented := c.rentedHost(h.ID)
 	out.MachineID = rented.MachineID
@@ -395,6 +404,10 @@ func (c *Controller) HostView(h *store.Host) HostView {
 				Limits:       b.Limits,
 				SharedFolder: b.SharedFolder,
 			})
+		}
+		if !h.AutoAdjustedAt.IsZero() {
+			at := h.AutoAdjustedAt
+			out.AutoAdjustedAt = &at
 		}
 		return out
 	}

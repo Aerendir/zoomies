@@ -61,3 +61,27 @@ func TestCheckoutNamesRefuseGeneratedMatrixDynamicAndDuplicateSourceNames(t *tes
 		}
 	}
 }
+
+func TestFindCheckoutChoosesTheOnePreviewableStepAndNeverGuesses(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	job := func(key, name string) string {
+		return "  " + key + ":\n    name: " + name + "\n    runs-on: ubuntu-latest\n    steps:\n      - name: Checkout\n        uses: actions/checkout@" + sha + "\n        with:\n          fetch-depth: 0\n      - name: Test\n        run: echo test\n"
+	}
+	lint := "  lint:\n    name: Lint\n    runs-on: ubuntu-latest\n    steps:\n      - name: Vet\n        run: echo vet\n"
+	two := "on: push\njobs:\n" + lint + job("test", "Build")
+	j, s, err := FindCheckout([]byte(two), "Build")
+	if err != nil || j != 1 || s != 0 {
+		t.Fatalf("want job 1 step 0, got %d %d %v", j, s, err)
+	}
+	if _, _, err := FindCheckout([]byte(two), "Deploy"); err != ErrCheckoutNotFound {
+		t.Fatalf("a job with no such name: %v", err)
+	}
+	shallow := strings.Replace(job("test", "Build"), "fetch-depth: 0", "fetch-depth: 1", 1)
+	if _, _, err := FindCheckout([]byte("on: push\njobs:\n"+shallow), "Build"); err != ErrCheckoutNotFound {
+		t.Fatalf("an already shallow checkout is not a candidate: %v", err)
+	}
+	twice := strings.Replace(job("test", "Build"), "      - name: Test\n        run: echo test\n", "      - name: Checkout again\n        uses: actions/checkout@"+sha+"\n        with:\n          fetch-depth: 0 # again\n", 1)
+	if _, _, err := FindCheckout([]byte("on: push\njobs:\n"+twice), "Build"); err != ErrCheckoutAmbiguous {
+		t.Fatalf("two candidates must be refused, not picked: %v", err)
+	}
+}

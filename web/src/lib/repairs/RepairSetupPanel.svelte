@@ -237,7 +237,7 @@
 
 <section class="setup" aria-label="Repair setup">
   {#if error}<p role="alert" class="error">{error}</p>{/if}
-  <div class="card">
+  <div class="card" id="access">
     <h2>Your GitHub account</h2>
     {#if ownIdentity}<p>
         Linked to <strong>@{ownIdentity.github_login}</strong>. Comment
@@ -265,7 +265,7 @@
     {/if}
   </div>
   {#if admin}
-    <details class="card" open>
+    <details class="card" id="repositories" open>
       <summary><Settings2 size={16} /> Repository repair policies</summary>
       <p>
         Explicit requests use the requester's provider. Automatic repairs use the installation
@@ -330,26 +330,28 @@
           label="Allow edits to workflow files"
           description="Off by default. Allows changes to .github/workflows files."
         />
-        <Field
-          id="policy-limit"
-          label="Attempts per 24 hours"
-          hint="Includes explicit requests and automatic attempts. Personal accounts have an additional limit of 10."
-          ><Input
+        <div id="allowance">
+          <Field
             id="policy-limit"
-            bind:value={limit}
-            type="number"
-            min={1}
-            max={50}
-            required
-          /></Field
-        >
+            label="Attempts per 24 hours"
+            hint="Includes explicit requests and automatic attempts. Personal accounts have an additional limit of 10."
+            ><Input
+              id="policy-limit"
+              bind:value={limit}
+              type="number"
+              min={1}
+              max={50}
+              required
+            /></Field
+          >
+        </div>
         <Button type="submit" disabled={busy || !selectedRepos.length}
           >Save for {selectedRepos.length} repositories</Button
         >
         {#each bulkResults as result (result)}<p role="status">{result}</p>{/each}
       </form>
     </details>
-    <details class="card" open={!ownIdentity}>
+    <details class="card" id="link-account" open={!ownIdentity}>
       <summary><Link size={16} /> Link a GitHub account</summary>
       <p>
         Verify that the selected person owns this GitHub account before linking it. Eli checks its
@@ -446,6 +448,7 @@
   }
   .card {
     padding: var(--z-space-4);
+    scroll-margin-top: calc(var(--z-topbar-height) + var(--z-control-touch) + var(--z-space-3));
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-lg);
     background: var(--z-surface);

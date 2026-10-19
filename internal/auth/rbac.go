@@ -53,6 +53,13 @@ const (
 	// is not automatically one that may say the fleet is answered for.
 	ActionJobsAcknowledge  Action = "jobs.acknowledge"
 	ActionComparisonsWrite Action = "comparisons.write"
+	// ActionOptimisationsRead and ActionOptimisationsWrite cover reviewed workflow
+	// optimisations. Writing reads a repository's workflow source and retains a
+	// proposed edit, so both are an operator's; the server-side settings
+	// optimisation.source_reads and optimisation.workflow_edits still decide
+	// whether the instance allows it at all.
+	ActionOptimisationsRead  Action = "optimisations.read"
+	ActionOptimisationsWrite Action = "optimisations.write"
 )
 const ActionUsageRead Action = "usage.read"
 
@@ -318,10 +325,12 @@ var actionRoles = map[Action]store.Role{
 	// Operator rather than viewer: a re-run spends the organisation's GitHub
 	// minutes and can have whatever side effects the workflow has, which is
 	// the same bar cancelling one clears.
-	ActionJobsRerun:        store.RoleOperator,
-	ActionJobsAcknowledge:  store.RoleOperator,
-	ActionComparisonsWrite: store.RoleOperator,
-	ActionUsageRead:        store.RoleViewer,
+	ActionJobsRerun:          store.RoleOperator,
+	ActionJobsAcknowledge:    store.RoleOperator,
+	ActionComparisonsWrite:   store.RoleOperator,
+	ActionOptimisationsRead:  store.RoleOperator,
+	ActionOptimisationsWrite: store.RoleOperator,
+	ActionUsageRead:          store.RoleViewer,
 	// Operator: it makes a change, as the pool and host updates it stands in for do.
 	ActionProblemsApply: store.RoleOperator,
 

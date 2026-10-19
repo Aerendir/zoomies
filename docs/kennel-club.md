@@ -30,8 +30,8 @@ Turn it on with the **Check repository standards** setting
 (`kennel.enabled`, see [Configuration](configuration.md)), and it appears in the
 UI under **Kennel Club**. This is its Overview for the demo fleet:
 
-![The Kennel Club Overview of the demo fleet: three repositories, two with no open findings and one needing attention, two errors open, acme/site listed first under Needs attention, and the by-check table beneath](screenshots/kennel-dark.webp#only-dark){ .zoomies-shot }
-![The Kennel Club Overview of the demo fleet: three repositories, two with no open findings and one needing attention, two errors open, acme/site listed first under Needs attention, and the by-check table beneath](screenshots/kennel-light.webp#only-light){ .zoomies-shot }
+![The Kennel Club Overview of the demo fleet: a verdict saying one repository needs attention with acme/site named, the counts as one strip, and the affected checks first under What is open by check](screenshots/kennel-dark.webp#only-dark){ .zoomies-shot }
+![The Kennel Club Overview of the demo fleet: a verdict saying one repository needs attention with acme/site named, the counts as one strip, and the affected checks first under What is open by check](screenshots/kennel-light.webp#only-light){ .zoomies-shot }
 
 ## What it checks
 
@@ -660,8 +660,8 @@ milder finding does not quietly cover the worse one. On acme/site the first
 finding below is an error because the second is open beside it, and each says
 what to change:
 
-![The CI tab of acme/site: two open errors, a public repository running jobs on this fleet and a public repository's jobs run on a pool with weak isolation, each with what to change and a Waive button](screenshots/kennel-repository-dark.webp#only-dark){ .zoomies-shot }
-![The CI tab of acme/site: two open errors, a public repository running jobs on this fleet and a public repository's jobs run on a pool with weak isolation, each with what to change and a Waive button](screenshots/kennel-repository-light.webp#only-light){ .zoomies-shot }
+![The Findings section of acme/site: two open errors, a public repository running jobs on this fleet and a public repository's jobs run on a pool with weak isolation, each with what to change and a Waive button](screenshots/kennel-repository-dark.webp#only-dark){ .zoomies-shot }
+![The Findings section of acme/site: two open errors, a public repository running jobs on this fleet and a public repository's jobs run on a pool with weak isolation, each with what to change and a Waive button](screenshots/kennel-repository-light.webp#only-light){ .zoomies-shot }
 
 ### The optional checks
 
@@ -1033,8 +1033,8 @@ the last thirty days. **Active on Zoomies** widens it to every repository Kennel
 Club knows, a choice each person's browser remembers, and the Overview's cards
 open it widened, so that a number and the rows behind it agree:
 
-![The Kennel Club Repositories list: acme/site needs attention with two errors, acme/widgets and acme/api have no open findings, and the filters above it include Tracked and Active on Zoomies](screenshots/kennel-repositories-dark.webp#only-dark){ .zoomies-shot }
-![The Kennel Club Repositories list: acme/site needs attention with two errors, acme/widgets and acme/api have no open findings, and the filters above it include Tracked and Active on Zoomies](screenshots/kennel-repositories-light.webp#only-light){ .zoomies-shot }
+![The Kennel Club Repositories list: quick views with counts, a single row of filters, and acme/site needing attention with two errors while acme/widgets and acme/api have no open findings](screenshots/kennel-repositories-dark.webp#only-dark){ .zoomies-shot }
+![The Kennel Club Repositories list: quick views with counts, a single row of filters, and acme/site needing attention with two errors while acme/widgets and acme/api have no open findings](screenshots/kennel-repositories-light.webp#only-light){ .zoomies-shot }
 
 * **A prompt for a coding agent.** Every open finding has a **Copy prompt for
   your coding agent** button, and `zoomies kennel repository <id> --prompts`
@@ -1050,12 +1050,13 @@ open it widened, so that a number and the rows behind it agree:
   repository, the catalogue and a recheck, and `zoomies kennel check [path]`
   runs the workflow checks over a checkout with no controller at all. See
   [the CLI page](cli.md#zoomies-kennel).
-* **The UI.** Under **Kennel Club** in the side menu: the **Overview** (how many
-  repositories are in each standing, what is open by severity, and which to open
-  first), **Repositories** (the list, narrowed by standing, severity, check and
-  tracking, every filter in the address so that a view is a link to send), and
-  each repository's own page, with an **Overview** of what the fleet knows, a
-  **CI** tab with Kennel Club's findings and a tab for its **AI Context**. See
+* **The UI.** Under **Kennel Club** in the side menu: the **Overview** (a
+  verdict first, the full counts as one strip, the affected checks before the
+  quiet and turned-off ones, and the sources read beside them), **Repositories**
+  (quick views with counts, one row of filters, and the list, every filter in the
+  address so that a view is a link to send), and each repository's own page, with
+  **Findings** (Kennel Club's findings, with **Protection** and **Agent guidance**
+  as areas of it), **Fleet activity**, and its **AI Context**. See
   [the UI, page by page](ui.md#kennel-club) for each page.
 * **Problems.** Two kinds reach the problems list, and no others:
   `kennel.exposure`, one problem for the fleet with the count of repositories

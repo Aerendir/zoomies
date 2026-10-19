@@ -20,11 +20,13 @@
   import type { Schemas } from '$lib/api/types';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
+  import Disclosure from '$lib/components/Disclosure.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
+  import SectionNav from '$lib/components/SectionNav.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import { shortId } from '$lib/format';
+  import { pluralise, shortId } from '$lib/format';
   import { router } from '$lib/router';
   import { session } from '$lib/state/session.svelte';
   import { repairStatus } from '$lib/status';
@@ -67,6 +69,16 @@
   const view = $derived(repair ? caseFromSnapshot(repair) : null);
   const pullLink = $derived(safeHttpUrl(view?.pullUrl));
   const runLink = $derived(safeHttpUrl(view?.runUrl));
+  const navItems = $derived([
+    { id: 'summary', label: 'Summary' },
+    { id: 'what-failed', label: 'What failed', count: view?.jobs.length ?? 0 },
+    { id: 'details', label: 'Details' },
+  ]);
+  const caseSummary = $derived.by(() => {
+    if (!view) return '';
+    const pull = view.pullNumber ? `${view.repo} #${view.pullNumber}` : view.repo;
+    return `${pull} · ${pluralise(view.jobs.length, 'failed job')}`;
+  });
 
   // An automatic repair has no owner, so only an administrator can open one, and only
   // an administrator can read the policy that started it.
@@ -272,33 +284,43 @@
     <Skeleton height="11rem" radius="md" />
   </div>
 {:else}
+  <SectionNav items={navItems} label="On this page" />
   <div class="cols">
     <div class="main">
-      {#if refreshFailed}
-        <p class="stale" role="status">
-          Could not refresh just now. This is the last answer Zoomies had, and it will try again
-          shortly.
-        </p>
-      {/if}
-      {#if active}
-        <ProgressTrack {repair} {now} />
-      {:else}
-        <OutcomeBanner {repair} />
-        <NextSteps {repair} {view} />
-      {/if}
-      <CaseCard
-        {view}
-        failedLabel={active ? 'What Eli is fixing' : 'What Eli was asked to fix'}
-        pullNote="Pull request details were not kept"
-      />
-      <FailedJobs
-        jobs={view.jobs}
-        repo={view.repo}
-        canReadLogs
-        description="As they were when the repair began."
-        none="This repair did not keep a record of the jobs it was asked to fix, so their names and steps are not shown."
-      />
-      <TechnicalDetails {repair} />
+      <div class="summary" id="summary" tabindex="-1">
+        {#if refreshFailed}
+          <p class="stale" role="status">
+            Could not refresh just now. This is the last answer Zoomies had, and it will try again
+            shortly.
+          </p>
+        {/if}
+        {#if active}
+          <ProgressTrack {repair} {now} />
+        {:else}
+          <OutcomeBanner {repair} />
+          <NextSteps {repair} {view} />
+        {/if}
+      </div>
+      <Disclosure id="what-failed" title="What Eli was asked to fix" summary={caseSummary}>
+        <div class="case">
+          <CaseCard
+            {view}
+            failedLabel={active ? 'What Eli is fixing' : 'What Eli was asked to fix'}
+            pullNote="Pull request details were not kept"
+          />
+        </div>
+        <FailedJobs
+          jobs={view.jobs}
+          repo={view.repo}
+          canReadLogs
+          description="As they were when the repair began."
+          none="This repair did not keep a record of the jobs it was asked to fix, so their names and steps are not shown."
+          bare
+        />
+      </Disclosure>
+      <div class="details" id="details" tabindex="-1">
+        <TechnicalDetails {repair} />
+      </div>
     </div>
     <aside class="side" aria-label="This attempt">
       <AttemptFacts {repair} {view} />
@@ -352,6 +374,18 @@
     gap: var(--z-space-5);
     align-content: start;
     min-width: 0;
+  }
+  .summary,
+  .details,
+  .case {
+    display: grid;
+    gap: var(--z-space-5);
+    min-width: 0;
+    scroll-margin-top: calc(var(--z-topbar-height) + var(--z-control-touch) + var(--z-space-3));
+  }
+  .summary:focus,
+  .details:focus {
+    outline: none;
   }
   .stale {
     margin: 0;

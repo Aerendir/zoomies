@@ -27,7 +27,9 @@
 
   let { rows, busy, onrecheck, onsetup, onchoose }: Props = $props();
 
-  const blockedCount = $derived(rows.filter((row) => row.status === 'blocked').length);
+  const blockedRows = $derived(rows.filter((row) => row.status === 'blocked'));
+  const blockedCount = $derived(blockedRows.length);
+  const otherRows = $derived(rows.filter((row) => row.status !== 'blocked'));
   const allPassed = $derived(rows.length > 0 && rows.every((row) => row.status === 'ok'));
 
   const words = { ok: 'Passed', blocked: 'Blocked', unchecked: 'Not checked yet' } as const;
@@ -39,9 +41,9 @@
   }
 </script>
 
-{#snippet list()}
+{#snippet list(shown: readonly CheckRow[])}
   <ul>
-    {#each rows as row (row.code)}
+    {#each shown as row (row.code)}
       {@const link = row.action?.kind === 'link' ? linkTarget(row.action.href) : undefined}
       <li class="row {row.status}">
         <span class="ico" aria-hidden="true">
@@ -101,10 +103,18 @@
           aria-hidden="true"><Check size={12} /></span
         >All {rows.length} checks passed</summary
       >
-      {@render list()}
+      {@render list(rows)}
     </details>
   {:else}
-    {@render list()}
+    {@render list(blockedRows)}
+    {#if otherRows.length}
+      <details class="folded">
+        <summary
+          ><ChevronRight size={16} class="chev" aria-hidden="true" />Show all {rows.length} checks</summary
+        >
+        {@render list(otherRows)}
+      </details>
+    {/if}
   {/if}
 </Panel>
 

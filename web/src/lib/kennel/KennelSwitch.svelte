@@ -97,6 +97,7 @@
   <Switch
     bind:checked={shown}
     label={KENNEL_SWITCH_LABEL}
+    size="sm"
     disabled={!canAdmin || busy || enabled === null}
     describedBy="kennel-switch-state"
     onchange={pressed}

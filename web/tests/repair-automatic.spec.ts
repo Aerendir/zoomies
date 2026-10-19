@@ -9,6 +9,14 @@
  * matters when something is going wrong away from a desk.
  */
 import { expect, test } from '@playwright/test';
+
+// Supporting detail is closed while work is in front of it; these tests open it.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zoomies.repairs.automatic.open', 'true');
+    localStorage.setItem('zoomies.repairs.history.open', 'true');
+  });
+});
 import {
   automaticPolicy,
   automaticRow,

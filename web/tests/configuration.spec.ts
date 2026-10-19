@@ -237,6 +237,7 @@ test('the capacity map opens in the layout the fleet chose for each page, until 
     );
     // The Overview has its own setting, which was not touched.
     await goto(page, '/', 'Overview');
+    await page.locator('#capacity > summary').click();
     await expect(layout.getByRole('button', { name: /^Overlay/ })).toHaveAttribute(
       'aria-pressed',
       'true',

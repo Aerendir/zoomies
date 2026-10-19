@@ -386,8 +386,8 @@ straight away when you choose **Recheck context**. A *Zoomies only* upload is
 verified the moment it arrives. Once verification passes,
 the repository shows **Context verified**.
 
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
 
 Every later push to the default branch regenerates the context. Zoomies notices
 on its next check.

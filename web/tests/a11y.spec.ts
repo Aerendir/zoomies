@@ -102,7 +102,7 @@ for (const { path, heading } of PAGES) {
     // At least one navigation landmark, and the sections one is named so it
     // can be told apart from the grid's pagination.
     expect(await page.getByRole('navigation').count()).toBeGreaterThanOrEqual(1);
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Sections', exact: true })).toHaveCount(1);
   });
 }
 
@@ -607,12 +607,16 @@ test('a pool editor section opens and shuts from the keyboard', async ({ page })
 for (const { path, heading, stubbed, ready } of REPAIR_PAGES) {
   test(`${path.split('?')[0]} can be used by a screen reader and a keyboard`, async ({ page }) => {
     if (stubbed) await mockRepairWorld(page);
+    await page.addInitScript(() => {
+      localStorage.setItem('zoomies.repairs.automatic.open', 'true');
+      localStorage.setItem('zoomies.repairs.history.open', 'true');
+    });
     await goto(page, path, heading);
     await expect(ready(page)).toBeVisible();
 
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Sections', exact: true })).toHaveCount(1);
     await expect(
       page.getByRole('button', { name: /^$/ }),
       `${path}: buttons are named`,
@@ -673,6 +677,9 @@ test('the Automatic repairs panel and its stop dialog can be used by a keyboard 
   page,
 }) => {
   await mockRepairWorld(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('zoomies.repairs.automatic.open', 'true');
+  });
   await goto(page, '/repairs', 'Eli repairs');
   const panel = page.getByRole('region', { name: 'Automatic repairs' });
   await expect(panel.getByRole('article')).toHaveCount(3);

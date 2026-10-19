@@ -191,3 +191,40 @@ func TestBrandedNameAlwaysCarriesTheBrand(t *testing.T) {
 		})
 	}
 }
+
+func TestNewRunnerNameOnNamesTheHostThatRunsTheJob(t *testing.T) {
+	pool := &Pool{
+		Name:      "zoomies-linux-x64",
+		Resources: Resources{CPUs: 4, MemoryMB: 8 * 1024},
+		Platform:  Platform{OS: "ubuntu", OSVersion: "24.04", Arch: "amd64"},
+	}
+	// A failed job is traced from GitHub's own record: the runner list, the job
+	// header and the "Set up job" line. That is only possible if the host is in
+	// the name, in place of a handle that says nothing about the machine.
+	host := &Host{Name: "zoomies-8vcpu-ubuntu-2404-fido"}
+	name := NewRunnerNameOn(pool, host)
+	if !strings.HasPrefix(name, "zoomies-4vcpu-8gb-ubuntu-2404-fido-") {
+		t.Fatalf("NewRunnerNameOn = %q, want the pool's shape then the host", name)
+	}
+	if !IsRunnerName(name) || len(name) > naming.MaxNameLength {
+		t.Fatalf("%q must stay recognisably this fleet's and inside GitHub's limit", name)
+	}
+	// Two runners on one host are still two registrations.
+	if other := NewRunnerNameOn(pool, host); other == name {
+		t.Fatal("two runners on one host got the same name")
+	}
+	// A host named by hand carries its own name; a long one is cut a word at a time.
+	if got := NewRunnerNameOn(pool, &Host{Name: "build-box-7"}); !strings.Contains(got, "-build-box-7-") {
+		t.Fatalf("a hand-named host should appear whole: %q", got)
+	}
+	long := NewRunnerNameOn(pool, &Host{Name: "the-runner-host-in-the-rack-by-the-window-number-nine"})
+	if len(long) > naming.MaxNameLength || !strings.Contains(long, "-the-runner-host-in-") || strings.Contains(long, "window") {
+		t.Fatalf("a long host name should lose whole words, not the token: %q", long)
+	}
+	// Nothing nameable falls back to the handle, as before.
+	for _, h := range []*Host{nil, {Name: ""}, {Name: "!!!"}} {
+		if got := NewRunnerNameOn(pool, h); !strings.HasPrefix(got, "zoomies-4vcpu-8gb-ubuntu-2404-") {
+			t.Fatalf("host %+v: %q", h, got)
+		}
+	}
+}

@@ -1300,6 +1300,36 @@ Two ceilings apply at once, and both are hard: a pool never exceeds its
 is therefore only as real as the capacity available on the hosts it can select;
 setting it to 20 across two hosts of capacity 4 buys nothing.
 
+### Keeping a host at its recommended size
+
+**Adjust** on a host's card recommends how many runners the machine can hold and what
+it should keep for itself, and **Set to recommendations** puts those numbers there.
+A host can also be kept there by the controller, so a machine nobody sized stops
+being a problem: choose **Keep at recommendations** in **Adjust**, or turn on
+[`scheduler.host_auto_adjust`](configuration.md#schedulerhost_auto_adjust) for the
+whole fleet, which includes hosts a provider rents. **Never adjust** keeps a host's
+typed figures whatever the fleet says.
+
+The recommendation is the smallest of three counts of runners:
+
+| Limit | What it counts |
+| --- | --- |
+| CPU | the cores left after the reserve, over what one runner asks for |
+| Memory | the memory left after the reserve, over what one runner asks for |
+| Disk | the work filesystem less its reserve, at 10 GiB of working room per runner |
+
+A runner asks for the largest size an enabled pool sets, or the fleet's default size
+where none does. The reserve is a core on anything up to sixteen, a tenth of the
+memory (1 to 8 GB) and a tenth of the disk (2 to 64 GB). The page names the limit that
+set the count, so a machine with many cores and a small disk says that the disk did.
+
+The controller re-works these as the host reports and the pools change, no more than
+once every five minutes for a host, and leaves a host alone when it is paused
+(capacity 0), cordoned, silent or has not reported its size. Running jobs are never
+stopped; a lower capacity only stops new runners starting until the host is under it.
+Each move is in the audit log as `host.auto_adjust` with the reason, and **Adjust**
+shows when it last happened.
+
 ### What a runner reserves
 
 A slot is a count, and a count does not know that eight runners of a pool that

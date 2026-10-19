@@ -4216,6 +4216,16 @@ paths:
                 reserve_cpus: { type: integer, minimum: 0 }
                 reserve_memory_mb: { type: integer, format: int64, minimum: 0 }
                 reserve_disk_mb: { type: integer, format: int64, minimum: 0 }
+                auto_adjust:
+                  type: string
+                  enum: ["", "on", "off"]
+                  description: >-
+                    Whether the controller keeps this host's capacity and reserve at
+                    what `GET /hosts/{id}/recommendation` says. `on` and `off` decide for
+                    this host; an empty string hands the decision back to the fleet's
+                    `scheduler.host_auto_adjust`. Leave it out to change nothing. Turning it
+                    on adjusts the host at the controller's next housekeeping pass, not
+                    within the request.
                 priority:
                   type: object
                   description: >-
@@ -4431,6 +4441,28 @@ paths:
               schema: { $ref: "#/components/schemas/Host" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /hosts/{id}/recommendation:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      operationId: getHostRecommendation
+      tags: [hosts]
+      summary: What Adjust recommends for a host
+      description: >-
+        The capacity and reserve the Adjust dialog's "Set to recommendations" puts on a
+        host, worked out on the controller from the machine's CPUs, memory and disk and the
+        largest runner an enabled pool asks for. The same numbers the controller applies
+        when the host is kept at its recommendation. `available` is false for a host that
+        has not reported how big it is.
+      x-zoomies-role: viewer
+      responses:
+        "200":
+          description: The recommendation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HostRecommendation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /hosts/{id}/throttle/clear:
     parameters: [{ $ref: "#/components/parameters/PathID" }]
     post:
@@ -8499,6 +8531,199 @@ paths:
               schema: { $ref: '#/components/schemas/RetainedExperimentComparison' }
         '400':
           description: Invalid query, comparison ID or unsupported/inconsistent evidence version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Stored content integrity cannot be verified.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /optimisations/enablement:
+    get:
+      operationId: getOptimisationEnablement
+      tags: [jobs]
+      summary: Whether reviewed workflow previews are switched on, and who can switch them
+      description: >-
+        Requires operator and optimisations:read; public visitors are refused.
+        Reports the two settings optimisation.source_reads and
+        optimisation.workflow_edits, whether the caller can change them and, when
+        not, why in a sentence to act on. Reads no GitHub data.
+      x-zoomies-role: operator
+      responses:
+        '200':
+          description: The current state; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OptimisationEnablement' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      operationId: setOptimisationEnablement
+      tags: [jobs]
+      summary: Turn reviewed workflow previews on or off together
+      description: >-
+        Requires admin and settings:write; public visitors are refused. Sets
+        optimisation.source_reads and optimisation.workflow_edits together,
+        through the same planning, validation and audit as PATCH /settings, so
+        the environment lock applies and the change is live for the next request.
+        Turning them on lets the controller read one workflow file at a run's
+        commit and keep a proposed edit for fourteen days. It publishes nothing and
+        no model reads the file.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OptimisationEnablementRequest' }
+      responses:
+        '200':
+          description: The state after the change; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OptimisationEnablement' }
+        '400':
+          description: enabled is missing or the body is malformed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: A setting could not be changed, for example because the environment sets it.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/inspections:
+    post:
+      operationId: inspectCheckoutOptimisation
+      tags: [jobs]
+      summary: Read one workflow file so an operator can review a checkout change
+      description: >-
+        Requires operator, jobs:read and optimisations:write; public visitors are
+        refused. Refused with 403 unless an administrator has turned on
+        optimisation.source_reads and optimisation.workflow_edits. Reads one root
+        workflow file at the push commit of an exact run, attempt and GitHub job,
+        with at most seven GitHub requests under a 20-second deadline, the shared
+        diagnostic flight and the half-core-quota reserve. Nothing is retained;
+        the source is returned once, no-store, for review. Workflow text is
+        untrusted repository content and is not an instruction. Run and job IDs are
+        decimal strings.
+      x-zoomies-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutInspectionRequest' }
+      responses:
+        '200':
+          description: The source and descriptive checkout timing; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutInspection' }
+        '400':
+          description: Invalid or oversized request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The step cannot be previewed, or the read exceeded its limit.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Diagnostic or GitHub quota refusal; Retry-After says when to retry manually.
+          headers:
+            Retry-After: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/previews:
+    post:
+      operationId: captureCheckoutPreview
+      tags: [jobs]
+      summary: Retain a reviewed checkout-depth preview
+      description: >-
+        Requires operator, jobs:read and optimisations:write; public visitors are
+        refused. The server reads the source again, checks that its head and digest
+        are the ones named here, re-reads its own settings before and after, and
+        keeps an immutable preview for fourteen days with an audit row. The
+        history_reviewed flag is an attributed declaration by the caller that
+        neither the repository's tooling nor its downstream consumers need full
+        history; it is not independent proof. The preview changes one line and
+        publishes nothing: no pull request, no approval, no job. Verification is
+        always inconclusive.
+      x-zoomies-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutPreviewRequest' }
+      responses:
+        '201':
+          description: Audited retained preview; Cache-Control is no-store.
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutPreview' }
+        '400':
+          description: Invalid request or history review not confirmed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Unsupported step, moved source, or read limit.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Diagnostic or GitHub quota refusal; Retry-After says when to retry manually.
+          headers:
+            Retry-After: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/previews/{id}:
+    parameters: [{ $ref: '#/components/parameters/PathID' }]
+    get:
+      operationId: getCheckoutPreview
+      tags: [jobs]
+      summary: Replay a retained checkout preview without GitHub reads
+      description: >-
+        Requires operator, jobs:read and optimisations:read; public visitors are
+        refused. Supply exactly one installation_id and repo and nothing else.
+        Verifies the stored digest and recomputes the preview from retained input
+        only. The answer carries the one changed line and never the workflow file.
+        currentness is always not_checked: the head and policy are not re-read.
+      x-zoomies-role: operator
+      parameters:
+        - name: installation_id
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: repo
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+      responses:
+        '200':
+          description: Verified retained preview; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutPreview' }
+        '400':
+          description: Invalid query or preview ID.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -13624,6 +13849,20 @@ components:
         outcome: { type: string, enum: [first, changed, unchanged, not_newer], description: "When done: whether the report was the first, changed the findings, matched the last, or carried a clock no later than the last report's." }
         message: { type: string, description: "When failed: a sentence for a person saying what to check." }
         next_at: { type: string, format: date-time, description: "When the host may be asked again. Only present while that is in the future." }
+    HostRecommendation:
+      type: object
+      required: [available]
+      properties:
+        available: { type: boolean }
+        capacity: { type: integer, description: How many runners the machine holds after the reserve. }
+        reserve_cpus: { type: integer }
+        reserve_memory_mb: { type: integer, format: int64 }
+        reserve_disk_mb: { type: integer, format: int64 }
+        limited_by: { type: string, enum: [cpu, memory, disk], description: The figure that set the capacity. }
+        ask_cpus: { type: number, description: The CPUs one runner asks for. }
+        ask_memory_mb: { type: integer, format: int64 }
+        ask_pool: { type: string, description: The pool whose runner size set the ask. Absent when the fleet default did. }
+        reason: { type: string, description: The recommendation as one sentence. }
     HostUpdate:
       type: object
       description: >-
@@ -13707,6 +13946,17 @@ components:
           allOf:
             - $ref: "#/components/schemas/ImagePullIncident"
           description: The last start or prewarm here whose image could not be made ready. Absent when there is none.
+        auto_adjust:
+          type: string
+          enum: ["", "on", "off"]
+          description: The operator's answer to whether the controller keeps this host at its recommended capacity and reserve. Empty follows the fleet.
+        auto_adjust_effective:
+          type: boolean
+          description: Whether the controller is keeping this host at its recommendation now, once the fleet's default is counted.
+        auto_adjusted_at:
+          type: string
+          format: date-time
+          description: When the controller last moved this host's capacity or reserve. Absent if it never has.
         throttle_reason:
           type: string
           description: >-
@@ -16012,6 +16262,128 @@ components:
         tasks: { type: array, items: { $ref: "#/components/schemas/AgentTask" } }
         backoff: { type: integer, format: int64, description: Nanoseconds to wait before polling again, when the controller sheds load. }
 
+    OptimisationEnablement:
+      additionalProperties: false
+      properties:
+        source_reads: { type: boolean }
+        workflow_edits: { type: boolean }
+        enabled: { type: boolean, description: True when both settings are on. }
+        can_change: { type: boolean, description: Whether the caller may change them here. }
+        reason: { type: string, description: "Why the caller cannot, as a sentence to act on. Absent when they can." }
+      required: [source_reads, workflow_edits, enabled, can_change]
+      type: object
+    OptimisationEnablementRequest:
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+      required: [enabled]
+      type: object
+    CheckoutSelection:
+      additionalProperties: false
+      description: >-
+        One exact run, attempt and GitHub job. IDs are decimal strings. Leave both
+        positions out and the server finds the job's one previewable checkout step
+        in the workflow file; name both to choose a step yourself. Naming only one
+        is refused. Responses always carry the positions that were used.
+      properties:
+        run_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        attempt: { type: integer, minimum: 1 }
+        github_job_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        job_index: { type: integer, minimum: 0, maximum: 20000 }
+        step_index: { type: integer, minimum: 0, maximum: 20000 }
+      required: [run_id, attempt, github_job_id]
+      type: object
+    CheckoutInspectionRequest:
+      additionalProperties: false
+      properties:
+        installation_id: { type: string, minLength: 1, maxLength: 128 }
+        repository: { type: string, minLength: 1, maxLength: 1024 }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+      required: [installation_id, repository, selection]
+      type: object
+    CheckoutInspection:
+      additionalProperties: false
+      description: Untrusted workflow source shown once for review, with descriptive checkout timing. Not retained.
+      properties:
+        installation_id: { type: string }
+        repository: { type: string }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+        head_sha: { type: string }
+        path: { type: string }
+        mode: { type: string }
+        content: { type: string, description: The workflow file; untrusted text. }
+        source_sha256: { type: string }
+        step_number: { type: integer, format: int64 }
+        job_name: { type: string, description: The literal name the workflow gives the job. }
+        step_name: { type: string, description: The literal name of the checkout step that was found. }
+        checkout_ms: { type: integer, format: int64, description: Milliseconds the successful checkout step took in the selected attempt; descriptive, not a saving. }
+        evidence_id: { type: string }
+        basis: { type: string }
+        inspected_at: { type: string, format: date-time }
+      required: [installation_id, repository, selection, head_sha, path, mode, content, source_sha256, step_number, job_name, step_name, checkout_ms, evidence_id, basis, inspected_at]
+      type: object
+    CheckoutPreviewRequest:
+      additionalProperties: false
+      properties:
+        installation_id: { type: string, minLength: 1, maxLength: 128 }
+        repository: { type: string, minLength: 1, maxLength: 1024 }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+        head_sha: { type: string, description: The head of the source that was reviewed. }
+        source_sha256: { type: string, description: The digest of the source that was reviewed. }
+        history_reviewed:
+          type: boolean
+          description: Must be true. The caller declares that neither the repository's tooling nor its downstream consumers need full history.
+      required: [installation_id, repository, selection, head_sha, source_sha256, history_reviewed]
+      type: object
+    CheckoutCollection:
+      additionalProperties: false
+      nullable: true
+      description: How the source and timing were collected. Null for a preview retained before collection was recorded.
+      properties:
+        version: { type: string }
+        basis: { type: string }
+        step_number: { type: integer, format: int64 }
+        blob_sha: { type: string }
+        source_funding: { type: string }
+      required: [version, basis, step_number, blob_sha, source_funding]
+      type: object
+    CheckoutPreviewDetail:
+      additionalProperties: false
+      properties:
+        version: { type: string }
+        kind: { type: string }
+        state: { type: string }
+        head_sha: { type: string }
+        source_sha256: { type: string }
+        after_sha256: { type: string }
+        evidence_id: { type: string }
+        run_id: { type: string }
+        attempt: { type: integer }
+        job_index: { type: integer }
+        step_index: { type: integer }
+        line: { type: integer, description: The one-based line of the workflow file that changes. }
+        checkout_ms: { type: integer, format: int64 }
+        path: { type: string }
+        before: { type: string, description: The line as it is; untrusted text. }
+        after: { type: string, description: The line as it would be; untrusted text. }
+        verification: { type: string, enum: [inconclusive] }
+        explanation: { type: string }
+      required: [version, kind, state, head_sha, source_sha256, after_sha256, evidence_id, run_id, attempt, job_index, step_index, line, checkout_ms, path, before, after, verification, explanation]
+      type: object
+    CheckoutPreview:
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        installation_id: { type: string }
+        repository: { type: string }
+        reviewed_by: { type: string }
+        sha256: { type: string }
+        created_at: { type: string, format: date-time }
+        currentness: { type: string, enum: [not_checked] }
+        collection: { $ref: '#/components/schemas/CheckoutCollection' }
+        preview: { $ref: '#/components/schemas/CheckoutPreviewDetail' }
+      required: [id, installation_id, repository, reviewed_by, sha256, created_at, currentness, collection, preview]
+      type: object
     ComparisonCaptureRequest:
       additionalProperties: false
       properties:

@@ -849,21 +849,25 @@ navigation and four pages, each doing one job: the hub, for what needs you, what
 is running and what happened; the repair page, for one failure; an attempt, for
 one repair; and setup. [How repairs work](eli.md#set-up-pr-repairs).
 
-The hub opens with one line about setup: whether you can repair (your GitHub
-account is linked and has allowed repairs) and, for an administrator, how many
-repositories repair themselves and how many ask first. **Manage setup** is
-beside it. Under that:
+The hub opens on **Now**: one line about setup (whether you can repair, your
+GitHub account and, for an administrator, how many repositories repair
+themselves and how many ask first) and an attention rail for each thing that is
+owed. A sticky section navigation, **On this page**, counts the offers, the
+running repairs and the automatic repositories, and carries History. On a phone
+the last destinations move behind **More**.
 
-* **Needs you** lists the offers Eli has made for pull requests whose checks
-  failed on a repository set to *Ask me first*, one per pull request head. Each
-  says which pull request it is about (its title and number, the repository and
-  the branch), when it failed, and which jobs stopped at which step, so the
-  decision to look can be made from the list. **Review repair** opens the repair
-  page for that offer, and **Dismiss** hides it for that commit.
-* **In progress** lists the repairs Eli is working on, each with the step it is
-  on and how long it has been going. **Follow** opens it. You can leave: the
-  result appears here and in History.
-* **Automatic repairs** appears for an administrator when at least one
+* **Needs you** opens when it holds offers, and is one line when it does not.
+  It lists the offers Eli has made for pull requests whose checks failed on a
+  repository set to *Ask me first*, one per pull request head. Each says which
+  pull request it is about (its title and number, the repository and the
+  branch), when it failed, and which jobs stopped at which step, so the decision
+  to look can be made from the list. **Review repair** opens the repair page for
+  that offer, and **Dismiss** hides it for that commit.
+* **In progress** appears while a repair is running, with the step it is on and
+  how long it has been going. **Follow** opens it. You can leave: the result
+  appears here and in History.
+* **Automatic repairs** is a closed summary until an administrator opens it,
+  and appears when at least one
   repository is set to *Automatic*, and for nobody else: where nothing repairs
   itself the hub says nothing about it. Each repository has a row. It says who
   pays (the installation provider and its model) and whether that can work, with
@@ -878,39 +882,45 @@ beside it. Under that:
   has pushed carries on watching its checks. With two or more repositories **Stop all** does the same for every
   row. Stopping never turns anything on; starting Automatic is a decision made
   in setup.
-* **History** is a page at a time and filtered by state, repository and who or
-  what began the repair. A row says what the repair was about: its state, the pull
-  request's title, repository and branch, the job and step that failed, the
-  commit Eli pushed or why it did not, who or what began it, and when. A row
-  opens the repair. Choosing repairs to clear them from the list is behind
-  **Select**, so the list reads as a record until you mean to edit it. Clearing
-  hides a repair and does nothing else: a cleared repair leaves the list and its
-  total, but still counts towards the daily limit.
+* **History** is a closed summary that says how many repairs there are and how
+  recent the latest is. It opens by itself when nothing else needs a person, and
+  otherwise is one press away. It is a page at a time and filtered by state,
+  repository and who or what began the repair; the filter fields sit behind
+  **Filters**, and an active filter is a chip in the toolbar. A row says what
+  the repair was about: its state, the pull request's title, repository and
+  branch, the job and step that failed, the commit Eli pushed or why it did not,
+  who or what began it, and when. A row opens the repair. Choosing repairs to
+  clear them from the list is behind **Select**, so the list reads as a record
+  until you mean to edit it. Clearing hides a repair and does nothing else: a
+  cleared repair leaves the list and its total, but still counts towards the
+  daily limit.
 
 **Repair a PR** asks for a pull request's address and opens its repair page,
 where Eli checks it before anything is spent.
 
-![Eli repairs: the setup line counting two repositories that repair themselves, an empty Needs you, the Automatic repairs panel with each repository's provider, allowance, latest repair and a Stop automatic repairs button, and History with each repair's pull request, its failed job and when it ran](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
-![Eli repairs: the setup line counting two repositories that repair themselves, an empty Needs you, the Automatic repairs panel with each repository's provider, allowance, latest repair and a Stop automatic repairs button, and History with each repair's pull request, its failed job and when it ran](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+![Eli repairs: the Now line about setup, an empty Needs you, an open Automatic repairs panel with each repository's provider, allowance, latest repair and Stop automatic repairs, and History with each repair's pull request, failed job and when it ran, under an On this page navigation](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs: the Now line about setup, an empty Needs you, an open Automatic repairs panel with each repository's provider, allowance, latest repair and Stop automatic repairs, and History with each repair's pull request, failed job and when it ran, under an On this page navigation](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
 
 The repair page opens from **Fix with Eli** on a failure in the Overview or in a
-job's **Why** drawer, from an offer, or from a pasted pull request. It shows the
-failure before anything is spent: the pull request's title, author, branch,
-commit and run, each linked to GitHub, where the job ran, and every job that
-failed, with the step it stopped at and whether the fault was the workflow's or
-this deployment's. Open a job to read the end of its log. Zoomies fetches the
-error lines from GitHub when you ask, takes out anything that looks like a
-credential and keeps nothing, and does so only for a person whose linked GitHub
-account can write to the repository. **Can Eli act on this?** lists the nine
-checks readiness makes, in the order it makes them: your GitHub account, the
-model provider, the GitHub App installation, write access, the repository
-policy, attempts left, the pull request, its failing checks and the app's
-permissions. Each says what passed, what is in the way and what to do about it,
-and a check an earlier one stopped is shown as never reached. Checking never
-calls a model or spends an attempt. When nothing is in the way, the page says who
-pays (the provider and its model), how many attempts are left today, whether Eli
-may edit workflow files and which branch it pushes to, with room to tell Eli what
-to look at, and **Fix with Eli** starts the repair and opens its page. A failure
+job's **Why** drawer, from an offer, or from a pasted pull request. Its **On
+this page** navigation moves between the next step, the setup when it is missing,
+the failure and the checks. It shows the failure before anything is spent: the
+pull request's title, author, branch, commit and run, each linked to GitHub,
+where the job ran, and every job that failed, with the step it stopped at and
+whether the fault was the workflow's or this deployment's. Open a job to read the
+end of its log. Zoomies fetches the error lines from GitHub when you ask, takes
+out anything that looks like a credential and keeps nothing, and does so only for
+a person whose linked GitHub account can write to the repository. **Can Eli act
+on this?** lists the blocked checks first, with **Show all 9 checks** for the
+rest: your GitHub account, the model provider, the GitHub App installation,
+write access, the repository policy, attempts left, the pull request, its
+failing checks and the app's permissions. Each says what passed, what is in the
+way and what to do about it, and a check an earlier one stopped is shown as
+never reached. Checking never calls a model or spends an attempt. When nothing
+is in the way, the decision card says who pays (the provider and its model), how
+many attempts are left today, whether Eli may edit workflow files and which
+branch it pushes to, with room to tell Eli what to look at, and **Fix with Eli**
+starts the repair and opens its page. A failure
 that Eli is already repairing opens that repair instead of offering another, and
 one that has since been fixed, closed or replaced by a newer commit says so
 instead of offering a repair; for a newer commit, **Check the current PR** asks
@@ -927,24 +937,26 @@ Automatic was switched on or never arrived. For anyone else it is one sentence
 saying the repository repairs itself, because an ordinary person cannot read what
 Eli did on its own.
 
-![The repair page for a pull request Eli cannot yet act on: the failure it is about, a wizard to link a GitHub account, and the checks, with the account and the model provider in the way](screenshots/eli-repair-readiness-dark.webp#only-dark){ .zoomies-shot }
-![The repair page for a pull request Eli cannot yet act on: the failure it is about, a wizard to link a GitHub account, and the checks, with the account and the model provider in the way](screenshots/eli-repair-readiness-light.webp#only-light){ .zoomies-shot }
+![The repair page for a pull request Eli cannot yet act on: the failure it is about, the next step naming the GitHub account and model provider in the way, What failed, and the checks with Show all 9 checks](screenshots/eli-repair-readiness-dark.webp#only-dark){ .zoomies-shot }
+![The repair page for a pull request Eli cannot yet act on: the failure it is about, the next step naming the GitHub account and model provider in the way, What failed, and the checks with Show all 9 checks](screenshots/eli-repair-readiness-light.webp#only-light){ .zoomies-shot }
 
 A repair has a page of its own, at `/repairs/<id>`, that follows it from the
 moment it is queued. While Eli works it shows five steps, where the repair has
 got to and how long it has been going, and asks again every few seconds for as
 long as the tab is open and the repair has not finished. When it has finished it
-says how it ended in the controller's own words and what to try next, then what
-Eli was asked to fix and the failed jobs as they were when the repair began, so
-the page still reads once Zoomies has pruned the job records. **Technical
-details** holds the model, the source supplied, the stage reached, the failure
+says how it ended in the controller's own words and what to try next. **What Eli
+was asked to fix** is a closed summary that opens the pull request, the run and
+the failed jobs as they were when the repair began, so the page still reads once
+Zoomies has pruned the job records. **Technical details** is closed too, with the
+number of model calls, the source supplied and the time in its summary; opening
+it holds the model, the stage reached, the failure
 code when there is one, and every model call with its tokens in and out, its
 request size and its time; a call whose provider did not report usage says
 Unknown and is never shown as zero. **Copy investigation details** puts the ids,
 states and sizes on the clipboard for a bug report, and nothing Eli read.
 
-![One repair that could not fix its failure: how it ended, what to try next, the pull request and job it was asked to fix, and its technical details with each model call, one of them with usage the provider did not report](screenshots/eli-repair-attempt-dark.webp#only-dark){ .zoomies-shot }
-![One repair that could not fix its failure: how it ended, what to try next, the pull request and job it was asked to fix, and its technical details with each model call, one of them with usage the provider did not report](screenshots/eli-repair-attempt-light.webp#only-light){ .zoomies-shot }
+![One repair that could not fix its failure: how it ended, what to try next, What Eli was asked to fix and Technical details closed, with the attempt facts and timeline beside](screenshots/eli-repair-attempt-dark.webp#only-dark){ .zoomies-shot }
+![One repair that could not fix its failure: how it ended, what to try next, What Eli was asked to fix and Technical details closed, with the attempt facts and timeline beside](screenshots/eli-repair-attempt-light.webp#only-light){ .zoomies-shot }
 
 A repair the repository's policy started says so under **This attempt**
 (**Started by** Automatic repairs, by the repository's policy), and an
@@ -954,10 +966,12 @@ much of the allowance is used), with **Stop automatic repairs** and a link to th
 policy in setup, or no longer automatic. While the repair has not pushed yet it
 says that stopping now also stops this repair.
 
-![An automatic repair that did not fix its failure: Started by Automatic repairs, and the Automatic repairs card for the repository with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-dark.webp#only-dark){ .zoomies-shot }
-![An automatic repair that did not fix its failure: Started by Automatic repairs, and the Automatic repairs card for the repository with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-light.webp#only-light){ .zoomies-shot }
+![An automatic repair that did not fix its failure: Started automatically, the outcome and next steps, and the Automatic repairs card with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-dark.webp#only-dark){ .zoomies-shot }
+![An automatic repair that did not fix its failure: Started automatically, the outcome and next steps, and the Automatic repairs card with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-light.webp#only-light){ .zoomies-shot }
 
-**Repair setup** is where administrators choose the repositories and **When
+**Repair setup** has its own **On this page** navigation for the account, the
+repositories, the allowance and the account link. It is where administrators
+choose the repositories and **When
 should Eli help?**, and link each requester's GitHub account to their Zoomies
 user; the requester then confirms that their own provider pays for the repairs
 they ask for. Start with **Ask me first** to review offers before spending
@@ -965,8 +979,8 @@ tokens. Workflow edits stay disabled until explicitly allowed, and the daily
 attempt budget bounds repair work. When a repair page is blocked on setup, a
 short wizard for that failure fixes what is missing and leaves you on it.
 
-![Repair setup: the repository policy form with Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-dark.webp#only-dark){ .zoomies-shot }
-![Repair setup: the repository policy form with Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-light.webp#only-light){ .zoomies-shot }
+![Repair setup: an On this page navigation for Account, Policies, Allowance and Link account, with the repository policy form open, Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-dark.webp#only-dark){ .zoomies-shot }
+![Repair setup: an On this page navigation for Account, Policies, Allowance and Link account, with the repository policy form open, Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-light.webp#only-light){ .zoomies-shot }
 
 ## Migrate
 
@@ -984,13 +998,13 @@ works](migration.md).
 
 How the repositories this fleet serves measure up against what affects CI and the fleet: a public repository whose pull requests run on a machine that keeps state between jobs, or a label no pool serves. It is off until an administrator turns on `kennel.enabled`, and until then the page says what it would do, what it would read and what it never does, and lists the checks it would make. The section has a side menu (**Overview**, **Repositories** and **AI Context**) which on a narrower screen becomes a row of buttons above the page, wrapped rather than scrolled so none of them is out of sight on a phone. At the head of it is a switch, **Check repository standards**, which is the `kennel.enabled` setting itself: an administrator turns Kennel Club on or off from the page without going to Settings, and anybody else sees which it is and who can change it. Turning it off asks first and says what it does: it stops reading from GitHub, its problem leaves the problems list, and what it found is kept for when it is turned back on. If the controller's environment holds the setting the other way, the switch says so and stays where it is. `g k` opens it from anywhere.
 
-Once it is on, the **Overview** counts the repositories by standing and what is open across them by severity, and names the repositories to open first. A card, **Not tracked**, appears once somebody has told Kennel Club to stop looking at a repository: it counts those, which are in none of the other numbers, and opens them. Each count opens the repositories behind it: the total, the ones with nothing open, the ones that are only partly checked, the ones that need attention, the repositories with an error or a warning open, and the ones with a waived finding. A count of nothing has no link, since it would open an empty list. Under that, **By check** says which repositories have each check open, and **What Kennel Club can see** says how far each source of facts could be read. When something could not be read, the counts are a minimum, and the page says so above them rather than letting a count read as a total.
+Once it is on, the **Overview** answers first: a verdict band says what needs attention, names the worst repository and offers the action, and the full counts follow as one compact strip. A page nav marks the sections. A card, **Not tracked**, appears once somebody has told Kennel Club to stop looking at a repository: it counts those, which are in none of the other numbers, and opens them. Each count opens the repositories behind it: the total, the ones with nothing open, the ones that are only partly checked, the ones that need attention, the repositories with an error or a warning open, and the ones with a waived finding. A count of nothing has no link, since it would open an empty list. Under that, **What is open by check** says which repositories have each check open, with the affected checks first; the checks with nothing open and the checks somebody turned off each fold away in their own disclosure, because "nothing open" and "not running" are not the same sentence. **What Kennel Club can see** says how far each source of facts could be read. When something could not be read, the counts are a minimum, and the page says so above them rather than letting a count read as a total.
 
 A repository's standing is one of four: **Best in show** (or **No open findings**, with plain status words), **Needs attention**, **Partly checked** and **Pending**. Nothing is shown as all clear on a read that was not whole.
 
-**Repositories** lists the ones the fleet is serving, worst first, and narrows by standing, severity and check; each filter is in the address, so a view is a link to send. *Serving* means a job the fleet had a hand in within the last thirty days, or within as long as it keeps its jobs if that is shorter. Kennel Club keeps a row for a repository for a quarter after its last job, and under the installation scope for every repository the App can see, so a switch, **Active on Zoomies**, leaves the quiet ones out, and a line under the filters says how many it has left out and offers them. The switch is each person's own and is remembered in their browser; it starts on. The Overview's counts, its cards and the Kennel Club problem still cover every repository it is tracking, so an error on a quiet repository is never hidden, and a link from any of them opens the list on every one of them (`?active=all`) so that it shows as many rows as the number it came from. A repository Kennel Club has been told not to look at is left out of the list the same way, and for the same reason, and the **Tracking** filter brings them back (`?tracked=false` for those alone, `?tracked=all` for both): a row for one says **Not tracked**, that nothing is evaluated for it, and since when. Opening one shows it in sections, and each has an address of its own, so a link opens on the one you were looking at. **Overview** is what the fleet knows of the repository from the jobs it ran for it: how many finished in the last 7 or 30 days and how they ended, the share that succeeded, how long they waited for a runner and how long they took, the pools and hosts that ran them, and any job queued for a label no pool serves. Each figure opens the Jobs page on the jobs it counted: the finished jobs, the ones that failed and the ones this fleet lost, each pool's and each host's count, and the two timings with the slowest first. The list starts at the same minute the window did and leaves out the same hosted-runner jobs, so it shows the number on the tile. None of it is read from GitHub, so it is there whatever Kennel Club could or could not read. Jobs on somebody else's hosted runners are left out, because the fleet did not run them, and a window as long as the fleet keeps jobs says so, because it is only what is still held. **CI** is what Kennel Club concluded: each finding as what is wrong, what to change and where it was seen, the pools and runs it is about, and then what could be read and what could not, with the permission that would fix it. Operators can press **Recheck** to have it read again, and **Waive** a finding they have decided is acceptable here. A waiver needs a reason of at least ten characters and an end, at most a year away, because a decision nobody is asked to make again is how an exception becomes the rule. Waiving an error is an administrator's decision; an operator can waive a warning or a note. A waived finding is not counted while the waiver runs, and it is never hidden: it is listed under **Waived** with who decided, why and until when, and it comes back by itself if it gets worse. Any operator can end a waiver, which puts the finding back. **Agent guidance** shows optional instruction-file checks and lets an administrator preview safe changes and open a draft pull request. It checks structure and references separately from AI Context freshness. **Protection** gathers the findings about the repository's settings and the status checks its default branch requires, with what was read of each, the permission that would fix a gap, and a link to the GitHub page where each is fixed; until `kennel.settings_checks` is on it says the checks are off. **AI Context** is the card the AI Context page lists, for this repository: its state, what it last verified, why a run failed and what Zoomies will do about it, and the actions that fit where it is. It is found by the installation and GitHub's ID for the repository, it offers setup to an administrator or the installation's owner when there is none, which opens with this repository already selected (they can untick it), and it adds no switch, because AI Context is set up and removed by reviewed pull requests and not turned on and off. Somebody who may not configure the installation is answered the same whether or not the repository has AI Context, so for them the tab says it cannot tell, and offers only the AI Context page.
+**Repositories** lists the ones the fleet is serving, worst first. The Overview's five questions are quick views with counts above the list, and the filters are one row: severity, check and tracking (the standing now lives in the quick views). Each filter is in the address, so a view is a link to send. **Visibility** is hidden by default and stays in the Columns chooser. *Serving* means a job the fleet had a hand in within the last thirty days, or within as long as it keeps its jobs if that is shorter. Kennel Club keeps a row for a repository for a quarter after its last job, and under the installation scope for every repository the App can see, so a switch, **Active on Zoomies**, leaves the quiet ones out, and a line under the filters says how many it has left out and offers them. The switch is each person's own and is remembered in their browser; it starts on. The Overview's counts, its cards and the Kennel Club problem still cover every repository it is tracking, so an error on a quiet repository is never hidden, and a link from any of them opens the list on every one of them (`?active=all`) so that it shows as many rows as the number it came from. A repository Kennel Club has been told not to look at is left out of the list the same way, and for the same reason, and the **Tracking** filter brings them back (`?tracked=false` for those alone, `?tracked=all` for both): a row for one says **Not tracked**, that nothing is evaluated for it, and since when. Opening one shows it in sections, and each has an address of its own, so a link opens on the one you were looking at. **Findings** leads when the repository has something open, and **Fleet activity** usually leads when it does not. **Fleet activity** is what the fleet knows of the repository from the jobs it ran for it: how many finished in the last 7 or 30 days and how they ended, the share that succeeded, how long they waited for a runner and how long they took, the pools and hosts that ran them, and any job queued for a label no pool serves. Each figure opens the Jobs page on the jobs it counted: the finished jobs, the ones that failed and the ones this fleet lost, each pool's and each host's count, and the two timings with the slowest first. The list starts at the same minute the window did and leaves out the same hosted-runner jobs, so it shows the number on the tile. None of it is read from GitHub, so it is there whatever Kennel Club could or could not read. Jobs on somebody else's hosted runners are left out, because the fleet did not run them, and a window as long as the fleet keeps jobs says so, because it is only what is still held. **Findings** is what Kennel Club concluded: each finding as what is wrong, what to change and where it was seen, the pools and runs it is about, and then what could be read and what could not, with the permission that would fix it. **Protection** and **Agent guidance** are areas of Findings, reachable as filter chips, and their old addresses, `/protection` and `/agent-guidance`, open the area they name. Operators can press **Recheck** to have it read again, and **Waive** a finding they have decided is acceptable here. A waiver needs a reason of at least ten characters and an end, at most a year away, because a decision nobody is asked to make again is how an exception becomes the rule. Waiving an error is an administrator's decision; an operator can waive a warning or a note. A waived finding is not counted while the waiver runs, and it is never hidden: it is listed under **Waived** with who decided, why and until when, and it comes back by itself if it gets worse. Any operator can end a waiver, which puts the finding back. The **Agent guidance** area shows optional instruction-file checks and lets an administrator preview safe changes and open a draft pull request. It checks structure and references separately from AI Context freshness. The **Protection** area gathers the findings about the repository's settings and the status checks its default branch requires, with what was read of each, the permission that would fix a gap, and a link to the GitHub page where each is fixed; until `kennel.settings_checks` is on it says the checks are off. **AI Context** is the card the AI Context page lists, for this repository: its state, what it last verified, why a run failed and what Zoomies will do about it, and the actions that fit where it is. It is found by the installation and GitHub's ID for the repository, it offers setup to an administrator or the installation's owner when there is none, which opens with this repository already selected (they can untick it), and it adds no switch, because AI Context is set up and removed by reviewed pull requests and not turned on and off. Somebody who may not configure the installation is answered the same whether or not the repository has AI Context, so for them the tab says it cannot tell, and offers only the AI Context page.
 
-A repository's page has a switch, **Track this repository**, beside **Recheck**. Every repository is tracked until somebody says otherwise. An administrator can stop Kennel Club looking at one, and it asks for a reason of at least ten characters first, because stopping silences the repository's errors and whoever finds it quiet in a year will want to know why. An operator can start it again with one press, because that can only make Kennel Club stricter. Anybody else sees the state and who can change it, instead of a switch that would answer 403. A repository that is not tracked is not read from GitHub and nothing is evaluated for it: it has no findings, raises no problem, is counted on the Overview as **Not tracked** and in no other number, and has no **Recheck**. Its page says who stopped it, when and why, and its **CI** tab says that having no findings is not an all clear. Its **Overview** still works, because that is the fleet's own record (its summary of what Kennel Club says reads **Not tracked**, not a standing), and so does **AI Context**, which is not Kennel Club's to stop. Its waivers are kept and do nothing until it is tracked again. It is kept however long it has been quiet, so a sandbox does not come back tracked, and read, the day somebody pushes to it. On the **Repositories** list an administrator can tick several rows and press **Stop tracking**, which asks for one reason, names what it is about to stop, leaves alone any that are already stopped, and sends a request for each, one after another, so that each has its own audit entry and a refusal is named; anything it could not stop stays ticked. Nobody else is offered the tick boxes.
+A repository's page has a switch, **Track this repository**, in the meta line under the title; **Recheck** is the page's primary action. Every repository is tracked until somebody says otherwise. An administrator can stop Kennel Club looking at one, and it asks for a reason of at least ten characters first, because stopping silences the repository's errors and whoever finds it quiet in a year will want to know why. An operator can start it again with one press, because that can only make Kennel Club stricter. Anybody else sees the state and who can change it, instead of a switch that would answer 403. A repository that is not tracked is not read from GitHub and nothing is evaluated for it: it has no findings, raises no problem, is counted on the Overview as **Not tracked** and in no other number, and has no **Recheck**. Its page says who stopped it, when and why, and its **CI** tab says that having no findings is not an all clear. Its **Overview** still works, because that is the fleet's own record (its summary of what Kennel Club says reads **Not tracked**, not a standing), and so does **AI Context**, which is not Kennel Club's to stop. Its waivers are kept and do nothing until it is tracked again. It is kept however long it has been quiet, so a sandbox does not come back tracked, and read, the day somebody pushes to it. On the **Repositories** list an administrator can tick several rows and press **Stop tracking**, which asks for one reason, names what it is about to stop, leaves alone any that are already stopped, and sends a request for each, one after another, so that each has its own audit entry and a refusal is named; anything it could not stop stays ticked. Nobody else is offered the tick boxes.
 
 AI Context lives under Kennel Club, at `/kennel/ai-context`, with a row of its own in the side menu. The row carries a count when a repository's last workflow run has failed (red if any of them is an error, amber if all are warnings) and nothing otherwise, so a fleet where AI Context works, or where it is not used, has no badge to learn to ignore. It counts the same failures the problems list names, one for each repository, and follows them live; it does not count repositories that are only waiting for their setup pull request to be merged. It sits apart from the switch because it works with Kennel Club off, and the confirmation for turning Kennel Club off says so. Its setup wizard is a task rather than a place, so it has no side menu and a way back instead. The old address, `/ai-context`, opens the same page, so links and bookmarks keep working.
 
@@ -1001,17 +1015,20 @@ Repositories prepared for AI coding assistants, and the way to prepare more.
 installation's permissions, pick where the context lives, set exclusions and
 retention, choose source readers, and review. Saving makes resumable drafts.
 **Review setup changes** then shows every file the setup pull request would
-write before one is opened. Each repository's card shows its status, when it was
-last checked and the last commit verified, with **Recheck context**,
-**Reinstall / repair**, **Amend** and **Remove**, and the AI instructions and
-badge to copy.
+write before one is opened. The page lists repositories before it explains itself, with a summary band
+and views that count what is in setup, ready and needing attention. Each
+repository's card shows its status, when it was last checked and the last commit
+verified, with the action that fits its state and **Reinstall / repair**;
+**Amend** and **Remove** are under **More actions**, and the AI instructions and
+badge under their own disclosure. How AI Context works, and Installation owners,
+sit below the list.
 
 Administrators can also choose **Installation owners**, who enable repositories
 for one installation without being administrators. A person who is only a
 source reader sees just the repositories shared with them.
 
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
 
 [AI Context](ai-context.md) walks through setting it up and using it.
 

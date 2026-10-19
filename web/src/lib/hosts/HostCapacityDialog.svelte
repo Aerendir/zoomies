@@ -22,8 +22,8 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { ApiError, updateHost } from '$lib/api/client';
-  import type { Host } from '$lib/api/types';
+  import { ApiError, getHostRecommendation, updateHost } from '$lib/api/client';
+  import type { Host, HostRecommendation } from '$lib/api/types';
   import { pluralise } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
@@ -31,6 +31,7 @@
   import Dialog from '$lib/components/Dialog.svelte';
   import Field from '$lib/components/Field.svelte';
   import Input from '$lib/components/Input.svelte';
+  import Select from '$lib/components/Select.svelte';
   import Slider from '$lib/components/Slider.svelte';
   import QuantityField from '$lib/components/QuantityField.svelte';
   import { cpuLabel, memoryLabel as sizeMemoryLabel, withValue } from '$lib/pools/sizing';
@@ -64,6 +65,11 @@
   let loadedFor = $state<string | null>(null);
   /** The controller's refusal, when this reserve would strand a pool. */
   let stranding = $state('');
+  /** What the controller itself would keep this host at. The numbers on this
+      page are the browser's own arithmetic until it answers, and its answer
+      afterwards, so the dialog and the automatic adjustment cannot disagree. */
+  let serverRec = $state<HostRecommendation | null>(null);
+  let autoMode = $state<'' | 'on' | 'off'>('');
 
   // Reload the form when a different host is opened, and only then: an SSE
   // update to the host must not overwrite what is being moved.
@@ -80,6 +86,18 @@
     reserveDiskMb = host.reserve_disk_mb ?? 0;
     errors = {};
     stranding = '';
+    autoMode = (host.auto_adjust as '' | 'on' | 'off' | undefined) ?? '';
+    serverRec = null;
+    const id = host.id;
+    if (id)
+      void getHostRecommendation(id)
+        .then((rec) => {
+          if (loadedFor === id) serverRec = rec;
+        })
+        .catch(() => {
+          // The browser's own figures stand: the recommendation is advice, and
+          // the page is usable without it.
+        });
   });
 
   // A refusal is about the figures that were sent, so moving any of them
@@ -114,10 +132,23 @@
   // page's own -- so the capacity recommended here and the sliders the pool
   // wizard opens on are describing the same fleet.
   const ask = $derived(runnerAsk(fleet.pools, fleet.runnerDefaults));
+  const fromServer = $derived(serverRec?.available === true ? serverRec : null);
   const recCores = $derived(recommendedReserveCores(shape.cpus));
   const recMb = $derived(recommendedReserveMemoryMb(shape.memoryMb));
   const recDiskMb = $derived(recommendedReserveDiskMb(diskTotalMb));
-  const recCapacity = $derived(recommendedCapacity(shape, reserveCores, reserveMb, ask));
+  /* The browser works out what the cores and the memory hold, as it always has,
+     and follows the reserve as it is moved. The disk is the controller's: it
+     is what the controller keeps hosts at, so where the disk is the tightest
+     figure the dialog says what the controller says rather than a number the
+     automatic adjustment would put straight back. */
+  const diskCapacity = $derived(
+    fromServer?.limited_by === 'disk' && fromServer.capacity
+      ? fromServer.capacity
+      : Number.POSITIVE_INFINITY,
+  );
+  const recCapacity = $derived(
+    Math.min(recommendedCapacity(shape, reserveCores, reserveMb, ask), diskCapacity),
+  );
 
   /* -- the standard size ----------------------------------------------------------
      A host that has been given a standard runner size takes as many runners of
@@ -241,7 +272,7 @@
     reserveCores = recCores;
     reserveMb = recMb;
     reserveDiskMb = recDiskMb;
-    capacity = String(recommendedCapacity(shape, recCores, recMb, ask));
+    capacity = String(Math.min(recommendedCapacity(shape, recCores, recMb, ask), diskCapacity));
   }
 
   function close(): void {
@@ -263,6 +294,7 @@
           ...(shape.cpus > 0 ? { reserve_cpus: reserveCores } : {}),
           ...(shape.memoryMb > 0 ? { reserve_memory_mb: reserveMb } : {}),
           ...(diskTotalMb > 0 ? { reserve_disk_mb: reserveDiskMb } : {}),
+          ...(autoMode !== (host.auto_adjust ?? '') ? { auto_adjust: autoMode } : {}),
         },
         confirm ? { confirm: true } : undefined,
       );
@@ -525,6 +557,40 @@
           {/if}
         {/if}
       </fieldset>
+    {/if}
+
+    {#if fromServer?.limited_by === 'disk'}
+      <p class="note" data-testid="capacity-disk-note">
+        The disk sets this, not the cores or the memory: {fromServer.reason}
+      </p>
+    {/if}
+
+    <Field
+      label="Keep at the recommendation"
+      hint={autoMode === 'on' || (autoMode === '' && host?.auto_adjust_effective)
+        ? 'Zoomies re-works the capacity and the reserve as this host reports and as the pools change, so figures typed here are put back within minutes. A host at 0 runners stays paused.'
+        : 'Zoomies leaves the figures here as they are.'}
+    >
+      {#snippet children({ id, describedBy })}
+        <Select
+          {id}
+          {describedBy}
+          bind:value={autoMode}
+          options={[
+            {
+              value: '',
+              label: 'Follow the fleet setting',
+            },
+            { value: 'on', label: 'Keep at recommendations' },
+            { value: 'off', label: 'Never adjust' },
+          ]}
+        />
+      {/snippet}
+    </Field>
+    {#if host?.auto_adjusted_at}
+      <p class="note" data-testid="auto-adjusted-at">
+        Last moved automatically {new Date(host.auto_adjusted_at).toLocaleString()}.
+      </p>
     {/if}
 
     {#if stranding}

@@ -63,26 +63,33 @@ not about the grammar here.
 
 ## Runner names
 
-A runner is named after the pool it belongs to, plus a discriminator that tells
-it from its siblings, `zoomies-4vcpu-ubuntu-2404-biscuit-a3f9qz2m`:
+A runner is named after the pool it belongs to, the host it was placed on, and
+a token that tells it from its siblings, `zoomies-4vcpu-ubuntu-2404-fido-a3f9qz2m`:
 
 | Part | Example | What it is for |
 | --- | --- | --- |
 | brand | `zoomies` | The only sign that a registration on GitHub is this fleet's. |
 | shape | `4vcpu-ubuntu-2404` | The pool's, in the grammar above. |
-| kennel word | `biscuit` | A handle two people can say to each other. |
+| host | `fido` | The machine the runner was placed on. |
 | token | `a3f9qz2m` | Eight random characters, which is what makes the name unique. |
 
-The **kennel word** is one of thirty-two cocker spaniel names; the same list
-the pool editor offers, because a fleet whose pools are named from one list and
-whose runners are named from another reads as two products. It is there to be
-said out loud: "the biscuit one" is a thing two people on a call can both find.
+The **host** is there because a failed job is first looked at on GitHub, in the
+runner list, the job header or the "Set up job" line of the log, and GitHub knows a
+runner by its name and nothing else. With the host in the name, "this job ran on
+`fido`" needs no lookup in the controller, so a disk that filled on one machine
+shows up as one machine's name repeating in the failures. It is the part of the
+host's name after its shape (`zoomies-8vcpu-ubuntu-2404-fido` contributes `fido`,
+a host an operator named `build-box-7` contributes all of it), cut a word at a
+time to 20 characters.
+
+A host with no name the grammar allows, and a runner named before any host is
+known, take a **kennel word** instead, one of thirty-two cocker spaniel names, the
+same list the pool editor offers. Runners created before this change keep the
+kennel word they were given.
 
 The **token** is eight random characters, and it is what actually guarantees
 uniqueness. GitHub requires a runner's name to be unique within the target, and
-thirty-two words collide about as often as two people in a room of eight share
-a birthday, fine for something you say, useless for something a registration
-depends on.
+two runners on one host share everything else.
 
 A pool that has no shape to report (no resources, no platform) lends its own
 name instead, so a pool created in the UI gets

@@ -24,9 +24,11 @@
     /** The last read failed, so what is shown is what was last read, or nothing yet. */
     error?: boolean;
     onstop: (repos: string[]) => void;
+    /** Render only the rows, for a section that supplies its own heading. */
+    bare?: boolean;
   }
 
-  let { repositories, error = false, onstop }: Props = $props();
+  let { repositories, error = false, onstop, bare = false }: Props = $props();
 
   let now = $state(Date.now());
   $effect(() => onClockTick((t) => (now = t)));
@@ -35,19 +37,20 @@
     repo.problem ? 'problem' : allowanceOf(repo).full ? 'waiting' : 'ready';
 </script>
 
-<Panel
-  title="Automatic repairs"
-  description="Eli repairs failed pull request checks on these repositories without asking. It pushes one commit and never merges."
-  flush
->
-  {#snippet actions()}
-    {#if repositories.length > 1}
+{#snippet rows()}
+  {#if bare}
+    <p class="intro">
+      Eli repairs failed pull request checks on these repositories without asking. It pushes one
+      commit and never merges.
+    </p>
+  {/if}
+  {#if bare && repositories.length > 1}
+    <div class="bulk">
       <Button variant="secondary" size="sm" onclick={() => onstop(repositories.map((r) => r.repo))}
         >Stop all</Button
       >
-    {/if}
-  {/snippet}
-
+    </div>
+  {/if}
   {#if error}
     <p class="stale" role="status">
       Could not read automatic repairs.{repositories.length > 0
@@ -115,9 +118,44 @@
       </div>
     </article>
   {/each}
-</Panel>
+{/snippet}
+
+{#if bare}
+  {@render rows()}
+{:else}
+  <Panel
+    title="Automatic repairs"
+    description="Eli repairs failed pull request checks on these repositories without asking. It pushes one commit and never merges."
+    flush
+  >
+    {#snippet actions()}
+      {#if repositories.length > 1}
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={() => onstop(repositories.map((r) => r.repo))}>Stop all</Button
+        >
+      {/if}
+    {/snippet}
+    {@render rows()}
+  </Panel>
+{/if}
 
 <style>
+  .intro {
+    margin: 0;
+    padding: var(--z-space-3) var(--z-space-4);
+    border-bottom: var(--z-border-width) solid var(--z-border);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-sm);
+    line-height: var(--z-leading-sm);
+  }
+  .bulk {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--z-space-2) var(--z-space-4);
+    border-bottom: var(--z-border-width) solid var(--z-border);
+  }
   .stale {
     margin: 0;
     padding: var(--z-space-3) var(--z-space-5);

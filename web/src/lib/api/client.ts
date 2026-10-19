@@ -1443,3 +1443,44 @@ export const getComparison = (
     query: { installation_id: installation, repo },
     signal,
   });
+
+/** Reading workflow source spends GitHub requests, so these are asked for, never polled. */
+export const inspectCheckout = (
+  body: import('./types').CheckoutInspectionRequest,
+  signal?: AbortSignal,
+) =>
+  api.post<import('./types').CheckoutInspection>('/optimisations/checkout/inspections', {
+    body,
+    signal,
+  });
+export const retainCheckoutPreview = (
+  body: import('./types').CheckoutPreviewRequest,
+  signal?: AbortSignal,
+) =>
+  api.post<import('./types').CheckoutPreview>('/optimisations/checkout/previews', { body, signal });
+export const getCheckoutPreview = (
+  id: string,
+  installation: string,
+  repo: string,
+  signal?: AbortSignal,
+) =>
+  api.get<import('./types').CheckoutPreview>(
+    '/optimisations/checkout/previews/' + encodeURIComponent(id),
+    { query: { installation_id: installation, repo }, signal },
+  );
+
+export const getOptimisationEnablement = (signal?: AbortSignal) =>
+  api.get<import('./types').OptimisationEnablement>('/optimisations/enablement', { signal });
+export const setOptimisationEnablement = (enabled: boolean) =>
+  api.put<import('./types').OptimisationEnablement>('/optimisations/enablement', {
+    body: { enabled },
+  });
+
+/** What Adjust recommends for a host, worked out where the controller applies it. */
+export const getHostRecommendation = (id: string, signal?: AbortSignal) =>
+  api.get<import('./types').HostRecommendation>(
+    '/hosts/' + encodeURIComponent(id) + '/recommendation',
+    {
+      signal,
+    },
+  );

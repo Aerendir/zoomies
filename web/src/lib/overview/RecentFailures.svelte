@@ -42,6 +42,7 @@
   import IconButton from '$lib/components/IconButton.svelte';
   import JobDrawer from '$lib/jobs/JobDrawer.svelte';
   import Panel from '$lib/components/Panel.svelte';
+  import OverviewDisclosure from './OverviewDisclosure.svelte';
   import RelativeTime from '$lib/components/RelativeTime.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { eliCanRepairRun, targetHref } from '$lib/repairs/workspace';
@@ -227,101 +228,133 @@
     </p>
   </section>
 {:else}
-  <Panel
-    title="Recent failures"
-    description={others
-      ? 'Unresolved failures from the last week, wherever they ran. Fixed, superseded and closed PR failures leave this list.'
-      : 'Unresolved failures from the last week. Fixed, superseded and closed PR failures leave this list.'}
-    class={className}
-    flush
-  >
-    {#snippet actions()}
-      {#if !loading && total > 0}
-        <Badge tone="danger" label="{formatNumber(total)} to look at" dot={false} />
-      {/if}
-    {/snippet}
+  <div class="failure-attention">
+    <OverviewDisclosure
+      id="failures"
+      title={loading
+        ? 'Checking failures'
+        : error
+          ? 'Recent failures unavailable'
+          : `${formatNumber(total)} failures need review`}
+    >
+      {#snippet actions()}<a class="review-failures" href={restHref}>Review failures</a>{/snippet}
+      <Panel
+        title="Recent failures"
+        description={others
+          ? 'Unresolved failures from the last week, wherever they ran. Fixed, superseded and closed PR failures leave this list.'
+          : 'Unresolved failures from the last week. Fixed, superseded and closed PR failures leave this list.'}
+        class={className}
+        flush
+      >
+        {#snippet actions()}
+          {#if !loading && total > 0}
+            <Badge tone="danger" label="{formatNumber(total)} to look at" dot={false} />
+          {/if}
+        {/snippet}
 
-    {#if error}
-      <div class="pad">
-        <ErrorState
-          {error}
-          compact
-          title="The recent failures could not be loaded"
-          onretry={() => void load(others)}
-        />
-      </div>
-    {:else if loading}
-      <p class="sr-only">Loading recent failures.</p>
-      <ul class="rows" aria-hidden="true">
-        {#each [0, 1, 2] as row (row)}
-          <li class="row">
-            <div class="what"><Skeleton width="60%" height="var(--z-text-base)" /></div>
-            <div class="elapsed"><Skeleton width="3rem" height="var(--z-text-xs)" /></div>
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <ul class="rows" bind:this={list}>
-        {#each jobs as job (job.id)}
-          <li class="row">
-            <button
-              class="what"
-              type="button"
-              aria-label="Inspect {readableJobText(job.job_name) || 'this failure'}"
-              onclick={() => open(job)}
-            >
-              <span class="title">
-                <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
-                <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
-              </span>
-              <span class="detail">
-                {#if readableJobText(job.job_name)}<span class="job-name"
-                    >{readableJobText(job.job_name)}</span
-                  >{/if}
-                {#if failureSummary(job)}
-                  <span class="reason" class:danger={fleetFailed(job)}>{failureSummary(job)}</span>
-                {/if}
-              </span>
-              <span class="inspect">View failure details</span>
-            </button>
-            <p class="elapsed">
-              <span class="sr-only">Failed </span>
-              <RelativeTime value={job.completed_at ?? job.queued_at} />
-            </p>
-            <div class="act">
-              {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id && eliCanRepairRun(job)}
-                <Button
-                  size="sm"
-                  href={targetHref({ repo: job.repo, run: job.github_run_id, job: job.id })}
-                  >Fix with Eli</Button
+        {#if error}
+          <div class="pad">
+            <ErrorState
+              {error}
+              compact
+              title="The recent failures could not be loaded"
+              onretry={() => void load(others)}
+            />
+          </div>
+        {:else if loading}
+          <p class="sr-only">Loading recent failures.</p>
+          <ul class="rows" aria-hidden="true">
+            {#each [0, 1, 2] as row (row)}
+              <li class="row">
+                <div class="what"><Skeleton width="60%" height="var(--z-text-base)" /></div>
+                <div class="elapsed"><Skeleton width="3rem" height="var(--z-text-xs)" /></div>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <ul class="rows" bind:this={list}>
+            {#each jobs as job (job.id)}
+              <li class="row">
+                <button
+                  class="what"
+                  type="button"
+                  aria-label="Inspect {readableJobText(job.job_name) || 'this failure'}"
+                  onclick={() => open(job)}
                 >
-              {/if}
-              {#if canAcknowledge}
-                <IconButton
-                  icon={Check}
-                  label="Mark this failure as known"
-                  help="Takes it off the failures needing attention without changing the failure."
-                  size="sm"
-                  disabled={acking === job.id}
-                  onclick={() => void acknowledge(job)}
-                />
-              {/if}
-            </div>
-          </li>
-        {/each}
-      </ul>
-      {#if total > jobs.length}
-        <p class="more">
-          <a href={restHref}>and {formatNumber(total - jobs.length)} more on the jobs page</a>
-        </p>
-      {/if}
-    {/if}
-  </Panel>
+                  <span class="title">
+                    <span class="repo mono">{job.repo ?? 'Unknown repository'}</span>
+                    <span class="workflow">{job.workflow ?? 'Unknown workflow'}</span>
+                  </span>
+                  <span class="detail">
+                    {#if readableJobText(job.job_name)}<span class="job-name"
+                        >{readableJobText(job.job_name)}</span
+                      >{/if}
+                    {#if failureSummary(job)}
+                      <span class="reason" class:danger={fleetFailed(job)}
+                        >{failureSummary(job)}</span
+                      >
+                    {/if}
+                  </span>
+                  <span class="inspect">View failure details</span>
+                </button>
+                <p class="elapsed">
+                  <span class="sr-only">Failed </span>
+                  <RelativeTime value={job.completed_at ?? job.queued_at} />
+                </p>
+                <div class="act">
+                  {#if session.can('operator') && !session.authDisabled && job.repo && job.github_run_id && eliCanRepairRun(job)}
+                    <Button
+                      size="sm"
+                      href={targetHref({ repo: job.repo, run: job.github_run_id, job: job.id })}
+                      >Fix with Eli</Button
+                    >
+                  {/if}
+                  {#if canAcknowledge}
+                    <IconButton
+                      icon={Check}
+                      label="Mark this failure as known"
+                      help="Takes it off the failures needing attention without changing the failure."
+                      size="sm"
+                      disabled={acking === job.id}
+                      onclick={() => void acknowledge(job)}
+                    />
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
+          {#if total > jobs.length}
+            <p class="more">
+              <a href={restHref}>and {formatNumber(total - jobs.length)} more on the jobs page</a>
+            </p>
+          {/if}
+        {/if}
+      </Panel>
+    </OverviewDisclosure>
+  </div>
 {/if}
 
 <JobDrawer bind:open={drawerOpen} job={selected} onclose={() => (selected = null)} />
 
 <style>
+  .failure-attention :global(details) {
+    border-left: var(--z-border-width-rail) solid var(--z-danger);
+  }
+  .failure-attention :global(.context) {
+    width: auto;
+  }
+  .failure-attention :global(summary) {
+    padding-block: 0;
+    gap: var(--z-space-2);
+  }
+  .review-failures {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--z-control-touch);
+    color: var(--z-accent);
+    font-size: var(--z-text-sm);
+  }
+
   .pad {
     padding: var(--z-space-4) var(--z-space-5);
   }

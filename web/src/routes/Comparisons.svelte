@@ -163,7 +163,10 @@
 <PageHeader
   title="Comparisons"
   subtitle="Inspect selected historical runs. Missing evidence stays inconclusive."
-  ><Button href="/jobs" variant="secondary">Job history</Button></PageHeader
+  ><Button href="/optimisations/checkout" variant="secondary">Checkout preview</Button><Button
+    href="/jobs"
+    variant="secondary">Job history</Button
+  ></PageHeader
 >
 {#if session.visitor}
   <ErrorState

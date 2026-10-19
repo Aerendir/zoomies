@@ -69,3 +69,19 @@ func TestRunnerNameWithoutADiscriminator(t *testing.T) {
 		t.Errorf("RunnerName with no discriminator = %q", got)
 	}
 }
+
+func TestHostSegmentIsShortWholeWordsAndMayBeEmpty(t *testing.T) {
+	cases := map[string]string{
+		"fido":        "fido",
+		"Build Box 7": "build-box-7",
+		"":            "",
+		"!!!":         "",
+		"the-runner-host-in-the-rack-by-the-window": "the-runner-host-in",
+		strings.Repeat("x", 40):                     strings.Repeat("x", MaxHostSegment),
+	}
+	for in, want := range cases {
+		if got := HostSegment(in); got != want {
+			t.Errorf("HostSegment(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

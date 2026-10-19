@@ -231,7 +231,7 @@ export async function reload(page: Page, heading?: string | RegExp): Promise<voi
 
 /** The persistent navigation: the left sidebar, or the phone's bottom bar. */
 export function nav(page: Page): Locator {
-  return page.getByRole('navigation', { name: 'Sections' });
+  return page.getByRole('navigation', { name: 'Sections', exact: true });
 }
 
 /**
@@ -259,7 +259,7 @@ export function navMenu(page: Page): Locator {
 
 /** Press "More" in the bottom bar and wait for the sheet it opens. */
 export async function openNavMenu(page: Page): Promise<Locator> {
-  await nav(page).getByRole('button', { name: 'More' }).click();
+  await nav(page).getByRole('button', { name: 'More', exact: true }).click();
   const menu = navMenu(page);
   await expect(menu).toBeVisible();
   return menu;

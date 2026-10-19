@@ -218,6 +218,11 @@ test('setup saves resumable drafts, retries only failures and never enables sour
     await expect(
       page.getByRole('heading', { name: 'Use AI Context with your assistant' }),
     ).toHaveCount(2);
+    for (const summary of await page
+      .getByText('AI instructions and README badge', { exact: true })
+      .all()) {
+      await summary.click();
+    }
     await expect(page.getByRole('button', { name: 'Copy AI instructions' })).toHaveCount(2);
     await expect(
       page.getByRole('link', { name: 'Manage MCP connections' }).first(),
@@ -509,6 +514,7 @@ test('maintenance reviews amended settings, recovers publication and shows remov
   );
   await goto(page, '/ai-context', 'AI Context');
   await expect(page.getByRole('link', { name: 'Reinstall / repair', exact: true })).toBeVisible();
+  await page.getByText('More actions', { exact: true }).click();
   await page.getByRole('link', { name: 'Amend', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Amend AI Context', exact: true })).toBeVisible();
   await page.getByLabel('Snapshots to retain').fill('6');
@@ -533,6 +539,7 @@ test('maintenance reviews amended settings, recovers publication and shows remov
     'https://github.com/acme/context/pull/2',
   );
   await goto(page, '/ai-context', 'AI Context');
+  await page.getByText('More actions', { exact: true }).click();
   await page.getByRole('link', { name: 'Remove', exact: true }).click();
   await expect(page.getByText(/immediately revokes Zoomies source access/)).toBeVisible();
   await expect(page.getByText(/historical generated context branch/)).toBeVisible();
@@ -666,7 +673,7 @@ test('a reader sees assistant notes marked AI-written and never rendered as HTML
   await expect(page.getByText(/Version 2 by Ada\s+via Claude/)).toHaveText(
     /\S · written against a{12}/,
   );
-  await page.getByRole('button', { name: 'Read' }).click();
+  await page.getByRole('button', { name: 'Read', exact: true }).click();
   const body = page.getByLabel('Upgrade plan, as written');
   await expect(body).toHaveText(hostile);
   expect(await body.locator('img, script').count()).toBe(0);

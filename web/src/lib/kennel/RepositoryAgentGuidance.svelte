@@ -117,7 +117,7 @@
       {:else}
         <p>
           An administrator can preview file contents and propose changes. Findings can be waived
-          from the CI tab.
+          from the Findings tab.
         </p>
       {/if}
     {/if}
