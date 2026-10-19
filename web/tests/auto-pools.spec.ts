@@ -26,6 +26,7 @@ import {
   documentWidth,
   goto,
   grid,
+  openEventsFeed,
   openFleetContext,
   openHostCard,
   tokenPixels,
@@ -266,7 +267,7 @@ test.describe('a host and its class', () => {
     page,
   }) => {
     await goto(page, '/', 'Overview');
-    const feed = page.getByRole('region', { name: 'Recent events', exact: true });
+    const feed = await openEventsFeed(page);
     // The controller's own sentence, under a title that says what kind of change
     // it was, and named for the host rather than for its id.
     const entry = feed.getByRole('listitem').filter({ hasText: NAME }).first();

@@ -12,7 +12,15 @@
  * reloading itself would pass a weaker test and still be the bug.
  */
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { dataRows, expectNoReload, FIXTURE, goto, grid, plantMarker } from './support/fixtures';
+import {
+  dataRows,
+  expectNoReload,
+  FIXTURE,
+  goto,
+  grid,
+  openEventsFeed,
+  plantMarker,
+} from './support/fixtures';
 
 interface Named {
   id: string;
@@ -240,8 +248,7 @@ test('a scaling decision delivered twice appears once', async ({ page }) => {
   // looks like -- and, because the feed is keyed by the decision's id, the
   // second copy takes the whole panel down rather than merely misleading.
   await goto(page, '/', 'Overview');
-  const feed = page.getByRole('region', { name: 'Recent events', exact: true });
-  await expect(feed).toBeVisible();
+  const feed = await openEventsFeed(page);
 
   const decision = {
     id: 'scl_replayed',
@@ -281,7 +288,7 @@ test('a runner lent spare CPU says so in the feed, in the dog park’s own words
   // something that just happened, and that rule is as much under test as the
   // line the second produces.
   await goto(page, '/', 'Overview');
-  const feed = page.getByRole('region', { name: 'Recent events', exact: true });
+  const feed = await openEventsFeed(page);
   await expect(feed.getByRole('listitem').first()).toBeVisible();
 
   const listed = (await page.request.get('/api/v1/runners?limit=1').then((r) => r.json())) as {
