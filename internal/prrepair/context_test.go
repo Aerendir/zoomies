@@ -20,6 +20,126 @@ func (r *countingReader) ReadFile(_ context.Context, path string) (File, error) 
 	f.Path = path
 	return f, nil
 }
+
+// A request can mix useful source with a path the policy forbids. Refusing the
+// latter must neither read it nor throw away the rest of the investigation.
+func TestProtectedReadsAreRefusedToTheModelAndAllowedReadsStillArrive(t *testing.T) {
+	for _, protected := range []string{".env", "../outside", ".github/workflows/ci.yml"} {
+		for _, windows := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/windows=%t", protected, windows), func(t *testing.T) {
+				request := Plan{Read: []string{protected, "main.go"}}
+				if windows {
+					request = Plan{Windows: []ReadWindow{{Path: protected, StartLine: 1, EndLine: 2}, {Path: "main.go", StartLine: 1, EndLine: 2}}}
+				}
+				raw, err := json.Marshal(request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				reader := &countingReader{file: File{Content: "old\n", Mode: "100644"}}
+				model := &usage{replies: &replies{values: []string{string(raw), `{"summary":"Fix the source","files":[{"path":"main.go","content":"fixed\n"}]}`}}}
+				plan, err := Generate(t.Context(), model, reader, Snapshot{}, "fix the failure", false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if reader.reads != 1 || len(model.used) != 2 || model.used[1] != len("old\n") {
+					t.Fatalf("protected read reached the reader or spent source: reads %d, usage %v", reader.reads, model.used)
+				}
+				note := model.seen[len(model.seen)-1].Content
+				if !strings.Contains(note, protected) || !strings.Contains(note, "protected") || !strings.Contains(note, `"path":"main.go"`) || strings.Contains(note, "already supplied") {
+					t.Fatalf("missing source or misleading refusal: %s", note)
+				}
+				if len(plan.Files) != 1 || plan.Files[0].Path != "main.go" || plan.Files[0].Content != "fixed\n" {
+					t.Fatalf("unexpected fix: %+v", plan)
+				}
+			})
+		}
+	}
+}
+
+func TestRepeatedProtectedReadsStopAtTheStepLimitAndNameThePath(t *testing.T) {
+	model := &replies{}
+	for range MaxSteps {
+		model.values = append(model.values, `{"read":[".github/workflows/ci.yml"]}`)
+	}
+	reader := &countingReader{}
+	_, err := Generate(t.Context(), model, reader, Snapshot{}, "fix the failure", false)
+	if err == nil || !strings.Contains(err.Error(), "model-step limit") || !strings.Contains(err.Error(), ".github/workflows/ci.yml") || !strings.Contains(err.Error(), "protected") || strings.Contains(err.Error(), "allowance") {
+		t.Fatalf("unhelpful outcome: %v", err)
+	}
+	if reader.reads != 0 {
+		t.Fatalf("read a protected path %d times", reader.reads)
+	}
+}
+
+func TestRefusingAProtectedReadStillLetsTheModelExplainWhyItCannotFix(t *testing.T) {
+	model := &replies{values: []string{`{"read":[".env"]}`, `{"cannot_fix":"the required configuration is protected"}`}}
+	_, err := Generate(t.Context(), model, &countingReader{}, Snapshot{}, "fix the failure", false)
+	if !errors.Is(err, ErrCannotFix) || !strings.Contains(err.Error(), "required configuration is protected") {
+		t.Fatalf("lost the model's diagnosis: %v", err)
+	}
+	note := model.seen[len(model.seen)-1].Content
+	if strings.Contains(note, "already supplied") || !strings.Contains(note, ".env") {
+		t.Fatalf("misleading refusal: %s", note)
+	}
+}
+
+func TestWorkflowAccessIsExplainedAndEditsStillRequireTheOptIn(t *testing.T) {
+	const workflow = ".github/workflows/ci.yml"
+	for _, enabled := range []bool{false, true} {
+		for _, targeted := range []bool{false, true} {
+			t.Run(fmt.Sprintf("enabled=%t/targeted=%t", enabled, targeted), func(t *testing.T) {
+				fix := Plan{Summary: "Fix the step", Files: []File{{Path: workflow, Content: "fixed\n"}}}
+				if targeted {
+					fix.Files = nil
+					fix.Edits = []Edit{{Path: workflow, Before: "old", After: "fixed"}}
+				}
+				raw, err := json.Marshal(fix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				model := &replies{values: []string{`{"read":["` + workflow + `"]}`, string(raw)}}
+				reader := &countingReader{file: File{Content: "old\n", Mode: "100644"}}
+				plan, err := Generate(t.Context(), model, reader, Snapshot{}, "fix the failure", enabled)
+				if enabled {
+					if err != nil || len(plan.Files) != 1 || plan.Files[0].Content != "fixed\n" || reader.reads != 1 {
+						t.Fatalf("opted-in workflow fix failed: %+v, reads %d, error %v", plan, reader.reads, err)
+					}
+				} else if err == nil || len(plan.Files) != 0 || reader.reads != 0 {
+					t.Fatalf("protected workflow was read or edited: %+v, reads %d, error %v", plan, reader.reads, err)
+				}
+				state := "disabled"
+				if enabled {
+					state = "enabled"
+				}
+				if !strings.Contains(model.seen[0].Content, "Workflow file reads and edits are "+state) {
+					t.Fatal("the model was not told the active workflow policy")
+				}
+			})
+		}
+	}
+}
+
+func TestProtectedAndOversizedRequestsStillSupplyTheFileThatFits(t *testing.T) {
+	reader := readerWithFour(28 << 10)
+	reader["large.go"] = File{Content: source(MaxFileBytes)}
+	reader["tiny.go"] = File{Content: "package tiny\n"}
+	model := &usage{replies: &replies{values: []string{
+		`{"read":["a.go","b.go","c.go","d.go"]}`,
+		`{"read":["large.go",".env","tiny.go"]}`,
+		`{"cannot_fix":"enough"}`,
+	}}}
+	_, err := Generate(t.Context(), model, reader, Snapshot{}, "fix the failure", false)
+	if !errors.Is(err, ErrCannotFix) {
+		t.Fatal(err)
+	}
+	note := model.seen[len(model.seen)-1].Content
+	if !strings.Contains(note, "16371 bytes of the 128 KiB allowance remain") || !strings.Contains(note, `"path":"tiny.go"`) || !strings.Contains(note, `".env" was not supplied`) || strings.Contains(note, "an empty list means already supplied") {
+		t.Fatalf("misleading mixed read result: %s", note)
+	}
+	if len(model.used) != 3 || model.used[2] != 114688+len("package tiny\n") {
+		t.Fatalf("wrong source accounting after refusals: %v", model.used)
+	}
+}
 func TestRepeatedSourceReadsDoNotSpendTheAllowanceAgain(t *testing.T) {
 	r := &countingReader{file: File{Content: strings.Repeat("x", MaxFileBytes)}}
 	s := newSourceContext(r, false)

@@ -14,17 +14,16 @@
   import type { Stats } from '$lib/api/types';
   import { fleet } from '$lib/state/fleet.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
-  import { formatDuration, formatNumber, pluralise, toMillis } from '$lib/format';
+  import { describeWindow, formatDuration, formatNumber, pluralise, toMillis } from '$lib/format';
   import MetricTile from '$lib/components/MetricTile.svelte';
 
   interface Props {
     /** True until the first authoritative fetch has landed. */
     loading?: boolean;
-    operational?: boolean;
     class?: string;
   }
 
-  let { loading = false, operational = false, class: className = '' }: Props = $props();
+  let { loading = false, class: className = '' }: Props = $props();
 
   /**
    * One minute of fleet history, in the shape the tiles plot.
@@ -220,14 +219,6 @@
   const p95Wait = $derived(
     startedJobs > 0 ? (others ? stats?.p95_wait_ms : stats?.fleet?.p95_wait_ms) : undefined,
   );
-  const measured = (ms: number | undefined): number | undefined => (ms ? ms : undefined);
-  const p50Startup = $derived(measured(stats?.p50_startup_ms));
-  const p95Startup = $derived(p50Startup === undefined ? undefined : stats?.p95_startup_ms);
-  const p50Registration = $derived(measured(stats?.p50_registration_ms));
-  const p95Registration = $derived(
-    p50Registration === undefined ? undefined : stats?.p95_registration_ms,
-  );
-
   /** A series is only worth drawing, or comparing against, once it has a shape. */
   function trend(values: readonly number[]): readonly number[] | undefined {
     return values.length > 1 ? values : undefined;
@@ -248,7 +239,7 @@
   });
 </script>
 
-<div class="tiles {className}" class:operational>
+<div class="tiles {className}">
   <MetricTile
     label="Queued jobs"
     value={formatNumber(queued)}
@@ -273,7 +264,6 @@
   <MetricTile
     label="Live runners"
     value={formatNumber(live)}
-    hint={capacityHint}
     href="/runners"
     tone="idle"
     delta={delta(liveSeries, live)}
@@ -293,87 +283,76 @@
     hint={p95Wait === undefined ? undefined : `p95 ${formatDuration(p95Wait)}`}
     {loading}
   />
-  {#if !operational}{@render timingMetrics()}{/if}
 </div>
 
-{#snippet timingMetrics()}
-  <MetricTile
-    label="Runner startup p50"
-    value={formatDuration(p50Startup)}
-    hint={p95Startup === undefined ? undefined : `p95 ${formatDuration(p95Startup)}`}
-    href="/runners"
-    tone="pending"
-    goodWhen="down"
-    {loading}
-  />
-  <MetricTile
-    label="Registration p50"
-    value={formatDuration(p50Registration)}
-    hint={p95Registration === undefined ? undefined : `p95 ${formatDuration(p95Registration)}`}
-    href="/runners"
-    tone="pending"
-    goodWhen="down"
-    {loading}
-  />
-{/snippet}
-{#if operational}
-  <details class="performance">
-    <summary>Startup and registration timing</summary>
-    <div class="tiles">{@render timingMetrics()}</div>
-  </details>
-{/if}
+<div class="context">
+  {#if !loading && capacityHint}<span
+      >{capacityHint}. {others ? 'Runners and hosts belong to this fleet.' : ''}</span
+    >{/if}
+  <span class="coverage"
+    >{!describeWindow(stats?.window) || describeWindow(stats?.window) === '1 hour'
+      ? 'Trends, waits and outcomes cover the last hour.'
+      : `Trends cover the last hour; waits and outcomes, the last ${describeWindow(stats?.window)}.`}</span
+  >
+</div>
 
 <style>
-  .performance summary {
-    padding: var(--z-space-3);
-    cursor: pointer;
-    color: var(--z-accent);
-    background: var(--z-surface);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-md);
-  }
-  .performance[open] summary {
-    margin-bottom: var(--z-space-3);
-  }
-  .tiles.operational {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  @media (min-width: 1181px) {
-    .tiles.operational {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-  @media (max-width: 360px) {
-    .tiles.operational {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
-  @media (pointer: coarse) {
-    .performance summary {
-      min-height: var(--z-control-touch);
-    }
-  }
   .tiles {
     display: grid;
-    gap: var(--z-space-4);
-    row-gap: var(--z-space-2);
-    /* Six tiles, so the column count is a divisor of six at every width: three
-       up with room, two on a tablet, one on a phone. Four columns left the
-       second row two-thirds empty, which is what the shipped screenshot
-       showed. */
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--z-space-2);
   }
-  /* The sidebar breakpoint from the other side: a media query cannot say
-     "above 1180" without naming the next pixel. */
-  @media (min-width: 1181px) {
-    .tiles {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+  .tiles :global(.tile) {
+    padding: var(--z-space-3);
+  }
+  .tiles :global(.spark svg) {
+    max-width: 100%;
+  }
+  .context {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--z-space-1) var(--z-space-4);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+    line-height: var(--z-leading-xs);
+    overflow-wrap: anywhere;
+  }
+  .coverage {
+    margin-left: auto;
   }
   @media (max-width: 768px) {
     .tiles {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .tiles :global(.tile) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: var(--z-space-2) var(--z-space-3);
+    }
+    .tiles :global(.label),
+    .tiles :global(.delta),
+    .tiles :global(.hint) {
+      grid-column: 1 / -1;
+    }
+    .tiles :global(.value) {
+      grid-column: 1;
+      overflow-wrap: anywhere;
+    }
+    .tiles :global(.foot) {
+      display: contents;
+    }
+    .tiles :global(span.spark) {
+      grid-column: 2;
+      grid-row: 2;
+      align-self: center;
+      width: var(--z-space-12);
+    }
+    .tiles :global(span.spark > svg) {
+      width: var(--z-space-12);
+      height: var(--z-space-4);
+    }
+    .coverage {
+      margin-left: 0;
     }
   }
 </style>

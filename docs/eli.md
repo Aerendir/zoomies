@@ -692,7 +692,12 @@ provider permitted to process your repository and job logs.
 
 Eli does not execute repository code or run local tests. It cannot edit symlinks,
 submodules, credential paths or binary files. Workflow files are protected unless
-explicitly enabled. Fork PRs, closed PRs and default-branch PRs are refused.
+explicitly enabled. The model is told this policy before its first turn. A
+protected-path read is refused without fetching the file, and the model is told
+which path was refused so it can continue from allowed source or explain why it
+cannot fix the failure. Allowed reads in the same request still arrive. These
+refusals count towards the six-turn limit, and do not permit protected edits.
+Fork PRs, closed PRs and default-branch PRs are refused.
 An infrastructure failure may produce a diagnosis rather than a code change.
 
 Before publication, Eli rechecks repository policy, provider availability and

@@ -50,10 +50,16 @@ animations, Off/Cute/Standard vocabulary, reduced motion, navigation and saved
 phone-table layouts. Log viewers refresh their canvas palette and type without
 clearing output. No fleet setting or API call is needed to change style.
 
-Mission Control's Overview keeps first-run guidance first, then current issues
-and four live metrics before pools, active jobs and history. Startup and
-registration timings remain available in an expandable section. Classic retains
-its history-first layout. On a Mission Control phone, Jobs puts search, status
+Both styles use the Calm operations Overview: first-run guidance, attention
+summaries and four compact live metrics, then pools and active jobs beside a
+three-entry recent-events preview. One scope selector controls the page. Sticky
+jump links assist navigation; phones put supplementary destinations under More.
+History, host capacity and startup/registration timings are expandable sections
+with live summaries and browser-local expansion preferences. History remains
+this fleet's activity, with its own labelled range, even when other runners are
+included in job counts. A fragment link opens its destination before scrolling.
+The full events feed expands in place, retaining the controller's reason strings.
+On a Mission Control phone, Jobs puts search, status
 and records before supplementary analytics; Filters and Fleet context expand
 without clearing the URL filters.
 

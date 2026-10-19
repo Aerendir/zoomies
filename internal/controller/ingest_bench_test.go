@@ -389,9 +389,16 @@ func BenchmarkReconcile(b *testing.B) {
 					for range sub.C {
 					}
 				}()
+				checkSlowerMix(b, h)
 
 				b.ReportAllocs()
-				for b.Loop() {
+				for i := 0; b.Loop(); i++ {
+					// The slower-job check reuses what it found for a minute. At the
+					// shipped ten-second interval that is five passes in six, and the sixth
+					// reads the jobs again, so the passes timed are that mix.
+					if i%6 == 0 {
+						forgetSlowerJobs(h.c)
+					}
 					if err := h.c.Reconcile(h.ctx); err != nil {
 						b.Fatal(err)
 					}

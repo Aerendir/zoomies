@@ -34,6 +34,7 @@ test('a failure of a push run is not offered to Eli, and a pull request failure 
   await signedInAs(page, 'operator');
   await triggeredBy(page, (i) => (i % 2 === 0 ? 'push' : 'pull_request'));
   await goto(page, '/', 'Overview');
+  await page.locator('#failures > summary > .title').click();
 
   const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
   const rows = failures.getByRole('listitem');
@@ -46,6 +47,7 @@ test('a failure whose trigger is not known yet is still offered', async ({ page 
   await signedInAs(page, 'operator');
   await triggeredBy(page, () => undefined);
   await goto(page, '/', 'Overview');
+  await page.locator('#failures > summary > .title').click();
 
   const failures = page.getByRole('region', { name: 'Recent failures', exact: true });
   await expect(failures.getByRole('link', { name: 'Fix with Eli' }).first()).toBeVisible();
@@ -57,6 +59,7 @@ test("a push failure's own drawer does not offer Eli either, where a pull reques
   await signedInAs(page, 'operator');
   await triggeredBy(page, (i) => (i % 2 === 0 ? 'push' : 'pull_request'));
   await goto(page, '/', 'Overview');
+  await page.locator('#failures > summary > .title').click();
 
   const rows = page
     .getByRole('region', { name: 'Recent failures', exact: true })

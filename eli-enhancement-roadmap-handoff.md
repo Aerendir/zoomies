@@ -1,7 +1,8 @@
 # Eli enhancement roadmap handoff
 
 Prepared 12 October 2026. Planning baseline: local checkout
-`1e745d258fdfce61d3395da97b72d575aab1fbbd`.
+`1e745d258fdfce61d3395da97b72d575aab1fbbd`. Reconciled with the code on
+19 October 2026 against main `87c5aa3b` (see the next section).
 
 This document turns the product review into implementation tracks that several
 agents can work from. It describes proposed extensions, their dependencies,
@@ -14,6 +15,47 @@ This file supports it rather than replacing it. Before implementation, the
 coordinating agent reconciles these tracks with current code and records new or
 changed work in ROADMAP.md, using existing packages where the work overlaps.
 The track IDs below are local handoff identifiers, not allocated ZF numbers.
+
+## Reconciliation, 19 October 2026
+
+Checked against main `87c5aa3b`, with a clean working tree. Where this section
+and an older row below disagree, this section is newer; the older rows are kept
+as the record of how each slice landed.
+
+| Track | Verified state in code | Correction to older text |
+| --- | --- | --- |
+| E1 (ZF-242) | Merged and used: `internal/analysis` (`merge_delay.go`), `get_pr_delay` on Eli's allowlist, CLI, contextual UI | None. ROADMAP.md still lists `in_progress` because live-model evaluation and a real performance experiment have not run |
+| E2 (ZF-243) | Descriptive milestone merged (#1020); `get_retained_comparison` on Eli's allowlist; ZF-241's period comparison, queue breakdown, host pressure and startup failures are `implemented` | None. Controlled-experiment proof and dispatch stay deferred by the owner |
+| E3 (ZF-244) | Pure preview (`internal/optimisation`), private retention (migration 0107) and admitted checkout evidence (`internal/controller/optimisation_capture.go`) are on main. [#1024](https://github.com/eyupio/zoomies/pull/1024) **merged** on 14 October | The table row and the last section describe #1024 as awaiting review; it is merged. There is still **no** HTTP route, OpenAPI entry, source/history policy setting, web flow, CLI or MCP tool for E3, and no approval, publication or verification |
+| E4 | Not started as a track. Kennel's evaluator, waivers and guidance exist, but no fix preview or publication path does | Unchanged |
+| E5 | ZF-241's `startup_failures` covers runner-startup recurrence. No workflow/test failure fingerprinting exists | Unchanged |
+| E6 | Not started. `internal/prrepair/mention` (ZF-239 slice 1) is only the command matcher | Unchanged |
+| E7 | Eli's repair history tools, repair identity relink, repair pages, automatic-repair visibility and stop controls (18 October), Eli protected-read recovery (19 October) and the analysis cards are all on main | The two E7 rows marked "Implemented, branch ..." are merged. Automatic repairs are repair-mode work, not Optimise or Review mode, and give those modes no new authority |
+
+Newer work that this handoff did not plan but that later tracks should reuse:
+the Eli repair pages and their readiness, policy and budget views, `run_event`
+on a job, and `GET /assistant/repairs/automatic` with its stop route.
+
+### Recommended next stage
+
+Finish E3's first vertical slice before starting E4 to E6, because three
+foundations are already merged with no operator-visible surface. In order:
+
+1. **Source and history policy plus the scoped web preview flow** (the next
+   agent note at the end of this file). Real server-side `OptimisationPolicyCheck`
+   reading current settings, separate source-read, edit and history-review
+   enablement, a bounded escaped source view bound to digest, head and actor,
+   decimal-string run/job identities, manual Retry-After. Allocate the migration
+   and OpenAPI entries from the current tree (latest migration is 0113).
+2. Explicit approval, then reconciled draft publication with fresh head and
+   policy checks. Never merges.
+3. E2 verification of the published change, reporting inconclusive unless a
+   suitable control and candidate exist.
+4. CLI and MCP/Eli adapters, with scripted scenarios.
+
+Start E4 (one deterministic Kennel fix preview) in parallel only if a second
+owner is free; it shares no files with E3 beyond the coordinator-owned
+registries. Hold E5 and E6.
 
 ## Execution status, updated 13 October 2026
 
@@ -58,14 +100,14 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
 | E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
 | E2 private root dependency inventory | Merged | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
-| E7 repair identity relink | Implemented, branch `fix/eli-identity-relink` | After #1053 | A GitHub account already linked to another Zoomies user (the state an instance move leaves behind) is refused as `assistant.identity_held` with the holder named in message and detail instead of a driver's constraint text; the page's move press resends with `relink`, moves the row server-side in one transaction, lands it unconfirmed so the new owner allows provider use again, and the link audit row carries `moved_from`. Store, API, GitHub fake, schema and client regenerated, docs and unit tests updated; full store/API/docs/web suites pending CI |
+| E7 repair identity relink | Merged (verified on main 19 October) | After #1053 | A GitHub account already linked to another Zoomies user (the state an instance move leaves behind) is refused as `assistant.identity_held` with the holder named in message and detail instead of a driver's constraint text; the page's move press resends with `relink`, moves the row server-side in one transaction, lands it unconfirmed so the new owner allows provider use again, and the link audit row carries `moved_from`. Store, API, GitHub fake, schema and client regenerated, docs and unit tests updated; full store/API/docs/web suites pending CI |
 | E2 descriptive-comparison milestone | Merged | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
 | E3 checkout preview foundation | Merged | ZF-244, [#1021](https://github.com/eyupio/zoomies/pull/1021), based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
 | E3 private preview retention | Merged | ZF-244, [#1022](https://github.com/eyupio/zoomies/pull/1022), based on main after #1021 | Bounded immutable private source/evidence/preview envelope and offline recomputation, scoped actor/audit and explicit unchecked currentness; admission and web flow remain outstanding |
-| E3 admitted checkout evidence | Implemented, pending review/CI/merge | ZF-244, [#1024](https://github.com/eyupio/zoomies/pull/1024), updated onto main after #1023 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
+| E3 admitted checkout evidence | Merged 14 October | ZF-244, [#1024](https://github.com/eyupio/zoomies/pull/1024), updated onto main after #1023 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
 | E4 to E6 | Not started | Dependencies and sequence below | No new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
-| E7 repair history in Eli's toolbox | Implemented, branch `eli-repairs` | After #1049 | The two read tools (`list_elis_repairs`, `get_eli_repair`) over `GET /assistant/repairs`, on the allowlist with the pinning test extended to the action tools, and the writes (request, accept, clear, policy) refused as not offered. Focused MCP/API/Eli scenario and docs tests pass; the generated MCP reference is refreshed. No live model evaluation has run |
+| E7 repair history in Eli's toolbox | Merged (verified on main 19 October) | After #1049 | The two read tools (`list_elis_repairs`, `get_eli_repair`) over `GET /assistant/repairs`, on the allowlist with the pinning test extended to the action tools, and the writes (request, accept, clear, policy) refused as not offered. Focused MCP/API/Eli scenario and docs tests pass; the generated MCP reference is refreshed. No live model evaluation has run |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
 | E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; complete installer package race tests pass |
 | E7 ledger fixture isolation | Merged | [#965](https://github.com/eyupio/zoomies/pull/965), following merged validation parents | Proxmox ledger package race tests pass with a temporary directory and checked opening error; no live e2e cluster run |
@@ -2163,7 +2205,7 @@ merge, dispatch, enrichment or E2 scope expansion.
 
 Retention #1022 merged. Branch codex/eli-e3-checkout-evidence starts from main
 after #1022 and is updated onto main after #1023.
-Ready PR [#1024](https://github.com/eyupio/zoomies/pull/1024) awaits review/CI/merge.
+PR [#1024](https://github.com/eyupio/zoomies/pull/1024) merged on 14 October 2026.
 This adds the bounded optional GitHub reader and internal capture
 adapter; no HTTP route, source policy setting or web flow is exposed yet.
 
