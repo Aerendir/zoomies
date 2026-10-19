@@ -11,6 +11,7 @@ import (
 
 	"github.com/eyupio/zoomies/internal/agent"
 	"github.com/eyupio/zoomies/internal/config"
+	"github.com/eyupio/zoomies/internal/naming"
 	"github.com/eyupio/zoomies/internal/scheduler"
 	"github.com/eyupio/zoomies/internal/store"
 )
@@ -954,5 +955,33 @@ func TestAPlannedFailureIsSkippedWhenTheRunnerHasSinceTakenAJob(t *testing.T) {
 	}
 	if after.State != store.RunnerBusy {
 		t.Fatalf("runner state = %s, want busy: failing it would end the job it just took", after.State)
+	}
+}
+
+// A job that fails on a runner is traced from GitHub's own record, which carries
+// the runner's name and nothing about the machine. So the name a runner is
+// registered under must say which host it was placed on.
+func TestARunnerIsNamedAfterTheHostItWasPlacedOn(t *testing.T) {
+	h := newHarness(t)
+	_, _, host := h.fleet()
+	h.deliverJob(jobEvent{Action: "queued", JobID: 1, Labels: []string{"self-hosted", "linux", "x64", "demo"}})
+	if err := h.c.Reconcile(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	h.c.lifecycleCalls.Wait()
+	runners := h.runners()
+	if len(runners) != 1 {
+		t.Fatalf("want one runner, got %d", len(runners))
+	}
+	segment := naming.HostSegment(host.Spec().Suffix)
+	if segment == "" {
+		t.Skip("the fixture host has nothing nameable")
+	}
+	if !strings.Contains(runners[0].Name, "-"+segment+"-") {
+		t.Fatalf("runner %q should name its host %q", runners[0].Name, segment)
+	}
+	registered := h.gh.Runners()
+	if len(registered) != 1 || registered[0].Name != runners[0].Name {
+		t.Fatal("GitHub must be told the same name the controller recorded")
 	}
 }

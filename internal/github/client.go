@@ -420,6 +420,12 @@ type Factory interface {
 // a name is trimmed to fit here rather than refused by the API at registration.
 func RunnerName(pool *store.Pool) string { return store.NewRunnerName(pool) }
 
+// RunnerNameOn names a runner that is going to a known host, so the name GitHub
+// shows says which machine a job ran on.
+func RunnerNameOn(pool *store.Pool, host *store.Host) string {
+	return store.NewRunnerNameOn(pool, host)
+}
+
 // SplitTarget parses "owner" or "owner/repo" into its parts.
 func SplitTarget(target string) (owner, repo string, kind store.TargetType) {
 	if o, r, ok := strings.Cut(target, "/"); ok && r != "" {

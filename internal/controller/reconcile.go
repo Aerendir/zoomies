@@ -480,7 +480,7 @@ func (c *Controller) createRunner(ctx context.Context, pool *store.Pool, host *s
 		}
 	}
 	resources.MinCPUs, resources.MinMemoryMB = 0, 0
-	name := github.RunnerName(pool)
+	name := github.RunnerNameOn(pool, host)
 	r := &store.Runner{
 		PoolID:            pool.ID,
 		HostID:            a.HostID,
