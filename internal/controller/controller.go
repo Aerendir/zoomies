@@ -140,6 +140,9 @@ type Controller struct {
 	// problemsFlight shares one computation of the problems list between
 	// callers that overlap; see problems_flight.go.
 	problemsFlight problemsFlight
+	// slower is what the slower-job check last found, reused for a minute; see
+	// jobtrends.go.
+	slower slowerMemo
 
 	// cleanupCursor is owned by the serial reconcile loop.
 	cleanupCursor string
