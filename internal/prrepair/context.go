@@ -22,6 +22,14 @@ type allowanceError struct {
 	need, left int
 }
 
+// A denied read is feedback for the model, not a reason to discard an otherwise
+// useful investigation. The path check still runs before any reader is called.
+type protectedReadError struct{ path string }
+
+func (e *protectedReadError) Error() string {
+	return fmt.Sprintf("%q was not supplied: the path is protected by the repository repair policy. Do not request it again. Work from allowed source, or return cannot_fix explaining why this file is needed.", Redact(e.path))
+}
+
 func (e *allowanceError) Error() string { return e.said(e.left) }
 
 // said is the refusal as the model is told it. left is what remains when the
@@ -42,11 +50,15 @@ func (e *allowanceError) said(left int) string {
 // A path counts as turned away if it was refused once, even if a window of it
 // fitted later, since the rounds spent finding that out are the rounds it ran
 // out of.
-func stepLimitError(refused []string) error {
-	if len(refused) == 0 {
-		return errors.New("the repair reached the model-step limit without a fix")
+func stepLimitError(refused, denied []string) error {
+	message := "the repair reached the model-step limit without a fix"
+	if len(refused) > 0 {
+		message += fmt.Sprintf("; the model asked for %s, which the %d KiB source allowance had no room for: name the file and the lines to change in the request, so that it asks for a window that fits", namedFiles(refused), MaxSourceBytes/1024)
 	}
-	return fmt.Errorf("the repair reached the model-step limit without a fix; the model asked for %s, which the %d KiB source allowance had no room for: name the file and the lines to change in the request, so that it asks for a window that fits", namedFiles(refused), MaxSourceBytes/1024)
+	if len(denied) > 0 {
+		message += fmt.Sprintf("; the model requested %s, which the repository repair policy kept protected: point Eli at allowed source, or fix the protected file by hand", namedFiles(denied))
+	}
+	return errors.New(message)
 }
 
 // namedFiles lists up to three paths and counts the rest. Each sits in a code
@@ -76,6 +88,7 @@ type sourceContext struct {
 	// refused is the paths the allowance turned away, in the order it first did,
 	// for the error a repair ends with if it runs out of rounds.
 	refused []string
+	denied  []string
 }
 
 func newSourceContext(reader Reader, workflows bool) *sourceContext {
@@ -89,7 +102,10 @@ func (s *sourceContext) complete(path string) bool {
 }
 func (s *sourceContext) reveal(ctx context.Context, w ReadWindow) ([]File, error) {
 	if !AllowedPath(w.Path, s.workflows) {
-		return nil, fmt.Errorf("the model requested a protected path")
+		if !slices.Contains(s.denied, w.Path) {
+			s.denied = append(s.denied, w.Path)
+		}
+		return nil, &protectedReadError{path: w.Path}
 	}
 	f, ok := s.originals[w.Path]
 	if !ok {
