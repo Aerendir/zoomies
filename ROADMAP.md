@@ -1867,7 +1867,7 @@ Depends on ZF-242 and ZF-243's descriptive milestone. Size M.
 [private retention/replay](roadmap/plans/2026-10-14-eli-e3-preview-retention.md),
 [admitted checkout evidence](roadmap/plans/2026-10-14-eli-e3-checkout-evidence.md).
 The preview foundation merged in #1021 and private retention in #1022.
-The web surface and its policy now exist: see [the 19 October plan](roadmap/plans/2026-10-19-eli-e3-checkout-web.md). Approval, draft publication and verification are still to do.
+The policy, routes and web flow merged in #1171 (see [the 19 October plan](roadmap/plans/2026-10-19-eli-e3-checkout-web.md)), tested against fakes only. Still to do, in order: a run against one real repository, explicit approval of a kept preview, draft PR publication (its own opt-in, fresh head and policy checks, never merges), E2 verification, then CLI/MCP/Eli access once a contract for the private envelope is decided. [The handoff](eli-enhancement-roadmap-handoff.md#e3-what-is-built-and-what-is-not) has the detail.
 
 ## 9. Kept for the day somebody asks
 
