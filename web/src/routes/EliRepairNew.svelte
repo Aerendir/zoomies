@@ -29,6 +29,7 @@
   import type { Job, Schemas } from '$lib/api/types';
   import Button from '$lib/components/Button.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SectionNav from '$lib/components/SectionNav.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import { router } from '$lib/router';
   import { session } from '$lib/state/session.svelte';
@@ -108,6 +109,15 @@
       (rows.find((row) => row.code === 'access')?.status === 'ok' ||
         (rows.length === 0 && readiness.ready)),
   );
+  const blockedChecks = $derived(rows.filter((row) => row.status === 'blocked').length);
+  const navItems = $derived([
+    { id: 'next', label: 'Next step' },
+    ...(loaded && (setupNeeded || setupOpen)
+      ? [{ id: 'repair-setup', label: 'Setup', secondary: true }]
+      : []),
+    { id: 'failed', label: 'What failed', count: view.jobs.length },
+    { id: 'checks', label: 'Checks', count: blockedChecks || undefined },
+  ]);
 
   const spoken = $derived.by(() => {
     if (!loaded) return 'Checking repair readiness.';
@@ -380,45 +390,16 @@
     {/snippet}
   </NoticeCard>
 {:else}
-  <div class="cols" bind:this={workspace}>
-    <div class="main">
-      <div class="case">
-        {#if loaded}
-          <CaseCard {view} />
-        {:else}
-          <Skeleton height="11rem" radius="md" />
-        {/if}
-      </div>
-      {#if loaded && readiness && (setupNeeded || setupOpen) && !changed}
-        <div class="setup" id="repair-setup">
-          {#key readiness.repo}
-            <RepairSetup repo={readiness.repo} oncomplete={() => load()} />
-          {/key}
-        </div>
-      {/if}
+  <SectionNav items={navItems} label="On this page" />
+  <div class="workspace" bind:this={workspace}>
+    <div class="case">
       {#if loaded}
-        <div class="failed">
-          <FailedJobs
-            jobs={view.jobs}
-            repo={view.repo}
-            {canReadLogs}
-            logsBlockedReason="Job logs can hold anything a workflow prints, so Zoomies reads them only for someone whose GitHub account can write to this repository. Fix what is blocking the checks and the error lines appear here."
-          />
-        </div>
-        {#if rows.length}
-          <div class="checks">
-            <ReadinessChecklist
-              {rows}
-              {busy}
-              onrecheck={() => void load()}
-              onsetup={openSetup}
-              onchoose={() => (dialogOpen = true)}
-            />
-          </div>
-        {/if}
+        <CaseCard {view} />
+      {:else}
+        <Skeleton height="11rem" radius="md" />
       {/if}
     </div>
-    <aside class="decision" aria-label="Next step" bind:this={decision}>
+    <aside class="decision" id="next" aria-label="Next step" tabindex="-1" bind:this={decision}>
       {#if loaded && note}<AutomaticNote {note} />{/if}
       <DecisionCard
         {stage}
@@ -436,62 +417,57 @@
         error={readFailed || startError}
       />
     </aside>
+    {#if loaded}
+      {#if readiness && (setupNeeded || setupOpen) && !changed}
+        <div class="setup" id="repair-setup" tabindex="-1">
+          {#key readiness.repo}
+            <RepairSetup repo={readiness.repo} oncomplete={() => load()} />
+          {/key}
+        </div>
+      {/if}
+      <div class="failed" id="failed" tabindex="-1">
+        <FailedJobs
+          jobs={view.jobs}
+          repo={view.repo}
+          {canReadLogs}
+          logsBlockedReason="Job logs can hold anything a workflow prints, so Zoomies reads them only for someone whose GitHub account can write to this repository. Fix what is blocking the checks and the error lines appear here."
+        />
+      </div>
+      {#if rows.length}
+        <div class="checks" id="checks" tabindex="-1">
+          <ReadinessChecklist
+            {rows}
+            {busy}
+            onrecheck={() => void load()}
+            onsetup={openSetup}
+            onchoose={() => (dialogOpen = true)}
+          />
+        </div>
+      {/if}
+    {/if}
   </div>
 {/if}
 
 <RepairTargetDialog bind:open={dialogOpen} />
 
 <style>
-  .cols {
+  .workspace {
     display: grid;
     gap: var(--z-space-5);
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* On a phone the decision follows the case, so the parts of the main column
-     join the one grid and are put in order; from 1180px the main column stands
-     alone and the decision sits beside it. */
-  .main {
-    display: contents;
-  }
-  .case {
-    order: 1;
-  }
-  .decision {
-    order: 2;
     min-width: 0;
-  }
-  .setup {
-    order: 3;
-  }
-  .failed {
-    order: 4;
-  }
-  .checks {
-    order: 5;
   }
   .case,
-  .setup,
+  .decision,
   .failed,
-  .checks {
+  .checks,
+  .setup {
     min-width: 0;
+    scroll-margin-top: calc(var(--z-topbar-height) + var(--z-control-touch) + var(--z-space-3));
   }
-  @media (min-width: 1180px) {
-    .cols {
-      grid-template-columns: minmax(0, 1fr) 22rem;
-      align-items: start;
-    }
-    .main {
-      display: grid;
-      gap: var(--z-space-5);
-      grid-column: 1;
-      grid-row: 1;
-      min-width: 0;
-    }
-    .decision {
-      grid-column: 2;
-      grid-row: 1;
-      position: sticky;
-      top: var(--z-space-6);
-    }
+  .decision:focus,
+  .failed:focus,
+  .checks:focus,
+  .setup:focus {
+    outline: none;
   }
 </style>

@@ -48,6 +48,19 @@ test('the setup page holds the account card, the repository policies and the lin
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test('the setup page has an in-page navigation for its sections', async ({ page }) => {
+  await goto(page, '/repairs/setup', 'Repair setup');
+  const nav = page.getByRole('navigation', { name: 'On this page' });
+  await expect(nav.getByRole('link', { name: 'Account', exact: true })).toHaveAttribute(
+    'href',
+    '#access',
+  );
+  await expect(nav.getByRole('link', { name: 'Policies', exact: true })).toHaveAttribute(
+    'href',
+    '#repositories',
+  );
+});
+
 // Settings keeps what is about the model, and sends repairs to the pages that are about them.
 test('Settings, Eli AI Assistant links to the hub and to setup and no longer lists repairs', async ({
   page,

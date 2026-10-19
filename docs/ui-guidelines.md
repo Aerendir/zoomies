@@ -70,6 +70,14 @@ including values older versions may have written automatically. Changing a
 logo or vocabulary does not record an unchosen global table default. Saved
 column order and widths take precedence over the new Jobs default order.
 
+The Eli repairs pages use the same grammar: a sticky **On this page** navigation
+with counts, native disclosures whose closed summaries stay useful, and the
+supporting detail (History, Automatic repairs, the attempt's case and technical
+details) closed until somebody asks for it. A section that holds live work opens
+by itself; a quiet History does too, because then it is the content. A browser's
+explicit open or closed choice is remembered, and the phone keeps the last two
+destinations behind **More**.
+
 
 Mission Control colour values live in the `--z-mission-*` tokens. Preview cards
 use those same tokens, so their light/dark previews agree with the selected

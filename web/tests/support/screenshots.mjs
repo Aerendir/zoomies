@@ -457,13 +457,22 @@ const SHOTS = [
     device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
     async prepare(page) {
       await page.getByRole('region', { name: 'Repair setup' }).waitFor();
-      await page
-        .getByRole('region', { name: 'Automatic repairs' })
-        .getByRole('article')
+      const automatic = page.getByRole('region', { name: 'Automatic repairs' });
+      await automatic
+        .locator('details')
         .first()
-        .waitFor();
-      await page.locator('.history').getByText('Checks passed', { exact: true }).first().waitFor();
-      await page.getByText('Needs attention', { exact: true }).last().waitFor();
+        .evaluate((el) => {
+          el.open = true;
+        });
+      await automatic.getByRole('article').first().waitFor();
+      const history = page.getByRole('region', { name: 'History' });
+      await history
+        .locator('details')
+        .first()
+        .evaluate((el) => {
+          el.open = true;
+        });
+      await history.getByText('Checks passed', { exact: true }).first().waitFor();
     },
   },
   {

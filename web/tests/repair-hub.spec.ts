@@ -17,6 +17,16 @@ import {
 } from './support/repairs';
 
 const COMMIT = 'b7d3e9150c2a4f8e6d1b0a93c5e7f2a4d6b8c0e1';
+
+/** The history is closed while there is current work; open it before reading rows. */
+async function openHistory(page: Page) {
+  const region = page.getByRole('region', { name: 'History' });
+  const details = region.locator('details').first();
+  await details.evaluate((el) => {
+    (el as HTMLDetailsElement).open = true;
+  });
+  return region;
+}
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 const running = () =>
@@ -100,7 +110,7 @@ test('the hub lists offers, running repairs and history with the failing job on 
   );
 
   // History: every row says what it was about and opens the attempt.
-  const rows = page.getByRole('region', { name: 'History' }).getByRole('article');
+  const rows = (await openHistory(page)).getByRole('article');
   await expect(rows).toHaveCount(3);
 
   const done = rows.filter({ hasText: 'Add a status line to the repairs page' });
@@ -129,6 +139,41 @@ test('the hub lists offers, running repairs and history with the failing job on 
   await expect(
     lost.getByRole('link', { name: 'Show the retention window on the Usage page' }),
   ).toHaveAttribute('href', '/repairs/rep-failed');
+});
+
+test('the hub puts current work first and keeps the history behind a summary', async ({ page }) => {
+  await mockRepairApi(page, {
+    settings: linkedAs('dana'),
+    jobs: [failedJob(), lintJob()],
+    offers: [offerRow()],
+    repairs: [running(), passed(), failed()],
+  });
+  await page.goto('/repairs');
+
+  const nav = page.getByRole('navigation', { name: 'On this page' });
+  await expect(nav.getByRole('link', { name: 'Now' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Needs you 1' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'In progress 1' })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 0) > 768) {
+    await expect(nav.getByRole('link', { name: 'History' })).toBeVisible();
+  } else {
+    await expect(nav.getByText('More')).toBeVisible();
+  }
+
+  await expect(
+    page.getByRole('region', { name: 'Needs you' }).locator('details').first(),
+  ).toHaveAttribute('open', '');
+  await expect(
+    page.getByRole('region', { name: 'In progress' }).locator('details').first(),
+  ).toHaveAttribute('open', '');
+
+  const history = page.getByRole('region', { name: 'History' });
+  const details = history.locator('details').first();
+  await expect(details).not.toHaveAttribute('open', '');
+  await expect(history).toContainText('3 repairs');
+  await details.locator('summary').first().click();
+  await expect(details).toHaveAttribute('open', '');
+  await expect(history.getByRole('article')).toHaveCount(3);
 });
 
 test('Review repair links to the repair page for that offer', async ({ page }) => {
@@ -179,7 +224,9 @@ test('with nothing to review or running, the hub says where offers come from', a
   await expect(needs.getByText('Nothing needs you right now')).toBeVisible();
   await expect(needs).toContainText('Ask me first');
   await expect(page.getByRole('region', { name: 'In progress' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'History' })).toContainText('No repairs yet');
+  const history = page.getByRole('region', { name: 'History' });
+  await expect(history.locator('details').first()).toHaveAttribute('open', '');
+  await expect(await openHistory(page)).toContainText('No repairs yet');
 });
 
 /**
@@ -373,7 +420,7 @@ test('everything a pull request or a job wrote is text, and none of it is a link
     needs.getByRole('heading', { name: '<img src=x onerror=alert(1)> #17' }),
   ).toBeVisible();
   await expect(needs).toContainText('<script>alert(2)</script>');
-  const history = page.getByRole('region', { name: 'History' });
+  const history = await openHistory(page);
   await expect(history.getByRole('link', { name: '<img src=x onerror=alert(6)>' })).toBeVisible();
   await expect(history).toContainText('<b>bold</b> message');
   await expect(history).toContainText('@<i>mallory</i>');
@@ -410,7 +457,7 @@ test('no horizontal scroll on a phone with very long names, and the sections sta
     ],
   });
   await page.goto('/repairs');
-  const history = page.getByRole('region', { name: 'History' });
+  const history = await openHistory(page);
   await expect(history.getByRole('article')).toHaveCount(2);
 
   const { scrollWidth, inner } = await page.evaluate(() => ({

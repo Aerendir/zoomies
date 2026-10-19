@@ -28,24 +28,18 @@
     /** An offer is being dismissed, so the buttons wait. */
     busy: boolean;
     ondismiss: (id: string) => void;
+    /** Render only the rows, for a section that supplies its own heading. */
+    bare?: boolean;
   }
 
-  let { offers, cases, busy, ondismiss }: Props = $props();
+  let { offers, cases, busy, ondismiss, bare = false }: Props = $props();
 
   const failed = jobStatus('completed', 'failure');
 
   const where = (offer: Schemas['EliOpportunity']): string => `${offer.repo} #${offer.pull_number}`;
 </script>
 
-<Panel
-  title="Needs you"
-  description="Failed pull requests Eli can look at. Reviewing an offer never calls a model or uses an attempt."
-  flush
->
-  {#snippet actions()}
-    <Badge tone="pending" label={pluralise(offers.length, 'offer')} />
-  {/snippet}
-
+{#snippet rows()}
   {#each offers as offer (offer.id)}
     {@const view = cases[offer.id]}
     <article class="offer">
@@ -103,7 +97,22 @@
       </div>
     </article>
   {/each}
-</Panel>
+{/snippet}
+
+{#if bare}
+  {@render rows()}
+{:else}
+  <Panel
+    title="Needs you"
+    description="Failed pull requests Eli can look at. Reviewing an offer never calls a model or uses an attempt."
+    flush
+  >
+    {#snippet actions()}
+      <Badge tone="pending" label={pluralise(offers.length, 'offer')} />
+    {/snippet}
+    {@render rows()}
+  </Panel>
+{/if}
 
 <style>
   .offer {

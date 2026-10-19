@@ -168,9 +168,10 @@ test('a repair that could not fix the failure says why and what to try next', as
   const outcome = page.getByRole('region', { name: 'Could not repair' });
   await expect(outcome).toContainText('Eli could not produce a supported fix.');
   await expect(page.getByRole('region', { name: 'Progress' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Retry transient 502s' })).toContainText(
-    'What Eli was asked to fix',
-  );
+  const asked = page.getByRole('region', { name: 'What Eli was asked to fix' });
+  await expect(asked).toContainText('acme/widgets #17');
+  await asked.locator('summary').first().click();
+  await expect(asked.getByRole('heading', { name: 'Retry transient 502s' })).toBeVisible();
 
   const next = page.getByRole('region', { name: 'What to try next' });
   await expect(next.getByRole('listitem').first()).toContainText(
@@ -189,9 +190,10 @@ test('a repair that could not fix the failure says why and what to try next', as
     'https://github.com/acme/widgets/pull/17',
   );
 
-  // A finished repair opens its technical details: the reader came to find out why.
+  // The evidence is one press away: the outcome and the next action are the page.
   const tech = page.locator('details.tech');
-  await expect(tech).toHaveAttribute('open', '');
+  await expect(tech).not.toHaveAttribute('open', '');
+  await tech.locator('summary').first().click();
   const rows = tech.getByRole('row');
   await expect(rows.nth(1).getByRole('cell')).toHaveText(['21,400', '1,800', '78 KB', '41s']);
   // Usage the provider did not report is unknown, never zero.
@@ -231,8 +233,10 @@ test('a repair from before cases were kept still opens, and says what it does no
   await expect(
     page.getByRole('heading', { level: 1, name: 'Pull request #17 in acme/widgets' }),
   ).toBeVisible();
-  await expect(page.getByText('did not keep a record of the jobs')).toBeVisible();
-  await expect(page.getByText('Pull request details were not kept')).toBeVisible();
+  const asked = page.getByRole('region', { name: 'What Eli was asked to fix' });
+  await asked.locator('summary').first().click();
+  await expect(asked.getByText('did not keep a record of the jobs')).toBeVisible();
+  await expect(asked.getByText('Pull request details were not kept')).toBeVisible();
   await expect(page.getByText('Pull request not looked up yet')).toHaveCount(0);
   // Without a job's address there is no host to build a link on.
   await expect(page.locator('.page-header').getByRole('link', { name: /Open PR/ })).toHaveCount(0);
@@ -271,7 +275,9 @@ test('a failed job’s error output is read when the job is opened and not befor
   });
   await page.goto('/repairs/rep-failed');
 
-  const failed = page.getByRole('region', { name: 'What failed' });
+  const asked = page.getByRole('region', { name: 'What Eli was asked to fix' });
+  await asked.locator('summary').first().click();
+  const failed = asked;
   await expect(failed.locator('details.job')).toHaveCount(2);
   expect(calls.errorOutput).toHaveLength(0);
   // A kept case has the step's name but not its number, and does not guess one.
@@ -342,7 +348,7 @@ test('everything a workflow or a pull request wrote is text, and none of it is a
   ).toHaveCount(0);
   await expect(
     page
-      .getByRole('region', { name: 'What failed' })
+      .getByRole('region', { name: 'What Eli was asked to fix' })
       .getByRole('link', { name: /Open job on GitHub/ }),
   ).toHaveCount(0);
 });

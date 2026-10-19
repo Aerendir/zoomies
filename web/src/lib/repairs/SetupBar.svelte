@@ -56,7 +56,6 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--z-space-2) var(--z-space-6);
-    margin-bottom: var(--z-space-5);
     padding: var(--z-space-3) var(--z-space-5);
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-md);

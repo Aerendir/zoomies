@@ -87,6 +87,17 @@ export function offsetAfterClear(
   return Math.max(0, Math.min(offset, lastStart));
 }
 
+/** What the closed History section still says, from the list it last read. */
+export interface RepairHistorySummary {
+  loaded: boolean;
+  error: string;
+  total: number;
+  /** The newest repair on the first page, when there is one. */
+  latest?: string;
+  /** Whether the total is narrowed by a filter. */
+  filtered: boolean;
+}
+
 /** What the bulk route will take in one request. A longer list is refused outright. */
 export const BULK_LIMIT = 500;
 

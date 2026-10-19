@@ -91,6 +91,31 @@ evidence.
 
 ## Log
 
+* 2026-10-19: Eli repairs use the Calm operations grammar, after the
+  [design review](../design/eli-repair-review/README.md). The hub opens on
+  **Now** with setup and attention rails, then a sticky **On this page**
+  navigation counts **Needs you**, **In progress**, **Automatic repairs** and
+  **History**. Offers and running repairs open; a quiet Needs you is one line;
+  Automatic repairs and History are closed summaries that keep their counts and
+  latest outcome, and History opens by itself when nothing else needs a person.
+  History's filter fields sit behind **Filters**, and its active state is
+  summarised in the toolbar. The repair page puts the next step first, reduces
+  the readiness list to blocked rows with **Show all 9 checks**, and moves setup
+  under the decision that needs it. The attempt page keeps the outcome and next
+  step first, with **What Eli was asked to fix** and **Technical details** as
+  closed summaries whose summaries carry the pull request, failed jobs, model
+  calls, source size and time. Setup has an **On this page** navigation for the
+  account, policies, allowance and account link. An explicit disclosure choice
+  is remembered per browser; the phone keeps Automatic and History behind
+  **More**. The page navigation and disclosure are shared components, and the
+  hub, repair, attempt and setup pages keep the accessible names the browser
+  audits use. The hub and the four repair images were retaken in both themes;
+  `docs/ui.md`, `docs/eli.md` and `docs/ui-guidelines.md` describe the new
+  reading order. Tests cover the closed history with its summary, the quiet hub
+  opening History, the page navigation, the filters disclosure, the attempt's
+  closed evidence, and the existing keyboard, hostile-input, phone and
+  component-gallery passes.
+
 * 2026-10-18: Automatic repairs can be watched and stopped from the Eli repairs
   pages: [the spec](plans/2026-10-18-eli-automatic-repairs.md) and
   [the plan](plans/2026-10-18-eli-automatic-repairs-plan.md). The pages built

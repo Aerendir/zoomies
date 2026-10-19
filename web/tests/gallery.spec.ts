@@ -439,7 +439,8 @@ test('the Eli repair components show every state they can be in', async ({ page 
   // Technical details: open once finished, shut while going, and a call whose usage
   // was never reported is unknown rather than zero.
   const finished = region.locator('[data-gallery="tech-finished"]');
-  await expect(finished.locator('details.tech')).toHaveAttribute('open', '');
+  await expect(finished.locator('details.tech')).not.toHaveAttribute('open', '');
+  await finished.locator('details.tech summary').first().click();
   await expect(finished.getByRole('row').nth(2).getByRole('cell')).toHaveText([
     'Unknown',
     'Unknown',
