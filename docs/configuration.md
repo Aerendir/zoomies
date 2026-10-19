@@ -272,7 +272,7 @@ scheduler:
   max_creates_per_tick: 10      # ZOOMIES_MAX_CREATES_PER_TICK
   default_runner_limits: true   # ZOOMIES_DEFAULT_RUNNER_LIMITS -- a pool with no cpus or memory_mb gets one slot's share of its host; off is warned about
   host_throttling: true         # ZOOMIES_HOST_THROTTLING -- step an overwhelmed host down and lift it after calm; off is warned about
-  host_auto_adjust: false       # ZOOMIES_HOST_AUTO_ADJUST -- keep every host at its recommended capacity and reserve; a host can override
+  host_auto_adjust: true        # ZOOMIES_HOST_AUTO_ADJUST -- keep every host at its recommended capacity and reserve; a host can override
   auto_rerun: false             # ZOOMIES_AUTO_RERUN -- re-run a job whose runner died under it; on is warned about
   auto_rerun_limit: 1           # ZOOMIES_AUTO_RERUN_LIMIT -- automatic re-runs per workflow run, 1–5
 
@@ -681,7 +681,7 @@ the validator says so with `limits.loopback`.
 | `scheduler.default_runner_limits` | `ZOOMIES_DEFAULT_RUNNER_LIMITS` | at once | Default runner limits: Give a runner whose pool sets no CPU or memory limit one slot's share of its host as a real limit. Off, a host's worth of them can each take every core. |
 | `scheduler.drain_timeout` | `ZOOMIES_DRAIN_TIMEOUT` | at once | Drain timeout: Fail a runner that has been draining this long with no job left on it. A runner still finishing a job is never touched by it. |
 | `scheduler.host_throttling` | `ZOOMIES_HOST_THROTTLING` | at once | Throttle hosts under pressure: Let the controller throttle a host its measurements say is overwhelmed, and step it back up after a stretch of calm. |
-| `scheduler.host_auto_adjust` | `ZOOMIES_HOST_AUTO_ADJUST` | at once | Keep hosts at their recommended size: Let the controller keep every host's capacity and reserve at what Zoomies recommends for its machine, disk and the pools' runner size, and re-work them as the host reports and the pools change. This covers hosts the fleet rents from a provider. A host can be set on or off by itself. Off by default, because it replaces figures an operator typed. |
+| `scheduler.host_auto_adjust` | `ZOOMIES_HOST_AUTO_ADJUST` | at once | Keep hosts at their recommended size: Let the controller keep every host's capacity and reserve at what Zoomies recommends for its machine, disk and the pools' runner size, and re-work them as the host reports and the pools change. This covers hosts the fleet rents from a provider. A host can be set on or off by itself. On by default; a host set to never adjust keeps the figures an operator typed. |
 | `scheduler.host_order` | `ZOOMIES_HOST_ORDER` | at once | Host placement order: Which host a runner prefers once the spec score has decided. `headroom` (default) picks the one with the most CPU and memory left afterwards, which spreads work. `largest_standard` picks the one whose runner of the pool is biggest, which suits a mixed fleet sized by runner profile. `best_fit` picks the one with the least left, filling one host before starting the next. Hosts are ranked first by what their agents report (more and faster CPU, memory and disk score higher) and by any operator's pin, so the order only chooses between hosts of the same priority. It only ever chooses among hosts that already fit, so it moves where runners go and never whether they start. |
 | `scheduler.history_sizing` | `ZOOMIES_HISTORY_SIZING` | at once | Job-history placement, `shadow` (default) records where it would place differently, `on` places each runner only on a host with room for what the jobs waiting on its pool used on their recent runs (the ninetieth percentile of their peaks, memory with a fifth more) and sizes it up to that where the pool leaves its size to the host, `off` ignores history. See [Sizing from job history](hosts-and-pools.md#sizing-from-job-history). |
 | `scheduler.size_routing` | `ZOOMIES_SIZE_ROUTING` | at once | Route jobs by size class, `off` (default) classes nothing. `shadow` classes each job small, medium or large from what its recent runs used and records the class and where the job ran, and sends nothing anywhere. `on` sends each job to the pool for its class. A workflow that writes `zoomies-large` in `runs-on` is always honoured and never moved; a job that writes only `zoomies` is routed best effort, because GitHub decides which waiting job a runner takes. Changing it puts the jobs already waiting through the new mode. See [size classes and automatic pools](auto-pools.md). |
@@ -1624,10 +1624,11 @@ recommendation for the number of runners is the smallest of what the CPUs, the m
 and the disk allow (the disk gets 10 GiB of working room per runner beyond its
 reserve), and the page says which one set it.
 
-Off by default, because it replaces figures an operator typed. Turn it on for the
-fleet here, which includes hosts a provider rents, or per host in **Adjust**, where
-**Follow the fleet**, **Keep at recommendations** and **Never adjust** choose. A host
-set to never adjust keeps whatever was typed. Care is taken not to surprise anyone:
+On by default, so a machine nobody sized does not fill its disk. It replaces figures
+an operator typed, so a fleet that sizes its hosts by hand turns it off here, or sets
+the hosts it wants left alone to **Never adjust** in **Adjust**, where **Follow the
+fleet setting**, **Keep at recommendations** and **Never adjust** choose. This covers
+hosts a provider rents. Care is taken not to surprise anyone:
 
 * A host at capacity 0 is paused, and is never un-paused. Only a person does that.
 * A host that has not reported how big it is, or has not been heard from lately, is

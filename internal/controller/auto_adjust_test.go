@@ -59,8 +59,12 @@ func TestAHostThatIsKeptAtItsRecommendationIsMovedToItAndAuditedOnce(t *testing.
 	}
 }
 
-func TestOnlyTheHostsThatAskForItAreMovedAndTheFleetDefaultIsOffUntilTurnedOn(t *testing.T) {
+func TestAHostFollowsTheFleetDefaultWhichIsOnAndAHostSetToOffKeepsItsFigures(t *testing.T) {
 	h := newHarness(t)
+	if !h.c.cfg().Scheduler.HostAutoAdjust {
+		t.Fatal("hosts are kept at their recommendation unless the fleet turns it off")
+	}
+	h.c.UpdateConfig(func(c *config.Config) { c.Scheduler.HostAutoAdjust = false })
 	follows := autoAdjustHost(t, h, "follows")
 	off := autoAdjustHost(t, h, "off")
 	on := autoAdjustHost(t, h, "on")
@@ -72,7 +76,7 @@ func TestOnlyTheHostsThatAskForItAreMovedAndTheFleetDefaultIsOffUntilTurnedOn(t 
 	}
 	h.c.autoAdjustHosts(h.ctx, h.c.Now())
 	if reload(t, h, follows.ID).Capacity != 20 || reload(t, h, off.ID).Capacity != 20 {
-		t.Fatal("a fleet default of off, and a host set to off, must leave capacity as typed")
+		t.Fatal("a fleet turned off, and a host set to off, must leave capacity as typed")
 	}
 	if reload(t, h, on.ID).Capacity == 20 {
 		t.Fatal("a host set to on was not moved")

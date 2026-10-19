@@ -37,8 +37,8 @@ func TestAnOperatorChoosesWhetherAHostIsKeptAtItsRecommendation(t *testing.T) {
 		t.Fatalf("off: %+v", view)
 	}
 	patch(map[string]any{"auto_adjust": ""}).into(t, &view)
-	if view.AutoAdjust != "" || view.AutoAdjustEffective {
-		t.Fatalf("handed back to the fleet, whose default is off: %+v", view)
+	if view.AutoAdjust != "" || !view.AutoAdjustEffective {
+		t.Fatalf("handed back to the fleet, whose default is on: %+v", view)
 	}
 	patch(map[string]any{"auto_adjust": "sometimes"}).mustStatus(t, http.StatusUnprocessableEntity, "a value that is not an answer")
 }

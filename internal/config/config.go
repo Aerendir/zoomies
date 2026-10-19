@@ -895,8 +895,9 @@ type Scheduler struct {
 	// HostAutoAdjust is the fleet's default for whether the controller keeps a
 	// host's capacity and reserve at what it recommends for the machine and the
 	// pools' runner size, re-working the figures as the machine's reports and the
-	// pools change. A host's own setting, on or off, overrides it. Off by
-	// default: it replaces numbers an operator may have typed.
+	// pools change. A host's own setting, on or off, overrides it. On by
+	// default, so a machine nobody sized does not fill its disk; a host set to
+	// never adjust keeps the figures an operator typed.
 	HostAutoAdjust bool `yaml:"host_auto_adjust"`
 }
 
@@ -1256,6 +1257,7 @@ func Default() *Config {
 			HostOrder:               "headroom",
 			HistorySizing:           "shadow",
 			HostThrottling:          true,
+			HostAutoAdjust:          true,
 			AutoRerunLimit:          1,
 			// Everything about size classes is off until an operator turns it
 			// on, and the figures below are what it does when they do. They are
