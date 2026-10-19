@@ -16,6 +16,9 @@
      * `sm` is for a switch that sits in a row of small controls, such as a
      * filter bar: the label takes the control text size and the pill is
      * centred on the line rather than hung from the top of a description.
+     * The label wraps when its space is narrower than it, because a switch in
+     * a column, such as the Kennel Club rail, would otherwise run out of the
+     * box that holds it.
      */
     size?: 'sm' | 'md';
     /**
@@ -155,7 +158,6 @@
   .sm label,
   .sm .name {
     font-size: var(--z-text-sm);
-    white-space: nowrap;
   }
   .sm .track {
     margin-top: 0;
