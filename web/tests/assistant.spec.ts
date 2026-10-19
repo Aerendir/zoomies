@@ -916,14 +916,14 @@ test('Eli has a circular launcher and can roam without leaving the viewport', as
   const handle = panel.getByRole('button', { name: 'Move Eli panel using arrow keys or drag' });
   const before = await panel.boundingBox();
   await handle.focus();
-  await handle.press('ArrowLeft');
-  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(before!.x - 10);
+  await handle.press('ArrowRight');
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(before!.x + 10);
   const grip = await handle.boundingBox();
   await page.mouse.move(grip!.x + 20, grip!.y + 20);
   await page.mouse.down();
-  await page.mouse.move(30, 40, { steps: 8 });
+  await page.mouse.move(360, 40, { steps: 8 });
   await page.mouse.up();
-  await expect.poll(async () => (await panel.boundingBox())!.x).toBeLessThan(before!.x - 10);
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBeGreaterThan(before!.x + 10);
   await page.setViewportSize({ width: 800, height: 600 });
   await expect
     .poll(async () => {
@@ -954,9 +954,9 @@ test('Eli drags from anywhere in its header without stealing the header buttons'
   // The header's top padding, halfway across: neither the handle nor a button.
   await page.mouse.move(bar.x + bar.width / 2, bar.y + 3);
   await page.mouse.down();
-  await page.mouse.move(bar.x + bar.width / 2 - 120, bar.y + 63, { steps: 8 });
+  await page.mouse.move(bar.x + bar.width / 2 + 120, bar.y + 63, { steps: 8 });
   await page.mouse.up();
-  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(before.x - 120);
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBe(before.x + 120);
   const moved = (await panel.boundingBox())!;
   const full = panel.getByRole('button', { name: 'Full screen' });
   const button = (await full.boundingBox())!;

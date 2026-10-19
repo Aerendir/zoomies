@@ -40,10 +40,29 @@ for (const style of ['classic', 'mission-control']) {
       await expect(
         page.getByRole('region', { name: 'Recent events', exact: true }).getByRole('listitem'),
       ).toHaveCount(3);
-      await page.screenshot({
-        path: info.outputPath(`${style}-${mode}-${width}.png`),
-        fullPage: true,
-      });
+      const launcher = page.getByRole('button', { name: 'Ask Eli', exact: true });
+      const before = (await launcher.boundingBox())!;
+      expect(before.x).toBeLessThan(32);
+      const clearance = 900 - before.y - before.height;
+      expect(clearance).toBeGreaterThanOrEqual(16);
+      expect(clearance).toBeLessThanOrEqual(96);
+      if (width === 375) {
+        const nav = (await page
+          .getByRole('navigation', { name: 'Sections', exact: true })
+          .boundingBox())!;
+        expect(before.y + before.height).toBeLessThan(nav.y);
+      }
+      await page.screenshot({ path: info.outputPath(`${style}-${mode}-${width}.png`) });
+      await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+      await expect
+        .poll(async () => {
+          const after = (await launcher.boundingBox())!;
+          return Math.abs(after.x - before.x) + Math.abs(after.y - before.y);
+        })
+        .toBeLessThan(1);
+      if (style === 'mission-control' && mode === 'dark') {
+        await page.screenshot({ path: info.outputPath(`${style}-${mode}-${width}-scrolled.png`) });
+      }
       expect(errors).toEqual([]);
     });
   }
@@ -199,4 +218,20 @@ test('a silenced preview keeps category settings reachable', async ({ page }) =>
   await expect(preview).toContainText('Nothing in the kinds you are watching');
   await preview.getByRole('link', { name: 'Choose', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+});
+
+// A new default must not override an explicit side chosen in this browser.
+test('Eli retains an explicitly saved side', async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem('zoomies.eli.layout', JSON.stringify({ side: 'right' })),
+  );
+  await goto(page, '/', 'Overview');
+  const launcher = page.getByRole('button', { name: 'Ask Eli', exact: true });
+  await expect
+    .poll(async () => (await launcher.boundingBox())!.x)
+    .toBeGreaterThan(page.viewportSize()!.width / 2);
+  await page.reload();
+  await expect
+    .poll(async () => (await launcher.boundingBox())!.x)
+    .toBeGreaterThan(page.viewportSize()!.width / 2);
 });

@@ -12,12 +12,16 @@ state and can change as the fixture runs.
 | Mission Control light | [Capture](mission-control-light-1440.png) | [Capture](mission-control-light-375.png) |
 | Mission Control dark | [Capture](mission-control-dark-1440.png) | [Capture](mission-control-dark-375.png) |
 
-These are full-page captures. The phone's fixed bottom navigation appears at
-its initial viewport position in the image; it stays attached to the viewport
-when the real page scrolls.
+These captures show only the visible viewport, so the position of floating
+controls is unambiguous. Eli starts at the bottom left and stays there when
+the page scrolls, above the phone navigation. An explicitly saved side remains
+available. Compare the Mission Control dark captures with the
+[desktop after scrolling](mission-control-dark-1440-scrolled.png) and
+[phone after scrolling](mission-control-dark-375-scrolled.png).
 
 ## Implemented behaviour
 
+- Eli defaults to the bottom left of the viewport, retaining saved side choices.
 - Both styles share the order: first-run guidance when needed, attention,
   four live metrics, pools, active jobs, recent events and supporting detail.
 - One page scope selector controls job figures and links. Infrastructure and
@@ -56,7 +60,9 @@ first-run guidance, capacity preferences, matrix keyboard interaction, zoom and
 text enlargement. New Calm operations checks cover both styles and both colour
 modes at desktop and phone widths, saved disclosures, deep links, page navigation,
 loading and failed fetches. The initial test run exposed a page/app More naming
-collision, which was corrected. Tests that relied on former layouts, disclosure
+collision, which was corrected. The Eli follow-up passed 12 browser checks (two desktop-only panel tests were
+skipped on phones), verifying viewport anchoring before and after scrolling,
+saved side preferences and panel dragging. Tests that relied on former layouts, disclosure
 visibility or error-control labels were updated and rerun.
 
 `web/tests/calm-overview.spec.ts` records the new behaviour. Existing browser
