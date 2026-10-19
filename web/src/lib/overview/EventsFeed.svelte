@@ -30,6 +30,7 @@
   import { formatNumber, pluralise } from '$lib/format';
   import { feed } from '$lib/state/feed.svelte';
   import { fleet } from '$lib/state/fleet.svelte';
+  import { remember, remembered } from '$lib/state/prefs.svelte';
   import { toneTokens } from '$lib/status';
   import Badge from '$lib/components/Badge.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -44,16 +45,18 @@
 
   let { loading = false, class: className = '' }: Props = $props();
 
-  /**
-   * How much of the recent past fits on a dashboard before it is a log viewer.
-   * The panel scrolls inside its column on a desktop, so this is really about
-   * the phone, where everything below it is a scroll further away -- and it is
-   * a little longer than it was because the outcomes panel that used to sit
-   * across the bottom of the page is now these lines too.
-   */
+  /** The expanded feed stays bounded; the default preview is three entries. */
   const SHOWN = 15;
 
-  const entries = $derived(feed.entries.slice(0, SHOWN));
+  const key = 'zoomies.overview.events.expanded';
+  let expanded = $state(
+    remembered(key, false, (value): value is boolean => typeof value === 'boolean'),
+  );
+  function expand(): void {
+    expanded = !expanded;
+    remember(key, expanded);
+  }
+  const entries = $derived(feed.entries.slice(0, expanded ? SHOWN : 3));
   const categories = $derived(feed.categories);
   const hidden = $derived(feed.hidden);
   const everything = $derived(hidden === 0);
@@ -95,9 +98,7 @@
   });
 </script>
 
-<!-- `scroll`: on a desktop the Overview cuts this panel to the height of the
-     column beside it, and the entries that do not fit are a scroll away
-     rather than a screen of blank space under the pools. -->
+<!-- Expansion uses normal page scrolling, including on touch devices. -->
 <Panel
   title="Recent events"
   description={everything
@@ -105,7 +106,6 @@
     : `Newest first. ${categories.length - hidden} of ${categories.length} kinds.`}
   class={className}
   flush
-  scroll
 >
   {#snippet actions()}
     {#if showBadge}
@@ -134,10 +134,10 @@
         </a>
       </Tooltip>
     {/if}
-    <a class="choose" href="/settings/events">
-      <SlidersHorizontal size={13} aria-hidden="true" />
-      Choose
-    </a>
+    {#if expanded || entries.length === 0}<a class="choose" href="/settings/events">
+        <SlidersHorizontal size={13} aria-hidden="true" />
+        Choose
+      </a>{/if}
   {/snippet}
 
   {#if loading}
@@ -165,7 +165,7 @@
         : `${pluralise(silenced, 'event')} ${silenced === 1 ? 'is' : 'are'} not shown, because ${pluralise(hidden, 'kind')} of event ${hidden === 1 ? 'is' : 'are'} switched off for this browser. Use \u201cChoose\u201d above to turn ${hidden === 1 ? 'it' : 'them'} back on.`}
     />
   {:else}
-    <ul class="feed">
+    <ul class="feed" class:preview={!expanded} id="overview-events">
       {#each entries as entry (entry.id)}
         {@const tone = toneTokens(entry.tone)}
         <li class="item">
@@ -186,15 +186,46 @@
               <span aria-hidden="true" class="dot">·</span>
               <RelativeTime value={entry.at} />
             </p>
-            {#if entry.detail}<p class="detail">{entry.detail}</p>{/if}
+            {#if expanded && entry.detail}<p class="detail">{entry.detail}</p>{/if}
           </div>
         </li>
       {/each}
     </ul>
   {/if}
+  {#if !loading && feed.entries.length > 0}
+    <button
+      class="expand"
+      type="button"
+      aria-expanded={expanded}
+      aria-controls="overview-events"
+      onclick={expand}>{expanded ? 'Show fewer events' : 'Expand events'}</button
+    >
+  {/if}
 </Panel>
 
 <style>
+  .expand {
+    min-height: var(--z-control-touch);
+    width: 100%;
+    padding: var(--z-space-2) var(--z-space-3);
+    border: 0;
+    border-top: var(--z-border-width) solid var(--z-border);
+    background: none;
+    color: var(--z-accent);
+    font: inherit;
+    font-size: var(--z-text-sm);
+    cursor: pointer;
+  }
+  .expand:hover {
+    background: var(--z-surface-hover);
+  }
+  .preview .item {
+    padding: var(--z-space-3);
+  }
+  .meta {
+    overflow-wrap: anywhere;
+  }
+
   .failed-badge {
     text-decoration: none;
   }

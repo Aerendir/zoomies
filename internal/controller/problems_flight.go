@@ -17,7 +17,9 @@ import (
 // and a queue of several seconds each. There is deliberately no time-to-live: a
 // caller that arrives after a computation has finished starts a new one, so the
 // answer is never older than the moment it was asked for, and a test that
-// changes something and asks again sees the change.
+// changes something and asks again sees the change. The one exception is a single
+// section, the slower-job check, which keeps what it found for a minute (see
+// jobtrends.go).
 type problemsFlight struct {
 	mu     sync.Mutex
 	active *problemsCall

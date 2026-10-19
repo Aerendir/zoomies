@@ -1,6 +1,6 @@
 <!--
-  The activity matrix at the top of the Overview: the fleet's days as one band
-  of squares, a year of them by default, or today by the hour.
+  The activity matrix in the Overview history section: the fleet's days as one band
+  of squares, today by the hour, or a longer calendar window.
 
   The series comes from GET /usage grouped by pool -- the one grouping that
   carries capacity telemetry -- and is summed back into a fleet total here.
@@ -54,9 +54,10 @@
 
   interface Props {
     class?: string;
+    onsummary?: (summary: string) => void;
   }
 
-  let { class: className = '' }: Props = $props();
+  let { class: className = '', onsummary }: Props = $props();
 
   /**
    * The quick ranges. A day and a week are drawn by the hour -- a row of
@@ -213,6 +214,16 @@
   );
 
   const totals = $derived(summarise(visible));
+  const windowTotals = $derived(summarise(series));
+  $effect(() => {
+    onsummary?.(
+      loading
+        ? 'Loading history'
+        : error
+          ? 'History unavailable; expand to retry'
+          : `${prefs.activityRange === '1d' ? 'Today' : chosen.name} · ${formatNumber(windowTotals.completed)} finished · ${formatNumber(windowTotals.failed)} failed · This fleet`,
+    );
+  });
   const capacity = $derived(hasCapacity(series));
   const modes = $derived(MODES.filter((m) => m.value !== 'capacity' || capacity));
 
@@ -242,7 +253,7 @@
 </script>
 
 <!-- No description line: the legend says what the colours mean, the tooltip
-     says what a square holds, and the band is at the top of the page, where
+     says what a square holds, and the band has its own section, where
      every line it spends is a line the fleet's own numbers lose. -->
 <Panel title="Activity matrix" class="band {className}" flush>
   {#snippet actions()}
