@@ -42,4 +42,4 @@ When you change something to improve search results, add an entry so the agent c
 
 ## What it deliberately leaves out
 
-There is no analytics, so there is no AI-crawler traffic check and no UTM tracking. Add one only together with an update to [the privacy page](../docs/privacy.md).
+The site counts page views with Cloudflare Web Analytics (cookieless; see [the privacy page](../docs/privacy.md)). It does not report AI-crawler traffic or UTM campaigns, and OpenSEO cannot read it, so read it in the Cloudflare dashboard. Add any other tracker only together with an update to the privacy page.

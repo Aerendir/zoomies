@@ -1,10 +1,10 @@
 ---
 icon: material/shield-account-outline
-title: "Zoomies privacy: no telemetry, analytics or accounts"
+title: "Zoomies privacy: no telemetry, tracking cookies or accounts"
 description: >-
-  What the Zoomies website and software collect: nothing. No telemetry,
-  analytics or account; the only non-fleet request is a daily release check you
-  can stop.
+  What the Zoomies website and software collect. The software has no telemetry
+  or account; the website counts page views without cookies; the only non-fleet
+  request is a daily release check you can stop.
 ---
 
 # Privacy
@@ -19,11 +19,16 @@ and what the software sends anywhere you did not point it.
 zoomies.sh is a static site published through GitHub Pages from the
 [documentation in the repository](https://github.com/eyupio/zoomies/tree/main/docs).
 
-- **No analytics and no advertising.** The site carries no analytics script, no
-  tag manager and no tracking pixel, and it does not set cookies of its own.
-- **Self-hosted fonts and scripts.** The fonts and the one script the site
-  ships come from zoomies.sh itself, so reading a page does not tell a font
-  provider or a third-party script host that you did.
+- **Cookieless page-view counts and no advertising.** The site loads one
+  analytics script, Cloudflare Web Analytics, which counts page views, referrers,
+  countries and page speed without cookies and without following you across
+  sites. It sets nothing on your device. There is no advertising, no tag manager
+  and no tracking pixel. Cloudflare's script and its reports go to
+  `static.cloudflareinsights.com` and `cloudflareinsights.com`; see
+  [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
+- **Self-hosted fonts and scripts.** The fonts and the site's own script come
+  from zoomies.sh itself, so reading a page does not tell a font provider or a
+  script host that you did. The analytics script above is the one exception.
 - **Search runs in your browser.** The search index is downloaded once and
   queried locally; what you type is not sent anywhere.
 - **Your colour-scheme choice stays on your device.** The light and dark toggle

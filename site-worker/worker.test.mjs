@@ -765,7 +765,14 @@ test("the content security policy forbids framing, plugins and foreign base URLs
   assert.match(CONTENT_SECURITY_POLICY, /frame-ancestors 'none'/);
   assert.match(CONTENT_SECURITY_POLICY, /object-src 'none'/);
   assert.match(CONTENT_SECURITY_POLICY, /base-uri 'self'/);
-  assert.doesNotMatch(CONTENT_SECURITY_POLICY, /https?:\/\/[a-z]/);
+  // Cloudflare Web Analytics is the only third-party origin the policy names.
+  // Any other address is a decision for the owner and for docs/privacy.md, so
+  // it fails here until this list is edited on purpose.
+  const origins = CONTENT_SECURITY_POLICY.match(/https?:\/\/[a-z0-9.-]+/g) ?? [];
+  assert.deepEqual(origins.sort(), [
+    "https://cloudflareinsights.com",
+    "https://static.cloudflareinsights.com",
+  ]);
 });
 
 test("HSTS does not preload or cover subdomains until the owner decides it should", () => {

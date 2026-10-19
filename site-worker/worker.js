@@ -272,7 +272,9 @@ async function mirrorResponse(from) {
 // The policy allows 'unsafe-inline' for scripts and styles because the theme
 // writes inline scripts and the JSON-LD blocks into every page, and a static
 // origin has no per-request nonce to give them. It is still tighter than no
-// policy: no third-party origin may run script, load a font or be connected
+// policy: apart from Cloudflare Web Analytics (its beacon script and the
+// address it reports to, named below and in docs/privacy.md), no third-party
+// origin may run script, load a font or be connected
 // to, nothing may frame the site, and no plugin content or foreign base URL is
 // accepted. It is sent as Report-Only until someone has browsed the built site
 // with the console open and seen no violation; then the name below changes.
@@ -280,11 +282,11 @@ export const CSP_HEADER = "content-security-policy-report-only";
 
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' https://cloudflareinsights.com",
   "manifest-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
