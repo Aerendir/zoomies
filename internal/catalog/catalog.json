@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "c010d13",
+  "generated_from": "9235f5f",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -1572,8 +1572,8 @@
       "category": "reliability",
       "severity": "info",
       "detection": "runtime",
-      "detects": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine.",
-      "fix": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine.",
+      "detects": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine. The check reads eight days of jobs, so it reads them at most once a minute, and an entry can lag the jobs by that long.",
+      "fix": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine. The check reads eight days of jobs, so it reads them at most once a minute, and an entry can lag the jobs by that long.",
       "verify": "The job's typical duration on the Jobs page falls back towards the seven-day figure and the entry leaves the list after the next day of runs.",
       "status_sentence": "A job now typically takes much longer than it did the week before.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-hosts-and-installations",
