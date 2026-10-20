@@ -11,7 +11,7 @@ import (
 
 func TestRunningJobsExpireOnlyBeyondGitHubsLimitAndMargin(t *testing.T) {
 	h := newHarness(t)
-	now := h.c.Now()
+	now := h.c.Now().Truncate(time.Millisecond)
 	h.c.clock = func() time.Time { return now }
 	for i, age := range []time.Duration{121*time.Hour + time.Second, 121 * time.Hour, 120 * time.Hour, time.Hour} {
 		start := now.Add(-age)
