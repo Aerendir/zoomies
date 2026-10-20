@@ -52,6 +52,9 @@ func TestExpiredBoostRetriesFailedWithdrawal(t *testing.T) {
 	beat(t, a, tr, be, &ThrottleDirective{CPUFactor: 1}, ElasticCPUDirective{RunnerID: "run_a", CPUFactor: 2, BaseCPUs: 2, TargetCPUs: 4})
 	tr.beatErr = errors.New("controller unreachable")
 	be.updateErr = errors.New("daemon unavailable")
+	a.mu.Lock()
+	a.boostRenewedAt = time.Now().Add(-boostExpiryMisses * a.heartbtI)
+	a.mu.Unlock()
 	for range boostExpiryMisses {
 		_ = a.heartbeat(context.Background())
 	}

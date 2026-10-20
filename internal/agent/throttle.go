@@ -72,7 +72,11 @@ const boostExpiryMisses = 3
 func (a *Agent) expireBoosts(ctx context.Context) {
 	a.mu.Lock()
 	a.missedBeats++
-	expire := a.missedBeats >= boostExpiryMisses
+	// A quick retry is another attempt, not another normal interval of
+	// silence. Keep the same time lease as the independent watchdog so a
+	// short controller restart does not take a running job's borrowed CPU.
+	expire := a.missedBeats >= boostExpiryMisses &&
+		!a.boostRenewedAt.IsZero() && time.Since(a.boostRenewedAt) >= boostExpiryMisses*a.heartbtI
 	hadBoost := len(a.elasticCPU) > 0
 	if expire {
 		a.elasticCPU = map[string]float64{}

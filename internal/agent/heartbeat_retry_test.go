@@ -134,3 +134,38 @@ func TestStoppingTheAgentInterruptsAHeartbeatRetry(t *testing.T) {
 		}
 	})
 }
+
+// Extra attempts recover a dead path; they do not spend a CPU loan's time.
+func TestFastHeartbeatRetriesDoNotWithdrawAnUnexpiredCPUBoost(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		a, tr, be, _ := newAgent(t, 4, func(o *Options) { o.HeartbeatInterval = 10 * time.Second })
+		createdRunner(a, "run_loan", "wl-loan", store.Resources{CPUs: 2})
+		beat(t, a, tr, be, &ThrottleDirective{CPUFactor: 1}, ElasticCPUDirective{RunnerID: "run_loan", CPUFactor: 2, BaseCPUs: 2, TargetCPUs: 4})
+		before := len(be.resourceUpdates())
+		start := time.Now()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		calls := 0
+		a.tr = &heartbeatScript{fakeTransport: tr, beat: func(context.Context) (*HeartbeatResponse, error) {
+			calls++
+			if calls == 4 {
+				cancel()
+			}
+			return nil, ErrRetryable
+		}}
+		if err := a.heartbeatLoop(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if calls != 4 || time.Since(start) >= boostExpiryMisses*a.heartbtI {
+			t.Fatalf("the scenario needs four quick failed attempts, got %d over %s", calls, time.Since(start))
+		}
+		if got := be.resourceUpdates(); len(got) != before {
+			t.Fatalf("quick retries changed CPU quotas before the loan expired: %+v", got[before:])
+		}
+		a.expireBoostLease(context.Background(), start.Add(boostExpiryMisses*a.heartbtI))
+		got := be.resourceUpdates()
+		if len(got) != before+1 || got[len(got)-1].res.CPUs != 2 {
+			t.Fatalf("an expired loan was not returned to its guarantee: %+v", got)
+		}
+	})
+}
