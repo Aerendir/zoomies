@@ -93,6 +93,21 @@ test.beforeAll(async ({ browser }) => {
   const page = await browser.newPage();
   try {
     ({ id: hostId, token: agentToken } = await enrol(page));
+    // The controller keeps a healthy host at its recommendation, and this
+    // host's recommendation is not the capacity it was enrolled with: the
+    // fleet's own pools ask for a bigger runner than this machine was
+    // measured for. The host is this spec's, so the housekeeping leaves it
+    // alone. A capacity that moved underneath the tests would make them
+    // depend on when the controller last looked, which is what made this
+    // file fail on a slow machine and pass on a fast one.
+    const own = await page.request.patch(`/api/v1/hosts/${hostId}`, {
+      data: { auto_adjust: 'off' },
+    });
+    expect(own.ok(), 'the host was taken out of the automatic adjustment').toBeTruthy();
+    const capacity = await page.request.patch(`/api/v1/hosts/${hostId}`, {
+      data: { capacity: 8 },
+    });
+    expect(capacity.ok(), 'the host kept the capacity it was enrolled with').toBeTruthy();
   } finally {
     await page.close();
   }
