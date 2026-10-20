@@ -10,11 +10,11 @@
 > maintain the index.
 >
 > **Drift check (run first)**, in the repo root:
->
-> ```
-> git diff --stat a0f21dba..HEAD -- internal/controller/kennel.go internal/controller/kennel_budget.go internal/controller/kennel_views.go internal/kennel/ docs/architecture.md AGENTS.md
-> ```
->
+
+```
+git diff --stat a0f21dba..HEAD -- internal/controller/kennel.go internal/controller/kennel_budget.go internal/controller/kennel_views.go internal/kennel/ docs/architecture.md AGENTS.md
+```
+
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.

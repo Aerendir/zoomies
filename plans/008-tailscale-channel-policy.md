@@ -8,11 +8,11 @@
 > maintain the index.
 >
 > **Drift check (run first)**, in the repo root:
->
-> ```
-> git diff --stat a0f21dba..HEAD -- go.mod docs/dependencies.md internal/docs/dependencies_test.go
-> ```
->
+
+```
+git diff --stat a0f21dba..HEAD -- go.mod docs/dependencies.md internal/docs/dependencies_test.go
+```
+
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
