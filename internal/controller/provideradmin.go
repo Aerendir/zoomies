@@ -227,7 +227,7 @@ func (c *Controller) CheckProvider(ctx context.Context, row *store.Provider) (Pr
 	// changed is newer than any machine built before it.
 	if report.BuildsCPUs > 0 && report.BuildsMemoryMB > 0 {
 		if _, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, report.BuildsCPUs, report.BuildsMemoryMB,
-			store.MachineSizeFromTemplate, now); err != nil {
+			report.BuildsDiskMB, store.MachineSizeFromTemplate, now); err != nil {
 			c.log.Warn("could not record the size a provider builds", "provider", row.ID, "error", err)
 		}
 	}

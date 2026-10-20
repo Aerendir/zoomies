@@ -115,14 +115,16 @@ type Provider struct {
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 
-	// SeenCPUs and SeenMemoryMB are the size this provider's machines turned
-	// out to be, for a row that names none of its own (MachineCPUs and
-	// MachineMemoryMB win wherever they are set). SeenFrom says where the
+	// SeenCPUs, SeenMemoryMB and SeenDiskMB are the size this provider's
+	// machines turned out to be, for a row that names none of its own
+	// (MachineCPUs, MachineMemoryMB and MachineDiskMB win wherever they are
+	// set). Zero means not measured. SeenFrom says where the
 	// figures came from, MachineSizeFromTemplate or MachineSizeFromMachine,
 	// and SeenAt when they were true. They are observations, written by the
 	// controller and never by a form: see SetProviderMachineSizeSeen.
 	SeenCPUs     int        `json:"seen_cpus,omitempty"`
 	SeenMemoryMB int64      `json:"seen_memory_mb,omitempty"`
+	SeenDiskMB   int64      `json:"seen_disk_mb,omitempty"`
 	SeenFrom     string     `json:"seen_from,omitempty"`
 	SeenAt       *time.Time `json:"seen_at,omitempty"`
 }

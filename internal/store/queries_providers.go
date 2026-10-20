@@ -26,7 +26,7 @@ const providerCols = `id, kind, name, endpoint, ca_pem, insecure_skip_verify, se
 	max_creates_in_flight, idle_timeout_ms, cost_per_machine_hour, enabled, paused,
 	paused_reason, paused_until, consecutive_failures, last_check_at, last_check_error,
 	last_sweep_at, created_at, updated_at, tailcat_address_enc, last_check_report, machine_ca_pem,
-	min_machines, seen_cpus, seen_memory_mb, seen_from, seen_at`
+	min_machines, seen_cpus, seen_memory_mb, seen_disk_mb, seen_from, seen_at`
 
 func scanProvider(sc interface{ Scan(...any) error }) (*Provider, error) {
 	var p Provider
@@ -40,7 +40,7 @@ func scanProvider(sc interface{ Scan(...any) error }) (*Provider, error) {
 		&p.MaxCreatesInFlight, &idle, &p.CostPerMachineHour, &enabled, &paused,
 		&p.PausedReason, &pausedUntil, &p.ConsecutiveFailures, &checked, &p.LastCheckError,
 		&swept, &created, &updated, &p.TailcatAddressEnc, &p.LastCheckReport, &p.MachineCAPEM,
-		&p.MinMachines, &p.SeenCPUs, &p.SeenMemoryMB, &p.SeenFrom, &seen)
+		&p.MinMachines, &p.SeenCPUs, &p.SeenMemoryMB, &p.SeenDiskMB, &p.SeenFrom, &seen)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (s *Store) CreateProvider(ctx context.Context, p *Provider) error {
 		return err
 	}
 	_, err = s.exec(ctx, `INSERT INTO providers (`+providerCols+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, string(p.Kind), p.Name, p.Endpoint, p.CAPEM, boolInt(p.InsecureSkipVerify),
 		p.Settings, p.CredentialsEnc, p.MachineLabels, p.MachineCapacity,
 		string(p.MachineBackend), platform, p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB,
@@ -82,7 +82,7 @@ func (s *Store) CreateProvider(ctx context.Context, p *Provider) error {
 		boolInt(p.Enabled), boolInt(p.Paused), p.PausedReason, msp(p.PausedUntil),
 		p.ConsecutiveFailures, msp(p.LastCheckAt), p.LastCheckError, msp(p.LastSweepAt),
 		ms(p.CreatedAt), ms(p.UpdatedAt), p.TailcatAddressEnc, p.LastCheckReport, p.MachineCAPEM,
-		p.MinMachines, p.SeenCPUs, p.SeenMemoryMB, p.SeenFrom, msp(p.SeenAt))
+		p.MinMachines, p.SeenCPUs, p.SeenMemoryMB, p.SeenDiskMB, p.SeenFrom, msp(p.SeenAt))
 	return wrapWrite(err)
 }
 
@@ -151,7 +151,7 @@ func (s *Store) UpdateProvider(ctx context.Context, p *Provider) error {
 		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines, p.MinMachines,
 		p.MaxCreatesInFlight, p.IdleTimeout.Duration().Milliseconds(), p.CostPerMachineHour,
 		boolInt(p.Enabled), ms(p.UpdatedAt)}
-	for range 4 {
+	for range 5 {
 		args = append(args, shape...)
 	}
 	args = append(args, p.ID)
@@ -162,6 +162,7 @@ func (s *Store) UpdateProvider(ctx context.Context, p *Provider) error {
 		idle_timeout_ms=?, cost_per_machine_hour=?, enabled=?, updated_at=?,
 		seen_cpus = CASE WHEN `+changed+` THEN 0 ELSE seen_cpus END,
 		seen_memory_mb = CASE WHEN `+changed+` THEN 0 ELSE seen_memory_mb END,
+		seen_disk_mb = CASE WHEN `+changed+` THEN 0 ELSE seen_disk_mb END,
 		seen_from = CASE WHEN `+changed+` THEN '' ELSE seen_from END,
 		seen_at = CASE WHEN `+changed+` THEN NULL ELSE seen_at END
 		WHERE id=?`, args...)
@@ -218,8 +219,8 @@ func (s *Store) SetProviderChecked(ctx context.Context, id string, at time.Time,
 	return err
 }
 
-// SetProviderMachineSizeSeen records the size this provider's machines turned
-// out to be, and where the figures came from.
+// SetProviderMachineSizeSeen records the size and disk this provider's machines
+// turned out to be, and where the figures came from.
 //
 // It is an observation writer, so it leaves updated_at alone like the check
 // and the breaker do. It writes only evidence at least as new as what the row
@@ -227,11 +228,11 @@ func (s *Store) SetProviderChecked(ctx context.Context, id string, at time.Time,
 // template is not evidence about the machines the provider builds now, and a
 // pass that wrote it anyway would undo the check every minute. It reports
 // whether it wrote, so a caller holding a copy of the row knows to update it.
-func (s *Store) SetProviderMachineSizeSeen(ctx context.Context, id string, cpus int, memoryMB int64, from string, at time.Time) (bool, error) {
-	res, err := s.exec(ctx, `UPDATE providers SET seen_cpus=?, seen_memory_mb=?, seen_from=?, seen_at=?
+func (s *Store) SetProviderMachineSizeSeen(ctx context.Context, id string, cpus int, memoryMB, diskMB int64, from string, at time.Time) (bool, error) {
+	res, err := s.exec(ctx, `UPDATE providers SET seen_cpus=?, seen_memory_mb=?, seen_disk_mb=?, seen_from=?, seen_at=?
 		WHERE id=? AND (seen_at IS NULL OR seen_at <= ?)
-		AND (seen_cpus <> ? OR seen_memory_mb <> ? OR seen_from <> ? OR seen_at IS NULL OR seen_at <> ?)`,
-		cpus, memoryMB, from, ms(at), id, ms(at), cpus, memoryMB, from, ms(at))
+		AND (seen_cpus <> ? OR seen_memory_mb <> ? OR seen_disk_mb <> ? OR seen_from <> ? OR seen_at IS NULL OR seen_at <> ?)`,
+		cpus, memoryMB, diskMB, from, ms(at), id, ms(at), cpus, memoryMB, diskMB, from, ms(at))
 	if err != nil {
 		return false, wrapWrite(err)
 	}

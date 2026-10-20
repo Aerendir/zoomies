@@ -339,16 +339,18 @@ func (c *Controller) noteMachineSizes(ctx context.Context, env *machineEnv) {
 		at := m.CreatedAt.Truncate(time.Millisecond)
 		if row.SeenAt != nil && (at.Before(*row.SeenAt) ||
 			(at.Equal(*row.SeenAt) && row.SeenFrom == store.MachineSizeFromMachine &&
-				row.SeenCPUs == h.CPUs && row.SeenMemoryMB == h.MemoryMB)) {
+				row.SeenCPUs == h.CPUs && row.SeenMemoryMB == h.MemoryMB &&
+				row.SeenDiskMB == h.DiskTotalMB)) {
 			continue
 		}
-		wrote, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, h.CPUs, h.MemoryMB, store.MachineSizeFromMachine, at)
+		wrote, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, h.CPUs, h.MemoryMB, h.DiskTotalMB, store.MachineSizeFromMachine, at)
 		if err != nil {
 			c.log.Warn("could not record the size a provider's machine measured", "provider", row.Name, "machine", m.ID, "error", err)
 			continue
 		}
 		if wrote {
-			row.SeenCPUs, row.SeenMemoryMB, row.SeenFrom, row.SeenAt = h.CPUs, h.MemoryMB, store.MachineSizeFromMachine, &at
+			row.SeenCPUs, row.SeenMemoryMB, row.SeenDiskMB = h.CPUs, h.MemoryMB, h.DiskTotalMB
+			row.SeenFrom, row.SeenAt = store.MachineSizeFromMachine, &at
 		}
 	}
 }
