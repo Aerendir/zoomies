@@ -745,7 +745,7 @@ func HostShortfall(h *store.Host, p *store.Pool) string {
 		return "its work directory is at or below its disk reserve, so it takes no runner of any pool"
 	case alloc.DiskKnown && left.DiskMB < want.DiskMB:
 		return fmt.Sprintf("it has %s of disk free to place on, and one runner of this pool is charged %s%s",
-			formatMB(left.DiskMB), formatMB(want.DiskMB), charged(p.Resources.DiskGB > 0, dind))
+			formatMB(left.DiskMB), formatMB(want.DiskMB), charged(p.Resources.DiskGB > 0, dind)+workingRoomCharged(p))
 	case alloc.CPUsKnown && left.CPUs+cpuEpsilon < want.CPUs:
 		return fmt.Sprintf("it has %s CPU to place on, and one runner of this pool is charged %s%s",
 			formatCPUs(left.CPUs), formatCPUs(want.CPUs), charged(p.Resources.CPUs > 0, dind)+minimumCharged(p, "cpu"))
@@ -894,6 +894,17 @@ func charged(set, dind bool) string {
 		return ", twice what it asks for, because a docker-in-docker runner is charged for its sidecar too"
 	}
 	return ""
+}
+
+// workingRoomCharged says where a disk charge came from when the pool typed
+// none: the working room every runner is given, which the operator can lower by
+// typing resources.disk_gb. Without it the figure looks like something the pool
+// asked for.
+func workingRoomCharged(p *store.Pool) string {
+	if p.Resources.DiskGB > 0 {
+		return ""
+	}
+	return ", the working room every runner is given when its pool types no resources.disk_gb"
 }
 
 // minimumCharged names the pool's own minimum where it is what a runner of an

@@ -700,16 +700,43 @@ func TestAPassChargesEachRunnerItAddsAWorkingRoom(t *testing.T) {
 }
 
 func TestTheLowOnDiskFixNamesTheWorkingRoom(t *testing.T) {
-	// Room for one runner: the host is big enough for the pool (a smaller one
-	// is "too small", a different answer), and the first placement uses it up.
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
+	p := testPool("plain", "plain")
+	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now).why(p)
+	if !strings.Contains(b.what, "low on disk") {
+		t.Errorf("a host with a few GB free is short of disk, not too small: %q", b.what)
+	}
+	for _, want := range []string{"free space", "10 GB", "disk_gb"} {
+		if !strings.Contains(b.fix, want) {
+			t.Errorf("the fix %q does not say %q", b.fix, want)
+		}
+	}
+}
+
+// The same answer once a runner of this pass has used up the room the host
+// had, which is the other way to arrive at the low-on-disk branch.
+func TestAHostWhoseRoomThisPassUsedUpIsLowOnDiskToo(t *testing.T) {
 	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024)
 	p := testPool("plain", "plain")
 	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	hs.place(p, 1)
 	b := hs.why(p)
-	for _, want := range []string{"free space", "10 GB", "disk_gb"} {
-		if !strings.Contains(b.fix, want) {
-			t.Errorf("the fix %q does not say %q", b.fix, want)
-		}
+	if !strings.Contains(b.what, "low on disk") || !strings.Contains(b.fix, "free space") {
+		t.Errorf("what %q, fix %q: want the low-on-disk answer", b.what, b.fix)
+	}
+}
+
+// Without the sentence, "is charged 10 GB" reads as something the pool asked
+// for, and the operator has no way to know that typing disk_gb lowers it.
+func TestTheDiskShortfallSaysWhereAnUntypedChargeCameFrom(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
+	got := HostShortfall(h, testPool("plain", "plain"))
+	if !strings.Contains(got, "working room") || !strings.Contains(got, "resources.disk_gb") {
+		t.Errorf("the shortfall does not explain the default charge: %q", got)
+	}
+	typed := testPool("typed", "typed")
+	typed.Resources.DiskGB = 8
+	if got := HostShortfall(h, typed); strings.Contains(got, "working room") {
+		t.Errorf("a pool that typed its disk is told about a default it did not use: %q", got)
 	}
 }
