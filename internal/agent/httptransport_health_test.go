@@ -196,8 +196,8 @@ func TestTheAgentLeavesAControllerConnectionThatStopsAnswering(t *testing.T) {
 
 // The test above shortens the health check to keep the suite quick; this pins
 // what production gets. Waiting for a beat, finding a dead connection and
-// starting the retry must all fit inside the
-// controller's patience: a host silent for store.HeartbeatTimeout is called
+// starting the retry must all fit inside the controller's patience: a host
+// silent for store.HeartbeatTimeout is called
 // unhealthy, and one silent for five minutes has its runners given up as lost.
 func TestTheControllerConnectionIsHealthCheckedInsideTheHeartbeatTimeout(t *testing.T) {
 	tr, err := NewHTTPTransport(HTTPOptions{ControllerURL: "https://controller.example:8080", Logger: testLogger()})

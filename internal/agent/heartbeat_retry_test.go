@@ -67,31 +67,42 @@ func TestAFailedHeartbeatIsRetriedBeforeTheHostBecomesUnhealthy(t *testing.T) {
 // A controller that really is down must not receive a tight retry loop. Fast
 // recovery is for the first failure, and continued failures earn more time.
 func TestHeartbeatFailuresBackOffWithoutWaitingLongerThanTheNormalInterval(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		start := time.Now()
-		var attempts []time.Duration
-		tr := &heartbeatScript{fakeTransport: newFakeTransport()}
-		tr.beat = func(context.Context) (*HeartbeatResponse, error) {
-			attempts = append(attempts, time.Since(start))
-			if len(attempts) == 9 {
-				cancel()
-			}
-			return nil, ErrRetryable
-		}
-		a, _, _, _ := newAgent(t, 1, func(o *Options) {
-			o.Transport = tr
-			o.HeartbeatInterval = 10 * time.Second
+	for _, tc := range []struct {
+		name     string
+		interval time.Duration
+		want     []time.Duration
+	}{
+		{"a short interval", 10 * time.Second, []time.Duration{0, time.Second, 3 * time.Second, 7 * time.Second, 15 * time.Second, 25 * time.Second, 35 * time.Second, 45 * time.Second, 55 * time.Second}},
+		{"the longest quiet interval", config.MaxQuietHeartbeatInterval, []time.Duration{0, time.Second, 3 * time.Second, 7 * time.Second, 15 * time.Second, 31 * time.Second, 61 * time.Second, 91 * time.Second, 121 * time.Second}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				start := time.Now()
+				var attempts []time.Duration
+				tr := &heartbeatScript{fakeTransport: newFakeTransport()}
+				tr.beat = func(context.Context) (*HeartbeatResponse, error) {
+					attempts = append(attempts, time.Since(start))
+					if len(attempts) == 9 {
+						cancel()
+					}
+					return nil, ErrRetryable
+				}
+				a, _, _, _ := newAgent(t, 1, func(o *Options) {
+					o.Transport = tr
+					o.HeartbeatInterval = tc.interval
+				})
+				if err := a.heartbeatLoop(ctx); err != nil {
+					t.Fatal(err)
+				}
+				want := tc.want
+				if !reflect.DeepEqual(attempts, want) {
+					t.Fatalf("heartbeat attempts = %v, want %v: retries must back off and stay within the configured interval", attempts, want)
+				}
+			})
 		})
-		if err := a.heartbeatLoop(ctx); err != nil {
-			t.Fatal(err)
-		}
-		want := []time.Duration{0, time.Second, 3 * time.Second, 7 * time.Second, 15 * time.Second, 25 * time.Second, 35 * time.Second, 45 * time.Second, 55 * time.Second}
-		if !reflect.DeepEqual(attempts, want) {
-			t.Fatalf("heartbeat attempts = %v, want %v: retries must back off and stay within the configured interval", attempts, want)
-		}
-	})
+	}
 }
 
 func TestStoppingTheAgentInterruptsAHeartbeatRetry(t *testing.T) {

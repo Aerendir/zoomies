@@ -36,7 +36,8 @@ const (
 	minHeartbeatInterval     = time.Second
 	// The first retry must fit between a dead connection being found and the
 	// host becoming unhealthy. Continued failures back off, so an unavailable
-	// controller receives at most one retry per thirty seconds.
+	// controller is not flooded, with the wait capped at the smaller of thirty
+	// seconds and the configured interval.
 	heartbeatRetryInitial = time.Second
 	heartbeatRetryMax     = 30 * time.Second
 	// defaultReconcileInterval is how often the host is compared against what
