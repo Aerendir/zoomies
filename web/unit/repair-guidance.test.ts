@@ -19,6 +19,7 @@ test('every failure code says what happened and gives at most three things to do
     'context_limit',
     'source_unavailable',
     'provider_unavailable',
+    'provider_billing',
     'rate_limited',
     'provider_credentials',
     'output_limit',
@@ -42,6 +43,9 @@ test('each code names the one thing that fixes it', () => {
   assert.match(text(failed('source_unavailable')), /Contents permission/);
   assert.match(text(failed('source_unavailable')), /100 files/);
   assert.match(text(failed('provider_unavailable')), /Eli settings/);
+  assert.match(text(failed('provider_billing')), /cannot pay/i);
+  assert.match(text(failed('provider_billing')), /credit/i);
+  assert.match(text(failed('provider_billing')), /another provider/i);
   assert.match(text(failed('rate_limited')), /quota/i);
   assert.match(text(failed('provider_credentials')), /key/i);
   assert.match(text(failed('provider_credentials')), /Eli settings/);
@@ -91,6 +95,7 @@ test('the copy follows the repository voice', () => {
     'context_limit',
     'source_unavailable',
     'provider_unavailable',
+    'provider_billing',
     'rate_limited',
     'provider_credentials',
     'output_limit',
