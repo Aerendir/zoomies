@@ -93,6 +93,15 @@ test.beforeAll(async ({ browser }) => {
   const page = await browser.newPage();
   try {
     ({ id: hostId, token: agentToken } = await enrol(page));
+    // The controller keeps a host at its recommended size unless the host says
+    // otherwise, and this host's recommendation is not the eight runners it
+    // joined with. These tests are about the sizes an operator types, so the
+    // host is set to be left alone and the capacity the test writes is the one
+    // the dialog and the card speak about.
+    const left = await page.request.patch(`/api/v1/hosts/${hostId}`, {
+      data: { auto_adjust: 'off' },
+    });
+    expect(left.ok(), 'the host was set to be left alone').toBeTruthy();
   } finally {
     await page.close();
   }
