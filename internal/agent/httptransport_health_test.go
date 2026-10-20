@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -148,20 +149,22 @@ func TestTheAgentLeavesAControllerConnectionThatStopsAnswering(t *testing.T) {
 		CAFile:        writeServerCA(t, srv),
 		Logger:        testLogger(),
 		pingAfter:     200 * time.Millisecond,
-		pingTimeout:   200 * time.Millisecond,
+		pingTimeout:   2 * time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewHTTPTransport: %v", err)
 	}
 	tr.SetCredentials("host-1", "agent-token")
 
-	heartbeat := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	heartbeat := func(timeout time.Duration) error {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		_, err := tr.Heartbeat(ctx, HeartbeatRequest{})
 		return err
 	}
-	if err := heartbeat(); err != nil {
+	// The first TLS handshake and HTTP/2 setup get their own generous bound,
+	// so a loaded race runner does not fail before the dead path is exercised.
+	if err := heartbeat(10 * time.Second); err != nil {
 		t.Fatalf("first heartbeat: %v", err)
 	}
 	// Over HTTP/1.1 a timed-out call closes its own connection, and this test
@@ -176,9 +179,9 @@ func TestTheAgentLeavesAControllerConnectionThatStopsAnswering(t *testing.T) {
 	// link to the controller. The bound is generous against the health check
 	// above and short against the hundred or more timed-out calls Go needs
 	// before it gives up on a connection without one.
-	deadline := time.Now().Add(6 * time.Second)
+	deadline := time.Now().Add(8 * time.Second)
 	for {
-		err := heartbeat()
+		err := heartbeat(time.Second)
 		if err == nil {
 			break
 		}
@@ -192,7 +195,8 @@ func TestTheAgentLeavesAControllerConnectionThatStopsAnswering(t *testing.T) {
 }
 
 // The test above shortens the health check to keep the suite quick; this pins
-// what production gets. Finding a dead connection has to take well under the
+// what production gets. Waiting for a beat, finding a dead connection and
+// starting the retry must all fit inside the
 // controller's patience: a host silent for store.HeartbeatTimeout is called
 // unhealthy, and one silent for five minutes has its runners given up as lost.
 func TestTheControllerConnectionIsHealthCheckedInsideTheHeartbeatTimeout(t *testing.T) {
@@ -210,7 +214,7 @@ func TestTheControllerConnectionIsHealthCheckedInsideTheHeartbeatTimeout(t *test
 	if ht.HTTP2.PingTimeout <= 0 {
 		t.Fatal("the health check has no ping timeout of its own; Go's default would apply without anyone having chosen it")
 	}
-	if found := ht.HTTP2.SendPingTimeout + ht.HTTP2.PingTimeout; found >= store.HeartbeatTimeout {
-		t.Fatalf("a dead connection takes %s to find, not inside the controller's %s heartbeat timeout", found, store.HeartbeatTimeout)
+	if found := config.MaxQuietHeartbeatInterval + ht.HTTP2.SendPingTimeout + ht.HTTP2.PingTimeout + heartbeatRetryInitial; found >= store.HeartbeatTimeout {
+		t.Fatalf("the heartbeat interval, dead connection check and first retry take %s, not inside the controller's %s heartbeat timeout", found, store.HeartbeatTimeout)
 	}
 }
