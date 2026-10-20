@@ -354,11 +354,46 @@ func TestSetupDoesNotMistakeAFencedImportForOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertClaudeKeepsItsOwnEntryPoint(t, changes)
+}
+
+// A backtick fence inside a tilde fence is part of the example: only the
+// delimiter that opened the fence closes it.
+func TestSetupDoesNotMistakeAFenceInsideAnotherFenceForAnImport(t *testing.T) {
+	key, config := setupInputs()
+	original := "# CLAUDE\n\nFor example:\n\n~~~\n```\n@AGENTS.md\n```\n~~~\n"
+	changes, err := PlanSetupFiles(key, "owner/repo", config, []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: original}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertClaudeKeepsItsOwnEntryPoint(t, changes)
+}
+
+// An absolute import names a file outside the repository, so it does not make
+// the repository's AGENTS.md the entry point.
+func TestSetupDoesNotMistakeAnAbsoluteImportForOne(t *testing.T) {
+	key, config := setupInputs()
+	original := "# CLAUDE\n\n@/AGENTS.md\n"
+	changes, err := PlanSetupFiles(key, "owner/repo", config, []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: original}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertClaudeKeepsItsOwnEntryPoint(t, changes)
+}
+
+// A Claude file that does not import the repository's AGENTS.md keeps its own
+// entry point, so the change must be there rather than quietly absent.
+func assertClaudeKeepsItsOwnEntryPoint(t *testing.T, changes []SetupChange) {
+	t.Helper()
 	for _, change := range changes {
-		if change.Path == "CLAUDE.md" && !strings.Contains(change.Content, managedStart) {
-			t.Fatal("a fenced example was treated as an import")
+		if change.Path == "CLAUDE.md" {
+			if !strings.Contains(change.Content, managedStart) {
+				t.Fatal("the Claude file lost its own entry point")
+			}
+			return
 		}
 	}
+	t.Fatal("the Claude file was left without an entry point")
 }
 
 func TestSetupSharesTheGuideWithoutChangingClaudeImportWrappers(t *testing.T) {
