@@ -89,6 +89,20 @@ func TestTheCheckDoesNotSuggestEnlargingTheTemplateForADiskTheShapeTyped(t *test
 	}
 }
 
+// A check that could not read the template's disk does not unsay what a
+// machine measured. The scheduler judges the provider by the learned figure,
+// so a card that went quiet on the same figure would contradict the pool page.
+func TestTheCheckWarnsOnTheDiskAMachineMeasuredWhenItCannotReadTheTemplates(t *testing.T) {
+	row := &store.Provider{MachineCapacity: 2, SeenDiskMB: 8192}
+	got, ok := machineDiskFinding(row, provider.Report{})
+	if !ok {
+		t.Fatal("no finding for two slots on a measured 8 GB disk the check could not re-read")
+	}
+	if !strings.Contains(got.Title, "8 GB") || !strings.Contains(got.Title, "22 GB") {
+		t.Errorf("title = %q, want the measured 8 GB against the 22 GB two runners need", got.Title)
+	}
+}
+
 // Silence is right when nothing says how big the disk is: a warning built on a
 // guess would be one the operator learns to ignore.
 func TestTheCheckIsSilentWhenNothingSaysTheDisk(t *testing.T) {

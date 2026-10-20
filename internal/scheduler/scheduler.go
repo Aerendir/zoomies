@@ -1351,6 +1351,9 @@ func newHostSet(hosts []*store.Host, pools []*store.Pool, runners map[string][]*
 		l := hs.left[h.ID]
 		l.CPUs -= t.reserved.CPUs
 		l.MemoryMB -= t.reserved.MemoryMB
+		if hs.alloc[h.ID].DiskKnown {
+			l.DiskMB -= t.reserved.DiskMB
+		}
 		hs.promisedMemory[h.ID] = l.MemoryMB
 		hs.ours[h.ID] = t.ours
 		if t.warming > 0 {

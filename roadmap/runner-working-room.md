@@ -63,8 +63,13 @@ Everything downstream already exists and needs no second copy of the rule:
 * `fits` refuses a host whose allocatable disk is under the ask, on the
   empty-host question (`HostFits`) and the room-left question in a pass alike.
 * `newHostSet` seeds each host with its allocatable disk and the pass charges
-  the working room for each runner it adds. Free disk stays a measurement, so
-  the runners already there are never charged twice.
+  the working room for each runner it adds. Review changed one thing here:
+  the first draft let free disk stand as the measurement for the runners
+  already there, and that forgot a runner placed last pass that had not yet
+  written its room, so a host could be promised the same gigabytes twice
+  across passes. A live runner now holds its room until it is gone, charged
+  with its CPU and memory in `hostTotals.add`; one that has written most of
+  its room is counted for the whole of it, which errs towards not placing.
 * `MachineFor` names the disk a too-small machine would need, and
   `machineSizeFix` already says where to set it ("raise its machine size" or
   "enlarge the template it clones").

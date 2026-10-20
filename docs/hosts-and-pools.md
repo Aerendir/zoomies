@@ -1562,7 +1562,11 @@ Free disk is a gate, and every runner is charged working room against it. A
 host at or below its disk reserve takes no new runner at all; above it, each
 runner a pass places is charged 10 GB of working room, or the figure the pool
 types as `resources.disk_gb`, so a job is never started on a machine that cannot
-hold its checkout and caches. Nothing is evicted to make room, because a
+hold its checkout and caches. A runner holds its room for as long as it lives:
+free disk measures what has been written, not what was promised, so a runner
+placed thirty seconds ago that has written nothing yet is still charged its
+room by the next pass. A runner that has written most of its room is counted
+for the whole of it, which errs towards not placing. Nothing is evicted to make room, because a
 runner's caches outlive it on purpose. Two things follow: disk is the one
 shortage that no job finishing will clear, and a host with less than about 12 GB
 free takes no new runner until space is freed or a pool asks for less.

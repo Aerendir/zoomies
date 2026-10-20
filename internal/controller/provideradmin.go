@@ -292,6 +292,14 @@ func machineDiskFinding(row *store.Provider, report provider.Report) (config.Fin
 		disk = report.BuildsDiskMB
 	}
 	if disk <= 0 {
+		// A check that could not read the template's disk is not evidence
+		// that the disk is fine. What a machine or an earlier check measured
+		// is what the scheduler judges the provider by, so the warning is
+		// held to the same figure, or the card says nothing while the pool
+		// page says the provider cannot serve.
+		disk = row.SeenDiskMB
+	}
+	if disk <= 0 {
 		return config.Finding{}, false
 	}
 	slots := providerSlots(row)

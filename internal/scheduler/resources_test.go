@@ -689,13 +689,46 @@ func TestAnUnmeasuredDiskConstrainsNothing(t *testing.T) {
 	}
 }
 
-// Free disk is a measurement, so the runners already there are in the figure;
-// the ones this pass adds are not, and each is charged its room.
+// Each runner a pass adds is charged its room against what is free.
 func TestAPassChargesEachRunnerItAddsAWorkingRoom(t *testing.T) {
 	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024) // room for one
 	hs := newHostSet([]*store.Host{h}, []*store.Pool{testPool("plain", "plain")}, nil, now)
 	if got := len(hs.place(testPool("plain", "plain"), 3)); got != 1 {
 		t.Fatalf("placed %d runners on a host with room for one", got)
+	}
+}
+
+// Free disk measures what has been written, not what was promised. A runner
+// placed last pass has written nothing yet, so a pass that started from the
+// measurement alone would place a second runner in the same room and the host
+// would run out part-way through both jobs, which is the failure the room
+// exists to prevent.
+func TestARunnerPlacedLastPassStillHoldsItsWorkingRoom(t *testing.T) {
+	p := testPool("plain", "plain")
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024) // room for one
+	live := map[string][]*store.Runner{p.ID: {{ID: "run_1", PoolID: p.ID, HostID: h.ID, State: store.RunnerIdle}}}
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now)
+	if got := len(hs.place(p, 3)); got != 0 {
+		t.Fatalf("placed %d runners beside one that holds the only room", got)
+	}
+	// Once it is gone the room is free again, and a measurement that has not
+	// moved is believed.
+	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	if got := len(hs.place(p, 3)); got != 1 {
+		t.Fatalf("placed %d runners on a host with room for one", got)
+	}
+}
+
+// A host that never measured its disk charges nothing for it, so a live
+// runner's room must not turn its unknown into a negative that reads as full.
+func TestALiveRunnersRoomDoesNotConstrainAnUnmeasuredHost(t *testing.T) {
+	p := testPool("plain", "plain")
+	h := sized("host", 4, 16, 16*1024, 0)
+	h.DiskTotalMB, h.DiskFreeMB = 0, 0
+	live := map[string][]*store.Runner{p.ID: {{ID: "run_1", PoolID: p.ID, HostID: h.ID, State: store.RunnerIdle}}}
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now)
+	if got := len(hs.place(p, 1)); got != 1 {
+		t.Fatalf("placed %d runners on an unmeasured host with a slot free", got)
 	}
 }
 

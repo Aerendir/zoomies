@@ -57,8 +57,10 @@ const (
 //
 // Disk's fallback is not a share but the working room (RunnerDiskMB): free
 // disk is a measurement rather than a budget, so it is not cut into slots, and
-// each runner a pass adds is charged a fixed room against what is free above
-// the host's reserve. The trade accepted is that a host with under about 12 GB
+// each runner is charged a fixed room against what is free above the host's
+// reserve, the ones already there as well as the ones a pass adds, because the
+// measurement cannot yet contain what a runner has only been promised (see
+// hostTotals.add). The trade accepted is that a host with under about 12 GB
 // free (the 2 GB reserve floor plus one runner's room) takes no new runner,
 // where before it took work and failed it part-way through a download. A pool
 // whose jobs need less sets resources.disk_gb, which is charged instead.
@@ -334,6 +336,13 @@ func (t *hostTotals) add(p *store.Pool, h *store.Host, r *store.Runner) {
 	res := RunnerCharge(p, h, r)
 	t.reserved.CPUs += res.CPUs
 	t.reserved.MemoryMB += res.MemoryMB
+	// A live runner holds its working room until it is gone. Free disk is a
+	// measurement of what has been written, not of what was promised, so a
+	// runner placed last pass that has not filled its room yet would otherwise
+	// be forgotten by this one, and a host could be promised the same gigabytes
+	// twice across passes. The error this accepts runs the safe way: a runner
+	// that has written most of its room is counted for the whole of it.
+	t.reserved.DiskMB += res.DiskMB
 	starting := r.State == store.RunnerProvisioning || r.State == store.RunnerRegistering
 	if starting {
 		t.warming++
