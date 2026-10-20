@@ -352,9 +352,12 @@ change, in full:
 * `.zoomies/AI_CONTEXT.md`: the shared guide to context access, revision checks
   and selective retrieval.
 * Short marked entry points in `AGENTS.md` and `CLAUDE.md` (or an existing
-  `.claude/CLAUDE.md`). An exact Claude import wrapper pointing to `AGENTS.md`
-  keeps that single entry point. The guide stays on the source branch; generated
-  source packs continue to live on the separate context branch or in Zoomies.
+  `.claude/CLAUDE.md`). A Claude file that imports `AGENTS.md`, whether an exact
+  wrapper or its own prose around the import, keeps that single entry point: the
+  marked block stays in `AGENTS.md`, and a duplicate block in the Claude file is
+  removed so Claude Code does not load it twice. The guide stays on the source
+  branch; generated source packs continue to live on the separate context
+  branch or in Zoomies.
 * The AI Context badge near the top of the README.
 
 Your own text in those files is kept as it is; only the marked sections are
@@ -368,9 +371,9 @@ retrying submits only the ones that failed.
 
 ### 4. Merge, and let it generate
 
-Merge the pull request as you would any other. The repository shows
-**Awaiting merge** until you do. The merge is a push to the default branch, and
-that push runs the workflow. It has two jobs:
+Merge the pull request as you would any other, once its checks pass. The
+repository shows **Awaiting merge** until you do. The merge is a push to the
+default branch, and that push runs the workflow. It has two jobs:
 
 * **Generate** reads the source at that exact commit, applies the exclusions,
   runs Repomix with its secret scanning, and fails if anything is too large,
@@ -650,9 +653,9 @@ file the secret scan withholds fails it with `Repomix omitted or changed source`
 Repair it and neither failure happens again; or exclude the files with **Amend**.
 
 **A formatter fails on the managed files.** The workflow, the generator's
-`package.json` and the marked sections in `README.md` and `CLAUDE.md` are written
-by Zoomies and rewritten by every **Reinstall / repair**, so reformatting them
-by hand only lasts until the next one. Add the workflow and
+`package.json` and the marked sections in `README.md`, `AGENTS.md` and
+`CLAUDE.md` are written by Zoomies and rewritten by every **Reinstall / repair**,
+so reformatting them by hand only lasts until the next one. Add the workflow and
 `.github/zoomies-ai-context/package.json` to your formatter's ignore file
 (`.prettierignore` for Prettier) rather than reformatting them.
 
