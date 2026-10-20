@@ -352,7 +352,7 @@ that alternative.
 | Storage | Where the clone's disk lands. Must accept disk images. |
 | Bridge | The network bridge the machine attaches to. It must reach the controller. |
 | VMID range | The block of identifiers Zoomies may allocate from, and nothing else may. |
-| Machine shape | CPUs, memory and disk for each machine, and the labels, capacity and backend the host will report. Left unset, the disk is the template's boot disk: the check reads it and uses it to judge the machines until one has joined and measured itself. The check warns (`provider.machine_disk_small`) when a shape is too small for its slots. |
+| Machine shape | CPUs, memory and disk for each machine, and the labels, capacity and backend the host will report. Left to the template (the form's placeholder reads "the template decides"), the disk is the template's boot disk: the check reads it and uses it to judge the machines until one has joined and measured itself. The check warns (`provider.machine_disk_small`) when a shape is too small for its slots. |
 | Maximum machines | How many this provider may run at once. The wizard recommends a figure from the nodes' size. |
 | Warm machines | The fewest kept running when nothing is waiting. The wizard recommends one. |
 

@@ -32,7 +32,8 @@ const NODE_RESERVE_FLOOR_MB = 2048;
 /**
  * The disk each runner is given to work in, above the host's reserve. Mirrors
  * `scheduler.RunnerDiskMB`; a change to one is a change to both, or the form
- * and the provider's check would disagree about what a machine needs.
+ * and the provider's check would disagree about what a machine needs. A test
+ * in `internal/docs` fails while they differ.
  */
 export const RUNNER_DISK_MB = 10 * 1024;
 
@@ -51,8 +52,17 @@ export function machineDiskNeededMb(slots: number): number {
   return HOST_RESERVE_DISK_FLOOR_MB + Math.max(slots, 1) * RUNNER_DISK_MB;
 }
 
-function wholeGigabytes(mb: number): string {
-  return `${Math.round(mb / 1024)} GB`;
+/**
+ * A disk figure the way the provider's check writes one (Go's `formatMB`):
+ * whole gigabytes where it divides evenly, one decimal where it does not. The
+ * decimal is floored rather than rounded, so a disk a megabyte short of what
+ * the slots need never prints as that figure and contradicts the sentence it
+ * sits in.
+ */
+function diskSize(mb: number): string {
+  if (mb < 1024) return `${mb} MB`;
+  if (mb % 1024 === 0) return `${mb / 1024} GB`;
+  return `${(Math.floor((mb / 1024) * 10) / 10).toFixed(1)} GB`;
 }
 
 /**
@@ -63,13 +73,13 @@ function wholeGigabytes(mb: number): string {
  */
 export function machineDiskHint(slots: number, diskMb: number): string {
   const n = Math.max(slots, 1);
-  const needed = wholeGigabytes(machineDiskNeededMb(n));
+  const needed = diskSize(machineDiskNeededMb(n));
   const noun = n === 1 ? 'slot needs' : 'slots need';
   if (diskMb <= 0) {
-    return `Each runner is given ${wholeGigabytes(RUNNER_DISK_MB)} of working room above a ${wholeGigabytes(HOST_RESERVE_DISK_FLOOR_MB)} reserve, so ${n} ${noun} at least ${needed}; the template's disk counts once the check has read it.`;
+    return `Each runner is given ${diskSize(RUNNER_DISK_MB)} of working room above a ${diskSize(HOST_RESERVE_DISK_FLOOR_MB)} reserve, so ${n} ${noun} at least ${needed}; the template's disk counts once the check has read it.`;
   }
   if (diskMb < machineDiskNeededMb(n)) {
-    return `${wholeGigabytes(diskMb)} is under the ${needed} ${n} ${noun}.`;
+    return `${diskSize(diskMb)} is under the ${needed} ${n} ${noun}.`;
   }
   return `${n} ${noun} at least ${needed}.`;
 }

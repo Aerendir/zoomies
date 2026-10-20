@@ -1317,7 +1317,7 @@ The recommendation is the smallest of three counts of runners:
 | --- | --- |
 | CPU | the cores left after the reserve, over what one runner asks for |
 | Memory | the memory left after the reserve, over what one runner asks for |
-| Disk | the work filesystem less its reserve, at 10 GiB of working room per runner |
+| Disk | the work filesystem less its reserve, at 10 GB of working room per runner |
 
 A runner asks for the largest size an enabled pool sets, or the fleet's default size
 where none does. The reserve is a core on anything up to sixteen, a tenth of the
@@ -1661,14 +1661,14 @@ Read the counts, because they name the fix:
 
 | What it says | What to do |
 | --- | --- |
-| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. Nor is one the pool's size excludes through its runner profile, or one already at its disk reserve, because a finishing job gives neither back. |
+| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. Nor is one the pool's size excludes through its runner profile, or one already at its disk reserve, or short of the working room above it, because a finishing job gives neither back. |
 | `cordoned` | Uncordon the host, if the maintenance is over. |
 | `unhealthy` | The agent is not heartbeating. Check that it is running on that machine and can reach this controller. |
 | `without the docker backend` | Fix the socket on that host, or point the pool at a backend your hosts already offer. When every other host is out for that reason, the sentence carries the agent's own words about the socket, and names the backends it could move to. |
 | `not matching the pool's host selector` | Relax the selector, or label a host to match. |
 | `too small for this pool's limits` | The machine could not hold one runner of this pool even when empty. Lower the pool's CPU or memory limits, or add a bigger host. Waiting will not help. |
 | `short of memory`, `short of CPU` | The host is the right size and has already promised what it has to the runners on it. Wait, lower the pool's limits, or add a host. When runners of yours hold it, that counts as full rather than as a fault, because a finishing job returns what they hold; memory taken by work outside the fleet does not. |
-| `low on disk` | The work directory's filesystem is at or below the host's disk reserve, or has less than the 10 GB of working room a runner is given above it. Free space on it, set the pool's `resources.disk_gb` lower, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
+| `low on disk` | The work directory's filesystem is at or below the host's disk reserve, or short of the working room a runner is given above it (10 GB, or the pool's `resources.disk_gb`). Free space on it, set the pool's `resources.disk_gb` lower, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
 | `throttled after sustained pressure` | The host is on a rung of the [throttle ladder](#current-usage-and-automatic-holds) and every slot the rung left it is in use. Wait for it to lift, lower the host's capacity or the pools' limits so its runners fit the machine, or add a host; running jobs continue. A host that keeps being throttled has too many slots for its machine, or pools whose limits let a job take more than a slot's worth of it. |
 
 The distinction the reasons keep is between a fleet that is merely **full**,
