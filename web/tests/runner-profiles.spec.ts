@@ -41,6 +41,15 @@ async function enrol(page: Page): Promise<{ id: string; token: string }> {
   });
   expect(join.ok(), 'the agent join succeeded').toBeTruthy();
   const joined = (await join.json()) as { host_id: string; agent_token: string };
+  // These specs are about a host its operator sized by hand, and every figure
+  // they read back is the eight slots typed above. The fleet keeps a host at
+  // its own recommendation by default (two runners, on these pools' asks), and
+  // it would move this one there within half a minute of the join, so the host
+  // is told to keep the capacity it was given.
+  const kept = await page.request.patch(`/api/v1/hosts/${joined.host_id}`, {
+    data: { auto_adjust: 'off' },
+  });
+  expect(kept.ok(), 'the host was told to keep its typed capacity').toBeTruthy();
   return { id: joined.host_id, token: joined.agent_token };
 }
 
