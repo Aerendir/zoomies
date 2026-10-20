@@ -472,6 +472,24 @@ func TestPreflightReportsTheSizeTheTemplateBuilds(t *testing.T) {
 	if report.BuildsCPUs != 2 || report.BuildsMemoryMB != 4096 {
 		t.Fatalf("builds %d CPUs and %d MB, want the template's 2 cores and 4096 MB", report.BuildsCPUs, report.BuildsMemoryMB)
 	}
+	if report.BuildsDiskMB != 32*1024 {
+		t.Fatalf("builds a %d MB disk, want the template's 32G", report.BuildsDiskMB)
+	}
+}
+
+// A disk line with no size= in it is a size the preflight cannot read, and an
+// unreadable size is reported as zero rather than guessed at: a guess would
+// let the fit check turn away, or admit, a machine on a number nobody read.
+func TestPreflightReportsNoDiskWhenTheTemplatesDiskLineHasNoSize(t *testing.T) {
+	f := newFakePVE(t, nil)
+	f.mu.Lock()
+	f.vms[9000].disk = "local-lvm:base-9000-disk-0"
+	f.mu.Unlock()
+
+	report := Preflight(context.Background(), f.client(t), healthyPrereqs())
+	if report.BuildsDiskMB != 0 {
+		t.Fatalf("builds a %d MB disk, want 0 for a disk line that names no size", report.BuildsDiskMB)
+	}
 }
 
 // What the two ways of reaching a cluster owe an operator who got nothing
