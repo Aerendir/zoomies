@@ -321,9 +321,16 @@ test('the usage report reads as cards on a phone, with nothing cut off', async (
   // rule rather than on the rendering, because every name the demo fleet has
   // fits either way -- a measured check here would pass whatever the CSS said,
   // and the pools that read alike on a real fleet have longer names than these.
+  //
+  // The tooltip's own copy of the name is not one of them. A name carries a
+  // tooltip saying which pool it is, and that sentence is on the page for a
+  // screen reader alone, which is what a screen-reader-only element is: cut to
+  // nothing on purpose. The tooltip marks its own nodes, and the marker is
+  // what says which is which.
   const nowrap = await names.evaluateAll((els) =>
     els
       .flatMap((el) => [el, ...Array.from(el.querySelectorAll<HTMLElement>('*'))])
+      .filter((el) => !el.closest('[data-tip-skip]'))
       .filter((el) => {
         const style = getComputedStyle(el);
         return style.whiteSpace === 'nowrap' && style.overflow === 'hidden';
