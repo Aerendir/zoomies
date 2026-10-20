@@ -105,19 +105,28 @@ func PlanMaintenance(key RepositoryKey, name string, previous Config, config Con
 }
 
 func removeManagedSection(content string) (string, error) {
+	clean, _, err := removeManagedSectionAt(content)
+	return clean, err
+}
+
+// removeManagedSectionAt removes the managed section and says where the seam
+// it left is in the text that remains, so a caller can mend that seam without
+// touching the operator's own spacing elsewhere. A seam of -1 means there was
+// no block to remove.
+func removeManagedSectionAt(content string) (string, int, error) {
 	starts, ends := strings.Count(content, managedStart), strings.Count(content, managedEnd)
 	if starts == 0 && ends == 0 {
 		if strings.Contains(content, "<!-- zoomies-ai-context:") {
-			return "", fmt.Errorf("repair incomplete ownership markers first")
+			return "", 0, fmt.Errorf("repair incomplete ownership markers first")
 		}
-		return content, nil
+		return content, -1, nil
 	}
 	if starts != 1 || ends != 1 {
-		return "", fmt.Errorf("repair duplicate or incomplete ownership markers first")
+		return "", 0, fmt.Errorf("repair duplicate or incomplete ownership markers first")
 	}
 	start, end := strings.Index(content, managedStart), strings.Index(content, managedEnd)
 	if end < start {
-		return "", fmt.Errorf("repair reversed ownership markers first")
+		return "", 0, fmt.Errorf("repair reversed ownership markers first")
 	}
 	end += len(managedEnd)
 	// The separator following the block belongs to the block; other text,
@@ -127,5 +136,5 @@ func removeManagedSection(content string) (string, error) {
 	} else if strings.HasPrefix(content[end:], "\n") {
 		end++
 	}
-	return content[:start] + content[end:], nil
+	return content[:start] + content[end:], start, nil
 }
