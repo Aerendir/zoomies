@@ -321,10 +321,15 @@ test('the usage report reads as cards on a phone, with nothing cut off', async (
   // rule rather than on the rendering, because every name the demo fleet has
   // fits either way -- a measured check here would pass whatever the CSS said,
   // and the pools that read alike on a real fleet have longer names than these.
+  //
+  // A name only a screen reader sees is not one of these: the tooltip's
+  // description of the row is there to be read aloud, and the recipe that
+  // hides it clips it to a pixel on purpose.
   const nowrap = await names.evaluateAll((els) =>
     els
       .flatMap((el) => [el, ...Array.from(el.querySelectorAll<HTMLElement>('*'))])
       .filter((el) => {
+        if (el.closest('.sr-only')) return false;
         const style = getComputedStyle(el);
         return style.whiteSpace === 'nowrap' && style.overflow === 'hidden';
       })
