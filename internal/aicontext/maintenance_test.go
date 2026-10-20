@@ -101,6 +101,44 @@ func TestRepairUpgradesAPreviousWorkflowInsteadOfRefusingIt(t *testing.T) {
 	}
 }
 
+// A repository may have taken an action update that this release's template
+// predates. Reinstalling regenerates the workflow around the pins rather than
+// moving them backwards.
+func TestReinstallKeepsTheActionVersionsTheRepositoryAlreadyPinned(t *testing.T) {
+	key, config := setupInputs()
+	files, err := PlanManagedSetup(key, "owner/repo", config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer := "actions/setup-node@" + strings.Repeat("d", 40) + " # v7.1.0"
+	installed := make([]SetupFile, 0, len(files))
+	for _, f := range files {
+		content := f.Content
+		if f.Path == WorkflowPath {
+			content = strings.Replace(content, "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0", newer, 1)
+			if content == f.Content {
+				t.Fatal("the workflow template no longer contains the pin this test moves")
+			}
+		}
+		installed = append(installed, SetupFile{Path: f.Path, SHA: strings.Repeat("b", 40), Mode: "100644", Content: content})
+	}
+	amended := config
+	amended.SetupGeneration++
+	changes, err := PlanMaintenance(key, "owner/repo", config, amended, installed, files, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, change := range changes {
+		if change.Path == WorkflowPath {
+			found = strings.Contains(change.Content, newer) && !strings.Contains(change.Content, "820762786026740c76f36085b0efc47a31fe5020")
+		}
+	}
+	if !found {
+		t.Fatal("reinstall moved the repository's pinned action backwards")
+	}
+}
+
 // Every generation of script a release has shipped must stay recognised, in both
 // hosting flavours and for the Zoomies-only workflow, which has no publish job.
 func TestEveryOlderWorkflowGenerationStaysRecognisedAndDistinct(t *testing.T) {
