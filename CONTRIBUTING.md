@@ -184,6 +184,9 @@ Some suites intentionally require more setup:
 - `make test-e2e` exercises Docker-backed end-to-end behaviour and skips when
   required GitHub credentials are absent.
 - `make screenshots` captures documentation screenshots from the real UI.
+- `make vet-tags` vets the suites behind the `e2e`, `drill` and `load` build
+  tags. A plain `go vet` never compiles them; `make lint` and CI both run this
+  target, and it is the quick check after editing a file under one of those tags.
 
 You do not need to run an unrelated privileged or credential-dependent suite.
 State exactly what you ran and what you could not run in the pull request.
