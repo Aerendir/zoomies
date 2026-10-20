@@ -332,6 +332,7 @@ test('the usage report reads as cards on a phone, with nothing cut off', async (
       .flatMap((el) => [el, ...Array.from(el.querySelectorAll<HTMLElement>('*'))])
       .filter((el) => !el.closest('[data-tip-skip]'))
       .filter((el) => {
+        if (el.closest('.sr-only')) return false;
         const style = getComputedStyle(el);
         return style.whiteSpace === 'nowrap' && style.overflow === 'hidden';
       })
