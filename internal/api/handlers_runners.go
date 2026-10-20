@@ -79,17 +79,24 @@ func (s *Server) handleGetRunner(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "reading the runner", err)
 		return
 	}
-	view, err := s.ctrl.RunnerRenderer(r.Context(), []*store.Runner{run})
+	// The host and pool rows are read once for both halves of the drawer:
+	// RunnerViewIn names the runner from them, and the panels below carry
+	// them in full. Rendering this one row through the fleet-wide renderer
+	// instead would list every pool and every host to name a single runner.
+	host, herr := s.ctrl.Store().GetHost(r.Context(), run.HostID)
+	pool, perr := s.ctrl.Store().GetPool(r.Context(), run.PoolID)
+
+	view, err := s.ctrl.RunnerViewIn(r.Context(), run, host, pool)
 	if err != nil {
 		s.internal(w, r, "reading the runner", err)
 		return
 	}
 	detail := runnerDetailResponse{
-		RunnerView: view.View(run).For(isVisitor(r.Context())),
+		RunnerView: view.For(isVisitor(r.Context())),
 		Timeline:   runnerTimeline(run, s.ctrl.Now()),
 	}
 
-	if host, herr := s.ctrl.Store().GetHost(r.Context(), run.HostID); herr == nil {
+	if herr == nil {
 		h := s.ctrl.HostView(host).For(isPlatform(r))
 		detail.Host = &h
 		// Logs come from the runner's own agent, so a host that is not
@@ -97,7 +104,7 @@ func (s *Server) handleGetRunner(w http.ResponseWriter, r *http.Request) {
 		// container to read.
 		detail.LogsAvailable = host.Healthy(s.ctrl.Now()) && run.State != store.RunnerRemoved
 	}
-	if pool, perr := s.ctrl.Store().GetPool(r.Context(), run.PoolID); perr == nil {
+	if perr == nil {
 		if pv, verr := s.ctrl.PoolRenderer(r.Context()); verr == nil {
 			p := poolFor(r, pv.View(pool))
 			detail.Pool = &p

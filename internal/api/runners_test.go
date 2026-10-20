@@ -338,6 +338,39 @@ func TestRunnerDetailAndTimeline(t *testing.T) {
 	}
 }
 
+// A busy runner's job row can go between the reads that render it: the job
+// finishes and its row is replaced while a drawer is being opened. The list
+// route has always tolerated that (RunnerRenderer renders a runner without a
+// job whose row is gone), so a detail route that answered 500 for the same
+// fleet state would be the one page that cannot be opened at the moment an
+// operator is most likely to open it.
+func TestARunnerWhoseJobRowWentAwayStillRendersItsDetail(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux-x64")
+	host := h.host("vm-1")
+	run := h.runner(pool, host, store.RunnerBusy)
+	run.CurrentJobID = "job_gone_between_reads"
+	if err := h.st.UpdateRunner(h.ctx, run); err != nil {
+		t.Fatalf("UpdateRunner: %v", err)
+	}
+	u, _ := h.user("viewer", store.RoleViewer)
+
+	resp := h.do(request{method: http.MethodGet, path: "/api/v1/runners/" + run.ID, cookie: h.session(u)})
+	resp.mustStatus(t, http.StatusOK, "runner detail")
+	var detail runnerDetailResponse
+	resp.into(t, &detail)
+	if detail.CurrentJob != nil {
+		t.Errorf("the detail carries a job whose row is gone: %+v", detail.CurrentJob)
+	}
+	if detail.Host == nil || detail.Host.ID != host.ID {
+		t.Errorf("the detail does not carry the host: %+v", detail.Host)
+	}
+	if detail.Pool == nil || detail.Pool.ID != pool.ID {
+		t.Errorf("the detail does not carry the pool: %+v", detail.Pool)
+	}
+}
+
 // A runner stuck in `registering` has one symptom and two unrelated causes: a
 // container that never started is a backend or image problem on its host, and
 // one that started and never reached GitHub is a credential, network or GitHub
