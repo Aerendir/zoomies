@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "9235f5f",
+  "generated_from": "09a6344",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2651,6 +2651,20 @@
       "fix": "Clear the certificate for machines if the controller is on a public certificate, or paste the authority that signed the controller's certificate.",
       "verify": null,
       "status_sentence": "Machines may refuse this controller's certificate and never join.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
+    },
+    {
+      "id": "provider.machine_disk_small",
+      "kind": "problem",
+      "title": "provider.machine_disk_small",
+      "category": "reliability",
+      "severity": "warning",
+      "detection": "runtime",
+      "detects": "The machines this provider builds have less disk than their slots are charged for. Each runner is given 10 GB of working room above the host's 2 GB reserve, so a job on a smaller machine fills the disk part-way through and fails with `no space left on device`. Found by the provider's check.",
+      "fix": "Raise the machine's disk to the figure the finding names, give the machine fewer slots, or enlarge the template it clones.",
+      "verify": null,
+      "status_sentence": "Machines may run out of disk part-way through a job.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
     },

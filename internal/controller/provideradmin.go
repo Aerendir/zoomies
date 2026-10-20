@@ -11,6 +11,7 @@ import (
 
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/provider"
+	"github.com/eyupio/zoomies/internal/scheduler"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -211,6 +212,9 @@ func (c *Controller) CheckProvider(ctx context.Context, row *store.Provider) (Pr
 	if f, ok := machineCertificateFinding(row); ok {
 		out.Findings = append(out.Findings, f)
 	}
+	if f, ok := machineDiskFinding(row, report); ok {
+		out.Findings = append(out.Findings, f)
+	}
 	// The recorded error is the worst thing the check found, in one sentence,
 	// because that is what a card has room for; the findings are the whole of
 	// it and are returned to the caller who asked.
@@ -262,6 +266,49 @@ func machineCertificateFinding(row *store.Provider) (config.Finding, bool) {
 			"\"certificate signed by unknown authority\".",
 		Fix: "clear the certificate for machines if the controller is on a public certificate, or paste the authority " +
 			"that signed the controller's certificate.",
+	}, true
+}
+
+// machineDiskFinding warns of a provider whose machines have less disk than
+// their slots are charged for.
+//
+// Each runner is given scheduler.RunnerDiskMB of working room above the host's
+// own reserve, and a machine with less fills its disk part-way through a job,
+// which fails with "no space left on device" long after the machine was rented
+// and looked healthy. The disk is the shape's when the operator typed one, and
+// otherwise what the template was seen to build; with neither there is nothing
+// to judge, and a warning built on a guess would teach people to ignore the
+// card.
+func machineDiskFinding(row *store.Provider, report provider.Report) (config.Finding, bool) {
+	disk := row.MachineDiskMB
+	typed := disk > 0
+	if !typed {
+		disk = report.BuildsDiskMB
+	}
+	if disk <= 0 {
+		return config.Finding{}, false
+	}
+	slots := providerSlots(row)
+	need := store.MinHostReserveDiskMB + int64(slots)*scheduler.RunnerDiskMB
+	if disk >= need {
+		return config.Finding{}, false
+	}
+	fix := "raise the machine's disk to at least " + scheduler.FormatMB(need) +
+		", give the machine fewer slots, or enlarge the template it clones."
+	if typed {
+		fix = "raise the machine's disk to at least " + scheduler.FormatMB(need) +
+			" or give the machine fewer slots."
+	}
+	return config.Finding{
+		Code:     "provider.machine_disk_small",
+		Severity: config.SeverityWarning,
+		Setting:  "machine_disk_mb",
+		Title: fmt.Sprintf("the machines this provider builds have %s of disk, and %s need %s",
+			scheduler.FormatMB(disk), plural(slots, "runner"), scheduler.FormatMB(need)),
+		Detail: fmt.Sprintf("each runner is given %s of working room above the host's %s reserve. A job on a machine "+
+			"with less fills the disk part-way through and fails with \"no space left on device\".",
+			scheduler.FormatMB(scheduler.RunnerDiskMB), scheduler.FormatMB(store.MinHostReserveDiskMB)),
+		Fix: fix,
 	}, true
 }
 
