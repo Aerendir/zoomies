@@ -213,17 +213,30 @@ func importsAgentGuidance(p, content string) bool {
 	if p != "CLAUDE.md" && p != ".claude/CLAUDE.md" {
 		return false
 	}
-	fence := false
+	fence := ""
 	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
 		trim := strings.TrimSpace(line)
 		if strings.HasPrefix(trim, "```") || strings.HasPrefix(trim, "~~~") {
-			fence = !fence
+			// Only the delimiter that opened the fence closes it: a backtick
+			// fence inside a tilde fence is an example, not an end.
+			mark := trim[:3]
+			if fence == "" {
+				fence = mark
+			} else if fence == mark {
+				fence = ""
+			}
 			continue
 		}
-		if fence || !strings.HasPrefix(trim, "@") || strings.ContainsAny(trim, " \t") {
+		if fence != "" || !strings.HasPrefix(trim, "@") || strings.ContainsAny(trim, " \t") {
 			continue
 		}
-		if path.Clean(path.Join(path.Dir(p), trim[1:])) == "AGENTS.md" {
+		target := trim[1:]
+		// An absolute path names a file outside the repository, so it is not
+		// the repository's AGENTS.md however it resolves.
+		if strings.HasPrefix(target, "/") {
+			continue
+		}
+		if path.Clean(path.Join(path.Dir(p), target)) == "AGENTS.md" {
 			return true
 		}
 	}
