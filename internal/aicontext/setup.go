@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -141,6 +142,26 @@ func PlanSetupFiles(key RepositoryKey, fullName string, config Config, files []S
 		if p == ".claude/CLAUDE.md" && f.SHA == "" || p == "CLAUDE.md" && f.SHA == "" && existing[".claude/CLAUDE.md"].SHA != "" {
 			continue
 		}
+		// Claude Code expands an @AGENTS.md import, so a managed block in both
+		// files is loaded twice and fails a repository that checks for one copy.
+		// AGENTS.md owns the block whenever the Claude entry point imports it.
+		if p != "AGENTS.md" && importsAgentGuidance(p, f.Content) {
+			clean, err := removeManagedSection(f.Content)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", p, err)
+			}
+			// Removing a block at the end of the file would otherwise leave the
+			// blank line that separated it, so the healed file fails a format check.
+			newline := "\n"
+			if strings.Contains(f.Content, "\r\n") {
+				newline = "\r\n"
+			}
+			if strings.HasSuffix(clean, newline+newline) {
+				clean = strings.TrimSuffix(clean, newline)
+			}
+			add(p, clean)
+			continue
+		}
 		wrapper := "@AGENTS.md"
 		if p == ".claude/CLAUDE.md" {
 			wrapper = "@../AGENTS.md"
@@ -183,6 +204,30 @@ func PlanSetupFiles(key RepositoryKey, fullName string, config Config, files []S
 
 func assistantDocument(p string) bool {
 	return p == "AGENTS.md" || p == "CLAUDE.md" || p == ".claude/CLAUDE.md"
+}
+
+// importsAgentGuidance reports whether a Claude entry point imports the
+// repository's AGENTS.md. Only a line that Claude Code executes as an import
+// counts, so an example inside a fenced code block is not one.
+func importsAgentGuidance(p, content string) bool {
+	if p != "CLAUDE.md" && p != ".claude/CLAUDE.md" {
+		return false
+	}
+	fence := false
+	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "```") || strings.HasPrefix(trim, "~~~") {
+			fence = !fence
+			continue
+		}
+		if fence || !strings.HasPrefix(trim, "@") || strings.ContainsAny(trim, " \t") {
+			continue
+		}
+		if path.Clean(path.Join(path.Dir(p), trim[1:])) == "AGENTS.md" {
+			return true
+		}
+	}
+	return false
 }
 
 func assistantEntryPoint(p string) string {

@@ -294,6 +294,73 @@ func TestEarlierTightMarkersUpgradeToFormatterCleanOnes(t *testing.T) {
 	}
 }
 
+// A repository that keeps the block in AGENTS.md and imports it from CLAUDE.md
+// must not gain a second copy: Claude Code expands the import and loads both.
+func TestSetupLeavesAnAgentsImportToCarryTheBlockOnce(t *testing.T) {
+	key, config := setupInputs()
+	agents := "# AGENTS\n\n" + managedBlock(assistantEntryPoint("AGENTS.md"), "\n") + "\n"
+	claude := "# CLAUDE\n\nThe rules live in AGENTS.md.\n\n@AGENTS.md\n\n" + managedBlock(assistantEntryPoint("CLAUDE.md"), "\n") + "\n"
+	files := []SetupFile{
+		{Path: "AGENTS.md", SHA: strings.Repeat("a", 40), Content: agents},
+		{Path: "CLAUDE.md", SHA: strings.Repeat("b", 40), Content: claude},
+	}
+	changes, err := PlanSetupFiles(key, "owner/repo", config, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, change := range changes {
+		if change.Path != "CLAUDE.md" {
+			continue
+		}
+		found = true
+		want := "# CLAUDE\n\nThe rules live in AGENTS.md.\n\n@AGENTS.md\n"
+		if change.Content != want || change.PreviousSHA != strings.Repeat("b", 40) {
+			t.Fatalf("CLAUDE.md block was not removed from around the import:\n%s", change.Content)
+		}
+	}
+	if !found {
+		t.Fatal("the duplicate block in CLAUDE.md was left in place")
+	}
+	for _, change := range changes {
+		if change.Path == "AGENTS.md" {
+			t.Fatal("the AGENTS.md block must stay where it is")
+		}
+	}
+	saved := append([]SetupFile{}, files...)
+	for _, change := range changes {
+		replaced := false
+		for i := range saved {
+			if saved[i].Path == change.Path {
+				saved[i] = SetupFile{Path: change.Path, SHA: strings.Repeat("c", 40), Content: change.Content}
+				replaced = true
+			}
+		}
+		if !replaced {
+			saved = append(saved, SetupFile{Path: change.Path, SHA: strings.Repeat("c", 40), Content: change.Content})
+		}
+	}
+	if retry, err := PlanSetupFiles(key, "owner/repo", config, saved); err != nil || len(retry) != 0 {
+		t.Fatalf("import-only Claude guidance is not idempotent: %v, %+v", err, retry)
+	}
+}
+
+// An @AGENTS.md line that only appears in an example is not an import, so the
+// Claude file still needs its own entry point.
+func TestSetupDoesNotMistakeAFencedImportForOne(t *testing.T) {
+	key, config := setupInputs()
+	original := "# CLAUDE\n\nFor example:\n\n```\n@AGENTS.md\n```\n"
+	changes, err := PlanSetupFiles(key, "owner/repo", config, []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: original}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range changes {
+		if change.Path == "CLAUDE.md" && !strings.Contains(change.Content, managedStart) {
+			t.Fatal("a fenced example was treated as an import")
+		}
+	}
+}
+
 func TestSetupSharesTheGuideWithoutChangingClaudeImportWrappers(t *testing.T) {
 	key, config := setupInputs()
 	for _, path := range []string{"CLAUDE.md", ".claude/CLAUDE.md"} {

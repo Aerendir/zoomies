@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -179,6 +180,30 @@ func enterpriseServerWorkflow(workflow string) string {
 		"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1", "actions/upload-artifact@c6a366c94c3e0affe28c06c8df20a878f24da3cf # v3.2.2",
 		"actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5", "actions/download-artifact@a9bc5e6ef2cb54c177f32aa5726adaa15e7e2d59 # v3.1.0",
 	).Replace(workflow)
+}
+
+var workflowActionUse = regexp.MustCompile(`(?m)^([ \t]*(?:-[ \t]+)?uses:[ \t]+)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([^ \t\r\n]+)([^\r\n]*)$`)
+
+// keepInstalledActionPins leaves each action at the version the repository
+// already has. Regenerating the workflow around them is the repair; silently
+// moving a pin backwards, even to one this release ships, is a change nobody
+// reviewed and can undo a security update the repository had taken.
+func keepInstalledActionPins(installed, generated string) string {
+	pins := map[string]string{}
+	for _, m := range workflowActionUse.FindAllStringSubmatch(installed, -1) {
+		pins[m[2]] = m[3] + m[4]
+	}
+	if len(pins) == 0 {
+		return generated
+	}
+	return workflowActionUse.ReplaceAllStringFunc(generated, func(line string) string {
+		m := workflowActionUse.FindStringSubmatch(line)
+		pin, ok := pins[m[2]]
+		if !ok {
+			return line
+		}
+		return m[1] + m[2] + "@" + pin
+	})
 }
 
 func indentScript(s string) string {
