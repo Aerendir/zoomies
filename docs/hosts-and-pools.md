@@ -514,8 +514,8 @@ must not be reduced gives its own figure instead. See
 [`runners.minimum_cpus`](configuration.md#runnersminimum_cpus-and-runnersminimum_memory_mb-the-least-a-runner-will-take).
 
 Disk and the process limit are independent of the choice. Neither has a share
-to be given (free disk is a measurement rather than a budget) so a pool may
-cap its cache's disk and still leave its size to the host.
+to be given (a runner is charged a fixed working room on disk, not a slot's
+share) so a pool may cap its cache's disk and still leave its size to the host.
 
 In the editor the size is a section of its own, after the hosts and before the
 count, because that is the order the decision is made in: these are the

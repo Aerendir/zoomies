@@ -75,12 +75,17 @@ func TestAProvidersSeenSizeIsForgottenWhenItsMachineShapeChanges(t *testing.T) {
 		{"its maximum machines", func(p *Provider) { p.MaxMachines = 9 }, false},
 		{"its typed size cleared for the template", func(p *Provider) { p.MachineCPUs, p.MachineMemoryMB = 0, 0 }, true},
 		{"its template", func(p *Provider) { p.Settings = StringMap{"template_id": "9200"} }, true},
+		// A typed disk cleared back to the template is as much a new machine
+		// as a typed processor count cleared: kept, the larger figure would
+		// judge a template that builds a smaller disk, and the fleet would rent
+		// machines with too little room for their runners.
+		{"its typed disk cleared for the template", func(p *Provider) { p.MachineDiskMB = 0 }, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newTestStore(t)
 			ctx := context.Background()
 			p := &Provider{Kind: ProviderFake, Name: "lab", MachineCPUs: 8, MachineMemoryMB: 16384,
-				Settings: StringMap{"template_id": "9100"}, MaxMachines: 2}
+				MachineDiskMB: 40960, Settings: StringMap{"template_id": "9100"}, MaxMachines: 2}
 			if err := s.CreateProvider(ctx, p); err != nil {
 				t.Fatalf("CreateProvider: %v", err)
 			}

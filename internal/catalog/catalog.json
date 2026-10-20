@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "09a6344",
+  "generated_from": "f4285cd",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -2241,8 +2241,8 @@
       "category": "capacity",
       "severity": "warning",
       "detection": "runtime",
-      "detects": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts.",
-      "fix": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts.",
+      "detects": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts. A pool whose room is bounded by disk (each runner is charged 10 GB of working room unless the pool sets `resources.disk_gb`) can also set `resources.disk_gb` lower, or free space on its hosts.",
+      "fix": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts. A pool whose room is bounded by disk (each runner is charged 10 GB of working room unless the pool sets `resources.disk_gb`) can also set `resources.disk_gb` lower, or free space on its hosts.",
       "verify": "The pool's maximum is at or below the room its page shows, and the entry leaves the list.",
       "status_sentence": "The fleet is allowed more runners than its machines have room for.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",

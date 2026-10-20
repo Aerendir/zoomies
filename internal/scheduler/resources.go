@@ -55,11 +55,13 @@ const (
 // limits charges each runner exactly one slot's worth, so its capacity is what
 // admits work, exactly as it did before any of this existed.
 //
-// Disk has no fallback. Free disk is a measurement rather than a budget, and
-// dividing what is left into shares would turn every fill of the cache into a
-// refusal to place work that had always placed. What guards it instead is the
-// reserve floor: a pool that asks for disk is charged it, and a host at or
-// below its reserve takes nothing.
+// Disk's fallback is not a share but the working room (RunnerDiskMB): free
+// disk is a measurement rather than a budget, so it is not cut into slots, and
+// each runner a pass adds is charged a fixed room against what is free above
+// the host's reserve. The trade accepted is that a host with under about 12 GB
+// free (the 2 GB reserve floor plus one runner's room) takes no new runner,
+// where before it took work and failed it part-way through a download. A pool
+// whose jobs need less sets resources.disk_gb, which is charged instead.
 //
 // A docker-in-docker runner is two containers, and what it is charged follows
 // what the two are given. A limit an operator typed says what the job may
@@ -1050,9 +1052,12 @@ func HostRoomFor(h *store.Host, p *store.Pool) HostRoom {
 	if alloc.MemoryKnown && want.MemoryMB > 0 {
 		consider(int(alloc.MemoryMB/want.MemoryMB), "memory")
 	}
-	// Disk only where the pool asks for it. Free disk is a measurement rather
-	// than a budget -- see Reserve -- so dividing what is left into runners
-	// would put a machine's cache on the pool's account.
+	// Disk is charged where the pool asks for it, and otherwise the working
+	// room every runner is given (RunnerDiskMB), exactly as Reserve charges it
+	// for placement: a count that left it out would promise runners the pass
+	// refuses. Free disk is a measurement, not a budget, so this count moves
+	// as a host's caches fill and empty; that is the page agreeing with
+	// placement, not drifting from it.
 	if alloc.DiskKnown && want.DiskMB > 0 {
 		consider(int(alloc.DiskMB/want.DiskMB), "disk")
 	}

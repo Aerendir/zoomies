@@ -132,20 +132,20 @@ func (s *Store) UpdateProvider(ctx context.Context, p *Provider) error {
 		return err
 	}
 	// The size a provider's machines were seen to be is evidence about the
-	// machines it built, so an edit to what decides that size (the size typed
-	// on the form, or the settings that pick the template) makes it evidence
-	// about a different machine. It is forgotten in the same statement rather
-	// than left for the fit check: an operator who clears a larger typed size
-	// to fall back on a smaller template would otherwise have the template
-	// judged at the old size, and the fleet would rent machines too small for
-	// the work. SQLite reads every column in a SET from the row as it was, so
-	// the comparison is against the old figures.
-	changed := `(machine_cpus <> ? OR machine_memory_mb <> ? OR settings <> ?)`
+	// machines it built, so an edit to what decides that size (the processors,
+	// memory or disk typed on the form, or the settings that pick the template)
+	// makes it evidence about a different machine. It is forgotten in the same
+	// statement rather than left for the fit check: an operator who clears a
+	// larger typed size to fall back on a smaller template would otherwise have
+	// the template judged at the old size, and the fleet would rent machines
+	// too small for the work. SQLite reads every column in a SET from the row
+	// as it was, so the comparison is against the old figures.
+	changed := `(machine_cpus <> ? OR machine_memory_mb <> ? OR machine_disk_mb <> ? OR settings <> ?)`
 	settings, err := p.Settings.Value()
 	if err != nil {
 		return err
 	}
-	shape := []any{p.MachineCPUs, p.MachineMemoryMB, settings}
+	shape := []any{p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, settings}
 	args := []any{p.Name, p.Endpoint, p.CAPEM, p.MachineCAPEM, boolInt(p.InsecureSkipVerify), p.Settings,
 		p.MachineLabels, p.MachineCapacity, string(p.MachineBackend), platform,
 		p.MachineCPUs, p.MachineMemoryMB, p.MachineDiskMB, p.PoolSelector, p.MaxMachines, p.MinMachines,

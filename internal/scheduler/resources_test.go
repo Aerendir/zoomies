@@ -713,6 +713,25 @@ func TestTheLowOnDiskFixNamesTheWorkingRoom(t *testing.T) {
 	}
 }
 
+// A pool that typed its disk is charged what it typed, not the working room,
+// so telling its operator to type a figure below 10 GB is advice about a
+// default they are not using; the figure to lower is their own.
+func TestTheLowOnDiskFixForATypedDiskNamesThePoolsOwnFigure(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
+	p := testPool("typed", "typed")
+	p.Resources.DiskGB = 8
+	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now).why(p)
+	if !strings.Contains(b.what, "low on disk") {
+		t.Fatalf("a host with a few GB free is short of disk, not too small: %q", b.what)
+	}
+	if !strings.Contains(b.fix, "lower the pool's resources.disk_gb") {
+		t.Errorf("the fix %q does not say to lower the pool's own figure", b.fix)
+	}
+	if strings.Contains(b.fix, "10 GB") {
+		t.Errorf("the fix %q names the working room the pool does not use", b.fix)
+	}
+}
+
 // The same answer once a runner of this pass has used up the room the host
 // had, which is the other way to arrive at the low-on-disk branch.
 func TestAHostWhoseRoomThisPassUsedUpIsLowOnDiskToo(t *testing.T) {

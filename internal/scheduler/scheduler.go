@@ -1950,7 +1950,13 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 		// Disk is the one of the three that no job finishing will return: a
 		// runner that exits leaves its caches behind on purpose, so telling an
 		// operator to wait here is telling them to wait for nothing.
-		b.fix = "free space on those hosts' work directories, set the pool's resources.disk_gb below the " + formatMB(RunnerDiskMB) + " of working room a runner is given, or add a host"
+		if p.Resources.DiskGB > 0 {
+			// The pool is charged what it typed, so the figure to lower is
+			// its own; the working room is a default it is not using.
+			b.fix = "free space on those hosts' work directories, lower the pool's resources.disk_gb, or add a host"
+		} else {
+			b.fix = "free space on those hosts' work directories, set the pool's resources.disk_gb below the " + formatMB(RunnerDiskMB) + " of working room a runner is given, or add a host"
+		}
 	case profile > 0 && profile+unhealthy+cordoned == len(hs.hosts):
 		// Both halves are things an operator wrote, so both are named: either
 		// can be changed, and which one is right is theirs to say.
