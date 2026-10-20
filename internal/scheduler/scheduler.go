@@ -35,8 +35,9 @@ type Snapshot struct {
 	Pools []*store.Pool
 	// Runners holds the non-removed runners of each pool, keyed by pool ID.
 	Runners map[string][]*store.Runner
-	// Jobs holds queued and in-progress jobs. Only queued jobs create demand:
-	// an in-progress job is already represented by the busy runner running it.
+	// Jobs holds queued jobs; the controller never puts an in-progress job
+	// here, see RunnersWithAJob. An in-progress job supplied by another caller
+	// still counts towards the guard that spares a runner with work on it.
 	Jobs []*store.Job
 	// RunnersWithAJob is every runner a job is in progress on, by ID, whatever
 	// that runner's row says. An in-progress job in Jobs counts towards it too.
