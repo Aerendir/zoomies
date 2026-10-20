@@ -71,6 +71,8 @@ const (
 	dialTimeout           = 5 * time.Second
 	responseHeaderTimeout = 30 * time.Second
 	defaultCallTimeout    = 60 * time.Second
+	defaultPingAfter      = 15 * time.Second
+	defaultPingTimeout    = 10 * time.Second
 )
 
 // maxErrorBody is how much of a failure's body is read before it is discarded.
@@ -183,6 +185,12 @@ func New(opts Options) (*Client, error) {
 		ResponseHeaderTimeout: responseHeaderTimeout,
 		ExpectContinueTimeout: time.Second,
 		ForceAttemptHTTP2:     true,
+		// Stream deadlines leave an HTTP/2 connection alive. Probe silence
+		// and close a dead path so the machine loop can dial the node again.
+		HTTP2: &http.HTTP2Config{
+			SendPingTimeout: defaultPingAfter,
+			PingTimeout:     defaultPingTimeout,
+		},
 	}
 	if opts.DialContext != nil {
 		// A proxy would take the connection out of the private tunnel, and
