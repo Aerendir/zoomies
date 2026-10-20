@@ -228,10 +228,16 @@ func (c *Controller) CheckProvider(ctx context.Context, row *store.Provider) (Pr
 	// The size a machine is built at when the row names none. It is what the
 	// fit check judges a provider's next machine by until one of its machines
 	// has joined and measured itself, and a check made after the template
-	// changed is newer than any machine built before it.
+	// changed is newer than any machine built before it. A template whose
+	// disk the provider could not read reports none, which is not a smaller
+	// disk, so the disk already known is carried rather than forgotten.
 	if report.BuildsCPUs > 0 && report.BuildsMemoryMB > 0 {
+		disk := report.BuildsDiskMB
+		if disk <= 0 {
+			disk = row.SeenDiskMB
+		}
 		if _, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, report.BuildsCPUs, report.BuildsMemoryMB,
-			report.BuildsDiskMB, store.MachineSizeFromTemplate, now); err != nil {
+			disk, store.MachineSizeFromTemplate, now); err != nil {
 			c.log.Warn("could not record the size a provider builds", "provider", row.ID, "error", err)
 		}
 	}
@@ -293,18 +299,22 @@ func machineDiskFinding(row *store.Provider, report provider.Report) (config.Fin
 	if disk >= need {
 		return config.Finding{}, false
 	}
-	fix := "raise the machine's disk to at least " + scheduler.FormatMB(need) +
-		", give the machine fewer slots, or enlarge the template it clones."
+	fix := "raise the machine's disk to at least " + scheduler.FormatMB(need)
 	if typed {
-		fix = "raise the machine's disk to at least " + scheduler.FormatMB(need) +
-			" or give the machine fewer slots."
+		fix += " or give the machine fewer slots."
+	} else {
+		fix += ", give the machine fewer slots, or enlarge the template it clones."
+	}
+	verb := "need"
+	if slots == 1 {
+		verb = "needs"
 	}
 	return config.Finding{
 		Code:     "provider.machine_disk_small",
 		Severity: config.SeverityWarning,
 		Setting:  "machine_disk_mb",
-		Title: fmt.Sprintf("the machines this provider builds have %s of disk, and %s need %s",
-			scheduler.FormatMB(disk), plural(slots, "runner"), scheduler.FormatMB(need)),
+		Title: fmt.Sprintf("the machines this provider builds have %s of disk, and %s %s %s",
+			scheduler.FormatMB(disk), plural(slots, "runner"), verb, scheduler.FormatMB(need)),
 		Detail: fmt.Sprintf("each runner is given %s of working room above the host's %s reserve. A job on a machine "+
 			"with less fills the disk part-way through and fails with \"no space left on device\".",
 			scheduler.FormatMB(scheduler.RunnerDiskMB), scheduler.FormatMB(store.MinHostReserveDiskMB)),

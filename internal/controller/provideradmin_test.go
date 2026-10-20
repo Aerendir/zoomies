@@ -65,7 +65,7 @@ func TestTheCheckWarnsWhenAShapeIsTooSmallForItsSlots(t *testing.T) {
 		t.Errorf("finding = %+v, want the warning provider.machine_disk_small on machine_disk_mb", got)
 	}
 	// 2048 reserve + 2 * 10240 working room.
-	if !strings.Contains(got.Title, "8 GB") || !strings.Contains(got.Title, "22 GB") || !strings.Contains(got.Title, "2 runners") {
+	if !strings.Contains(got.Title, "8 GB") || !strings.Contains(got.Title, "22 GB") || !strings.Contains(got.Title, "2 runners need ") {
 		t.Errorf("title = %q, want the disk it has (8 GB), what 2 runners need (22 GB)", got.Title)
 	}
 	if !strings.Contains(got.Detail, "no space left on device") {
@@ -106,7 +106,7 @@ func TestTheCheckCountsAShapeWithNoSlotsAsOne(t *testing.T) {
 	if !ok {
 		t.Fatal("12287 MB is a megabyte short of one slot and drew no finding")
 	}
-	if !strings.Contains(f.Title, "1 runner ") {
-		t.Errorf("title = %q, want the single runner counted in the singular", f.Title)
+	if !strings.Contains(f.Title, "1 runner needs ") {
+		t.Errorf("title = %q, want the single runner counted in the singular, verb and all", f.Title)
 	}
 }

@@ -404,6 +404,29 @@ func TestAProviderWhoseTemplateGivesASmallDiskIsUnservable(t *testing.T) {
 	if !strings.Contains(misfit.Fix, " GB of disk") || !strings.Contains(misfit.Fix, "more disk") {
 		t.Errorf("fix %q does not name a disk figure in GB and the template's disk", misfit.Fix)
 	}
+	// One slot: the 2 GB reserve floor plus one runner's 10 GB of room.
+	if !strings.Contains(misfit.Fix, "12 GB") {
+		t.Errorf("fix %q does not name the 12 GB one slot needs", misfit.Fix)
+	}
+}
+
+// A provider nothing has measured has no disk to judge, and a machine of
+// unknown disk is judged as an agent that has not reported one is: able to
+// run. Charging the working room against a disk of zero would refuse every
+// pool for a provider whose template simply has not been checked yet.
+func TestAProviderOfUnknownDiskIsJudgedAbleToRun(t *testing.T) {
+	p := smallProvider("lab")
+	p.MachineCapacity = 1
+	p.MachineDiskMB, p.SeenDiskMB = 0, 0
+	pool := demandPool("builds", "self-hosted", "linux", "x64")
+
+	synth := providerSynthHost(p, machineNow)
+	if synth.DiskTotalMB != 0 {
+		t.Fatalf("synthetic disk = %d MB, want 0 for a provider nothing has measured", synth.DiskTotalMB)
+	}
+	if !scheduler.HostCanRun(synth, pool, machineNow) {
+		t.Fatal("a provider of unknown disk was judged unable to run a runner")
+	}
 }
 
 // A size typed on the provider is what the next machine will be built at, so
@@ -437,5 +460,76 @@ func TestTheSizeSentenceNamesTheDisk(t *testing.T) {
 	typed.MachineDiskMB = 32768
 	if got := machineSizeSaid(typed); got != "its machine size is 32 GB of disk" {
 		t.Errorf("a typed disk alone said %q, want it counted as a typed size", got)
+	}
+}
+
+// A check that cannot read the template's disk says nothing about it, and
+// nothing is not a smaller disk. Recorded as zero, it would drop the figure a
+// machine measured, and the next machine would be judged as one of unknown
+// disk: the warning about a disk too small for its slots would go quiet, and
+// the fleet would rent it again.
+func TestACheckThatCannotReadTheDiskKeepsTheDiskAMachineMeasured(t *testing.T) {
+	h := newHarness(t)
+	h.enableProviders(t)
+	row := h.providerRow(t, "lab")
+	if _, err := h.st.SetProviderMachineSizeSeen(h.ctx, row.ID, 2, 3915, 20480,
+		store.MachineSizeFromMachine, h.c.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("SetProviderMachineSizeSeen: %v", err)
+	}
+	// The fake reports processors and memory and no disk, as a template whose
+	// disk the provider could not read does.
+	h.fake.SetBuilds(2, 4096)
+	row, err := h.st.GetProvider(h.ctx, row.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	if _, err := h.c.CheckProvider(h.ctx, row); err != nil {
+		t.Fatalf("CheckProvider: %v", err)
+	}
+	fresh, err := h.st.GetProvider(h.ctx, row.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	if fresh.SeenCPUs != 2 || fresh.SeenMemoryMB != 4096 || fresh.SeenFrom != store.MachineSizeFromTemplate {
+		t.Fatalf("seen = %d CPUs, %d MB from %q; want the template's processors and memory", fresh.SeenCPUs, fresh.SeenMemoryMB, fresh.SeenFrom)
+	}
+	if fresh.SeenDiskMB != 20480 {
+		t.Errorf("seen disk = %d MB after a check that read none, want the 20480 a machine measured", fresh.SeenDiskMB)
+	}
+}
+
+// The same from the other side: an agent that cannot measure its work
+// directory reports no disk, and the template's figure is still the best
+// evidence of what the machine has.
+func TestAMachineThatReportsNoDiskKeepsTheDiskTheTemplateGave(t *testing.T) {
+	h := newHarness(t)
+	_, row := h.machineFleet(t)
+	if _, err := h.st.SetProviderMachineSizeSeen(h.ctx, row.ID, 2, 4096, 32768,
+		store.MachineSizeFromTemplate, h.c.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("SetProviderMachineSizeSeen: %v", err)
+	}
+
+	h.machinePass(t)
+	if got := len(h.machines()); got != 1 {
+		t.Fatalf("%d machines were bought for one queued job, want 1", got)
+	}
+	m := h.drive(t, h.onlyMachine(t).ID, store.MachineEnrolling, 8)
+	req := joinRequest(m.Name, h.tokenFromBootstrap(t, m))
+	req.Capacity, req.CPUs, req.MemoryMB, req.DiskTotalMB = 2, 2, 3915, 0
+	if _, err := h.c.Join(h.ctx, req, "203.0.113.9"); err != nil {
+		t.Fatalf("joining as machine %s: %v", m.Name, err)
+	}
+	h.machinePass(t)
+	h.drive(t, m.ID, store.MachineReady, 3)
+
+	fresh, err := h.st.GetProvider(h.ctx, row.ID)
+	if err != nil {
+		t.Fatalf("GetProvider: %v", err)
+	}
+	if fresh.SeenCPUs != 2 || fresh.SeenMemoryMB != 3915 || fresh.SeenFrom != store.MachineSizeFromMachine {
+		t.Fatalf("seen = %d CPUs, %d MB from %q; want what the machine measured", fresh.SeenCPUs, fresh.SeenMemoryMB, fresh.SeenFrom)
+	}
+	if fresh.SeenDiskMB != 32768 {
+		t.Errorf("seen disk = %d MB after a machine that measured none, want the template's 32768", fresh.SeenDiskMB)
 	}
 }
