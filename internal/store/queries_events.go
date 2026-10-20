@@ -146,6 +146,13 @@ func sameArgument(a, b any) bool {
 	return a == b
 }
 
+// JobCondition keeps an age-based retirement tied to the row it selected.
+// A newly learned start or a completed delivery makes that selection obsolete.
+type JobCondition struct {
+	State     JobState
+	StartedAt *time.Time
+}
+
 // ApplyJob is UpsertJob that also says what changed.
 //
 // The change is worked out inside the write transaction, against the row as it
@@ -156,7 +163,9 @@ func sameArgument(a, b any) bool {
 // A delivery that leaves the row as it is writes nothing. Most of what a job is
 // sent after its first delivery is that: GitHub sends at least once, and the
 // poller finds jobs the webhook already announced.
-func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
+// Optional conditions are checked against the current row before writing;
+// a mismatch leaves it untouched and reports no state change.
+func (s *Store) ApplyJob(ctx context.Context, j *Job, conditions ...JobCondition) (*Job, JobChange, error) {
 	var out *Job
 	var change JobChange
 	err := s.tx(ctx, func(tx *sql.Tx) error {
@@ -164,6 +173,9 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 		existing, err := scanJob(row)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
+			if len(conditions) != 0 {
+				return ErrConflict
+			}
 			if j.ID == "" {
 				j.ID = NewID(PrefixJob)
 			}
@@ -205,6 +217,17 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 		// true before the job moved on. The steps are the sharpest case: an
 		// "in_progress" that arrives after "completed" would put every step
 		// back to "queued".
+		for _, condition := range conditions {
+			sameStart := existing.StartedAt == nil && condition.StartedAt == nil
+			if existing.StartedAt != nil && condition.StartedAt != nil {
+				sameStart = existing.StartedAt.Equal(*condition.StartedAt)
+			}
+			if existing.State != condition.State || !sameStart {
+				out = existing
+				change.PreviousState = existing.State
+				return nil
+			}
+		}
 		merged := *existing
 		current := jobRank(j.State) >= jobRank(existing.State)
 		if current {
@@ -1877,4 +1900,25 @@ func (s *Store) PruneSamples(ctx context.Context, before time.Time) (int64, erro
 		}
 		return res.RowsAffected()
 	})
+}
+
+// ListStaleRunningJobs finds jobs whose execution or workflow lifetime has elapsed.
+func (s *Store) ListStaleRunningJobs(ctx context.Context, startedBefore, queuedBefore time.Time) ([]*Job, error) {
+	rows, err := s.read.QueryContext(ctx, `SELECT `+jobCols+` FROM jobs
+        WHERE state = ? AND ((started_at IS NOT NULL AND started_at < ?)
+        OR (started_at IS NULL AND queued_at < ?)) ORDER BY queued_at`,
+		string(JobInProgress), ms(startedBefore), ms(queuedBefore))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Job
+	for rows.Next() {
+		j, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
 }
