@@ -15,6 +15,10 @@ on:
       - "web/package.json"
       - "web/package-lock.json"
       - "SECURITY.md"
+      # The Vulnerabilities check reads the ignore list that sits beside each
+      # manifest it scans, so a change to any of them moves the check.
+      - "osv-scanner.toml"
+      - "**/osv-scanner.toml"
   schedule:
     # Re-evaluate repository and supply-chain posture every week.
     - cron: "23 7 * * 6"

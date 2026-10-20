@@ -89,7 +89,10 @@ _sources: dict[str, tuple[object, str]] = {}
 _FULL_PAGE_LIMIT = 15_000
 
 _comment = re.compile(r"<!--.*?-->", re.DOTALL)
-_jsonld = re.compile(r"<script\b[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
+# The end tag is matched as widely as a browser matches it: `</script >` and
+# `</script foo="bar">` both close the element, and a pattern that missed them
+# would leave the script's text in the copy llms.txt carries.
+_jsonld = re.compile(r"<script\b[^>]*>.*?</script[^<>]*>", re.DOTALL | re.IGNORECASE)
 _snippet = re.compile(r"^--8<--.*\n?", re.MULTILINE)
 _md_link = re.compile(r"(\]\()([^)\s#]+\.md)(#[^)\s]*)?(\))")
 _only_light = re.compile(r"^!\[[^\n]*\]\([^)\n]*#only-light\)[^\n]*\n?", re.MULTILINE)
