@@ -217,6 +217,7 @@ func (a *Agent) handleUpdate(ctx context.Context, task Task) {
 		a.answerUpdate(ctx, task, "the controller asked for an update this host's helper would refuse, so nothing was written: "+err.Error())
 		return
 	}
+	var stuck *UpdateStuck
 	if err := channel.WriteRequest(dir, req); err != nil {
 		// The request waiting may be this attempt's own, written by an agent
 		// process before this one, which a restarted controller asks for again.
@@ -228,35 +229,55 @@ func (a *Agent) handleUpdate(ctx context.Context, task Task) {
 				a.answerUpdate(ctx, task, "")
 				return
 			}
+			// Somebody else's request is in the way. Before refusing, look at why
+			// the helper has not read it: a helper that has stopped would refuse
+			// every attempt from now on, with nobody the wiser.
+			heal := a.healStuckHelper(ctx, task, dir, req)
+			switch {
+			case heal.written:
+				err, stuck = nil, heal.stuck
+			case heal.stuck != nil:
+				a.answerUpdateStuck(ctx, task, heal.reason, heal.stuck)
+				return
+			}
 		}
-		// The full error names the folder, which is for this host's log. The
-		// sentence goes to a page every role reads, so it names only the fix.
-		a.log.Warn("could not hand the update request to the helper", "attempt", task.UpdateID, "tag", tag, "error", err)
-		if errors.Is(err, channel.ErrRequestPending) {
-			a.answerUpdate(ctx, task, "an earlier update request is still waiting in this host's update folder, so the helper has not read it and this one was not written; "+
-				`check the helper with "sudo zoomies updates helper status" on the host, and remove the waiting request.json if the helper is not going to read it`)
+		if err != nil {
+			// The full error names the folder, which is for this host's log. The
+			// sentence goes to a page every role reads, so it names only the fix.
+			a.log.Warn("could not hand the update request to the helper", "attempt", task.UpdateID, "tag", tag, "error", err)
+			if errors.Is(err, channel.ErrRequestPending) {
+				a.answerUpdate(ctx, task, "an earlier update request is still waiting in this host's update folder, so the helper has not read it and this one was not written; "+
+					`check the helper with "sudo zoomies updates helper status" on the host, and remove the waiting request.json if the helper is not going to read it`)
+				return
+			}
+			a.answerUpdate(ctx, task, "the update request could not be written to this host's update folder, so nothing ran; run "+
+				helperInstallCommand+" on the host, which creates the folder with the right owner, and see the agent's log there for the reason")
 			return
 		}
-		a.answerUpdate(ctx, task, "the update request could not be written to this host's update folder, so nothing ran; run "+
-			helperInstallCommand+" on the host, which creates the folder with the right owner, and see the agent's log there for the reason")
-		return
 	}
 	if a.updateWritten == nil {
 		a.updateWritten = make(map[string]bool)
 	}
 	a.updateWritten[task.UpdateID] = true
 	a.log.Info("asked the update helper to update this host", "attempt", task.UpdateID, "from", running, "to", tag)
-	a.answerUpdate(ctx, task, "")
+	a.answerUpdateStuck(ctx, task, "", stuck)
 }
 
 // answerUpdate reports what became of an update task: written, or why not. It
 // names no runner and carries no runner state, because the task is the host's,
 // and a failure counted against a runner would be counted against its pool.
 func (a *Agent) answerUpdate(ctx context.Context, task Task, failure string) {
+	a.answerUpdateStuck(ctx, task, failure, nil)
+}
+
+// answerUpdateStuck is answerUpdate for a task that found the helper stopped, or
+// repaired it: stuck says what was found and done, for the controller to name and
+// to record, whether the request was written in the end or not.
+func (a *Agent) answerUpdateStuck(ctx context.Context, task Task, failure string, stuck *UpdateStuck) {
 	if failure != "" {
 		a.log.Warn("did not ask the update helper for an update", "attempt", task.UpdateID, "tag", task.UpdateTag, "reason", failure)
 	}
-	a.report(ctx, TaskResult{TaskID: task.ID, Kind: task.Kind, OK: failure == "", Error: failure, CompletedAt: a.now()})
+	a.report(ctx, TaskResult{TaskID: task.ID, Kind: task.Kind, OK: failure == "", Error: failure, Stuck: stuck, CompletedAt: a.now()})
 }
 
 // updateRequestedBy is who the helper's log says asked. The agent does not know

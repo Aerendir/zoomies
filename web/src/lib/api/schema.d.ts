@@ -10227,6 +10227,11 @@ export interface components {
              * @example upd_k3fqz2mx7abcd
              */
             attempt_id: string;
+            /**
+             * @description The problem code of the failure `state` describes, when it has a cause of its own worth naming, and empty otherwise. `host.update_helper_stuck` says the update helper on the host had stopped reading requests (its path unit disabled, inactive or failed, or a request nobody had read for longer than a healthy helper takes), so the attempt failed before anything ran. `reason` is then built by the controller from fixed words and numbers, with the attempt, how long the request had waited and what systemd says of the units, and carries no path, so every role reads it rather than the fixed sentence below the `platform` role is otherwise given.
+             * @enum {string}
+             */
+            code: "" | "host.update_helper_stuck";
         };
         RecoveryHost: {
             host_id: string;

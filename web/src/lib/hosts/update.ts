@@ -203,7 +203,15 @@ export function hostUpdateWords(host: HostFields): HostUpdateWords | null {
     case 'failed':
     case 'timed_out':
       return {
-        label: state === 'failed' ? 'Failed' : 'Timed out',
+        // A failure with a cause of its own says so in the badge: the helper on
+        // the host had stopped, which is the host's to put right and not a
+        // release that did not install.
+        label:
+          update.code === 'host.update_helper_stuck'
+            ? 'Helper stopped'
+            : state === 'failed'
+              ? 'Failed'
+              : 'Timed out',
         tone: 'danger',
         sentence: update.reason,
         offered: true,

@@ -35,12 +35,20 @@ func HelperOptionsFromPointer(string) (HelperOptions, error) {
 
 func RunUpdateHelper(context.Context, HelperOptions) error { return errNoUpdateHelper }
 
+// RepairOptions is the repair's options; only the unix build has a repair.
+type RepairOptions struct{ HelperOptions }
+
+func RunUpdateRepair(context.Context, RepairOptions) error { return errNoUpdateHelper }
+
 // The helper's units, named everywhere so that uninstall builds; nothing here
 // writes them.
 const (
 	UpdatePathUnit    = "zoomies-update.path"
 	UpdateServiceUnit = "zoomies-update.service"
-	systemdUnitDir    = "/etc/systemd/system"
+
+	UpdateRepairPathUnit    = "zoomies-update-repair.path"
+	UpdateRepairServiceUnit = "zoomies-update-repair.service"
+	systemdUnitDir          = "/etc/systemd/system"
 )
 
 // InstallHelperOptions is the unix installer's options, so that the command
