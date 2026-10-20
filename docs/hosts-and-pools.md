@@ -1558,11 +1558,14 @@ fits.
 pools that set no limits, and is warned about as
 `scheduler.default_runner_limits_off` for as long as it stands.
 
-Free disk is a gate rather than a budget. A host at or below its disk reserve
-takes no new runner at all, whatever the pool asks for; nothing is evicted to
-make room, because a runner's caches outlive it on purpose. Two things follow:
-disk is the one shortage that no job finishing will clear, and a pool that sets
-`resources.disk_gb` is charged it against what is free right now.
+Free disk is a gate, and every runner is charged working room against it. A
+host at or below its disk reserve takes no new runner at all; above it, each
+runner a pass places is charged 10 GB of working room, or the figure the pool
+types as `resources.disk_gb`, so a job is never started on a machine that cannot
+hold its checkout and caches. Nothing is evicted to make room, because a
+runner's caches outlive it on purpose. Two things follow: disk is the one
+shortage that no job finishing will clear, and a host with less than about 12 GB
+free takes no new runner until space is freed or a pool asks for less.
 
 A host whose agent never reported its size is placed by slots alone, exactly as
 before, which is what stops an upgrade emptying a fleet, and it is worth
@@ -1665,7 +1668,7 @@ Read the counts, because they name the fix:
 | `not matching the pool's host selector` | Relax the selector, or label a host to match. |
 | `too small for this pool's limits` | The machine could not hold one runner of this pool even when empty. Lower the pool's CPU or memory limits, or add a bigger host. Waiting will not help. |
 | `short of memory`, `short of CPU` | The host is the right size and has already promised what it has to the runners on it. Wait, lower the pool's limits, or add a host. When runners of yours hold it, that counts as full rather than as a fault, because a finishing job returns what they hold; memory taken by work outside the fleet does not. |
-| `low on disk` | The work directory's filesystem is at or below the host's disk reserve. Free space on it, lower the pool's `disk_gb`, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
+| `low on disk` | The work directory's filesystem is at or below the host's disk reserve, or has less than the 10 GB of working room a runner is given above it. Free space on it, set the pool's `resources.disk_gb` lower, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
 | `throttled after sustained pressure` | The host is on a rung of the [throttle ladder](#current-usage-and-automatic-holds) and every slot the rung left it is in use. Wait for it to lift, lower the host's capacity or the pools' limits so its runners fit the machine, or add a host; running jobs continue. A host that keeps being throttled has too many slots for its machine, or pools whose limits let a job take more than a slot's worth of it. |
 
 The distinction the reasons keep is between a fleet that is merely **full**,
