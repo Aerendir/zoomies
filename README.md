@@ -605,6 +605,10 @@ roadmap/            supporting status/evidence, decision records, model guidance
                     README is the index, and it does not compete with ROADMAP.md
 skills/             what a coding agent installs: the zoomies skill, with a command
                     reference generated from the binary
+plans/              the improve advisor's output: prioritised, self-contained
+                    implementation plans and their index, each stamped with the
+                    commit it was written against; executors update the status
+                    table in plans/README.md
 install.sh          the one-line installer, served from the site root
 mkdocs.yml          how docs/ becomes zoomies.sh
 nixpacks.toml       how a Nixpacks-based PaaS builds and runs the controller
