@@ -374,3 +374,68 @@ func TestAProviderShortOnlyOfDiskIsToldTheDiskItsMachinesNeed(t *testing.T) {
 		t.Errorf("fix %q names processors or memory, which already fit", misfit.Fix)
 	}
 }
+
+// "The template decides" used to mean a machine of unknown disk, which fits
+// every pool. A provider whose template gives a cloud image's few gigabytes
+// is now refused for any pool with a working room, before it rents anything.
+func TestAProviderWhoseTemplateGivesASmallDiskIsUnservable(t *testing.T) {
+	p := smallProvider("lab")
+	p.MachineCapacity, p.MaxMachines = 1, 1
+	p.SeenCPUs, p.SeenMemoryMB, p.SeenDiskMB, p.SeenFrom = 2, 4096, 4096, store.MachineSizeFromTemplate
+	pool := demandPool("builds", "self-hosted", "linux", "x64")
+
+	synth := providerSynthHost(p, machineNow)
+	if synth.DiskTotalMB != 4096 || synth.DiskFreeMB != 4096 {
+		t.Fatalf("synthetic disk = %d total, %d free MB; want the template's 4096 of both", synth.DiskTotalMB, synth.DiskFreeMB)
+	}
+	if scheduler.HostCanRun(synth, pool, machineNow) {
+		t.Fatalf("a 4 GB machine was judged able to run a runner that is charged a working room")
+	}
+
+	misfit := machineFit(p, synth, pool)
+	if !misfit.Size {
+		t.Fatalf("the provider fits the pool, so renting would buy it: %+v", misfit)
+	}
+	for _, want := range []string{"the template it clones gives", "4 GB of disk"} {
+		if !strings.Contains(misfit.Why, want) {
+			t.Errorf("fit_why %q does not say %q", misfit.Why, want)
+		}
+	}
+	if !strings.Contains(misfit.Fix, " GB of disk") || !strings.Contains(misfit.Fix, "more disk") {
+		t.Errorf("fix %q does not name a disk figure in GB and the template's disk", misfit.Fix)
+	}
+}
+
+// A size typed on the provider is what the next machine will be built at, so
+// it outranks what a machine once measured, exactly as it does for processors
+// and memory.
+func TestAShapeThatTypesADiskWinsOverWhatAMachineMeasured(t *testing.T) {
+	p := smallProvider("lab")
+	p.MachineDiskMB = 32768
+	p.SeenDiskMB, p.SeenFrom = 4096, store.MachineSizeFromMachine
+
+	synth := providerSynthHost(p, machineNow)
+	if synth.DiskTotalMB != 32768 || synth.DiskFreeMB != 32768 {
+		t.Fatalf("synthetic disk = %d total, %d free MB; want the shape's 32768 of both", synth.DiskTotalMB, synth.DiskFreeMB)
+	}
+}
+
+// A machine too small only in disk has to say which disk, or the operator is
+// left to guess that the template's figure is the one to change.
+func TestTheSizeSentenceNamesTheDisk(t *testing.T) {
+	p := smallProvider("lab")
+	p.SeenCPUs, p.SeenMemoryMB, p.SeenDiskMB, p.SeenFrom = 2, 4096, 4096, store.MachineSizeFromTemplate
+
+	got := machineSizeSaid(p)
+	for _, want := range []string{"the template it clones gives", "2 CPUs, 4 GB of memory and 4 GB of disk"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("size sentence %q does not say %q", got, want)
+		}
+	}
+
+	typed := smallProvider("typed")
+	typed.MachineDiskMB = 32768
+	if got := machineSizeSaid(typed); got != "its machine size is 32 GB of disk" {
+		t.Errorf("a typed disk alone said %q, want it counted as a typed size", got)
+	}
+}
