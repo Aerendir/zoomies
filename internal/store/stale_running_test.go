@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -74,6 +75,9 @@ func TestAStaleCompletionDoesNotOverwriteAKnownOutcome(t *testing.T) {
 func TestAStaleCompletionDoesNotRetireAJobWhoseStartWasJustLearned(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
+	if _, _, err := s.ApplyJob(ctx, &Job{GitHubJobID: 31, State: JobCompleted, Conclusion: "stale"}, JobCondition{State: JobInProgress}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a conditioned update recreated a missing row: %v", err)
+	}
 	now := time.Now()
 	if _, _, err := s.ApplyJob(ctx, &Job{GitHubJobID: 30, State: JobInProgress, QueuedAt: now.Add(-36 * 24 * time.Hour)}); err != nil {
 		t.Fatal(err)
