@@ -45,11 +45,17 @@ async function enrol(page: Page): Promise<{ id: string; token: string }> {
   // they read back is the eight slots typed above. The fleet keeps a host at
   // its own recommendation by default (two runners, on these pools' asks), and
   // it would move this one there within half a minute of the join, so the host
-  // is told to keep the capacity it was given.
+  // is told to keep the capacity it was given. A joined host is healthy from
+  // its first moment, so the pass can land between the join and this request;
+  // the capacity travels with the setting, and the host is read back, so a
+  // pass that got in first is undone rather than left for a spec to find.
   const kept = await page.request.patch(`/api/v1/hosts/${joined.host_id}`, {
-    data: { auto_adjust: 'off' },
+    data: { auto_adjust: 'off', capacity: 8 },
   });
   expect(kept.ok(), 'the host was told to keep its typed capacity').toBeTruthy();
+  const host = (await kept.json()) as { capacity: number; auto_adjust: string };
+  expect(host.auto_adjust, 'the host keeps its own capacity').toBe('off');
+  expect(host.capacity, 'the host has the eight slots it was given').toBe(8);
   return { id: joined.host_id, token: joined.agent_token };
 }
 
