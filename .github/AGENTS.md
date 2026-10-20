@@ -76,6 +76,12 @@ has a CI job that diffs them:
   and that the header names a release: `hooks/source.py` resolves the latest
   release, stars and forks from the GitHub API at build time, and an offline
   build is allowed to go without them where the published site is not.
+* `ci-gate` in `ci.yml` is the one status check branch protection requires on
+  `main`. It `needs` every other job in that file and fails if any failed or
+  was cancelled; a skipped job counts as passed, because the `changes` filter
+  skipped it on purpose. A new job goes into its `needs` list, and a test in
+  `internal/docs` fails when one is left out: a job outside the gate can fail
+  without blocking a merge.
 * Every job in every workflow has a `timeout-minutes` at about two to three
   times the longest successful run, and a workflow file is named in lower-case
   words joined by hyphens. Both are tested in `internal/docs`: a hung job holds
