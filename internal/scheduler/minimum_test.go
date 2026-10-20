@@ -163,6 +163,10 @@ func TestAReducedDockerInDockerRunnerIsChargedTwiceItsRow(t *testing.T) {
 	// the next reconcile pass trusts to know what room is left. It must agree
 	// with what the placement pass just subtracted for this exact runner.
 	runners := map[string][]*store.Runner{p.ID: {r}}
+	// Reserved leaves disk out on purpose (free disk is measured, so the runner's
+	// own bytes are in it already), and a runner's charge now carries a working
+	// room, so the two are compared on what Reserved does sum.
+	got.DiskMB = 0
 	if reserved := Reserved(h, []*store.Pool{p}, runners); reserved != got {
 		t.Errorf("Reserved = %+v, want it to match RunnerCharge's %+v for the host's one live runner", reserved, got)
 	}

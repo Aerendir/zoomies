@@ -650,3 +650,66 @@ func TestAPoolThatTypesOneFieldIsRefusedWhereTheOtherIsTooThinForAPair(t *testin
 		t.Errorf("a roomy host was refused: %q", field)
 	}
 }
+
+// A pool that says nothing about disk used to be charged nothing, so one
+// runner could start on a machine with 3 GB free and fill it part-way through
+// its first download. Three CI jobs died that way on fresh machines.
+func TestAPoolThatTypesNoDiskIsChargedAWorkingRoom(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, 200*1024)
+	if got := Reserve(testPool("plain", "plain"), h).DiskMB; got != RunnerDiskMB {
+		t.Fatalf("charged %d MB, want the working room %d", got, RunnerDiskMB)
+	}
+}
+
+func TestADockerInDockerPairSharesOneWorkingRoom(t *testing.T) {
+	p := testPool("dind", "dind")
+	p.DockerMode = store.DockerDinD
+	if got := Reserve(p, sized("host", 4, 16, 16*1024, 200*1024)).DiskMB; got != RunnerDiskMB {
+		t.Fatalf("charged %d MB, want one room %d: only a typed figure doubles", got, RunnerDiskMB)
+	}
+}
+
+func TestATypedDiskFigureWinsOverTheWorkingRoom(t *testing.T) {
+	p := testPool("small", "small")
+	p.Resources.DiskGB = 1
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+2048) // 2 GB to place on
+	if got := Reserve(p, h).DiskMB; got != 1024 {
+		t.Fatalf("charged %d MB, want the 1024 the pool typed", got)
+	}
+	if !HostFits(h, p) {
+		t.Fatal("a pool that asks for 1 GB does not fit a host with 2 GB to place on")
+	}
+}
+
+func TestAnUnmeasuredDiskConstrainsNothing(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, 0)
+	h.DiskTotalMB, h.DiskFreeMB = 0, 0
+	if !HostFits(h, testPool("plain", "plain")) {
+		t.Fatal("a host that never measured its disk must place by slots alone")
+	}
+}
+
+// Free disk is a measurement, so the runners already there are in the figure;
+// the ones this pass adds are not, and each is charged its room.
+func TestAPassChargesEachRunnerItAddsAWorkingRoom(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024) // room for one
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{testPool("plain", "plain")}, nil, now)
+	if got := len(hs.place(testPool("plain", "plain"), 3)); got != 1 {
+		t.Fatalf("placed %d runners on a host with room for one", got)
+	}
+}
+
+func TestTheLowOnDiskFixNamesTheWorkingRoom(t *testing.T) {
+	// Room for one runner: the host is big enough for the pool (a smaller one
+	// is "too small", a different answer), and the first placement uses it up.
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024)
+	p := testPool("plain", "plain")
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	hs.place(p, 1)
+	b := hs.why(p)
+	for _, want := range []string{"free space", "10 GB", "disk_gb"} {
+		if !strings.Contains(b.fix, want) {
+			t.Errorf("the fix %q does not say %q", b.fix, want)
+		}
+	}
+}

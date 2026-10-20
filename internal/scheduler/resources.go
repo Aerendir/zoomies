@@ -94,6 +94,13 @@ func Reserve(p *store.Pool, h *store.Host) Reservation {
 		DiskMB:   p.Resources.DiskGB * 1024,
 	}
 	cpuFromHost, memoryFromHost := res.CPUs <= 0, res.MemoryMB <= 0
+	// A pool that types no disk is still charged a working room. Charging
+	// nothing let a runner start on a machine with a few GB free and fill it
+	// part-way through its first download.
+	diskFromHost := res.DiskMB <= 0
+	if diskFromHost {
+		res.DiskMB = RunnerDiskMB
+	}
 	// A minimum above the slot share is a slot of the minimum's size: the
 	// runner is given it and charged it, and the host holds fewer runners
 	// than its slots rather than none -- see MinimumSlot.
@@ -122,8 +129,11 @@ func Reserve(p *store.Pool, h *store.Host) Reservation {
 		if !memoryFromHost {
 			res.MemoryMB *= 2
 		}
-		// Disk has no fallback, so a figure here is always one somebody typed.
-		res.DiskMB *= 2
+		// The default working room is one per pair, like a share: the pair
+		// works in one directory. Only a typed figure doubles.
+		if !diskFromHost {
+			res.DiskMB *= 2
+		}
 	}
 	return res
 }
