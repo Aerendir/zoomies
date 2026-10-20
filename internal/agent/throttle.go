@@ -54,12 +54,11 @@ func (a *Agent) applyResourceDirectives(ctx context.Context, d *ThrottleDirectiv
 	a.applyThrottle(ctx, changed)
 }
 
-// boostExpiryMisses is how many heartbeats in a row may go unanswered before a
-// boost is given back.
+// boostExpiryMisses is how many normal heartbeat intervals a boost may go
+// without renewal.
 const boostExpiryMisses = 3
 
-// expireBoosts gives back every boost once the controller has missed
-// boostExpiryMisses heartbeats in a row.
+// expireBoosts checks overdue CPU loans after unanswered heartbeats.
 //
 // A boost is lent on the controller's say-so, from what it judged the host
 // could spare, and is only ever withdrawn by the next plan. With the controller
