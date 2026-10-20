@@ -23,7 +23,9 @@ type Transport interface {
 	Join(ctx context.Context, req JoinRequest) (*JoinResponse, error)
 
 	// Heartbeat reports liveness, capacity and the agent's own view of its
-	// runners.
+	// runners. A transport that returns a nil error returns a non-nil
+	// response; the agent dereferences the answer unguarded, so this is part
+	// of the contract, not a courtesy.
 	Heartbeat(ctx context.Context, req HeartbeatRequest) (*HeartbeatResponse, error)
 
 	// PollTasks blocks for up to wait, returning as soon as there is work. An

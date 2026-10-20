@@ -1047,6 +1047,14 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		a.expireBoosts(ctx)
 		return err
 	}
+	// A transport that could not answer says so with an error; one that
+	// answers nothing at all is still refused here, because the loop above
+	// is this process's whole report path and nothing recovers a panic in
+	// it. Both transports return a response, so this is the contract held
+	// rather than a state that is expected.
+	if resp == nil {
+		return nil
+	}
 	if update != nil && !resp.UpdateHeld {
 		a.markUpdateDelivered(delivery)
 	}
@@ -1067,9 +1075,6 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 	}
 	a.notify.send(fmt.Sprintf("STATUS=%d runner(s), capacity %d, controller %s", len(runners), a.opts.Capacity, a.tr.Describe()))
 
-	if resp == nil {
-		return nil
-	}
 	a.warnSkew(resp.ControllerVersion)
 
 	a.mu.Lock()
