@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -273,6 +274,29 @@ type bulkRunnerResponse struct {
 	Results []bulkRunnerResult `json:"results"`
 }
 
+// bulkRunnerMessage is one row's error as the single routes would answer it:
+// the store's own sentences for the errors an operator can act on, and a
+// short line that carries no cause for everything else. The bulk loop was
+// the one route that answered with err.Error() itself, which on a database
+// fault is the driver's own text: the sentence the single routes give is at
+// internal/api/errors.go, and this is that funnel, per row.
+func bulkRunnerMessage(err error) (message string, known bool) {
+	switch {
+	case errors.Is(err, store.ErrNotFound),
+		errors.Is(err, store.ErrConflict),
+		errors.Is(err, store.ErrInvalidTransition),
+		errors.Is(err, controller.ErrStreamUnknown):
+		return err.Error(), true
+	case errors.Is(err, controller.ErrConfirmationRequired):
+		// The same sentence fail appends, so both routes teach the same
+		// way out of a 409 that is asking for consent.
+		return err.Error() + ". Send it again with confirm=true to accept that, " +
+			"or wait for the job to finish and drain it then.", true
+	default:
+		return "", false
+	}
+}
+
 // handleBulkRunners drains or deletes several runners at once.
 //
 // It answers 200 with a result per ID rather than a single status: selecting
@@ -324,7 +348,21 @@ func (s *Server) handleBulkRunners(w http.ResponseWriter, r *http.Request) {
 			run, err = s.ctrl.RemoveRunner(r.Context(), runnerID, drainReason(r), req.Force, req.Confirm)
 		}
 		if err != nil {
-			results = append(results, bulkRunnerResult{ID: runnerID, Error: err.Error()})
+			if msg, known := bulkRunnerMessage(err); known {
+				results = append(results, bulkRunnerResult{ID: runnerID, Error: msg})
+				continue
+			}
+			// The cause is what an operator needs and an attacker would
+			// like, so it goes to the log with the request ID, exactly as
+			// internal() sends it for the single routes.
+			reqID := ""
+			if info := infoFrom(r.Context()); info != nil {
+				reqID = info.id
+			}
+			s.logger(r).Error("bulk runner action failed", "doing", req.Action,
+				"runner", runnerID, "error", err, "request_id", reqID)
+			results = append(results, bulkRunnerResult{ID: runnerID, Error: "this runner could not be " +
+				req.Action + "d; " + supportHint()})
 			continue
 		}
 		changed++

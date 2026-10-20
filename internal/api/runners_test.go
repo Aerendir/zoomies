@@ -1,11 +1,14 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/controller"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -136,6 +139,96 @@ func TestBulkRunnerActionValidates(t *testing.T) {
 	unknown.mustStatus(t, http.StatusUnprocessableEntity, "bulk with an unknown action")
 	if !strings.Contains(unknown.errorMessage(t), "carried out") {
 		t.Errorf("unexpected message: %q", unknown.errorMessage(t))
+	}
+}
+
+// TestBulkRunnerMessageHidesWhatTheSingleRoutesHide pins the per-row mapping
+// to the one the single routes state in fail, so the two answer alike: the
+// store's own sentences for what an operator can act on, and no message at
+// all for a cause that belongs in the controller's log. A row that answered
+// with the driver's own text is what this exists to prevent.
+func TestBulkRunnerMessageHidesWhatTheSingleRoutesHide(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		known    bool
+		contains string
+	}{
+		{
+			name:     "a missing runner",
+			err:      fmt.Errorf("runner %s: %w", "run_nope", store.ErrNotFound),
+			known:    true,
+			contains: "not found",
+		},
+		{
+			name:     "a busy runner that needs consent",
+			err:      fmt.Errorf("%w: runner %s has five minutes to finish", controller.ErrConfirmationRequired, "run_busy"),
+			known:    true,
+			contains: "confirm=true",
+		},
+		{
+			name:  "a runner in a terminal state",
+			err:   fmt.Errorf("runner %s: %w", "run_done", store.ErrInvalidTransition),
+			known: true,
+		},
+		{
+			name:  "a database fault",
+			err:   errors.New("sql: disk I/O error: /var/lib/zoomies/db.sqlite"),
+			known: false,
+		},
+	}
+	for _, tc := range cases {
+		message, known := bulkRunnerMessage(tc.err)
+		if known != tc.known {
+			t.Errorf("%s: known = %v, want %v", tc.name, known, tc.known)
+			continue
+		}
+		if tc.contains != "" && !strings.Contains(message, tc.contains) {
+			t.Errorf("%s: message %q does not contain %q", tc.name, message, tc.contains)
+		}
+		if !tc.known && message != "" {
+			// A cause the log owns must not travel in the row, not even
+			// partly: err.Error() is the driver's own text here.
+			t.Errorf("%s: an unknown error produced a message: %q", tc.name, message)
+		}
+	}
+}
+
+// TestBulkDrainAnswersOneRowWithTheStoreSentenceAndLogsTheRest is the route
+// half of the funnel: a missing runner answers its row with the store's own
+// sentence, the same one the single route answers with, so a driver fault on
+// the next row reaches the client only as the short line that carries no
+// cause.
+func TestBulkDrainAnswersOneRowWithTheStoreSentenceAndLogsTheRest(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux-x64")
+	host := h.host("vm-1")
+	idle := h.runner(pool, host, store.RunnerIdle)
+	_, cookie := h.user("operator", store.RoleOperator)
+
+	resp := h.do(request{method: http.MethodPost, path: "/api/v1/runners/bulk", cookie: cookie,
+		body: map[string]any{"action": "drain", "ids": []string{idle.ID, "run_missing"}}})
+	resp.mustStatus(t, http.StatusOK, "bulk drain")
+
+	var out bulkRunnerResponse
+	resp.into(t, &out)
+	byID := map[string]bulkRunnerResult{}
+	for _, row := range out.Results {
+		byID[row.ID] = row
+	}
+	if !byID[idle.ID].OK {
+		t.Errorf("the idle runner was not drained: %+v", byID[idle.ID])
+	}
+	missing := byID["run_missing"]
+	if missing.OK {
+		t.Errorf("an unknown ID reported success: %+v", missing)
+	}
+	if !strings.Contains(missing.Error, "not found") {
+		t.Errorf("the missing runner's row does not say what the single route says: %q", missing.Error)
+	}
+	if strings.Contains(missing.Error, "sql:") || strings.Contains(missing.Error, ".sqlite") {
+		t.Errorf("the missing runner's row carries database internals: %q", missing.Error)
 	}
 }
 
