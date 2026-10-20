@@ -1801,3 +1801,50 @@ jobs:
             done
           done
           exit "$failed"
+
+  # The one status check to require on main. A ruleset can require a check only
+  # by name, and the jobs above are several matrices and a filter that skips
+  # most of them on most changes, so none of them is a name that can be
+  # required without either blocking every merge or protecting nothing. This
+  # job waits on all of them and fails if any failed or was cancelled, so a pull
+  # request whose CI never ran, or ran red, has no passing check to merge on.
+  # Two pull requests were merged with no CI run on their heads before this
+  # existed. A skipped job is one the changes filter decided this run did not
+  # need, and counts as passed. A test in internal/docs holds the needs list to
+  # every other job in this file, so a new job cannot be left outside the gate.
+  ci-gate:
+    name: CI gate
+    needs:
+      - changes
+      - go
+      - ai-context-workflow
+      - coverage
+      - drill
+      - arm64
+      - windows
+      - upgrade
+      - staticcheck
+      - ui
+      - playwright
+      - build-matrix
+      - dev-binaries
+      - installer
+      - images
+      - runner-images
+      - runner-manifests
+    # !cancelled() rather than always(): a dependency that was skipped skips its
+    # dependants, so the gate has to run whatever the jobs before it did, but a
+    # run cancelled by a newer push has a newer run to report for it.
+    if: ${{ !cancelled() && github.event.action != 'closed' }}
+    runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 5 # two shell steps and no checkout
+    steps:
+      - name: What each job did
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -r 'to_entries[] | "\(.value.result)\t\(.key)"' <<<"$RESULTS" | sort
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::a job in this run failed or was cancelled; the step above names it"
+          exit 1
