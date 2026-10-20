@@ -163,21 +163,24 @@ func TestAReturnedRunnerIsNotReapedWhileItsJobIsStillRunning(t *testing.T) {
 		t.Fatalf("ReportRunners: %v", err)
 	}
 
-	// Past the ten minutes a failed runner stays on the Runners page.
-	h.advance(11 * time.Minute)
-	if err := h.c.Reconcile(h.ctx); err != nil {
-		t.Fatalf("Reconcile: %v", err)
-	}
-	h.c.lifecycleCalls.Wait()
-	if h.hasTaskOfKind(r.HostID, agent.TaskRemoveRunner) {
-		t.Fatal("the reap queued a remove task while the job was still running; that kills the job the late-report path kept alive")
-	}
-	kept, err := h.st.GetRunner(h.ctx, r.ID)
-	if err != nil {
-		t.Fatalf("GetRunner: %v", err)
-	}
-	if kept.State != store.RunnerFailed {
-		t.Fatalf("state = %q, want it to stay failed while its job runs", kept.State)
+	// The first pass crosses failed retention; the second crosses the host
+	// cleanup grace too. Each deletion path must spare the same live job.
+	for _, elapsed := range []time.Duration{11 * time.Minute, 5 * time.Minute} {
+		h.advance(elapsed)
+		if err := h.c.Reconcile(h.ctx); err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		h.c.lifecycleCalls.Wait()
+		if h.hasTaskOfKind(r.HostID, agent.TaskRemoveRunner) {
+			t.Fatal("a deletion path queued a remove task while the job was still running; that kills the job the late-report path kept alive")
+		}
+		kept, err := h.st.GetRunner(h.ctx, r.ID)
+		if err != nil {
+			t.Fatalf("GetRunner: %v", err)
+		}
+		if kept.State != store.RunnerFailed {
+			t.Fatalf("state = %q, want it to stay failed while its job runs", kept.State)
+		}
 	}
 
 	// Once the job is over the row is litter like any other failed runner's,
