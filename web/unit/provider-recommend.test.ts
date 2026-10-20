@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_MACHINE,
   SUGGESTED_CEILING,
+  machineDiskHint,
+  machineDiskNeededMb,
   machineSize,
   machinesPerNode,
   nodeReserveMb,
@@ -157,4 +159,15 @@ test('the minimum never exceeds the maximum', () => {
     assert.ok(rec.min <= rec.max, `${memory} GB: ${rec.min} warm of ${rec.max}`);
     assert.ok(rec.min >= 1);
   }
+});
+
+test('a machine needs the reserve floor plus a working room per slot', () => {
+  assert.equal(machineDiskNeededMb(2), 2048 + 2 * 10240);
+  assert.equal(machineDiskNeededMb(0), 2048 + 10240);
+});
+
+test('the disk hint names the figure and says when the disk is under it', () => {
+  assert.match(machineDiskHint(2, 0), /22 GB/);
+  assert.match(machineDiskHint(2, 8192), /8 GB.*22 GB/);
+  assert.doesNotMatch(machineDiskHint(1, 32768), /under/);
 });

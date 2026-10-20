@@ -30,6 +30,51 @@ const CPU_SHARING = 2;
 const NODE_RESERVE_FLOOR_MB = 2048;
 
 /**
+ * The disk each runner is given to work in, above the host's reserve. Mirrors
+ * `scheduler.RunnerDiskMB`; a change to one is a change to both, or the form
+ * and the provider's check would disagree about what a machine needs.
+ */
+export const RUNNER_DISK_MB = 10 * 1024;
+
+/**
+ * The least disk a machine keeps back for itself before any runner is placed.
+ * Mirrors `store.MinHostReserveDiskMB`; a change to one is a change to both.
+ */
+export const HOST_RESERVE_DISK_FLOOR_MB = 2048;
+
+/**
+ * The disk a machine needs for this many slots: the reserve plus a working
+ * room each. A machine always runs at least one runner, so a slot count of
+ * zero (nothing typed yet) is read as one.
+ */
+export function machineDiskNeededMb(slots: number): number {
+  return HOST_RESERVE_DISK_FLOOR_MB + Math.max(slots, 1) * RUNNER_DISK_MB;
+}
+
+function wholeGigabytes(mb: number): string {
+  return `${Math.round(mb / 1024)} GB`;
+}
+
+/**
+ * What sits under the Disk field: the arithmetic the provider's check applies,
+ * so an operator sees what the slots imply before saving rather than from a
+ * warning afterwards. A disk of zero means the template decides, and the
+ * template's size is only known once the check has read it.
+ */
+export function machineDiskHint(slots: number, diskMb: number): string {
+  const n = Math.max(slots, 1);
+  const needed = wholeGigabytes(machineDiskNeededMb(n));
+  const noun = n === 1 ? 'slot needs' : 'slots need';
+  if (diskMb <= 0) {
+    return `Each runner is given ${wholeGigabytes(RUNNER_DISK_MB)} of working room above a ${wholeGigabytes(HOST_RESERVE_DISK_FLOOR_MB)} reserve, so ${n} ${noun} at least ${needed}; the template's disk counts once the check has read it.`;
+  }
+  if (diskMb < machineDiskNeededMb(n)) {
+    return `${wholeGigabytes(diskMb)} is under the ${needed} ${n} ${noun}.`;
+  }
+  return `${n} ${noun} at least ${needed}.`;
+}
+
+/**
  * Memory kept back for the hypervisor itself: a fifth of the node, and never
  * less than two gigabytes. A node filled to the brim swaps, and every machine
  * on it slows down with it.
