@@ -83,6 +83,13 @@ func PlanMaintenance(key RepositoryKey, name string, previous Config, config Con
 	if err != nil {
 		return nil, err
 	}
+	if old, ok := actual[WorkflowPath]; ok && old.SHA != "" {
+		for i := range wanted {
+			if wanted[i].Path == WorkflowPath {
+				wanted[i].Content = keepInstalledActionPins(old.Content, wanted[i].Content)
+			}
+		}
+	}
 	for _, f := range wanted {
 		old := actual[f.Path]
 		if old.Content == f.Content {

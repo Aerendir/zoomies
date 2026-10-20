@@ -271,13 +271,18 @@ func (c *appClient) OpenContextSetup(ctx context.Context, req ContextSetupReques
 			return nil, c.migrationError("publish complete setup branch", classify(resp, err))
 		}
 	}
-	body := "Prepare this repository for AI coding assistants with Zoomies-managed Repomix context.\n\nReview the workflow, exclusions, generated source copy and instruction/badge sections. Merge runs generation; it does not grant assistant connections source access. The workflow uses a read-only generation job and a separate write-only publication job.\n\n<!-- zoomies-ai-context:setup " + req.PlanHash + " -->"
+	body := "Prepare this repository for AI coding assistants with Zoomies-managed Repomix context.\n\nReview every changed file below, including the workflow and the instruction and badge sections. Wait for this pull request's checks to pass before merging it; merging runs generation. It does not grant assistant connections source access. The workflow uses a read-only generation job and a separate write-only publication job. Action pins already in the repository are kept, so a reinstall does not move them.\n\nChanged files:\n" + changedFiles(req.Files)
 	if req.Action == "agent-guidance" {
-		body = "Review the proposed agent instruction files and commands declared in repository files. Existing guidance is preserved except for exact duplicate Claude adapters or unambiguous broken imports. This proposal does not install AI Context, change workflows or grant assistant access. Merge it, then press Recheck in Kennel Club.\n\n<!-- zoomies-agent-guidance:proposal " + req.PlanHash + " -->"
+		body = "Review the proposed agent instruction files and commands declared in repository files. Existing guidance is preserved except for exact duplicate Claude adapters or unambiguous broken imports. This proposal does not install AI Context, change workflows or grant assistant access. Merge it, then press Recheck in Kennel Club.\n\nChanged files:\n" + changedFiles(req.Files)
 	}
 	if req.Action == "remove" {
-		body = "Remove the Zoomies AI Context workflow and managed files/sections. Other repository text and the historical generated context branch are preserved. Zoomies access, cached snapshots, readers and connection consent have been revoked; reinstall requires explicit access selection again.\n\n<!-- zoomies-ai-context:setup " + req.PlanHash + " -->"
+		body = "Remove the Zoomies AI Context workflow and managed files/sections. Other repository text and the historical generated context branch are preserved. Zoomies access, cached snapshots, readers and connection consent have been revoked; reinstall requires explicit access selection again.\n\nChanged files:\n" + changedFiles(req.Files)
 	}
+	marker := "<!-- zoomies-ai-context:setup " + req.PlanHash + " -->"
+	if req.Action == "agent-guidance" {
+		marker = "<!-- zoomies-agent-guidance:proposal " + req.PlanHash + " -->"
+	}
+	body += "\n" + marker
 	// Closed PRs are included: a retry must not reopen a deliberately declined
 	// proposal or produce a duplicate after an uncertain successful response.
 	pulls, resp, err := c.asInstallation.PullRequests.List(ctx, owner, name, &gh.PullRequestListOptions{State: "all", Head: owner + ":" + req.Head, Base: req.Base, ListOptions: gh.ListOptions{PerPage: 100}})
@@ -307,6 +312,21 @@ func (c *appClient) OpenContextSetup(ctx context.Context, req ContextSetupReques
 		return nil, c.migrationError("open setup pull request", classify(resp, err))
 	}
 	return &PullRequest{Number: pr.GetNumber(), HTMLURL: pr.GetHTMLURL(), Branch: req.Head}, nil
+}
+
+func changedFiles(files []aicontext.SetupChange) string {
+	var b strings.Builder
+	for _, f := range files {
+		state := "modified"
+		switch {
+		case f.Delete:
+			state = "deleted"
+		case f.PreviousSHA == "":
+			state = "new"
+		}
+		b.WriteString("- `" + f.Path + "` (" + state + ")\n")
+	}
+	return b.String()
 }
 
 func contextSetupFileMode(mode string) string {
