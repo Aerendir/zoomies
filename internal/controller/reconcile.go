@@ -164,6 +164,15 @@ func (c *Controller) snapshot(ctx context.Context) (scheduler.Snapshot, error) {
 		return scheduler.Snapshot{}, fmt.Errorf("listing queued jobs: %w", err)
 	}
 	jobs = c.routableJobs(jobs)
+	// Which runners a job is running on is read apart from the queue, not added
+	// to it, because the queue-age figures read every job in that list as
+	// waiting. Without it every guard that spares a runner with work on it
+	// guards nothing, and the reap removes a runner the late-report path kept
+	// alive, with the job still running in it.
+	working, err := c.st.RunnersWithAJob(ctx)
+	if err != nil {
+		return scheduler.Snapshot{}, fmt.Errorf("listing the runners with a job in progress: %w", err)
+	}
 	activeByRepository, queuedByRepository, err := c.st.RepositoryJobCounts(ctx)
 	if err != nil {
 		return scheduler.Snapshot{}, fmt.Errorf("counting jobs by repository: %w", err)
@@ -228,6 +237,7 @@ func (c *Controller) snapshot(ctx context.Context) (scheduler.Snapshot, error) {
 		Pools:              pools,
 		Runners:            runners,
 		Jobs:               jobs,
+		RunnersWithAJob:    working,
 		ActiveByRepository: activeByRepository,
 		QueuedByRepository: queuedByRepository,
 		Hosts:              hosts,
