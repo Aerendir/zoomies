@@ -13,6 +13,7 @@ import (
 	"cmp"
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -37,6 +38,11 @@ type Snapshot struct {
 	// Jobs holds queued and in-progress jobs. Only queued jobs create demand:
 	// an in-progress job is already represented by the busy runner running it.
 	Jobs []*store.Job
+	// RunnersWithAJob is every runner a job is in progress on, by ID, whatever
+	// that runner's row says. An in-progress job in Jobs counts towards it too.
+	// The controller sends the set on its own instead, because everything else
+	// it hands a snapshot's jobs to reads them as waiting work.
+	RunnersWithAJob map[string]bool
 	// ActiveByRepository and QueuedByRepository make repository fair-share
 	// state explicit at the scheduler boundary rather than hiding database reads
 	// inside the policy engine.
@@ -373,7 +379,7 @@ func Decide(s Snapshot) Plan {
 		jitter:             s.Jitter,
 		lastProvisioned:    s.LastProvisioned,
 		held:               s.HeldInstallations,
-		stillRunning:       runnersWithAJob(s.Jobs),
+		stillRunning:       runnersWithAJob(s),
 		history:            s.JobHistory,
 		historySizing:      s.HistorySizing,
 	}
@@ -712,10 +718,13 @@ func recentBusyHosts(runners []*store.Runner, now time.Time) map[string]bool {
 	return out
 }
 
-// runnersWithAJob is the set of runners a job in progress is attributed to.
-func runnersWithAJob(jobs []*store.Job) map[string]bool {
-	out := map[string]bool{}
-	for _, j := range jobs {
+// runnersWithAJob is the set of runners a job in progress is attributed to:
+// the snapshot's own set, and the runner of every in-progress job among its
+// jobs. It is a copy, so the caller's set is never written to.
+func runnersWithAJob(s Snapshot) map[string]bool {
+	out := make(map[string]bool, len(s.RunnersWithAJob))
+	maps.Copy(out, s.RunnersWithAJob)
+	for _, j := range s.Jobs {
 		if j.State == store.JobInProgress && j.RunnerID != "" {
 			out[j.RunnerID] = true
 		}

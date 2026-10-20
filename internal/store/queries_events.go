@@ -1087,6 +1087,41 @@ func (s *Store) ListRunningJobsForRunner(ctx context.Context, runnerID string) (
 	return out, rows.Err()
 }
 
+// runnersWithAJobQuery runs on every scheduling pass, and the equality on state
+// is what lets the planner seek an index that leads with state, as it does for
+// ListRunningJobsForRunner, rather than walk the whole jobs table. The
+// query-plan test reads the statement that ships from here.
+var runnersWithAJobQuery = hot(`SELECT DISTINCT runner_id FROM jobs
+	WHERE state = 'in_progress' AND runner_id != ''`)
+
+// RunnersWithAJob returns, by ID, every runner GitHub says a job is executing
+// on: ListRunningJobsForRunner's question asked of the whole fleet at once, for
+// the scheduler, which decides from one snapshot and cannot ask runner by
+// runner. Like that question it is read from the jobs, because a runner failed
+// as lost has forgotten its job.
+//
+// A job whose run an operator cancelled still counts, unlike in runningJobSQL.
+// Until GitHub says the job has ended, the container is where the cancellation
+// is carried out, including any steps that run when a job is cancelled, and
+// this is the answer the late-report path gets about the same container: the
+// reap must never take back a workload that path decided to keep.
+func (s *Store) RunnersWithAJob(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.hotRead().Query(ctx, runnersWithAJobQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // JobDistinct returns the distinct values of a filterable column, for
 // populating the job filter's dropdowns without a full table scan client-side.
 func (s *Store) JobDistinct(ctx context.Context, column string, limit int) ([]string, error) {
