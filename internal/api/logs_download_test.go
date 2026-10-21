@@ -133,3 +133,44 @@ func TestLogFilenameSurvivesEveryFilesystemAndQuotingRule(t *testing.T) {
 		}
 	}
 }
+
+// A download used to write its headers before waiting for the first chunk, so
+// a relay that never started (an agent in poll backoff, or a host restarting)
+// answered 200 with a file-shaped empty attachment. That reads as a build
+// that printed nothing. The headers now wait for the first bytes, and a silent
+// window is a 503 with a sentence saying to try again.
+func TestADownloadWithNoFirstChunkIsRefusedNotEmpty(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux-x64")
+
+	hostID, agentToken := h.agentToken("vm-1")
+	host, err := h.st.GetHost(h.ctx, hostID)
+	if err != nil {
+		t.Fatalf("GetHost: %v", err)
+	}
+	run := h.runner(pool, host, store.RunnerBusy)
+	u, _ := h.user("viewer", store.RoleViewer)
+
+	done := make(chan *response, 1)
+	go func() {
+		done <- h.do(request{method: http.MethodGet,
+			path: "/api/v1/runners/" + run.ID + "/logs/download", cookie: h.session(u)})
+	}()
+
+	// Wait until the controller has queued the relay, so the handler is in its
+	// first-chunk wait rather than still opening the stream. Nothing answers
+	// the task: that is the host this test is about.
+	_ = waitForStreamTask(t, h, agentToken)
+
+	resp := <-done
+	if resp.status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503: %s", resp.status, resp.body)
+	}
+	if resp.errorMessage(t) == "" {
+		t.Fatalf("the refusal said nothing an operator can act on:\n%s", resp.body)
+	}
+	if cd := resp.header.Get("Content-Disposition"); cd != "" {
+		t.Fatalf("Content-Disposition = %q, want no attachment for a refused download", cd)
+	}
+}
