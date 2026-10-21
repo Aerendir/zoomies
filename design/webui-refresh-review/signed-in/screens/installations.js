@@ -10,9 +10,9 @@ import { listScreen, rowAction } from './list.js';
 const rows = FLEET.installations.map((i) => [
   `<strong>${esc(i.target)}</strong>`,
   i.healthy ? pill({ state: 'idle', label: 'Connected' }) : pill({ state: 'danger', label: 'Disconnected' }),
-  esc(i.target_type),
+  esc(i.target_type === 'org' ? 'Organisation' : 'Repository'),
   esc(i.pool_count),
-  clip(i.healthy ? 'GitHub answered the last check.' : i.last_error),
+  esc(i.healthy ? 'GitHub answered the last check.' : i.last_error),
   esc(relative(i.last_checked_at)),
   rowAction('Open', i.target),
 ]);
@@ -41,7 +41,7 @@ export default listScreen({
       { label: 'State' },
       { label: 'Kind' },
       { label: 'Pools', align: 'end' },
-      { label: 'What GitHub said', truncate: true },
+      { label: 'What GitHub said', wrap: true },
       { label: 'Checked' },
       { label: 'Actions' },
     ],

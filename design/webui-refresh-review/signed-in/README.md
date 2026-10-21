@@ -78,12 +78,12 @@ eleven), so the heights compare layouts and not what a real fleet would do.
 
 | Page | Today, 1440 | Columns today | Mock, 1440 | Columns in the mock | Today, phone | Mock, phone |
 | --- | --- | --- | --- | --- | --- | --- |
-| Overview | 1238 | none | 1555 | none | 2188 | 2437 |
-| Queue | 1609 | 9 | 947 | 6 | 2584 | 1189 |
-| Jobs | 1251 | 12 | 1379 | 8 | 1532 | 1495 |
-| Runners | 1854 | 11 | 1109 | 8 | 2914 | 1379 |
-| Runner detail | 2277 | none | 844 | none | 4796 | 1157 |
-| Workflows | 900 | 11 | 1241 | 7 | 1616 | 1357 |
+| Overview | 1238 | none | 1611 | none | 2188 | 2627 |
+| Queue | 1609 | 9 | 971 | 6 | 2584 | 1269 |
+| Jobs | 1251 | 12 | 1393 | 8 | 1532 | 1541 |
+| Runners | 1854 | 11 | 1123 | 8 | 2914 | 1425 |
+| Runner detail | 2277 | none | 872 | none | 4796 | 1227 |
+| Workflows | 900 | 11 | 1255 | 7 | 1616 | 1403 |
 
 Today's Overview is six tiles, a lifecycle diagram and two paragraphs. The mock
 answers the question the page is opened for, whether anything is wrong, in the
@@ -98,11 +98,11 @@ in the title.
 
 | Page | Today, 1440 | Columns today | Mock, 1440 | Columns in the mock | Today, phone | Mock, phone |
 | --- | --- | --- | --- | --- | --- | --- |
-| Pools | 1117 | 14 | 844 | 7 | 2086 | 896 |
-| Pool detail | 2389 | none | 1214 | 5 | 5247 | 1490 |
-| Hosts | 1681 | none | 844 | 8 | 3515 | 856 |
-| Host detail | 1069 | none | 962 | 4 | 1616 | 1222 |
-| Providers | 1534 | none | 844 | 7 | 2346 | 670 |
+| Pools | 1117 | 14 | 872 | 7 | 2086 | 942 |
+| Pool detail | 2389 | none | 1254 | 5 | 5247 | 1564 |
+| Hosts | 1681 | none | 872 | 8 | 3515 | 890 |
+| Host detail | 1069 | none | 986 | 4 | 1616 | 1280 |
+| Providers | 1534 | none | 872 | 7 | 2346 | 692 |
 
 A pool, a host and a runner each get a page that is a header, a few numbers, the
 facts, and the things that belong to it. A host that is not reporting says so in
@@ -113,11 +113,11 @@ not claim a job.
 
 | Page | Today, 1440 | Columns today | Mock, 1440 | Columns in the mock | Today, phone | Mock, phone |
 | --- | --- | --- | --- | --- | --- | --- |
-| Usage | 2692 | none | 1300 | 5 | 6587 | 1556 |
-| Comparisons | 1191 | none | 1160 | 4 | 1979 | 1250 |
-| Kennel Club | 4423 | 2 | 1285 | 5 | 7709 | 1715 |
-| Eli repairs | 900 | none | 1024 | 6 | 947 | 1202 |
-| AI context | 977 | none | 919 | 6 | 1399 | 1017 |
+| Usage | 2692 | none | 1332 | 5 | 6587 | 1626 |
+| Comparisons | 1191 | none | 1182 | 4 | 1979 | 1288 |
+| Kennel Club | 4423 | 2 | 1335 | 5 | 7709 | 1799 |
+| Eli repairs | 900 | none | 1038 | 6 | 947 | 1292 |
+| AI context | 977 | none | 937 | 6 | 1399 | 1061 |
 
 Each page leads with the one answer it exists to give (how did the week go, did
 the change help, is anything wrong, what did Eli do) in the stage, and the stage's
@@ -128,13 +128,13 @@ gain, since today it is the tallest page in the capture.
 
 | Page | Today, 1440 | Columns today | Mock, 1440 | Columns in the mock | Today, phone | Mock, phone |
 | --- | --- | --- | --- | --- | --- | --- |
-| Settings | 900 | none | 893 | none | 1474 | 1451 |
-| Audit | 900 | 5 | 938 | 6 | 1384 | 1062 |
-| Installations | 1276 | none | 844 | 7 | 2394 | 648 |
-| Migrate | 900 | none | 877 | none | 950 | 1179 |
-| New pool | 2265 | none | 844 | none | 2582 | 1117 |
-| Add a host | 1365 | none | 844 | none | 1929 | 863 |
-| Add a provider | 1023 | none | 844 | none | 1462 | 985 |
+| Settings | 900 | none | 931 | none | 1474 | 1525 |
+| Audit | 900 | 5 | 952 | 6 | 1384 | 1084 |
+| Installations | 1276 | none | 872 | 7 | 2394 | 692 |
+| Migrate | 900 | none | 899 | none | 950 | 1221 |
+| New pool | 2265 | none | 872 | none | 2582 | 1127 |
+| Add a host | 1365 | none | 872 | none | 1929 | 873 |
+| Add a provider | 1023 | none | 872 | none | 1462 | 995 |
 
 Settings is sectioned cards with their icon tiles and a bar that says a change
 has not been saved. The setup flows (a pool, a host, a provider) become the
@@ -146,7 +146,10 @@ in the field's own words.
 * **A shell**: the product's own sidebar, in its four groups and its order, with
   the Overview alone above them; a top bar; and on a phone a bar of the four
   sections an operator watches a fleet with and a More sheet for the rest. The
-  sheet is a native popover, so it closes on Escape and gives focus back.
+  sheet is a native popover, so it opens with focus on its Close button, closes
+  on Escape, gives focus back and dims the page behind it. A native popover does
+  not hold Tab inside it: the product's own menu on a phone (`NavMenu`) does, by
+  making the page behind it inert, and the real build keeps that behaviour.
 * **A page header**: small capitals, the title, a short blue rule, one sentence.
 * **A card, a stat, a stage, a table card, steps and a checklist.**
 * **A pill**: a word and a shape (disc, diamond, ring, triangle, square, bar),
@@ -186,6 +189,9 @@ purpose, and everything is drawn from `tokens.css` as it stands. What
 | `3.5rem` | the width of an outlined numeral |
 | `5.5rem` | the mark's size in a stage on a phone |
 | `1.4s` | the pulse of a loading placeholder, still for anyone who asks for less motion |
+| `0.5` | the dimmest a loading placeholder pulses to |
+| `100vh` | the tallest the sidebar grows before it scrolls inside itself |
+| `80vh` | the tallest the phone's More sheet grows before it scrolls |
 
 ## What was checked
 
@@ -206,7 +212,7 @@ spill still is.
 Tests hold the rest: the fixture against the API's schema and its totals against
 its rows, the Overview's numbers against the fleet, every list page in all five
 states and at 320, a 300-character name and a 120-character label held to a line
-with all of the text in the title, every row action at 44px on a phone, the More
+with all of the text in the title and shown whole while the row has keyboard focus, every row action, filter, page action and search at 44px on a phone, the More
 sheet opening and closing and returning focus, the pill shapes being six
 different shapes, and a wrong field being marked and described.
 

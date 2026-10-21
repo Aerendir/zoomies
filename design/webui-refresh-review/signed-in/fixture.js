@@ -31,7 +31,7 @@ const installations = [
     app_id: 112233,
     installation_id: 5550001,
     target: 'acme-corp',
-    target_type: 'Organization',
+    target_type: 'org',
     api_base_url: 'https://api.github.com',
     app_slug: 'zoomies-acme',
     healthy: true,
@@ -45,7 +45,7 @@ const installations = [
     app_id: 112233,
     installation_id: 5550002,
     target: 'acme-labs',
-    target_type: 'Organization',
+    target_type: 'org',
     api_base_url: 'https://api.github.com',
     app_slug: 'zoomies-acme',
     healthy: false,
@@ -65,10 +65,10 @@ const poolBase = [
 ];
 
 const hostBase = [
-  ['host_a', 'vm-build-01', '10.0.4.11', 'agent', 8, true, false, ['linux', 'x64'], 16, 65536],
-  ['host_b', 'vm-build-02', '10.0.4.12', 'agent', 8, true, false, ['linux', 'x64'], 16, 65536],
-  ['host_c', 'metal-gpu-01', '10.0.7.5', 'agent', 2, true, false, ['linux', 'x64', 'gpu'], 32, 131072],
-  ['host_d', 'pi-rack-03', '10.0.9.23', 'agent', 4, false, true, ['linux', 'arm64'], 8, 16384],
+  ['host_a', 'vm-build-01', '10.0.4.11', 'direct', 8, true, false, ['linux', 'x64'], 16, 65536],
+  ['host_b', 'vm-build-02', '10.0.4.12', 'direct', 8, true, false, ['linux', 'x64'], 16, 65536],
+  ['host_c', 'metal-gpu-01', '10.0.7.5', 'direct', 2, true, false, ['linux', 'x64', 'gpu'], 32, 131072],
+  ['host_d', 'pi-rack-03', '10.0.9.23', 'direct', 4, false, true, ['linux', 'arm64'], 8, 16384],
 ];
 
 // [id, pool, host, state, label extras, current job id, jobs handled]
@@ -300,7 +300,7 @@ const machines = [
     provider_name: 'pve-cluster-a',
     provider_kind: 'proxmox',
     name: 'zoomies-build-81c2',
-    state: 'cloning',
+    state: 'creating',
     pool_id: 'pool_build',
     pool_name: 'linux-build',
     message: 'Cloning template 9000, 40% done.',
@@ -321,14 +321,14 @@ const machines = [
 ];
 
 const audit = [
-  ['sign-in', 'session', 'sess_1', 'ada@example.com', 'user', 4],
-  ['pool.update', 'pool', 'pool_build', 'ada@example.com', 'user', 12],
+  ['auth.login', 'session', 'sess_1', 'ada@example.com', 'user', 4],
+  ['pool.disable', 'pool', 'pool_build', 'ada@example.com', 'user', 12],
   ['host.cordon', 'host', 'host_d', 'ada@example.com', 'user', 19],
-  ['token.create', 'token', 'tok_ci', 'ada@example.com', 'user', 55],
-  ['provider.pause', 'provider', 'prov_pve2', 'zoomies', 'system', 8],
-  ['installation.check', 'installation', 'inst_labs', 'zoomies', 'system', 1],
+  ['auth.password_changed', 'user', 'ada', 'ada@example.com', 'user', 55],
+  ['host.unhealthy', 'host', 'host_d', 'zoomies', 'system', 8],
+  ['installation.verify', 'installation', 'inst_labs', 'zoomies', 'system', 1],
   ['pool.create', 'pool', 'pool_labs', 'grace@example.com', 'user', 60 * 24 * 12],
-  ['sign-in', 'session', 'sess_0', 'grace@example.com', 'user', 60 * 26],
+  ['auth.login', 'session', 'sess_0', 'grace@example.com', 'user', 60 * 26],
 ].map(([action, target_kind, target_id, actor_name, actor_kind, minutes], i) => ({
   id: `aud_${String(i + 1).padStart(3, '0')}`,
   actor_name,
@@ -518,7 +518,8 @@ export function fleetCounts(fleet) {
       fleet.pools.map((pool) => [
         pool.id,
         {
-          runners: fleet.runners.filter((r) => r.pool_id === pool.id && r.state !== 'removed').length,
+          // Live runners: the ones that hold a slot, which is what the Overview counts too.
+          runners: fleet.runners.filter((r) => r.pool_id === pool.id && LIVE.includes(r.state)).length,
           queued: fleet.jobs.filter((j) => j.pool_id === pool.id && j.state === 'queued').length,
         },
       ]),

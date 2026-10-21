@@ -32,7 +32,7 @@ export function providerPill(provider) {
 
 /** A rented machine's state. */
 export function machinePill(machine) {
-  const map = { ready: ['idle', 'Ready'], cloning: ['pending', 'Cloning'], failed: ['danger', 'Failed'] };
+  const map = { ready: ['idle', 'Ready'], creating: ['pending', 'Creating'], failed: ['danger', 'Failed'] };
   const [state, label] = map[machine.state] ?? ['neutral', machine.state];
   return pill({ state, label });
 }

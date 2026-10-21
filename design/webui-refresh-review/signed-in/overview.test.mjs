@@ -17,10 +17,10 @@ after(async () => {
   await server?.close();
 });
 
-async function open(state, width = 1440, extra = '') {
+async function open(state, width = 1440, extra = '', screen = 'overview') {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await context.newPage();
-  const hash = `#screen=overview&concept=a&style=mission-control&mode=dark&state=${state}${extra}`;
+  const hash = `#screen=${screen}&concept=a&style=mission-control&mode=dark&state=${state}${extra}`;
   await page.goto(`${server.url}/signed-in/mockups.html${hash}`);
   await page.waitForFunction((h) => document.documentElement.dataset.rendered === h, hash);
   return { page, context };
@@ -39,6 +39,20 @@ test('the numbers on the Overview are the fleet the other pages list', async () 
   const pools = await page.$$eval('.k-grid.wide .k-card-title', (els) => els.map((el) => el.textContent.trim()));
   assert.deepEqual(pools, FLEET.pools.map((p) => p.name));
   await context.close();
+});
+
+test('the Runners stat is the runners the pool cards add up to, and the Runners page says the same live number', async () => {
+  const { page, context } = await open('attention');
+  const stat = Number(await page.locator('.k-stat-value').first().innerText());
+  const cards = await page.$$eval('.k-grid.wide .k-facts div:first-child dd', (els) => els.map((e) => Number(e.textContent.split(' of ')[0])));
+  assert.equal(cards.reduce((a, b) => a + b, 0), stat, 'the pool cards and the stat count the same runners');
+  await context.close();
+  const runners = await open('rows', 1440, '', 'runners');
+  assert.match(await runners.page.locator('.k-card-head .k-eyebrow').first().innerText(), new RegExp(`${stat} live`, 'i'));
+  await runners.context.close();
+  const link = await open('attention');
+  assert.equal(await link.page.locator('.k-stat', { hasText: 'Jobs running' }).locator('a').getAttribute('href'), '#screen=jobs');
+  await link.context.close();
 });
 
 test('the healthy state is the same fleet with what is wrong taken out, and says so', async () => {

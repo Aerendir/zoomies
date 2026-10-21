@@ -93,7 +93,13 @@ test('no measured mock scrolls the page sideways, on a phone or at 1440', () => 
 
 test('every length kit.css writes by hand is listed in the README, and every listed one is in kit.css', () => {
   const css = readFileSync(resolve(here, 'kit.css'), 'utf8');
-  const written = new Set([...css.matchAll(/(?<![\w-])(\d+(?:\.\d+)?(?:rem|s))\b/g)].map((m) => m[1]));
+  // A media query's width is the product's own breakpoint (--z-bp-md), which a custom property
+  // cannot be written into, so the query lines are left out and the rest are all counted.
+  const body = css.replace(/@media[^{]*/g, '');
+  const written = new Set([
+    ...[...body.matchAll(/(?<![\w.-])(\d+(?:\.\d+)?(?:rem|s|vh|px))\b/g)].map((m) => m[1]),
+    ...[...body.matchAll(/opacity:\s*([\d.]+)/g)].map((m) => m[1]),
+  ]);
   const table = section('Tokens');
   const listed = new Set([...table.matchAll(/^\| `([^`]+)`/gm)].flatMap((m) => m[1].split(/,\s*/)));
   for (const length of written) assert.ok(listed.has(length), `${length} is written in kit.css and not listed in the README`);

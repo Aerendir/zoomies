@@ -27,6 +27,22 @@ function properties(name) {
   return new Set([...block.matchAll(/\n {8}([a-z0-9_]+):/g)].map((match) => match[1]));
 }
 
+/** The values a property may take: its own enum, or the one its $ref names, or null. */
+function enumOf(schema, property) {
+  const start = components.indexOf(`\n    ${schema}:\n`);
+  const rest = components.slice(start + 1);
+  const end = rest.slice(1).search(/\n    [A-Z][A-Za-z0-9]+:\n/);
+  const block = end < 0 ? rest : rest.slice(0, end + 1);
+  const line = new RegExp(`\\n {8}${property}: ([^\\n]*)`).exec(block)?.[1] ?? '';
+  const inline = /enum: \[([^\]]*)\]/.exec(line);
+  if (inline) return inline[1].split(',').map((v) => v.trim());
+  const ref = /schemas\/([A-Za-z]+)"/.exec(line)?.[1];
+  if (!ref) return null;
+  const named = components.slice(components.indexOf(`\n    ${ref}:\n`) + 1);
+  const listed = /enum: \[([^\]]*)\]/.exec(named);
+  return listed ? listed[1].split(',').map((v) => v.trim()) : null;
+}
+
 const SCHEMAS = {
   pools: 'Pool',
   hosts: 'Host',
@@ -75,6 +91,31 @@ test("a Kennel Club repository's counts are its findings, by severity", () => {
   }
 });
 
+// A key that exists is not a value that can occur: a mock showing `target_type: 'Organization'`
+// draws a word the API never returns, on a page a person is asked to judge.
+const ENUMS = [
+  ['runners', 'Runner', 'state'],
+  ['jobs', 'Job', 'state'],
+  ['hosts', 'Host', 'connection'],
+  ['installations', 'Installation', 'target_type'],
+  ['machines', 'Machine', 'state'],
+  ['audit', 'AuditEvent', 'actor_kind'],
+  ['kennelRepositories', 'KennelRepository', 'state'],
+];
+for (const [collection, schema, property] of ENUMS) {
+  test(`every ${collection} ${property} is a value the API can return (${schema}.${property})`, () => {
+    const allowed = enumOf(schema, property);
+    assert.ok(allowed && allowed.length > 1, `could not read the values of ${schema}.${property} from api/openapi.yaml`);
+    for (const item of FLEET[collection]) assert.ok(allowed.includes(item[property]), `${item.name ?? item.id}: "${item[property]}" is not one of ${allowed}`);
+  });
+}
+
+test('every AI context freshness state is one the API can return', () => {
+  const block = components.slice(components.indexOf('\n    AIContextRepository:\n'));
+  const allowed = /freshness:[\s\S]*?state: \{ type: string, enum: \[([^\]]*)\]/.exec(block)[1].split(',').map((v) => v.trim());
+  for (const item of FLEET.contexts) assert.ok(allowed.includes(item.freshness.state), `${item.full_name}: ${item.freshness.state}`);
+});
+
 test('the fleet is frozen, so a screen cannot change what another one reads', () => {
   assert.ok(Object.isFrozen(FLEET));
   assert.ok(Object.isFrozen(FLEET.runners));
@@ -87,7 +128,7 @@ test('the counts the Overview shows are the rows the pages list', () => {
   assert.equal(counts.jobs.queued, FLEET.jobs.filter((j) => j.state === 'queued').length);
   assert.equal(counts.jobs.running, FLEET.jobs.filter((j) => j.state === 'in_progress').length);
   for (const pool of FLEET.pools) {
-    const rows = FLEET.runners.filter((r) => r.pool_id === pool.id && r.state !== 'removed');
+    const rows = FLEET.runners.filter((r) => r.pool_id === pool.id && LIVE.includes(r.state));
     assert.equal(counts.pools[pool.id].runners, rows.length, `${pool.name}: runners listed against runners counted`);
     assert.equal(
       counts.pools[pool.id].queued,

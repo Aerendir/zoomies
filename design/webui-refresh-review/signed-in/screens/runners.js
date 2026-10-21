@@ -6,7 +6,7 @@
 // runners straight under it, with the three columns that name things held to a
 // line and the full text kept in the title. The 120-character label on the
 // fourth runner is the case that tests it.
-import { FLEET } from '/signed-in/fixture.js';
+import { FLEET, fleetCounts } from '/signed-in/fixture.js';
 import { clip, filters, meter } from '/signed-in/kit.js';
 import { esc, button } from '/review/ui.js';
 import { listScreen, rowAction, runnerPill } from './list.js';
@@ -22,6 +22,7 @@ const rows = FLEET.runners.map((r) => [
   rowAction('Open', r.name),
 ]);
 
+const live = fleetCounts(FLEET).runners.live;
 const count = (state) => FLEET.runners.filter((r) => r.state === state).length;
 
 export default listScreen({
@@ -41,7 +42,7 @@ export default listScreen({
   },
   table: () => ({
     title: 'All runners',
-    eyebrow: `${FLEET.runners.length} runners`,
+    eyebrow: `${FLEET.runners.length} known, ${live} live`,
     icon: 'server',
     caption: 'Runners',
     toolbar: filters(

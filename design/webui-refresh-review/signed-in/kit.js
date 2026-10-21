@@ -216,7 +216,7 @@ export function tableCard({ title, eyebrow, caption, columns, rows, actions = ''
         `<tr>${row
           .map((cell, i) => {
             const column = columns[i];
-            const classes = [column.align === 'end' && 'is-end', column.mono && 'is-mono', column.truncate && 'is-truncate']
+            const classes = [column.align === 'end' && 'is-end', column.mono && 'is-mono', column.truncate && 'is-truncate', column.wrap && 'is-wrap']
               .filter(Boolean)
               .join(' ');
             return `<td${classes ? ` class="${classes}"` : ''}>${cell}</td>`;
@@ -310,7 +310,7 @@ export function shell({ page, title, eyebrow, subtitle, actions = '', body, coll
       .join('') +
     `<button type="button" class="k-bar-item" popovertarget="k-more" aria-label="More pages">${icon('menu', 20)}<span>More</span></button></nav>` +
     `<div id="k-more" class="k-sheet" popover aria-label="All pages"><div class="k-sheet-head"><strong>All pages</strong>` +
-    `<button type="button" class="m-icon-btn" popovertarget="k-more" popovertargetaction="hide" aria-label="Close">${icon('x', 16)}</button></div>` +
-    `<nav aria-label="All pages">${nav(page, false)}</nav></div></div>`
+    `<button type="button" class="m-icon-btn" popovertarget="k-more" popovertargetaction="hide" aria-label="Close" autofocus>${icon('x', 16)}</button></div>` +
+    `<nav aria-label="Pages">${nav(page, false)}</nav></div></div>`
   );
 }

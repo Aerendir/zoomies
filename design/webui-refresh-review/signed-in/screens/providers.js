@@ -13,7 +13,7 @@ const rows = FLEET.providers.map((p) => [
   providerPill(p),
   esc(p.kind),
   esc(`${p.machines} of ${p.max_machines}`),
-  clip(p.paused ? p.paused_reason : 'No failures since the last check.'),
+  esc(p.paused ? p.paused_reason : 'No failures since the last check.'),
   esc(relative(p.last_check_at)),
   rowAction('Open', p.name),
 ]);
@@ -42,7 +42,7 @@ export default listScreen({
       { label: 'State' },
       { label: 'Kind' },
       { label: 'Machines' },
-      { label: 'Note', truncate: true },
+      { label: 'Note', wrap: true },
       { label: 'Last check' },
       { label: 'Actions' },
     ],

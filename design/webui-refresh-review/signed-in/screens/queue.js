@@ -27,7 +27,7 @@ const rows = queued.map((j, i) => [
   `<div class="k-stack">${clip(j.repo)}${clip(`${j.workflow} / ${j.job_name}`)}</div>`,
   esc(j.pool_name),
   esc(relative(j.queued_at)),
-  clip(why(j)),
+  esc(why(j)),
   rowAction('Open', `${j.job_name} in ${j.repo}, run ${j.run_number}`),
 ]);
 
@@ -62,7 +62,7 @@ export default listScreen({
       { label: 'Job', truncate: true },
       { label: 'Pool' },
       { label: 'Waiting' },
-      { label: 'Why', truncate: true },
+      { label: 'Why', wrap: true },
       { label: 'Actions' },
     ],
     rows,

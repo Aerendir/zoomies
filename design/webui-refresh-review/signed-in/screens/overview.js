@@ -9,6 +9,7 @@
 // the pages it links to cannot disagree.
 import { button, esc } from '/review/ui.js';
 import { poolState } from './derive.js';
+import { rowAction } from './list.js';
 import { icon } from '/review/icons.js';
 import { FLEET, fleetCounts } from '/signed-in/fixture.js';
 import {
@@ -76,7 +77,7 @@ function problemRow(problem) {
   return (
     `<li>${pill({ state: problem.severity === 'error' ? 'danger' : 'pending', label: problem.severity === 'error' ? 'Error' : 'Warning' })}` +
     `<div class="k-list-main"><strong>${esc(problem.title)}</strong><span>${esc(problem.fix)}</span></div>` +
-    `${button({ label: 'Open', variant: 'secondary', size: 'sm', href: '#' })}</li>`
+    `${rowAction('Open', problem.title)}</li>`
   );
 }
 
@@ -106,7 +107,7 @@ function populated(fleet, state) {
     }) +
     `<div class="k-grid">` +
     stat({ label: 'Runners', value: counts.runners.live, note: `${counts.runners.busy} busy, ${counts.runners.idle} idle`, href: '#screen=runners', icon: 'server' }) +
-    stat({ label: 'Jobs running', value: counts.jobs.running, note: 'across all pools', href: '#screen=workflows', icon: 'workflow' }) +
+    stat({ label: 'Jobs running', value: counts.jobs.running, note: 'across all pools', href: '#screen=jobs', icon: 'workflow' }) +
     stat({
       label: 'Waiting',
       value: counts.jobs.queued,

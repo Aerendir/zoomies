@@ -1,10 +1,10 @@
 {
-  "generated": "2026-10-21T17:45:10.857Z",
+  "generated": "2026-10-21T18:32:50.396Z",
   "look": "mission-control dark",
   "screens": {
     "overview": {
       "375": {
-        "height": 2437,
+        "height": 2627,
         "columns": 0,
         "tables": 0,
         "cards": 10,
@@ -12,7 +12,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1555,
+        "height": 1611,
         "columns": 0,
         "tables": 0,
         "cards": 10,
@@ -23,7 +23,7 @@
     },
     "pools": {
       "375": {
-        "height": 896,
+        "height": 942,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -31,7 +31,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -42,7 +42,7 @@
     },
     "pool-detail": {
       "375": {
-        "height": 1490,
+        "height": 1564,
         "columns": 5,
         "tables": 1,
         "cards": 5,
@@ -50,7 +50,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1214,
+        "height": 1254,
         "columns": 5,
         "tables": 1,
         "cards": 5,
@@ -61,7 +61,7 @@
     },
     "runners": {
       "375": {
-        "height": 1379,
+        "height": 1425,
         "columns": 8,
         "tables": 1,
         "cards": 1,
@@ -69,7 +69,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1109,
+        "height": 1123,
         "columns": 8,
         "tables": 1,
         "cards": 1,
@@ -80,7 +80,7 @@
     },
     "runner-detail": {
       "375": {
-        "height": 1157,
+        "height": 1227,
         "columns": 0,
         "tables": 0,
         "cards": 3,
@@ -88,7 +88,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 0,
         "tables": 0,
         "cards": 3,
@@ -99,7 +99,7 @@
     },
     "queue": {
       "375": {
-        "height": 1189,
+        "height": 1269,
         "columns": 6,
         "tables": 1,
         "cards": 4,
@@ -107,7 +107,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 947,
+        "height": 971,
         "columns": 6,
         "tables": 1,
         "cards": 4,
@@ -118,7 +118,7 @@
     },
     "workflows": {
       "375": {
-        "height": 1357,
+        "height": 1403,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -126,7 +126,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1241,
+        "height": 1255,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -137,7 +137,7 @@
     },
     "jobs": {
       "375": {
-        "height": 1495,
+        "height": 1541,
         "columns": 8,
         "tables": 1,
         "cards": 1,
@@ -145,7 +145,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1379,
+        "height": 1393,
         "columns": 8,
         "tables": 1,
         "cards": 1,
@@ -156,7 +156,7 @@
     },
     "hosts": {
       "375": {
-        "height": 856,
+        "height": 890,
         "columns": 8,
         "tables": 1,
         "cards": 1,
@@ -164,7 +164,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 8,
         "tables": 1,
         "cards": 1,
@@ -175,7 +175,7 @@
     },
     "host-detail": {
       "375": {
-        "height": 1222,
+        "height": 1280,
         "columns": 4,
         "tables": 1,
         "cards": 5,
@@ -183,7 +183,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 962,
+        "height": 986,
         "columns": 4,
         "tables": 1,
         "cards": 5,
@@ -194,7 +194,7 @@
     },
     "providers": {
       "375": {
-        "height": 670,
+        "height": 692,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -202,7 +202,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -213,7 +213,7 @@
     },
     "usage": {
       "375": {
-        "height": 1556,
+        "height": 1626,
         "columns": 5,
         "tables": 1,
         "cards": 6,
@@ -221,7 +221,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1300,
+        "height": 1332,
         "columns": 5,
         "tables": 1,
         "cards": 6,
@@ -232,7 +232,7 @@
     },
     "comparisons": {
       "375": {
-        "height": 1250,
+        "height": 1288,
         "columns": 4,
         "tables": 1,
         "cards": 3,
@@ -240,7 +240,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1160,
+        "height": 1182,
         "columns": 4,
         "tables": 1,
         "cards": 3,
@@ -251,7 +251,7 @@
     },
     "kennel": {
       "375": {
-        "height": 1715,
+        "height": 1799,
         "columns": 5,
         "tables": 1,
         "cards": 6,
@@ -259,7 +259,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1285,
+        "height": 1335,
         "columns": 5,
         "tables": 1,
         "cards": 6,
@@ -270,7 +270,7 @@
     },
     "repairs": {
       "375": {
-        "height": 1202,
+        "height": 1292,
         "columns": 6,
         "tables": 1,
         "cards": 2,
@@ -278,7 +278,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 1024,
+        "height": 1038,
         "columns": 6,
         "tables": 1,
         "cards": 2,
@@ -289,7 +289,7 @@
     },
     "ai-context": {
       "375": {
-        "height": 1017,
+        "height": 1061,
         "columns": 6,
         "tables": 1,
         "cards": 2,
@@ -297,7 +297,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 919,
+        "height": 937,
         "columns": 6,
         "tables": 1,
         "cards": 2,
@@ -308,7 +308,7 @@
     },
     "installations": {
       "375": {
-        "height": 648,
+        "height": 692,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -316,7 +316,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 7,
         "tables": 1,
         "cards": 1,
@@ -327,7 +327,7 @@
     },
     "migrate": {
       "375": {
-        "height": 1179,
+        "height": 1221,
         "columns": 0,
         "tables": 0,
         "cards": 3,
@@ -335,7 +335,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 877,
+        "height": 899,
         "columns": 0,
         "tables": 0,
         "cards": 3,
@@ -346,7 +346,7 @@
     },
     "audit": {
       "375": {
-        "height": 1062,
+        "height": 1084,
         "columns": 6,
         "tables": 1,
         "cards": 1,
@@ -354,7 +354,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 938,
+        "height": 952,
         "columns": 6,
         "tables": 1,
         "cards": 1,
@@ -365,7 +365,7 @@
     },
     "settings": {
       "375": {
-        "height": 1451,
+        "height": 1525,
         "columns": 0,
         "tables": 0,
         "cards": 4,
@@ -373,7 +373,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 893,
+        "height": 931,
         "columns": 0,
         "tables": 0,
         "cards": 4,
@@ -384,7 +384,7 @@
     },
     "pool-new": {
       "375": {
-        "height": 1117,
+        "height": 1127,
         "columns": 0,
         "tables": 0,
         "cards": 2,
@@ -392,7 +392,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 0,
         "tables": 0,
         "cards": 2,
@@ -403,7 +403,7 @@
     },
     "host-new": {
       "375": {
-        "height": 863,
+        "height": 873,
         "columns": 0,
         "tables": 0,
         "cards": 2,
@@ -411,7 +411,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 0,
         "tables": 0,
         "cards": 2,
@@ -422,7 +422,7 @@
     },
     "provider-new": {
       "375": {
-        "height": 985,
+        "height": 995,
         "columns": 0,
         "tables": 0,
         "cards": 2,
@@ -430,7 +430,7 @@
         "scrollsSideways": false
       },
       "1440": {
-        "height": 844,
+        "height": 872,
         "columns": 0,
         "tables": 0,
         "cards": 2,
