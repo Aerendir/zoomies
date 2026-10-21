@@ -81,3 +81,13 @@ test('a hash that tries to be markup is only ever compared, never echoed', () =>
 test('with no screens there is nothing to land on, which is a programming error', () => {
   assert.throws(() => parseHash('', []), /no screens/);
 });
+
+test('a pack that offers fewer concepts turns one it does not offer into the first it does', () => {
+  const screens = [{ id: 'overview', states: ['normal'] }];
+  const offered = { concepts: ['current', 'a'] };
+  assert.equal(parseHash('#concept=b', screens, offered).concept, 'a');
+  assert.equal(parseHash('#concept=current', screens, offered).concept, 'current');
+  assert.equal(parseHash('', screens, offered).concept, 'a');
+  // Without the option nothing changes for pack 1.
+  assert.equal(parseHash('#concept=c', screens).concept, 'c');
+});

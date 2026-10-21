@@ -6,8 +6,17 @@
 // delay. The hash is never rewritten behind the caller's back: a caller that
 // sets a partial hash waits for exactly that hash to come back.
 import { CONCEPTS, MODES, STYLES, formatHash, parseHash } from './review-state.js';
-import { SCREENS } from './screens/index.js';
 import { esc } from './ui.js';
+
+// The page names its own registry, so a second pack can reuse all of this. The
+// default is pack 1's, which is what a page with no such tag means. A registry
+// may also say which concepts it offers and what to call them.
+const registryUrl =
+  document.querySelector('meta[name="review-screens"]')?.getAttribute('content') ??
+  './screens/index.js';
+const registry = await import(registryUrl);
+const { SCREENS } = registry;
+const OFFERED = registry.CONCEPTS ?? CONCEPTS;
 
 const root = document.documentElement;
 const stage = document.getElementById('stage');
@@ -16,7 +25,13 @@ const controls = Object.fromEntries(KEYS.map((key) => [key, document.getElementB
 const browserMode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 
 const LABELS = {
-  concept: { current: 'Current (capture)', a: 'A (evolution)', b: 'B (evolution)', c: 'C (bold)' },
+  concept: {
+    current: 'Current (capture)',
+    a: 'A (evolution)',
+    b: 'B (evolution)',
+    c: 'C (bold)',
+    ...registry.LABELS?.concept,
+  },
   style: { 'mission-control': 'Mission Control', classic: 'Classic' },
   mode: { light: 'Light', dark: 'Dark' },
 };
@@ -47,12 +62,12 @@ function currentView(screen) {
 }
 
 fill(controls.screen, SCREENS.map((s) => s.id), (id) => SCREENS.find((s) => s.id === id).title);
-fill(controls.concept, CONCEPTS, (concept) => LABELS.concept[concept]);
+fill(controls.concept, OFFERED, (concept) => LABELS.concept[concept]);
 fill(controls.style, STYLES, (style) => LABELS.style[style]);
 fill(controls.mode, MODES, (mode) => LABELS.mode[mode]);
 
 function draw() {
-  const wanted = parseHash(location.hash, SCREENS, { mode: browserMode });
+  const wanted = parseHash(location.hash, SCREENS, { mode: browserMode, concepts: OFFERED });
   const screen = SCREENS.find((s) => s.id === wanted.screen);
 
   // Classic is the absence of the attribute, exactly as the app does it.
@@ -74,7 +89,9 @@ for (const select of Object.values(controls)) {
     const chosen = Object.fromEntries(KEYS.map((key) => [key, controls[key].value]));
     // A new screen starts at its own first state.
     if (select === controls.screen) chosen.state = '';
-    location.hash = formatHash(parseHash(formatHash(chosen), SCREENS, { mode: browserMode }));
+    location.hash = formatHash(
+      parseHash(formatHash(chosen), SCREENS, { mode: browserMode, concepts: OFFERED }),
+    );
   });
 }
 

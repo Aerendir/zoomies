@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signed-in pages review</title>
+    <!-- The registry this page draws from. The page code is pack 1's, served at
+         /review/, so a second pack is a registry and a stylesheet and nothing else. -->
+    <meta name="review-screens" content="/signed-in/screens/index.js" />
+    <!-- The product's own tokens, by path, so a mockup cannot drift from them.
+         tokens.css names its backdrops as /brand/..., which is why this page
+         has to be served by tools/serve.mjs and not opened as a file. -->
+    <link rel="stylesheet" href="/web/src/lib/styles/tokens.css" />
+    <link rel="stylesheet" href="/review/review.css" />
+    <link rel="stylesheet" href="/signed-in/kit-tokens.css" />
+    <link rel="stylesheet" href="/signed-in/kit.css" />
+    <script type="module" src="/review/review.js"></script>
+  </head>
+  <body>
+    <header class="review-bar">
+      <p class="review-title">
+        <strong>Signed-in pages review</strong>
+        Illustrative data. Not product UI.
+      </p>
+      <div class="review-controls">
+        <div class="review-control">
+          <label for="screen">Screen</label>
+          <select id="screen" name="screen"></select>
+        </div>
+        <div class="review-control">
+          <label for="concept">Concept</label>
+          <select id="concept" name="concept"></select>
+        </div>
+        <div class="review-control">
+          <label for="style">Style</label>
+          <select id="style" name="style"></select>
+        </div>
+        <div class="review-control">
+          <label for="mode">Mode</label>
+          <select id="mode" name="mode"></select>
+        </div>
+        <div class="review-control">
+          <label for="state">State</label>
+          <select id="state" name="state"></select>
+        </div>
+      </div>
+    </header>
+
+    <div id="assets-banner" role="alert" hidden>
+      <strong>The design tokens did not load.</strong>
+      This page cannot show the product's look when it is opened as a file. Serve it with
+      <code>node design/webui-refresh-review/tools/serve.mjs</code>, then open
+      <code>http://127.0.0.1:8101/signed-in/mockups.html</code>. The tokens link to
+      <code>/brand/</code> and <code>/web/src/</code>, which only that server provides.
+    </div>
+
+    <noscript>
+      <p class="review-bar">This review page needs JavaScript to switch screens and concepts.</p>
+    </noscript>
+
+    <main id="stage"></main>
+
+    <!-- A classic script, not part of review.js: opened from a file, a module
+         script is blocked by the browser, so the module could never report that
+         it had failed to load. This runs either way. -->
+    <script>
+      (function () {
+        var loaded = getComputedStyle(document.documentElement).getPropertyValue('--z-space-4');
+        if (!loaded || !loaded.trim()) document.getElementById('assets-banner').hidden = false;
+      })();
+    </script>
+  </body>
+</html>

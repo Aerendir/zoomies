@@ -16,11 +16,16 @@ const web = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../web'
 const lucide = resolve(web, 'node_modules/@lucide/svelte');
 
 const WANTED = [
-  'arrow-left', 'arrow-right', 'boxes', 'cable', 'check', 'chevron-down', 'circle-alert',
-  'circle-check', 'clock', 'compass', 'copy', 'download', 'external-link', 'eye', 'eye-off',
-  'globe', 'house', 'info', 'key-round', 'laptop', 'layers', 'layout-dashboard', 'lock', 'moon',
-  'plug', 'scan-line', 'search', 'server', 'shield-check', 'sun', 'terminal', 'triangle-alert',
-  'user-round', 'workflow', 'x',
+  'activity', 'arrow-left', 'arrow-right', 'arrow-up-right', 'ban', 'bell', 'boxes', 'cable',
+  'chart-no-axes-combined', 'check', 'chevron-down', 'chevron-left', 'chevron-right',
+  'circle-alert', 'circle-check', 'circle-question-mark', 'clock', 'cloud', 'compass', 'copy', 'cpu',
+  'database', 'download', 'ellipsis', 'external-link', 'eye', 'eye-off', 'file-text', 'funnel',
+  'flag', 'gauge', 'git-branch', 'git-pull-request-arrow', 'globe', 'hard-drive', 'clock-fading',
+  'house', 'info', 'key-round', 'laptop', 'layers', 'layout-dashboard', 'link', 'list-ordered',
+  'lock', 'log-out', 'memory-stick', 'menu', 'moon', 'pause', 'pencil', 'play', 'plug', 'plus',
+  'refresh-cw', 'rocket', 'scan-line', 'scroll-text', 'search', 'server', 'settings',
+  'shield-check', 'sparkles', 'sun', 'tag', 'terminal', 'trash', 'triangle-alert', 'trophy',
+  'user', 'user-round', 'users', 'workflow', 'wrench', 'x', 'zap',
 ];
 
 function nodesOf(name) {

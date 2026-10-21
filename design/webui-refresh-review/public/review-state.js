@@ -19,16 +19,18 @@ const pick = (offered, wanted, fallback) => (offered.includes(wanted) ? wanted :
  * @param {string} hash  `location.hash`, with or without the leading `#`.
  * @param {{ id: string, states: string[] }[]} screens  What the page offers, in
  *   order; the first is the default.
- * @param {{ mode?: string }} [defaults]  The mode to use when the hash names
- *   none, which the page takes from the browser's own colour scheme.
+ * @param {{ mode?: string, concepts?: string[] }} [defaults]  The mode to use when
+ *   the hash names none, which the page takes from the browser's own colour
+ *   scheme, and the concepts the pack offers (a pack with one concept of its
+ *   own offers Current and that one, and a hash naming any other lands on it).
  */
-export function parseHash(hash, screens, { mode = 'dark' } = {}) {
+export function parseHash(hash, screens, { mode = 'dark', concepts = CONCEPTS } = {}) {
   if (screens.length === 0) throw new Error('the review page has no screens to show');
   const query = new URLSearchParams(hash.replace(/^#/, ''));
   const screen = screens.find((s) => s.id === query.get('screen')) ?? screens[0];
   return {
     screen: screen.id,
-    concept: pick(CONCEPTS, query.get('concept'), 'a'),
+    concept: pick(concepts, query.get('concept'), concepts.find((c) => c !== 'current') ?? concepts[0]),
     style: pick(STYLES, query.get('style'), 'mission-control'),
     mode: pick(MODES, query.get('mode'), pick(MODES, mode, 'dark')),
     // A state belongs to its screen: `stale` on the sign-in screen is not a

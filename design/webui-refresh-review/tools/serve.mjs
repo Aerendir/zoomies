@@ -32,6 +32,9 @@ const MOUNTS = [
     ],
   },
   { prefix: '/review/', roots: [at('design/webui-refresh-review/public')] },
+  // The second pack, beside the first: it links pack 1's review page code by
+  // its /review/ address and its own files by this one.
+  { prefix: '/signed-in/', roots: [at('design/webui-refresh-review/signed-in')] },
   { prefix: '/', roots: [at('web/public')] },
 ];
 

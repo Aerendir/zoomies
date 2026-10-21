@@ -1,0 +1,7 @@
+/*
+ * The signed-in mocks' proposed tokens.
+ *
+ * The only file in this pack where a new token may be defined, so the cost of
+ * the portal look is visible in one place: every name below would be added to
+ * web/src/lib/styles/tokens.css and described in docs/ui-guidelines.md.
+ */

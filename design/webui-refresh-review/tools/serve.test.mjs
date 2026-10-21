@@ -10,18 +10,23 @@ import { fileURLToPath } from 'node:url';
 import { serve } from './serve.mjs';
 
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
+const signedInDir = fileURLToPath(new URL('../signed-in/', import.meta.url));
 const probe = `${publicDir}_serve-test.txt`;
+const signedInProbe = `${signedInDir}_serve-test.txt`;
 let server;
 
 before(async () => {
   await mkdir(publicDir, { recursive: true });
+  await mkdir(signedInDir, { recursive: true });
   await writeFile(probe, 'probe');
+  await writeFile(signedInProbe, 'signed-in probe');
   server = await serve(0);
 });
 
 after(async () => {
   await server?.close();
   await rm(probe, { force: true });
+  await rm(signedInProbe, { force: true });
 });
 
 /**
@@ -71,6 +76,15 @@ test('serves files from the review pack under /review/', async () => {
   assert.match(res.type, /^text\/plain/);
 });
 
+test('serves the signed-in pack under /signed-in/, beside pack 1 and not instead of it', async () => {
+  const res = await raw('/signed-in/_serve-test.txt');
+  assert.equal(res.status, 200);
+  assert.equal(res.body, 'signed-in probe');
+  // Each mount answers for its own folder: a file in one is not found in the other.
+  assert.equal((await raw('/review/_serve-test.txt')).body, 'probe');
+  assert.equal((await raw('/signed-in/review.js')).status, 404);
+});
+
 test('has no directory listing: the bare /review/ is 404', async () => {
   assert.equal((await raw('/review/')).status, 404);
 });
@@ -83,10 +97,12 @@ test('refuses any path that climbs out of its mount', async () => {
     '/web/src/..%2F..%2Fpackage.json',
     '/fonts/..%2F..%2F..%2Fpackage.json',
     '/review/../tools/serve.mjs',
+    '/signed-in/..%2Fpublic%2Freview.js',
+    '/signed-in/%2e%2e/tools/serve.mjs',
   ]) {
     const res = await raw(path);
     assert.ok([403, 404].includes(res.status), `${path} answered ${res.status}`);
-    assert.doesNotMatch(res.body, /module github\.com|"name":|createServer/, path);
+    assert.doesNotMatch(res.body, /module github\.com|"name":|createServer|SCREENS/, path);
   }
 });
 
