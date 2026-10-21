@@ -501,6 +501,33 @@ the host, `sudo zoomies updates helper status` and the journal of
 `zoomies-update.service` can, and [rolling back](#rolling-back-by-hand) says
 what to do.
 
+#### When the helper stops reading requests
+
+systemd stops the helper's path unit when its service starts too often, and a
+host whose `zoomies-update.path` is `disabled` or `inactive (dead)` reads no
+request at all. Before this was handled, a stale `request.json` then made the
+agent refuse every later update with "an update request is already waiting for
+the helper", and the host stayed on its old build with only a bare "update
+failed" on its card.
+
+Now the agent looks first: how old `request.json` is, whether `upgrade.lock`
+is there, and what `systemctl` says of the two units. If the helper is running
+an update it touches nothing and the attempt says so. If the helper is stopped
+it asks root, through the update folder, to repair it. The agent cannot do that
+itself, and does not try. The repair clears the units' failed state, rewrites
+and starts `zoomies-update.path`, and only then removes a `request.json` or
+`upgrade.lock` that is older than 15 minutes with no helper and no upgrade
+running. Each host is repaired at most three times a day and ten minutes apart.
+
+When the repair works the update goes ahead and the repair is in the audit as
+`update.helper_repair`. When it does not, or cannot run, the attempt fails with
+a sentence that names the cause, the host card says **Helper stopped**, and the
+problem `host.update_helper_stuck` carries the attempt, how long the request
+waited and what systemd says of the units. The fix by hand is
+`sudo zoomies updates helper install`, which does the same. A host whose helper
+was installed before the repair existed has no repair units and needs that
+command once.
+
 ### Updating hosts, and rollouts
 
 A host is updated by its own agent, never by the controller reaching into it:

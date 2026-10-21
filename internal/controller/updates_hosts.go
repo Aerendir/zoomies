@@ -43,6 +43,12 @@ type HostUpdateView struct {
 	CanUpdate bool `json:"can_update"`
 	// AttemptID is the attempt State describes, and empty with none.
 	AttemptID string `json:"attempt_id"`
+	// Code is the problem code of the failure State describes when it has a
+	// cause of its own worth naming, and empty otherwise. Today that is
+	// host.update_helper_stuck: the helper on the host had stopped reading
+	// requests. Its Reason is built from fixed words and numbers, so every role
+	// reads it, unlike the helper's own sentence.
+	Code string `json:"code"`
 }
 
 // The states of a host with no attempt worth showing.
@@ -60,6 +66,9 @@ const (
 func (u HostUpdateView) For(platform bool) HostUpdateView {
 	switch {
 	case platform:
+		return u
+	case u.Code != "":
+		// Built from fixed words and numbers by the controller, never the helper's.
 		return u
 	case u.State == store.UpdateFailed, u.State == store.UpdateTimedOut, u.State == store.UpdateCancelled:
 		u.Reason = withheldAttemptError(u.State)
@@ -380,6 +389,12 @@ func (c *Controller) applyUpdateTaskResult(ctx context.Context, hostID string, t
 	switch {
 	case res.OK:
 		c.noteHandedOver(task.UpdateID)
+		// A request written after the helper was found stopped and repaired: the
+		// attempt goes on, and the repair is recorded for whoever asks why a
+		// host's update took longer than usual.
+		if res.Stuck != nil && c.mayAct() {
+			c.noteHelperStuck(ctx, hostID, task.UpdateID, res.Stuck)
+		}
 		return
 	case res.NotStarted:
 		// Given back unstarted too often to offer again; the pass queues it anew.
@@ -399,7 +414,13 @@ func (c *Controller) applyUpdateTaskResult(ctx context.Context, hostID string, t
 	}
 	name := c.hostName(ctx, hostID)
 	var text string
+	// The agent found the helper stopped or busy. The sentence is the
+	// controller's own, from the checked record, so that it names no path and
+	// every role may read it.
+	stuck := c.noteHelperStuck(ctx, hostID, latest[0].ID, res.Stuck)
 	switch said := reportedSentence(res.Error); {
+	case stuck != nil:
+		text = stuckSentence(name, stuck)
 	case strings.Contains(said, "unknown task kind"):
 		text = "The agent on " + name + " is older than this controller and cannot update itself. Update it with the command on its card."
 	case said == "":
@@ -717,6 +738,9 @@ func (c *Controller) hostUpdateView(h *store.Host) *HostUpdateView {
 		out.Reason = withoutDirectionControls(a.Error)
 		if strings.TrimSpace(out.Reason) == "" {
 			out.Reason = withheldAttemptError(a.State)
+		}
+		if s := stuckOf(a); stuckIsFault(s) && a.State == store.UpdateFailed {
+			out.Code, out.Reason = CodeHostUpdateHelperStuck, stuckSentence(naming.ForSentence(h.Name), s)
 		}
 	}
 	return out

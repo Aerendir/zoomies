@@ -55,13 +55,17 @@ type UpdateAttempt struct {
 	// anything, and RolledBack says it put the previous release back because the
 	// new one did not answer (migration 0108). Both are empty on an attempt
 	// whose result carried neither.
-	Backup      string
-	RolledBack  bool
+	Backup     string
+	RolledBack bool
+	// Stuck is the controller's record of a stalled update helper found while
+	// this attempt was being handed over (migration 0116): a JSON document the
+	// controller reads and writes, opaque here, and empty when there was none.
+	Stuck       string
 	RequestedAt time.Time
 	FinishedAt  *time.Time
 }
 
-const updateAttemptCols = `id, scope, host_id, from_version, to_version, trigger, requested_by, state, error, rollout_id, backup, rolled_back, requested_at, finished_at`
+const updateAttemptCols = `id, scope, host_id, from_version, to_version, trigger, requested_by, state, error, rollout_id, backup, rolled_back, requested_at, finished_at, stuck`
 
 func scanUpdateAttempt(sc interface{ Scan(...any) error }) (UpdateAttempt, error) {
 	var a UpdateAttempt
@@ -69,7 +73,7 @@ func scanUpdateAttempt(sc interface{ Scan(...any) error }) (UpdateAttempt, error
 	var finished sql.NullInt64
 	var rolledBack bool
 	err := sc.Scan(&a.ID, &a.Scope, &a.HostID, &a.FromVersion, &a.ToVersion, &a.Trigger,
-		&a.RequestedBy, &a.State, &a.Error, &a.RolloutID, &a.Backup, &rolledBack, &requested, &finished)
+		&a.RequestedBy, &a.State, &a.Error, &a.RolloutID, &a.Backup, &rolledBack, &requested, &finished, &a.Stuck)
 	a.RequestedAt, a.FinishedAt, a.RolledBack = at(requested), atp(finished), rolledBack
 	return a, err
 }
@@ -134,7 +138,7 @@ func (s *Store) CreateUpdateAttempt(ctx context.Context, a *UpdateAttempt) error
 			a.RequestedAt = at(newest.Int64 + 1)
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO update_attempts (`+updateAttemptCols+`)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, ?, NULL)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, ?, NULL, '')`,
 			a.ID, a.Scope, a.HostID, a.FromVersion, a.ToVersion, a.Trigger, a.RequestedBy,
 			a.State, a.Error, a.RolloutID, ms(a.RequestedAt))
 		return wrapWrite(err)
@@ -166,6 +170,14 @@ func (s *Store) FinishUpdateAttempt(ctx context.Context, id, state, errText stri
 // fails loses only the facts and never the ending.
 func (s *Store) SetUpdateAttemptFacts(ctx context.Context, id, backup string, rolledBack bool) error {
 	_, err := s.exec(ctx, `UPDATE update_attempts SET backup = ?, rolled_back = ? WHERE id = ?`, backup, rolledBack, id)
+	return err
+}
+
+// SetUpdateAttemptStuck records what was found wrong with the update helper
+// while the attempt was handed over. Like the facts above it is written apart
+// from the ending, so a write that fails loses only the record.
+func (s *Store) SetUpdateAttemptStuck(ctx context.Context, id, stuck string) error {
+	_, err := s.exec(ctx, `UPDATE update_attempts SET stuck = ? WHERE id = ?`, stuck, id)
 	return err
 }
 

@@ -187,7 +187,7 @@ func ProjectStatus(problems []Problem, stats *Stats) FleetStatus {
 func statusExempt(code string) bool {
 	switch code {
 	case "host.os_health", "host.health_stale", "host.reboot_pending",
-		"host.update_failed", "host.update_unavailable":
+		"host.update_failed", "host.update_helper_stuck", "host.update_unavailable":
 		return true
 	}
 	return strings.HasPrefix(code, "ai_context.") || strings.HasPrefix(code, "kennel.")

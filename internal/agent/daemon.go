@@ -21,6 +21,7 @@ import (
 	"github.com/eyupio/zoomies/internal/machine"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates"
+	"github.com/eyupio/zoomies/internal/updates/channel"
 	"github.com/eyupio/zoomies/internal/version"
 )
 
@@ -199,6 +200,20 @@ type Options struct {
 	// installed while the agent runs is noticed without a restart. Nil for the
 	// embedded agent, which is updated with its controller and never as a host.
 	UpdateDir func() (string, bool)
+	// UnitRun asks systemd about the update helper's units, so that a request the
+	// helper has not read can be told from a helper that has stopped. Nil is an
+	// agent that diagnoses nothing and never asks for a repair: the embedded
+	// agent, and a test that is not about it. It changes nothing on the host.
+	UnitRun channel.RunFunc
+	// Processes lists the command lines on the host, to see an upgrade engine
+	// alive. Nil reads /proc.
+	Processes func() [][]string
+	// ConfigDir is the deployment's configuration directory, where upgrade.lock
+	// is. Empty looks for no lock.
+	ConfigDir string
+	// RepairWait is how long an update task waits for root to answer a repair
+	// request before it reports that nobody did. Zero is 45 seconds.
+	RepairWait time.Duration
 	// HelperHost says what this machine is, as far as whether the update helper
 	// could be installed on it, so that a host where it never can be is shown so
 	// rather than offered a command that would refuse. Nil says nothing, which
@@ -342,6 +357,9 @@ type Agent struct {
 	// for, so that a redelivered task is answered as written and not refused by
 	// its own request. Guarded by update, not mu.
 	updateWritten map[string]bool
+	// repairs bounds how often this agent asks root to repair the helper. It is
+	// used only under update, which every update task holds.
+	repairs updates.RepairLedger
 
 	// polled records that at least one task poll has completed since start.
 	// The reconciler will not delete anything until it has, so a controller

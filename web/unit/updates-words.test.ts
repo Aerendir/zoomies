@@ -670,7 +670,13 @@ function rolloutHost(overrides: Partial<RolloutHost> = {}): RolloutHost {
   return {
     embedded: false,
     version_skew: 'behind',
-    update: { state: 'none', reason: 'This host runs 1.2.0.', can_update: true, attempt_id: '' },
+    update: {
+      state: 'none',
+      reason: 'This host runs 1.2.0.',
+      can_update: true,
+      attempt_id: '',
+      code: '',
+    },
     ...overrides,
   };
 }
@@ -682,7 +688,7 @@ test('the hosts action counts the hosts whose own update block says they can be 
     rolloutHost(),
     rolloutHost(),
     rolloutHost({
-      update: { state: 'none', reason: 'No helper.', can_update: false, attempt_id: '' },
+      update: { state: 'none', reason: 'No helper.', can_update: false, attempt_id: '', code: '' },
     }),
     rolloutHost({ version_skew: undefined, update: undefined }),
   ];
@@ -711,7 +717,13 @@ test('the hosts action is an administrator’s, and is not offered while a rollo
 test('with updating off the hosts action is disabled and says why, while a host is behind', () => {
   const off = status({ mode: 'off' });
   const behind = rolloutHost({
-    update: { state: 'none', reason: 'Updating is off.', can_update: false, attempt_id: '' },
+    update: {
+      state: 'none',
+      reason: 'Updating is off.',
+      can_update: false,
+      attempt_id: '',
+      code: '',
+    },
   });
   assert.deepEqual(rolloutOffer(off, [behind], true), {
     kind: 'off',

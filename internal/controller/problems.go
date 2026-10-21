@@ -191,6 +191,7 @@ var problemAudience = map[string]Audience{
 	"host.reboot_pending":               AudienceFleet,
 	"host.version_behind":               AudienceFleet,
 	"host.update_failed":                AudienceFleet,
+	"host.update_helper_stuck":          AudienceFleet,
 	"host.update_unavailable":           AudienceFleet,
 	"installation.unhealthy":            AudienceFleet,
 	"jobs.oom_killed":                   AudienceFleet,
@@ -3174,6 +3175,14 @@ func failedHostUpdateProblem(h *store.Host, a store.UpdateAttempt, target string
 		how = "timed out"
 	}
 	label := naming.ForSentence(h.Name)
+	if s := stuckOf(a); stuckIsFault(s) && a.State == store.UpdateFailed {
+		p := stuckProblem(h, a, s)
+		if a.FinishedAt != nil {
+			since := *a.FinishedAt
+			p.Since = &since
+		}
+		return p, true
+	}
 	p := Problem{
 		Code:     "host.update_failed",
 		Severity: config.SeverityError,

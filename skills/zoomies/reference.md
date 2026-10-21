@@ -1879,6 +1879,7 @@ Subcommands:
   install [--config-dir path]        Make this host ready to be updated from the controller: install the helper, as root
   remove [--config-dir path]         Stop the helper and remove it, its units and its files
   run                                Answer the request in the update folder; the helper's unit runs it, as root
+  repair                             Put a stopped helper right: reset its failed units, rewrite and start them, and clear what is provably abandoned; its unit runs it, as root
   status                             Where the update folder is, whether the helper is installed, and its last result
 
 Run "zoomies updates helper <subcommand> --help" for the flags each one takes.

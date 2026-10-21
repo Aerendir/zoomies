@@ -203,6 +203,35 @@ type HeartbeatRequest struct {
 	UpdateUnsupported string `json:"update_unsupported,omitempty"`
 }
 
+// UpdateStuck is what an agent found when the update helper on its host was not
+// reading requests, and what was done about it. Everything in it is a number or
+// one of a fixed set of words, so the controller can show it to any role. It is
+// additive: a controller that does not know the field drops it, and an agent
+// that finds nothing wrong never sends it, so ProtocolVersion does not move.
+type UpdateStuck struct {
+	// Kind is one of updates.StuckPathDown, StuckStaleRequest or StuckBusy.
+	Kind string `json:"kind"`
+	// RequestAgeSeconds is how long request.json had been waiting, 0 with none.
+	RequestAgeSeconds int64 `json:"request_age_seconds,omitempty"`
+	// Path and Service are systemd's own words for the two units, such as
+	// "inactive, disabled" and "failed".
+	Path    string `json:"path,omitempty"`
+	Service string `json:"service,omitempty"`
+	// LockPresent says upgrade.lock was found.
+	LockPresent bool `json:"lock_present,omitempty"`
+	// Repaired are the actions root took, in order, as updates.Action words.
+	Repaired []string `json:"repaired,omitempty"`
+	// Healed says root put the helper right and this task then wrote its request.
+	Healed bool `json:"healed,omitempty"`
+	// Asked says this agent asked root for a repair, and Attempts is how many it
+	// has asked for in the last day.
+	Asked    bool `json:"asked,omitempty"`
+	Attempts int  `json:"attempts,omitempty"`
+	// Note says why nothing was done, as a fixed word: "held_back" (the budget),
+	// "no_answer" (the repair units did not answer) or "refused" (root declined).
+	Note string `json:"note,omitempty"`
+}
+
 // UpdateReport is what an agent says about an update it attempted. It is
 // answered by the attempt's ID, not by a task, because the agent that took the
 // task has been replaced by the time there is anything to say.
@@ -488,7 +517,10 @@ type TaskResult struct {
 	// does not know the field drops it, and an agent that does not know the
 	// task never sends it, so ProtocolVersion does not move.
 	Doctor *hosttune.Report `json:"doctor,omitempty"`
-	TaskID string           `json:"task_id"`
+	// Stuck is what a TaskUpdateAgent found wrong with the update helper, and
+	// what was done about it. Additive, like Doctor.
+	Stuck  *UpdateStuck `json:"update_stuck,omitempty"`
+	TaskID string       `json:"task_id"`
 	// Kind is the kind of the task this answers. The controller uses it to
 	// tell a lifecycle task that failed -- which leaves the runner unusable --
 	// from a log relay that could not be opened, which leaves it exactly as it
