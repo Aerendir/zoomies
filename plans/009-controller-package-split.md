@@ -12,7 +12,7 @@
 > **Drift check (run first)**, in the repo root:
 
 ```
-git diff --stat a0f21dba..HEAD -- internal/controller/kennel.go internal/controller/kennel_budget.go internal/controller/kennel_views.go internal/kennel/ docs/architecture.md AGENTS.md
+git diff --stat 52e30381..HEAD -- internal/controller/kennel.go internal/controller/kennel_budget.go internal/controller/kennel_views.go internal/kennel/ docs/architecture.md AGENTS.md
 ```
 
 > If any in-scope file changed since this plan was written, compare the
@@ -29,7 +29,8 @@ git diff --stat a0f21dba..HEAD -- internal/controller/kennel.go internal/control
 - **Depends on**: land after Plans 004 and 005 if those are executed (they
   touch the same package; conflicts, not correctness)
 - **Category**: tech-debt
-- **Planned at**: commit `a0f21dba`, 2026-10-19
+- **Planned at**: commit `52e30381`, 2026-10-21 (refreshed: the
+  architecture.md and AGENTS.md line numbers below are the ones on this commit)
 
 ## Why this matters
 
@@ -69,7 +70,8 @@ recipe later (Maintenance notes), one pull request each.
   `docs/architecture.md:315`) and its subpackage `internal/kennel/workflow`
   (architecture.md:316). The exemplar of an impure half in a subpackage:
   `internal/updates/channel` (architecture.md:314).
-- The controller surface the cluster uses (from a grep at `a0f21dba`; Step 1
+- The controller surface the cluster uses (from a grep at `a0f21dba`, re-checked
+  at `52e30381`; Step 1
   re-verifies): `c.st` (the store), `c.cfg()`, `c.log`,
   `c.publish`/`c.publishDerived`/`c.publishKennelDeleted` (the event-bus
   publishing helpers; remember the invariant: every `*.updated` event is the
@@ -81,7 +83,7 @@ recipe later (Maintenance notes), one pull request each.
 - Tests that must stay green: the whole `internal/controller` suite,
   `internal/kennel`'s purity test (check its scope in Step 1), the
   `internal/docs` tests (architecture.md's kennel paragraph,
-  `docs/architecture.md:333-342`, and the Components row at line 315, both of
+  `docs/architecture.md:358-367`, and the Components row at line 340, both of
   which this plan updates), and `make test` overall.
 
 ## Commands you will need
@@ -121,8 +123,8 @@ recipe later (Maintenance notes), one pull request each.
 - `internal/controller/controller.go` (the field, the construction, the
   delegating methods; read it first, its layout decides where these go)
 - `internal/kennel/club/` (create)
-- `docs/architecture.md` (the kennel row at line 315 and the paragraph at
-  333-342)
+- `docs/architecture.md` (the kennel row at line 340 and the paragraph at
+  358-367)
 - `AGENTS.md` (the layout row for `internal/kennel`)
 - `plans/README.md` (status)
 
@@ -264,14 +266,15 @@ passes.
 
 ### Step 4: Update the two documents that name the loop's home
 
-- `docs/architecture.md`: the `internal/kennel` row (line 315) gains the
-  club, and the paragraph at 333-342 ("The loop in `internal/controller`
-  builds snapshots") now names `internal/kennel/club` as the loop's home,
+- `docs/architecture.md`: the `internal/kennel` row (line 340 on commit
+  `52e30381`) gains the club, and the paragraph at 358-367 ("The loop in
+  `internal/controller` builds snapshots") now names `internal/kennel/club`
+  as the loop's home,
   in the same sentences, saying why (the pattern of `internal/updates`
   and `internal/updates/channel`, pure decisions beside impure wiring).
 - `AGENTS.md`'s layout row for `internal/kennel` likewise; and the
   `internal/controller` row ("Wiring: the reconcile loop, ...") needs the
-  kennel loop struck from it only if it names it (read it; at `a0f21dba` the
+  kennel loop struck from it only if it names it (read it; on `52e30381` the
   architecture.md row does, in the paragraph, and the AGENTS.md table does
   not).
 
