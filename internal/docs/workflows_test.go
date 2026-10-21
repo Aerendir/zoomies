@@ -1,6 +1,7 @@
 package docs
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -793,6 +794,93 @@ func TestScorecardPublishesFromAGitHubHostedRunner(t *testing.T) {
 	if strings.Contains(body, "runs-on: zoomies-linux-x64") {
 		t.Error("scorecard.yml's job runs on the fleet's label; this workflow is scored by a service that only accepts results from GitHub's runners")
 	}
+}
+
+// The Vulnerabilities check reads the manifests this repository carries, and a
+// fix for an advisory lands in one of them. A push that changes a manifest the
+// check does not read re-runs nothing, so the alert the fix was made for
+// stays open until the next Saturday's run.
+func TestEveryManifestReRunsTheScorecardScan(t *testing.T) {
+	body := workflowFiles(t)["scorecard.yml"]
+	if body == "" {
+		t.Fatal("scorecard.yml is missing")
+	}
+	var wf struct {
+		On struct {
+			Push struct {
+				Paths []string `yaml:"paths"`
+			} `yaml:"push"`
+		} `yaml:"on"`
+	}
+	if err := yaml.Unmarshal([]byte(body), &wf); err != nil {
+		t.Fatalf("parsing scorecard.yml: %v", err)
+	}
+	if len(wf.On.Push.Paths) == 0 {
+		t.Fatal("scorecard.yml lists no push paths; the scan would then run on every push, which is what the filter is there to avoid")
+	}
+
+	manifests, err := dependencyManifests("../..")
+	if err != nil {
+		t.Fatalf("finding the manifests: %v", err)
+	}
+	if len(manifests) == 0 {
+		t.Fatal("no manifests found; this test is looking in the wrong place")
+	}
+	for _, manifest := range manifests {
+		if !scorecardPathCovers(wf.On.Push.Paths, manifest) {
+			t.Errorf("scorecard.yml does not re-run the scan when %s changes; a fix for an advisory in it is not seen until the weekly run", manifest)
+		}
+	}
+}
+
+// dependencyManifests finds the files a dependency scanner reads: the Go
+// module files, the npm manifests and the Python lockfile.
+func dependencyManifests(root string) ([]string, error) {
+	var out []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "node_modules", "site", "dist", "build":
+				return fs.SkipDir
+			case "testdata", "fixtures":
+				// A manifest in a fixture is a sample of somebody else's
+				// dependency, not one of this repository's.
+				return fs.SkipDir
+			}
+			return nil
+		}
+		switch d.Name() {
+		case "go.mod", "go.sum", "package.json", "package-lock.json", "requirements.txt":
+		default:
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		out = append(out, filepath.ToSlash(rel))
+		return nil
+	})
+	return out, err
+}
+
+// scorecardPathCovers says whether one of the workflow's push paths covers a
+// file: the path itself, or a directory glob that holds it.
+func scorecardPathCovers(paths []string, manifest string) bool {
+	for _, p := range paths {
+		switch {
+		case p == manifest:
+			return true
+		case strings.HasSuffix(p, "/**"):
+			if strings.HasPrefix(manifest, strings.TrimSuffix(p, "**")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // A release tag that does not begin with a lower-case v has to fail out loud.

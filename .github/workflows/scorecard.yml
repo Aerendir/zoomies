@@ -10,6 +10,11 @@ on:
     paths:
       - ".github/**"
       - "deploy/**"
+      # The docs site's lockfile and the AI context's are manifests the
+      # Vulnerabilities check reads, and a fix for an advisory lands in one of
+      # them. Without them here such a fix waits for Saturday's run to be seen.
+      - "docs/requirements.txt"
+      - "internal/aicontext/templates/package-lock.json"
       - "go.mod"
       - "go.sum"
       - "web/package.json"

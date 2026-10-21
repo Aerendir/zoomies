@@ -39,4 +39,4 @@ Zoomies-caused failure and of a denominator stay in
 `docs/metrics.md`. Evidence from a real fleet (a Windows host, a Proxmox
 cluster) is still recorded here when it arrives, and is never waited for.
 
-See [Scorecard hardening](scorecard-hardening.md) for the September 2026 security changes and remaining repository settings.
+See [Scorecard hardening](scorecard-hardening.md) for the September 2026 security changes and remaining repository settings, and [the certifi advisory behind Scorecard alert 17](scorecard-certifi-2026-10-21.md) for the October 2026 fix that closed it.
