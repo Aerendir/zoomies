@@ -55,6 +55,9 @@ func referenceNewHostSet(hosts []*store.Host, pools []*store.Pool, runners map[s
 		l := hs.left[h.ID]
 		l.CPUs -= res.CPUs
 		l.MemoryMB -= res.MemoryMB
+		if hs.alloc[h.ID].DiskKnown {
+			l.DiskMB -= res.DiskMB
+		}
 		hs.promisedMemory[h.ID] = l.MemoryMB
 		hs.ours[h.ID] = referenceHostRunsOurs(h, runners)
 		pending := hs.referencePending(h, pools, runners)
@@ -104,6 +107,7 @@ func referenceReserved(h *store.Host, pools []*store.Pool, runners map[string][]
 			res := RunnerCharge(p, h, r)
 			out.CPUs += res.CPUs
 			out.MemoryMB += res.MemoryMB
+			out.DiskMB += res.DiskMB
 		}
 	}
 	return out

@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
+	"github.com/eyupio/zoomies/internal/provider"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -47,5 +49,78 @@ func TestAProviderWithNoUsableStoredCheckReadsAsNone(t *testing.T) {
 		if got := decodeCheckReport(row); got != nil {
 			t.Errorf("%s: read back %+v", name, got)
 		}
+	}
+}
+
+// A shape that is too small for its slots is the failure an operator finds out
+// about from a job dying with "no space left on device", an hour after the
+// machine was rented. The check says so while nothing is running on it.
+func TestTheCheckWarnsWhenAShapeIsTooSmallForItsSlots(t *testing.T) {
+	row := &store.Provider{MachineCapacity: 2}
+	got, ok := machineDiskFinding(row, provider.Report{BuildsDiskMB: 8192})
+	if !ok {
+		t.Fatal("no finding for two slots on an 8 GB disk")
+	}
+	if got.Code != "provider.machine_disk_small" || got.Severity != config.SeverityWarning || got.Setting != "machine_disk_mb" {
+		t.Errorf("finding = %+v, want the warning provider.machine_disk_small on machine_disk_mb", got)
+	}
+	// 2048 reserve + 2 * 10240 working room.
+	if !strings.Contains(got.Title, "8 GB") || !strings.Contains(got.Title, "22 GB") || !strings.Contains(got.Title, "2 runners need ") {
+		t.Errorf("title = %q, want the disk it has (8 GB), what 2 runners need (22 GB)", got.Title)
+	}
+	if !strings.Contains(got.Detail, "no space left on device") {
+		t.Errorf("detail = %q, want the failure the operator would otherwise meet", got.Detail)
+	}
+	if !strings.Contains(got.Fix, "disk") || !strings.Contains(got.Fix, "slots") || !strings.Contains(got.Fix, "template") {
+		t.Errorf("fix = %q, want the disk, the slots and the template as the three ways out", got.Fix)
+	}
+}
+
+// A disk the operator typed is not the template's to change, so the fix does
+// not send them to enlarge it.
+func TestTheCheckDoesNotSuggestEnlargingTheTemplateForADiskTheShapeTyped(t *testing.T) {
+	row := &store.Provider{MachineCapacity: 2, MachineDiskMB: 8192}
+	got, ok := machineDiskFinding(row, provider.Report{BuildsDiskMB: 100_000})
+	if !ok {
+		t.Fatal("no finding for two slots on a typed 8 GB disk")
+	}
+	if strings.Contains(got.Fix, "template") {
+		t.Errorf("fix = %q, want no template clause when the shape typed the disk", got.Fix)
+	}
+}
+
+// A check that could not read the template's disk does not unsay what a
+// machine measured. The scheduler judges the provider by the learned figure,
+// so a card that went quiet on the same figure would contradict the pool page.
+func TestTheCheckWarnsOnTheDiskAMachineMeasuredWhenItCannotReadTheTemplates(t *testing.T) {
+	row := &store.Provider{MachineCapacity: 2, SeenDiskMB: 8192}
+	got, ok := machineDiskFinding(row, provider.Report{})
+	if !ok {
+		t.Fatal("no finding for two slots on a measured 8 GB disk the check could not re-read")
+	}
+	if !strings.Contains(got.Title, "8 GB") || !strings.Contains(got.Title, "22 GB") {
+		t.Errorf("title = %q, want the measured 8 GB against the 22 GB two runners need", got.Title)
+	}
+}
+
+// Silence is right when nothing says how big the disk is: a warning built on a
+// guess would be one the operator learns to ignore.
+func TestTheCheckIsSilentWhenNothingSaysTheDisk(t *testing.T) {
+	if f, ok := machineDiskFinding(&store.Provider{MachineCapacity: 4}, provider.Report{}); ok {
+		t.Fatalf("a finding with no disk figure: %+v", f)
+	}
+}
+
+func TestTheCheckCountsAShapeWithNoSlotsAsOne(t *testing.T) {
+	// 2048 reserve + one runner's 10240.
+	if f, ok := machineDiskFinding(&store.Provider{MachineDiskMB: 12288}, provider.Report{}); ok {
+		t.Errorf("12288 MB is enough for one slot, got %+v", f)
+	}
+	f, ok := machineDiskFinding(&store.Provider{MachineDiskMB: 12287}, provider.Report{})
+	if !ok {
+		t.Fatal("12287 MB is a megabyte short of one slot and drew no finding")
+	}
+	if !strings.Contains(f.Title, "1 runner needs ") {
+		t.Errorf("title = %q, want the single runner counted in the singular, verb and all", f.Title)
 	}
 }

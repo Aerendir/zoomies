@@ -946,3 +946,56 @@ func (c *Controller) expireStaleQueuedJobs(ctx context.Context, now time.Time) {
 		c.Nudge()
 	}
 }
+
+// GitHub limits a self-hosted job to five days of execution. The extra hour
+// leaves room for delayed completion delivery and clock disagreement before
+// releasing a runner to the reap. Without a start time, the queue time may
+// include waiting for approval, so use the whole 35-day workflow limit instead.
+const (
+	staleRunningAfter   = 5*24*time.Hour + time.Hour
+	staleUnstartedAfter = 35*24*time.Hour + time.Hour
+)
+
+// expireStaleRunningJobs releases runners pinned by jobs whose run or repository
+// disappeared. A failed GitHub read is not proof of cancellation: only age past
+// GitHub's lifetime limit, including our margin, permits this deletion path.
+func (c *Controller) expireStaleRunningJobs(ctx context.Context, now time.Time) {
+	jobs, err := c.st.ListStaleRunningJobs(ctx, now.Add(-staleRunningAfter), now.Add(-staleUnstartedAfter))
+	if err != nil {
+		c.log.Warn("could not list running jobs to retire stale ones", "error", err)
+		return
+	}
+	retired := false
+	for _, j := range jobs {
+		basis := "recorded start"
+		age := now.Sub(j.QueuedAt)
+		if j.StartedAt != nil {
+			age = now.Sub(*j.StartedAt)
+		} else {
+			basis = "recorded queue time (start unknown, using the 35-day workflow limit)"
+		}
+		done := now
+		saved, change, err := c.st.ApplyJob(ctx, &store.Job{
+			GitHubJobID: j.GitHubJobID, State: store.JobCompleted, Conclusion: "stale", CompletedAt: &done,
+		}, store.JobCondition{State: j.State, StartedAt: j.StartedAt})
+		if err != nil {
+			c.log.Warn("could not retire a stale running job", "job", j.ID, "error", err)
+			continue
+		}
+		if !change.StateChanged {
+			continue
+		}
+		message := fmt.Sprintf("in progress for %s since %s with no completion from GitHub; past GitHub's lifetime limit plus an hour, presumed cancelled or lost, so its runner is no longer protected from cleanup", age.Truncate(time.Minute), basis)
+		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
+			JobID: saved.ID, Kind: store.JobEventCompleted, Source: sourceController, Message: message, At: now,
+		}); err != nil {
+			c.log.Warn("could not record a job timeline entry", "job", saved.ID, "kind", store.JobEventCompleted, "error", err)
+		}
+		c.log.Warn("retired a running job GitHub never completed", "job", saved.ID, "repo", saved.Repo, "age", age.Truncate(time.Minute))
+		c.publishJob(ctx, saved)
+		retired = true
+	}
+	if retired {
+		c.Nudge()
+	}
+}
