@@ -354,6 +354,16 @@ by trying again.
 | `internal/events` | In-process pub/sub that the SSE endpoint fans out. |
 | `internal/mcp` | The fleet over the Model Context Protocol: the tools, and both transports, stdio for `zoomies mcp`, Streamable HTTP for the controller's `/mcp`. Every tool is a documented REST route called with the caller's own token, so it adds no authority. |
 | `internal/migrate` | Rewriting a workflow's `runs-on` line, and nothing else in the file. |
+| `internal/registry` | What a container registry says a tag points at, so the digest-pinning generators can pin what they build; a hand-rolled client, for the reason the Docker one is. |
+| `internal/aicontext` | Commit-pinned repository context, independent of the fleet's own jobs: verified snapshots of a repository's files, admitted only after the controller has verified the publication itself. See [Verified AI Context snapshots](#verified-ai-context-snapshots). |
+| `internal/assistant` | The model-provider contract behind the assistant chat and its adapters; the assistant reaches the fleet only through the MCP tools, with the chatting person's identity, so it adds no authority of its own. |
+| `internal/prrepair` | The bounds on what a model may edit when it proposes a pull request: an allow-list, blob caps, and a refusal of anything credential-shaped, enforced on the server before a file is written. |
+| `internal/toolscan` | Reads workflow files for the toolchains their jobs install, so a pool's tool cache can be filled with the versions its jobs will ask for before the jobs arrive. |
+| `internal/agentguidance` | Inspects a repository's agent instruction files (AGENTS.md, CLAUDE.md and their neighbours) without executing them. |
+| `internal/optimisation` | Reviewable proposals computed from explicitly supplied evidence, such as a proposed change to a workflow's checkout depth; it fetches nothing and calls no model, so a proposal is reproducible from its inputs. |
+| `internal/analysis` | Evidence-backed findings computed from explicit snapshots: why jobs waited, what got worse, whether a host's failures came when it was busy. |
+| `internal/hosttune` | Host health and tuning: detection that never writes, and changes only an operator approved. See [Host health](host-health.md). |
+| `internal/catalog` | The one machine-readable list of problem codes and Kennel Club checks, shared by the controller, the API and the MCP tools. |
 
 Kennel Club follows the scheduler's rule: the decisions are pure and the wiring is
 not. `internal/kennel` takes a snapshot and returns findings and a standing. The
@@ -731,3 +741,22 @@ separate gateway service. The browser polls only the name, endpoint and readines
 validation, discovery and creation resolve the staged credentials on the server
 and bind them to their enrolled endpoint and CA. Saving the provider removes its
 staged connection. Setup never invokes agent join or changes runner host state.
+
+## The model-facing subsystems and their bounds
+
+The assistant, the pull request repair, the AI Context verification and the
+optimisation previews follow the rule the kennel loop set: they run outside the
+reconcile lock, and the two that watch for work of their own, AI Context
+verification and Eli's repair loop, each in a bounded loop of its own, because a
+model answer and a GitHub read are slow and nothing about scaling should wait
+with them. Each is bounded at its edges before anything is written:
+`internal/redact` strips credentials and commit authors' email addresses from
+text bound for a model, and `internal/prrepair` holds the path allow-list, the
+blob caps and the refusal of anything credential-shaped on the server, where
+the file would be written.
+
+None of them adds authority. The assistant reaches the fleet through the MCP
+tools, in process, with the identity of the person it is talking to, and MCP
+itself reaches the router with the caller's own token, so the model-facing half
+inherits what the person driving it could do with their own token, and cannot
+exceed it.
