@@ -14,7 +14,7 @@ was not audited) is in [improve.md](improve.md).
 | [002](002-bulk-error-funnel.md) | Send bulk runner errors through the same funnel as single ones | P1 | S | none | DONE (merged, PR #1188) |
 | [003](003-process-log-pruning-tests.md) | Test the process backend's log bounding, which nothing covers today | P1 | S | none | DONE (merged, PR #1188) |
 | [004](004-runner-detail-fleet-reads.md) | Read one runner's detail without re-reading the whole fleet | P2 | M | none | DONE (merged, PR #1188) |
-| [005](005-log-relay-edges.md) | Make the log relay's edges honest: races, drops, empty downloads, late tails | P2 | M | none (before 009) | IN PROGRESS (implemented in /tmp/opencode/exec-005, uncommitted: verify, commit, PR) |
+| [005](005-log-relay-edges.md) | Make the log relay's edges honest: races, drops, empty downloads, late tails | P2 | M | none (before 009) | DONE (merged, PR #1204) |
 | [006](006-mcp-response-budgets.md) | Give the MCP and assistant tool paths a per-caller budget | P2 | M | none | TODO |
 | [007](007-architecture-docs-subsystems.md) | Put the newer subsystems into architecture.md, and hold them there | P3 | S-M | none | TODO (refreshed against 52e30381) |
 | [008](008-tailscale-channel-policy.md) | Record the tailscale.com pin's channel policy, where the pin is defended | P3 | S | none | TODO |
@@ -31,8 +31,10 @@ REJECTED (with one-line rationale).
   sits above the first use of the response, the bulk route no longer
   answers with the cause, the log-bounding tests are there, and
   `RunnerViewIn` renders the runner detail).
-- 005 is implemented but uncommitted in `/tmp/opencode/exec-005`; it needs
-  the race suite, a commit and a pull request.
+- 005 is merged: PR #1204, merge commit 706b0ac1. The four edges are
+  closed, and the relay's tail-before-present ordering is now deterministic
+  (the inherited merge picked between the tail and the live output at
+  random when both were ready, which the executor found and fixed).
 - 006, 008 and 010 are untouched by anything that landed since they were
   written; their in-scope files are byte-identical to the commit they were
   written against.
