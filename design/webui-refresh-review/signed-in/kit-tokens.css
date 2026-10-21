@@ -1,7 +1,7 @@
 /*
- * The signed-in mocks' proposed tokens.
+ * Tokens the signed-in mocks propose and the product does not have.
  *
- * The only file in this pack where a new token may be defined, so the cost of
- * the portal look is visible in one place: every name below would be added to
- * web/src/lib/styles/tokens.css and described in docs/ui-guidelines.md.
+ * None yet: the kit is built from tokens.css as it stands, which is the point of
+ * the exercise. A token added here is a decision for docs/ui-guidelines.md, so
+ * the README lists each one against the section it would change.
  */

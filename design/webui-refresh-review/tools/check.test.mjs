@@ -493,3 +493,8 @@ test('every text colour the concepts draw is the foreground of a checked pair', 
 test('every base pair names a minimum the two ratios allow', () => {
   for (const pair of BASE_PAIRS) assert.ok(pair.min === 3 || pair.min === 4.5, `${pair.fg} on ${pair.bg}`);
 });
+
+test('parseArgs: reads --pack, and run refuses a pack it does not know', async () => {
+  assert.deepEqual(parseArgs(['--pack', 'signed-in']), { pack: 'signed-in' });
+  await assert.rejects(run({ url: 'http://127.0.0.1:1', pack: 'nope' }), /unknown pack "nope"/);
+});

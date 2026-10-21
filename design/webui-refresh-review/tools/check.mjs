@@ -6,7 +6,7 @@
 // sideways, a control with no name, a focus ring that has gone, a colour pair
 // below the contrast minimum. It reports; it never edits a concept to pass.
 //
-//   node design/webui-refresh-review/tools/check.mjs [--screen id] [--out file]
+//   node design/webui-refresh-review/tools/check.mjs [--pack public|signed-in] [--screen id] [--out file]
 //
 // It exits 1 on any finding. What it cannot see is listed in each README under
 // "Not claimed": it is no substitute for a person with a screen reader.
@@ -51,6 +51,33 @@ export const BASE_PAIRS = [
 ];
 
 /**
+ * What the signed-in kit paints on top of the base pairs: the stage's words and
+ * its blue accent on Zoomies Black, the card surface the kit uses instead of the
+ * page's, a pill's word on each tint it sits on, and the edge of a filter pill.
+ * The stage never changes with the theme, so these hold in both.
+ */
+export const SIGNED_IN_PAIRS = [
+  { fg: '--z-panel-text', bg: '--z-panel-bg', min: 4.5 },
+  { fg: '--z-panel-text-muted', bg: '--z-panel-bg', min: 4.5 },
+  { fg: '--z-brand-runner-blue', bg: '--z-panel-bg', min: 4.5 },
+  { fg: '--z-text', bg: '--z-surface-raised', min: 4.5 },
+  { fg: '--z-text-muted', bg: '--z-surface-raised', min: 4.5 },
+  { fg: '--z-text', bg: '--z-neutral-subtle', min: 4.5 },
+  { fg: '--z-text', bg: '--z-idle-subtle', min: 4.5 },
+  { fg: '--z-text', bg: '--z-busy-subtle', min: 4.5 },
+  { fg: '--z-text', bg: '--z-pending-subtle', min: 4.5 },
+  { fg: '--z-text', bg: '--z-draining-subtle', min: 4.5 },
+  { fg: '--z-text', bg: '--z-danger-subtle', min: 4.5 },
+  { fg: '--z-border-strong', bg: '--z-surface-raised', min: 3 },
+];
+
+/** The two review pages: where each is served, and the pairs and registries it is judged on. */
+export const PACKS = {
+  public: { path: '/review/mockups.html', pairs: BASE_PAIRS, perConcept: true },
+  'signed-in': { path: '/signed-in/mockups.html', pairs: [...BASE_PAIRS, ...SIGNED_IN_PAIRS], perConcept: false },
+};
+
+/**
  * What the product's own tokens already get wrong, and identically for every
  * concept built from them, so no concept can fix it. A finding that matches an
  * entry is reported as known and does not fail the run. It stops matching if
@@ -66,6 +93,14 @@ export const KNOWN = [
     atLeast: 1.6,
     reason:
       "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept.",
+  },
+  {
+    style: 'classic',
+    fg: '--z-border-strong',
+    bg: '--z-surface-raised',
+    atLeast: 1.4,
+    reason:
+      "The same Classic control edge, on the raised card surface the signed-in kit uses (about 1.62:1 in light, 1.48:1 in dark). One token change to --z-border-strong clears both.",
   },
 ];
 
@@ -339,13 +374,16 @@ async function loadConceptPairs() {
 export async function run({
   url,
   screen,
+  pack = 'public',
   widths = WIDTHS,
-  pairs = BASE_PAIRS,
+  pairs,
   conceptPairs,
   known = KNOWN,
 } = {}) {
-  const extra = conceptPairs ?? (await loadConceptPairs());
-  const target = `${url}/review/mockups.html`;
+  if (!PACKS[pack]) throw new Error(`unknown pack "${pack}"; the packs are: ${Object.keys(PACKS).join(', ')}`);
+  pairs ??= PACKS[pack].pairs;
+  const extra = conceptPairs ?? (PACKS[pack].perConcept ? await loadConceptPairs() : {});
+  const target = `${url}${PACKS[pack].path}`;
   const browser = await launch();
   try {
     const open = async (width) => {
@@ -436,7 +474,7 @@ export function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i++) {
     const option = argv[i];
-    if (option !== '--screen' && option !== '--out') throw new Error(`unknown option "${option}"`);
+    if (option !== '--screen' && option !== '--out' && option !== '--pack') throw new Error(`unknown option "${option}"`);
     const value = argv[++i];
     if (value === undefined) throw new Error(`${option} needs a value`);
     args[option.slice(2)] = value;
@@ -448,7 +486,7 @@ async function main(argv) {
   const args = parseArgs(argv);
   const server = await serve(0);
   try {
-    const result = await run({ url: server.url, screen: args.screen });
+    const result = await run({ url: server.url, screen: args.screen, pack: args.pack });
     if (args.out) {
       await mkdir(dirname(args.out), { recursive: true });
       const report = { generated: new Date().toISOString(), ...result, url: undefined };
