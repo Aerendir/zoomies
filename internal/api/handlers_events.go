@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/events"
 )
 
@@ -148,9 +149,16 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 		since = recentSince{id: nowMark}
 	}
 
+	// Who the frames of this answer are narrowed for. Resolved once per
+	// request, which lasts at most a wait, as the live stream resolves it
+	// once per heartbeat: a page of frames is narrowed for one identity, and
+	// each resolution of a session is a database read. A resolution that
+	// fails is nobody, and nobody's frames are narrowed as a visitor's.
+	id, _ := s.resolveIdentity(r)
+
 	// The cursor, taken once. A timed-out wait hands this back unchanged, which
 	// is what makes a poll loop that finds nothing idempotent.
-	view := s.readRecent(r, since, opts, limit)
+	view := s.readRecent(r, id, since, opts, limit)
 	// A truncated read is answered at once even when none of it is for this
 	// caller: more is waiting in the ring after the cursor it carries, and holding
 	// the request would let a newer frame overtake it.
@@ -176,7 +184,7 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 	// effect is in the ring but was never offered to the subscriber. Reading
 	// again, now that it is registered, closes that gap: anything later arrives
 	// on the channel.
-	if again := s.readRecent(r, since, opts, limit); len(again.Items) > 0 || again.Truncated {
+	if again := s.readRecent(r, id, since, opts, limit); len(again.Items) > 0 || again.Truncated {
 		writeJSON(w, http.StatusOK, again)
 		return
 	}
@@ -196,14 +204,14 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				// The bus ended this feed for falling behind. What is in the ring
 				// is the answer now, whether or not it is what was waited for.
-				again := s.readRecent(r, since, opts, limit)
+				again := s.readRecent(r, id, since, opts, limit)
 				// Frames may have been dropped with the feed, and the ring is
 				// all there is to say what they were.
 				again.Complete = false
 				writeJSON(w, http.StatusOK, again)
 				return
 			}
-			first, ok := s.recentFrame(r, ev)
+			first, ok := s.recentFrame(r, ev, id)
 			if !ok {
 				continue
 			}
@@ -219,7 +227,7 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 					if !open {
 						break drain
 					}
-					if f, ok := s.recentFrame(r, more); ok {
+					if f, ok := s.recentFrame(r, more, id); ok {
 						items = append(items, f)
 					}
 				default:
@@ -239,7 +247,8 @@ func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 // readRecent is one read of the ring for the caller's cursor and filters.
-func (s *Server) readRecent(r *http.Request, since recentSince, opts events.SubscribeOptions, limit int) recentView {
+// The frames are narrowed for id, the identity the request resolved.
+func (s *Server) readRecent(r *http.Request, id *auth.Identity, since recentSince, opts events.SubscribeOptions, limit int) recentView {
 	bus := s.ctrl.Events()
 	// Taken before the ring is read, so that the cursor handed back when nothing
 	// matched can only be behind what was read, never past an event published in
@@ -281,7 +290,7 @@ func (s *Server) readRecent(r *http.Request, since recentSince, opts events.Subs
 
 	out := recentView{Items: make([]recentFrame, 0, len(items)), Complete: complete, Truncated: truncated}
 	for _, ev := range items {
-		if f, ok := s.recentFrame(r, ev); ok {
+		if f, ok := s.recentFrame(r, ev, id); ok {
 			out.Items = append(out.Items, f)
 		}
 	}
@@ -326,14 +335,17 @@ func fromRing(bus *events.Bus, opts events.SubscribeOptions, limit int, keep fun
 
 // recentFrame renders one event for this caller, or reports that it is not
 // theirs to see.
-func (s *Server) recentFrame(r *http.Request, ev events.Event) (recentFrame, bool) {
+//
+// id is who the frame is narrowed for: the identity the request resolved,
+// once, so every frame of a page is narrowed for the same caller.
+func (s *Server) recentFrame(r *http.Request, ev events.Event, id *auth.Identity) (recentFrame, bool) {
 	// The stream's rule: a frame goes only to a caller who could have fetched
 	// it from its GET route. Resolved once per request, which lasts at most a
 	// wait, as the stream resolves it once per heartbeat.
 	if !frameReadable(Identity(r.Context()), ev.Kind) {
 		return recentFrame{}, false
 	}
-	data, ok := s.frameFor(r, ev)
+	data, ok := s.frameFor(r, ev, id)
 	if !ok {
 		return recentFrame{}, false
 	}

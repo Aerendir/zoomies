@@ -238,6 +238,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// on every heartbeat, which is when the stream re-checks its credential
 	// anyway, rather than once per frame: a busy fleet sends many frames a
 	// second, and each resolution of a session is a database read.
+	//
+	// This is who the narrowed frames are chosen for as well as which kinds
+	// they may be sent, so a demotion reaches both on the tick the revocation
+	// check already runs on, rather than one frame at a time.
 	reader := Identity(ctx)
 
 	for {
@@ -255,7 +259,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			if !frameReadable(reader, ev.Kind) {
 				continue
 			}
-			data, ok := s.frameFor(r, ev)
+			data, ok := s.frameFor(r, ev, reader)
 			if !ok {
 				continue
 			}
@@ -288,15 +292,22 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 // It is shared by the live stream and GET /events/recent, so the two cannot
 // disagree about who is entitled to what. A second route that read the same ring
 // without these checks would be the way round every one of them.
-func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
+//
+// id is who the frames are narrowed for. The caller resolves it: once per
+// heartbeat on the live stream, once per request on the replay. A nil id is
+// nobody, and nobody fails closed exactly as a failed resolution did when this
+// resolved per frame. The pool frames are the exception: they carry
+// credentials, so their block resolves for the frame itself.
+func (s *Server) frameFor(r *http.Request, ev events.Event, id *auth.Identity) ([]byte, bool) {
 	data := []byte(ev.Data)
 	if ev.Kind == events.KindProblems {
 		// The same two lists the REST route serves, chosen per
-		// subscriber. Resolved per frame rather than once at
-		// connect, for the reason the pool frames are: a viewer may
-		// keep the stream open across a demotion.
-		id, err := s.resolveIdentity(r)
-		platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
+		// subscriber. Narrowed for the identity the caller resolved, for
+		// the reason the pool frames are: a viewer may keep the stream
+		// open across a demotion. The demotion reaches these fields on
+		// the same tick the reader and the revocation check already
+		// accept, and an identity that could not be resolved is nobody.
+		platform := id != nil && id.Role.AtLeast(store.RolePlatform)
 		filtered, ok := problemsFor(data, platform)
 		if !ok && !platform {
 			// Unfilterable, and this subscriber is not entitled to
@@ -313,20 +324,18 @@ func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
 	if ev.Kind == events.KindTransfer {
 		// A transfer's preparation names runners, hosts and jobs
 		// the route itself only shows the process operator, so the
-		// frame goes to that audience and nobody below it. Resolved
-		// per frame, as the others are.
-		id, err := s.resolveIdentity(r)
-		if err != nil || id == nil || !id.Role.AtLeast(store.RolePlatform) {
+		// frame goes to that audience and nobody below it. Narrowed
+		// for the identity the caller resolved, as the others are.
+		if id == nil || !id.Role.AtLeast(store.RolePlatform) {
 			return nil, false
 		}
 	}
 	if ev.Kind == events.KindUpdates {
 		// The same status GET /updates serves this caller, chosen per
-		// subscriber. Resolved per frame, like the problems list, for the
-		// reason it is: a platform account may keep the stream open
-		// across a demotion.
-		id, err := s.resolveIdentity(r)
-		platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
+		// subscriber. Narrowed for the identity the caller resolved, like
+		// the problems list, for the reason it is: a platform account may
+		// keep the stream open across a demotion.
+		platform := id != nil && id.Role.AtLeast(store.RolePlatform)
 		filtered, ok := updatesFor(data, platform)
 		if !ok && !platform {
 			// Unfilterable, and the unfiltered frame is exactly what this
@@ -341,9 +350,9 @@ func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
 		// The same host GET /hosts serves this caller: the bus carries the
 		// platform's form, and the reason an ended update recorded, which
 		// can name a path on the host, is withheld from everybody else.
-		// Resolved per frame, replay included, like the update status.
-		id, err := s.resolveIdentity(r)
-		platform := err == nil && id != nil && id.Role.AtLeast(store.RolePlatform)
+		// Narrowed for the identity the caller resolved, replay included,
+		// like the update status.
+		platform := id != nil && id.Role.AtLeast(store.RolePlatform)
 		filtered, ok := hostsFor(data, platform)
 		if !ok && !platform {
 			// Unfilterable, so possibly carrying exactly what is withheld.
@@ -357,14 +366,13 @@ func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
 		// The same job GET /jobs/{id} serves this caller, or the one a runner
 		// frame carries as its current job: the bus holds the form that names
 		// who marked a failure as known, and a visitor is not told. Only a
-		// frame that names somebody is looked at, and only then is the caller
-		// resolved, because job frames are the busiest on the stream and
-		// almost none of them name anyone. Resolved per frame, replay
-		// included, like the others; a caller who cannot be resolved is
+		// frame that names somebody is looked at, because job frames are the
+		// busiest on the stream and almost none of them name anyone. The
+		// identity is the one the caller resolved, on the same tick for
+		// every frame of the page; a caller who cannot be resolved is
 		// answered as a visitor, because the name is what is withheld.
 		if bytes.Contains(data, []byte(`"acknowledged_by"`)) {
-			id, err := s.resolveIdentity(r)
-			if err != nil || id == nil || auth.IsVisitor(id) {
+			if id == nil || auth.IsVisitor(id) {
 				filtered, ok := withoutAcknowledger(data)
 				if !ok {
 					// Unfilterable, so possibly carrying exactly what is
@@ -377,15 +385,15 @@ func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
 		}
 	}
 	if ev.Kind == events.KindAudit {
-		// The same row GET /audit serves this caller, resolved per
-		// frame for the reason the others are. A frame that will not
-		// decode is dropped rather than passed through: the whole
-		// document is exactly what the filter exists to withhold.
+		// The same row GET /audit serves this caller, narrowed for the
+		// identity the caller resolved, for the reason the others are. A
+		// frame that will not decode is dropped rather than passed
+		// through: the whole document is exactly what the filter exists
+		// to withhold.
 		var row store.AuditEvent
 		if err := json.Unmarshal(data, &row); err != nil {
 			return nil, false
 		}
-		id, _ := s.resolveIdentity(r)
 		filtered, err := json.Marshal(auditRowFor(row, id))
 		if err != nil {
 			return nil, false
@@ -395,9 +403,19 @@ func (s *Server) frameFor(r *http.Request, ev events.Event) ([]byte, bool) {
 	if ev.Kind == events.KindPoolCreated || ev.Kind == events.KindPoolUpdated {
 		// A viewer may keep watching after a demotion, but must not
 		// keep the environment access they opened this stream with.
-		// Resolve each pool frame, including replay, and fail closed.
-		id, err := s.resolveIdentity(r)
-		if err != nil || !auth.Allowed(id, auth.ActionPoolsWrite) {
+		//
+		// The pool frame is the one narrowed frame that carries
+		// credentials, so it is resolved for the frame rather than
+		// taken from the identity the caller passes in: a demoted
+		// watcher must not be handed a registry password in the frame
+		// that follows the demotion, and the heartbeat is too late for
+		// that. TestPoolEventsFollowTheWatchersCurrentRole holds this
+		// to. Every other kind withholds a list, a path, an address or
+		// a name, and reaching those a heartbeat late is the staleness
+		// the stream already accepts for the reader and for the
+		// revocation check.
+		caller, err := s.resolveIdentity(r)
+		if err != nil || caller == nil || !auth.Allowed(caller, auth.ActionPoolsWrite) {
 			data = withoutEnvValues(data)
 		}
 	}
