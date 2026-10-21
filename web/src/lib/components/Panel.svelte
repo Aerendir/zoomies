@@ -66,7 +66,7 @@
     flex-direction: column;
     min-width: 0;
     border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-md);
+    border-radius: var(--z-radius-xl);
     background: var(--z-surface);
   }
   .panel.fill {
@@ -133,7 +133,7 @@
     min-height: 0;
     overflow-y: auto;
     /* Rows scrolled to the bottom edge stay inside the panel's corners. */
-    border-bottom-left-radius: var(--z-radius-md);
-    border-bottom-right-radius: var(--z-radius-md);
+    border-bottom-left-radius: var(--z-radius-xl);
+    border-bottom-right-radius: var(--z-radius-xl);
   }
 </style>

@@ -1,0 +1,480 @@
+/*
+ * Concept A, evolution. Sign in keeps its split layout; a phone gets one
+ * compact brand header in place of the black stage that pushed the button below
+ * the fold, and the instance being signed in to becomes the line under the title.
+ */
+.s-a {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(20rem, 40vw, 36rem) minmax(0, 1fr);
+  min-height: 100%;
+  background: var(--z-surface);
+}
+.s-a .a-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-12);
+  padding: var(--z-space-12);
+  border-right: var(--z-border-width) solid var(--z-border);
+}
+/* The backdrop is a glow drawn for a dark ground, so the lockup sits on Zoomies
+   Black in both themes: a stage, not a column. */
+.s-a .a-stage {
+  display: flex;
+  justify-content: center;
+  align-self: center;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--z-space-4);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-panel-bg);
+}
+.s-a .a-pitch {
+  margin-block: auto;
+  max-width: 22rem;
+}
+.s-a .a-eyebrow {
+  margin-bottom: var(--z-space-5);
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-text-muted);
+}
+.s-a .a-tagline {
+  font-size: var(--z-text-3xl);
+  line-height: var(--z-leading-3xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-a .a-rule {
+  width: var(--z-space-10);
+  height: var(--z-border-width-thick);
+  margin-block: var(--z-space-8);
+  background: var(--z-brand-runner-blue);
+}
+.s-a .a-pitch-lede {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-lg);
+  color: var(--z-text-muted);
+}
+.s-a .a-brand .m-links {
+  color: var(--z-text-muted);
+}
+.s-a .a-form {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--z-space-16) var(--z-space-8) var(--z-space-6);
+}
+.s-a .a-mark {
+  display: none;
+}
+.s-a .a-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  max-width: var(--z-width-dialog-sm);
+  min-width: 0;
+  margin: auto;
+}
+.s-a .a-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-1);
+  margin-bottom: var(--z-space-2);
+}
+.s-a h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-a .a-lede {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  color: var(--z-text-muted);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.s-a .a-lede .m-host {
+  color: var(--z-text);
+  font-weight: var(--z-weight-medium);
+}
+.s-a .a-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--z-space-2) var(--z-space-4);
+  margin-top: var(--z-space-8);
+  color: var(--z-text-subtle);
+  font-size: var(--z-text-2xs);
+  line-height: var(--z-leading-xs);
+}
+.s-a .a-links-phone {
+  display: none;
+}
+.s-a .a-appearance {
+  position: absolute;
+  top: var(--z-space-6);
+  right: var(--z-space-8);
+}
+@media (max-width: 800px) {
+  .s-a {
+    display: flex;
+    flex-direction: column;
+  }
+  .s-a .a-brand {
+    display: none;
+  }
+  .s-a .a-mark {
+    display: flex;
+    justify-content: center;
+    padding: var(--z-space-8) var(--z-space-6) var(--z-space-2);
+  }
+  .s-a .a-form {
+    flex: 1;
+    padding: var(--z-space-4) var(--z-space-6) var(--z-space-6);
+  }
+  .s-a .a-meta {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .s-a .a-links-phone {
+    display: block;
+    color: var(--z-text-muted);
+  }
+  .s-a .a-links-phone .m-links {
+    justify-content: center;
+  }
+  .s-a .a-appearance {
+    top: var(--z-space-4);
+    right: var(--z-space-6);
+  }
+  .s-a .m-no-account {
+    display: none;
+  }
+}
+
+/*
+ * First account, concept A: the same card, shorter. A one-sentence lede, the
+ * commands that find the token as tabs under the field that asks for it, the
+ * explanation behind a disclosure, and what comes next after the button, where
+ * a person who has finished the form is looking.
+ */
+.s-fa-a {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--z-space-6) var(--z-space-4);
+  background: var(--z-bg);
+}
+.s-fa-a .fa-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  max-width: var(--z-width-dialog-md);
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-shadow-lg);
+}
+.s-fa-a .fa-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--z-border-width);
+  margin: 0 var(--z-radius-lg);
+  background: linear-gradient(90deg, transparent, var(--z-border-strong), transparent);
+}
+.s-fa-a .fa-brand {
+  display: flex;
+  justify-content: center;
+}
+.s-fa-a .fa-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-1);
+  text-align: center;
+}
+.s-fa-a .fa-step {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-medium);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-text-subtle);
+}
+.s-fa-a h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-wrap: balance;
+}
+.s-fa-a .fa-lede {
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+  text-wrap: pretty;
+}
+.s-fa-a form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+.s-fa-a .fa-then {
+  text-align: center;
+}
+.s-fa-a .fa-version {
+  font-size: var(--z-text-2xs);
+  color: var(--z-text-subtle);
+  text-align: center;
+}
+.s-fa-a .fa-appearance,
+.s-ca-a .fa-appearance {
+  position: absolute;
+  top: var(--z-space-4);
+  right: var(--z-space-4);
+}
+@media (max-width: 768px) {
+  .s-fa-a {
+    padding-top: var(--z-space-4);
+  }
+  .s-fa-a .fa-card {
+    padding: var(--z-space-5);
+  }
+}
+
+/*
+ * Connect an app, concept A: the same card. Where the app sends you and the
+ * warning about that address are one summary, the warning is shorter, and the
+ * primary action names the app it is allowing.
+ */
+.s-ca-a {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-5);
+  min-height: 100%;
+  padding: var(--z-space-8) var(--z-space-4);
+  background: var(--z-bg);
+}
+.s-ca-a .ca-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  max-width: var(--z-width-dialog-md);
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-shadow-md);
+}
+.s-ca-a .ca-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--z-space-10);
+  height: var(--z-space-10);
+  border-radius: var(--z-radius-full);
+  background: var(--z-accent-subtle);
+  color: var(--z-accent);
+}
+.s-ca-a h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  font-weight: var(--z-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.s-ca-a .ca-lede {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  color: var(--z-text-muted);
+}
+.s-ca-a .ca-lede strong {
+  color: var(--z-text);
+  font-weight: var(--z-weight-medium);
+}
+.s-ca-a .ca-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  padding: var(--z-space-4);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface-sunken);
+}
+.s-ca-a .ca-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  margin: 0;
+}
+.s-ca-a .ca-facts dt {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-medium);
+  letter-spacing: var(--z-tracking-wide);
+  text-transform: uppercase;
+  color: var(--z-text-muted);
+}
+.s-ca-a .ca-facts dd {
+  margin: var(--z-space-1) 0 0;
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  overflow-wrap: anywhere;
+}
+.s-ca-a .ca-host {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-medium);
+}
+@media (max-width: 768px) {
+  .s-ca-a {
+    padding-top: var(--z-space-6);
+  }
+  .s-ca-a .ca-card {
+    padding: var(--z-space-5);
+  }
+}
+
+/*
+ * Fleet status, concept A: the page gains a brand and a bigger banner, the four
+ * facts stay two across on a phone, and the reasons are grouped by how serious
+ * they are, with the long group folded so the cause is not two screens down.
+ */
+.s-fs-a {
+  position: relative;
+  min-height: 100%;
+  background: var(--z-bg);
+}
+.s-fs-a .fs-page {
+  display: grid;
+  gap: var(--z-space-6);
+  max-width: var(--z-width-dialog-md);
+  margin: 0 auto;
+  padding: var(--z-space-8) var(--z-space-4);
+}
+.s-fs-a .fs-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+.s-fs-a .m-state {
+  gap: var(--z-space-5);
+  padding: var(--z-space-6);
+}
+.s-fs-a .m-state-word {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+}
+.s-fs-a .fs-headline {
+  margin-top: var(--z-space-1);
+  font-size: var(--z-text-lg);
+  line-height: var(--z-leading-lg);
+  text-wrap: pretty;
+}
+.s-fs-a .fs-group + .fs-group {
+  margin-top: var(--z-space-4);
+}
+.s-fs-a .fs-group h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  margin-bottom: var(--z-space-2);
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-semibold);
+}
+.s-fs-a details.fs-group > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--z-control-touch);
+  cursor: pointer;
+  list-style: none;
+}
+.s-fs-a details.fs-group > summary::-webkit-details-marker {
+  display: none;
+}
+.s-fs-a details.fs-group > summary h3 {
+  margin: 0;
+}
+.s-fs-a details.fs-group > summary::after {
+  content: '+';
+  margin-left: auto;
+  font-size: var(--z-text-lg);
+  color: var(--z-text-muted);
+}
+.s-fs-a details.fs-group[open] > summary::after {
+  content: '\2212';
+}
+
+/* The group heading already says Blocking or Slowing, so the word inside each item is for a screen reader. */
+.s-fs-a .m-sev {
+  position: absolute;
+  width: var(--z-nudge-1);
+  height: var(--z-nudge-1);
+  margin: calc(-1 * var(--z-nudge-1));
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/*
+ * Not found, concept A: the same page, with a way back beside the way forward.
+ * Somebody who followed a stale link usually came from the page before it.
+ */
+.s-nf-a {
+  position: relative;
+  min-height: 100%;
+  padding: var(--z-space-8) var(--z-space-6);
+  background: var(--z-bg);
+}
+.s-nf-a .nf-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-1);
+}
+.s-nf-a .nf-head h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-nf-a .nf-head p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+}
+.s-nf-a .nf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-3);
+  max-width: var(--z-width-dialog-md);
+  margin: var(--z-space-16) auto 0;
+  text-align: center;
+}
+.s-nf-a .nf-empty h2 {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-semibold);
+}
+.s-nf-a .nf-empty p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  text-wrap: pretty;
+}
+.s-nf-a .nf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--z-space-3);
+  margin-top: var(--z-space-2);
+}

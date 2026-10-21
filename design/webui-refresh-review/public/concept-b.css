@@ -1,0 +1,434 @@
+/*
+ * Concept B, evolution. No brand panel: one centred frame, the same one the
+ * first-account and consent screens use, so every page before sign in looks
+ * like the same product. The pitch becomes a single quiet line beneath.
+ */
+.s-b {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: var(--z-space-12) var(--z-space-4) var(--z-space-8);
+  background: var(--z-bg);
+}
+.s-b .b-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-6);
+  width: 100%;
+  max-width: var(--z-width-dialog-md);
+  min-width: 0;
+  margin-block: auto;
+}
+.s-b .b-brand {
+  display: flex;
+  justify-content: center;
+}
+.s-b .b-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-shadow-lg);
+}
+.s-b .b-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--z-border-width);
+  margin: 0 var(--z-radius-lg);
+  background: linear-gradient(90deg, transparent, var(--z-border-strong), transparent);
+}
+.s-b h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-align: center;
+  text-wrap: balance;
+}
+.s-b .b-lede {
+  margin-top: calc(-1 * var(--z-space-2));
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+  text-align: center;
+  text-wrap: pretty;
+}
+.s-b .b-instance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-xs);
+  color: var(--z-text-muted);
+}
+.s-b .b-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-3);
+  max-width: 100%;
+  color: var(--z-text-muted);
+  font-size: var(--z-text-xs);
+  line-height: var(--z-leading-xs);
+  text-align: center;
+}
+.s-b .b-footer .m-links {
+  justify-content: center;
+}
+.s-b .b-version {
+  color: var(--z-text-subtle);
+  font-size: var(--z-text-2xs);
+}
+.s-b .b-appearance {
+  position: absolute;
+  top: var(--z-space-4);
+  right: var(--z-space-4);
+}
+@media (max-width: 768px) {
+  .s-b {
+    padding-top: var(--z-space-8);
+  }
+  .s-b .b-card {
+    padding: var(--z-space-5);
+  }
+}
+
+/*
+ * First account, concept B: where to find the token sits beside the form, in the
+ * same frame sign in uses. From 960px it is two columns; below that the help
+ * folds into a disclosure above the token field.
+ */
+.s-b--wide .b-column {
+  max-width: var(--z-width-dialog-lg);
+}
+.s-b .fa-b-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-1);
+  text-align: center;
+}
+.s-b .fa-step {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-medium);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-text-subtle);
+}
+.s-b .fa-b-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: var(--z-space-8);
+}
+.s-b .fa-b-help {
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  gap: var(--z-space-3);
+  padding: var(--z-space-5);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface-sunken);
+}
+.s-b .fa-b-help h2 {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-semibold);
+}
+.s-b .fa-b-help-phone {
+  display: none;
+}
+.s-b .fa-b-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  min-width: 0;
+}
+.s-b .fa-then {
+  text-align: center;
+}
+@media (max-width: 959px) {
+  .s-b .fa-b-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .s-b .fa-b-help {
+    display: none;
+  }
+  .s-b .fa-b-help-phone {
+    display: block;
+  }
+}
+
+/*
+ * Connect an app, concept B: in the frame sign in and first account share. The
+ * role is two cards that say what each allows, what the app can never do is its
+ * own short list, and on a phone the buttons stay at the bottom of the screen.
+ */
+.s-ca-b h1 {
+  overflow-wrap: anywhere;
+}
+.s-ca-b .cb-from {
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+  text-align: center;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.s-ca-b .cb-from strong {
+  color: var(--z-text);
+}
+.s-ca-b .cb-where {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--z-space-2);
+  vertical-align: middle;
+  color: var(--z-text);
+}
+.s-ca-b .m-radio {
+  padding: var(--z-space-4);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface);
+}
+.s-ca-b .m-radio:has(input:checked) {
+  border-color: var(--z-accent);
+  background: var(--z-accent-subtle);
+}
+.s-ca-b .cb-never {
+  padding: var(--z-space-4);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+}
+.s-ca-b .cb-never-title {
+  margin-bottom: var(--z-space-2);
+  font-size: var(--z-text-xs);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-wide);
+  text-transform: uppercase;
+  color: var(--z-text-muted);
+}
+.s-ca-b .cb-never ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-ca-b .cb-never li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+}
+.s-ca-b .cb-never .icon {
+  margin-top: var(--z-nudge-3);
+  color: var(--z-text-subtle);
+}
+.s-ca-b .cb-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--z-space-3);
+}
+@media (max-width: 768px) {
+  /* Stuck to the bottom of the screen while the card is taller than it, and
+     resting at the card's foot when it is not. The page scrolls a focused field
+     clear of the bar, so the bar never covers what a person is typing in. */
+  .s-ca-b .cb-actions:not(.cb-actions--plain) {
+    position: sticky;
+    bottom: 0;
+    margin: 0 calc(-1 * var(--z-space-5)) calc(-1 * var(--z-space-5));
+    padding: var(--z-space-3) var(--z-space-5);
+    border-top: var(--z-border-width) solid var(--z-border);
+    border-radius: 0 0 var(--z-radius-lg) var(--z-radius-lg);
+    background: var(--z-surface);
+  }
+  .s-ca-b .cb-actions .m-btn {
+    flex: 1;
+  }
+  :root[data-concept='b']:has(.s-ca-b) {
+    scroll-padding-bottom: 6rem;
+  }
+}
+
+/*
+ * Fleet status, concept B: one plain sentence for the person waiting, written
+ * from the same three facts the product's headline uses, and everything else
+ * behind a disclosure.
+ */
+.s-fs-b {
+  position: relative;
+  min-height: 100%;
+  background: var(--z-bg);
+}
+.s-fs-b .fs-b-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-6);
+  max-width: var(--z-width-dialog-md);
+  margin: 0 auto;
+  padding: var(--z-space-8) var(--z-space-4);
+}
+.s-fs-b .fs-b-head {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-4);
+}
+.s-fs-b .fs-b-head h1 {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-medium);
+  color: var(--z-text-muted);
+}
+.s-fs-b .fs-b-sentence {
+  font-size: var(--z-text-3xl);
+  line-height: var(--z-leading-3xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-wrap: balance;
+}
+.s-fs-b .fs-b-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--z-space-1) var(--z-space-3);
+  border: var(--z-border-width) solid;
+  border-radius: var(--z-radius-full);
+  font-size: var(--z-text-sm);
+}
+.s-fs-b .fs-b-state .m-state-word {
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  font-weight: var(--z-weight-semibold);
+}
+/* Inside the tinted chip the whole line takes the tone, which is the pair the
+   checker holds; muted grey on a tint is not. */
+.s-fs-b .fs-b-state .fs-since {
+  color: inherit;
+}
+.s-fs-b .fs-b-more {
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface);
+}
+.s-fs-b .fs-b-more > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  min-height: var(--z-control-touch);
+  padding: 0 var(--z-space-4);
+  font-weight: var(--z-weight-medium);
+  cursor: pointer;
+  list-style: none;
+}
+.s-fs-b .fs-b-more > summary::-webkit-details-marker {
+  display: none;
+}
+.s-fs-b .fs-b-more > summary::after {
+  content: '+';
+  margin-left: auto;
+  font-size: var(--z-text-lg);
+  color: var(--z-text-muted);
+}
+.s-fs-b .fs-b-more[open] > summary::after {
+  content: '\2212';
+}
+.s-fs-b .fs-b-more > :not(summary) {
+  margin: 0 var(--z-space-4) var(--z-space-4);
+}
+
+/*
+ * Not found, concept B: the same page, and the three places most people want,
+ * each with the sentence the navigation already uses for it.
+ */
+.s-nf-b {
+  position: relative;
+  min-height: 100%;
+  padding: var(--z-space-8) var(--z-space-6);
+  background: var(--z-bg);
+}
+.s-nf-b .nf-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-1);
+}
+.s-nf-b .nf-head h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-nf-b .nf-head p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+}
+.s-nf-b .nf-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-2);
+  max-width: var(--z-measure-prose);
+  margin: var(--z-space-10) 0 var(--z-space-8);
+}
+.s-nf-b .nf-empty h2 {
+  font-size: var(--z-text-lg);
+  font-weight: var(--z-weight-semibold);
+}
+.s-nf-b .nf-empty p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+}
+.s-nf-b .nf-where h2 {
+  margin-bottom: var(--z-space-3);
+  font-size: var(--z-text-sm);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-wide);
+  text-transform: uppercase;
+  color: var(--z-text-muted);
+}
+.s-nf-b .nf-dests {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--z-space-3);
+}
+.s-nf-b .nf-dest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-2);
+  padding: var(--z-space-4);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface);
+  color: var(--z-text);
+  text-decoration: none;
+}
+.s-nf-b .nf-dest:hover {
+  background: var(--z-surface-hover);
+}
+.s-nf-b .nf-dest .icon {
+  color: var(--z-accent);
+}
+.s-nf-b .nf-dest-label {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-semibold);
+}
+.s-nf-b .nf-dest-hint {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+}
+@media (max-width: 768px) {
+  .s-nf-b .nf-dests {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -513,7 +513,8 @@ Page gutters are `--z-space-6`, card padding `--z-space-5`, table cell padding
 ### 1.4 Radii, borders and geometry
 
 `--z-radius-sm` 4 (badges, inputs) · `--z-radius-md` 8 (buttons, cards) ·
-`--z-radius-lg` 12 (dialogs, panels) · `--z-radius-full` 9999 (dots, pills).
+`--z-radius-lg` 12 (dialogs, panels) · `--z-radius-xl` 28 (the stage on the pages
+before sign in) · `--z-radius-full` 9999 (dots, pills).
 
 Borders come in three weights and the choice between them is meaning, not
 taste. `--z-border-width` (1px) is the hairline that separates things belonging
@@ -543,7 +544,8 @@ Dialogs and drawers are cut to their content's comfortable measure rather than
 to the viewport, so each has three widths and they are the three shapes we
 actually put in one; a confirmation, a form, a table:
 `--z-width-dialog-sm|md|lg` (400/560/820) and `--z-width-drawer-sm|md|lg`
-(360/520/760).
+(360/520/760). A public page, before anybody has signed in, is cut to
+`--z-width-public` (1120px), which its header, its stage and its footer share.
 
 ### 1.5 Elevation
 
@@ -648,6 +650,23 @@ it is handed the same three thumb tokens through its theme.
 ---
 
 ## 2. Information architecture
+
+**The look of a signed-in page** is the public pages' look carried inside the
+shell. The sidebar is a sunken column and the page you are on is raised off it
+with the brand's blue rail (a bar along the top on a phone) and a bold label, so
+the rail is for the eye and the weight is for anyone it does not reach. Every
+page header names its section above the title (the sidebar's own heading, drawn
+from a data attribute so it is never a second heading or a string a page's text
+can collide with), sets the title in the medium weight, and puts a short blue
+rule under it; the Overview, which stands alone, has no section to name. Panels
+are cards with the extra-large radius, on the page's own surface: the quiet
+text colours are only guaranteed to read on it, and a raised one costs the
+gallery's contrast check in dark. The Overview opens with a slim
+band, Zoomies Black in both themes, that answers "is anything wrong" in one
+sentence (counts by severity, never a problem's own words) and has no status
+colour in it; it is a band and not the public pages' tall stage, and it is left out on a
+phone, because the pools must stay on the first screen. The wrong-address page uses the full band
+with the dog.
 
 Persistent left navigation, collapsible to icons only (persisted). Order is
 fixed, because muscle memory is the point:
@@ -916,6 +935,7 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 | `MemoryBar` | `lib/runners/`. A runner's memory as one bar: guaranteed, lent, swap (hatched, so it cannot be mistaken for the solid fill where colour is lost) and a tick at the ceiling. `aria-hidden`: the figures beside it carry the meaning |
 | `RunnerTimeline` | `lib/runners/`. One row per state with how long the runner stayed there, reconstructed from the four timestamps a runner row carries -- and it says so, rather than letting an operator read it as an audit trail |
 | `Wizard` | a flow of steps that is genuinely a sequence; the AI Context setup, the provider form, the migration; on a phone its footer stays pinned above the bottom bar. The provider form also sets `jumpable`, so each stage in the list but the current one is a button that goes straight to it; the current stage is plain text with `aria-current` on its list item, because a button that did nothing would be a dead tab stop. A pool is not one: see [the pool editor](#the-pool-editor) |
+| `PublicFrame`, `SplitPage`, `BrandStage`, `ThemeSwitch` | `lib/public/`. The frame every page before sign in shares. `PublicFrame` is the header (paw and wordmark, with the appearance switch drawn at the right but read after the page, so a person who came to sign in is on the first field), the page, and a Zoomies Black footer panel with the build, the links and the credit, all on `--z-width-public`. `SplitPage` is the stage beside the column a person acts in, and a strip above it on a phone. `BrandStage` is the rounded panel holding the dog, an eyebrow, a headline (a string or its lines, optionally with a line in the runner blue), a blue rule and a sentence; `wide` makes it a band with its headline as the page's h1, as on the status page. `ThemeSwitch` is the three-way appearance choice as icons in a pill, with a native `title` and not the shared tooltip, because the status page that uses it is held to a few kilobytes. None of them imports the preference store or the API client, so the status page can; the dog is drawn by `LogoArt`, which is told its backdrop, where `Logo` asks the operator's preference |
 
 ### The log viewer
 

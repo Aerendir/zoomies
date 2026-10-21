@@ -36,6 +36,7 @@ const SECTIONS = [
   'Notices',
   'Data grid',
   'Eli repairs',
+  'Public pages',
 ];
 
 function open(page: Page, style: string, mode: string): Promise<unknown> {

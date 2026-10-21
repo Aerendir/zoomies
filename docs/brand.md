@@ -30,7 +30,7 @@ logo stays monochrome, always.
 
 | Name | Value | Where it is used |
 | --- | --- | --- |
-| Zoomies Black | `#080808` | Dark backgrounds and the sign-in page's logo stage |
+| Zoomies Black | `#080808` | Dark backgrounds, and the stage and footer panel of the pages before sign in |
 | White | `#FFFFFF` | Surfaces in the light theme, and the knockout mark |
 | Cool Grey | `#B9BCC2` | Secondary text in the dark theme |
 | Mid Grey | `#666A73` | Secondary text in the light theme |
@@ -144,31 +144,42 @@ one: a badge in different colours on different READMEs is not a brand.
 
 ## Using the system in the product
 
-The full primary logo appears on the sign-in, first-run, boot and connection
-failure screens (the screens that open the product) and it is given room on
-them: a nominal 220px on the sign-in page, plus room for its atmospheric backdrop.
-The artwork keeps its black colouring and is capped at the width of its
-container, so a phone does not overflow. The artwork carries its own clear
-space, so the canvas is deliberately larger than the dog inside it; that padding
-is part of the supplied file and is not cropped away.
+The full primary logo appears on the boot and connection failure screens, which
+open the product before anything else has loaded, and it is given room on them:
+a nominal 220px, plus room for its atmospheric backdrop. The artwork keeps its
+black colouring and is capped at the width of its container, so a phone does not
+overflow. The artwork carries its own clear space, so the canvas is deliberately
+larger than the dog inside it; that padding is part of the supplied file and is
+not cropped away.
 
-![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
-![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
+![The sign-in page: a header with the paw and wordmark and the appearance switch; a rounded Zoomies Black stage on the left holding the dog on its backdrop, the words "Your infrastructure. Your control." and "A fresh runner. For every job." with a short blue rule; the form on the right under the address of the instance; and a Zoomies Black footer panel with the build and the links](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
+![The sign-in page: a header with the paw and wordmark and the appearance switch; a rounded Zoomies Black stage on the left holding the dog on its backdrop, the words "Your infrastructure. Your control." and "A fresh runner. For every job." with a short blue rule; the form on the right under the address of the instance; and a Zoomies Black footer panel with the build and the links](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
 
-The sign-in page is the one screen where the brand gets a column rather than a
-shape. It is the page met by people who did not install the controller
-(somebody sent its address by the colleague who did) so the left of it says
-what they are looking at: the lockup, a short introduction and links to
-[zoomies.sh](https://zoomies.sh), the source on GitHub and
-[EyUp.io](https://eyup.io). The original black artwork uses the backdrop
-selected in Appearance, and sits on a stage: a rounded square of Zoomies Black
-around the lockup, the same in both themes, because the backdrop is a glow
-drawn for a dark ground. The stage is as wide as the lockup and no wider; the
-column around it, and the words on it, follow the selected theme like the form.
+The pages before anybody has signed in (sign in, the first account, the consent
+screen and the public status page) share one frame, and it is where the brand
+gets its room. The header carries the paw and wordmark with the appearance
+choice at its right. The footer is a Zoomies Black panel with the build, links
+to [zoomies.sh](https://zoomies.sh), the source on GitHub and
+[EyUp.io](https://eyup.io), and the credit. Between them the page sits in a
+column no wider than `--z-width-public`, so the logo, the stage and the footer
+share their edges.
 
-On a phone the column comes apart: the full lockup, its selected backdrop and its stage stay
-above the form, scaling together to fit narrow screens, and the links move below the form. The first-run screen stays a card. Only the person who has just
-installed the controller ever sees it, and they already know what it is.
+A page with something to do puts a stage beside it: a rounded panel of Zoomies
+Black (`--z-radius-xl`) holding the dog, an eyebrow in small capitals, a
+headline, a short blue rule and a sentence. The dog is the standalone mark, not
+the lockup, drawn on the backdrop selected in Appearance, and it shrinks to the
+room it is given. The stage is the same black in both themes because the
+backdrop is a glow drawn for a dark ground, and what is written on it is fixed
+to match; the page around it and the form beside it follow the selected theme.
+The words on a stage say what the page is for in a line, and none of them is a
+heading, because the page's own h1 sits in the column the person acts in. The
+status page has nothing to do, so it uses the stage as a band, the dog at the
+right, and its heading is the page's h1.
+
+On a phone the stage becomes a strip above the form with the dog beside its
+words, so the first field is still on the first screen. The sentence under the
+rule goes, the footer panel stays at the foot, and the appearance switch
+takes the touch size.
 
 The running spaniel emblem carries Settings → About at 128px, its minimum size;
 the one identity slot in the signed-in product with room for the primary mark,
@@ -299,8 +310,8 @@ identity outwards, and both are part of the brand rather than an afterthought.
 
 **A controller's own page.** `web/index.html` carries Open Graph and Twitter
 card tags, `brand/social-card.png` as the card image, and a link to
-[zoomies.sh](https://zoomies.sh) on the sign-in page's brand panel, beside the
-source on GitHub, and in the footer of every signed-in page, each beside the
+[zoomies.sh](https://zoomies.sh) in the footer panel of every page before sign in,
+beside the source on GitHub, and in the footer of every signed-in page, each beside the
 credit *Developed by [EyUp.io](https://eyup.io)*.
 Both addresses come from `web/src/lib/links.ts`, and the site's footer prints
 the same credit from `extra.developer` in `mkdocs.yml`, so the product and the

@@ -1,0 +1,443 @@
+{
+  "generated": "2026-10-21T18:32:50.396Z",
+  "look": "mission-control dark",
+  "screens": {
+    "overview": {
+      "375": {
+        "height": 2627,
+        "columns": 0,
+        "tables": 0,
+        "cards": 10,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1611,
+        "columns": 0,
+        "tables": 0,
+        "cards": 10,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Overview"
+    },
+    "pools": {
+      "375": {
+        "height": 942,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Pools"
+    },
+    "pool-detail": {
+      "375": {
+        "height": 1564,
+        "columns": 5,
+        "tables": 1,
+        "cards": 5,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1254,
+        "columns": 5,
+        "tables": 1,
+        "cards": 5,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Pool detail"
+    },
+    "runners": {
+      "375": {
+        "height": 1425,
+        "columns": 8,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1123,
+        "columns": 8,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Runners"
+    },
+    "runner-detail": {
+      "375": {
+        "height": 1227,
+        "columns": 0,
+        "tables": 0,
+        "cards": 3,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 0,
+        "tables": 0,
+        "cards": 3,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Runner detail"
+    },
+    "queue": {
+      "375": {
+        "height": 1269,
+        "columns": 6,
+        "tables": 1,
+        "cards": 4,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 971,
+        "columns": 6,
+        "tables": 1,
+        "cards": 4,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Queue"
+    },
+    "workflows": {
+      "375": {
+        "height": 1403,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1255,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Workflows"
+    },
+    "jobs": {
+      "375": {
+        "height": 1541,
+        "columns": 8,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1393,
+        "columns": 8,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Jobs"
+    },
+    "hosts": {
+      "375": {
+        "height": 890,
+        "columns": 8,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 8,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Hosts"
+    },
+    "host-detail": {
+      "375": {
+        "height": 1280,
+        "columns": 4,
+        "tables": 1,
+        "cards": 5,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 986,
+        "columns": 4,
+        "tables": 1,
+        "cards": 5,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Host detail"
+    },
+    "providers": {
+      "375": {
+        "height": 692,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Providers"
+    },
+    "usage": {
+      "375": {
+        "height": 1626,
+        "columns": 5,
+        "tables": 1,
+        "cards": 6,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1332,
+        "columns": 5,
+        "tables": 1,
+        "cards": 6,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Usage"
+    },
+    "comparisons": {
+      "375": {
+        "height": 1288,
+        "columns": 4,
+        "tables": 1,
+        "cards": 3,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1182,
+        "columns": 4,
+        "tables": 1,
+        "cards": 3,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Comparisons"
+    },
+    "kennel": {
+      "375": {
+        "height": 1799,
+        "columns": 5,
+        "tables": 1,
+        "cards": 6,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1335,
+        "columns": 5,
+        "tables": 1,
+        "cards": 6,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Kennel Club"
+    },
+    "repairs": {
+      "375": {
+        "height": 1292,
+        "columns": 6,
+        "tables": 1,
+        "cards": 2,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 1038,
+        "columns": 6,
+        "tables": 1,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Eli repairs"
+    },
+    "ai-context": {
+      "375": {
+        "height": 1061,
+        "columns": 6,
+        "tables": 1,
+        "cards": 2,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 937,
+        "columns": 6,
+        "tables": 1,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "AI context"
+    },
+    "installations": {
+      "375": {
+        "height": 692,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 7,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Installations"
+    },
+    "migrate": {
+      "375": {
+        "height": 1221,
+        "columns": 0,
+        "tables": 0,
+        "cards": 3,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 899,
+        "columns": 0,
+        "tables": 0,
+        "cards": 3,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Migrate"
+    },
+    "audit": {
+      "375": {
+        "height": 1084,
+        "columns": 6,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": true,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 952,
+        "columns": 6,
+        "tables": 1,
+        "cards": 1,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Audit"
+    },
+    "settings": {
+      "375": {
+        "height": 1525,
+        "columns": 0,
+        "tables": 0,
+        "cards": 4,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 931,
+        "columns": 0,
+        "tables": 0,
+        "cards": 4,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Settings"
+    },
+    "pool-new": {
+      "375": {
+        "height": 1127,
+        "columns": 0,
+        "tables": 0,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 0,
+        "tables": 0,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "New pool"
+    },
+    "host-new": {
+      "375": {
+        "height": 873,
+        "columns": 0,
+        "tables": 0,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 0,
+        "tables": 0,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Add a host"
+    },
+    "provider-new": {
+      "375": {
+        "height": 995,
+        "columns": 0,
+        "tables": 0,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "1440": {
+        "height": 872,
+        "columns": 0,
+        "tables": 0,
+        "cards": 2,
+        "scrollsInCard": false,
+        "scrollsSideways": false
+      },
+      "title": "Add a provider"
+    }
+  }
+}

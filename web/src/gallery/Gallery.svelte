@@ -24,6 +24,7 @@
   import FeedbackSection from './sections/Feedback.svelte';
   import FormsSection from './sections/Forms.svelte';
   import OverlaysSection from './sections/Overlays.svelte';
+  import PublicSection from './sections/Public.svelte';
   import SurfacesSection from './sections/Surfaces.svelte';
   import { applyChoice, choiceQuery, readChoice, resolveMode, type GalleryChoice } from './style';
 
@@ -89,6 +90,7 @@
     <OverlaysSection />
     <DataSection />
     <EliRepairsSection />
+    <PublicSection />
   </div>
 </main>
 

@@ -14,15 +14,14 @@
   at all. Those are three different problems and only one of them is the
   operator's fault.
 
-  The original black logo keeps the backdrop chosen in Appearance in both themes,
-  on a rounded Zoomies Black stage of its own; the column around it follows the
-  theme like the form. On a phone the same full logo and its stage stay above
-  the form; only the marketing copy is removed.
+  The page is the shared public frame: the brand on a dark stage beside the form,
+  with the header and footer every page before sign in has. On a phone the stage
+  becomes a strip above the form, so the button is still on the first screen.
 -->
 <script lang="ts">
   import Tooltip from '$lib/components/Tooltip.svelte';
   import { tick, untrack } from 'svelte';
-  import { Moon, Sun, Eye, EyeOff, Globe, Server, TriangleAlert } from '@lucide/svelte';
+  import { Eye, EyeOff, Server, TriangleAlert } from '@lucide/svelte';
   import {
     ApiError,
     confirmTwoStepEnrolment,
@@ -36,15 +35,12 @@
   import TwoStepEnrol from '$lib/twostep/TwoStepEnrol.svelte';
   import { authFailureText, sentence } from '$lib/errors';
   import { router } from '$lib/router';
-  import { theme } from '$lib/state/theme.svelte';
   import { session } from '$lib/state/session.svelte';
-  import { DEVELOPER_NAME, DEVELOPER_URL, REPO_URL, SITE_HOST, SITE_URL } from '$lib/links';
-  import GithubMark from '$lib/icons/GithubMark.svelte';
-  import Logo from '$lib/components/Logo.svelte';
   import Button from '$lib/components/Button.svelte';
   import Field from '$lib/components/Field.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import Input from '$lib/components/Input.svelte';
+  import SplitPage from '$lib/public/SplitPage.svelte';
 
   let username = $state('');
   let password = $state('');
@@ -328,409 +324,251 @@
   }
 </script>
 
-<div class="signin" class:embedded>
-  {#if !embedded}
-    <div class="mark">
-      <div class="stage"><Logo variant="lockup" size={71} label="Zoomies" /></div>
-    </div>
-  {/if}
+{#snippet column()}
+  <div class="form-column">
+    {#if !embedded}
+      <Tooltip bare text="The Zoomies instance at this address">
+        <p class="instance">
+          <Server size={12} aria-hidden="true" />
+          <span class="sr-only">This instance:</span>
+          <span class="host">{host}</span>
+        </p>
+      </Tooltip>
+    {/if}
 
-  <div class="form-side">
-    <div class="form-column">
-      {#if !embedded}
-        <Tooltip bare text="The Zoomies instance at this address">
-          <p class="instance">
-            <Server size={12} aria-hidden="true" />
-            <span class="sr-only">This instance:</span>
-            <span class="host">{host}</span>
-          </p>
-        </Tooltip>
+    {#if meta?.auth_disabled}
+      <h1>No sign-in required</h1>
+      <p class="lede">
+        Authentication is switched off in this instance's configuration, so there is nothing to sign
+        in to. Anyone who can reach this address has full access.
+      </p>
+      <Button variant="primary" size="lg" full href="/">Continue to the dashboard</Button>
+      <p class="note">
+        Turn authentication back on in the configuration file before this instance is reachable by
+        anyone you do not trust.
+      </p>
+    {:else if pending?.two_step === 'verify'}
+      <h1>Enter your code</h1>
+      <p class="lede">
+        Open your authenticator app and type the code it shows for Zoomies. A recovery code works
+        too.
+      </p>
+      <form onsubmit={submitCode} novalidate>
+        <Field
+          label="Code"
+          hint="Signing in as {pending.username}. This step expires after five minutes."
+          error={codeError || undefined}
+        >
+          {#snippet children({ id, describedBy, invalid })}
+            <Input
+              bind:value={code}
+              bind:element={codeInput}
+              {id}
+              {describedBy}
+              {invalid}
+              size="lg"
+              name="code"
+              inputmode="text"
+              autocomplete="one-time-code"
+              autocapitalize="none"
+              spellcheck={false}
+              mono
+              disabled={submitting}
+            />
+          {/snippet}
+        </Field>
+        <Button type="submit" variant="primary" size="lg" full loading={submitting}>
+          Verify and sign in
+        </Button>
+      </form>
+      <p class="note">
+        Lost your phone and your recovery codes? An administrator can reset two-step verification
+        for you. <button type="button" class="linkish" onclick={() => startAgain()}
+          >Start again</button
+        >
+      </p>
+    {:else if pending?.two_step === 'enrol'}
+      {#if enrolled?.recovery_codes}
+        <h1>Save your recovery codes</h1>
+        <p class="lede">You are signed in. Keep these before you go any further.</p>
+        <div class="stack">
+          <RecoveryCodes codes={enrolled.recovery_codes} account={pending.username} />
+          <Button variant="primary" size="lg" full onclick={() => enrolled && finish(enrolled)}>
+            I have saved them, continue
+          </Button>
+        </div>
+      {:else}
+        <h1>Set up two-step verification</h1>
+        <p class="lede">
+          This instance asks for a code from an authenticator app after your password. Set one up to
+          finish signing in as {pending.username}.
+        </p>
+        <TwoStepEnrol
+          load={startTwoStepEnrolment}
+          confirm={confirmEnrolment}
+          confirmLabel="Turn on and sign in"
+          size="lg"
+        />
+        <p class="note">
+          <button type="button" class="linkish" onclick={() => startAgain()}>Start again</button>
+        </p>
+      {/if}
+    {:else}
+      <h1>Sign in to Zoomies</h1>
+      <p class="lede">Manage your runner fleet.</p>
+
+      {#if failureText}
+        <p class="failure" role="alert">
+          <TriangleAlert size={15} aria-hidden="true" />
+          <span>{failureText}</span>
+        </p>
       {/if}
 
-      {#if meta?.auth_disabled}
-        <h1>No sign-in required</h1>
-        <p class="lede">
-          Authentication is switched off in this instance's configuration, so there is nothing to
-          sign in to. Anyone who can reach this address has full access.
-        </p>
-        <Button variant="primary" size="lg" full href="/">Continue to the dashboard</Button>
-        <p class="note">
-          Turn authentication back on in the configuration file before this instance is reachable by
-          anyone you do not trust.
-        </p>
-      {:else if pending?.two_step === 'verify'}
-        <h1>Enter your code</h1>
-        <p class="lede">
-          Open your authenticator app and type the code it shows for Zoomies. A recovery code works
-          too.
-        </p>
-        <form onsubmit={submitCode} novalidate>
-          <Field
-            label="Code"
-            hint="Signing in as {pending.username}. This step expires after five minutes."
-            error={codeError || undefined}
-          >
+      {#if meta?.oidc_enabled}
+        <Button href={oidcStartUrl(returnTo)} variant="primary" size="lg" full
+          >{meta.oidc_label ?? 'Sign in with SSO'}</Button
+        >
+        {#if passwordForm}
+          <div class="divider"><span>or use a local account</span></div>
+        {/if}
+        {#if !passwordForm}
+          <p class="note">
+            An administrator who cannot use single sign-on can
+            <a href="/login?password">sign in with a password</a>.
+          </p>
+        {/if}
+      {/if}
+
+      {#if passwordForm}
+        <form onsubmit={submit} novalidate>
+          <Field label="Username" error={usernameError}>
             {#snippet children({ id, describedBy, invalid })}
               <Input
-                bind:value={code}
-                bind:element={codeInput}
+                bind:value={username}
+                bind:element={usernameInput}
                 {id}
                 {describedBy}
                 {invalid}
                 size="lg"
-                name="code"
-                inputmode="text"
-                autocomplete="one-time-code"
+                name="username"
+                autocomplete="username"
                 autocapitalize="none"
                 spellcheck={false}
-                mono
                 disabled={submitting}
+                onkeydown={readCapsLock}
+                onblur={() => (touched = { ...touched, username: true })}
               />
             {/snippet}
           </Field>
-          <Button type="submit" variant="primary" size="lg" full loading={submitting}>
-            Verify and sign in
-          </Button>
-        </form>
-        <p class="note">
-          Lost your phone and your recovery codes? An administrator can reset two-step verification
-          for you. <button type="button" class="linkish" onclick={() => startAgain()}
-            >Start again</button
+
+          <!-- The caps-lock warning goes in `notice`, not `hint`: hint is the
+             branch Field drops the moment there is an error, which is exactly
+             when caps lock is most likely to be the reason for one.
+
+             The hint holds the row an error takes, so "Enter your password."
+             appearing on blur cannot move the button out from under a pointer
+             on its way to it. It used to read "the one you chose when this
+             instance was set up", which is true of the first administrator
+             and of nobody else: every other password was set by an
+             administrator, and an administrator is also who can reset it. -->
+          <Field
+            label="Password"
+            hint="Forgotten it? An administrator can reset it."
+            error={passwordError}
+            notice={capsLock ? 'Caps lock is on.' : undefined}
           >
-        </p>
-      {:else if pending?.two_step === 'enrol'}
-        {#if enrolled?.recovery_codes}
-          <h1>Save your recovery codes</h1>
-          <p class="lede">You are signed in. Keep these before you go any further.</p>
-          <div class="stack">
-            <RecoveryCodes codes={enrolled.recovery_codes} account={pending.username} />
-            <Button variant="primary" size="lg" full onclick={() => enrolled && finish(enrolled)}>
-              I have saved them, continue
-            </Button>
-          </div>
-        {:else}
-          <h1>Set up two-step verification</h1>
-          <p class="lede">
-            This instance asks for a code from an authenticator app after your password. Set one up
-            to finish signing in as {pending.username}.
-          </p>
-          <TwoStepEnrol
-            load={startTwoStepEnrolment}
-            confirm={confirmEnrolment}
-            confirmLabel="Turn on and sign in"
-            size="lg"
-          />
-          <p class="note">
-            <button type="button" class="linkish" onclick={() => startAgain()}>Start again</button>
-          </p>
-        {/if}
-      {:else}
-        <h1>Sign in to Zoomies</h1>
-        <p class="lede">Manage your runner fleet.</p>
+            {#snippet children({ id, describedBy, invalid })}
+              <Input
+                bind:value={password}
+                bind:element={passwordInput}
+                {id}
+                {describedBy}
+                {invalid}
+                size="lg"
+                type={revealed ? 'text' : 'password'}
+                name="password"
+                autocomplete="current-password"
+                disabled={submitting}
+                onkeydown={readCapsLock}
+                onblur={() => {
+                  touched = { ...touched, password: true };
+                  capsLock = false;
+                }}
+              >
+                {#snippet trailing()}
+                  <IconButton
+                    icon={revealed ? EyeOff : Eye}
+                    label={revealed ? 'Hide password' : 'Show password'}
+                    pressed={revealed}
+                    disabled={submitting}
+                    onclick={() => {
+                      revealed = !revealed;
+                      passwordInput?.focus();
+                    }}
+                  />
+                {/snippet}
+              </Input>
+            {/snippet}
+          </Field>
 
-        {#if failureText}
-          <p class="failure" role="alert">
-            <TriangleAlert size={15} aria-hidden="true" />
-            <span>{failureText}</span>
-          </p>
-        {/if}
-
-        {#if meta?.oidc_enabled}
-          <Button href={oidcStartUrl(returnTo)} variant="primary" size="lg" full
-            >{meta.oidc_label ?? 'Sign in with SSO'}</Button
-          >
-          {#if passwordForm}
-            <div class="divider"><span>or use a local account</span></div>
-          {/if}
-          {#if !passwordForm}
-            <p class="note">
-              An administrator who cannot use single sign-on can
-              <a href="/login?password">sign in with a password</a>.
-            </p>
-          {/if}
-        {/if}
-
-        {#if passwordForm}
-          <form onsubmit={submit} novalidate>
-            <Field label="Username" error={usernameError}>
-              {#snippet children({ id, describedBy, invalid })}
-                <Input
-                  bind:value={username}
-                  bind:element={usernameInput}
-                  {id}
-                  {describedBy}
-                  {invalid}
-                  size="lg"
-                  name="username"
-                  autocomplete="username"
-                  autocapitalize="none"
-                  spellcheck={false}
-                  disabled={submitting}
-                  onkeydown={readCapsLock}
-                  onblur={() => (touched = { ...touched, username: true })}
-                />
-              {/snippet}
-            </Field>
-
-            <!-- The caps-lock warning goes in `notice`, not `hint`: hint is the
-               branch Field drops the moment there is an error, which is exactly
-               when caps lock is most likely to be the reason for one.
-
-               The hint holds the row an error takes, so "Enter your password."
-               appearing on blur cannot move the button out from under a pointer
-               on its way to it. It used to read "the one you chose when this
-               instance was set up", which is true of the first administrator
-               and of nobody else: every other password was set by an
-               administrator, and an administrator is also who can reset it. -->
-            <Field
-              label="Password"
-              hint="Forgotten it? An administrator can reset it."
-              error={passwordError}
-              notice={capsLock ? 'Caps lock is on.' : undefined}
-            >
-              {#snippet children({ id, describedBy, invalid })}
-                <Input
-                  bind:value={password}
-                  bind:element={passwordInput}
-                  {id}
-                  {describedBy}
-                  {invalid}
-                  size="lg"
-                  type={revealed ? 'text' : 'password'}
-                  name="password"
-                  autocomplete="current-password"
-                  disabled={submitting}
-                  onkeydown={readCapsLock}
-                  onblur={() => {
-                    touched = { ...touched, password: true };
-                    capsLock = false;
-                  }}
-                >
-                  {#snippet trailing()}
-                    <IconButton
-                      icon={revealed ? EyeOff : Eye}
-                      label={revealed ? 'Hide password' : 'Show password'}
-                      pressed={revealed}
-                      disabled={submitting}
-                      onclick={() => {
-                        revealed = !revealed;
-                        passwordInput?.focus();
-                      }}
-                    />
-                  {/snippet}
-                </Input>
-              {/snippet}
-            </Field>
-
-            <Button
-              type="submit"
-              variant={meta?.oidc_enabled ? 'secondary' : 'primary'}
-              size="lg"
-              full
-              loading={submitting}
-            >
-              Sign in
-            </Button>
-          </form>
-        {/if}
-
-        {#if meta?.public_view}
-          <!--
-            A visitor who opened this page and changed their mind, or somebody
-            who just signed out of a public fleet, can go back to looking. The
-            session is asked again rather than assumed: it is what turns this
-            browser back into a visitor.
-          -->
           <Button
-            variant="ghost"
+            type="submit"
+            variant={meta?.oidc_enabled ? 'secondary' : 'primary'}
             size="lg"
             full
-            loading={returning}
-            onclick={() => void keepLooking()}
+            loading={submitting}
           >
-            Continue without signing in
+            Sign in
           </Button>
-        {/if}
-
-        <details class="account-help">
-          <summary>Need help signing in?</summary>
-          <p>
-            <strong>Forgotten your password?</strong> An administrator of this instance can reset it.
-          </p>
-          <p><strong>Need an account?</strong> Ask an administrator of this instance to add you.</p>
-        </details>
+        </form>
       {/if}
-    </div>
-  </div>
 
-  {#if !embedded}
-    <!--
-      What Zoomies is, for the person who did not install it -- and until now the
-      page named the product and nothing else. Free and open source is the fact
-      worth carrying, because it is what makes "you could run your own" a real
-      sentence. The links are the ones the site and every signed-in page carry,
-      from links.ts, and each leaves the product, so each opens a new tab.
-    -->
-    <div class="about">
-      <div class="pitch">
-        <p class="eyebrow">Your infrastructure. Your control.</p>
-        <p class="tagline">A fresh runner.<br />For every job.</p>
-        <div class="brand-rule" aria-hidden="true"></div>
-        <p class="pitch-lede">
-          GitHub Actions runners on machines you own. Managed from one place.
-        </p>
-      </div>
-      <nav class="links" aria-label="About Zoomies">
-        <a href={SITE_URL} target="_blank" rel="noopener noreferrer">
-          <Globe size={15} aria-hidden="true" />
-          {SITE_HOST}<span class="sr-only"> (opens in a new tab)</span>
-        </a>
-        <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
-          <GithubMark size={15} aria-hidden="true" />
-          GitHub<span class="sr-only"> (opens in a new tab)</span>
-        </a>
-        <span class="credit">
-          Developed by
-          <a href={DEVELOPER_URL} target="_blank" rel="noopener noreferrer">
-            {DEVELOPER_NAME}<span class="sr-only"> (opens in a new tab)</span>
-          </a>
-        </span>
-      </nav>
-    </div>
-
-    <!-- A build number is about the installation, not about signing in, so it
-         sits under the form rather than inside it. -->
-    <div class="meta">
-      <span class="build">
-        <span class="product">Zoomies</span>
-        {#if meta?.version}<span class="version">{meta.version}</span>{/if}
-      </span>
-      {#if !meta?.auth_disabled}
-        <span class="no-account">No account? Ask an administrator of this instance to add you.</span
+      {#if meta?.public_view}
+        <!--
+          A visitor who opened this page and changed their mind, or somebody
+          who just signed out of a public fleet, can go back to looking. The
+          session is asked again rather than assumed: it is what turns this
+          browser back into a visitor.
+        -->
+        <Button
+          variant="ghost"
+          size="lg"
+          full
+          loading={returning}
+          onclick={() => void keepLooking()}
         >
+          Continue without signing in
+        </Button>
       {/if}
-    </div>
-  {/if}
-  {#if !embedded}
-    <div class="appearance">
-      <IconButton
-        icon={theme.resolved === 'dark' ? Sun : Moon}
-        label="Switch to {theme.resolved === 'dark' ? 'light' : 'dark'} appearance"
-        onclick={() => theme.set(theme.resolved === 'dark' ? 'light' : 'dark')}
-      />
-    </div>
-  {/if}
-</div>
+
+      <details class="account-help">
+        <summary>Need help signing in?</summary>
+        <p>
+          <strong>Forgotten your password?</strong> An administrator of this instance can reset it.
+        </p>
+        <p><strong>Need an account?</strong> Ask an administrator of this instance to add you.</p>
+      </details>
+    {/if}
+  </div>
+{/snippet}
+
+{#if embedded}
+  <div class="embedded">{@render column()}</div>
+{:else}
+  <SplitPage
+    eyebrow="Your infrastructure. Your control."
+    headline={['A fresh runner.', 'For every job.']}
+    lede="GitHub Actions runners on machines you own. Managed from one place."
+    version={meta?.version}
+    note={meta?.auth_disabled
+      ? undefined
+      : 'No account? Ask an administrator of this instance to add you.'}
+  >
+    {@render column()}
+  </SplitPage>
+{/if}
 
 <style>
-  .signin {
-    --panel-width: clamp(20rem, 40vw, 36rem);
-    --panel-pad-x: var(--z-space-12);
-    position: relative;
-    overflow: clip;
-    display: grid;
-    grid-template-columns: var(--panel-width) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: 'mark form' 'about form' 'about meta';
-    min-height: 100vh;
-    min-height: 100dvh;
-    background: var(--z-surface);
-  }
-  .mark,
-  .about {
-    border-right: var(--z-border-width) solid var(--z-border);
-  }
-  .mark {
-    grid-area: mark;
-    display: flex;
-    justify-content: center;
-    padding: var(--z-space-12) var(--panel-pad-x) 0;
-  }
-  /* The backdrop is a glow drawn for a dark ground, so the lockup sits on a
-     rounded square of Zoomies Black in both themes: a stage, not a column.
-     The stage is as wide as the lockup wants to be and no wider, and gives
-     way before the lockup does on a narrow screen. */
-  .stage {
-    display: flex;
-    justify-content: center;
-    box-sizing: border-box;
-    width: fit-content;
-    max-width: 100%;
-    padding: var(--z-space-4);
-    border-radius: var(--z-radius-lg);
-    background: var(--z-panel-bg);
-  }
-  .about {
-    grid-area: about;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: var(--z-space-12);
-    padding: var(--z-space-16) var(--panel-pad-x) var(--z-space-8);
-    color: var(--z-text);
-  }
-  .pitch {
-    margin-block: auto;
-    max-width: 22rem;
-  }
-  .eyebrow {
-    margin: 0 0 var(--z-space-5);
-    font-size: var(--z-text-2xs);
-    font-weight: var(--z-weight-semibold);
-    letter-spacing: var(--z-tracking-wider);
-    text-transform: uppercase;
-    color: var(--z-text-muted);
-  }
-  .tagline {
-    margin: 0;
-    font-size: var(--z-text-3xl);
-    line-height: var(--z-leading-3xl);
-    font-weight: var(--z-weight-semibold);
-    letter-spacing: var(--z-tracking-tight);
-  }
-  .brand-rule {
-    width: var(--z-space-10);
-    height: var(--z-border-width-thick);
-    margin-block: var(--z-space-8);
-    background: var(--z-brand-runner-blue);
-  }
-  .pitch-lede {
-    margin: 0;
-    font-size: var(--z-text-base);
-    line-height: var(--z-leading-lg);
-    color: var(--z-text-muted);
-  }
-  .links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--z-space-3) var(--z-space-5);
-    font-size: var(--z-text-xs);
-    color: var(--z-text-muted);
-  }
-  .links a {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--z-space-2);
-    color: inherit;
-    text-decoration: none;
-  }
-  .links a:hover {
-    text-decoration: underline;
-  }
-  .credit {
-    flex-basis: 100%;
-  }
-  .credit a {
-    font-weight: var(--z-weight-semibold);
-  }
-  .form-side {
-    grid-area: form;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--z-space-16) var(--z-space-8) var(--z-space-8);
-  }
   .form-column {
     display: flex;
     flex-direction: column;
@@ -878,106 +716,5 @@
   }
   .account-help p {
     margin: var(--z-space-3) 0 0;
-  }
-  .meta {
-    grid-area: meta;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--z-space-2) var(--z-space-4);
-    justify-content: space-between;
-    padding: var(--z-space-6) var(--z-space-8);
-    color: var(--z-text-subtle);
-    font-size: var(--z-text-2xs);
-    line-height: var(--z-leading-xs);
-  }
-  .build {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--z-space-2);
-    min-width: 0;
-  }
-  .version {
-    font-family: var(--z-font-mono);
-    overflow-wrap: anywhere;
-  }
-  .appearance {
-    position: absolute;
-    right: var(--z-space-8);
-    top: var(--z-space-6);
-  }
-  .form-side :global(input) {
-    min-height: var(--z-space-12);
-    font-size: var(--z-control-font-touch);
-  }
-  .form-side :global(.btn) {
-    min-height: var(--z-space-12);
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .form-side :global(.icon-btn) {
-    width: var(--z-control-touch);
-    height: var(--z-control-touch);
-  }
-  .form-side :global(.has-trailing input) {
-    padding-right: calc(var(--z-control-touch) + var(--z-space-2));
-  }
-  @media (max-width: 1180px) {
-    .signin {
-      --panel-pad-x: var(--z-space-8);
-    }
-  }
-  @media (max-width: 800px) {
-    .signin {
-      display: flex;
-      flex-direction: column;
-    }
-    /* The stage starts below the appearance toggle in the corner, which
-       would otherwise sit half on the black and half on the page. */
-    .mark {
-      padding: calc(var(--z-space-16) + var(--z-safe-top)) var(--z-space-6) var(--z-space-6);
-      border: 0;
-    }
-    .form-side {
-      padding: var(--z-space-6) max(var(--z-space-6), env(safe-area-inset-right)) var(--z-space-6)
-        max(var(--z-space-6), env(safe-area-inset-left));
-    }
-    .pitch {
-      display: none;
-    }
-    .about {
-      border: 0;
-      padding: var(--z-space-6);
-      color: var(--z-text-muted);
-      margin-top: auto;
-    }
-    .links {
-      justify-content: center;
-    }
-    .credit {
-      text-align: center;
-    }
-    .meta {
-      justify-content: center;
-      text-align: center;
-      padding: 0 var(--z-space-6) calc(var(--z-space-6) + var(--z-safe-bottom));
-    }
-    .appearance {
-      right: var(--z-space-6);
-      top: calc(var(--z-space-4) + var(--z-safe-top));
-    }
-    .no-account {
-      display: none;
-    }
-  }
-  .signin.embedded {
-    display: block;
-    min-height: 0;
-    background: none;
-  }
-  .embedded .form-side {
-    display: block;
-    margin: 0;
-    padding: 0;
-    background: none;
   }
 </style>

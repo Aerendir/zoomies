@@ -13,6 +13,7 @@
   import { prefs } from '$lib/state/prefs.svelte';
   import ActiveJobs from '$lib/overview/ActiveJobs.svelte';
   import FirstRun from '$lib/overview/FirstRun.svelte';
+  import FleetStatus from '$lib/overview/FleetStatus.svelte';
   import FleetActivity from '$lib/overview/FleetActivity.svelte';
   import FleetMetrics from '$lib/overview/FleetMetrics.svelte';
   import PoolUtilisation from '$lib/overview/PoolUtilisation.svelte';
@@ -220,6 +221,7 @@
         {/if}
       </div>
     </nav>
+    <FleetStatus {setupPending} />
     <div class="stack">
       <section id="now" tabindex="-1" aria-label="Fleet now" class="now">
         <FirstRun onpending={(pending) => (setupPending = pending)} />
@@ -278,11 +280,16 @@
   .overview :global(.page-header) {
     margin-bottom: var(--z-space-3);
   }
+  /* The connection state sits beside the title, so the title's rule is drawn
+     after the pair and not between them. */
   .overview :global(.page-header .titles) {
     display: flex;
     align-items: baseline;
     gap: var(--z-space-3);
     flex-wrap: wrap;
+  }
+  .overview :global(.page-header .rule) {
+    display: none;
   }
   .overview :global(.page-header .meta) {
     margin: 0;

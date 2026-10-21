@@ -1,0 +1,50 @@
+{
+  "generated": "2026-10-21T16:50:59.590Z",
+  "look": "mission-control dark",
+  "shots": {
+    "overview-1440": {
+      "path": "/",
+      "documentHeight": 1238,
+      "viewportHeight": 900,
+      "scrollsSideways": false,
+      "heading": "Overview",
+      "tables": 1,
+      "columns": 0,
+      "cards": 0,
+      "buttons": 39
+    },
+    "overview-375": {
+      "path": "/",
+      "documentHeight": 2188,
+      "viewportHeight": 812,
+      "scrollsSideways": false,
+      "heading": "Overview",
+      "tables": 1,
+      "columns": 0,
+      "cards": 0,
+      "buttons": 39
+    },
+    "runners-1440": {
+      "path": "/runners",
+      "documentHeight": 1854,
+      "viewportHeight": 900,
+      "scrollsSideways": false,
+      "heading": "Runners",
+      "tables": 1,
+      "columns": 11,
+      "cards": 0,
+      "buttons": 90
+    },
+    "runners-375": {
+      "path": "/runners",
+      "documentHeight": 2914,
+      "viewportHeight": 812,
+      "scrollsSideways": false,
+      "heading": "Runners",
+      "tables": 1,
+      "columns": 11,
+      "cards": 0,
+      "buttons": 92
+    }
+  }
+}
