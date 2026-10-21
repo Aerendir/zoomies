@@ -99,3 +99,67 @@
     padding: var(--z-space-5);
   }
 }
+
+/*
+ * First account, concept B: where to find the token sits beside the form, in the
+ * same frame sign in uses. From 960px it is two columns; below that the help
+ * folds into a disclosure above the token field.
+ */
+.s-b--wide .b-column {
+  max-width: var(--z-width-dialog-lg);
+}
+.s-b .fa-b-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-1);
+  text-align: center;
+}
+.s-b .fa-step {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-medium);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-text-subtle);
+}
+.s-b .fa-b-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: var(--z-space-8);
+}
+.s-b .fa-b-help {
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  gap: var(--z-space-3);
+  padding: var(--z-space-5);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface-sunken);
+}
+.s-b .fa-b-help h2 {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-semibold);
+}
+.s-b .fa-b-help-phone {
+  display: none;
+}
+.s-b .fa-b-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  min-width: 0;
+}
+.s-b .fa-then {
+  text-align: center;
+}
+@media (max-width: 959px) {
+  .s-b .fa-b-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .s-b .fa-b-help {
+    display: none;
+  }
+  .s-b .fa-b-help-phone {
+    display: block;
+  }
+}

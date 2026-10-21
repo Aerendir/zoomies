@@ -11,17 +11,14 @@
 //      screens also use, so all the pages before sign-in share one frame.
 //   C  makes the brand moment the page: a scene, the tagline large, and the
 //      form as a raised panel. It needs the tokens in concept-c-tokens.css.
-import { githubMark, icon } from '../icons.js';
+import { icon } from '../icons.js';
 import { button, callout, esc, field, iconButton, logo } from '../ui.js';
+import { VERSION, appearance, links } from './shared.js';
 
 const HOST = 'fleet.acme-ci.example';
 // 128 characters with nowhere to break. A hostname this long is rare and a
 // bad day to find out that the page cannot cope with one.
 const LONG_HOST = `controller${'0123456789'.repeat(11)}.example`;
-const VERSION = '0.9.0';
-const SITE = 'https://zoomies.sh';
-const REPO = 'https://github.com/eyupio/zoomies';
-const DEVELOPER = 'https://eyup.io';
 
 const STATES = [
   'password',
@@ -228,17 +225,6 @@ function content(state) {
       throw new Error(`no sign-in state called "${state}"`);
   }
 }
-
-const links = (label = 'About Zoomies') =>
-  `<nav class="m-links" aria-label="${esc(label)}">` +
-  `<a href="${SITE}" target="_blank" rel="noopener noreferrer">${icon('globe', 15)}zoomies.sh` +
-  `<span class="sr-only"> (opens in a new tab)</span></a>` +
-  `<a href="${REPO}" target="_blank" rel="noopener noreferrer">${githubMark(15)}GitHub` +
-  `<span class="sr-only"> (opens in a new tab)</span></a>` +
-  `<span class="m-credit">Developed by <a href="${DEVELOPER}" target="_blank" rel="noopener noreferrer">EyUp.io` +
-  `<span class="sr-only"> (opens in a new tab)</span></a></span></nav>`;
-
-const appearance = () => iconButton({ icon: 'sun', label: 'Switch to light appearance' });
 
 const noAccount = (c) =>
   c.authOff ? '' : '<span class="m-no-account">No account? Ask an administrator of this instance to add you.</span>';

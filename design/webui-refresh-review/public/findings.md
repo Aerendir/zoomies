@@ -44,3 +44,24 @@ below it. No concept may claim to fix the 1440px case.
 * The consent capture is a real registration of a client called Claude with the
   redirect `claude.ai`. The loopback capture is a second real client with a
   redirect on `127.0.0.1`.
+
+## What the first account concepts change, measured
+
+Positions are in pixels from the top of the page, with the Mission Control dark
+captures and mockups at 1440x900 and 375x812, and the empty state. Today's page
+is from `current-measurements.json`.
+
+| | Setup token field, 1440 | Create button's bottom edge, 1440 | Setup token field, 375 | Create button's bottom edge, 375 |
+| --- | --- | --- | --- | --- |
+| Today | 425 to 457 | 851 | 511 to 543 | 1017 |
+| A, the same card | 362 to 394 | 884 | 364 to 396 | 1004 |
+| B, two columns | 295 to 343 | 821 | 380 to 428 | 926 |
+| C, a rail of steps | 217 to 265 | 839 | 387 to 435 | 1107 |
+
+* Every concept asks for the token higher up than today, by 63 to 208px on a
+  desktop and by 124 to 147px on a phone.
+* A is the only concept whose Create button is lower than today's on a desktop,
+  by 33px, because the commands that find the token now sit under the token
+  field. It still ends inside the fold, and a test holds it there.
+* B and C use the product's 48px touch fields, where A keeps today's 32px ones,
+  which is most of why their phone pages are longer.

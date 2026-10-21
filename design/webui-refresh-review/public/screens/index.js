@@ -10,5 +10,6 @@
 //
 // Adding a screen is one import and one line here.
 import signin from './signin.js';
+import firstAccount from './first-account.js';
 
-export const SCREENS = [signin];
+export const SCREENS = [signin, firstAccount];

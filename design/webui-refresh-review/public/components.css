@@ -617,3 +617,75 @@ p {
 .m-key-side .m-btn--ghost {
   margin-left: calc(-1 * var(--z-space-3));
 }
+
+/* Where to find the setup token: the commands as tabs, from native radios. The
+   radio covers its own label, so the browser's focus ring draws around the tab
+   and the arrow keys move between them. :has() picks the panel to show. */
+.m-install {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-2);
+}
+.m-install-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--z-space-1);
+}
+.m-install-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--z-space-8);
+  padding: 0 var(--z-space-3);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-sm);
+  background: var(--z-surface);
+  color: var(--z-text-muted);
+  font-size: var(--z-text-xs);
+  font-weight: var(--z-weight-medium);
+  cursor: pointer;
+}
+.m-install-tab input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.m-install-tab:has(input:checked) {
+  border-color: var(--z-accent);
+  background: var(--z-accent-subtle);
+  color: var(--z-text);
+}
+.m-install-panel {
+  display: none;
+  align-items: center;
+  gap: var(--z-space-3);
+  padding: var(--z-space-2) var(--z-space-3);
+  border-radius: var(--z-radius-sm);
+  background: var(--z-surface-sunken);
+}
+.m-install:has(input[value='compose']:checked) .p-compose,
+.m-install:has(input[value='init']:checked) .p-init,
+.m-install:has(input[value='systemd']:checked) .p-systemd,
+.m-install:has(input[value='other']:checked) .p-other {
+  display: flex;
+}
+.m-command {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--z-text-xs);
+  color: var(--z-text);
+}
+.m-callout-body .m-btn {
+  margin-top: var(--z-space-3);
+}
+
+/* The product's touch minimum is for fields and the one button a form is for.
+   A Copy button beside a command stays the size of the command. */
+.m-form-page .m-install-panel .m-btn {
+  min-height: var(--z-space-8);
+}

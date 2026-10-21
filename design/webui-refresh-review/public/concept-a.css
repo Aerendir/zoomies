@@ -158,3 +158,97 @@
     display: none;
   }
 }
+
+/*
+ * First account, concept A: the same card, shorter. A one-sentence lede, the
+ * commands that find the token as tabs under the field that asks for it, the
+ * explanation behind a disclosure, and what comes next after the button, where
+ * a person who has finished the form is looking.
+ */
+.s-fa-a {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--z-space-6) var(--z-space-4);
+  background: var(--z-bg);
+}
+.s-fa-a .fa-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  max-width: var(--z-width-dialog-md);
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-shadow-lg);
+}
+.s-fa-a .fa-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--z-border-width);
+  margin: 0 var(--z-radius-lg);
+  background: linear-gradient(90deg, transparent, var(--z-border-strong), transparent);
+}
+.s-fa-a .fa-brand {
+  display: flex;
+  justify-content: center;
+}
+.s-fa-a .fa-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-1);
+  text-align: center;
+}
+.s-fa-a .fa-step {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-medium);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-text-subtle);
+}
+.s-fa-a h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-wrap: balance;
+}
+.s-fa-a .fa-lede {
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+  text-wrap: pretty;
+}
+.s-fa-a form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+.s-fa-a .fa-then {
+  text-align: center;
+}
+.s-fa-a .fa-version {
+  font-size: var(--z-text-2xs);
+  color: var(--z-text-subtle);
+  text-align: center;
+}
+.s-fa-a .fa-appearance {
+  position: absolute;
+  top: var(--z-space-4);
+  right: var(--z-space-4);
+}
+@media (max-width: 768px) {
+  .s-fa-a {
+    padding-top: var(--z-space-4);
+  }
+  .s-fa-a .fa-card {
+    padding: var(--z-space-5);
+  }
+}
