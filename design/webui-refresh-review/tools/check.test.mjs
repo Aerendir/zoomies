@@ -4,7 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { launch } from './lib/browser.mjs';
-import { contrast, watch, checkPage, checkPairs, run, parseArgs } from './check.mjs';
+import { KNOWN, contrast, watch, checkPage, checkPairs, run, parseArgs } from './check.mjs';
 
 let browser;
 before(async () => {
@@ -51,6 +51,35 @@ test('checkPage: a clean page has no findings', async () => {
 
 test('checkPage: sideways overflow is reported', async () => {
   const page = await open(`<main id="stage"><h1>t</h1><div style="width:2000px;height:10px"></div></main>`);
+  assert.deepEqual(kinds(await checkPage(page)), ['overflow']);
+  await page.close();
+});
+
+test('checkPage: content cut off by an overflow rule is reported though the page does not scroll', async () => {
+  // overflow: clip hides the spill from scrollWidth, so the overflow rule sees
+  // a page that fits while a person sees a sentence cut off at the edge.
+  const page = await open(
+    `<main id="stage" style="overflow:clip"><h1>t</h1><p style="width:2000px">wide</p></main>`,
+  );
+  const found = await checkPage(page);
+  assert.deepEqual(kinds(found), ['clipped']);
+  assert.match(found[0].detail, /\bp\b/);
+  await page.close();
+});
+
+test('checkPage: a decorative element hung past the edge is not content that is cut off', async () => {
+  const page = await open(
+    `<main id="stage" style="overflow:clip"><h1>t</h1>
+     <div aria-hidden="true" style="position:absolute;left:-500px;width:300px;height:20px"></div>
+     <span class="sr-only">hidden text</span></main>
+     <style>.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0)}</style>`,
+  );
+  assert.deepEqual(await checkPage(page), []);
+  await page.close();
+});
+
+test('checkPage: one cause is one finding: a page that scrolls sideways is not also clipped', async () => {
+  const page = await open(`<main id="stage"><h1>t</h1><p style="width:2000px">wide</p></main>`);
   assert.deepEqual(kinds(await checkPage(page)), ['overflow']);
   await page.close();
 });
@@ -203,8 +232,10 @@ test('parseArgs: reads --screen and --out, and refuses anything else', () => {
 // phone, so it must be caught at 320px and nowhere else.
 const FIXTURE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>fixture</title>
 <style>
-:root{--z-text:#000;--z-surface:#fff}
-:root[data-theme=dark]{--z-text:#fff;--z-surface:#000}
+:root{--z-text:#000;--z-surface:#fff;--z-edge:#cccccc}
+:root[data-theme=dark]{--z-text:#fff;--z-surface:#000;--z-edge:#333333}
+:root[data-ui-style=mission-control]{--z-edge:#555555}
+:root[data-ui-style=mission-control][data-theme=dark]{--z-edge:#aaaaaa}
 body{margin:0;background:var(--z-surface);color:var(--z-text)}
 .wide{width:600px;height:10px}
 </style></head><body>
@@ -308,4 +339,84 @@ test('run: a concept\'s own pairs are checked only on that concept', async () =>
   const contrastFindings = result.findings.filter((f) => f.kind === 'contrast');
   assert.equal(contrastFindings.length, 4);
   assert.ok(contrastFindings.every((f) => f.concept === 'a'));
+});
+
+// A finding that is a property of the product's own tokens, and the same for
+// every concept, cannot be fixed by a concept. It is recorded with its reason
+// and a floor, so it neither turns every screen red for ever nor hides a change
+// for the worse. The fixture's edge token is pale in Classic and strong in
+// Mission Control, as the product's is.
+const EDGE = [{ fg: '--z-edge', bg: '--z-surface', min: 3 }];
+const PALE_IN_CLASSIC = {
+  style: 'classic',
+  fg: '--z-edge',
+  bg: '--z-surface',
+  atLeast: 1.5,
+  reason: 'the edge is pale in Classic',
+};
+
+test('run: a known issue is reported as known and does not count as a finding', async () => {
+  const result = await run({
+    url: fixture.url, widths: [1440], pairs: EDGE, conceptPairs: {}, known: [PALE_IN_CLASSIC],
+  });
+  assert.deepEqual(result.findings, []);
+  // Two live concepts, in Classic, in two modes.
+  assert.equal(result.known.length, 4);
+  for (const k of result.known) {
+    assert.equal(k.style, 'classic');
+    assert.equal(k.reason, 'the edge is pale in Classic');
+    assert.ok(k.ratio >= 1.5 && k.ratio < 3);
+  }
+});
+
+test('run: with nothing known the same pair is a finding in every concept and mode', async () => {
+  const result = await run({ url: fixture.url, widths: [1440], pairs: EDGE, conceptPairs: {}, known: [] });
+  assert.equal(result.findings.filter((f) => f.kind === 'contrast').length, 4);
+  assert.deepEqual(result.known, []);
+});
+
+test('run: a known issue in one style does not hide the same pair failing in another', async () => {
+  const result = await run({
+    url: fixture.url,
+    widths: [1440],
+    pairs: [{ fg: '--z-edge', bg: '--z-surface', min: 10 }],
+    conceptPairs: {},
+    known: [PALE_IN_CLASSIC],
+  });
+  const failing = result.findings.filter((f) => f.kind === 'contrast');
+  assert.equal(failing.length, 4);
+  assert.ok(failing.every((f) => f.style === 'mission-control'));
+  assert.equal(result.known.length, 4);
+});
+
+test('run: a known issue stops covering a pair that has got worse than its floor', async () => {
+  const result = await run({
+    url: fixture.url,
+    widths: [1440],
+    pairs: EDGE,
+    conceptPairs: {},
+    known: [{ ...PALE_IN_CLASSIC, atLeast: 1.7 }],
+  });
+  assert.equal(result.findings.filter((f) => f.kind === 'contrast').length, 4);
+  assert.deepEqual(result.known, []);
+});
+
+test('checkPairs: a finding carries the pair and the ratio, so a baseline can match it', async () => {
+  const page = await open(TOKENS);
+  const [found] = await checkPairs(page, [{ fg: '--fg', bg: '--bg', min: 4.5 }]);
+  assert.equal(found.fg, '--fg');
+  assert.equal(found.bg, '--bg');
+  assert.equal(found.min, 4.5);
+  assert.ok(found.ratio > 4.4 && found.ratio < 4.5);
+  await page.close();
+});
+
+test('KNOWN: every entry says why, and the Classic control edge is the one on record', () => {
+  for (const k of KNOWN) {
+    assert.ok(k.reason.length > 40, `${k.fg} on ${k.bg} needs a real reason`);
+    assert.equal(typeof k.atLeast, 'number');
+  }
+  assert.ok(
+    KNOWN.some((k) => k.style === 'classic' && k.fg === '--z-border-strong' && k.bg === '--z-surface'),
+  );
 });

@@ -1,0 +1,99 @@
+/*
+ * The chrome around a concept: the bar that switches screen, concept, style and
+ * mode, and the notices. None of this is product UI and none of it is judged by
+ * the checker, which looks only inside #stage.
+ */
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.review-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--z-space-3) var(--z-space-6);
+  padding: var(--z-space-3) var(--z-space-4);
+  border-bottom: var(--z-border-width) solid var(--z-border);
+  background: var(--z-surface-sunken);
+  color: var(--z-text-muted);
+  font-size: var(--z-text-xs);
+  line-height: var(--z-leading-xs);
+}
+.review-title strong {
+  display: block;
+  color: var(--z-text);
+  font-size: var(--z-text-sm);
+}
+.review-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--z-space-3);
+}
+.review-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-nudge-2);
+}
+.review-control select {
+  min-height: var(--z-space-8);
+  padding: 0 var(--z-space-2);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-sm);
+  background: var(--z-surface);
+  color: var(--z-text);
+  font: inherit;
+  font-size: var(--z-text-sm);
+}
+
+/* Shown when the tokens did not load, which is exactly when the product's own
+   colours are unavailable, so these two fallbacks are the one deliberate raw
+   value in the pack. */
+#assets-banner {
+  margin: 0;
+  padding: var(--z-space-4);
+  border-bottom: 2px solid var(--z-danger, #bd2018);
+  background: var(--z-danger-subtle, #faedec);
+  color: var(--z-text, #0b0c0e);
+  font-size: var(--z-text-sm, 14px);
+  line-height: 1.5;
+}
+#assets-banner[hidden] {
+  display: none;
+}
+
+#stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+#stage > * {
+  flex: 1;
+}
+
+.current {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  margin: 0;
+  padding: var(--z-space-4);
+}
+.current img {
+  display: block;
+  width: 100%;
+  max-width: 1440px;
+  height: auto;
+  margin: 0 auto;
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+}
+.current figcaption {
+  max-width: var(--z-measure-prose);
+  margin: 0 auto;
+  color: var(--z-text-muted);
+  font-size: var(--z-text-xs);
+  line-height: var(--z-leading-xs);
+}

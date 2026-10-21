@@ -1,0 +1,619 @@
+/*
+ * The product's own pieces, as the mockups need them.
+ *
+ * Everything here is read from tokens.css and nothing else: no raw colour, and
+ * no raw value that already has a token. The rules are ported from the Svelte
+ * components they stand for (Logo, Button, Field, Input) so a concept built
+ * from them is judged on the pieces it would really use. The one piece with no
+ * original is the callout, which is the shared banner the product's three
+ * hand-written ones should become.
+ */
+
+/* Fonts: the faces fonts.css declares, from the review server's /fonts/ mount.
+   If a file is missing the page falls back to the system face and still works. */
+@font-face {
+  font-family: 'InterVariable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/inter-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'InterVariable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/inter-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('/fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}
+
+/* The app's base rules, from app.css, so a mockup sits on the same ground. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  background: var(--z-bg);
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--z-bg);
+  color: var(--z-text);
+  font-family: var(--z-font-sans);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  font-weight: var(--z-weight-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    'cv05' 1,
+    'ss03' 1;
+}
+code,
+kbd,
+.mono {
+  font-family: var(--z-font-mono);
+  font-size: 0.95em;
+}
+:focus-visible {
+  outline: var(--z-focus-width) solid var(--z-focus-colour);
+  outline-offset: var(--z-focus-offset);
+  border-radius: var(--z-radius-sm);
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+.sr-only {
+  position: absolute;
+  width: var(--z-nudge-1);
+  height: var(--z-nudge-1);
+  padding: 0;
+  margin: calc(-1 * var(--z-nudge-1));
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+.icon {
+  flex: none;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+/* Logo, as Logo.svelte draws it. The backdrop is a glow made for a dark
+   ground; the product sits the lockup on a stage of Zoomies Black in both
+   themes, and a concept that does the same does it here. */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  color: var(--z-text);
+  line-height: 0;
+  max-width: 100%;
+}
+.logo.lockup {
+  display: flex;
+  width: calc(var(--edge) * var(--z-logo-scene-scale));
+  justify-content: center;
+}
+.logo .art {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  width: var(--edge);
+  max-width: 100%;
+  aspect-ratio: 1;
+  flex: none;
+}
+.logo.large .art::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  inset: -12%;
+  background: var(--z-logo-starlight) center / contain no-repeat;
+  mask-image: var(--z-logo-edge-fade);
+  mask-composite: intersect;
+}
+.logo.lockup .art {
+  width: 100%;
+}
+.logo.lockup .art::before {
+  inset: 0;
+}
+.logo.lockup .art img {
+  padding: var(--z-logo-scene-padding);
+  box-sizing: border-box;
+}
+.logo .art img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.logo[data-treatment='pearl'] .art::before {
+  background-image: var(--z-logo-pearl);
+}
+.logo[data-treatment='orbital'] .art::before {
+  background-image: var(--z-logo-orbital);
+}
+.logo .art .white {
+  display: none;
+}
+:root[data-theme='dark'] .logo .black {
+  display: none;
+}
+:root[data-theme='dark'] .logo .white {
+  display: block;
+}
+.logo .wordmark {
+  display: block;
+  height: var(--word-h);
+  aspect-ratio: 1128 / 226;
+  background: currentColor;
+  mask: url('/brand/wordmark-black-transparent.svg') left center / contain no-repeat;
+}
+
+/* Button, from Button.svelte. */
+.m-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--z-space-2);
+  border: var(--z-border-width) solid transparent;
+  border-radius: var(--z-radius-md);
+  font-family: inherit;
+  font-weight: var(--z-weight-medium);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--z-motion-fast) var(--z-ease),
+    border-color var(--z-motion-fast) var(--z-ease),
+    color var(--z-motion-fast) var(--z-ease);
+}
+.m-btn[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.m-btn--full {
+  width: 100%;
+}
+.m-btn--sm {
+  height: var(--z-space-6);
+  padding: 0 var(--z-space-2);
+  font-size: var(--z-text-xs);
+}
+.m-btn--md {
+  height: var(--z-space-8);
+  padding: 0 var(--z-space-3);
+  font-size: var(--z-text-sm);
+}
+.m-btn--lg {
+  height: var(--z-space-10);
+  padding: 0 var(--z-space-4);
+  font-size: var(--z-text-base);
+}
+@media (pointer: coarse) {
+  .m-btn--lg {
+    height: var(--z-control-touch);
+  }
+}
+.m-btn--primary {
+  background: var(--z-accent);
+  color: var(--z-accent-contrast);
+}
+.m-btn--primary:hover {
+  background: var(--z-accent-hover);
+}
+.m-btn--primary:active {
+  background: var(--z-accent-active);
+}
+.m-btn--secondary {
+  background: var(--z-surface);
+  color: var(--z-text);
+  border-color: var(--z-border-strong);
+}
+.m-btn--secondary:hover {
+  background: var(--z-surface-hover);
+}
+.m-btn--ghost {
+  background: transparent;
+  color: var(--z-text-muted);
+}
+.m-btn--ghost:hover {
+  background: var(--z-surface-hover);
+  color: var(--z-text);
+}
+.m-btn-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+}
+.m-btn-content.is-hidden {
+  visibility: hidden;
+}
+.m-spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--z-control-icon);
+  height: var(--z-control-icon);
+  border: var(--z-border-width-thick) solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--z-radius-full);
+}
+.m-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--z-space-8);
+  height: var(--z-space-8);
+  padding: 0;
+  border: 0;
+  border-radius: var(--z-radius-sm);
+  background: transparent;
+  color: var(--z-text-muted);
+  cursor: pointer;
+}
+.m-icon-btn:hover {
+  background: var(--z-surface-hover);
+  color: var(--z-text);
+}
+
+/* Field and Input, from Field.svelte and Input.svelte. */
+.m-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-2);
+}
+.m-label {
+  font-size: var(--z-text-xs);
+  font-weight: var(--z-weight-medium);
+  color: var(--z-text-muted);
+}
+.m-required {
+  color: var(--z-danger);
+  margin-inline-start: var(--z-nudge-2);
+}
+.m-hint,
+.m-notice,
+.m-error {
+  font-size: var(--z-text-xs);
+  line-height: var(--z-leading-xs);
+}
+.m-hint {
+  color: var(--z-text-subtle);
+}
+/* Muted, not a status colour: caps lock is not an alarm, and the status
+   palette is a fixed mapping operators learn. */
+.m-notice {
+  color: var(--z-text-muted);
+  font-weight: var(--z-weight-medium);
+}
+.m-error {
+  color: var(--z-danger);
+}
+.m-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.m-input {
+  width: 100%;
+  font-family: var(--z-font-sans);
+  font-size: var(--z-text-base);
+  color: var(--z-text);
+  background: var(--z-surface);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-sm);
+}
+.m-input--sm {
+  height: var(--z-space-6);
+  padding: 0 var(--z-space-2);
+  font-size: var(--z-text-sm);
+}
+.m-input--md {
+  height: var(--z-space-8);
+  padding: 0 var(--z-space-3);
+}
+.m-input--lg {
+  height: var(--z-space-10);
+  padding: 0 var(--z-space-3);
+}
+.has-trailing .m-input--md {
+  padding-right: var(--z-space-8);
+}
+.has-trailing .m-input--lg {
+  padding-right: var(--z-space-10);
+}
+.m-input--mono {
+  font-family: var(--z-font-mono);
+  font-size: var(--z-text-sm);
+}
+.m-input:hover:not(:disabled) {
+  border-color: var(--z-text-subtle);
+}
+.m-input:disabled {
+  background: var(--z-surface-sunken);
+  color: var(--z-text-subtle);
+  cursor: not-allowed;
+}
+.m-input[aria-invalid='true'] {
+  border-color: var(--z-danger);
+}
+.m-trailing {
+  position: absolute;
+  right: var(--z-space-1);
+  display: inline-flex;
+  align-items: center;
+}
+/* iOS zooms a page when a focused field is under 16px. */
+@media (max-width: 768px) {
+  .m-input,
+  .m-input--mono {
+    font-size: var(--z-control-font-touch);
+  }
+}
+
+/* Callout: the one banner. A failure is danger; a note is quiet. */
+.m-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-2);
+  padding: var(--z-space-3);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text);
+}
+.m-callout .icon {
+  margin-top: var(--z-nudge-3);
+}
+.m-callout-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.m-callout-body p + p {
+  margin-top: var(--z-space-2);
+}
+.m-callout--danger {
+  border-color: var(--z-danger-border);
+  background: var(--z-danger-subtle);
+}
+.m-callout--danger .icon {
+  color: var(--z-danger);
+}
+.m-callout--neutral {
+  color: var(--z-text-muted);
+}
+
+/* Links and small furniture. */
+.m-link {
+  color: var(--z-accent);
+  text-decoration: underline;
+  text-underline-offset: var(--z-underline-offset);
+}
+.m-link:hover {
+  color: var(--z-accent-hover);
+}
+/* "Start again" reads as a link in a sentence and is a button because it
+   changes the page rather than going anywhere. */
+.m-linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--z-accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: var(--z-underline-offset);
+  cursor: pointer;
+}
+.m-linkish:hover {
+  color: var(--z-accent-hover);
+}
+.m-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-3);
+  color: var(--z-text-subtle);
+  font-size: var(--z-text-xs);
+}
+.m-divider::before,
+.m-divider::after {
+  content: '';
+  flex: 1;
+  height: var(--z-border-width);
+  background: var(--z-border);
+}
+.m-note {
+  font-size: var(--z-text-xs);
+  line-height: var(--z-leading-xs);
+  color: var(--z-text-muted);
+  text-wrap: pretty;
+}
+.m-host {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.m-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+.m-details {
+  border-top: var(--z-border-width) solid var(--z-border);
+  padding-top: var(--z-space-2);
+  color: var(--z-text-muted);
+  font-size: var(--z-text-xs);
+  line-height: var(--z-leading-base);
+}
+.m-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--z-control-touch);
+  cursor: pointer;
+  list-style: none;
+}
+.m-details summary::-webkit-details-marker {
+  display: none;
+}
+.m-details summary::after {
+  content: '+';
+  font-size: var(--z-text-lg);
+}
+.m-details[open] summary::after {
+  content: '\2212';
+}
+.m-details p {
+  margin-top: var(--z-space-3);
+}
+
+/* Where the form is the page (sign in, first account): the product makes every
+   field and button here a full touch target, on a desktop as well. */
+.m-form-page .m-input {
+  min-height: var(--z-space-12);
+  font-size: var(--z-control-font-touch);
+}
+.m-form-page .m-btn {
+  min-height: var(--z-space-12);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.m-form-page .m-icon-btn {
+  width: var(--z-control-touch);
+  height: var(--z-control-touch);
+}
+.m-form-page .has-trailing .m-input {
+  padding-right: calc(var(--z-control-touch) + var(--z-space-2));
+}
+.m-form-page form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+
+/* Links to the project, as a brand panel and the footers carry them. */
+.m-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--z-space-3) var(--z-space-5);
+  font-size: var(--z-text-xs);
+}
+.m-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  color: inherit;
+  text-decoration: none;
+}
+.m-links a:hover {
+  text-decoration: underline;
+}
+.m-credit {
+  flex-basis: 100%;
+}
+.m-credit a {
+  font-weight: var(--z-weight-semibold);
+}
+
+/* Two-step: setting up an authenticator, and the recovery codes. */
+.m-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.m-step-title {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  margin-bottom: var(--z-space-3);
+  font-size: var(--z-text-sm);
+  font-weight: var(--z-weight-semibold);
+}
+.m-scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--z-space-5);
+}
+.m-key-side {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--z-space-3);
+  min-width: 0;
+}
+.qr {
+  flex: none;
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-md);
+}
+.m-codes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  padding: var(--z-space-4);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface-sunken);
+}
+.m-codes-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  font-weight: var(--z-weight-semibold);
+}
+.m-code-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--z-space-2) var(--z-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--z-text-sm);
+}
+.m-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--z-space-2);
+}
+
+/* A ghost button beside a paragraph aligns its text with the paragraph, not its own padding. */
+.m-key-side .m-btn--ghost {
+  margin-left: calc(-1 * var(--z-space-3));
+}

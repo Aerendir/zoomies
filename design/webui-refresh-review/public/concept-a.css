@@ -1,0 +1,160 @@
+/*
+ * Concept A, evolution. Sign in keeps its split layout; a phone gets one
+ * compact brand header in place of the black stage that pushed the button below
+ * the fold, and the instance being signed in to becomes the line under the title.
+ */
+.s-a {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(20rem, 40vw, 36rem) minmax(0, 1fr);
+  min-height: 100%;
+  background: var(--z-surface);
+}
+.s-a .a-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-12);
+  padding: var(--z-space-12);
+  border-right: var(--z-border-width) solid var(--z-border);
+}
+/* The backdrop is a glow drawn for a dark ground, so the lockup sits on Zoomies
+   Black in both themes: a stage, not a column. */
+.s-a .a-stage {
+  display: flex;
+  justify-content: center;
+  align-self: center;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--z-space-4);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-panel-bg);
+}
+.s-a .a-pitch {
+  margin-block: auto;
+  max-width: 22rem;
+}
+.s-a .a-eyebrow {
+  margin-bottom: var(--z-space-5);
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-text-muted);
+}
+.s-a .a-tagline {
+  font-size: var(--z-text-3xl);
+  line-height: var(--z-leading-3xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-a .a-rule {
+  width: var(--z-space-10);
+  height: var(--z-border-width-thick);
+  margin-block: var(--z-space-8);
+  background: var(--z-brand-runner-blue);
+}
+.s-a .a-pitch-lede {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-lg);
+  color: var(--z-text-muted);
+}
+.s-a .a-brand .m-links {
+  color: var(--z-text-muted);
+}
+.s-a .a-form {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--z-space-16) var(--z-space-8) var(--z-space-6);
+}
+.s-a .a-mark {
+  display: none;
+}
+.s-a .a-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  max-width: var(--z-width-dialog-sm);
+  min-width: 0;
+  margin: auto;
+}
+.s-a .a-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-1);
+  margin-bottom: var(--z-space-2);
+}
+.s-a h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-a .a-lede {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  color: var(--z-text-muted);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.s-a .a-lede .m-host {
+  color: var(--z-text);
+  font-weight: var(--z-weight-medium);
+}
+.s-a .a-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--z-space-2) var(--z-space-4);
+  margin-top: var(--z-space-8);
+  color: var(--z-text-subtle);
+  font-size: var(--z-text-2xs);
+  line-height: var(--z-leading-xs);
+}
+.s-a .a-links-phone {
+  display: none;
+}
+.s-a .a-appearance {
+  position: absolute;
+  top: var(--z-space-6);
+  right: var(--z-space-8);
+}
+@media (max-width: 800px) {
+  .s-a {
+    display: flex;
+    flex-direction: column;
+  }
+  .s-a .a-brand {
+    display: none;
+  }
+  .s-a .a-mark {
+    display: flex;
+    justify-content: center;
+    padding: var(--z-space-8) var(--z-space-6) var(--z-space-2);
+  }
+  .s-a .a-form {
+    flex: 1;
+    padding: var(--z-space-4) var(--z-space-6) var(--z-space-6);
+  }
+  .s-a .a-meta {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .s-a .a-links-phone {
+    display: block;
+    color: var(--z-text-muted);
+  }
+  .s-a .a-links-phone .m-links {
+    justify-content: center;
+  }
+  .s-a .a-appearance {
+    top: var(--z-space-4);
+    right: var(--z-space-6);
+  }
+  .s-a .m-no-account {
+    display: none;
+  }
+}

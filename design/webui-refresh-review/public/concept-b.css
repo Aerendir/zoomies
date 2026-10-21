@@ -1,0 +1,101 @@
+/*
+ * Concept B, evolution. No brand panel: one centred frame, the same one the
+ * first-account and consent screens use, so every page before sign in looks
+ * like the same product. The pitch becomes a single quiet line beneath.
+ */
+.s-b {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: var(--z-space-12) var(--z-space-4) var(--z-space-8);
+  background: var(--z-bg);
+}
+.s-b .b-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-6);
+  width: 100%;
+  max-width: var(--z-width-dialog-md);
+  min-width: 0;
+  margin-block: auto;
+}
+.s-b .b-brand {
+  display: flex;
+  justify-content: center;
+}
+.s-b .b-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-shadow-lg);
+}
+.s-b .b-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--z-border-width);
+  margin: 0 var(--z-radius-lg);
+  background: linear-gradient(90deg, transparent, var(--z-border-strong), transparent);
+}
+.s-b h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-align: center;
+  text-wrap: balance;
+}
+.s-b .b-lede {
+  margin-top: calc(-1 * var(--z-space-2));
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+  text-align: center;
+  text-wrap: pretty;
+}
+.s-b .b-instance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-xs);
+  color: var(--z-text-muted);
+}
+.s-b .b-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-3);
+  max-width: 100%;
+  color: var(--z-text-muted);
+  font-size: var(--z-text-xs);
+  line-height: var(--z-leading-xs);
+  text-align: center;
+}
+.s-b .b-footer .m-links {
+  justify-content: center;
+}
+.s-b .b-version {
+  color: var(--z-text-subtle);
+  font-size: var(--z-text-2xs);
+}
+.s-b .b-appearance {
+  position: absolute;
+  top: var(--z-space-4);
+  right: var(--z-space-4);
+}
+@media (max-width: 768px) {
+  .s-b {
+    padding-top: var(--z-space-8);
+  }
+  .s-b .b-card {
+    padding: var(--z-space-5);
+  }
+}

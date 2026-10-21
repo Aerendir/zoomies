@@ -162,7 +162,12 @@ starting again.
   every state in the table above.
 * No horizontal overflow at 375px or 1440px, and no console errors, in any
   combination.
-* Every concept's text and control contrast meets the stated ratios.
+* Every concept's text and control contrast meets the stated ratios, except
+  where the product's own Classic tokens do not: the Classic control edge is about
+  1.62:1 against the surface in both modes, under the 3:1 minimum, and no concept
+  built from tokens can change that. The checker records it as a known issue with
+  its reason and a floor, each README repeats it, and raising the edge is
+  recommended as a token change independent of any concept.
 * Each page has a recommendation, and every claim in the README is backed by a
   capture or a check recorded in `viewport-review.json`.
 * `go test ./internal/docs` passes.

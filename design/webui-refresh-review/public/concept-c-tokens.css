@@ -1,0 +1,25 @@
+/*
+ * Concept C's proposed tokens.
+ *
+ * This is the only file in the pack where a new token may be defined, so the
+ * cost of choosing C is visible in one place: every name below would be added
+ * to web/src/lib/styles/tokens.css and described in docs/ui-guidelines.md. They
+ * are scoped to the concept so the other two cannot lean on them by accident.
+ *
+ * The scene is the same in both themes, as the lockup's black stage already is:
+ * the logo's backdrop is a glow drawn for a dark ground. What is drawn on it
+ * reads the existing --z-panel-* tokens, which are fixed for exactly that
+ * reason. The form's panel follows the theme.
+ */
+:root[data-concept='c'] {
+  /* The scene: deeper than --z-panel-bg's pure black, with a navy cast. */
+  --z-gate-ground: #070b14;
+  /* The panel's edge against the scene, past 3:1 so it reads as a shape. */
+  --z-gate-edge: #4f6280;
+  --z-gate-shadow: 0 24px 64px -16px rgb(0 0 0 / 0.6);
+  /* How much of the backdrop image shows behind the headline. */
+  --z-gate-scene-opacity: 0.55;
+  /* The tagline: the largest type in the product, used once. */
+  --z-gate-display: clamp(var(--z-text-3xl), 4.5vw, 3.75rem);
+  --z-gate-display-leading: 1.1;
+}

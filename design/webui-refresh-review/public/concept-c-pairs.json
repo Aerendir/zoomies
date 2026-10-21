@@ -1,0 +1,5 @@
+[
+  { "fg": "--z-panel-text", "bg": "--z-gate-ground", "min": 4.5 },
+  { "fg": "--z-panel-text-muted", "bg": "--z-gate-ground", "min": 4.5 },
+  { "fg": "--z-gate-edge", "bg": "--z-gate-ground", "min": 3 }
+]

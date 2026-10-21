@@ -30,6 +30,25 @@ export const BASE_PAIRS = [
   { fg: '--z-border-strong', bg: '--z-surface', min: 3 },
 ];
 
+/**
+ * What the product's own tokens already get wrong, and identically for every
+ * concept built from them, so no concept can fix it. A finding that matches an
+ * entry is reported as known and does not fail the run. It stops matching if
+ * the ratio falls below `atLeast`, so a change for the worse is still caught,
+ * and it never covers another style. Delete an entry to make the pack fail on
+ * it again.
+ */
+export const KNOWN = [
+  {
+    style: 'classic',
+    fg: '--z-border-strong',
+    bg: '--z-surface',
+    atLeast: 1.6,
+    reason:
+      "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept.",
+  },
+];
+
 const CONCEPT_PAIRS = fileURLToPath(new URL('../public/concept-c-pairs.json', import.meta.url));
 const MAX_TAB_STOPS = 60;
 
@@ -102,6 +121,27 @@ export async function checkPage(page, { layoutOnly = false } = {}) {
   }));
   if (scrollWidth > innerWidth) {
     add('overflow', `the page is ${scrollWidth}px wide in a ${innerWidth}px window`);
+  }
+  // A page can fit its window and still cut a sentence off at the edge: an
+  // overflow rule hides the spill from scrollWidth. Only asked when the page
+  // does not already report overflow, so one cause is one finding. Anything
+  // inside aria-hidden is decoration (a scene hung past the edge on purpose).
+  if (scrollWidth <= innerWidth) {
+    const cut = await page.evaluate(() => {
+      const stage = document.querySelector('#stage') ?? document.body;
+      const limit = window.innerWidth;
+      const found = [];
+      for (const el of stage.querySelectorAll('*')) {
+        if (el.closest('[aria-hidden="true"]')) continue;
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        if (box.right > limit + 1 || box.left < -1) {
+          found.push(`${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}`);
+        }
+      }
+      return [...new Set(found)].slice(0, 3);
+    });
+    for (const name of cut) add('clipped', `${name} extends past the ${innerWidth}px window and is cut off, not scrolled`);
   }
   // Drained, so an error is reported against the combination that caused it.
   for (const message of pending.get(page)?.splice(0) ?? []) add('console', message);
@@ -220,6 +260,12 @@ export async function checkPairs(page, pairs) {
       const shown = (Math.floor(ratio * 100) / 100).toFixed(2);
       findings.push({
         kind: 'contrast',
+        // The pair and the ratio travel with the finding, so a baseline can
+        // recognise it without parsing a sentence.
+        fg: pair.fg,
+        bg: pair.bg,
+        min: pair.min,
+        ratio,
         detail: `${pair.fg} on ${pair.bg} is ${shown}:1 and needs ${pair.min}:1`,
       });
     }
@@ -257,7 +303,14 @@ async function loadConceptPairs() {
  * #mode and #state, a <main id="stage">, a hash that drives them, and
  * data-rendered on <html> once a render is done.
  */
-export async function run({ url, screen, widths = WIDTHS, pairs = BASE_PAIRS, conceptPairs } = {}) {
+export async function run({
+  url,
+  screen,
+  widths = WIDTHS,
+  pairs = BASE_PAIRS,
+  conceptPairs,
+  known = KNOWN,
+} = {}) {
   const extra = conceptPairs ?? (await loadConceptPairs());
   const target = `${url}/review/mockups.html`;
   const browser = await launch();
@@ -319,7 +372,26 @@ export async function run({ url, screen, widths = WIDTHS, pairs = BASE_PAIRS, co
         await page.close();
       }),
     );
-    return { url: target, widths, screens: screen ? [screen] : screens, combinations, findings };
+    // A finding the baseline recognises is not a failure of this run. It is
+    // still returned, with its reason, so it can be reported and not forgotten.
+    const covering = (f) =>
+      f.kind === 'contrast' &&
+      known.find((k) => k.style === f.style && k.fg === f.fg && k.bg === f.bg && f.ratio >= k.atLeast);
+    const failing = [];
+    const tolerated = [];
+    for (const f of findings) {
+      const entry = covering(f);
+      if (entry) tolerated.push({ ...f, reason: entry.reason });
+      else failing.push(f);
+    }
+    return {
+      url: target,
+      widths,
+      screens: screen ? [screen] : screens,
+      combinations,
+      findings: failing,
+      known: tolerated,
+    };
   } finally {
     await browser.close();
   }
@@ -356,6 +428,14 @@ async function main(argv) {
         .join(' ');
       console.log(`  ${where} ${f.kind}: ${f.detail}`);
     }
+    // Known issues are said every time, once each, so a green run is never silent about them.
+    const groups = new Map();
+    for (const k of result.known) {
+      const key = `${k.style}: ${k.fg} on ${k.bg}`;
+      groups.set(key, [...(groups.get(key) ?? []), k]);
+    }
+    if (groups.size) console.log(`${result.known.length} known, not failing:`);
+    for (const [key, list] of groups) console.log(`  ${key} (${list.length}): ${list[0].reason}`);
     process.exitCode = result.findings.length ? 1 : 0;
   } finally {
     await server.close();

@@ -1,0 +1,159 @@
+/*
+ * Concept C, bold. The brand moment is the page: a scene, the tagline at the
+ * largest size the product has, and the form as a raised panel. Every --z-gate-*
+ * token is proposed, and defined in concept-c-tokens.css.
+ */
+.s-c {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 30rem);
+  grid-template-areas:
+    'hero panel'
+    'footer footer';
+  align-items: center;
+  gap: var(--z-space-8) var(--z-space-16);
+  min-height: 100%;
+  padding: var(--z-space-12) var(--z-space-16) var(--z-space-6);
+  overflow: clip;
+  background: var(--z-gate-ground);
+  color: var(--z-panel-text);
+}
+.s-c .c-scene {
+  position: absolute;
+  z-index: -1;
+  /* Behind the panel, so every word on the left sits on plain ground: text
+     over an image has no contrast pair a checker can compute. */
+  inset: -25% -10% -25% 45%;
+  background: var(--z-logo-orbital) center / contain no-repeat;
+  opacity: var(--z-gate-scene-opacity);
+  mask-image: var(--z-logo-edge-fade);
+  mask-composite: intersect;
+  pointer-events: none;
+}
+.s-c .c-hero {
+  grid-area: hero;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--z-space-4);
+  max-width: 36rem;
+}
+.s-c .c-eyebrow {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-tagline {
+  font-size: var(--z-gate-display);
+  line-height: var(--z-gate-display-leading);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  color: var(--z-panel-text);
+}
+.s-c .c-lede {
+  max-width: 24rem;
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-lg);
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-panel {
+  grid-area: panel;
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  min-width: 0;
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-gate-edge);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-gate-shadow);
+  color: var(--z-text);
+}
+.s-c .c-panel h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-c .c-panel-lede {
+  margin-top: calc(-1 * var(--z-space-2));
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  color: var(--z-text-muted);
+  text-wrap: pretty;
+}
+.s-c .c-instance {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-xs);
+  color: var(--z-text-muted);
+}
+.s-c .c-footer {
+  grid-area: footer;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--z-space-2) var(--z-space-6);
+  color: var(--z-panel-text-muted);
+  font-size: var(--z-text-xs);
+}
+.s-c .c-appearance {
+  position: absolute;
+  top: var(--z-space-6);
+  right: var(--z-space-8);
+}
+.s-c .c-appearance .m-icon-btn {
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-appearance .m-icon-btn:hover {
+  background: var(--z-panel-raised);
+  color: var(--z-panel-text);
+}
+@media (max-width: 900px) {
+  .s-c {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'hero'
+      'panel'
+      'footer';
+    align-items: start;
+    gap: var(--z-space-5);
+    padding: var(--z-space-6) var(--z-space-4) var(--z-space-4);
+  }
+  .s-c .c-scene {
+    inset: 20% -40% 14% -40%;
+  }
+  .s-c .c-hero {
+    align-items: center;
+    gap: var(--z-space-2);
+    max-width: none;
+    text-align: center;
+  }
+  .s-c .c-hero .art {
+    width: var(--z-space-16);
+  }
+  .s-c .c-eyebrow,
+  .s-c .c-lede {
+    display: none;
+  }
+  .s-c .c-tagline {
+    font-size: var(--z-text-xl);
+    line-height: var(--z-leading-xl);
+  }
+  .s-c .c-panel {
+    padding: var(--z-space-5);
+  }
+  .s-c .c-footer {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .s-c .c-appearance {
+    top: var(--z-space-3);
+    right: var(--z-space-4);
+  }
+}
