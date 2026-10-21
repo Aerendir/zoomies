@@ -33,7 +33,7 @@ export const BASE_PAIRS = [
 const CONCEPT_PAIRS = fileURLToPath(new URL('../public/concept-c-pairs.json', import.meta.url));
 const MAX_TAB_STOPS = 60;
 
-/* -- colour ---------------------------------------------------------------- */
+/* colour */
 
 function channels(text) {
   const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[,/]\s*[\d.]+%?\s*)?\)$/i.exec(
@@ -61,7 +61,7 @@ export function contrast(fg, bg) {
   return (light + 0.05) / (dark + 0.05);
 }
 
-/* -- one page ---------------------------------------------------------------- */
+/* one page */
 
 const pending = new WeakMap();
 
@@ -227,7 +227,7 @@ export async function checkPairs(page, pairs) {
   return findings;
 }
 
-/* -- the whole review page ------------------------------------------------------ */
+/* the whole review page */
 
 /** Point the review page at one combination and wait until it has drawn it. */
 async function show(page, choice) {
@@ -325,7 +325,7 @@ export async function run({ url, screen, widths = WIDTHS, pairs = BASE_PAIRS, co
   }
 }
 
-/* -- command line ---------------------------------------------------------------- */
+/* command line */
 
 export function parseArgs(argv) {
   const args = {};

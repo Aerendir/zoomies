@@ -183,7 +183,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'zoomies-review-'));
 const running = [];
 const browser = await launch();
 try {
-  /* -- first-run controller: first account, sign in, consent ---------------------- */
+  /* first-run controller: first account, sign in, consent */
   const tokenFile = join(scratch, 'setup-token');
   const firstRun = await startController('serve-firstrun.mjs', 8098, tokenFile);
   running.push(firstRun);
@@ -254,7 +254,7 @@ try {
   await firstRun.stop();
   running.pop();
 
-  /* -- status fixture: the public fleet status page -------------------------------- */
+  /* status fixture: the public fleet status page */
   const status = await startController('serve-status.mjs', 8095);
   running.push(status);
   const publicContext = await withContext(browser, status.url, { app: false });
@@ -269,7 +269,7 @@ try {
   await status.stop();
   running.pop();
 
-  /* -- demo fleet: a wrong address --------------------------------------------------- */
+  /* demo fleet: a wrong address */
   const demo = await startController('serve.mjs', 8099);
   running.push(demo);
   const notFoundContext = await withContext(browser, demo.url);
