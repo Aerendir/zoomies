@@ -557,20 +557,21 @@ func (s *Server) handleDownloadRunnerLogs(w http.ResponseWriter, r *http.Request
 	}
 	defer cancel()
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+logFilename(run.Name)+`"`)
-	w.WriteHeader(http.StatusOK)
-	rc := http.NewResponseController(w)
-	_ = rc.SetWriteDeadline(time.Time{})
-
-	// A backlog arrives in a burst and then stops; this bounds the wait for the
-	// first chunk and the gap between chunks, so a wedged agent cannot hold the
-	// request open indefinitely.
+	// The headers are held back until the first chunk arrives. A relay that
+	// never starts used to answer 200 with a file-shaped empty attachment,
+	// which looks like a build that printed nothing; a 503 below says the
+	// host did not answer, which is something an operator can act on.
 	const firstChunkWait = 10 * time.Second
 	const quietFor = 2 * time.Second
 
+	rc := http.NewResponseController(w)
+	// The write deadline is cleared before the wait, not after the first
+	// chunk: the refusal below is a write too, and it must not fall foul of a
+	// server timeout that is shorter than the wait it answers.
+	_ = rc.SetWriteDeadline(time.Time{})
 	timer := time.NewTimer(firstChunkWait)
 	defer timer.Stop()
+	started := false
 	for {
 		select {
 		case <-r.Context().Done():
@@ -578,6 +579,12 @@ func (s *Server) handleDownloadRunnerLogs(w http.ResponseWriter, r *http.Request
 		case chunk, ok := <-ch:
 			if !ok {
 				return
+			}
+			if !started {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.Header().Set("Content-Disposition", `attachment; filename="`+logFilename(run.Name)+`"`)
+				w.WriteHeader(http.StatusOK)
+				started = true
 			}
 			if _, err := w.Write(chunk); err != nil {
 				return
@@ -591,6 +598,16 @@ func (s *Server) handleDownloadRunnerLogs(w http.ResponseWriter, r *http.Request
 			}
 			timer.Reset(quietFor)
 		case <-timer.C:
+			if !started {
+				// Nothing arrived in the whole first-chunk window: the agent
+				// may be in poll backoff (up to 30 seconds) or the host may be
+				// restarting. That is a try-again, not an empty log.
+				writeError(w, http.StatusServiceUnavailable, errorEnvelope{Error: errorBody{
+					Code: codeInternal,
+					Message: fmt.Sprintf("the runner's host did not begin sending its log within %d seconds; it may be busy or restarting, so try the download again, or read the log live",
+						int(firstChunkWait.Seconds())),
+				}})
+			}
 			return
 		}
 	}

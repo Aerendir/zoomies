@@ -228,15 +228,23 @@ func TestALogStreamOverItsByteBudgetIsDroppedRatherThanBlocked(t *testing.T) {
 	}
 
 	got := 0
+	// The relay now says in band how much it refused, so the viewer's bytes
+	// are the accepted flood plus that notice. The notice is the corrected
+	// expectation: a silently gapped log is what the marker exists to prevent.
+	noticed := 0
 	for chunk := range ch {
 		got += len(chunk)
+		if bytes.Contains(chunk, []byte("dropped")) {
+			noticed += len(chunk)
+		}
 	}
 	// A little refills while the flood is read, so the bound is the burst plus
-	// a second's worth rather than the burst exactly.
-	if got > logStreamBurst+logStreamBytesPerSecond {
-		t.Errorf("the viewer received %d of %d bytes; the budget is a burst of %d", got, flood, logStreamBurst)
+	// a second's worth rather than the burst exactly. The notice is not part
+	// of the flood, so it does not count against the bound.
+	if accepted := got - noticed; accepted > logStreamBurst+logStreamBytesPerSecond {
+		t.Errorf("the viewer received %d of %d bytes; the budget is a burst of %d", accepted, flood, logStreamBurst)
 	}
-	if dropped := testutil.ToFloat64(h.c.metrics.logRelayDropped); int(dropped) != flood-got {
-		t.Errorf("zoomies_log_relay_dropped_bytes_total = %v, want %d", dropped, flood-got)
+	if dropped := testutil.ToFloat64(h.c.metrics.logRelayDropped); int(dropped) != flood-(got-noticed) {
+		t.Errorf("zoomies_log_relay_dropped_bytes_total = %v, want %d", dropped, flood-(got-noticed))
 	}
 }
