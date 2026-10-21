@@ -6,6 +6,9 @@ go 1.27.1
 // into go vet, staticcheck and go test as if it were ours.
 ignore ./web/node_modules
 
+// tailscale.com rides the pre-release channel tailcat tracks, at or above
+// the version tailcat itself requires; the rule, and why the pin carries a
+// graph with it, is in docs/dependencies.md.
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/charmbracelet/huh v1.0.0

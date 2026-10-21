@@ -24,8 +24,10 @@ const dependenciesDoc = "../../docs/dependencies.md"
 var (
 	// One module path at the start of a table row's first cell.
 	dependencyRow = regexp.MustCompile("(?m)^\\| `([^`]+)` \\|")
-	// One requirement inside a require block, or a single-line require.
-	requirement = regexp.MustCompile(`^\s*(?:require\s+)?(\S+)\s+v\S+(\s+//\s*indirect)?\s*$`)
+	// One requirement inside a require block, or a single-line require: the
+	// module path, the version, and the marker that says the module is
+	// indirect.
+	requirement = regexp.MustCompile(`^\s*(?:require\s+)?(\S+)\s+(v\S+?)(\s+//\s*indirect)?\s*$`)
 )
 
 func TestEveryDirectGoModuleHasARowInTheDependenciesPage(t *testing.T) {
@@ -70,11 +72,29 @@ func TestEveryDirectGoModuleHasARowInTheDependenciesPage(t *testing.T) {
 // requires at all.
 func goModules(t *testing.T) (direct, all map[string]bool) {
 	t.Helper()
+	direct, all = map[string]bool{}, map[string]bool{}
+	for _, m := range requirementLines(t) {
+		all[m[1]] = true
+		if m[3] == "" {
+			direct[m[1]] = true
+		}
+	}
+	if len(direct) == 0 {
+		t.Fatal("no direct requirements were found in go.mod; the test is reading it wrongly")
+	}
+	return direct, all
+}
+
+// requirementLines returns every requirement go.mod states, in the order it
+// states them. The block structure is read as well as the lines, so a comment
+// that looks like a requirement is not taken for one.
+func requirementLines(t *testing.T) [][]string {
+	t.Helper()
 	body, err := os.ReadFile("../../go.mod")
 	if err != nil {
 		t.Fatalf("reading go.mod: %v", err)
 	}
-	direct, all = map[string]bool{}, map[string]bool{}
+	var found [][]string
 	inBlock := false
 	for _, line := range strings.Split(string(body), "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -92,15 +112,64 @@ func goModules(t *testing.T) (direct, all map[string]bool) {
 		if m == nil {
 			continue
 		}
-		all[m[1]] = true
-		if m[2] == "" {
-			direct[m[1]] = true
+		found = append(found, m)
+	}
+	return found
+}
+
+// moduleVersion returns the version go.mod requires directly for a module.
+func moduleVersion(t *testing.T, name string) string {
+	t.Helper()
+	for _, m := range requirementLines(t) {
+		if m[1] == name && m[3] == "" {
+			return m[2]
 		}
 	}
-	if len(direct) == 0 {
-		t.Fatal("no direct requirements were found in go.mod; the test is reading it wrongly")
+	t.Fatalf("go.mod requires no direct module named %s; the test is reading it wrongly", name)
+	return ""
+}
+
+// rowFor returns the row a module has in the Go table of the dependencies
+// page, or the empty string when it has none.
+func rowFor(text, module string) string {
+	for _, line := range strings.Split(section(text, "## Go", "## "), "\n") {
+		if strings.HasPrefix(line, "| `"+module+"` |") {
+			return line
+		}
 	}
-	return direct, all
+	return ""
+}
+
+// The tailscale.com pin rides a pre-release channel, and a pin on that
+// channel brings a module graph with it: the version names one module, and the
+// hundred and thirty indirect ones arrive alongside it. Nothing in the
+// pipeline sees that arrival, because govulncheck and osv-scanner read what
+// is there, not what arrived, so the row in docs/dependencies.md is the one
+// place an owner defends the pin. It has to name the channel and the rule, or
+// a bump can change the graph without anybody being asked about it.
+func TestTheTailscalePinNamesItsChannel(t *testing.T) {
+	version := moduleVersion(t, "tailscale.com")
+	if !strings.Contains(version, "-pre") {
+		// A stable tag is an owner decision that leaves no channel policy to
+		// defend, so there is nothing for the row to have to say.
+		return
+	}
+	page, err := os.ReadFile(dependenciesDoc)
+	if err != nil {
+		t.Fatalf("reading %s: %v", dependenciesDoc, err)
+	}
+	row := rowFor(string(page), "tailscale.com")
+	if row == "" {
+		t.Fatalf("docs/dependencies.md has no row for tailscale.com; the page changed shape")
+	}
+	// The row may be reworded as long as it keeps naming the channel and the
+	// graph rule, so the test reads the two markers and not the wording.
+	for _, marker := range []string{"pre-release", "changes what it pulls in says so"} {
+		if !strings.Contains(row, marker) {
+			t.Errorf("the tailscale.com row in docs/dependencies.md does not say %q; the pin rides the pre-release channel and carries a module graph with it, and that row is where an owner defends it:\n  %s",
+				marker, row)
+		}
+	}
 }
 
 // section returns the text from the first line starting with start up to the
