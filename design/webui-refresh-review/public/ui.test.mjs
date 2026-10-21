@@ -48,7 +48,7 @@ test('field(): a required field is marked for the eye and announced for the ear'
 
 test('field(): a value and a label are data, never markup', () => {
   const html = field({ name: 'a', label: '<b>x</b>', value: '"><script>alert(1)</script>' });
-  assert.doesNotMatch(html, /<script/);
+  assert.doesNotMatch(html, /<script/i);
   assert.doesNotMatch(html, /<b>/);
 });
 
@@ -148,5 +148,5 @@ test('radioGroup(): labels, descriptions and values are data, never markup', () 
     name: 'r', legend: '<i>x</i>',
     options: [{ value: '"><script>', label: '<b>L</b>', description: '<img src=x onerror=1>' }],
   });
-  assert.doesNotMatch(html, /<script|<b>|<i>|<img/);
+  assert.doesNotMatch(html, /<script|<b>|<i>|<img/i);
 });
