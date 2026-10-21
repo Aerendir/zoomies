@@ -473,6 +473,11 @@ func TestBoostsAreGivenBackWhenTheControllerStopsAnswering(t *testing.T) {
 			t.Fatalf("after %d missed beat(s) the agent changed %+v; a restart should not cost a running job its boost", i, got)
 		}
 	}
+	// The third failed attempt only ends a loan once its time lease has
+	// elapsed too; quick retries must not shorten that window.
+	a.mu.Lock()
+	a.boostRenewedAt = time.Now().Add(-boostExpiryMisses * a.heartbtI)
+	a.mu.Unlock()
 	if got := miss(); len(got) != 1 || got[0].res.CPUs != 2 {
 		t.Fatalf("after %d missed beats updates = %+v, want the runner back at its 2 CPU guarantee", boostExpiryMisses, got)
 	}
