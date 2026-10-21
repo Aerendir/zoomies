@@ -250,7 +250,7 @@
   justify-content: center;
   width: var(--z-control-box);
   height: var(--z-control-box);
-  border: var(--z-border-width) solid var(--z-border);
+  border: var(--z-border-width) solid var(--z-border-strong);
   border-radius: var(--z-radius-md);
   background: var(--z-surface-sunken);
   color: var(--z-text);
@@ -640,6 +640,7 @@
   padding: var(--z-space-3) var(--z-space-4) var(--z-space-3) 0;
   border-bottom: var(--z-border-width) solid var(--z-border);
   vertical-align: middle;
+  white-space: nowrap;
 }
 .k-table .is-end {
   text-align: right;
@@ -876,4 +877,26 @@
   font-size: var(--z-text-sm);
   color: var(--z-text-muted);
   overflow-wrap: anywhere;
+}
+
+/* ---- a cell that stacks two names ---- */
+.k-stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.k-stack > .k-clip:first-child {
+  font-weight: var(--z-weight-semibold);
+}
+.k-stack > .k-clip:last-child {
+  font-size: var(--z-text-xs);
+  color: var(--z-text-muted);
+}
+.k-table code {
+  font-size: var(--z-text-xs);
+}
+@media (max-width: 800px) {
+  .k-table .m-btn {
+    min-height: var(--z-control-touch);
+  }
 }

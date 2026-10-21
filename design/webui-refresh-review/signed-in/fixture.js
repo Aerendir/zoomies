@@ -75,12 +75,12 @@ const hostBase = [
 const runnerBase = [
   ['run_01', 'pool_build', 'host_a', 'busy', [], 'job_01', 41],
   ['run_02', 'pool_build', 'host_a', 'busy', [], 'job_02', 38],
-  ['run_03', 'pool_build', 'host_a', 'idle', [], null, 12],
+  ['run_03', 'pool_build', 'host_a', 'draining', [], null, 12],
   ['run_04', 'pool_build', 'host_b', 'busy', [LONG_LABEL], 'job_03', 57],
-  ['run_05', 'pool_build', 'host_b', 'idle', [], null, 9],
+  ['run_05', 'pool_build', 'host_b', 'draining', [], null, 9],
   ['run_06', 'pool_build', 'host_b', 'provisioning', [], null, 0],
   ['run_07', 'pool_gpu', 'host_c', 'busy', [], 'job_04', 22],
-  ['run_08', 'pool_gpu', 'host_c', 'idle', [], null, 5],
+  ['run_08', 'pool_gpu', 'host_c', 'provisioning', [], null, 0],
   ['run_09', 'pool_arm', 'host_d', 'failed', [], null, 3],
   ['run_10', 'pool_arm', 'host_d', 'removed', [], null, 17],
   ['run_11', 'pool_labs', 'host_a', 'idle', [], null, 4],
@@ -109,7 +109,12 @@ const jobBase = [
   ['job_09', 'completed', 'pool_build', 'run_05', 'acme-corp/api', 'ci.yml', 'test (linux)', 'main', 60],
   ['job_10', 'completed', 'pool_build', 'run_03', 'acme-corp/web', 'ci.yml', 'build', 'main', 75],
   ['job_11', 'completed', 'pool_labs', 'run_11', 'acme-labs/notes', 'ci.yml', 'test', 'main', 120],
+  ['job_12', 'completed', 'pool_build', 'run_03', 'acme-corp/api', 'ci.yml', 'lint', 'main', 22],
+  ['job_13', 'queued', 'pool_build', null, 'acme-corp/web', 'ci.yml', 'test', 'feat/portal', 4],
 ];
+
+// Jobs of one workflow run share its id; every other job is a run of its own.
+const SHARED_RUN = { job_12: 'job_01', job_13: 'job_02' };
 
 const buildRunners = () =>
   runnerBase.map(([id, pool_id, host_id, state, extra, job, handled], i) => {
@@ -139,7 +144,7 @@ const jobs = jobBase.map(([id, state, pool_id, runner_id, repo, workflow, job_na
   return {
     id,
     github_job_id: 90000 + i,
-    github_run_id: 70000 + i,
+    github_run_id: 70000 + jobBase.findIndex((row) => row[0] === (SHARED_RUN[id] ?? id)),
     repo,
     workflow,
     job_name,
@@ -159,6 +164,37 @@ const jobs = jobBase.map(([id, state, pool_id, runner_id, repo, workflow, job_na
 });
 
 const runners = buildRunners();
+
+/** A run is its jobs, seen together: running if any is, else waiting if any is, else done. */
+function deriveRuns(rows) {
+  const byRun = new Map();
+  for (const job of rows) byRun.set(job.github_run_id, [...(byRun.get(job.github_run_id) ?? []), job]);
+  return [...byRun.values()].map((own) => {
+    const first = own[0];
+    const state = own.some((j) => j.state === 'in_progress')
+      ? 'in_progress'
+      : own.some((j) => j.state === 'queued')
+        ? 'queued'
+        : 'completed';
+    return {
+      repo: first.repo,
+      workflow: first.workflow,
+      github_run_id: first.github_run_id,
+      run_number: first.run_number,
+      run_attempt: 1,
+      head_branch: first.head_branch,
+      installation_id: first.installation_id,
+      state,
+      ...(state === 'completed' ? { conclusion: own.some((j) => j.conclusion === 'failure') ? 'failure' : 'success' } : {}),
+      managed: true,
+      hosted: false,
+      jobs: own.length,
+      queued_at: own.map((j) => j.queued_at).sort()[0],
+      ...(state !== 'queued' ? { started_at: own.find((j) => j.started_at)?.started_at } : {}),
+      ...(state === 'completed' ? { completed_at: own.map((j) => j.completed_at).sort().at(-1) } : {}),
+    };
+  });
+}
 
 const live = (hostId) => runners.filter((r) => r.host_id === hostId && LIVE.includes(r.state)).length;
 
@@ -345,7 +381,18 @@ function deepFreeze(value) {
   return value;
 }
 
-export const FLEET = deepFreeze({ installations, pools, hosts, runners, jobs, providers, machines, audit, problems });
+export const FLEET = deepFreeze({
+  installations,
+  pools,
+  hosts,
+  runners,
+  jobs,
+  runs: deriveRuns(jobs),
+  providers,
+  machines,
+  audit,
+  problems,
+});
 
 /**
  * Every total a screen shows, computed from the rows. A screen that wants a number

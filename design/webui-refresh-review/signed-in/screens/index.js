@@ -4,8 +4,12 @@
 // The concept control offers Current (a capture of the page today) and the
 // portal style, because the owner chose that look over three to choose between.
 import overview from './overview.js';
+import runners from './runners.js';
+import queue from './queue.js';
+import workflows from './workflows.js';
+import jobs from './jobs.js';
 
 export const CONCEPTS = ['current', 'a'];
 export const LABELS = { concept: { a: 'Portal style' } };
 
-export const SCREENS = [overview];
+export const SCREENS = [overview, runners, queue, workflows, jobs];

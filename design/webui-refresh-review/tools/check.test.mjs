@@ -80,6 +80,19 @@ test('checkPage: a decorative element hung past the edge is not content that is 
   await page.close();
 });
 
+test('checkPage: a wide table inside a region that scrolls is not cut off, and inside one that hides is', async () => {
+  const scrolls = await open(
+    `<main id="stage" style="overflow:clip"><h1>t</h1><div style="overflow-x:auto"><p style="width:2000px">wide</p></div></main>`,
+  );
+  assert.deepEqual(await checkPage(scrolls), []);
+  await scrolls.close();
+  const hides = await open(
+    `<main id="stage" style="overflow:clip"><h1>t</h1><div style="overflow-x:hidden"><p style="width:2000px">wide</p></div></main>`,
+  );
+  assert.deepEqual(kinds(await checkPage(hides)), ['clipped']);
+  await hides.close();
+});
+
 test('checkPage: one cause is one finding: a page that scrolls sideways is not also clipped', async () => {
   const page = await open(`<main id="stage"><h1>t</h1><p style="width:2000px">wide</p></main>`);
   assert.deepEqual(kinds(await checkPage(page)), ['overflow']);

@@ -32,6 +32,7 @@ const SCHEMAS = {
   hosts: 'Host',
   runners: 'Runner',
   jobs: 'Job',
+  runs: 'WorkflowRun',
   installations: 'Installation',
   providers: 'Provider',
   machines: 'Machine',
@@ -74,6 +75,15 @@ test('the counts the Overview shows are the rows the pages list', () => {
   }
   assert.equal(counts.hosts.slots, FLEET.hosts.reduce((total, h) => total + h.capacity, 0));
   assert.equal(counts.hosts.used, FLEET.hosts.reduce((total, h) => total + h.active_runners, 0));
+});
+
+test('a workflow run counts the jobs that belong to it', () => {
+  for (const run of FLEET.runs) {
+    const own = FLEET.jobs.filter((j) => j.github_run_id === run.github_run_id);
+    assert.equal(run.jobs, own.length, `${run.repo} ${run.workflow} #${run.run_number}`);
+    assert.ok(own.every((j) => j.repo === run.repo && j.workflow === run.workflow), 'one run is one workflow of one repository');
+  }
+  assert.ok(FLEET.runs.some((run) => run.jobs > 1), 'at least one run has more than one job');
 });
 
 test('a runner is on a host and in a pool that exist, and a job names the runner that has it', () => {

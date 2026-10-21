@@ -1,14 +1,18 @@
 {
-  "generated": "2026-10-21T17:05:23.775Z",
+  "generated": "2026-10-21T17:13:42.957Z",
   "widths": [
     320,
     375,
     1440
   ],
   "screens": [
-    "overview"
+    "overview",
+    "runners",
+    "queue",
+    "workflows",
+    "jobs"
   ],
-  "combinations": 84,
+  "combinations": 324,
   "findings": [],
   "known": [
     {

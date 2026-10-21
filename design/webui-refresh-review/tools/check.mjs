@@ -188,6 +188,14 @@ export async function checkPage(page, { layoutOnly = false } = {}) {
       const found = [];
       for (const el of stage.querySelectorAll('*')) {
         if (el.closest('[aria-hidden="true"]')) continue;
+        // What sits inside a region that scrolls sideways is reached by scrolling it,
+        // which is what a wide table in a card is meant to do. One that hides its
+        // spill is not that: it is the cut-off sentence this rule is for.
+        let scrolled = false;
+        for (let up = el.parentElement; up && up !== stage; up = up.parentElement) {
+          if (['auto', 'scroll'].includes(getComputedStyle(up).overflowX)) scrolled = true;
+        }
+        if (scrolled) continue;
         const box = el.getBoundingClientRect();
         if (box.width === 0 || box.height === 0) continue;
         if (box.right > limit + 1 || box.left < -1) {
