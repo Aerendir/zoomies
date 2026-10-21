@@ -397,6 +397,70 @@ func TestRecentEventsNarrowFramesTheWayTheStreamDoes(t *testing.T) {
 	}
 }
 
+// The identity is resolved once per request, so every frame of a page is
+// narrowed for the same caller. A page that mixed one caller's frames with
+// another's would be the way round the narrowing the stream does.
+func TestRecentEventsNarrowEveryFrameOfOnePageForTheSameCaller(t *testing.T) {
+	h := newHarness(t)
+	_, viewerCookie := h.user("watcher", store.RoleViewer)
+	_, platformCookie := h.user("operator", store.RolePlatform)
+	bus := h.ctrl.Events()
+
+	bus.Publish(events.KindPoolCreated, "pool:p", map[string]any{"id": "p", "env": map[string]string{"TOKEN": "secret"}})
+	bus.Publish(events.KindAudit, "audit:1", store.AuditEvent{ID: "aud_1", Action: "auth.login", ActorName: "alice", IP: "198.51.100.4"})
+	bus.Publish(events.KindProblems, "problems:1", map[string]any{
+		"ok": true,
+		"items": []map[string]any{
+			{"code": "backup.failed", "severity": "error", "title": "the platform's backups failed", "audience": "platform"},
+			{"code": "host.unhealthy", "severity": "error", "title": "a host is unhealthy", "audience": "fleet"},
+		},
+	})
+
+	got := h.recent(t, viewerCookie, "")
+	if len(got.Items) != 3 {
+		t.Fatalf("a viewer was handed %v, want the three frames that are theirs", got.ids())
+	}
+	for _, it := range got.Items {
+		switch it.Kind {
+		case string(events.KindPoolCreated):
+			if strings.Contains(string(it.Data), "secret") {
+				t.Errorf("the pool frame carries the environment value: %s", it.Data)
+			}
+		case string(events.KindAudit):
+			if strings.Contains(string(it.Data), "198.51.100.4") {
+				t.Errorf("the audit frame carries the address it came from: %s", it.Data)
+			}
+		case string(events.KindProblems):
+			if strings.Contains(string(it.Data), "backup.failed") {
+				t.Errorf("the problems frame carries a problem that is not the caller's: %s", it.Data)
+			}
+		}
+	}
+
+	// The same page for the platform carries them, so the narrowing above is the
+	// caller's and not a blanket one.
+	theirs := h.recent(t, platformCookie, "")
+	if len(theirs.Items) != 3 {
+		t.Fatalf("the platform account was handed %v, want the three frames", theirs.ids())
+	}
+	for _, it := range theirs.Items {
+		switch it.Kind {
+		case string(events.KindPoolCreated):
+			if !strings.Contains(string(it.Data), "secret") {
+				t.Errorf("the pool frame lost the environment value: %s", it.Data)
+			}
+		case string(events.KindAudit):
+			if !strings.Contains(string(it.Data), "198.51.100.4") {
+				t.Errorf("the audit frame lost the address it came from: %s", it.Data)
+			}
+		case string(events.KindProblems):
+			if !strings.Contains(string(it.Data), "backup.failed") {
+				t.Errorf("the problems frame lost the platform's own problem: %s", it.Data)
+			}
+		}
+	}
+}
+
 // waitFor polls a condition that another goroutine will bring about.
 func waitFor(t *testing.T, what string, ok func() bool) {
 	t.Helper()
