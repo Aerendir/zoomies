@@ -67,7 +67,7 @@
     min-width: 0;
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-xl);
-    background: var(--z-surface-raised);
+    background: var(--z-surface);
   }
   .panel.fill {
     /* A flex child will not shrink below its content unless told it may. */

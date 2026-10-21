@@ -659,7 +659,9 @@ page header names its section above the title (the sidebar's own heading, drawn
 from a data attribute so it is never a second heading or a string a page's text
 can collide with), sets the title in the medium weight, and puts a short blue
 rule under it; the Overview, which stands alone, has no section to name. Panels
-are raised cards with the extra-large radius. The Overview opens with a slim
+are cards with the extra-large radius, on the page's own surface: the quiet
+text colours are only guaranteed to read on it, and a raised one costs the
+gallery's contrast check in dark. The Overview opens with a slim
 band, Zoomies Black in both themes, that answers "is anything wrong" in one
 sentence (counts by severity, never a problem's own words) and has no status
 colour in it; it is a band and not the public pages' tall stage because the
