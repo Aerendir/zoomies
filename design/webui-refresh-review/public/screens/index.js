@@ -13,5 +13,6 @@ import signin from './signin.js';
 import firstAccount from './first-account.js';
 import connectApp from './connect-app.js';
 import fleetStatus from './fleet-status.js';
+import notFound from './not-found.js';
 
-export const SCREENS = [signin, firstAccount, connectApp, fleetStatus];
+export const SCREENS = [signin, firstAccount, connectApp, fleetStatus, notFound];

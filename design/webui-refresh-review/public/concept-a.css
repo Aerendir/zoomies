@@ -426,3 +426,55 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
+
+/*
+ * Not found, concept A: the same page, with a way back beside the way forward.
+ * Somebody who followed a stale link usually came from the page before it.
+ */
+.s-nf-a {
+  position: relative;
+  min-height: 100%;
+  padding: var(--z-space-8) var(--z-space-6);
+  background: var(--z-bg);
+}
+.s-nf-a .nf-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-1);
+}
+.s-nf-a .nf-head h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-nf-a .nf-head p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+}
+.s-nf-a .nf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-3);
+  max-width: var(--z-width-dialog-md);
+  margin: var(--z-space-16) auto 0;
+  text-align: center;
+}
+.s-nf-a .nf-empty h2 {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-semibold);
+}
+.s-nf-a .nf-empty p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  text-wrap: pretty;
+}
+.s-nf-a .nf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--z-space-3);
+  margin-top: var(--z-space-2);
+}

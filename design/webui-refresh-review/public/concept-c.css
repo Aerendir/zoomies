@@ -429,3 +429,39 @@
     grid-column: 1 / -1;
   }
 }
+
+/*
+ * Not found, concept C: the mark large and one calm action, with nothing else
+ * to read. The line that is the heading is the only sentence the page needs.
+ */
+.s-nf-c {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--z-space-12) var(--z-space-6);
+  background: var(--z-bg);
+}
+.s-nf-c .nf-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-5);
+  max-width: var(--z-width-dialog-md);
+  text-align: center;
+}
+.s-nf-c .nf-hero h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-wrap: balance;
+}
+.s-nf-c .nf-hero p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  text-wrap: pretty;
+}
