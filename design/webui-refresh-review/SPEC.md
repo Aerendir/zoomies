@@ -1,0 +1,173 @@
+# Web UI refresh review: design specification
+
+21 October 2026. This is the specification for a concept review of the whole
+controller web UI. It describes what will be produced and how it will be
+checked. It does not change the application, and nothing in it has been built
+yet.
+
+## Intent
+
+The owner asked for the whole web UI to be refactored or improved, starting
+with every page that can be seen without signing in and then working across the
+signed-in pages, and asked to be shown variations and concepts rather than a
+single answer.
+
+What the owner chose:
+
+| Decision | Choice |
+| --- | --- |
+| Deliverable | Concept pack first. No product code changes until a direction is chosen. |
+| What to improve | All four: clarity and flow, visual look and polish, accessibility and phone fit, and code structure. |
+| Pacing | Public pages first, then roll on through the signed-in areas using the recommended direction, reviewed as a batch. |
+| Boldness | Two evolutions plus one bold concept. |
+
+Assumptions, open to correction: every concept must fit the token system and
+work in both visual styles (Mission Control and Classic) in light and dark, and
+every concept must include a phone layout at 375px.
+
+## Constraints that come from the repository
+
+* Tokens: no raw colour in a component and no raw value that already has a
+  token (`web/AGENTS.md`). Concepts link `web/src/lib/styles/tokens.css`
+  instead of copying its values, so they cannot drift from it.
+* Status colours are a fixed mapping and are not reused for anything else.
+* Identity stays: the Zoomies logo and its backdrop choices, Eli, the paw and
+  dog artwork, the Off, Cute and Standard vocabulary, and reduced motion.
+* No new libraries. The mockups are plain HTML, CSS and a little script.
+* Nothing is shown that the REST API cannot supply. The public status page in
+  particular may use only what `GET /api/v1/status` returns.
+* Prose follows the repository voice: British spelling, no em dashes, no spaced
+  double hyphen, comments that say why.
+
+## What is produced
+
+```text
+design/webui-refresh-review/
+  SPEC.md                    this document
+  public/                    pack 1: pages reachable without an account
+    README.md                findings, concepts, recommendation, evidence, not claimed
+    mockups.html             the interactive review page
+    concept-c-tokens.css     the only place a proposed new token may appear
+    current-*.png            the real UI today, from the built binary
+    concept-*.png            each concept, 1440px and 375px, both styles, both modes
+    viewport-review.json     overflow, contrast and console checks, as data
+  shell-and-monitoring/      pack 2
+  fleet-management/          pack 3
+  insight-and-repairs/       pack 4
+  settings-and-setup/        pack 5
+```
+
+The mockup page offers four independent controls: the screen, the concept
+(Current, A, B or C), the visual style, and the colour mode. It sends no API
+requests and uses illustrative data, as the earlier reviews do.
+
+### The three concepts
+
+* **A, evolution.** Keeps the current page structure and fixes hierarchy,
+  wording and spacing. The least risky to ship.
+* **B, evolution.** A different layout idea inside the same tokens and brand.
+* **C, bold.** A deliberately larger departure. Any token it needs is defined in
+  `concept-c-tokens.css` and listed in the README as a proposed change to
+  `docs/ui-guidelines.md`, so the cost of choosing C is visible.
+
+Each page ends with one recommendation and the reason for it.
+
+## Pack 1: the public pages
+
+| Screen | Source today | States the pack must show |
+| --- | --- | --- |
+| Sign in | `web/src/routes/Login.svelte` | password only; single sign-on plus password; single sign-on only; a wrong-credentials failure; rate limited; controller unreachable; two-step verify; two-step enrolment and recovery codes; authentication switched off |
+| First account | `web/src/routes/Bootstrap.svelte` | empty; field errors; caps lock; weak password; closed because an account now exists |
+| Connect an app | `web/src/routes/McpConsent.svelte` | loading; normal request; request with the loopback warning; refused; nothing to approve; expired |
+| Fleet status | `web/src/status/StatusPage.svelte` | healthy; slowed; blocked; stale after a failed refresh; sign-in required; not published |
+| Not found | `web/src/routes/NotFound.svelte` | the one state |
+
+### Findings from reading the source
+
+These come from reading the code, not from rendering it, and each is confirmed
+or dropped in a browser before it appears in the README.
+
+1. **Three brand treatments on three screens.** Sign in uses the lockup on a
+   black stage, the first-account form uses a 72px mark, and consent uses a
+   28px full logo.
+2. **One banner, written three times.** The failure banner is hand-written in
+   `Login.svelte`, `Bootstrap.svelte` and `McpConsent.svelte` with different
+   radii and icon offsets. The component list has no shared callout. This is
+   the clearest code-structure candidate.
+3. **The hardest field comes first.** The first-account form opens with the
+   setup token, which has to be found in a log. The per-install commands sit
+   behind a help control, and the introduction is three sentences long.
+4. **The widest audience has the least brand.** The public status page carries
+   no logo, and only the Classic style.
+5. **Sign in carries four states in one 983-line file.** Layout, banner, form
+   and two-step logic are mixed, which makes any visual change expensive.
+6. **A question, not a finding: the loopback warning's tone.** The consent
+   warning uses the danger treatment for a case that is common and legitimate
+   when the client is a local coding agent. Whether that is alarm fatigue is for
+   the concepts to explore. Status colours are not to be reused, so any
+   alternative must stay inside the fixed mapping.
+
+## Verification
+
+The Playwright MCP that the web design skill prefers is not installed in this
+environment, so its automatic verification is skipped. Verification is done with
+what the repository already has:
+
+* Serve the pack over loopback HTTP (the earlier review found file URLs
+  unreliable) and drive the pre-installed Chromium with the repository's own
+  `@playwright/test`.
+* For each concept, screen, style and mode, at 1440px and 375px: no horizontal
+  overflow, no console errors, keyboard order and visible focus, and contrast
+  computed from the token values (4.5:1 for text, 3:1 for control edges).
+* Capture "current" screens from the real built controller. That needs
+  `npm ci` in `web/`. If the install fails, fall back to the captures already in
+  `docs/screenshots` and say so in the README.
+* Run `go test ./internal/docs` so the pack obeys the voice and placement rules.
+
+Not claimed, and stated as such in each README: no usability study, no
+screen-reader session, no measured performance change, and no end-to-end test
+of the real sign-in, bootstrap or consent flows. Counts and names in a mockup
+are illustrative.
+
+## Rolling on
+
+After pack 1, the signed-in areas follow in four packs, each with the same
+method and the recommended pack-1 direction as its baseline:
+
+| Pack | Pages |
+| --- | --- |
+| Shell and monitoring | the app shell, Overview, Queue, Jobs, Runners, Workflows |
+| Fleet management | Pools, Hosts, Providers, Machines |
+| Insight and repairs | Kennel Club, Eli repairs, AI context, Usage, Comparisons |
+| Settings and setup | Settings, Audit, Installations, Migrate, the wizards |
+
+Overview, Eli repairs and Kennel Club already have reviews in `design/`. Their
+packs build on those reviews and say what has changed since, rather than
+starting again.
+
+## Out of scope
+
+* Any change under `web/src`, `internal/`, `api/` or `cmd/`.
+* New dependencies.
+* A change to the Zoomies logo, Eli or the paw artwork.
+* Choosing the direction. The README recommends; the owner decides.
+
+## Success criteria
+
+* Pack 1 opens over HTTP, switches screen, concept, style and mode, and shows
+  every state in the table above.
+* No horizontal overflow at 375px or 1440px, and no console errors, in any
+  combination.
+* Every concept's text and control contrast meets the stated ratios.
+* Each page has a recommendation, and every claim in the README is backed by a
+  capture or a check recorded in `viewport-review.json`.
+* `go test ./internal/docs` passes.
+
+## Risks
+
+* The scope is large. Splitting it into packs is what keeps each one
+  reviewable, and the order above puts the least-seen pages last.
+* A mockup is not the product. Choosing a concept starts a separate
+  implementation task, and each README says which Svelte files it would touch.
+* `npm ci` may be blocked by the network proxy. The fallback above keeps the
+  "current" evidence honest, at lower fidelity.
