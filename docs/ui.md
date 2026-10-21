@@ -35,20 +35,23 @@ The Eli conversation uses the built-in demo model and a real fleet lookup.
 Before any of them, the page everyone meets first, and often the only one met
 by people who did not install the controller. The form is on the right, under
 the address of the instance being signed in to, so telling a staging controller
-from a production one does not rest on reading the address bar. On the left,
-the full logo sits on a rounded Zoomies Black stage in either theme. Below it
-are **A fresh runner. For every job.**, a short description, and links to [zoomies.sh](https://zoomies.sh),
-the source on GitHub and [EyUp.io](https://eyup.io), who make it. A failed
+from a production one does not rest on reading the address bar. On the left, the dog stands on a rounded Zoomies Black stage in either theme,
+under **A fresh runner. For every job.** and a short description. A header
+above carries the logo and the appearance switch, and a footer panel below has
+the build and links to [zoomies.sh](https://zoomies.sh), the source on GitHub
+and [EyUp.io](https://eyup.io), who make it. A failed
 sign-in says which kind of failure it was (wrong credentials, too many
 attempts, or a controller that cannot be reached) and caps lock is called out
-before it costs an attempt. On a phone the full logo keeps its rounded black stage
-above the form, the introductory copy is hidden and the links move below it.
+before it costs an attempt. The first account, the consent screen and the
+public status page use the same header, stage and footer. On a phone the
+stage becomes a strip above the form with the dog beside its words, and the
+sentence under them is hidden.
 
-![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
-![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
+![The sign-in page: a header with the paw and wordmark and the appearance switch; a rounded Zoomies Black stage on the left holding the dog on its backdrop, the words "Your infrastructure. Your control." and "A fresh runner. For every job." with a short blue rule; the form on the right under the address of the instance; and a Zoomies Black footer panel with the build and the links](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
+![The sign-in page: a header with the paw and wordmark and the appearance switch; a rounded Zoomies Black stage on the left holding the dog on its backdrop, the words "Your infrastructure. Your control." and "A fresh runner. For every job." with a short blue rule; the form on the right under the address of the instance; and a Zoomies Black footer panel with the build and the links](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
 
-![The phone sign-in page: the full Zoomies logo on its rounded black stage above the instance address and sign-in form](screenshots/sign-in-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
-![The phone sign-in page: the full Zoomies logo on its rounded black stage above the instance address and sign-in form](screenshots/sign-in-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
+![The phone sign-in page: a strip of Zoomies Black with the dog beside its words above the instance address and sign-in form, and the footer panel below](screenshots/sign-in-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
+![The phone sign-in page: a strip of Zoomies Black with the dog beside its words above the instance address and sign-in form, and the footer panel below](screenshots/sign-in-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
 
 ## Overview
 

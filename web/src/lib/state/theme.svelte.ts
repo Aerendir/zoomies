@@ -13,7 +13,7 @@
  * because otherwise an operator on a dark laptop who asks for the light theme
  * still gets a black bar above a white page.
  */
-import { storage } from './prefs.svelte';
+import { storage } from './storage';
 
 export type ThemeChoice = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';

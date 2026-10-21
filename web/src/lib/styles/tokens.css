@@ -210,6 +210,8 @@
   --z-radius-sm: 4px;
   --z-radius-md: 8px;
   --z-radius-lg: 12px;
+  /* The stage: the dark panel the dog stands on, on the pages before sign-in. */
+  --z-radius-xl: 28px;
   --z-radius-full: 9999px;
 
   /* Borders --------------------------------------------------------------
@@ -245,6 +247,8 @@
   --z-width-drawer-sm: 360px;
   --z-width-drawer-md: 520px;
   --z-width-drawer-lg: 760px;
+  /* The measure of a public page: the header, the stage and the footer share it. */
+  --z-width-public: 1120px;
 
   /* Controls -------------------------------------------------------------
    * The drawn controls -- the checkbox box, the switch thumb, the icon in a

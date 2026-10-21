@@ -498,12 +498,11 @@ test('the sign-in form comes before the brand panel for a keyboard', async ({ pa
   await expect(page.locator('input[name="password"]')).toBeFocused();
 });
 
-test('the lockup sits on a rounded Zoomies Black stage in both themes', async ({ page }) => {
-  // The backdrop is a glow drawn for a dark ground, so the lockup's stage is
-  // the brand's own black whichever theme is on. The stage is a rounded square
-  // around the lockup and nothing more: the column it sits in, and the pitch
-  // under it, are a surface like the form's, so their text follows the theme
-  // rather than being fixed white (which the light theme would put on white).
+test('the dog stands on a rounded Zoomies Black stage in both themes', async ({ page }) => {
+  // The backdrop is a glow drawn for a dark ground, so the stage is the brand's
+  // own black whichever theme is on, and what is written on it is fixed to match
+  // (white on black is not something the light theme should be able to undo).
+  // The page around it, and the form, follow the theme.
   //
   // Dark is the default, so this follows the operating system on purpose: the
   // test switches themes by emulating the system's setting.
@@ -522,10 +521,9 @@ test('the lockup sits on a rounded Zoomies Black stage in both themes', async ({
       radius: getComputedStyle(stage).borderTopLeftRadius,
       wraps: stage.querySelector('img') !== null,
     })),
-    column: await ground('.mark'),
-    pitch: await ground('.tagline'),
+    page: await ground('.public'),
     form: await ground('.form-column'),
-    text: await page.locator('.tagline').evaluate((el) => getComputedStyle(el).color),
+    text: await page.locator('.stage .headline').evaluate((el) => getComputedStyle(el).color),
   });
   const inTheme = async (colorScheme: 'light' | 'dark') => {
     await page.emulateMedia({ colorScheme });
@@ -533,27 +531,26 @@ test('the lockup sits on a rounded Zoomies Black stage in both themes', async ({
     const got = await read();
     expect(got.stage, `the stage in the ${colorScheme} theme`).toEqual({
       ground: 'rgb(8, 8, 8)',
-      radius: '12px',
+      radius: '28px',
       wraps: true,
     });
-    expect(got.column, `the column in the ${colorScheme} theme`).not.toBe('rgb(8, 8, 8)');
-    expect(got.pitch, `the pitch's ground in the ${colorScheme} theme`).toBe(got.form);
+    expect(got.page, `the page in the ${colorScheme} theme`).not.toBe('rgb(8, 8, 8)');
+    expect(got.form, `the form's ground in the ${colorScheme} theme`).toBe(got.page);
     return got;
   };
   const light = await inTheme('light');
   const dark = await inTheme('dark');
-  expect(light.text, 'the pitch follows the theme').not.toBe(dark.text);
-  expect(light.column, 'the column follows the theme').not.toBe(dark.column);
+  expect(light.text, 'the stage keeps its own text in both themes').toBe(dark.text);
+  expect(light.page, 'the page follows the theme').not.toBe(dark.page);
   // The original black artwork stays readable on the selected pale backdrop.
-  await expect(page.getByRole('img', { name: 'Zoomies' })).toBeVisible();
-  await expect(page.getByRole('img', { name: 'Zoomies', exact: true })).toHaveAttribute(
-    'data-treatment',
-    'orbital',
-  );
-  await expect(page.locator('.mark img')).toHaveAttribute(
+  await expect(page.locator('.stage .logo')).toHaveAttribute('data-treatment', 'orbital');
+  await expect(page.locator('.stage img')).toHaveAttribute(
     'src',
-    '/brand/logo-black-transparent.svg',
+    '/brand/mark-black-transparent.svg',
   );
+  // The header carries the brand and the appearance choice, and nothing else.
+  await expect(page.getByRole('img', { name: 'Zoomies', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Appearance' })).toBeVisible();
   // Which instance this is, as the browser reached it.
   await expect(page.getByText(new URL(page.url()).host, { exact: true })).toBeVisible();
 });
@@ -594,20 +591,20 @@ test('the sign-in page fits a phone too', async ({ page }) => {
       page.getByRole('heading', { name: 'Sign in to Zoomies', exact: true }),
     ).toBeVisible();
 
-    // The panel comes apart: the lockup stays above the form, at the brand's
-    // minimum rather than shrunk to a chip, and the heading is still above the
+    // The stage comes apart: it becomes a strip above the form, with the dog
+    // beside its words and not above them, and the heading is still above the
     // fold under it. On a current phone the button is on screen as well, so
     // signing in never needs a scroll. The links move below the form rather
     // than being dropped -- they are the page's only answer to "what is this"
-    // -- and the pitch goes.
-    const lockup = await page.getByRole('img', { name: 'Zoomies', exact: true }).boundingBox();
+    // -- and the stage's sentence goes.
+    const stage = await page.locator('.stage').boundingBox();
+    const dog = await page.locator('.stage img').boundingBox();
     const heading = await page.getByRole('heading', { level: 1 }).boundingBox();
-    expect(lockup?.width, `${where}: the lockup is under the brand minimum`).toBeGreaterThanOrEqual(
-      220,
-    );
-    expect((lockup?.y ?? 0) < (heading?.y ?? 0), `${where}: the lockup is above the form`).toBe(
-      true,
-    );
+    expect(dog?.width, `${where}: the dog is a speck`).toBeGreaterThanOrEqual(72);
+    expect(
+      (stage?.y ?? 0) + (stage?.height ?? 0) <= (heading?.y ?? 0),
+      `${where}: the stage is above the form`,
+    ).toBe(true);
     expect(
       heading && heading.y + heading.height,
       `${where}: the heading is below the fold`,
@@ -619,12 +616,12 @@ test('the sign-in page fits a phone too', async ({ page }) => {
     for (const name of [/^zoomies\.sh\b/, /^GitHub\b/, /^EyUp\.io\b/]) {
       await expect(about.getByRole('link', { name })).toBeVisible();
     }
-    await expect(page.locator('.pitch')).toBeHidden();
+    await expect(page.locator('.stage .lede')).toBeHidden();
     await workable(where);
   }
 
   // On its side, a phone is wider than the band layout and keeps the desktop
-  // split, panel beside form; it is still a phone, so the same controls apply.
+  // split, stage beside form; it is still a phone, so the same controls apply.
   await page.setViewportSize({ width: 844, height: 390 });
   await page.goto('/login');
   await expect(
@@ -978,12 +975,14 @@ test('a saved logo treatment survives reload and sign-out on a portrait screen',
   expect((await signedOut).ok()).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/login');
-  const logo = page.getByRole('img', { name: 'Zoomies', exact: true });
-  await expect(logo).toBeVisible();
-  await expect(logo).toHaveAttribute('data-treatment', 'circle');
-  await expect(page.locator('.mark img')).toHaveAttribute(
+  // The dog on the stage carries the chosen backdrop; the paw and wordmark in
+  // the header are small and carry none.
+  const dog = page.locator('.stage .logo');
+  await expect(dog).toBeVisible();
+  await expect(dog).toHaveAttribute('data-treatment', 'circle');
+  await expect(page.locator('.stage img')).toHaveAttribute(
     'src',
-    '/brand/logo-black-transparent.svg',
+    '/brand/mark-black-transparent.svg',
   );
   await expectPhoneSafe(page, 'the selected logo on a portrait login');
 });
