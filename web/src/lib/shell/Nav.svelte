@@ -214,7 +214,7 @@
     height: 100vh;
     padding: var(--z-space-3);
     border-right: var(--z-border-width) solid var(--z-border);
-    background: var(--z-surface);
+    background: var(--z-surface-sunken);
     z-index: var(--z-layer-nav);
     transition: width var(--z-motion-base) var(--z-ease);
   }
@@ -338,10 +338,17 @@
     background: var(--z-surface-hover);
     color: var(--z-text);
   }
+  /* The page you are on is raised off the column and carries the brand's rail,
+     and it is bold: the rail is for the eye, and the weight is for anyone it
+     does not reach. */
   a.current,
   .more.current {
-    background: var(--z-accent-subtle);
-    color: var(--z-accent);
+    background: var(--z-surface-raised);
+    box-shadow:
+      inset var(--z-border-width-thick) 0 0 var(--z-brand-runner-blue),
+      var(--z-shadow-sm);
+    color: var(--z-text);
+    font-weight: var(--z-weight-semibold);
   }
   .label {
     flex: 1;
@@ -435,6 +442,11 @@
       collapsed sidebar uses. Five entries fit their names across a phone,
       and a named target is one an operator can hit without learning a glyph.
     */
+    /* A bar has no side to put a rail on: the rail goes along the top. */
+    .phone a.current,
+    .phone .more.current {
+      box-shadow: inset 0 var(--z-border-width-thick) 0 var(--z-brand-runner-blue);
+    }
     .phone .label {
       flex: none;
       max-width: 100%;

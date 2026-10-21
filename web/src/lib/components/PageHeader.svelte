@@ -12,6 +12,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { ChevronRight } from '@lucide/svelte';
+  import { router } from '../router';
+  import { SECTIONS, isCurrentSection } from '../shell/sections';
   import type { RefreshHandler } from '../state/refresh.svelte';
   import RefreshButton from './RefreshButton.svelte';
 
@@ -47,6 +49,14 @@
     children,
     class: className = '',
   }: Props = $props();
+
+  /**
+   * The sidebar's heading for the page this is, so a page says where it lives
+   * above its own name as the portal's do. It is drawn from a data attribute and
+   * not written into the page, so it is neither a second heading nor a string the
+   * page's own text can collide with. The Overview stands alone and has none.
+   */
+  const section = $derived(SECTIONS.find((s) => isCurrentSection(s.path, router.pathname))?.group);
 </script>
 
 <header class="page-header {className}">
@@ -66,8 +76,9 @@
     </nav>
   {/if}
   <div class="row">
-    <div class="titles">
+    <div class="titles" data-eyebrow={section}>
       <h1 id="page-heading" tabindex="-1">{title}</h1>
+      <div class="rule" aria-hidden="true"></div>
       {#if subtitle}<p class="subtitle">{subtitle}</p>{/if}
       {#if meta}<div class="meta">{@render meta()}</div>{/if}
     </div>
@@ -127,13 +138,31 @@
   .titles {
     min-width: 0;
   }
+  .titles[data-eyebrow]::before {
+    content: attr(data-eyebrow);
+    display: block;
+    margin-bottom: var(--z-space-2);
+    font-size: var(--z-text-2xs);
+    font-weight: var(--z-weight-semibold);
+    letter-spacing: var(--z-tracking-wider);
+    text-transform: uppercase;
+    color: var(--z-text-muted);
+  }
   h1 {
     margin: 0;
-    font-size: var(--z-text-xl);
-    line-height: var(--z-leading-xl);
-    font-weight: var(--z-weight-bold);
+    font-size: var(--z-text-2xl);
+    line-height: var(--z-leading-2xl);
+    font-weight: var(--z-weight-medium);
+    letter-spacing: var(--z-tracking-tight);
     color: var(--z-text);
     overflow-wrap: anywhere;
+  }
+  /* The brand's blue, short, under the name: the same mark the stage carries. */
+  .rule {
+    width: var(--z-space-10);
+    height: var(--z-border-width-thick);
+    margin-top: var(--z-space-3);
+    background: var(--z-brand-runner-blue);
   }
   /*
     Route navigation moves focus here so a keyboard user lands on the page name
@@ -150,7 +179,7 @@
     outline: none;
   }
   .subtitle {
-    margin: var(--z-space-1) 0 0;
+    margin: var(--z-space-3) 0 0;
     max-width: var(--z-measure-prose);
     font-size: var(--z-text-base);
     line-height: var(--z-leading-base);
@@ -180,6 +209,10 @@
   @media (max-width: 768px) {
     .actions {
       width: 100%;
+    }
+    h1 {
+      font-size: var(--z-text-xl);
+      line-height: var(--z-leading-xl);
     }
   }
 </style>

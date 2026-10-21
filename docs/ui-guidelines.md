@@ -651,6 +651,21 @@ it is handed the same three thumb tokens through its theme.
 
 ## 2. Information architecture
 
+**The look of a signed-in page** is the public pages' look carried inside the
+shell. The sidebar is a sunken column and the page you are on is raised off it
+with the brand's blue rail (a bar along the top on a phone) and a bold label, so
+the rail is for the eye and the weight is for anyone it does not reach. Every
+page header names its section above the title (the sidebar's own heading, drawn
+from a data attribute so it is never a second heading or a string a page's text
+can collide with), sets the title in the medium weight, and puts a short blue
+rule under it; the Overview, which stands alone, has no section to name. Panels
+are raised cards with the extra-large radius. The Overview opens with a slim
+band, Zoomies Black in both themes, that answers "is anything wrong" in one
+sentence (counts by severity, never a problem's own words) and has no status
+colour in it; it is a band and not the public pages' tall stage because the
+pools must stay on the first screen. The wrong-address page uses the full band
+with the dog.
+
 Persistent left navigation, collapsible to icons only (persisted). Order is
 fixed, because muscle memory is the point:
 
