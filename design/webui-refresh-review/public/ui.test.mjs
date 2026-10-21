@@ -4,7 +4,7 @@
 // never told about, and text that was meant as data being written as markup.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { button, callout, esc, field, iconButton, logo } from './ui.js';
+import { button, callout, esc, field, iconButton, logo, radioGroup } from './ui.js';
 
 test('esc() makes markup inert', () => {
   assert.equal(esc('<img src=x onerror="a&b">\''), '&lt;img src=x onerror=&quot;a&amp;b&quot;&gt;&#39;');
@@ -117,4 +117,36 @@ test('logo(): with no label it is decorative', () => {
   const html = logo({ variant: 'mark', size: 72, label: '' });
   assert.match(html, /aria-hidden="true"/);
   assert.doesNotMatch(html, /role="img"/);
+});
+
+const ROLES = [
+  { value: 'viewer', label: 'Viewer', description: 'Read jobs, runners, pools, hosts, problems and runner logs.' },
+  { value: 'operator', label: 'Operator', description: 'Also re-run a failed job and drain an idle runner.' },
+];
+
+test('radioGroup(): a fieldset with a legend, and each label wraps its radio so it has a name', () => {
+  const html = radioGroup({ name: 'role', legend: 'What it may do', options: ROLES, value: 'viewer' });
+  assert.match(html, /^<fieldset class="m-radios"><legend class="m-label">What it may do<\/legend>/);
+  const labels = html.match(/<label class="m-radio">.*?<\/label>/g);
+  assert.equal(labels.length, 2);
+  for (const label of labels) assert.match(label, /<input type="radio" name="role"/);
+});
+
+test('radioGroup(): only the chosen value is checked', () => {
+  const html = radioGroup({ name: 'role', legend: 'x', options: ROLES, value: 'operator' });
+  assert.match(html, /value="operator" checked/);
+  assert.doesNotMatch(html, /value="viewer" checked/);
+});
+
+test('radioGroup(): a description is inside its label, so it is read with the name', () => {
+  const html = radioGroup({ name: 'role', legend: 'x', options: ROLES, value: 'viewer' });
+  assert.match(html, /<span class="m-radio-label">Viewer<\/span><span class="m-radio-desc">Read jobs, runners/);
+});
+
+test('radioGroup(): labels, descriptions and values are data, never markup', () => {
+  const html = radioGroup({
+    name: 'r', legend: '<i>x</i>',
+    options: [{ value: '"><script>', label: '<b>L</b>', description: '<img src=x onerror=1>' }],
+  });
+  assert.doesNotMatch(html, /<script|<b>|<i>|<img/);
 });

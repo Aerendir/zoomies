@@ -163,3 +163,99 @@
     display: block;
   }
 }
+
+/*
+ * Connect an app, concept B: in the frame sign in and first account share. The
+ * role is two cards that say what each allows, what the app can never do is its
+ * own short list, and on a phone the buttons stay at the bottom of the screen.
+ */
+.s-ca-b h1 {
+  overflow-wrap: anywhere;
+}
+.s-ca-b .cb-from {
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+  text-align: center;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.s-ca-b .cb-from strong {
+  color: var(--z-text);
+}
+.s-ca-b .cb-where {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--z-space-2);
+  vertical-align: middle;
+  color: var(--z-text);
+}
+.s-ca-b .m-radio {
+  padding: var(--z-space-4);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface);
+}
+.s-ca-b .m-radio:has(input:checked) {
+  border-color: var(--z-accent);
+  background: var(--z-accent-subtle);
+}
+.s-ca-b .cb-never {
+  padding: var(--z-space-4);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+}
+.s-ca-b .cb-never-title {
+  margin-bottom: var(--z-space-2);
+  font-size: var(--z-text-xs);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-wide);
+  text-transform: uppercase;
+  color: var(--z-text-muted);
+}
+.s-ca-b .cb-never ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-ca-b .cb-never li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+}
+.s-ca-b .cb-never .icon {
+  margin-top: var(--z-nudge-3);
+  color: var(--z-text-subtle);
+}
+.s-ca-b .cb-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--z-space-3);
+}
+@media (max-width: 768px) {
+  /* Stuck to the bottom of the screen while the card is taller than it, and
+     resting at the card's foot when it is not. The page scrolls a focused field
+     clear of the bar, so the bar never covers what a person is typing in. */
+  .s-ca-b .cb-actions:not(.cb-actions--plain) {
+    position: sticky;
+    bottom: 0;
+    margin: 0 calc(-1 * var(--z-space-5)) calc(-1 * var(--z-space-5));
+    padding: var(--z-space-3) var(--z-space-5);
+    border-top: var(--z-border-width) solid var(--z-border);
+    border-radius: 0 0 var(--z-radius-lg) var(--z-radius-lg);
+    background: var(--z-surface);
+  }
+  .s-ca-b .cb-actions .m-btn {
+    flex: 1;
+  }
+  :root[data-concept='b']:has(.s-ca-b) {
+    scroll-padding-bottom: 6rem;
+  }
+}

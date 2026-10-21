@@ -215,3 +215,129 @@
     display: block;
   }
 }
+
+/*
+ * Connect an app, concept C: the connection drawn as two ends, with the
+ * address the app sends you back to as the checked destination. The diagram is
+ * decoration of what the text beside it already says, so it is hidden from a
+ * screen reader.
+ */
+.s-ca-c .c-hero {
+  gap: var(--z-space-5);
+}
+.s-ca-c .cc-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  margin: 0;
+  color: var(--z-panel-text);
+}
+.s-ca-c .cc-ends {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-3);
+}
+.s-ca-c .cc-node {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  min-width: 0;
+  padding: var(--z-space-4) var(--z-space-5);
+  border: var(--z-border-width) solid var(--z-gate-edge);
+  border-radius: var(--z-radius-md);
+  background: var(--z-panel-raised);
+  color: var(--z-panel-text);
+}
+.s-ca-c .cc-node--client {
+  max-width: 16rem;
+  font-size: var(--z-text-lg);
+  font-weight: var(--z-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-link {
+  flex: none;
+  fill: none;
+  stroke: var(--z-panel-text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.s-ca-c .cc-dest {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-panel-text-muted);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-dest .icon {
+  margin-top: var(--z-nudge-2);
+}
+.s-ca-c .c-lede strong {
+  color: var(--z-panel-text);
+  font-weight: var(--z-weight-medium);
+}
+.s-ca-c .c-panel h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-back {
+  font-size: var(--z-text-sm);
+  color: var(--z-text-muted);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-local {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-2);
+  padding: var(--z-space-3);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface-sunken);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+}
+.s-ca-c .cc-local .icon {
+  margin-top: var(--z-nudge-3);
+}
+.s-ca-c .cc-hero-line {
+  max-width: 18rem;
+}
+@media (max-width: 900px) {
+  /* The toggle gets its own row, and the two ends share what is left: the link
+     shrinks to an arrow so the app's name is never squeezed into a column. */
+  .s-ca-c .c-hero {
+    padding-top: var(--z-space-8);
+  }
+  .s-ca-c .cc-ends {
+    justify-content: center;
+    gap: var(--z-space-2);
+  }
+  .s-ca-c .cc-node {
+    padding: var(--z-space-3);
+  }
+  .s-ca-c .cc-node--client {
+    flex: 1 1 8rem;
+    min-width: 8rem;
+    font-size: var(--z-text-base);
+  }
+  .s-ca-c .cc-link {
+    width: var(--z-space-10);
+  }
+  .s-ca-c .cc-dest {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* A long name is a long name, and the heading already carries all of it: the
+   diagram's node shows the first few lines, so it cannot push the form away. */
+.s-ca-c .cc-node--client .m-host {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}

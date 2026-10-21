@@ -29,15 +29,20 @@ body {
 }
 .review-controls {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   gap: var(--z-space-3);
+  min-width: 0;
 }
 .review-control {
   display: flex;
+  flex: 1 1 9rem;
   flex-direction: column;
   gap: var(--z-nudge-2);
+  min-width: 0;
 }
 .review-control select {
+  width: 100%;
   min-height: var(--z-space-8);
   padding: 0 var(--z-space-2);
   border: var(--z-border-width) solid var(--z-border-strong);

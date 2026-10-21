@@ -65,3 +65,27 @@ is from `current-measurements.json`.
   field. It still ends inside the fold, and a test holds it there.
 * B and C use the product's 48px touch fields, where A keeps today's 32px ones,
   which is most of why their phone pages are longer.
+
+## What the connect an app concepts change, measured
+
+The bottom edge of the Allow button, in pixels from the top of the page, in
+Mission Control dark at 1440x900 and 375x812. Today's page is from
+`current-measurements.json`. The fold is 900px on a desktop and 812px on a phone.
+
+| | Normal, 1440 | With the warning, 1440 | Normal, 375 |
+| --- | --- | --- | --- |
+| Today | 820 | 905 (below the fold) | 963 (below the fold) |
+| A, the same card | 769 | 873 | 949 (below the fold) |
+| B, role cards | 732 | 818 | pinned to the screen's bottom edge |
+| C, a diagram | 576 | 657 | 749 |
+
+* All three put Allow inside the fold on a desktop, with or without the warning.
+  Tests hold that.
+* A's first version put Allow at 995px with the warning, worse than today, and
+  the fix was to drop a decorative icon, merge two notes into one and position
+  the appearance toggle, which had been taking a row of its own.
+* On a phone only B and C keep Allow in reach: B pins the buttons, and C's page
+  is the shortest. A is a tidy card, and a card this long scrolls.
+* How the warning about this computer should sound stays a question. A keeps the
+  danger colour with fewer words, B uses a neutral note with the laptop icon,
+  and C labels the address in its diagram as this computer with no alarm colour.

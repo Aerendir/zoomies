@@ -144,3 +144,20 @@ export function callout({ tone = 'neutral', icon: name, html, role }) {
     `${name ? icon(name, 15) : ''}<div class="m-callout-body">${html}</div></div>`
   );
 }
+
+/**
+ * A group of radios. Each label wraps its input, so the label is the name, and
+ * the description inside it is read with it. The legend names the group.
+ */
+export function radioGroup({ name, legend, options, value }) {
+  const items = options
+    .map(
+      (option) =>
+        `<label class="m-radio"><input type="radio" name="${esc(name)}" value="${esc(option.value)}"` +
+        `${option.value === value ? ' checked' : ''}><span class="m-radio-text">` +
+        `<span class="m-radio-label">${esc(option.label)}</span>` +
+        `${option.description ? `<span class="m-radio-desc">${esc(option.description)}</span>` : ''}</span></label>`,
+    )
+    .join('');
+  return `<fieldset class="m-radios"><legend class="m-label">${esc(legend)}</legend>${items}</fieldset>`;
+}

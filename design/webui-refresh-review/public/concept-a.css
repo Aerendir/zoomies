@@ -239,7 +239,8 @@
   color: var(--z-text-subtle);
   text-align: center;
 }
-.s-fa-a .fa-appearance {
+.s-fa-a .fa-appearance,
+.s-ca-a .fa-appearance {
   position: absolute;
   top: var(--z-space-4);
   right: var(--z-space-4);
@@ -249,6 +250,98 @@
     padding-top: var(--z-space-4);
   }
   .s-fa-a .fa-card {
+    padding: var(--z-space-5);
+  }
+}
+
+/*
+ * Connect an app, concept A: the same card. Where the app sends you and the
+ * warning about that address are one summary, the warning is shorter, and the
+ * primary action names the app it is allowing.
+ */
+.s-ca-a {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-5);
+  min-height: 100%;
+  padding: var(--z-space-8) var(--z-space-4);
+  background: var(--z-bg);
+}
+.s-ca-a .ca-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  max-width: var(--z-width-dialog-md);
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-shadow-md);
+}
+.s-ca-a .ca-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--z-space-10);
+  height: var(--z-space-10);
+  border-radius: var(--z-radius-full);
+  background: var(--z-accent-subtle);
+  color: var(--z-accent);
+}
+.s-ca-a h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  font-weight: var(--z-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.s-ca-a .ca-lede {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  color: var(--z-text-muted);
+}
+.s-ca-a .ca-lede strong {
+  color: var(--z-text);
+  font-weight: var(--z-weight-medium);
+}
+.s-ca-a .ca-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  padding: var(--z-space-4);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface-sunken);
+}
+.s-ca-a .ca-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  margin: 0;
+}
+.s-ca-a .ca-facts dt {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-medium);
+  letter-spacing: var(--z-tracking-wide);
+  text-transform: uppercase;
+  color: var(--z-text-muted);
+}
+.s-ca-a .ca-facts dd {
+  margin: var(--z-space-1) 0 0;
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  overflow-wrap: anywhere;
+}
+.s-ca-a .ca-host {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-medium);
+}
+@media (max-width: 768px) {
+  .s-ca-a {
+    padding-top: var(--z-space-6);
+  }
+  .s-ca-a .ca-card {
     padding: var(--z-space-5);
   }
 }

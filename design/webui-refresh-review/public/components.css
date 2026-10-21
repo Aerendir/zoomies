@@ -689,3 +689,98 @@ p {
 .m-form-page .m-install-panel .m-btn {
   min-height: var(--z-space-8);
 }
+
+/* Radios, as RadioGroup draws them: the browser's own control in the accent. */
+.m-radios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.m-radios legend {
+  padding: 0;
+  margin-bottom: var(--z-space-2);
+}
+.m-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-3);
+  cursor: pointer;
+}
+.m-radio input {
+  flex: none;
+  width: var(--z-control-box);
+  height: var(--z-control-box);
+  margin: var(--z-nudge-2) 0 0;
+  accent-color: var(--z-accent);
+}
+.m-radio-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-nudge-2);
+  min-width: 0;
+}
+.m-radio-label {
+  font-size: var(--z-text-base);
+  color: var(--z-text);
+  overflow-wrap: anywhere;
+}
+.m-radio-desc {
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-text-muted);
+}
+
+/* A loading state is shapes where the words will be, and never moves. */
+.m-skeleton-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+}
+.m-skeleton {
+  display: block;
+  border-radius: var(--z-radius-sm);
+  background: var(--z-surface-sunken);
+}
+.m-skeleton--title {
+  width: 60%;
+  height: var(--z-leading-xl);
+}
+.m-skeleton--line {
+  height: var(--z-space-4);
+}
+.m-skeleton--short {
+  width: 90%;
+}
+.m-skeleton--block {
+  height: 7.5rem;
+}
+
+/* Connect an app: the pieces the three concepts share. The client names itself
+   and the redirect is whatever it registered, so both wrap wherever they must. */
+.ca-client,
+.ca-host {
+  overflow-wrap: anywhere;
+}
+.ca-muted {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  color: var(--z-text-muted);
+}
+.ca-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--z-space-3);
+  margin-top: var(--z-space-2);
+}
+@media (max-width: 768px) {
+  .ca-actions {
+    flex-direction: column-reverse;
+  }
+  .ca-actions > * {
+    width: 100%;
+  }
+}
