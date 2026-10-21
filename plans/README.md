@@ -15,16 +15,40 @@ was not audited) is in [improve.md](improve.md).
 | [003](003-process-log-pruning-tests.md) | Test the process backend's log bounding, which nothing covers today | P1 | S | none | DONE (merged, PR #1188) |
 | [004](004-runner-detail-fleet-reads.md) | Read one runner's detail without re-reading the whole fleet | P2 | M | none | DONE (merged, PR #1188) |
 | [005](005-log-relay-edges.md) | Make the log relay's edges honest: races, drops, empty downloads, late tails | P2 | M | none (before 009) | DONE (merged, PR #1204) |
-| [006](006-mcp-response-budgets.md) | Give the MCP and assistant tool paths a per-caller budget | P2 | M | none | TODO |
-| [007](007-architecture-docs-subsystems.md) | Put the newer subsystems into architecture.md, and hold them there | P3 | S-M | none | TODO (refreshed against 52e30381) |
-| [008](008-tailscale-channel-policy.md) | Record the tailscale.com pin's channel policy, where the pin is defended | P3 | S | none | TODO |
-| [009](009-controller-package-split.md) | Extract the Kennel Club loop from the controller package, as the first seam | P3 | L | after 004, 005 | TODO (refreshed against 52e30381) |
-| [010](010-sse-identity-tick.md) | Resolve the stream's narrowing identity per heartbeat, not per frame | P3 | S | after 005 (same file) | TODO |
+| [006](006-mcp-response-budgets.md) | Give the MCP and assistant tool paths a per-caller budget | P2 | M | none | DONE (merged, PR #1206) |
+| [007](007-architecture-docs-subsystems.md) | Put the newer subsystems into architecture.md, and hold them there | P3 | S-M | none | DONE (merged, PR #1209) |
+| [008](008-tailscale-channel-policy.md) | Record the tailscale.com pin's channel policy, where the pin is defended | P3 | S | none | DONE (merged, PR #1210) |
+| [009](009-controller-package-split.md) | Extract the Kennel Club loop from the controller package, as the first seam | P3 | L | after 004, 005 | OPEN (not executed: the one large refactor, and the owner's call) |
+| [010](010-sse-identity-tick.md) | Resolve the stream's narrowing identity per heartbeat, not per frame | P3 | S | after 005 (same file) | DONE (merged, PR #1208) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale).
 
-## Where this stands (2026-10-21, main at 52e30381)
+## Where this stands (2026-10-21, after PRs #1188, #1203, #1204, #1205, #1206, #1208, #1209 and #1210)
+
+Nine of the ten findings are closed and merged. Plan 009, the controller
+package split, is deliberately open: it is the one change of a size that
+belongs to the owner's order of work rather than to a plan.
+
+- 001 to 004: PR #1188, merge commit 41518de2.
+- 005: PR #1204, merge commit 706b0ac1. The relay's four edges are closed.
+  The executor found one thing wrong in the inherited work and fixed it: the
+  merge that hands a late viewer's tail over before the live output was
+  picking between the two at random when both were ready.
+- 006: PR #1206, merge commit a55c7379. The MCP and assistant tool paths
+  have a per-caller budget, and the map of held answers cannot grow.
+- 007: PR #1209, merge commit 136a7448. architecture.md names the ten
+  missing subsystems and a test holds them there. Three of the drafted
+  sentences were wrong and were corrected from the code.
+- 008: PR #1210, merge commit ae820187. The tailscale pin's channel policy
+  is written down, in the doc and beside the version, and a test holds it.
+- 010: PR #1208, merge commit 6de99c55. The stream's narrowing identity
+  rides the heartbeat tick, except for the pool frame, which carries
+  credentials and keeps its per-frame resolution because the repository
+  holds a demoted watcher to the current role for it
+  (TestPoolEventsFollowTheWatchersCurrentRole).
+
+### The earlier snapshot (2026-10-21, main at 52e30381)
 
 - 001 to 004 are merged: PR #1188, merge commit 41518de2. Their fixes are
   still in main and still where the plans put them (the heartbeat guard
