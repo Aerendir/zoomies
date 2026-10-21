@@ -100,12 +100,12 @@
     flex: none;
     width: var(--z-space-16);
   }
+  /* A phone stacks everything and the pools must still be on its first screen
+     (calm-overview.spec holds the line at 800px), which even a single line of
+     band costs. The line under the page's controls already says whether anything
+     needs a person, so the band is for the screens that have room for both. */
   @media (max-width: 768px) {
     .band {
-      flex-wrap: wrap;
-      padding: var(--z-space-4);
-    }
-    .art {
       display: none;
     }
   }

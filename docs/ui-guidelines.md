@@ -664,8 +664,8 @@ text colours are only guaranteed to read on it, and a raised one costs the
 gallery's contrast check in dark. The Overview opens with a slim
 band, Zoomies Black in both themes, that answers "is anything wrong" in one
 sentence (counts by severity, never a problem's own words) and has no status
-colour in it; it is a band and not the public pages' tall stage because the
-pools must stay on the first screen. The wrong-address page uses the full band
+colour in it; it is a band and not the public pages' tall stage, and it is left out on a
+phone, because the pools must stay on the first screen. The wrong-address page uses the full band
 with the dog.
 
 Persistent left navigation, collapsible to icons only (persisted). Order is
