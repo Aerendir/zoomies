@@ -900,3 +900,52 @@
     min-height: var(--z-control-touch);
   }
 }
+
+/* ---- a step the person is on, and the ones behind them ---- */
+.k-step[aria-current='step'] .k-numeral {
+  -webkit-text-stroke-color: var(--z-text);
+}
+.k-step[aria-current='step'] .k-step-title {
+  font-weight: var(--z-weight-bold);
+}
+.k-step.is-done .k-numeral {
+  color: var(--z-text-muted);
+}
+.k-wizard {
+  display: grid;
+  gap: var(--z-space-6);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: start;
+}
+.k-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-5);
+}
+.k-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--z-space-2);
+  justify-content: flex-end;
+}
+.k-savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--z-space-3);
+  padding: var(--z-space-3) var(--z-space-4);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface-raised);
+}
+@media (max-width: 800px) {
+  .k-wizard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* A field a thumb has to hit is the touch size, at any width: a form is where a
+   missed tap costs the most. */
+.k-form .m-input {
+  min-height: var(--z-control-touch);
+}

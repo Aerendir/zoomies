@@ -1,4 +1,4 @@
-// The list pages (Runners, Queue, Jobs, Workflows, Pools, Hosts, Providers) and
+// The list pages (Runners, Queue, Jobs, Workflows, Pools, Hosts, Providers, Installations, Audit) and
 // the cases a table has to survive: a 300-character name, a 120-character label, a phone,
 // and a list that is loading, empty, failed, or showing rows from before a
 // failed refresh.
@@ -8,7 +8,7 @@ import { launch } from '../tools/lib/browser.mjs';
 import { serve } from '../tools/serve.mjs';
 import { FLEET } from './fixture.js';
 
-const PAGES = ['runners', 'queue', 'jobs', 'workflows', 'pools', 'hosts', 'providers'];
+const PAGES = ['runners', 'queue', 'jobs', 'workflows', 'pools', 'hosts', 'providers', 'installations', 'audit'];
 let browser;
 let server;
 before(async () => {

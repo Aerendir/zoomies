@@ -19,6 +19,13 @@ import repairs from './repairs.js';
 import aiContext from './ai-context.js';
 import usage from './usage.js';
 import comparisons from './comparisons.js';
+import installations from './installations.js';
+import migrate from './migrate.js';
+import audit from './audit.js';
+import settings from './settings.js';
+import poolNew from './pool-new.js';
+import hostNew from './host-new.js';
+import providerNew from './provider-new.js';
 
 export const CONCEPTS = ['current', 'a'];
 export const LABELS = { concept: { a: 'Portal style' } };
@@ -40,4 +47,11 @@ export const SCREENS = [
   kennel,
   repairs,
   aiContext,
+  installations,
+  migrate,
+  audit,
+  settings,
+  poolNew,
+  hostNew,
+  providerNew,
 ];

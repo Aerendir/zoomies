@@ -122,13 +122,13 @@ export function stage({ eyebrow, headline, accent, lede, html = '', art = true }
 }
 
 /** Numbered steps, as the portal's outlined 01 02 03. */
-export function steps(items) {
+export function steps(items, current = -1) {
   return (
     `<ol class="k-steps">` +
     items
       .map(
         (item, i) =>
-          `<li class="k-step"><span class="k-numeral" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>` +
+          `<li class="k-step${i < current ? ' is-done' : ''}"${i === current ? ' aria-current="step"' : ''}><span class="k-numeral" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>` +
           `<div><h3 class="k-step-title">${esc(item.title)}</h3><p class="k-step-text">${esc(item.text)}</p></div></li>`,
       )
       .join('') +

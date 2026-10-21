@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-21T17:13:42.957Z",
+  "generated": "2026-10-21T17:36:01.257Z",
   "widths": [
     320,
     375,
@@ -7,12 +7,30 @@
   ],
   "screens": [
     "overview",
+    "pools",
+    "pool-detail",
     "runners",
+    "runner-detail",
     "queue",
     "workflows",
-    "jobs"
+    "jobs",
+    "hosts",
+    "host-detail",
+    "providers",
+    "usage",
+    "comparisons",
+    "kennel",
+    "repairs",
+    "ai-context",
+    "installations",
+    "migrate",
+    "audit",
+    "settings",
+    "pool-new",
+    "host-new",
+    "provider-new"
   ],
-  "combinations": 324,
+  "combinations": 1392,
   "findings": [],
   "known": [
     {
