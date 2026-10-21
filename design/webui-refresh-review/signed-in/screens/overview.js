@@ -8,6 +8,7 @@
 // Every number is computed from the fixture by fleetCounts, so this page and
 // the pages it links to cannot disagree.
 import { button, esc } from '/review/ui.js';
+import { poolState } from './derive.js';
 import { icon } from '/review/icons.js';
 import { FLEET, fleetCounts } from '/signed-in/fixture.js';
 import {
@@ -54,15 +55,6 @@ function healthy(fleet) {
     jobs: fleet.jobs.filter((j) => poolIds.has(j.pool_id)),
     problems: [],
   };
-}
-
-function poolState(pool, fleet) {
-  const installation = fleet.installations.find((i) => i.id === pool.installation_id);
-  if (installation && !installation.healthy) return { state: 'danger', label: 'Disconnected' };
-  const counts = fleetCounts(fleet).pools[pool.id];
-  if (counts.queued > 0 && pool.counts.idle === 0) return { state: 'pending', label: 'Waiting for a runner' };
-  if (pool.counts.busy > 0) return { state: 'busy', label: 'Working' };
-  return { state: 'idle', label: 'Ready' };
 }
 
 function poolCard(pool, fleet) {

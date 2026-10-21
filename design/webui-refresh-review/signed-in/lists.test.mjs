@@ -1,5 +1,5 @@
-// The four monitoring pages (Runners, Queue, Jobs, Workflows) and the cases a
-// table has to survive: a 300-character name, a 120-character label, a phone,
+// The list pages (Runners, Queue, Jobs, Workflows, Pools, Hosts, Providers) and
+// the cases a table has to survive: a 300-character name, a 120-character label, a phone,
 // and a list that is loading, empty, failed, or showing rows from before a
 // failed refresh.
 import { test, before, after } from 'node:test';
@@ -8,7 +8,7 @@ import { launch } from '../tools/lib/browser.mjs';
 import { serve } from '../tools/serve.mjs';
 import { FLEET } from './fixture.js';
 
-const PAGES = ['runners', 'queue', 'jobs', 'workflows'];
+const PAGES = ['runners', 'queue', 'jobs', 'workflows', 'pools', 'hosts', 'providers'];
 let browser;
 let server;
 before(async () => {

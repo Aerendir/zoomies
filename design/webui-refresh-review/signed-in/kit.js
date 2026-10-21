@@ -160,6 +160,11 @@ export function checklist({ title = 'Your next step', items }) {
   });
 }
 
+/** Name and value pairs, two to a row. A value is trusted markup, so a caller escapes data. */
+export function facts(pairs) {
+  return `<dl class="k-facts">${pairs.map(([name, value]) => `<div><dt>${esc(name)}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
+}
+
 /* ---- the four states of a list ---- */
 
 /** Placeholder blocks while the first fetch is out. Still, for anyone who asks for less motion. */
