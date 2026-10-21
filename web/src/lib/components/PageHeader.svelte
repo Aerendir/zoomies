@@ -161,7 +161,7 @@
   .rule {
     width: var(--z-space-10);
     height: var(--z-border-width-thick);
-    margin-top: var(--z-space-3);
+    margin-top: var(--z-space-2);
     background: var(--z-brand-runner-blue);
   }
   /*
@@ -179,7 +179,7 @@
     outline: none;
   }
   .subtitle {
-    margin: var(--z-space-3) 0 0;
+    margin: var(--z-space-2) 0 0;
     max-width: var(--z-measure-prose);
     font-size: var(--z-text-base);
     line-height: var(--z-leading-base);
