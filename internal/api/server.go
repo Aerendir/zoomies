@@ -96,6 +96,11 @@ type Server struct {
 	handler   http.Handler
 	private   privateConnections
 	transfers transferUploads
+
+	// inProcessBudget bounds how many route answers one caller may be
+	// holding at once, for the MCP and assistant paths that reach every
+	// route through inProcessAPI. See mcp_budget.go.
+	inProcessBudget inProcessBudget
 }
 
 // cfg is the configuration as it currently stands. It comes from the

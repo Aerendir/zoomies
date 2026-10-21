@@ -236,6 +236,23 @@ func (a inProcessAPI) do(ctx context.Context, method, path string, q url.Values,
 	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", "zoomies-mcp/"+version.Version)
 
+	// Every tool call buffers a whole answer, so a caller that opens many at
+	// once pins that much memory on the process that owns the SQLite writer.
+	// The agent routes refuse this with a 429 before reading a byte; this is
+	// the same refusal for the two model-facing entry points, which reach
+	// every route through here, whether the call arrives over /mcp or
+	// through the assistant's toolbox.
+	key := ""
+	if a.as != nil {
+		key = a.as.String()
+	}
+	if ok, retry := a.s.inProcessBudget.take(key); !ok {
+		a.s.logger(a.from).Warn("in-process call budget exhausted", "identity", key, "retry_after", retry)
+		return nil, &mcpRefusal{status: http.StatusTooManyRequests,
+			message: "this caller already has tool answers being read; wait for one to finish and ask again"}
+	}
+	defer a.s.inProcessBudget.give(key)
+
 	rec := &bufferedResponse{header: http.Header{}, limit: mcpResponseLimit}
 	a.s.handler.ServeHTTP(rec, req)
 	if a.as != nil && a.as.Kind == auth.KindConnection && method != http.MethodGet {
