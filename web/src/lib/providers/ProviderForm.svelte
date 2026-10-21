@@ -64,7 +64,7 @@
   import LabelMapEditor from '$lib/hosts/LabelMapEditor.svelte';
   import { fleet } from '$lib/state/fleet.svelte';
   import { poolMatchesSelector } from './pairing';
-  import { machineSize, recommendLimits } from './recommend';
+  import { machineDiskHint, machineSize, recommendLimits } from './recommend';
   import {
     applyDiscovery,
     applySettingDefaults,
@@ -843,7 +843,11 @@
       />
     {/snippet}
   </Field>
-  <Field label="Disk" error={errors.machine_disk_mb}>
+  <Field
+    label="Disk"
+    error={errors.machine_disk_mb}
+    hint={machineDiskHint(Number(draft.machine_capacity) || 0, Number(draft.machine_disk_mb) || 0)}
+  >
     {#snippet children({ id, describedBy, invalid })}
       <QuantityField
         {id}

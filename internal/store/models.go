@@ -842,8 +842,8 @@ func (h *Host) Supports(feature string) bool {
 // It is what a pool means by asking for no CPU and no memory, and it is the
 // shape a pool has unless somebody chose otherwise. Disk and the pids limit
 // are deliberately not part of the question: neither has a share to be given
-// (free disk is a measurement rather than a budget) so a pool may cap its
-// cache's disk and still leave its size to the host.
+// (a runner is charged a fixed working room on disk, not a slot's share) so a
+// pool may cap its cache's disk and still leave its size to the host.
 func (p *Pool) Automatic() bool {
 	return p.Resources.CPUs <= 0 && p.Resources.MemoryMB <= 0
 }

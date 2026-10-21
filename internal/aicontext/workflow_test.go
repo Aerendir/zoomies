@@ -202,7 +202,7 @@ func TestEnterpriseServerGetsAWorkflowItCanRun(t *testing.T) {
 		if err != nil {
 			t.Fatal(destination, err)
 		}
-		for _, absent := range []string{"ubuntu-latest", "upload-artifact@043fb46", "download-artifact@634f93c", "checkout@3d3c42e", "setup-node@8207627", "package-manager-cache"} {
+		for _, absent := range []string{"ubuntu-latest", "upload-artifact@cf430e0", "download-artifact@9000827", "checkout@3d3c42e", "setup-node@949feb2", "package-manager-cache"} {
 			if strings.Contains(workflow, absent) {
 				t.Errorf("%s: Enterprise Server workflow still has %q", destination, absent)
 			}

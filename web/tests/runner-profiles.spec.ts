@@ -97,11 +97,17 @@ test.beforeAll(async ({ browser }) => {
     // otherwise, and this host's recommendation is not the eight runners it
     // joined with. These tests are about the sizes an operator types, so the
     // host is set to be left alone and the capacity the test writes is the one
-    // the dialog and the card speak about.
+    // the dialog and the card speak about. A joined host is healthy from its
+    // first moment, so the pass can land between the join and this request;
+    // the capacity travels with the setting, and the host is read back, so a
+    // pass that got in first is undone rather than left for a spec to find.
     const left = await page.request.patch(`/api/v1/hosts/${hostId}`, {
-      data: { auto_adjust: 'off' },
+      data: { auto_adjust: 'off', capacity: 8 },
     });
     expect(left.ok(), 'the host was set to be left alone').toBeTruthy();
+    const host = (await left.json()) as { capacity: number; auto_adjust: string };
+    expect(host.auto_adjust, 'the host keeps its own capacity').toBe('off');
+    expect(host.capacity, 'the host has the eight slots it was given').toBe(8);
   } finally {
     await page.close();
   }

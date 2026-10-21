@@ -16,12 +16,14 @@ import (
 //
 // It is pure: it reads the host as it stands and the pools it is handed.
 
-// AutoAdjustRunnerDiskMB is the working room a runner is assumed to need on the
-// disk, beside the reserve. Checkouts, caches and the images a job pulls land on
-// the work filesystem, and a host that offers more runners than the disk holds
+// RunnerDiskMB is the working room a runner is assumed to need on the disk,
+// beside the reserve. Checkouts, caches and the images a job pulls land on the
+// work filesystem, and a host that offers more runners than the disk holds
 // fills it and fails jobs part-way through, which is the failure this exists to
 // stop. It is deliberately generous and is not a limit on any single runner.
-const AutoAdjustRunnerDiskMB int64 = 10 * 1024
+// Placement charges it too (Reserve) where a pool types no resources.disk_gb,
+// so the capacity the recommender suggests is the capacity a pass will fill.
+const RunnerDiskMB int64 = 10 * 1024
 
 // RunnerAsk is what one runner asks of a machine: the largest ask across the
 // enabled pools, or the fleet's default where none has said.
@@ -222,7 +224,7 @@ func RecommendHost(h *store.Host, ask RunnerAsk) (HostRecommendation, bool) {
 	// figure follows cores and memory alone, and a host built that way on a
 	// small disk is the one that fills it.
 	if h.DiskTotalMB > 0 {
-		if v := int((h.DiskTotalMB - rec.ReserveDiskMB) / AutoAdjustRunnerDiskMB); v < fit {
+		if v := int((h.DiskTotalMB - rec.ReserveDiskMB) / RunnerDiskMB); v < fit {
 			fit, rec.LimitedBy = v, "disk"
 		}
 	}
