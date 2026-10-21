@@ -46,6 +46,10 @@ const TABLE: Record<string, Guidance> = {
     headline: 'The model provider failed',
     steps: ['Test it in Eli settings, then try again.'],
   },
+  provider_billing: {
+    headline: 'The provider’s account cannot pay for the repair',
+    steps: ['Add credit to the provider’s account, or choose another provider in Eli settings.'],
+  },
   rate_limited: {
     headline: 'The model provider is rate limiting you',
     steps: ['Wait a few minutes, then try again.', 'Check the quota on your provider account.'],

@@ -322,12 +322,15 @@ test('the usage report reads as cards on a phone, with nothing cut off', async (
   // fits either way -- a measured check here would pass whatever the CSS said,
   // and the pools that read alike on a real fleet have longer names than these.
   //
-  // A name only a screen reader sees is not one of these: the tooltip's
-  // description of the row is there to be read aloud, and the recipe that
-  // hides it clips it to a pixel on purpose.
+  // The tooltip's own copy of the name is not one of them. A name carries a
+  // tooltip saying which pool it is, and that sentence is on the page for a
+  // screen reader alone, which is what a screen-reader-only element is: cut to
+  // nothing on purpose. The tooltip marks its own nodes, and the marker is
+  // what says which is which.
   const nowrap = await names.evaluateAll((els) =>
     els
       .flatMap((el) => [el, ...Array.from(el.querySelectorAll<HTMLElement>('*'))])
+      .filter((el) => !el.closest('[data-tip-skip]'))
       .filter((el) => {
         if (el.closest('.sr-only')) return false;
         const style = getComputedStyle(el);

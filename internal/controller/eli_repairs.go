@@ -688,6 +688,21 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		_ = c.persistEliRepair(ctx, r)
 		c.repairNotice(ctx, client, r, r.Message)
 	}
+	// failWith ends the repair with an error the controller did not write, and
+	// keeps the failure code that error carries: a provider that cannot pay is
+	// not the same thing as a provider that could not be reached, and the code
+	// is what the advice on the page is chosen by.
+	failWith := func(err error) {
+		r.State = "failed"
+		r.Message = prrepair.Redact(err.Error())
+		r.Details.FailureCode = repairFailureCode(r.Message)
+		var coded interface{ RepairFailureCode() string }
+		if errors.As(err, &coded) && coded.RepairFailureCode() != "" {
+			r.Details.FailureCode = coded.RepairFailureCode()
+		}
+		_ = c.persistEliRepair(ctx, r)
+		c.repairNotice(ctx, client, r, r.Message)
+	}
 	var pull github.RepairPull
 	if r.Trigger == "automatic" {
 		pull, err = client.RepairPullForRun(ctx, r.Repo, r.RunID)
@@ -814,7 +829,7 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		_ = c.persistEliRepair(ctx, r)
 	}}, source, source.Snapshot, r.Instruction, policy.AllowWorkflows)
 	if err != nil {
-		fail(err.Error())
+		failWith(err)
 		return
 	}
 	// Re-read both authorisation and credentials after the model's work, before the first repository write.
@@ -1041,6 +1056,8 @@ func repairFailureCode(message string) string {
 	// name such as read_file would otherwise read as a source failure.
 	case strings.Contains(message, "tool call"):
 		return "provider_unavailable"
+	case strings.Contains(message, "cannot pay") || strings.Contains(message, "out of credit"):
+		return "provider_billing"
 	case strings.Contains(message, "rate limit"):
 		return "rate_limited"
 	case strings.Contains(message, "provider credentials"):
@@ -1067,10 +1084,17 @@ func repairFailureCode(message string) string {
 type repairProviderFailure struct {
 	message string
 	status  int
+	// code is the failure the repair records. It is carried rather than read
+	// back out of the words, because the words are the controller's own and a
+	// provider's answer quoted in them would say what it means to say.
+	code string
 }
 
 func (e *repairProviderFailure) Error() string   { return e.message }
 func (e *repairProviderFailure) HTTPStatus() int { return e.status }
+
+// RepairFailureCode is the code the repair records for this failure.
+func (e *repairProviderFailure) RepairFailureCode() string { return e.code }
 
 func repairProviderError(err error) error {
 	var carried interface{ HTTPStatus() int }
@@ -1078,21 +1102,63 @@ func repairProviderError(err error) error {
 	if errors.As(err, &carried) {
 		status = carried.HTTPStatus()
 	}
-	fail := func(message string) error { return &repairProviderFailure{message: message, status: status} }
+	fail := func(message, code string) error {
+		return &repairProviderFailure{message: message, status: status, code: code}
+	}
 	message := strings.ToLower(err.Error())
-	if strings.Contains(message, "context length") || strings.Contains(message, "context window") {
-		return fail("the provider context limit was reached; narrow the investigation or choose a model with more input room")
+	switch {
+	case strings.Contains(message, "context length") || strings.Contains(message, "context window"):
+		return fail("the provider context limit was reached; narrow the investigation or choose a model with more input room", "context_limit")
+	case status == http.StatusPaymentRequired || providerOutOfCredit(message):
+		// A provider with no credit left is not a provider that could not be
+		// reached, and "test its connection" names nothing the person can act
+		// on. The status is kept so the provider's own page can be matched.
+		paid := "the provider's account cannot pay for this repair"
+		if status > 0 {
+			paid += " (HTTP " + strconv.Itoa(status) + ")"
+		}
+		return fail(paid+"; add credit to the provider's account or choose another provider in Eli settings", "provider_billing")
 	}
 	switch status {
 	case 429:
-		return fail("the provider rate limited this repair; check quota or try again later")
+		return fail("the provider rate limited this repair; check quota or try again later", "rate_limited")
 	case 401, 403:
-		return fail("the provider credentials were refused; update or test your provider in Eli settings")
+		return fail("the provider credentials were refused; update or test your provider in Eli settings", "provider_credentials")
 	case 404:
-		return fail("the provider model or endpoint was not found; check your provider settings")
+		return fail("the provider model or endpoint was not found; check your provider settings", "provider_unavailable")
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fail("the provider timed out; try again later")
+		return fail("the provider timed out; try again later", "provider_unavailable")
 	}
-	return fail("the provider could not complete this repair; test its connection in Eli settings")
+	return fail("the provider could not complete this repair; test its connection in Eli settings", "provider_unavailable")
+}
+
+// providerOutOfCredit is whether a provider said it cannot pay: an account
+// with no credit left, a balance too low, or a quota it has already spent.
+// The words differ between providers, so the ones that mean it are listed.
+// A provider that is merely slow says rate limit, and is left to that.
+func providerOutOfCredit(message string) bool {
+	for _, phrase := range []string{
+		"insufficient funds",
+		"insufficient balance",
+		"insufficient credit",
+		"insufficient account funds",
+		"insufficient quota",
+		"insufficient_quota",
+		"out of credit",
+		"out of funds",
+		"not enough funds",
+		"no funds",
+		"credits exhausted",
+		"credit balance is too low",
+		"balance is too low",
+		"payment required",
+		"payment failed",
+		"check your plan and billing",
+	} {
+		if strings.Contains(message, phrase) {
+			return true
+		}
+	}
+	return false
 }
