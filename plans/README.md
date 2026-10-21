@@ -10,19 +10,36 @@ was not audited) is in [improve.md](improve.md).
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| [001](001-heartbeat-nil-guard.md) | Guard a heartbeat against a transport that answers nothing | P1 | S | none | DONE (exec ef8fa46c) |
-| [002](002-bulk-error-funnel.md) | Send bulk runner errors through the same funnel as single ones | P1 | S | none | DONE (exec 215f97f9) |
-| [003](003-process-log-pruning-tests.md) | Test the process backend's log bounding, which nothing covers today | P1 | S | none | DONE (exec 3957e66c) |
-| [004](004-runner-detail-fleet-reads.md) | Read one runner's detail without re-reading the whole fleet | P2 | M | none | DONE (exec bbb6f119) |
-| [005](005-log-relay-edges.md) | Make the log relay's edges honest: races, drops, empty downloads, late tails | P2 | M | none (before 009) | TODO |
+| [001](001-heartbeat-nil-guard.md) | Guard a heartbeat against a transport that answers nothing | P1 | S | none | DONE (merged, PR #1188) |
+| [002](002-bulk-error-funnel.md) | Send bulk runner errors through the same funnel as single ones | P1 | S | none | DONE (merged, PR #1188) |
+| [003](003-process-log-pruning-tests.md) | Test the process backend's log bounding, which nothing covers today | P1 | S | none | DONE (merged, PR #1188) |
+| [004](004-runner-detail-fleet-reads.md) | Read one runner's detail without re-reading the whole fleet | P2 | M | none | DONE (merged, PR #1188) |
+| [005](005-log-relay-edges.md) | Make the log relay's edges honest: races, drops, empty downloads, late tails | P2 | M | none (before 009) | IN PROGRESS (implemented in /tmp/opencode/exec-005, uncommitted: verify, commit, PR) |
 | [006](006-mcp-response-budgets.md) | Give the MCP and assistant tool paths a per-caller budget | P2 | M | none | TODO |
-| [007](007-architecture-docs-subsystems.md) | Put the newer subsystems into architecture.md, and hold them there | P3 | S-M | none | TODO |
+| [007](007-architecture-docs-subsystems.md) | Put the newer subsystems into architecture.md, and hold them there | P3 | S-M | none | TODO (refreshed against 52e30381) |
 | [008](008-tailscale-channel-policy.md) | Record the tailscale.com pin's channel policy, where the pin is defended | P3 | S | none | TODO |
-| [009](009-controller-package-split.md) | Extract the Kennel Club loop from the controller package, as the first seam | P3 | L | after 004, 005 | TODO |
+| [009](009-controller-package-split.md) | Extract the Kennel Club loop from the controller package, as the first seam | P3 | L | after 004, 005 | TODO (refreshed against 52e30381) |
 | [010](010-sse-identity-tick.md) | Resolve the stream's narrowing identity per heartbeat, not per frame | P3 | S | after 005 (same file) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale).
+
+## Where this stands (2026-10-21, main at 52e30381)
+
+- 001 to 004 are merged: PR #1188, merge commit 41518de2. Their fixes are
+  still in main and still where the plans put them (the heartbeat guard
+  sits above the first use of the response, the bulk route no longer
+  answers with the cause, the log-bounding tests are there, and
+  `RunnerViewIn` renders the runner detail).
+- 005 is implemented but uncommitted in `/tmp/opencode/exec-005`; it needs
+  the race suite, a commit and a pull request.
+- 006, 008 and 010 are untouched by anything that landed since they were
+  written; their in-scope files are byte-identical to the commit they were
+  written against.
+- 007 and 009 were refreshed against 52e30381: the findings still hold
+  (all ten subsystems are still missing from architecture.md, and the
+  Kennel Club loop is still in internal/controller), and only the line
+  numbers moved.
 
 ## Dependency notes
 

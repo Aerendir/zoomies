@@ -10,7 +10,7 @@
 > **Drift check (run first)**, in the repo root:
 
 ```
-git diff --stat a0f21dba..HEAD -- docs/architecture.md internal/docs/ mkdocs.yml
+git diff --stat 52e30381..HEAD -- docs/architecture.md internal/docs/ mkdocs.yml
 ```
 
 > If any in-scope file changed since this plan was written, compare the
@@ -24,7 +24,8 @@ git diff --stat a0f21dba..HEAD -- docs/architecture.md internal/docs/ mkdocs.yml
 - **Risk**: LOW (prose plus one pinning test)
 - **Depends on**: none
 - **Category**: docs
-- **Planned at**: commit `a0f21dba`, 2026-10-19
+- **Planned at**: commit `52e30381`, 2026-10-21 (refreshed: the
+  architecture.md line numbers below are the ones on this commit)
 
 ## Why this matters
 
@@ -32,7 +33,7 @@ The root `AGENTS.md` routes every structural change through
 `docs/architecture.md` ("Read docs/architecture.md before changing anything
 structural; it explains the shape and the reasons for it"), but the doc stops
 at the fleet core: its Components table (lines 304-331) and its closing
-sections end at "Verified AI Context snapshots" (line 673), and the packages
+sections end at "Verified AI Context snapshots" (line 701), and the packages
 that arrived since (`internal/optimisation`, `internal/toolscan`,
 `internal/agentguidance`, `internal/prrepair`, the assistant adapters,
 `internal/analysis`, `internal/hosttune`, `internal/catalog`,
@@ -46,8 +47,10 @@ today; the dependencies page is the exemplar of the pinning pattern).
 
 ## Current state
 
-- `docs/architecture.md` (705 lines). The Components table runs lines 306-331
-  and ends with these rows:
+- `docs/architecture.md` (733 lines on commit `52e30381`; it was 705
+  lines when this plan was first written, and grew by a section on jobs
+  GitHub no longer reports). The Components table runs lines 329-357 and
+  ends with these rows (`internal/migrate` is the last row, at line 356):
 
 ```markdown
 	| `internal/controller` | Wiring: the reconcile loop, the machine loop, the automatic pool reconciler, webhook ingest, the agent task queue, the log relay. |
@@ -62,7 +65,7 @@ today; the dependencies page is the exemplar of the pinning pattern).
   The headings after it: "The runner state machine", "The machine state
   machine", "Why the agent connects outbound", "Storage", "Security posture",
   "What this is not", "Private agent connections", "Verified AI Context
-  snapshots" (the last, lines 673-705).
+  snapshots" (the last section, now at line 701; the file ends at line 733).
 - `internal/docs/dependencies_test.go` (lines 1-67) is the pinning-pattern
   exemplar: it reads `docs/dependencies.md` and go.mod and fails when a
   direct module has no row. Note its voice: the comment explains why the doc
@@ -126,7 +129,8 @@ today; the dependencies page is the exemplar of the pinning pattern).
 
 ### Step 1: Verify the drafts against the packages
 
-The rows below were drafted against commit `a0f21dba`. Before adding them,
+The rows below were drafted against commit `a0f21dba` and re-checked against
+`52e30381`. Before adding them,
 read each package's top doc comment or scoped `AGENTS.md`
 (`internal/hosttune/AGENTS.md` exists; the rest are covered by the root
 layout) and confirm the one sentence is still true. Where a draft is wrong,
@@ -134,8 +138,8 @@ correct it from the code, and note the correction in your report.
 
 ### Step 2: Add the rows to the Components table
 
-Append to the table after the `internal/migrate` row (line 331), in this
-order, adjusted per Step 1:
+Append to the table after the `internal/migrate` row (line 356 on commit
+`52e30381`), in this order, adjusted per Step 1:
 
 ```markdown
 | `internal/registry` | What a container registry says a tag points at, so the digest-pinning generators can pin what they build; a hand-rolled client, for the reason the Docker one is. |
@@ -151,7 +155,7 @@ order, adjusted per Step 1:
 ```
 
 Check the two cross-links before adding them: `#verified-ai-context-snapshots`
-(the section exists, line 673) and `host-health.md` (grep
+(the section exists, line 701) and `host-health.md` (grep
 `grep -n 'host-health' mkdocs.yml docs/architecture.md` to confirm the page
 exists and the doc already references it; if the doc already links it
 elsewhere, match that link's form). If a link target does not exist, drop
@@ -163,13 +167,13 @@ rely on the Step 4 test plus review.
 
 ### Step 3: Add one prose section for the model-facing half
 
-After "Verified AI Context snapshots" (the file's last section, ending at
-line 705), add one section, `## The model-facing subsystems and their
+After "Verified AI Context snapshots" (the file's last section, which now
+runs from line 701 to the end of the file at line 733), add one section, `## The model-facing subsystems and their
 bounds`, of two paragraphs, this content corrected per your Step 1 reading:
 
 - Paragraph one: the assistant, PR repair, AI context and optimisation
   subsystems all follow the rule the kennel loop set (its paragraph at
-  architecture.md lines 333-342 is the pattern to point at): each runs
+  architecture.md lines 358-367 is the pattern to point at): each runs
   outside the reconcile lock, in a bounded loop of its own, because model
   work and GitHub reads are slow and nothing about scaling should wait with
   them. Each is bounded at its edges before anything is written: redaction
@@ -265,7 +269,7 @@ Stop and report back (do not improvise) if:
   helpers a structural change is unlikely to touch wrongly).
 - When Plan 009 (if executed) moves a subsystem out of
   `internal/controller`, the `internal/controller` row and the kennel
-  paragraph (architecture.md lines 333-342) are the two places to update in
+  paragraph (architecture.md lines 358-367) are the two places to update in
   the same change; this test will not catch prose drift, only absence.
 - A reviewer should check the two paragraphs of Step 3 hardest: they state
   security posture, and a wrong sentence there is worse than a missing one.
