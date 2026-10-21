@@ -21,13 +21,31 @@ export const WIDTHS = [320, 375, 1440];
 /** Below this a phone is only asked to reflow; the slow rules run from here up. */
 const FULL_CHECK_FROM = 375;
 
-/** The pairs every concept inherits from tokens.css: 4.5 for text, 3 for a control's edge. */
+/**
+ * The pairs every concept inherits from tokens.css: 4.5 for text, 3 for a
+ * control's edge. They are the colours the concepts paint, on the grounds they
+ * paint them on: a hint is `--z-text-subtle` on the card and on a sunken
+ * summary, a primary button is `--z-accent-contrast` on `--z-accent` and on its
+ * hover colour, and a severity label sits on the card as well as on its tint. A
+ * test holds the foregrounds to the CSS, so a new text colour has to arrive here.
+ */
 export const BASE_PAIRS = [
   { fg: '--z-text', bg: '--z-surface', min: 4.5 },
+  { fg: '--z-text', bg: '--z-accent-subtle', min: 4.5 },
   { fg: '--z-text-muted', bg: '--z-surface', min: 4.5 },
+  { fg: '--z-text-muted', bg: '--z-bg', min: 4.5 },
+  { fg: '--z-text-muted', bg: '--z-surface-sunken', min: 4.5 },
+  { fg: '--z-text-subtle', bg: '--z-surface', min: 4.5 },
+  { fg: '--z-text-subtle', bg: '--z-surface-sunken', min: 4.5 },
   { fg: '--z-accent', bg: '--z-surface', min: 4.5 },
+  { fg: '--z-accent', bg: '--z-surface-sunken', min: 4.5 },
+  { fg: '--z-accent-hover', bg: '--z-surface', min: 4.5 },
+  { fg: '--z-accent-contrast', bg: '--z-accent', min: 4.5 },
+  { fg: '--z-accent-contrast', bg: '--z-accent-hover', min: 4.5 },
+  { fg: '--z-danger', bg: '--z-surface', min: 4.5 },
   { fg: '--z-danger', bg: '--z-danger-subtle', min: 4.5 },
   { fg: '--z-idle', bg: '--z-idle-subtle', min: 4.5 },
+  { fg: '--z-pending', bg: '--z-surface', min: 4.5 },
   { fg: '--z-pending', bg: '--z-pending-subtle', min: 4.5 },
   { fg: '--z-border-strong', bg: '--z-surface', min: 3 },
 ];
@@ -187,11 +205,24 @@ export async function checkPage(page, { layoutOnly = false } = {}) {
       const el = document.activeElement;
       if (!el || el === document.body || el === document.documentElement) return null;
       const stage = document.querySelector('#stage') ?? document.body;
-      const style = getComputedStyle(el);
-      const ring =
-        style.outlineStyle === 'auto' ||
-        (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) ||
-        style.boxShadow !== 'none';
+      // A ring on an element at opacity 0, or inside one, is drawn and never
+      // seen. A native radio stretched over its label hides itself this way on
+      // purpose, so the ring that counts is the label's.
+      const opacity = (node) => {
+        let seen = 1;
+        for (let n = node; n && n.nodeType === 1; n = n.parentElement) seen *= parseFloat(getComputedStyle(n).opacity);
+        return seen;
+      };
+      const drawn = (node) => {
+        const style = getComputedStyle(node);
+        return (
+          style.outlineStyle === 'auto' ||
+          (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) ||
+          style.boxShadow !== 'none'
+        );
+      };
+      const owner = opacity(el) > 0 ? el : (el.labels?.[0] ?? el.closest('label'));
+      const ring = Boolean(owner) && opacity(owner) > 0 && drawn(owner);
       const repeated = el.__reviewSeen === true;
       el.__reviewSeen = true;
       return {

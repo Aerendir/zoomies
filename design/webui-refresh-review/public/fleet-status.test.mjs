@@ -48,7 +48,7 @@ const read = (page) =>
       width: box.width,
       drawn: style.stroke !== 'none' || style.fill !== 'none',
       // What differs between the three outlines without a colour to tell them by.
-      signature: `${svg.dataset.shape}|${getComputedStyle(mark).strokeDasharray}|${style.fill === 'none'}`,
+      signature: `${getComputedStyle(mark).strokeDasharray}|${style.fill === 'none'}`,
     };
   });
 

@@ -111,6 +111,14 @@ Every concept uses only tokens that exist today, except C, which needs the new
 ones listed [below](#the-tokens-concept-c-would-add). Each works in both styles,
 in light and dark, and has a phone layout.
 
+Positions below are pixels from the top of the page with the review bar hidden,
+as the product would draw the page and as today's pages were photographed. A page
+that needs no scrolling reads as exactly the window tall, and is said to fit. They
+are written down by `tools/measure.mjs` in
+[concept-measurements.json](concept-measurements.json), and a test holds every
+number in a table row to that file, or to
+[current-measurements.json](current-measurements.json) for Today's.
+
 * **A, evolution.** Keeps each page's structure and fixes its hierarchy, wording
   and spacing, so it is the least risky to ship. It is a tidy version of what is
   there.
@@ -129,9 +137,9 @@ Mission Control dark, in the password-only state:
 | | First input, 1440 | Sign in button's bottom edge, 1440 | First input, 375 | Sign in button's bottom edge, 375 |
 | --- | --- | --- | --- | --- |
 | Today | 352 | 590 | 601 | 839 (below the fold) |
-| A, the split layout | 337 | 571 | 244 | 478 |
-| B, the shared card | 319 | 553 | 291 | 525 |
-| C, a scene | 267 | 501 | 343 | 577 |
+| A, the split layout | 351 | 585 | 309 | 543 |
+| B, the shared card | 356 | 590 | 291 | 525 |
+| C, a scene | 286 | 520 | 351 | 585 |
 
 * **A** keeps the brand panel and the form side by side, and gives a phone one
   compact brand header in place of the 295px black stage. It is the smallest
@@ -145,8 +153,10 @@ Mission Control dark, in the password-only state:
   the screen where people read "controller unreachable" and "rate limited".
 
 **Recommendation: B.** It is the only concept that settles finding 1, the three
-brand treatments, because it gives all three account screens one frame, and it
-does so with less page than today on both a desktop and a phone. A leaves the
+brand treatments, because it gives all three account screens one frame. On a
+phone it brings the button from 839px to 525px, well inside the fold, and on a
+desktop it costs nothing: the button ends at 590px, exactly where today's does,
+and A and C do no better than a few pixels either side of it there. A leaves the
 three pages unlike one another. C is the most memorable, but it spends the most
 and does so on the screen that matters most when something has gone wrong.
 
@@ -165,12 +175,12 @@ The first account is made once, by whoever deployed the controller, and the hard
 part is finding the setup token in a log. Positions are in pixels from the top of
 the page, in Mission Control dark, in the empty state:
 
-| | Setup token field, 1440 | Create button's bottom edge, 1440 | Setup token field, 375 | Create button's bottom edge, 375 |
-| --- | --- | --- | --- | --- |
-| Today | 425 to 457 | 851 | 511 to 543 | 1017 |
-| A, the same card | 362 to 394 | 884 | 364 to 396 | 1004 |
-| B, two columns | 295 to 343 | 821 | 380 to 428 | 926 |
-| C, a rail of steps | 217 to 265 | 839 | 387 to 435 | 1107 |
+| | Setup token field, 1440 | Create button's bottom edge, 1440 | Page, 1440 | Setup token field, 375 | Create button's bottom edge, 375 | Page, 375 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Today | 425 to 457 | 851 | 950 | 511 to 543 | 1017 | 1116 |
+| A, the same card | 362 to 394 | 884 | 1055 | 364 to 396 | 1004 | 1183 |
+| B, two columns | 295 to 343 | 821 | 1082 | 380 to 428 | 926 | 1235 |
+| C, a rail of steps | 217 to 265 | 839 | 984 | 387 to 435 | 1107 | 1346 |
 
 * **A** keeps the card, with a one-sentence introduction, the commands that find
   the token as tabs directly under its field, and the explanation behind a
@@ -180,13 +190,16 @@ the page, in Mission Control dark, in the empty state:
   help into a disclosure above the field on a phone. It uses the product's 48px
   touch fields, as C does, where A keeps today's 32px.
 * **C** adds a rail of what comes after the account, echoing the Overview's
-  checklist, beside the form. Its phone page is the longest, 90px longer than
-  today's.
+  checklist, beside the form. Its phone page is the longest, 1346px against
+  today's 1116px, and its Create button ends 90px lower than today's.
 
 **Recommendation: B.** The token is the one thing a visitor cannot guess, so the
 page should show where it is, beside the field, without a click; B does that and
-is shorter than today on both screens (821px against 851px, and 926px against
-1017px). It also reuses the shared frame from Sign in. A's tabs keep the command
+puts the Create button higher than today on both screens (821px against 851px,
+and 926px against 1017px). Its pages are taller than today's, 1082px against 950px
+and 1235px against 1116px, because B uses the product's 48px touch fields where
+today's are 32px, which is the right size for a phone and not free. It also
+reuses the shared frame from Sign in. A's tabs keep the command
 in view on a phone without a tap, and are worth borrowing if B's disclosure tests
 badly.
 
@@ -200,12 +213,12 @@ Somebody else's app sends a signed-in person here mid-task to say yes or no. The
 bottom edge of the Allow button, in pixels from the top of the page, in Mission
 Control dark, with the fold at 900px on a desktop and 812px on a phone:
 
-| | A request, 1440 | With the loopback warning, 1440 | A request, 375 |
-| --- | --- | --- | --- |
-| Today | 820 | 905 (below the fold) | 963 (below the fold) |
-| A, the same card | 769 | 873 | 949 (below the fold) |
-| B, role cards | 732 | 818 | pinned to the screen's bottom edge |
-| C, a diagram | 576 | 657 | 749 |
+| | A request, 1440 | With the loopback warning, 1440 | A request, 375 | With the warning, 375 |
+| --- | --- | --- | --- | --- |
+| Today | 820 | 905 (below the fold) | 963 (below the fold) | not measured |
+| A, the same card | 769 | 873 | 949 (below the fold) | 1125 (below the fold) |
+| B, role cards | 732 | 818 | pinned to the screen's bottom edge | pinned to the screen's bottom edge |
+| C, a diagram | 596 | 677 | 749 | 907 (below the fold) |
 
 * **A** keeps the card, groups the destination and its warning in one summary,
   shortens the warning, and names the app on the primary button. It keeps the
@@ -219,15 +232,17 @@ Control dark, with the fold at 900px on a desktop and 812px on a phone:
   computer and uses no alarm colour.
 
 All three put Allow inside the fold on a desktop, with and without the warning,
-and a test holds that. On a phone only B and C keep it in reach. A's first
-version put Allow at 995px with the warning, worse than today, and the fix is
-described in [findings.md](findings.md#what-the-connect-an-app-concepts-change-measured).
+and a test holds that. On a phone, with a plain request, B and C keep it in reach;
+with the warning showing, only B does, because C's Allow ends at 907px and A's at
+1125px. A's first version put Allow at 995px with the warning on a desktop, worse
+than today, and the fix is described in [findings.md](findings.md#what-the-connect-an-app-concepts-change-measured).
 
 **Recommendation: B.** Two role cards make the decision the person came to take
 the biggest thing on the page, and the pinned buttons keep Allow in reach on a
-phone however long the request is. C gets there by being the shortest page, which
-depends on the request staying short, and the review page's `stress` state shows a
-300-character app name to test that. Take B's structure with A's shortened warning in
+phone however long the request is, which is the only way to keep it there once the
+warning shows. C gets there for a plain request by being the shortest page, and the
+review page's `stress` state shows a 300-character app name to test the rest. Take
+B's structure with A's shortened warning in
 the danger colour. That combination is not drawn in the pack and so the checker
 has not seen it, though both halves use tokens it has. The tone is a judgement
 and the owner's decision: nothing here shows that a red warning causes alarm
@@ -246,12 +261,12 @@ waits, and the reasons with the server's sentence for each. No concept draws a
 number the API does not send. Measured on a blocked fleet with twelve reasons, in
 Classic dark, because that is the only style today's page has:
 
-| | Page, 1440 | Page, 375 | First blocking cause ends, 1440 | First blocking cause ends, 375 |
+| | Page, 1440 | Page, 375 | Both blocking causes end, 1440 | Both blocking causes end, 375 |
 | --- | --- | --- | --- | --- |
 | Today | 1724 | 2080 | not measured | not measured |
-| A, banner, tiles, grouped | 888 | 912 | 654 | 678 |
-| B, one sentence | 823 | 559 | behind a disclosure | behind a disclosure |
-| C, a board | 1440 | 2090 | 222 | 612 |
+| A, banner, tiles, grouped | 900 (fits one screen) | 912 | 752 | 776 |
+| B, one sentence | 900 (fits one screen) | 812 (fits one screen) | behind a disclosure | behind a disclosure |
+| C, a board | 1440 | 2090 | 324 | 734 |
 
 * **A** adds a brand header, a larger state banner and the four facts as tiles
   that stay two across on a phone, and groups the reasons by how serious they
@@ -266,7 +281,7 @@ Classic dark, because that is the only style today's page has:
 In all three the state survives forced colours: the word is on the page, and a
 triangle, a dashed ring and a hollow ring differ with no colour at all.
 
-**Recommendation: A.** It cuts the page from 1724px to 888px at 1440 and from
+**Recommendation: A.** It cuts the page from 1724px to one screen at 1440 and from
 2080px to 912px at 375, puts both blocking causes on the first screen, and keeps
 every other reason one tap away, which matters on a page whose reader has nobody
 to ask. B is the right trade for
@@ -339,9 +354,12 @@ Each combination is a screen, a state, a concept, a style, a mode and a width of
 * a console error or an uncaught exception;
 * a control with no accessible name, a page with no `h1` or with two, a page with
   no `main` landmark or with two, a positive `tabindex`, and a control that hides
-  its focus ring;
+  its focus ring or draws it on something at opacity 0, as an invisible radio
+  stretched over its label does;
 * contrast computed from the real token values in the browser, at 4.5:1 for text
-  and 3:1 for the edge of a control.
+  and 3:1 for the edge of a control, on the 18 pairs of tokens the concepts paint
+  (and three more for concept C). A test holds those pairs to the text colours
+  the CSS draws, so a new one has to arrive in the list.
 
 It reports and never edits a concept to pass. Each rule was shown to fail on a
 page built to break it before it was trusted. Every test in the pack passes under
@@ -365,6 +383,10 @@ only these five.
   means argued from measurements and the source, not tested on people.
 * No screen reader session. The checker reads the accessibility tree and proves
   names, headings and landmarks exist; it does not say what a person hears.
+* No contrast check of anything outside the listed token pairs. A colour set
+  another way, such as text over a gradient or a picture, is not judged by the
+  checker, and nothing in the concepts is drawn that way except the scene behind
+  concept C's panel, whose own pairs are in `concept-c-pairs.json`.
 * No measured performance change. Page heights and positions are measured; load
   time, bundle size and render cost are not.
 * No end-to-end test of the real sign-in, bootstrap or consent flows. The
@@ -398,6 +420,7 @@ To regenerate any of this:
 | --- | --- |
 | `node design/webui-refresh-review/tools/capture.mjs` | the `concept-*.png` pictures |
 | `node design/webui-refresh-review/tools/check.mjs --out design/webui-refresh-review/public/viewport-review.json` | the check record |
+| `node design/webui-refresh-review/tools/measure.mjs` | `concept-measurements.json`, the positions the tables quote |
 | `node design/webui-refresh-review/tools/capture-current.mjs` | the `current-*.png` pictures and their measurements; needs `make build` first |
 | `node design/webui-refresh-review/tools/make-icons.mjs` | `icons.js` from Lucide and the product's GitHub mark |
 | `node --test "design/webui-refresh-review/tools/**/*.test.mjs" "design/webui-refresh-review/public/**/*.test.mjs"` | nothing: the pack's tests |

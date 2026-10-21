@@ -1,0 +1,394 @@
+{
+  "generated": "2026-10-21T15:18:56.677Z",
+  "reviewBar": "hidden",
+  "screens": {
+    "signin": {
+      "a": {
+        "password": {
+          "375": {
+            "first": {
+              "top": 309,
+              "bottom": 357
+            },
+            "action": {
+              "bottom": 543,
+              "pinned": false
+            },
+            "last": null,
+            "page": 812,
+            "fits": true
+          },
+          "1440": {
+            "first": {
+              "top": 351,
+              "bottom": 399
+            },
+            "action": {
+              "bottom": 585,
+              "pinned": false
+            },
+            "last": null,
+            "page": 900,
+            "fits": true
+          }
+        }
+      },
+      "b": {
+        "password": {
+          "375": {
+            "first": {
+              "top": 291,
+              "bottom": 339
+            },
+            "action": {
+              "bottom": 525,
+              "pinned": false
+            },
+            "last": null,
+            "page": 827,
+            "fits": false
+          },
+          "1440": {
+            "first": {
+              "top": 356,
+              "bottom": 404
+            },
+            "action": {
+              "bottom": 590,
+              "pinned": false
+            },
+            "last": null,
+            "page": 900,
+            "fits": true
+          }
+        }
+      },
+      "c": {
+        "password": {
+          "375": {
+            "first": {
+              "top": 351,
+              "bottom": 399
+            },
+            "action": {
+              "bottom": 585,
+              "pinned": false
+            },
+            "last": null,
+            "page": 812,
+            "fits": true
+          },
+          "1440": {
+            "first": {
+              "top": 286,
+              "bottom": 334
+            },
+            "action": {
+              "bottom": 520,
+              "pinned": false
+            },
+            "last": null,
+            "page": 900,
+            "fits": true
+          }
+        }
+      }
+    },
+    "first-account": {
+      "a": {
+        "empty": {
+          "375": {
+            "first": {
+              "top": 364,
+              "bottom": 396
+            },
+            "action": {
+              "bottom": 1004,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1183,
+            "fits": false
+          },
+          "1440": {
+            "first": {
+              "top": 362,
+              "bottom": 394
+            },
+            "action": {
+              "bottom": 884,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1055,
+            "fits": false
+          }
+        }
+      },
+      "b": {
+        "empty": {
+          "375": {
+            "first": {
+              "top": 380,
+              "bottom": 428
+            },
+            "action": {
+              "bottom": 926,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1235,
+            "fits": false
+          },
+          "1440": {
+            "first": {
+              "top": 295,
+              "bottom": 343
+            },
+            "action": {
+              "bottom": 821,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1082,
+            "fits": false
+          }
+        }
+      },
+      "c": {
+        "empty": {
+          "375": {
+            "first": {
+              "top": 387,
+              "bottom": 435
+            },
+            "action": {
+              "bottom": 1107,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1346,
+            "fits": false
+          },
+          "1440": {
+            "first": {
+              "top": 217,
+              "bottom": 265
+            },
+            "action": {
+              "bottom": 839,
+              "pinned": false
+            },
+            "last": null,
+            "page": 984,
+            "fits": false
+          }
+        }
+      }
+    },
+    "connect-app": {
+      "a": {
+        "normal": {
+          "375": {
+            "first": null,
+            "action": {
+              "bottom": 949,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1062,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": {
+              "bottom": 769,
+              "pinned": false
+            },
+            "last": null,
+            "page": 900,
+            "fits": true
+          }
+        },
+        "loopback": {
+          "375": {
+            "first": null,
+            "action": {
+              "bottom": 1125,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1238,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": {
+              "bottom": 873,
+              "pinned": false
+            },
+            "last": null,
+            "page": 938,
+            "fits": false
+          }
+        }
+      },
+      "b": {
+        "normal": {
+          "375": {
+            "first": null,
+            "action": {
+              "bottom": 800,
+              "pinned": true
+            },
+            "last": null,
+            "page": 1032,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": {
+              "bottom": 732,
+              "pinned": false
+            },
+            "last": null,
+            "page": 937,
+            "fits": false
+          }
+        },
+        "loopback": {
+          "375": {
+            "first": null,
+            "action": {
+              "bottom": 800,
+              "pinned": true
+            },
+            "last": null,
+            "page": 1190,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": {
+              "bottom": 818,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1023,
+            "fits": false
+          }
+        }
+      },
+      "c": {
+        "normal": {
+          "375": {
+            "first": null,
+            "action": {
+              "bottom": 749,
+              "pinned": false
+            },
+            "last": null,
+            "page": 952,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": {
+              "bottom": 596,
+              "pinned": false
+            },
+            "last": null,
+            "page": 900,
+            "fits": true
+          }
+        },
+        "loopback": {
+          "375": {
+            "first": null,
+            "action": {
+              "bottom": 907,
+              "pinned": false
+            },
+            "last": null,
+            "page": 1110,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": {
+              "bottom": 677,
+              "pinned": false
+            },
+            "last": null,
+            "page": 900,
+            "fits": true
+          }
+        }
+      }
+    },
+    "fleet-status": {
+      "a": {
+        "blocked": {
+          "375": {
+            "first": null,
+            "action": null,
+            "last": {
+              "bottom": 776
+            },
+            "page": 912,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": null,
+            "last": {
+              "bottom": 752
+            },
+            "page": 900,
+            "fits": true
+          }
+        }
+      },
+      "b": {
+        "blocked": {
+          "375": {
+            "first": null,
+            "action": null,
+            "last": null,
+            "page": 812,
+            "fits": true
+          },
+          "1440": {
+            "first": null,
+            "action": null,
+            "last": null,
+            "page": 900,
+            "fits": true
+          }
+        }
+      },
+      "c": {
+        "blocked": {
+          "375": {
+            "first": null,
+            "action": null,
+            "last": {
+              "bottom": 734
+            },
+            "page": 2090,
+            "fits": false
+          },
+          "1440": {
+            "first": null,
+            "action": null,
+            "last": {
+              "bottom": 324
+            },
+            "page": 1440,
+            "fits": false
+          }
+        }
+      }
+    }
+  }
+}

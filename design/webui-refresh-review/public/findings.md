@@ -7,6 +7,12 @@ controller for the first account, sign in and the MCP consent screen, the status
 fixture for the public status page, and the demo fleet for a wrong address. The
 captures are Mission Control, dark, at 1440x900 and 375x812. Nothing was stubbed.
 
+The concept tables further down were first written from positions read beneath
+the review page's bar of controls, which moves a concept that centres its content.
+They have been restated from [concept-measurements.json](concept-measurements.json),
+which `tools/measure.mjs` writes with the bar hidden, and those figures and the
+README's are the ones to trust.
+
 ## The six observations from the source
 
 | # | Observation (from reading the source) | Evidence | Verdict |
@@ -77,15 +83,17 @@ Mission Control dark at 1440x900 and 375x812. Today's page is from
 | Today | 820 | 905 (below the fold) | 963 (below the fold) |
 | A, the same card | 769 | 873 | 949 (below the fold) |
 | B, role cards | 732 | 818 | pinned to the screen's bottom edge |
-| C, a diagram | 576 | 657 | 749 |
+| C, a diagram | 596 | 677 | 749 |
 
 * All three put Allow inside the fold on a desktop, with or without the warning.
   Tests hold that.
 * A's first version put Allow at 995px with the warning, worse than today, and
   the fix was to drop a decorative icon, merge two notes into one and position
   the appearance toggle, which had been taking a row of its own.
-* On a phone only B and C keep Allow in reach: B pins the buttons, and C's page
-  is the shortest. A is a tidy card, and a card this long scrolls.
+* On a phone, with a plain request, B and C keep Allow in reach: B pins the
+  buttons, and C's page is the shortest. With the warning showing only B does,
+  because C's Allow ends at 907px and A's at 1125px. A is a tidy card, and a card
+  this long scrolls.
 * How the warning about this computer should sound stays a question. A keeps the
   danger colour with fewer words, B uses a neutral note with the laptop icon,
   and C labels the address in its diagram as this computer with no alarm colour.
@@ -97,15 +105,16 @@ is from `current-measurements.json`: 1724px tall at 1440 and 2080px at 375. Its 
 reasons are already on the first screen, so what is long is the list, in which the two
 reasons that block and the ten that only slow are one undivided stack.
 
-| | Page, 1440 | Page, 375 | First blocking cause ends, 1440 | First blocking cause ends, 375 |
+| | Page, 1440 | Page, 375 | Both blocking causes end, 1440 | Both blocking causes end, 375 |
 | --- | --- | --- | --- | --- |
 | Today | 1724 | 2080 | not measured | not measured |
-| A, banner, tiles, grouped | 888 | 912 | 654 | 678 |
-| B, one sentence | 823 | 559 | behind a disclosure | behind a disclosure |
-| C, a board | 1440 | 2090 | 222 | 612 |
+| A, banner, tiles, grouped | 900 (fits one screen) | 912 | 752 | 776 |
+| B, one sentence | 900 (fits one screen) | 812 (fits one screen) | behind a disclosure | behind a disclosure |
+| C, a board | 1440 | 2090 | 324 | 734 |
 
-* A halves the page on both widths by grouping the reasons by how serious they are
-  and folding the ten that only slow. Its two blocking causes are on the first screen.
+* A takes the page to a screen at 1440 and to 912px at 375 by grouping the reasons
+  by how serious they are and folding the ten that only slow. Its two blocking
+  causes are on the first screen.
 * B is the shortest and the plainest, and its price is that the cause is one tap away.
   For a developer who only wants to know whether to wait, that may be the right price.
 * C helps on a desktop, where the cause sits beside the word Blocked, and not on a phone,

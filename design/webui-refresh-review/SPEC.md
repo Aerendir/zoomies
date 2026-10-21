@@ -59,6 +59,7 @@ design/webui-refresh-review/
     current-*.png            the real UI today, from the built binary
     current-measurements.json  the numbers the findings cite, written beside those photographs
     concept-*.png            each concept in Mission Control dark at 1440px and 375px, and the recommended one in Classic light
+    concept-measurements.json  where each concept puts things, with the review bar hidden, written by tools/measure.mjs
     viewport-review.json     overflow, contrast and console checks, as data, for every combination
     *.test.mjs               the tests for the page, each screen and the README
   shell-and-monitoring/      pack 2

@@ -619,8 +619,9 @@ p {
 }
 
 /* Where to find the setup token: the commands as tabs, from native radios. The
-   radio covers its own label, so the browser's focus ring draws around the tab
-   and the arrow keys move between them. :has() picks the panel to show. */
+   radio covers its own label so a press lands on it and the arrow keys move
+   between the tabs. It is invisible, and a ring drawn on something invisible is
+   not there, so the label draws the ring itself. :has() picks the panel to show. */
 .m-install {
   display: flex;
   flex-direction: column;
@@ -653,6 +654,10 @@ p {
   margin: 0;
   opacity: 0;
   cursor: pointer;
+}
+.m-install-tab:has(input:focus-visible) {
+  outline: var(--z-focus-width) solid var(--z-focus-colour);
+  outline-offset: var(--z-focus-offset);
 }
 .m-install-tab:has(input:checked) {
   border-color: var(--z-accent);

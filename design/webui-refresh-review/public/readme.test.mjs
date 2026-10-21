@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RECOMMENDED, plan } from '../tools/capture.mjs';
+import { BASE_PAIRS } from '../tools/check.mjs';
 import { SCREENS } from './screens/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -59,7 +60,43 @@ test('the totals in the README are the ones the checker wrote down', () => {
   assert.ok(flat.includes(`${combinations} combinations`), `the README does not say ${combinations} combinations`);
   assert.ok(flat.includes(`${review.findings.length} findings`), `the README does not say ${review.findings.length} findings`);
   assert.ok(flat.includes(`${review.known.length} known`), `the README does not say ${review.known.length} known`);
+  assert.ok(flat.includes(`on the ${BASE_PAIRS.length} pairs of tokens`), `the README does not say ${BASE_PAIRS.length} pairs of tokens`);
 });
+
+// The tables compare each concept with today's page, and a number that was typed
+// from memory or measured beneath the review bar is a comparison that is wrong in
+// the concept's favour or against it. Every number in a row is one a script
+// recorded, from the concept for a concept's row and from the photographed page
+// for Today's.
+const numbersIn = (value, found = new Set()) => {
+  if (typeof value === 'number') found.add(value);
+  else if (value && typeof value === 'object') Object.values(value).forEach((inner) => numbersIn(inner, found));
+  return found;
+};
+const measuredConcepts = JSON.parse(readFileSync(resolve(here, 'concept-measurements.json'), 'utf8'));
+const photographed = JSON.parse(readFileSync(resolve(here, 'current-measurements.json'), 'utf8')).shots;
+
+for (const [title, id] of [
+  ['Sign in', 'signin'],
+  ['First account', 'first-account'],
+  ['Connect an app', 'connect-app'],
+  ['Fleet status', 'fleet-status'],
+]) {
+  test(`${title}: every number in a table row is one that was measured`, () => {
+    const rows = section(title).split('\n').filter((line) => /^\| (Today|[ABC],)/.test(line));
+    assert.equal(rows.length, 4, `${title} has a Today row and a row for each concept`);
+    for (const row of rows) {
+      const [label, ...cells] = row.split('|').slice(1, -1).map((cell) => cell.trim());
+      const allowed =
+        label === 'Today'
+          ? numbersIn(Object.entries(photographed).filter(([key]) => key.startsWith(id)).map(([, shot]) => shot))
+          : numbersIn(measuredConcepts.screens[id][label[0].toLowerCase()]);
+      for (const number of cells.flatMap((cell) => [...cell.matchAll(/\d+/g)].map((match) => Number(match[0])))) {
+        assert.ok(allowed.has(number), `${title}, "${label}": ${number} was not measured`);
+      }
+    }
+  });
+}
 
 test('the README says what it does not claim', () => {
   const claimed = section('Not claimed').toLowerCase();

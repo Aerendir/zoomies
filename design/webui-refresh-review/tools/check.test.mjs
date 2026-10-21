@@ -136,6 +136,39 @@ test('checkPage: a control that hides its focus ring is reported', async () => {
   await page.close();
 });
 
+// A native radio stretched invisibly over its label is a good way to get arrow
+// keys for free, and a good way to lose the focus ring: the ring is drawn on
+// the element at opacity 0, which is nothing at all.
+const TAB = `<style>.tab{position:relative;display:inline-block}
+  .tab input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0}</style>`;
+
+test('checkPage: a focus ring painted on a control at opacity 0 is not a ring', async () => {
+  const page = await open(
+    `${TAB}<main id="stage"><h1>t</h1><label class="tab"><input type="radio" name="x">One</label></main>`,
+  );
+  const found = await checkPage(page);
+  assert.deepEqual(kinds(found), ['focus']);
+  assert.match(found[0].detail, /input/);
+  await page.close();
+});
+
+test('checkPage: the same control passes when its label draws the ring', async () => {
+  const page = await open(
+    `${TAB}<style>.tab:has(input:focus-visible){outline:2px solid blue}</style>
+     <main id="stage"><h1>t</h1><label class="tab"><input type="radio" name="x">One</label></main>`,
+  );
+  assert.deepEqual(kinds(await checkPage(page)), []);
+  await page.close();
+});
+
+test('checkPage: a ring on a control inside a transparent ancestor is not a ring either', async () => {
+  const page = await open(
+    `<main id="stage"><h1>t</h1><div style="opacity:0"><button>Go</button></div></main>`,
+  );
+  assert.ok(kinds(await checkPage(page)).includes('focus'));
+  await page.close();
+});
+
 test('checkPage: a console error and an uncaught exception are both reported', async () => {
   for (const script of ["console.error('boom')", "throw new Error('boom')"]) {
     const page = await open(`<main id="stage"><h1>t</h1><script>${script}</script></main>`);
@@ -439,6 +472,22 @@ test('every pair the checker applies, and every token the baseline names, exists
     assert.ok(definedTokens.has(fg), `${fg} is not defined in tokens.css or concept-c-tokens.css`);
     assert.ok(definedTokens.has(bg), `${bg} is not defined in tokens.css or concept-c-tokens.css`);
   }
+});
+
+// A list of colour pairs is only as good as its match with what is painted. The
+// first version named seven pairs while the concepts drew hints, primary buttons
+// and severity labels in colours none of them covered, and a concept could have
+// put failing text on a page the checker called green.
+test('every text colour the concepts draw is the foreground of a checked pair', () => {
+  const drawn = new Set();
+  for (const file of ['components', 'concept-a', 'concept-b', 'concept-c']) {
+    const css = readFileSync(here(`../public/${file}.css`), 'utf8');
+    for (const match of css.matchAll(/(?<![-\w])color:\s*var\((--z-[a-z0-9-]+)/g)) drawn.add(match[1]);
+  }
+  const conceptC = JSON.parse(readFileSync(here('../public/concept-c-pairs.json'), 'utf8'));
+  const checked = new Set([...BASE_PAIRS, ...conceptC].map((pair) => pair.fg));
+  const unchecked = [...drawn].filter((token) => !checked.has(token)).sort();
+  assert.deepEqual(unchecked, [], `drawn as text and checked against nothing: ${unchecked.join(', ')}`);
 });
 
 test('every base pair names a minimum the two ratios allow', () => {
