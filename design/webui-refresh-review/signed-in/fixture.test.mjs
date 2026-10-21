@@ -38,6 +38,10 @@ const SCHEMAS = {
   machines: 'Machine',
   audit: 'AuditEvent',
   problems: 'Problem',
+  kennelRepositories: 'KennelRepository',
+  repairs: 'EliRepair',
+  contexts: 'AIContextRepository',
+  usage: 'UsageBucket',
 };
 
 for (const [collection, schema] of Object.entries(SCHEMAS)) {
@@ -52,6 +56,24 @@ for (const [collection, schema] of Object.entries(SCHEMAS)) {
     }
   });
 }
+
+test('every Kennel Club finding is one the API returns (KennelFinding)', () => {
+  const declared = properties('KennelFinding');
+  assert.ok(declared, 'api/openapi.yaml has no KennelFinding schema');
+  const all = FLEET.kennelRepositories.flatMap((repository) => repository.findings);
+  assert.ok(all.length >= 3);
+  for (const finding of all) {
+    for (const key of Object.keys(finding)) assert.ok(declared.has(key), `KennelFinding.${key} is not in api/openapi.yaml`);
+  }
+});
+
+test("a Kennel Club repository's counts are its findings, by severity", () => {
+  for (const repository of FLEET.kennelRepositories) {
+    for (const severity of ['error', 'warning', 'info']) {
+      assert.equal(repository.counts[severity], repository.findings.filter((f) => f.severity === severity).length, `${repository.name} ${severity}`);
+    }
+  }
+});
 
 test('the fleet is frozen, so a screen cannot change what another one reads', () => {
   assert.ok(Object.isFrozen(FLEET));

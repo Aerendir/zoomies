@@ -373,6 +373,104 @@ const problems = [
   },
 ];
 
+const kennelFindings = {
+  api: [
+    {
+      code: 'workflow.unpinned-action',
+      severity: 'warning',
+      subject: '.github/workflows/ci.yml',
+      title: 'An action is pinned to a tag, not a commit',
+      detail: 'actions/checkout@v4 can move. A job on your own runners would run whatever it points to next.',
+      fix: 'Pin it to the commit the tag points at.',
+    },
+    {
+      code: 'workflow.self-hosted-on-pr',
+      severity: 'error',
+      subject: '.github/workflows/e2e.yml',
+      title: 'A pull request from a fork can run on your runners',
+      detail: 'This workflow runs on pull_request and asks for self-hosted labels, so a stranger can run code on the fleet.',
+      fix: 'Run it on pull_request_target with a label gate, or on a hosted runner.',
+    },
+  ],
+  web: [
+    {
+      code: 'workflow.no-timeout',
+      severity: 'info',
+      subject: '.github/workflows/ci.yml',
+      title: 'A job has no timeout',
+      detail: 'A stuck job holds a runner until GitHub gives up after six hours.',
+      fix: 'Add timeout-minutes to the job.',
+    },
+  ],
+  models: [],
+};
+
+const kennelRepositories = [
+  ['kr_api', 'acme-corp/api', 'private', 'attention', 'api'],
+  ['kr_web', 'acme-corp/web', 'private', 'partial', 'web'],
+  ['kr_models', 'acme-corp/models', 'private', 'best_in_show', 'models'],
+  ['kr_notes', 'acme-labs/notes', 'public', 'pending', null],
+].map(([id, name, visibility, state, key]) => {
+  const own = key ? kennelFindings[key] : [];
+  const count = (severity) => own.filter((f) => f.severity === severity).length;
+  return {
+    id,
+    name,
+    visibility,
+    state,
+    evaluated_at: state === 'pending' ? null : minutesAgo(40),
+    counts: { error: count('error'), warning: count('warning'), info: count('info'), waived: 0 },
+    complete: state !== 'partial' && state !== 'pending',
+    findings: own,
+  };
+});
+
+const repairs = [
+  ['rep_1', 'acme-corp/api', 'working', 'automatic', 412, 'The lint job failed on a formatting rule; Eli is editing the file.', 3],
+  ['rep_2', 'acme-corp/web', 'checking', 'requested', 409, 'Eli pushed a fix and is waiting for CI to run it.', 18],
+  ['rep_3', 'acme-corp/api', 'passed', 'automatic', 401, 'The fix passed CI and was pushed to the pull request.', 95],
+  ['rep_4', 'acme-corp/models', 'failed', 'requested', 398, 'Eli could not reproduce the failure from the log it was given.', 240],
+].map(([id, repo, state, trigger, pull_number, message, minutes]) => ({
+  id,
+  installation_id: 'inst_acme',
+  repo,
+  head_sha: `${id.replace('rep_', '')}f3a91c0`.padEnd(40, '0'),
+  trigger,
+  state,
+  message,
+  pull_number,
+  created_at: minutesAgo(minutes),
+  updated_at: minutesAgo(Math.max(minutes - 2, 0)),
+}));
+
+const contexts = [
+  ['ctx_api', 'acme-corp/api', 'ready', null, 'The prepared context is the latest commit.'],
+  ['ctx_web', 'acme-corp/web', 'stale', null, 'The default branch moved 14 commits since the context was prepared.'],
+  ['ctx_models', 'acme-corp/models', 'awaiting_merge', 'awaiting_merge', 'The setup pull request is open and not merged yet.'],
+].map(([id, full_name, state, setup_state, detail], i) => ({
+  id,
+  full_name,
+  freshness: { state, desired_commit: `a1b2c3${i}`, published_commit: state === 'ready' ? `a1b2c3${i}` : `9f8e7d${i}`, checked_at: minutesAgo(12) },
+  ...(setup_state ? { setup_state } : {}),
+  diagnosis: { cause: state, title: state === 'ready' ? 'Up to date' : 'Needs attention', detail },
+  created_at: minutesAgo(60 * 24 * 14),
+  updated_at: minutesAgo(30 + i * 40),
+}));
+
+const usage = [6, 5, 4, 3, 2, 1, 0].map((daysAgo, i) => {
+  const succeeded = [118, 131, 96, 24, 18, 142, 87][i];
+  const failed = [9, 12, 7, 1, 2, 11, 6][i];
+  return {
+    from: minutesAgo(daysAgo * 60 * 24 + 60 * 24),
+    queued: succeeded + failed + 3,
+    started: succeeded + failed,
+    succeeded,
+    failed,
+    cancelled: [2, 1, 3, 0, 0, 2, 1][i],
+    execution_seconds: (succeeded + failed) * 410,
+  };
+});
+
 function deepFreeze(value) {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -392,6 +490,10 @@ export const FLEET = deepFreeze({
   machines,
   audit,
   problems,
+  kennelRepositories,
+  repairs,
+  contexts,
+  usage,
 });
 
 /**

@@ -92,3 +92,40 @@ export function listScreen(config) {
     render: (_concept, state) => renderList(config, state),
   };
 }
+
+/**
+ * A page that is not a table but has the same states: a stage with an answer, cards
+ * of evidence under it. `config.body()` draws it, `config.empty` is what is shown when
+ * there is nothing yet, and the rest is the header, as for a list.
+ */
+export function pageScreen(config) {
+  return {
+    id: config.id ?? config.page,
+    title: config.title,
+    states: LIST_STATES.map((s) => (s === 'rows' ? 'normal' : s)),
+    labels: { ...LIST_LABELS, normal: config.normalLabel ?? 'Normal', rows: undefined },
+    currentAlt: config.currentAlt,
+    render(_concept, state) {
+      let body;
+      if (state === 'loading') body = card({ html: skeleton({ rows: 6, label: `Loading ${config.noun}` }) });
+      else if (state === 'error') {
+        body = card({
+          html: failure({
+            title: 'The controller did not answer',
+            text: `The ${config.noun} could not be loaded. Nothing has changed on your fleet; this page just cannot see it. Check that the controller is running, then try again.`,
+          }),
+        });
+      } else if (state === 'empty') body = card({ html: empty(config.empty) });
+      else body = config.body();
+      return shell({
+        page: config.page,
+        title: config.title,
+        eyebrow: config.eyebrow,
+        subtitle: config.subtitle,
+        actions: config.actions ?? '',
+        banner: state === 'stale' ? staleBanner({ ago: '6 minutes ago' }) : '',
+        body,
+      });
+    },
+  };
+}

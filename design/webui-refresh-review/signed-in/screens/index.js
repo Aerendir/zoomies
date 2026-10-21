@@ -14,6 +14,11 @@ import jobs from './jobs.js';
 import hosts from './hosts.js';
 import hostDetail from './host-detail.js';
 import providers from './providers.js';
+import kennel from './kennel.js';
+import repairs from './repairs.js';
+import aiContext from './ai-context.js';
+import usage from './usage.js';
+import comparisons from './comparisons.js';
 
 export const CONCEPTS = ['current', 'a'];
 export const LABELS = { concept: { a: 'Portal style' } };
@@ -30,4 +35,9 @@ export const SCREENS = [
   hosts,
   hostDetail,
   providers,
+  usage,
+  comparisons,
+  kennel,
+  repairs,
+  aiContext,
 ];
