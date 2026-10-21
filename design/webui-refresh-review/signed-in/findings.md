@@ -41,7 +41,8 @@ so a real fleet's pages are taller than these.
 * **Five pages are more than three screens tall on a phone**: Usage (6,587px),
   Kennel Club (7,709px), a pool (5,247px), a runner (4,796px) and Hosts (3,515px).
   These are the pages whose structure the look has most to say about.
-* **Every list page opens the same way**: a title, a sentence, four to six small
+* **Most list pages open the same way** (Pools, Queue, Jobs, Runners, Hosts and
+  Providers; Workflows is the exception): a title, a sentence, four to six small
   stat tiles, a paragraph that explains them, filters, and then the grid. On
   Runners that is six tiles, a provisioning strip, a lifecycle diagram, two
   paragraphs and a disclosure before the first row at 1,000px down, and the grid
