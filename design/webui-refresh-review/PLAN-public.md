@@ -96,7 +96,7 @@ The tree in `SPEC.md` omits `tools/` and the per-concept files; Task 2 updates i
 - Produces `serve(port?: number): Promise<{ url: string; close(): Promise<void> }>`, default port 8101, bound to `127.0.0.1`. Mounts: `/` to `web/public`, `/web/src/` to `web/src`, `/fonts/` to the `@fontsource` files `fonts.css` names, `/review/` to `public/`. Anything else is 404.
 
 - [ ] **Step 1: Write `serve.test.mjs`** (`node:test`). Assertions: `/web/src/lib/styles/tokens.css` is 200 with `text/css`; `/brand/logo-black-transparent.svg` is 200 with `image/svg+xml`; `/review/mockups.html` is 404 until Task 5, so assert 200 for `/review/` plus a known file you create now (`public/.keep`); `/review/..%2F..%2Fgo.mod` and `/%2e%2e/go.mod` are 403 or 404; a POST is 405.
-- [ ] **Step 2:** `node --test design/webui-refresh-review/tools/`. Expected: FAIL (module missing).
+- [ ] **Step 2:** `node --test "design/webui-refresh-review/tools/**/*.test.mjs"` (Node 22 runs a bare directory argument as a module, so tests are found by glob). Expected: FAIL (module missing).
 - [ ] **Step 3: Implement** `serve` and `launch` as above. Use `node:http`, an extension-to-type table for `.html .css .js .mjs .svg .png .webp .woff2 .json`, and reject any resolved path that leaves its mount. Add a CLI guard (`import.meta.url === pathToFileURL(process.argv[1]).href`) that listens and prints the URL.
 - [ ] **Step 4:** Rerun the tests. Expected: all pass.
 - [ ] **Step 5:** Edit the tree in `SPEC.md` to match "File structure" above. Run `go test -count=1 ./internal/docs`. Expected: ok.
@@ -195,7 +195,7 @@ The tree in `SPEC.md` omits `tools/` and the per-concept files; Task 2 updates i
 **Files:** Create `public/README.md`; modify `PLAN-public.md` status line.
 
 - [ ] **Step 1:** Write the README in the earlier reviews' shape: date, how to view (`node tools/serve.mjs`, then `http://127.0.0.1:8101/review/mockups.html`, needing `npm ci` for exact fonts), a captures table, the findings from Task 4 with only the confirmed ones, each concept in two sentences, one recommendation per screen with the reason, the Svelte files each recommendation would touch, the proposed tokens from `concept-c-tokens.css` with the guideline section each would change, and "Not claimed" copied from the spec.
-- [ ] **Step 2:** `go test -count=1 ./internal/docs` and `node --test design/webui-refresh-review/tools/ design/webui-refresh-review/public/`. Expected: all pass.
+- [ ] **Step 2:** `go test -count=1 ./internal/docs` and `node --test "design/webui-refresh-review/tools/**/*.test.mjs" "design/webui-refresh-review/public/**/*.test.mjs"`. Expected: all pass.
 - [ ] **Step 3:** `git status` shows no stray build output. Push; update the pull request description with the pack's contents and what was and was not run.
 - [ ] **Step 4:** Tell the owner pack 1 is ready, then write the plan for the next pack (shell and monitoring) from the same method.
 

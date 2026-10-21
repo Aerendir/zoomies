@@ -44,13 +44,17 @@ every concept must include a phone layout at 375px.
 ```text
 design/webui-refresh-review/
   SPEC.md                    this document
+  PLAN-public.md             the implementation plan for pack 1
+  tools/                     the loopback review server, the checker and the capture scripts
   public/                    pack 1: pages reachable without an account
     README.md                findings, concepts, recommendation, evidence, not claimed
-    mockups.html             the interactive review page
+    mockups.html             the interactive review page, with its review.css, review.js and screens/
+    concept-{a,b,c}.css      the styling of each concept
     concept-c-tokens.css     the only place a proposed new token may appear
+    concept-c-pairs.json     the contrast pairs those tokens must pass
     current-*.png            the real UI today, from the built binary
-    concept-*.png            each concept, 1440px and 375px, both styles, both modes
-    viewport-review.json     overflow, contrast and console checks, as data
+    concept-*.png            each concept in Mission Control dark at 1440px and 375px, and the recommended one in Classic light
+    viewport-review.json     overflow, contrast and console checks, as data, for every combination
   shell-and-monitoring/      pack 2
   fleet-management/          pack 3
   insight-and-repairs/       pack 4
