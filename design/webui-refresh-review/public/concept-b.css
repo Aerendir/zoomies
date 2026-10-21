@@ -259,3 +259,90 @@
     scroll-padding-bottom: 6rem;
   }
 }
+
+/*
+ * Fleet status, concept B: one plain sentence for the person waiting, written
+ * from the same three facts the product's headline uses, and everything else
+ * behind a disclosure.
+ */
+.s-fs-b {
+  position: relative;
+  min-height: 100%;
+  background: var(--z-bg);
+}
+.s-fs-b .fs-b-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-6);
+  max-width: var(--z-width-dialog-md);
+  margin: 0 auto;
+  padding: var(--z-space-8) var(--z-space-4);
+}
+.s-fs-b .fs-b-head {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-4);
+}
+.s-fs-b .fs-b-head h1 {
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-medium);
+  color: var(--z-text-muted);
+}
+.s-fs-b .fs-b-sentence {
+  font-size: var(--z-text-3xl);
+  line-height: var(--z-leading-3xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-wrap: balance;
+}
+.s-fs-b .fs-b-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--z-space-1) var(--z-space-3);
+  border: var(--z-border-width) solid;
+  border-radius: var(--z-radius-full);
+  font-size: var(--z-text-sm);
+}
+.s-fs-b .fs-b-state .m-state-word {
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  font-weight: var(--z-weight-semibold);
+}
+/* Inside the tinted chip the whole line takes the tone, which is the pair the
+   checker holds; muted grey on a tint is not. */
+.s-fs-b .fs-b-state .fs-since {
+  color: inherit;
+}
+.s-fs-b .fs-b-more {
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface);
+}
+.s-fs-b .fs-b-more > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  min-height: var(--z-control-touch);
+  padding: 0 var(--z-space-4);
+  font-weight: var(--z-weight-medium);
+  cursor: pointer;
+  list-style: none;
+}
+.s-fs-b .fs-b-more > summary::-webkit-details-marker {
+  display: none;
+}
+.s-fs-b .fs-b-more > summary::after {
+  content: '+';
+  margin-left: auto;
+  font-size: var(--z-text-lg);
+  color: var(--z-text-muted);
+}
+.s-fs-b .fs-b-more[open] > summary::after {
+  content: '\2212';
+}
+.s-fs-b .fs-b-more > :not(summary) {
+  margin: 0 var(--z-space-4) var(--z-space-4);
+}

@@ -3,8 +3,10 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { launch } from './lib/browser.mjs';
-import { KNOWN, contrast, watch, checkPage, checkPairs, run, parseArgs } from './check.mjs';
+import { BASE_PAIRS, KNOWN, contrast, watch, checkPage, checkPairs, run, parseArgs } from './check.mjs';
 
 let browser;
 before(async () => {
@@ -419,4 +421,26 @@ test('KNOWN: every entry says why, and the Classic control edge is the one on re
   assert.ok(
     KNOWN.some((k) => k.style === 'classic' && k.fg === '--z-border-strong' && k.bg === '--z-surface'),
   );
+});
+
+// A pair that names a token nobody defines is reported as a finding on every
+// page, so it would never be silent. What it could be is wrong in the other
+// direction: a typo in the baseline that stops a known issue matching.
+const here = (path) => fileURLToPath(new URL(path, import.meta.url));
+const definedTokens = new Set(
+  [...readFileSync(here('../../../web/src/lib/styles/tokens.css'), 'utf8').matchAll(/^\s*(--z-[a-z0-9-]+):/gm)].map((m) => m[1]).concat(
+    [...readFileSync(here('../public/concept-c-tokens.css'), 'utf8').matchAll(/^\s*(--z-[a-z0-9-]+):/gm)].map((m) => m[1]),
+  ),
+);
+
+test('every pair the checker applies, and every token the baseline names, exists', () => {
+  const conceptC = JSON.parse(readFileSync(here('../public/concept-c-pairs.json'), 'utf8'));
+  for (const { fg, bg } of [...BASE_PAIRS, ...conceptC, ...KNOWN]) {
+    assert.ok(definedTokens.has(fg), `${fg} is not defined in tokens.css or concept-c-tokens.css`);
+    assert.ok(definedTokens.has(bg), `${bg} is not defined in tokens.css or concept-c-tokens.css`);
+  }
+});
+
+test('every base pair names a minimum the two ratios allow', () => {
+  for (const pair of BASE_PAIRS) assert.ok(pair.min === 3 || pair.min === 4.5, `${pair.fg} on ${pair.bg}`);
 });

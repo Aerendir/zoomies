@@ -27,6 +27,8 @@ export const BASE_PAIRS = [
   { fg: '--z-text-muted', bg: '--z-surface', min: 4.5 },
   { fg: '--z-accent', bg: '--z-surface', min: 4.5 },
   { fg: '--z-danger', bg: '--z-danger-subtle', min: 4.5 },
+  { fg: '--z-idle', bg: '--z-idle-subtle', min: 4.5 },
+  { fg: '--z-pending', bg: '--z-pending-subtle', min: 4.5 },
   { fg: '--z-border-strong', bg: '--z-surface', min: 3 },
 ];
 

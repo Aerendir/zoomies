@@ -784,3 +784,148 @@ p {
     width: 100%;
   }
 }
+
+/* Fleet status, as StatusPage.svelte draws it: the three tones, the shapes that
+   carry the state without colour, the queue's tiles, and the reasons with a rail
+   coloured by how serious each is. */
+.m-tone-idle {
+  background: var(--z-idle-subtle);
+  border-color: var(--z-idle-border);
+  color: var(--z-idle);
+}
+.m-tone-pending {
+  background: var(--z-pending-subtle);
+  border-color: var(--z-pending-border);
+  color: var(--z-pending);
+}
+.m-tone-danger {
+  background: var(--z-danger-subtle);
+  border-color: var(--z-danger-border);
+  color: var(--z-danger);
+}
+.m-shape {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--z-border-width-thick);
+}
+.m-shape[data-shape='triangle'] {
+  fill: currentColor;
+}
+.m-shape .dashed {
+  stroke-dasharray: 4 3;
+}
+.m-state {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-4);
+  padding: var(--z-space-5);
+  border: var(--z-border-width) solid;
+  border-radius: var(--z-radius-lg);
+}
+.m-state-word {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  font-weight: var(--z-weight-bold);
+  text-transform: capitalize;
+}
+.m-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--z-space-3);
+  margin: 0;
+}
+.m-tile {
+  padding: var(--z-space-3);
+  border: var(--z-border-width) solid var(--z-border);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface);
+}
+.m-tile dt {
+  font-size: var(--z-text-xs);
+  color: var(--z-text-muted);
+}
+.m-tile dd {
+  margin: 0;
+  font-weight: var(--z-weight-semibold);
+}
+.m-reasons {
+  display: grid;
+  gap: var(--z-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.m-reason {
+  display: grid;
+  gap: var(--z-space-1);
+  padding: var(--z-space-3);
+  border: var(--z-border-width) solid var(--z-border);
+  border-left-width: var(--z-border-width-rail);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface);
+}
+.m-reason.sev-error {
+  border-left-color: var(--z-danger);
+}
+.m-reason.sev-warning {
+  border-left-color: var(--z-pending);
+}
+.m-sev {
+  font-size: var(--z-text-xs);
+  font-weight: var(--z-weight-semibold);
+}
+.sev-error .m-sev {
+  color: var(--z-danger);
+}
+.sev-warning .m-sev {
+  color: var(--z-pending);
+}
+.m-sentence {
+  overflow-wrap: anywhere;
+}
+.m-meta {
+  font-size: var(--z-text-xs);
+  color: var(--z-text-muted);
+}
+.m-meta code {
+  font-family: var(--z-font-mono);
+}
+.fs-appearance {
+  position: absolute;
+  top: var(--z-space-4);
+  right: var(--z-space-4);
+}
+.fs-head h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-bold);
+}
+.fs-h2 {
+  margin-bottom: var(--z-space-2);
+  font-size: var(--z-text-lg);
+  line-height: var(--z-leading-lg);
+  font-weight: var(--z-weight-semibold);
+}
+.fs-headline {
+  color: var(--z-text);
+}
+.fs-since,
+.fs-note,
+.fs-foot {
+  color: var(--z-text-muted);
+}
+.fs-foot {
+  font-size: var(--z-text-xs);
+}
+.fs-count {
+  display: inline-block;
+  min-width: var(--z-space-5);
+  padding: 0 var(--z-space-2);
+  border-radius: var(--z-radius-full);
+  background: var(--z-surface-sunken);
+  color: var(--z-text-muted);
+  font-size: var(--z-text-xs);
+  font-weight: var(--z-weight-medium);
+  text-align: center;
+}

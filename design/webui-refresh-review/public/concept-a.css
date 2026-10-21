@@ -345,3 +345,84 @@
     padding: var(--z-space-5);
   }
 }
+
+/*
+ * Fleet status, concept A: the page gains a brand and a bigger banner, the four
+ * facts stay two across on a phone, and the reasons are grouped by how serious
+ * they are, with the long group folded so the cause is not two screens down.
+ */
+.s-fs-a {
+  position: relative;
+  min-height: 100%;
+  background: var(--z-bg);
+}
+.s-fs-a .fs-page {
+  display: grid;
+  gap: var(--z-space-6);
+  max-width: var(--z-width-dialog-md);
+  margin: 0 auto;
+  padding: var(--z-space-8) var(--z-space-4);
+}
+.s-fs-a .fs-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+.s-fs-a .m-state {
+  gap: var(--z-space-5);
+  padding: var(--z-space-6);
+}
+.s-fs-a .m-state-word {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+}
+.s-fs-a .fs-headline {
+  margin-top: var(--z-space-1);
+  font-size: var(--z-text-lg);
+  line-height: var(--z-leading-lg);
+  text-wrap: pretty;
+}
+.s-fs-a .fs-group + .fs-group {
+  margin-top: var(--z-space-4);
+}
+.s-fs-a .fs-group h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  margin-bottom: var(--z-space-2);
+  font-size: var(--z-text-base);
+  font-weight: var(--z-weight-semibold);
+}
+.s-fs-a details.fs-group > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--z-control-touch);
+  cursor: pointer;
+  list-style: none;
+}
+.s-fs-a details.fs-group > summary::-webkit-details-marker {
+  display: none;
+}
+.s-fs-a details.fs-group > summary h3 {
+  margin: 0;
+}
+.s-fs-a details.fs-group > summary::after {
+  content: '+';
+  margin-left: auto;
+  font-size: var(--z-text-lg);
+  color: var(--z-text-muted);
+}
+.s-fs-a details.fs-group[open] > summary::after {
+  content: '\2212';
+}
+
+/* The group heading already says Blocking or Slowing, so the word inside each item is for a screen reader. */
+.s-fs-a .m-sev {
+  position: absolute;
+  width: var(--z-nudge-1);
+  height: var(--z-nudge-1);
+  margin: calc(-1 * var(--z-nudge-1));
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}

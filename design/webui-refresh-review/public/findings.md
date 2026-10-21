@@ -89,3 +89,30 @@ Mission Control dark at 1440x900 and 375x812. Today's page is from
 * How the warning about this computer should sound stays a question. A keeps the
   danger colour with fewer words, B uses a neutral note with the laptop icon,
   and C labels the address in its diagram as this computer with no alarm colour.
+
+## What the fleet status concepts change, measured
+
+A blocked fleet with twelve reasons, in Classic dark at 1440x900 and 375x812. Today's page
+is from `current-measurements.json`: 1724px tall at 1440 and 2080px at 375. Its first
+reasons are already on the first screen, so what is long is the list, in which the two
+reasons that block and the ten that only slow are one undivided stack.
+
+| | Page, 1440 | Page, 375 | First blocking cause ends, 1440 | First blocking cause ends, 375 |
+| --- | --- | --- | --- | --- |
+| Today | 1724 | 2080 | not measured | not measured |
+| A, banner, tiles, grouped | 888 | 912 | 654 | 678 |
+| B, one sentence | 823 | 559 | behind a disclosure | behind a disclosure |
+| C, a board | 1440 | 2090 | 222 | 612 |
+
+* A halves the page on both widths by grouping the reasons by how serious they are
+  and folding the ten that only slow. Its two blocking causes are on the first screen.
+* B is the shortest and the plainest, and its price is that the cause is one tap away.
+  For a developer who only wants to know whether to wait, that may be the right price.
+* C helps on a desktop, where the cause sits beside the word Blocked, and not on a phone,
+  where its page is as long as today's. It is a desktop idea, and needs A's folding to
+  help a phone.
+* The state survives forced colours in all three: the word is on the page, and a
+  triangle, a dashed ring and a hollow ring differ without any colour.
+* The status page ignores the visual style today, because its policy allows no inline
+  script to apply one. A Mission Control status page would need the server to write the
+  style into the HTML.

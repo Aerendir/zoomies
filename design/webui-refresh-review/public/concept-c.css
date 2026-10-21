@@ -341,3 +341,91 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
+
+/*
+ * Fleet status, concept C: a board. The state and the queue are held in view on
+ * one side while the reasons scroll on the other, so the cause of a blocked
+ * fleet is beside the word that says it is blocked and never two screens below.
+ */
+.s-fs-c {
+  position: relative;
+  min-height: 100%;
+  background: var(--z-bg);
+}
+.s-fs-c .fs-c-page {
+  display: grid;
+  gap: var(--z-space-6);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--z-space-8) var(--z-space-6);
+}
+.s-fs-c .fs-head {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-3);
+}
+.s-fs-c .fs-c-board {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--z-space-8);
+}
+.s-fs-c .fs-c-hold {
+  position: sticky;
+  top: var(--z-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+.s-fs-c .fs-c-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  padding: var(--z-space-6);
+  border: var(--z-border-width) solid;
+  border-radius: var(--z-radius-lg);
+}
+.s-fs-c .fs-c-hero .m-shape {
+  width: var(--z-hero-shape);
+  height: var(--z-hero-shape);
+}
+.s-fs-c .fs-c-hero .m-state-word {
+  font-size: var(--z-hero-word);
+  line-height: 1.05;
+}
+.s-fs-c .fs-headline {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  text-wrap: pretty;
+}
+@media (max-width: 900px) {
+  .s-fs-c .fs-c-page {
+    padding: var(--z-space-8) var(--z-space-4);
+  }
+  .s-fs-c .fs-c-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .s-fs-c .fs-c-hold {
+    position: static;
+  }
+  /* Shape and word on one line, the sentence and the time beneath them. */
+  .s-fs-c .fs-c-hero {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--z-space-3);
+    row-gap: var(--z-space-2);
+  }
+  .s-fs-c .fs-c-hero .m-shape {
+    width: var(--z-space-12);
+    height: var(--z-space-12);
+  }
+  .s-fs-c .fs-c-hero .m-state-word {
+    font-size: var(--z-text-3xl);
+    overflow-wrap: anywhere;
+  }
+  .s-fs-c .fs-c-hero .fs-headline,
+  .s-fs-c .fs-c-hero .fs-since {
+    grid-column: 1 / -1;
+  }
+}

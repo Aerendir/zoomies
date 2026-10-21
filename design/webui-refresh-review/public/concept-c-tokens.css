@@ -23,3 +23,10 @@
   --z-gate-display: clamp(var(--z-text-3xl), 4.5vw, 3.75rem);
   --z-gate-display-leading: 1.1;
 }
+
+/* Fleet status, concept C: the state word is the largest type on the page and
+   its shape is drawn to match. */
+:root[data-concept='c'] {
+  --z-hero-word: clamp(var(--z-text-3xl), 6vw, 4.5rem);
+  --z-hero-shape: 5rem;
+}
