@@ -10,7 +10,7 @@
 > **Drift check (run first)**, in the repo root:
 
 ```
-git diff --stat a0f21dba..HEAD -- internal/api/sse.go internal/api/handlers_events.go internal/api/auth.go
+git diff --stat ed9dad2c..HEAD -- internal/api/sse.go internal/api/handlers_events.go internal/api/auth.go
 ```
 
 > If any in-scope file changed since this plan was written, compare the
@@ -27,7 +27,10 @@ git diff --stat a0f21dba..HEAD -- internal/api/sse.go internal/api/handlers_even
 - **Depends on**: none, but land after Plan 005 if that one is executed
   (both touch `internal/api/sse.go`, different regions)
 - **Category**: perf
-- **Planned at**: commit `a0f21dba`, 2026-10-19
+- **Planned at**: commit `ed9dad2c`, 2026-10-21 (refreshed: the line
+  numbers below are the ones on this commit; the sse.go change since the
+  planning commit is the merged plan 005's download handler, a different
+  region of the file)
 
 ## Why this matters
 
