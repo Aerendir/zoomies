@@ -35,6 +35,12 @@ var _ Transport = (*HTTPTransport)(nil)
 const (
 	defaultHeartbeatInterval = 30 * time.Second
 	minHeartbeatInterval     = time.Second
+	// The first retry must fit between a dead connection being found and the
+	// host becoming unhealthy. Continued failures back off, so an unavailable
+	// controller is not flooded, with the wait capped at the smaller of thirty
+	// seconds and the configured interval.
+	heartbeatRetryInitial = time.Second
+	heartbeatRetryMax     = 30 * time.Second
 	// defaultReconcileInterval is how often the host is compared against what
 	// the agent believes. It is deliberately slower than the heartbeat: it
 	// costs a listing per backend.
@@ -1007,9 +1013,11 @@ func (a *Agent) drain(ctx context.Context) {
 // heartbeatLoop keeps the host marked online and carries the agent's view of
 // its runners.
 func (a *Agent) heartbeatLoop(ctx context.Context) error {
-	ticker := time.NewTicker(a.heartbtI)
-	defer ticker.Stop()
+	timer := time.NewTimer(a.heartbtI)
+	defer timer.Stop()
+	retry := heartbeatRetryInitial
 	for {
+		delay := a.heartbtI
 		if err := a.heartbeat(ctx); err != nil {
 			switch {
 			case ctx.Err() != nil:
@@ -1019,13 +1027,18 @@ func (a *Agent) heartbeatLoop(ctx context.Context) error {
 			case errors.Is(err, ErrUnauthorized):
 				return fmt.Errorf("agent: the controller rejected this agent's token, so it has been revoked or the host was recreated: re-join with `zoomies agent join %s --token <join-token>`: %w", a.tr.Describe(), err)
 			default:
-				a.log.Warn("heartbeat failed; retrying on the next interval", "error", err, "interval", a.heartbtI)
+				delay = min(retry, a.heartbtI)
+				retry = min(2*retry, heartbeatRetryMax)
+				a.log.Warn("heartbeat failed; retrying after a short backoff", "error", err, "retry_after", delay)
 			}
+		} else {
+			retry = heartbeatRetryInitial
 		}
+		timer.Reset(delay)
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-timer.C:
 		}
 	}
 }
@@ -1065,6 +1078,14 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		a.expireBoosts(ctx)
 		return err
 	}
+	// A transport that could not answer says so with an error; one that
+	// answers nothing at all is still refused here, because the loop above
+	// is this process's whole report path and nothing recovers a panic in
+	// it. Both transports return a response, so this is the contract held
+	// rather than a state that is expected.
+	if resp == nil {
+		return nil
+	}
 	if update != nil && !resp.UpdateHeld {
 		a.markUpdateDelivered(delivery)
 	}
@@ -1085,9 +1106,6 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 	}
 	a.notify.send(fmt.Sprintf("STATUS=%d runner(s), capacity %d, controller %s", len(runners), a.opts.Capacity, a.tr.Describe()))
 
-	if resp == nil {
-		return nil
-	}
 	a.warnSkew(resp.ControllerVersion)
 
 	a.mu.Lock()

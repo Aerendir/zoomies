@@ -243,6 +243,10 @@ roadmap/            what supports it: the work-package record, decision records,
                     document answers which question
 skills/             what a coding agent installs: the zoomies skill, with a command
                     reference generated from the binary
+plans/              the improve advisor's output: prioritised, self-contained
+                    implementation plans and their index, each stamped with the
+                    commit it was written against; executors update the status
+                    table in plans/README.md
 install.sh          the one-line installer, served from the site root
 nixpacks.toml       the build a Nixpacks-based PaaS runs; see docs/paas.md
 ```

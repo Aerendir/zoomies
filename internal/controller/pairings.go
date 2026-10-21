@@ -134,12 +134,13 @@ func machineFit(p *store.Provider, machine *store.Host, pool *store.Pool) machin
 // what a machine it built measured itself as.
 func machineSizeSaid(p *store.Provider) string {
 	cpus, memoryMB := providerMachineSize(p)
-	if cpus <= 0 && memoryMB <= 0 {
+	diskMB := providerMachineDisk(p)
+	if cpus <= 0 && memoryMB <= 0 && diskMB <= 0 {
 		return ""
 	}
-	size := machineSize(cpus, memoryMB)
+	size := machineSize(cpus, memoryMB, diskMB)
 	switch {
-	case p.MachineCPUs > 0 || p.MachineMemoryMB > 0:
+	case p.MachineCPUs > 0 || p.MachineMemoryMB > 0 || p.MachineDiskMB > 0:
 		return "its machine size is " + size
 	case p.SeenFrom == store.MachineSizeFromMachine:
 		return "its machines measure " + size + " once they join"
@@ -179,15 +180,7 @@ func machineSizeFix(p *store.Provider, machine *store.Host, pool *store.Pool) st
 	if p.MachineCPUs > 0 || p.MachineMemoryMB > 0 || p.MachineDiskMB > 0 {
 		where = "raise its machine size"
 	}
-	size := machineSize(need.CPUs, need.MemoryMB)
-	if need.DiskMB > 0 {
-		disk := scheduler.FormatMB(need.DiskMB) + " of disk"
-		if size == "" {
-			size = disk
-		} else {
-			size = strings.ReplaceAll(size, " and ", ", ") + " and " + disk
-		}
-	}
+	size := machineSize(need.CPUs, need.MemoryMB, need.DiskMB)
 	return fmt.Sprintf("Give %s's machines at least %s (%s), or lower this pool's minimum runner size.", p.Name, size, where)
 }
 
@@ -202,9 +195,9 @@ func andList(words []string) string {
 	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
 }
 
-// machineSize writes a machine's processors and memory as an operator would
-// order them, leaving out a field nothing said.
-func machineSize(cpus int, memoryMB int64) string {
+// machineSize writes a machine's processors, memory and disk as an operator
+// would order them, leaving out a field nothing said.
+func machineSize(cpus int, memoryMB, diskMB int64) string {
 	var parts []string
 	if cpus > 0 {
 		parts = append(parts, plural(cpus, "CPU"))
@@ -212,7 +205,10 @@ func machineSize(cpus int, memoryMB int64) string {
 	if memoryMB > 0 {
 		parts = append(parts, scheduler.FormatMB(memoryMB)+" of memory")
 	}
-	return strings.Join(parts, " and ")
+	if diskMB > 0 {
+		parts = append(parts, scheduler.FormatMB(diskMB)+" of disk")
+	}
+	return andList(parts)
 }
 
 // sentence makes a finding's clause into one an operator reads on a page: the

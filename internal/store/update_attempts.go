@@ -58,7 +58,7 @@ type UpdateAttempt struct {
 	Backup     string
 	RolledBack bool
 	// Stuck is the controller's record of a stalled update helper found while
-	// this attempt was being handed over (migration 0115): a JSON document the
+	// this attempt was being handed over (migration 0116): a JSON document the
 	// controller reads and writes, opaque here, and empty when there was none.
 	Stuck       string
 	RequestedAt time.Time

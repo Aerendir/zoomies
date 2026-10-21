@@ -6,7 +6,7 @@ import { resolveUIStyle, UI_STYLE_KEY } from '../src/lib/state/ui-style';
 import { assertLook, expectedLook, storedLook } from '../tests/support/look.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const bootstrap = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+const bootstrap = /<script>([\s\S]*?)<\/script>/i.exec(html)?.[1];
 assert.ok(bootstrap);
 
 function boot(style: unknown, mode: string | null = null, blocked = false) {

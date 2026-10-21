@@ -423,6 +423,7 @@ func DecideMachines(s MachineSnapshot) MachinePlan {
 func providerSynthHost(p *store.Provider, now time.Time) *store.Host {
 	pf := p.MachinePlatform.Normalized()
 	cpus, memoryMB := providerMachineSize(p)
+	disk := providerMachineDisk(p)
 	return &store.Host{
 		ID:       "synthetic-" + p.ID,
 		Name:     p.Name,
@@ -444,8 +445,8 @@ func providerSynthHost(p *store.Provider, now time.Time) *store.Host {
 		// host reserve then applies to it exactly as it would to the real one,
 		// so a provider offering a machine too small for a pool is refused here
 		// rather than after it has been paid for.
-		DiskTotalMB: p.MachineDiskMB,
-		DiskFreeMB:  p.MachineDiskMB,
+		DiskTotalMB: disk,
+		DiskFreeMB:  disk,
 		// It has never missed a heartbeat either: without the snapshot's own
 		// clock here, HostCanRun's health test would rule out every provider
 		// and the fleet would never buy anything.
@@ -472,6 +473,22 @@ func providerMachineSize(p *store.Provider) (cpus int, memoryMB int64) {
 		memoryMB = p.SeenMemoryMB
 	}
 	return cpus, memoryMB
+}
+
+// providerMachineDisk is the disk this provider's next machine will have, as
+// far as anything has said: the row's own figure where it names one, and
+// otherwise what its template gives or what a machine it built measured.
+//
+// Without it a row that leaves the disk to its template judged the machine as
+// one of unknown disk, which fits every pool, so the fleet rented cloud-image
+// machines of a few gigabytes for a pool whose runner is charged a working
+// room of ten. Zero when nothing has said, which still fits by slots alone: the
+// first machine is how the disk is learnt.
+func providerMachineDisk(p *store.Provider) int64 {
+	if p.MachineDiskMB > 0 {
+		return p.MachineDiskMB
+	}
+	return p.SeenDiskMB
 }
 
 // providerServes is whether this provider may rent a machine for this pool:

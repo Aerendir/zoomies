@@ -983,8 +983,14 @@ func (c *Controller) RunnerRenderer(ctx context.Context, runners []*store.Runner
 
 // View renders one runner.
 func (v *RunnerRenderer) View(r *store.Runner) RunnerView {
-	pool := v.pools[r.PoolID]
-	host := v.hosts[r.HostID]
+	return runnerView(r, v.pools[r.PoolID], v.hosts[r.HostID], v.jobs[r.CurrentJobID])
+}
+
+// runnerView renders one runner from the rows that name it: its pool, its host
+// and, when it is busy, the job it is executing. It is RunnerRenderer.View
+// for a caller that holds one runner's rows already, which is what a detail
+// route is; the renderer's maps are the same three rows for a whole page.
+func runnerView(r *store.Runner, pool *store.Pool, host *store.Host, job *store.Job) RunnerView {
 	poolName, hostName := "", ""
 	if pool != nil {
 		poolName = pool.Name
@@ -1036,15 +1042,41 @@ func (v *RunnerRenderer) View(r *store.Runner) RunnerView {
 		CleanupAttempts:       r.CleanupAttempts,
 		CleanedUpAt:           r.CleanedUpAt,
 	}
-	if j := v.jobs[r.CurrentJobID]; j != nil {
+	if job != nil {
+		// The job's pool name comes from the pool row in hand: a runner
+		// only ever executes a job its own pool claimed, so the row that
+		// names the runner names the job too. The ID is checked rather
+		// than trusted so a row that disagrees renders the way the
+		// renderer's map lookup would, without a name.
 		jobPool := ""
-		if p := v.pools[j.PoolID]; p != nil {
-			jobPool = p.Name
+		if pool != nil && job.PoolID == pool.ID {
+			jobPool = pool.Name
 		}
-		job := NewJobView(j, jobPool)
-		out.CurrentJob = &job
+		jobView := NewJobView(job, jobPool)
+		out.CurrentJob = &jobView
 	}
 	return out
+}
+
+// RunnerViewIn renders one runner for a caller that already holds its host
+// and pool rows, the way jobViewIn names a job from pools in hand: a detail
+// route reads its host and pool anyway, and listing every pool and host to
+// name one runner is the fleet read a single drawer never needed. The busy
+// runner's job is fetched here, and a job row that has gone since the runner
+// was read is tolerated the way RunnerRenderer tolerates it: the runner is
+// rendered without it.
+func (c *Controller) RunnerViewIn(ctx context.Context, run *store.Runner, host *store.Host, pool *store.Pool) (RunnerView, error) {
+	// Only a runner that is actually executing something needs a job, which
+	// on an idle fleet is none of them.
+	var job *store.Job
+	if run.CurrentJobID != "" {
+		j, err := c.st.GetJob(ctx, run.CurrentJobID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return RunnerView{}, fmt.Errorf("reading the job a runner is executing: %w", err)
+		}
+		job = j
+	}
+	return runnerView(run, pool, host, job), nil
 }
 
 func cpuResourceView(r *store.Runner, p *store.Pool, h *store.Host) *CPUResourceView {

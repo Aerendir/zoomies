@@ -270,6 +270,7 @@ var problemAudience = map[string]Audience{
 	"provider.renting_off":                          AudienceFleet,
 	"provider.template_unverified":                  AudienceFleet,
 	"provider.machine_ca_same_as_cluster":           AudienceFleet,
+	"provider.machine_disk_small":                   AudienceFleet,
 	"provider.machines_behind":                      AudienceFleet,
 	"provider.unreachable":                          AudienceFleet,
 	"provider.unservable":                           AudienceFleet,
