@@ -351,11 +351,12 @@ change, in full:
 * `zoomies-ai-context.config.json`: the settings you chose.
 * `.zoomies/AI_CONTEXT.md`: the shared guide to context access, revision checks
   and selective retrieval.
-* Short marked entry points in `AGENTS.md` and `CLAUDE.md` (or an existing
-  `.claude/CLAUDE.md`). A Claude file that imports `AGENTS.md`, whether an exact
-  wrapper or its own prose around the import, keeps that single entry point: the
-  marked block stays in `AGENTS.md`, and a duplicate block in the Claude file is
-  removed so Claude Code does not load it twice. The guide stays on the source
+* A short marked entry point in `AGENTS.md`, and an import of it in `CLAUDE.md`
+  (or an existing `.claude/CLAUDE.md`). The block is written once, in
+  `AGENTS.md`, and the Claude file reaches it with `@AGENTS.md`: Claude Code
+  expands the import, so a block in both files is loaded twice. A Claude file
+  that has rules of its own keeps them and is given the import; one that
+  already imports `AGENTS.md` is left alone. The guide stays on the source
   branch; generated source packs continue to live on the separate context
   branch or in Zoomies.
 * The AI Context badge near the top of the README.

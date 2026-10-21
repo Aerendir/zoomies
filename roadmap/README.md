@@ -62,6 +62,9 @@ the row in `progress.md` is the record of what shipped.
 * [kennel-club.md](kennel-club.md): repository standards for the fleet (ZF-229).
 * [rc1-triage.md](rc1-triage.md): the known findings before the first release
   candidate.
+* [runner-working-room.md](runner-working-room.md): the design for charging
+  every runner working room on disk, and for a provider learning the disk its
+  machines have, so a job is never placed where it cannot fit.
 * [support-and-measurement.md](support-and-measurement.md): the support matrix
   and the moments the platform must timestamp.
 * [tailcat-private-hosts.md](tailcat-private-hosts.md): private runner hosts

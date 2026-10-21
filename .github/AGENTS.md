@@ -50,7 +50,12 @@ has a CI job that diffs them:
   the template, which needs the previous template kept as a recognised
   generation (`olderGenerations` in `workflow.go`, and `olderGeneratorLocks`
   there for the lockfile, which a dependency fix changes without a new
-  template).
+  template). Because Dependabot does not touch them, a CI step asks GitHub
+  which release each action is at and fails when the template is behind: the
+  pins it writes are the ones it knows, and a repository that took an update
+  of its own would otherwise be moved back by the next reinstall. Taking a new
+  version means keeping the one it replaces in `olderActionPins`, so the
+  repositories that installed it are still recognised.
 * The Go CI and releases use is written once, in `.github/actions/setup-go`, and
   every job calls that action; `go.mod` holds the lower floor a contributor
   needs and gets no `toolchain` line. The UI's Node major is `NODE_VERSION` in

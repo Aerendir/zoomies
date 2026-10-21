@@ -514,8 +514,8 @@ must not be reduced gives its own figure instead. See
 [`runners.minimum_cpus`](configuration.md#runnersminimum_cpus-and-runnersminimum_memory_mb-the-least-a-runner-will-take).
 
 Disk and the process limit are independent of the choice. Neither has a share
-to be given (free disk is a measurement rather than a budget) so a pool may
-cap its cache's disk and still leave its size to the host.
+to be given (a runner is charged a fixed working room on disk, not a slot's
+share) so a pool may cap its cache's disk and still leave its size to the host.
 
 In the editor the size is a section of its own, after the hosts and before the
 count, because that is the order the decision is made in: these are the
@@ -1317,7 +1317,7 @@ The recommendation is the smallest of three counts of runners:
 | --- | --- |
 | CPU | the cores left after the reserve, over what one runner asks for |
 | Memory | the memory left after the reserve, over what one runner asks for |
-| Disk | the work filesystem less its reserve, at 10 GiB of working room per runner |
+| Disk | the work filesystem less its reserve, at 10 GB of working room per runner |
 
 A runner asks for the largest size an enabled pool sets, or the fleet's default size
 where none does. The reserve is a core on anything up to sixteen, a tenth of the
@@ -1558,11 +1558,18 @@ fits.
 pools that set no limits, and is warned about as
 `scheduler.default_runner_limits_off` for as long as it stands.
 
-Free disk is a gate rather than a budget. A host at or below its disk reserve
-takes no new runner at all, whatever the pool asks for; nothing is evicted to
-make room, because a runner's caches outlive it on purpose. Two things follow:
-disk is the one shortage that no job finishing will clear, and a pool that sets
-`resources.disk_gb` is charged it against what is free right now.
+Free disk is a gate, and every runner is charged working room against it. A
+host at or below its disk reserve takes no new runner at all; above it, each
+runner a pass places is charged 10 GB of working room, or the figure the pool
+types as `resources.disk_gb`, so a job is never started on a machine that cannot
+hold its checkout and caches. A runner holds its room for as long as it lives:
+free disk measures what has been written, not what was promised, so a runner
+placed thirty seconds ago that has written nothing yet is still charged its
+room by the next pass. A runner that has written most of its room is counted
+for the whole of it, which errs towards not placing. Nothing is evicted to make room, because a
+runner's caches outlive it on purpose. Two things follow: disk is the one
+shortage that no job finishing will clear, and a host with less than about 12 GB
+free takes no new runner until space is freed or a pool asks for less.
 
 A host whose agent never reported its size is placed by slots alone, exactly as
 before, which is what stops an upgrade emptying a fleet, and it is worth
@@ -1658,14 +1665,14 @@ Read the counts, because they name the fix:
 
 | What it says | What to do |
 | --- | --- |
-| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. Nor is one the pool's size excludes through its runner profile, or one already at its disk reserve, because a finishing job gives neither back. |
+| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. Nor is one the pool's size excludes through its runner profile, or one already at its disk reserve, or short of the working room above it, because a finishing job gives neither back. |
 | `cordoned` | Uncordon the host, if the maintenance is over. |
 | `unhealthy` | The agent is not heartbeating. Check that it is running on that machine and can reach this controller. |
 | `without the docker backend` | Fix the socket on that host, or point the pool at a backend your hosts already offer. When every other host is out for that reason, the sentence carries the agent's own words about the socket, and names the backends it could move to. |
 | `not matching the pool's host selector` | Relax the selector, or label a host to match. |
 | `too small for this pool's limits` | The machine could not hold one runner of this pool even when empty. Lower the pool's CPU or memory limits, or add a bigger host. Waiting will not help. |
 | `short of memory`, `short of CPU` | The host is the right size and has already promised what it has to the runners on it. Wait, lower the pool's limits, or add a host. When runners of yours hold it, that counts as full rather than as a fault, because a finishing job returns what they hold; memory taken by work outside the fleet does not. |
-| `low on disk` | The work directory's filesystem is at or below the host's disk reserve. Free space on it, lower the pool's `disk_gb`, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
+| `low on disk` | The work directory's filesystem is at or below the host's disk reserve, or short of the working room a runner is given above it (10 GB, or the pool's `resources.disk_gb`). Free space on it, set the pool's `resources.disk_gb` lower, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
 | `throttled after sustained pressure` | The host is on a rung of the [throttle ladder](#current-usage-and-automatic-holds) and every slot the rung left it is in use. Wait for it to lift, lower the host's capacity or the pools' limits so its runners fit the machine, or add a host; running jobs continue. A host that keeps being throttled has too many slots for its machine, or pools whose limits let a job take more than a slot's worth of it. |
 
 The distinction the reasons keep is between a fleet that is merely **full**,
