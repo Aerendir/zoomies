@@ -94,10 +94,24 @@ func TestASmallDiskLimitsHowManyRunnersAHostIsToldToTake(t *testing.T) {
 	if !ok || r.LimitedBy != "disk" {
 		t.Fatalf("the disk should set the capacity: %+v", r)
 	}
-	if want := int((h.DiskTotalMB - r.ReserveDiskMB) / AutoAdjustRunnerDiskMB); r.Capacity != want || r.Capacity >= 16 {
+	if want := int((h.DiskTotalMB - r.ReserveDiskMB) / RunnerDiskMB); r.Capacity != want || r.Capacity >= 16 {
 		t.Fatalf("capacity %d, want %d (disk-bound)", r.Capacity, want)
 	}
 	if r.Reason() == "" {
 		t.Fatal("a recommendation must say why")
+	}
+}
+
+// The recommender and placement read one constant, so a host told it can
+// hold N runners is a host the pass will place N runners on.
+func TestPlacementAndTheRecommenderAgreeOnAWorkingRoom(t *testing.T) {
+	h := &store.Host{Capacity: 8, Backends: store.StringSlice{"docker"}, CPUs: 36, MemoryMB: 131072,
+		DiskTotalMB: 40 * 1024, DiskFreeMB: 40 * 1024}
+	r, ok := RecommendHost(h, DefaultRunnerAsk)
+	if !ok || r.LimitedBy != "disk" {
+		t.Fatalf("the disk should set the capacity: %+v", r)
+	}
+	if got := Reserve(&store.Pool{Enabled: true, Backend: store.BackendDocker}, h).DiskMB; got != RunnerDiskMB {
+		t.Fatalf("placement charges %d MB, the recommender assumed %d", got, RunnerDiskMB)
 	}
 }

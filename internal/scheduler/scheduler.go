@@ -1352,6 +1352,9 @@ func newHostSet(hosts []*store.Host, pools []*store.Pool, runners map[string][]*
 		l := hs.left[h.ID]
 		l.CPUs -= t.reserved.CPUs
 		l.MemoryMB -= t.reserved.MemoryMB
+		if hs.alloc[h.ID].DiskKnown {
+			l.DiskMB -= t.reserved.DiskMB
+		}
 		hs.promisedMemory[h.ID] = l.MemoryMB
 		hs.ours[h.ID] = t.ours
 		if t.warming > 0 {
@@ -1781,11 +1784,14 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 			if detail == "" {
 				detail = naming.ForSentence(h.Name) + ": " + ThrottleReason(h)
 			}
-		case hs.alloc[h.ID].DiskKnown && hs.alloc[h.ID].DiskMB <= 0:
+		case hs.alloc[h.ID].DiskKnown && hs.alloc[h.ID].DiskMB < MinimumReserve(p, h).DiskMB:
 			// The disk gate is asked before the sizing one, because a host at
 			// its reserve refuses every pool and "too small for this pool's
 			// limits" would send the operator to change limits that were never
-			// the problem.
+			// the problem. It is asked of the pool's disk ask too, not only of
+			// an empty allocation: every runner is charged a working room, so a
+			// host with a few GB free is short of disk, and freeing space on
+			// it does make room, unlike a machine that is too small.
 			lowDisk++
 		case !HostFits(h, p):
 			// The machine itself is too small for one runner of this pool, so
@@ -1948,7 +1954,13 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 		// Disk is the one of the three that no job finishing will return: a
 		// runner that exits leaves its caches behind on purpose, so telling an
 		// operator to wait here is telling them to wait for nothing.
-		b.fix = "free space on those hosts' work directories, lower the pool's disk request, or add a host"
+		if p.Resources.DiskGB > 0 {
+			// The pool is charged what it typed, so the figure to lower is
+			// its own; the working room is a default it is not using.
+			b.fix = "free space on those hosts' work directories, lower the pool's resources.disk_gb, or add a host"
+		} else {
+			b.fix = "free space on those hosts' work directories, set the pool's resources.disk_gb below the " + formatMB(RunnerDiskMB) + " of working room a runner is given, or add a host"
+		}
 	case profile > 0 && profile+unhealthy+cordoned == len(hs.hosts):
 		// Both halves are things an operator wrote, so both are named: either
 		// can be changed, and which one is right is theirs to say.

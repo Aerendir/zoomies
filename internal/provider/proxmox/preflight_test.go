@@ -472,6 +472,56 @@ func TestPreflightReportsTheSizeTheTemplateBuilds(t *testing.T) {
 	if report.BuildsCPUs != 2 || report.BuildsMemoryMB != 4096 {
 		t.Fatalf("builds %d CPUs and %d MB, want the template's 2 cores and 4096 MB", report.BuildsCPUs, report.BuildsMemoryMB)
 	}
+	if report.BuildsDiskMB != 32*1024 {
+		t.Fatalf("builds a %d MB disk, want the template's 32G", report.BuildsDiskMB)
+	}
+}
+
+// HasDisk admits a template on any of four slots, and the size has to be read
+// from whichever of them holds the disk: a SATA or IDE template passed the
+// check and then reported no size, so the fleet judged its clones by slots
+// alone and rented machines with a cloud image's few gigabytes.
+func TestTheBootDiskIsReadFromWhicheverSlotHasDiskAdmits(t *testing.T) {
+	for name, tc := range map[string]struct {
+		cfg  VMConfig
+		slot string
+	}{
+		"scsi":              {VMConfig{SCSI0: "local-lvm:base-9000-disk-0,size=32G"}, "scsi0"},
+		"virtio":            {VMConfig{VirtIO0: "local-lvm:base-9000-disk-0,size=32G"}, "virtio0"},
+		"sata":              {VMConfig{SATA0: "local-lvm:base-9000-disk-0,size=32G"}, "sata0"},
+		"ide":               {VMConfig{IDE0: "local-lvm:base-9000-disk-0,size=32G"}, "ide0"},
+		"scsi before sata":  {VMConfig{SCSI0: "local-lvm:base-9000-disk-0,size=32G", SATA0: "local-lvm:base-9000-disk-1,size=8G"}, "scsi0"},
+		"past a cdrom":      {VMConfig{IDE0: "local:iso/ubuntu.iso,media=cdrom", SATA0: "local-lvm:base-9000-disk-0,size=32G"}, "sata0"},
+		"past cloud-init":   {VMConfig{IDE0: "local-lvm:vm-9000-cloudinit,media=cdrom", VirtIO0: "local-lvm:base-9000-disk-0,size=32G"}, "virtio0"},
+		"nothing but media": {VMConfig{IDE0: "local:iso/ubuntu.iso,media=cdrom"}, ""},
+	} {
+		slot, spec := bootDisk(tc.cfg)
+		if slot != tc.slot {
+			t.Errorf("%s: read %q, want %q", name, slot, tc.slot)
+			continue
+		}
+		if slot == "" {
+			continue
+		}
+		if mb, ok := diskSizeMB(spec); !ok || mb != 32*1024 {
+			t.Errorf("%s: size %d MB (readable %v), want the 32G on %s", name, mb, ok, slot)
+		}
+	}
+}
+
+// A disk line with no size= in it is a size the preflight cannot read, and an
+// unreadable size is reported as zero rather than guessed at: a guess would
+// let the fit check turn away, or admit, a machine on a number nobody read.
+func TestPreflightReportsNoDiskWhenTheTemplatesDiskLineHasNoSize(t *testing.T) {
+	f := newFakePVE(t, nil)
+	f.mu.Lock()
+	f.vms[9000].disk = "local-lvm:base-9000-disk-0"
+	f.mu.Unlock()
+
+	report := Preflight(context.Background(), f.client(t), healthyPrereqs())
+	if report.BuildsDiskMB != 0 {
+		t.Fatalf("builds a %d MB disk, want 0 for a disk line that names no size", report.BuildsDiskMB)
+	}
 }
 
 // What the two ways of reaching a cluster owe an operator who got nothing

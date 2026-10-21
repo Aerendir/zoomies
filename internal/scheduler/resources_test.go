@@ -650,3 +650,145 @@ func TestAPoolThatTypesOneFieldIsRefusedWhereTheOtherIsTooThinForAPair(t *testin
 		t.Errorf("a roomy host was refused: %q", field)
 	}
 }
+
+// A pool that says nothing about disk used to be charged nothing, so one
+// runner could start on a machine with 3 GB free and fill it part-way through
+// its first download. Three CI jobs died that way on fresh machines.
+func TestAPoolThatTypesNoDiskIsChargedAWorkingRoom(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, 200*1024)
+	if got := Reserve(testPool("plain", "plain"), h).DiskMB; got != RunnerDiskMB {
+		t.Fatalf("charged %d MB, want the working room %d", got, RunnerDiskMB)
+	}
+}
+
+func TestADockerInDockerPairSharesOneWorkingRoom(t *testing.T) {
+	p := testPool("dind", "dind")
+	p.DockerMode = store.DockerDinD
+	if got := Reserve(p, sized("host", 4, 16, 16*1024, 200*1024)).DiskMB; got != RunnerDiskMB {
+		t.Fatalf("charged %d MB, want one room %d: only a typed figure doubles", got, RunnerDiskMB)
+	}
+}
+
+func TestATypedDiskFigureWinsOverTheWorkingRoom(t *testing.T) {
+	p := testPool("small", "small")
+	p.Resources.DiskGB = 1
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+2048) // 2 GB to place on
+	if got := Reserve(p, h).DiskMB; got != 1024 {
+		t.Fatalf("charged %d MB, want the 1024 the pool typed", got)
+	}
+	if !HostFits(h, p) {
+		t.Fatal("a pool that asks for 1 GB does not fit a host with 2 GB to place on")
+	}
+}
+
+func TestAnUnmeasuredDiskConstrainsNothing(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, 0)
+	h.DiskTotalMB, h.DiskFreeMB = 0, 0
+	if !HostFits(h, testPool("plain", "plain")) {
+		t.Fatal("a host that never measured its disk must place by slots alone")
+	}
+}
+
+// Each runner a pass adds is charged its room against what is free.
+func TestAPassChargesEachRunnerItAddsAWorkingRoom(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024) // room for one
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{testPool("plain", "plain")}, nil, now)
+	if got := len(hs.place(testPool("plain", "plain"), 3)); got != 1 {
+		t.Fatalf("placed %d runners on a host with room for one", got)
+	}
+}
+
+// Free disk measures what has been written, not what was promised. A runner
+// placed last pass has written nothing yet, so a pass that started from the
+// measurement alone would place a second runner in the same room and the host
+// would run out part-way through both jobs, which is the failure the room
+// exists to prevent.
+func TestARunnerPlacedLastPassStillHoldsItsWorkingRoom(t *testing.T) {
+	p := testPool("plain", "plain")
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024) // room for one
+	live := map[string][]*store.Runner{p.ID: {{ID: "run_1", PoolID: p.ID, HostID: h.ID, State: store.RunnerIdle}}}
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now)
+	if got := len(hs.place(p, 3)); got != 0 {
+		t.Fatalf("placed %d runners beside one that holds the only room", got)
+	}
+	// Once it is gone the room is free again, and a measurement that has not
+	// moved is believed.
+	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	if got := len(hs.place(p, 3)); got != 1 {
+		t.Fatalf("placed %d runners on a host with room for one", got)
+	}
+}
+
+// A host that never measured its disk charges nothing for it, so a live
+// runner's room must not turn its unknown into a negative that reads as full.
+func TestALiveRunnersRoomDoesNotConstrainAnUnmeasuredHost(t *testing.T) {
+	p := testPool("plain", "plain")
+	h := sized("host", 4, 16, 16*1024, 0)
+	h.DiskTotalMB, h.DiskFreeMB = 0, 0
+	live := map[string][]*store.Runner{p.ID: {{ID: "run_1", PoolID: p.ID, HostID: h.ID, State: store.RunnerIdle}}}
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now)
+	if got := len(hs.place(p, 1)); got != 1 {
+		t.Fatalf("placed %d runners on an unmeasured host with a slot free", got)
+	}
+}
+
+func TestTheLowOnDiskFixNamesTheWorkingRoom(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
+	p := testPool("plain", "plain")
+	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now).why(p)
+	if !strings.Contains(b.what, "low on disk") {
+		t.Errorf("a host with a few GB free is short of disk, not too small: %q", b.what)
+	}
+	for _, want := range []string{"free space", "10 GB", "disk_gb"} {
+		if !strings.Contains(b.fix, want) {
+			t.Errorf("the fix %q does not say %q", b.fix, want)
+		}
+	}
+}
+
+// A pool that typed its disk is charged what it typed, not the working room,
+// so telling its operator to type a figure below 10 GB is advice about a
+// default they are not using; the figure to lower is their own.
+func TestTheLowOnDiskFixForATypedDiskNamesThePoolsOwnFigure(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
+	p := testPool("typed", "typed")
+	p.Resources.DiskGB = 8
+	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now).why(p)
+	if !strings.Contains(b.what, "low on disk") {
+		t.Fatalf("a host with a few GB free is short of disk, not too small: %q", b.what)
+	}
+	if !strings.Contains(b.fix, "lower the pool's resources.disk_gb") {
+		t.Errorf("the fix %q does not say to lower the pool's own figure", b.fix)
+	}
+	if strings.Contains(b.fix, "10 GB") {
+		t.Errorf("the fix %q names the working room the pool does not use", b.fix)
+	}
+}
+
+// The same answer once a runner of this pass has used up the room the host
+// had, which is the other way to arrive at the low-on-disk branch.
+func TestAHostWhoseRoomThisPassUsedUpIsLowOnDiskToo(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024)
+	p := testPool("plain", "plain")
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	hs.place(p, 1)
+	b := hs.why(p)
+	if !strings.Contains(b.what, "low on disk") || !strings.Contains(b.fix, "free space") {
+		t.Errorf("what %q, fix %q: want the low-on-disk answer", b.what, b.fix)
+	}
+}
+
+// Without the sentence, "is charged 10 GB" reads as something the pool asked
+// for, and the operator has no way to know that typing disk_gb lowers it.
+func TestTheDiskShortfallSaysWhereAnUntypedChargeCameFrom(t *testing.T) {
+	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
+	got := HostShortfall(h, testPool("plain", "plain"))
+	if !strings.Contains(got, "working room") || !strings.Contains(got, "resources.disk_gb") {
+		t.Errorf("the shortfall does not explain the default charge: %q", got)
+	}
+	typed := testPool("typed", "typed")
+	typed.Resources.DiskGB = 8
+	if got := HostShortfall(h, typed); strings.Contains(got, "working room") {
+		t.Errorf("a pool that typed its disk is told about a default it did not use: %q", got)
+	}
+}

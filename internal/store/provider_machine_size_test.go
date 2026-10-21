@@ -30,16 +30,17 @@ func TestAProvidersSeenMachineSizeIsOnlyEverReplacedByNewerEvidence(t *testing.T
 		name      string
 		cpus      int
 		memoryMB  int64
+		diskMB    int64
 		from      string
 		at        time.Time
 		wantWrote bool
 	}{
-		{"a machine measures itself", 2, 3915, MachineSizeFromMachine, built, true},
-		{"the same machine says the same again", 2, 3915, MachineSizeFromMachine, built, false},
-		{"a check reads an enlarged template", 4, 8192, MachineSizeFromTemplate, checked, true},
-		{"the older machine is read again", 2, 3915, MachineSizeFromMachine, built, false},
+		{"a machine measures itself", 2, 3915, 20480, MachineSizeFromMachine, built, true},
+		{"the same machine says the same again", 2, 3915, 20480, MachineSizeFromMachine, built, false},
+		{"a check reads an enlarged template", 4, 8192, 32768, MachineSizeFromTemplate, checked, true},
+		{"the older machine is read again", 2, 3915, 20480, MachineSizeFromMachine, built, false},
 	} {
-		wrote, err := s.SetProviderMachineSizeSeen(ctx, p.ID, step.cpus, step.memoryMB, step.from, step.at)
+		wrote, err := s.SetProviderMachineSizeSeen(ctx, p.ID, step.cpus, step.memoryMB, step.diskMB, step.from, step.at)
 		if err != nil {
 			t.Fatalf("%s: SetProviderMachineSizeSeen: %v", step.name, err)
 		}
@@ -52,9 +53,9 @@ func TestAProvidersSeenMachineSizeIsOnlyEverReplacedByNewerEvidence(t *testing.T
 	if err != nil {
 		t.Fatalf("GetProvider: %v", err)
 	}
-	if got.SeenCPUs != 4 || got.SeenMemoryMB != 8192 || got.SeenFrom != MachineSizeFromTemplate ||
+	if got.SeenCPUs != 4 || got.SeenMemoryMB != 8192 || got.SeenDiskMB != 32768 || got.SeenFrom != MachineSizeFromTemplate ||
 		got.SeenAt == nil || !got.SeenAt.Equal(checked) {
-		t.Fatalf("seen = %d CPUs, %d MB from %q at %v; want the check's 4 CPUs and 8 GB", got.SeenCPUs, got.SeenMemoryMB, got.SeenFrom, got.SeenAt)
+		t.Fatalf("seen = %d CPUs, %d MB memory, %d MB disk from %q at %v; want the check's 4 CPUs, 8 GB and 32 GB disk", got.SeenCPUs, got.SeenMemoryMB, got.SeenDiskMB, got.SeenFrom, got.SeenAt)
 	}
 	if !got.UpdatedAt.Equal(created.UpdatedAt) {
 		t.Errorf("updated_at moved from %v to %v for an observation", created.UpdatedAt, got.UpdatedAt)
@@ -74,16 +75,21 @@ func TestAProvidersSeenSizeIsForgottenWhenItsMachineShapeChanges(t *testing.T) {
 		{"its maximum machines", func(p *Provider) { p.MaxMachines = 9 }, false},
 		{"its typed size cleared for the template", func(p *Provider) { p.MachineCPUs, p.MachineMemoryMB = 0, 0 }, true},
 		{"its template", func(p *Provider) { p.Settings = StringMap{"template_id": "9200"} }, true},
+		// A typed disk cleared back to the template is as much a new machine
+		// as a typed processor count cleared: kept, the larger figure would
+		// judge a template that builds a smaller disk, and the fleet would rent
+		// machines with too little room for their runners.
+		{"its typed disk cleared for the template", func(p *Provider) { p.MachineDiskMB = 0 }, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newTestStore(t)
 			ctx := context.Background()
 			p := &Provider{Kind: ProviderFake, Name: "lab", MachineCPUs: 8, MachineMemoryMB: 16384,
-				Settings: StringMap{"template_id": "9100"}, MaxMachines: 2}
+				MachineDiskMB: 40960, Settings: StringMap{"template_id": "9100"}, MaxMachines: 2}
 			if err := s.CreateProvider(ctx, p); err != nil {
 				t.Fatalf("CreateProvider: %v", err)
 			}
-			if _, err := s.SetProviderMachineSizeSeen(ctx, p.ID, 8, 15800, MachineSizeFromMachine, time.Now()); err != nil {
+			if _, err := s.SetProviderMachineSizeSeen(ctx, p.ID, 8, 15800, 40960, MachineSizeFromMachine, time.Now()); err != nil {
 				t.Fatalf("SetProviderMachineSizeSeen: %v", err)
 			}
 			row, err := s.GetProvider(ctx, p.ID)
@@ -98,10 +104,10 @@ func TestAProvidersSeenSizeIsForgottenWhenItsMachineShapeChanges(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetProvider: %v", err)
 			}
-			forgot := got.SeenCPUs == 0 && got.SeenMemoryMB == 0 && got.SeenFrom == "" && got.SeenAt == nil
-			kept := got.SeenCPUs == 8 && got.SeenMemoryMB == 15800 && got.SeenAt != nil
+			forgot := got.SeenCPUs == 0 && got.SeenMemoryMB == 0 && got.SeenDiskMB == 0 && got.SeenFrom == "" && got.SeenAt == nil
+			kept := got.SeenCPUs == 8 && got.SeenMemoryMB == 15800 && got.SeenDiskMB == 40960 && got.SeenAt != nil
 			if tc.wantForgot && !forgot || !tc.wantForgot && !kept {
-				t.Fatalf("seen = %d CPUs, %d MB from %q at %v; want forgotten = %v", got.SeenCPUs, got.SeenMemoryMB, got.SeenFrom, got.SeenAt, tc.wantForgot)
+				t.Fatalf("seen = %d CPUs, %d MB memory, %d MB disk from %q at %v; want forgotten = %v", got.SeenCPUs, got.SeenMemoryMB, got.SeenDiskMB, got.SeenFrom, got.SeenAt, tc.wantForgot)
 			}
 		})
 	}
