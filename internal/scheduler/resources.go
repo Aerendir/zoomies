@@ -55,11 +55,15 @@ const (
 // limits charges each runner exactly one slot's worth, so its capacity is what
 // admits work, exactly as it did before any of this existed.
 //
-// Disk has no fallback. Free disk is a measurement rather than a budget, and
-// dividing what is left into shares would turn every fill of the cache into a
-// refusal to place work that had always placed. What guards it instead is the
-// reserve floor: a pool that asks for disk is charged it, and a host at or
-// below its reserve takes nothing.
+// Disk's fallback is not a share but the working room (RunnerDiskMB): free
+// disk is a measurement rather than a budget, so it is not cut into slots, and
+// each runner is charged a fixed room against what is free above the host's
+// reserve, the ones already there as well as the ones a pass adds, because the
+// measurement cannot yet contain what a runner has only been promised (see
+// hostTotals.add). The trade accepted is that a host with under about 12 GB
+// free (the 2 GB reserve floor plus one runner's room) takes no new runner,
+// where before it took work and failed it part-way through a download. A pool
+// whose jobs need less sets resources.disk_gb, which is charged instead.
 //
 // A docker-in-docker runner is two containers, and what it is charged follows
 // what the two are given. A limit an operator typed says what the job may
@@ -94,6 +98,13 @@ func Reserve(p *store.Pool, h *store.Host) Reservation {
 		DiskMB:   p.Resources.DiskGB * 1024,
 	}
 	cpuFromHost, memoryFromHost := res.CPUs <= 0, res.MemoryMB <= 0
+	// A pool that types no disk is still charged a working room. Charging
+	// nothing let a runner start on a machine with a few GB free and fill it
+	// part-way through its first download.
+	diskFromHost := res.DiskMB <= 0
+	if diskFromHost {
+		res.DiskMB = RunnerDiskMB
+	}
 	// A minimum above the slot share is a slot of the minimum's size: the
 	// runner is given it and charged it, and the host holds fewer runners
 	// than its slots rather than none -- see MinimumSlot.
@@ -122,8 +133,11 @@ func Reserve(p *store.Pool, h *store.Host) Reservation {
 		if !memoryFromHost {
 			res.MemoryMB *= 2
 		}
-		// Disk has no fallback, so a figure here is always one somebody typed.
-		res.DiskMB *= 2
+		// The default working room is one per pair, like a share: the pair
+		// works in one directory. Only a typed figure doubles.
+		if !diskFromHost {
+			res.DiskMB *= 2
+		}
 	}
 	return res
 }
@@ -322,6 +336,13 @@ func (t *hostTotals) add(p *store.Pool, h *store.Host, r *store.Runner) {
 	res := RunnerCharge(p, h, r)
 	t.reserved.CPUs += res.CPUs
 	t.reserved.MemoryMB += res.MemoryMB
+	// A live runner holds its working room until it is gone. Free disk is a
+	// measurement of what has been written, not of what was promised, so a
+	// runner placed last pass that has not filled its room yet would otherwise
+	// be forgotten by this one, and a host could be promised the same gigabytes
+	// twice across passes. The error this accepts runs the safe way: a runner
+	// that has written most of its room is counted for the whole of it.
+	t.reserved.DiskMB += res.DiskMB
 	starting := r.State == store.RunnerProvisioning || r.State == store.RunnerRegistering
 	if starting {
 		t.warming++
@@ -735,7 +756,7 @@ func HostShortfall(h *store.Host, p *store.Pool) string {
 		return "its work directory is at or below its disk reserve, so it takes no runner of any pool"
 	case alloc.DiskKnown && left.DiskMB < want.DiskMB:
 		return fmt.Sprintf("it has %s of disk free to place on, and one runner of this pool is charged %s%s",
-			formatMB(left.DiskMB), formatMB(want.DiskMB), charged(p.Resources.DiskGB > 0, dind))
+			formatMB(left.DiskMB), formatMB(want.DiskMB), charged(p.Resources.DiskGB > 0, dind)+workingRoomCharged(p))
 	case alloc.CPUsKnown && left.CPUs+cpuEpsilon < want.CPUs:
 		return fmt.Sprintf("it has %s CPU to place on, and one runner of this pool is charged %s%s",
 			formatCPUs(left.CPUs), formatCPUs(want.CPUs), charged(p.Resources.CPUs > 0, dind)+minimumCharged(p, "cpu"))
@@ -886,6 +907,17 @@ func charged(set, dind bool) string {
 	return ""
 }
 
+// workingRoomCharged says where a disk charge came from when the pool typed
+// none: the working room every runner is given, which the operator can lower by
+// typing resources.disk_gb. Without it the figure looks like something the pool
+// asked for.
+func workingRoomCharged(p *store.Pool) string {
+	if p.Resources.DiskGB > 0 {
+		return ""
+	}
+	return ", the working room every runner is given when its pool types no resources.disk_gb"
+}
+
 // minimumCharged names the pool's own minimum where it is what a runner of an
 // automatic pool is charged, because that is a figure the operator set and can
 // lower -- and nothing else in the sentence says where the charge came from.
@@ -1029,9 +1061,12 @@ func HostRoomFor(h *store.Host, p *store.Pool) HostRoom {
 	if alloc.MemoryKnown && want.MemoryMB > 0 {
 		consider(int(alloc.MemoryMB/want.MemoryMB), "memory")
 	}
-	// Disk only where the pool asks for it. Free disk is a measurement rather
-	// than a budget -- see Reserve -- so dividing what is left into runners
-	// would put a machine's cache on the pool's account.
+	// Disk is charged where the pool asks for it, and otherwise the working
+	// room every runner is given (RunnerDiskMB), exactly as Reserve charges it
+	// for placement: a count that left it out would promise runners the pass
+	// refuses. Free disk is a measurement, not a budget, so this count moves
+	// as a host's caches fill and empty; that is the page agreeing with
+	// placement, not drifting from it.
 	if alloc.DiskKnown && want.DiskMB > 0 {
 		consider(int(alloc.DiskMB/want.DiskMB), "disk")
 	}

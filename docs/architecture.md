@@ -157,6 +157,31 @@ problems list -- are worked out again after every pass and sent when they
 differ. Each frame is the resource's `GET` shape, rendered by the same code
 (see [api-surface.md](api-surface.md#sse-event-kinds)).
 
+### Jobs GitHub no longer reports
+
+The background sweep completes a job still queued after 24 hours as `stale`,
+so a deleted run stops creating demand. An in-progress job instead protects
+its runner from cleanup: a 404, revoked access or a GitHub outage cannot safely
+prove that the workload stopped.
+
+GitHub [limits self-hosted job execution to five days](https://docs.github.com/en/actions/reference/limits).
+The sweep retires an in-progress row only after its `started_at` is more than
+five days and one hour old. The hour allows for completion delivery and clock
+skew. If the start is unknown, it waits 35 days and one hour from `queued_at`,
+using GitHub's whole workflow lifetime limit because that queue timestamp may
+precede an approval wait. Such rows deliberately linger longer rather than
+risk killing a newly started job.
+
+The controller records `completed` with conclusion `stale` and a timeline
+explanation, then wakes the scheduler. `stale` is not a workflow failure.
+Normal cleanup can now remove the runner and its workload. Incorrect timestamps,
+clock skew beyond the margin, or a future increase to GitHub's limits could
+therefore stop live work; this is an age-based presumption, not confirmation
+from GitHub. A failed database read or completion write leaves the job protecting
+its runner for a later sweep. A failed timeline write is logged; completion
+still stands and cleanup remains possible. Cleanup delivery failures follow
+the existing task retry path.
+
 ### Runner starts on one host
 
 See [Runner startup under host load](runner-startup-stability.md) for controls,

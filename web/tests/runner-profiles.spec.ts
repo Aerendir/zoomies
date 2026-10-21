@@ -93,21 +93,21 @@ test.beforeAll(async ({ browser }) => {
   const page = await browser.newPage();
   try {
     ({ id: hostId, token: agentToken } = await enrol(page));
-    // The controller keeps a healthy host at its recommendation, and this
-    // host's recommendation is not the capacity it was enrolled with: the
-    // fleet's own pools ask for a bigger runner than this machine was
-    // measured for. The host is this spec's, so the housekeeping leaves it
-    // alone. A capacity that moved underneath the tests would make them
-    // depend on when the controller last looked, which is what made this
-    // file fail on a slow machine and pass on a fast one.
-    const own = await page.request.patch(`/api/v1/hosts/${hostId}`, {
-      data: { auto_adjust: 'off' },
+    // The controller keeps a host at its recommended size unless the host says
+    // otherwise, and this host's recommendation is not the eight runners it
+    // joined with. These tests are about the sizes an operator types, so the
+    // host is set to be left alone and the capacity the test writes is the one
+    // the dialog and the card speak about. A joined host is healthy from its
+    // first moment, so the pass can land between the join and this request;
+    // the capacity travels with the setting, and the host is read back, so a
+    // pass that got in first is undone rather than left for a spec to find.
+    const left = await page.request.patch(`/api/v1/hosts/${hostId}`, {
+      data: { auto_adjust: 'off', capacity: 8 },
     });
-    expect(own.ok(), 'the host was taken out of the automatic adjustment').toBeTruthy();
-    const capacity = await page.request.patch(`/api/v1/hosts/${hostId}`, {
-      data: { capacity: 8 },
-    });
-    expect(capacity.ok(), 'the host kept the capacity it was enrolled with').toBeTruthy();
+    expect(left.ok(), 'the host was set to be left alone').toBeTruthy();
+    const host = (await left.json()) as { capacity: number; auto_adjust: string };
+    expect(host.auto_adjust, 'the host keeps its own capacity').toBe('off');
+    expect(host.capacity, 'the host has the eight slots it was given').toBe(8);
   } finally {
     await page.close();
   }

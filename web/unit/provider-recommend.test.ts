@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_MACHINE,
   SUGGESTED_CEILING,
+  machineDiskHint,
+  machineDiskNeededMb,
   machineSize,
   machinesPerNode,
   nodeReserveMb,
@@ -157,4 +159,25 @@ test('the minimum never exceeds the maximum', () => {
     assert.ok(rec.min <= rec.max, `${memory} GB: ${rec.min} warm of ${rec.max}`);
     assert.ok(rec.min >= 1);
   }
+});
+
+test('a machine needs the reserve floor plus a working room per slot', () => {
+  assert.equal(machineDiskNeededMb(2), 2048 + 2 * 10240);
+  assert.equal(machineDiskNeededMb(0), 2048 + 10240);
+});
+
+test('the disk hint names the figure and says when the disk is under it', () => {
+  assert.match(machineDiskHint(2, 0), /22 GB/);
+  assert.match(machineDiskHint(2, 8192), /8 GB.*22 GB/);
+  assert.doesNotMatch(machineDiskHint(1, 32768), /under/);
+});
+
+// A typed figure a megabyte short of 22 GB rounded to "22 GB" and the hint
+// read "22 GB is under the 22 GB 2 slots need". The typed disk is never
+// rounded up past what it is.
+test('a typed disk just under the need is not printed as the need', () => {
+  const hint = machineDiskHint(2, 22527);
+  assert.match(hint, /under the 22 GB 2 slots need/);
+  assert.doesNotMatch(hint, /^22 GB/);
+  assert.match(hint, /^21\.9 GB/);
 });

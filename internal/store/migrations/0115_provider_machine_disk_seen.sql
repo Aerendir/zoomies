@@ -1,0 +1,15 @@
+-- The disk a provider's machines turned out to have, beside their size.
+--
+-- Migration 0103 taught a provider the processors and memory its machines
+-- turn out to have, because a machine of unknown size fits every pool. It left
+-- the disk out, so a pool that needed room to clone and build was still handed
+-- a machine whose disk nobody had measured. A template that is a cloud image
+-- boots with a few gigabytes, and three jobs on fresh clones died on one
+-- before anything said it was too small for them.
+--
+-- The column is an observation like the others: the template's boot disk when
+-- a connection check reads it, and what a machine it built measured itself as
+-- once its agent joined, written under the same seen_at and forgotten under the
+-- same edits. Zero means not measured, which fits every pool by disk, as
+-- before.
+ALTER TABLE providers ADD COLUMN seen_disk_mb INTEGER NOT NULL DEFAULT 0;
