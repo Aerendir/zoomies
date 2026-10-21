@@ -927,11 +927,18 @@ func looksLikeMAC(s string) bool {
 // scsi0 is what every current Proxmox template uses and virtio0 what the older
 // ones do.
 func bootDisk(cfg VMConfig) (string, string) {
-	switch {
-	case cfg.SCSI0 != "":
-		return "scsi0", cfg.SCSI0
-	case cfg.VirtIO0 != "":
-		return "virtio0", cfg.VirtIO0
+	// The same four slots HasDisk admits a template on, in the same order, and
+	// with the same lines passed over: a template the check accepted because
+	// its disk is sata0 must not then be read as having no disk at all, or its
+	// size goes unlearned and a clone of it is judged able to run anything.
+	for _, slot := range []struct{ name, spec string }{
+		{"scsi0", cfg.SCSI0}, {"virtio0", cfg.VirtIO0}, {"sata0", cfg.SATA0}, {"ide0", cfg.IDE0},
+	} {
+		spec := strings.TrimSpace(slot.spec)
+		if spec == "" || strings.Contains(spec, "media=cdrom") || strings.Contains(spec, "cloudinit") {
+			continue
+		}
+		return slot.name, spec
 	}
 	return "", ""
 }

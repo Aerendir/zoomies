@@ -101,6 +101,31 @@ func TestRepairUpgradesAPreviousWorkflowInsteadOfRefusingIt(t *testing.T) {
 	}
 }
 
+// A release that takes a new version of an action changes the workflow it
+// writes, and every repository that installed the earlier one still owns what
+// it installed: reading it as somebody's edit would close its access gate
+// until somebody ran a repair. The action versions are part of what an earlier
+// release wrote, so the workflow carrying them is still recognised.
+//
+// The Enterprise Server workflow is the exception that proves the rule: it has
+// always carried the versions that server bundles, and those have not moved,
+// so there is no earlier set of versions for it to be recognised by.
+func TestAWorkflowWithAnEarlierActionVersionIsStillRecognised(t *testing.T) {
+	key, config := setupInputs()
+	for i, pins := range olderActionPins {
+		installed, err := setupWorkflowWithPins(key, config, pins)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !IsOlderSetupWorkflow(key, config, installed) {
+			t.Errorf("the workflow with action versions %d was not recognised", i)
+		}
+		if edited := installed + "# edited\n"; IsOlderSetupWorkflow(key, config, edited) {
+			t.Errorf("an edited workflow with action versions %d was recognised", i)
+		}
+	}
+}
+
 // A repository may have taken an action update that this release's template
 // predates. Reinstalling regenerates the workflow around the pins rather than
 // moving them backwards.
@@ -111,11 +136,21 @@ func TestReinstallKeepsTheActionVersionsTheRepositoryAlreadyPinned(t *testing.T)
 		t.Fatal(err)
 	}
 	newer := "actions/setup-node@" + strings.Repeat("d", 40) + " # v7.1.0"
+	templatePin := ""
 	installed := make([]SetupFile, 0, len(files))
 	for _, f := range files {
 		content := f.Content
 		if f.Path == WorkflowPath {
-			content = strings.Replace(content, "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0", newer, 1)
+			// The pin this test moves is whatever the template ships now, so a
+			// release that takes a new version does not have to change it. Only
+			// the action and its ref are replaced, so the line keeps the shape
+			// the installer recognises.
+			current := setupNodePin(f.Content)
+			if current == "" {
+				t.Fatal("the workflow template no longer contains the pin this test moves")
+			}
+			templatePin = current
+			content = strings.Replace(f.Content, current, strings.TrimSpace(newer), 1)
 			if content == f.Content {
 				t.Fatal("the workflow template no longer contains the pin this test moves")
 			}
@@ -131,7 +166,9 @@ func TestReinstallKeepsTheActionVersionsTheRepositoryAlreadyPinned(t *testing.T)
 	found := false
 	for _, change := range changes {
 		if change.Path == WorkflowPath {
-			found = strings.Contains(change.Content, newer) && !strings.Contains(change.Content, "820762786026740c76f36085b0efc47a31fe5020")
+			// The repository's own pin is in the file, and the one the template
+			// ships is not: the reinstall regenerated the workflow around it.
+			found = strings.Contains(change.Content, newer) && !strings.Contains(change.Content, templatePin)
 		}
 	}
 	if !found {
@@ -338,8 +375,17 @@ func TestRepairMigratesAnOlderSetupToTheSharedGuide(t *testing.T) {
 		if change.Path == ContextGuidePath {
 			guide = strings.Contains(change.Content, "manifest.json")
 		}
-		if assistantDocument(change.Path) {
-			if !strings.HasPrefix(change.Content, "Keep my instructions.\r\n\r\n") || !strings.Contains(change.Content, ContextGuidePath) || strings.Contains(change.Content, "snapshot.json") {
+		switch change.Path {
+		case "AGENTS.md":
+			// The short entry point, in the file that holds it, with the
+			// operator's own words kept and the long injected prompt gone.
+			if !strings.Contains(change.Content, "Keep my instructions.\r\n\r\n") || !strings.Contains(change.Content, "## Zoomies AI Context") || strings.Contains(change.Content, "snapshot.json") {
+				t.Fatal("repair lost custom instructions or retained the long injected prompt")
+			}
+			entries++
+		case "CLAUDE.md":
+			// The import that reaches AGENTS.md, and the operator's own words.
+			if !strings.HasPrefix(change.Content, "@AGENTS.md\r\n") || !strings.Contains(change.Content, "Keep my instructions.") || strings.Contains(change.Content, "snapshot.json") {
 				t.Fatal("repair lost custom instructions or retained the long injected prompt")
 			}
 			entries++
@@ -368,4 +414,15 @@ func TestAmendingAnEntirelyManagedGuidePreservesCRLF(t *testing.T) {
 		}
 	}
 	t.Fatal("guide amendment missing")
+}
+
+// setupNodePin is the action and ref of the setup-node line a workflow
+// carries, whatever version it is pinned to.
+func setupNodePin(workflow string) string {
+	for _, m := range workflowActionUse.FindAllStringSubmatch(workflow, -1) {
+		if m[2] == "actions/setup-node" {
+			return m[2] + "@" + m[3] + m[4]
+		}
+	}
+	return ""
 }

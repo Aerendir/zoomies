@@ -459,6 +459,89 @@ jobs:
         env:
           ZOOMIES_TEST_REPOMIX_CLI: ${{ runner.temp }}/zoomies-tools/node_modules/.bin/repomix
         run: go test -race ./internal/aicontext -count=1
+      # The managed workflow's action versions are excluded from Dependabot,
+      # because a bump there is read as somebody's edit and closes the
+      # context's access gate. They move only when a release of Zoomies changes
+      # the template, which is how they fell behind: a repository that took an
+      # update of its own was moved back by the next reinstall. This asks
+      # GitHub which release each action is at, and says so when the template
+      # is behind, so a stale template is caught here rather than by a
+      # repository's build going red.
+      - name: Check the managed workflow's action versions are the current ones
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import os
+          import json
+          import re
+          import urllib.request
+
+          token = os.environ.get("GITHUB_TOKEN", "")
+          headers = {"Accept": "application/vnd.github+json"}
+          if token:
+              headers["Authorization"] = "token " + token
+
+          def get(url):
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          template = open("internal/aicontext/workflow.go", encoding="utf-8").read()
+          # The pins the template holds, as "actions/name@ref # vX.Y.Z". The
+          # Enterprise Server versions are in the same file but are the ones
+          # that server bundles, so they are not compared with the releases.
+          body = template.split("enterpriseActionPins")[0].split("olderActionPins")[0]
+          pins = re.findall(
+              r"(actions/[A-Za-z0-9_.-]+)@([0-9a-f]{40}) # (v[0-9][^\"\s]*)", body
+          )
+          if not pins:
+              raise SystemExit("no action versions found in the managed workflow template")
+
+          def latest_release(repo):
+              for release in get(f"https://api.github.com/repos/{repo}/releases?per_page=20"):
+                  tag = release.get("tag_name", "")
+                  if not tag or release.get("draft"):
+                      continue
+                  return tag
+              return None
+
+          def commit_of(repo, tag):
+              ref = get(f"https://api.github.com/repos/{repo}/git/ref/tags/{tag}")
+              obj = ref.get("object", {})
+              if obj.get("type") == "tag":
+                  obj = get(f"https://api.github.com/repos/{repo}/git/tags/{obj['sha']}")["object"]
+              return obj.get("sha", "")
+
+          behind = []
+          seen = set()
+          for action, ref, version in pins:
+              # The same action is used by more than one job.
+              if action in seen:
+                  continue
+              seen.add(action)
+              tag = latest_release(action)
+              if not tag:
+                  behind.append(f"{action} has no published release")
+                  continue
+              if tag != version:
+                  behind.append(
+                      f"{action} is at {tag} and the template pins {version}"
+                  )
+                  continue
+              if commit_of(action, tag) != ref:
+                  behind.append(f"{action} {tag} is not the commit the template pins")
+          if behind:
+              for line in behind:
+                  print(f"::error::{line}")
+              raise SystemExit(
+                  "the managed workflow's action versions are behind: take the new "
+                  "version, and keep the one it replaces in olderActionPins so the "
+                  "repositories that installed it are still recognised"
+              )
+          print("the managed workflow's action versions are the current ones")
+          PY
 
   coverage:
     name: Coverage
