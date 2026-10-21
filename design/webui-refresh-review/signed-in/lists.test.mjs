@@ -30,6 +30,16 @@ async function open(screen, state = 'rows', width = 1440) {
 }
 
 for (const screen of PAGES) {
+  test(`${screen}: at 1440 nothing in the table is hidden behind its card's scroll`, async () => {
+    const { page, context } = await open(screen, 'rows', 1440);
+    const hidden = await page.evaluate(() => {
+      const region = document.querySelector('.k-scroll');
+      return region.scrollWidth - region.clientWidth;
+    });
+    assert.ok(hidden <= 0, `${hidden}px of the table is out of sight, which is where the Actions column goes`);
+    await context.close();
+  });
+
   test(`${screen} draws all five states: rows, loading, empty, error with a retry, stale rows`, async () => {
     const rows = await open(screen, 'rows');
     assert.equal(await rows.page.locator('#stage table').count(), 1);

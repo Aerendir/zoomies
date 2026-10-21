@@ -3,7 +3,7 @@
 // README recommends for each screen is shown in the other style and mode too.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPTURE_STATE, RECOMMENDED, plan } from './capture.mjs';
+import { CAPTURE_STATE, RECOMMENDED, SIGNED_IN_STATE, plan, signedInPlan } from './capture.mjs';
 
 const SCREENS = ['signin', 'first-account', 'connect-app', 'fleet-status', 'not-found'];
 
@@ -47,4 +47,30 @@ test('each picture is of the state that shows the design best, in the hash the p
     assert.match(shot.hash, new RegExp(`screen=${shot.screen}&concept=${shot.concept}`));
     assert.match(shot.hash, new RegExp(`state=${CAPTURE_STATE[shot.screen]}$`));
   }
+});
+
+/* the second pack: one concept, so a screen is three pictures and not ten */
+
+const SIGNED_IN = Object.keys(SIGNED_IN_STATE);
+
+test('the signed-in pack photographs every screen three ways: dark and phone, and Classic light', () => {
+  const shots = signedInPlan(SIGNED_IN);
+  assert.equal(shots.length, SIGNED_IN.length * 3);
+  assert.equal(new Set(shots.map((s) => s.file)).size, shots.length, 'every file name is unique');
+  for (const screen of SIGNED_IN) {
+    const own = shots.filter((s) => s.screen === screen).map((s) => s.file);
+    assert.deepEqual(own, [`concept-${screen}-1440.png`, `concept-${screen}-375.png`, `concept-${screen}-classic-light-1440.png`]);
+  }
+});
+
+test('the signed-in pictures are of the portal style, in the state that shows the page best', () => {
+  for (const shot of signedInPlan(SIGNED_IN)) {
+    assert.match(shot.hash, new RegExp(`screen=${shot.screen}&concept=a&`));
+    assert.match(shot.hash, new RegExp(`state=${SIGNED_IN_STATE[shot.screen]}$`));
+    assert.match(shot.hash, shot.file.includes('classic-light') ? /style=classic&mode=light/ : /style=mission-control&mode=dark/);
+  }
+});
+
+test('a screen the pack offers that has no capture state is refused by name, not photographed in a guess', () => {
+  assert.throws(() => signedInPlan(['no-such-screen']), /no capture state for "no-such-screen"/);
 });

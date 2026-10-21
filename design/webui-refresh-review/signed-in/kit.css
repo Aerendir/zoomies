@@ -650,7 +650,7 @@
   font-size: var(--z-text-xs);
 }
 .k-table .is-truncate {
-  max-width: 20rem;
+  max-width: 14rem;
 }
 .k-clip {
   display: block;

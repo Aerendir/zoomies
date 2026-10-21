@@ -61,3 +61,11 @@ test("pack 1's page still offers its own three concepts and Current", async () =
   );
   await context.close();
 });
+
+test('the review page offers exactly the screens the capture script knows a state for', async () => {
+  const { SIGNED_IN_STATE } = await import('../tools/capture.mjs');
+  const { page, context } = await open();
+  const screens = (await options(page, 'screen')).map(([id]) => id);
+  assert.deepEqual([...screens].sort(), Object.keys(SIGNED_IN_STATE).sort());
+  await context.close();
+});
