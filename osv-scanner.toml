@@ -5,6 +5,10 @@
 # belongs here only when govulncheck has already said it is unreachable and
 # there is no version to move to -- an ignore for a fixable finding is a fix
 # not taken. Every entry names why, and a fix that later ships removes it.
+#
+# osv-scanner reads the configuration that sits beside the manifest it scans,
+# so the npm lockfiles this repository carries are covered by a copy of these
+# rules beside each lockfile.
 
 [[IgnoredVulns]]
 id = "GO-2026-5932"
