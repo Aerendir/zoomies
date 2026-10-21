@@ -1,0 +1,328 @@
+{
+  "generated": "2026-10-21T13:38:15.219Z",
+  "shots": {
+    "first-account-1440": {
+      "logos": [
+        {
+          "variant": "mark",
+          "x": 684,
+          "y": 57,
+          "width": 72,
+          "height": 72
+        }
+      ],
+      "images": 1,
+      "scrollWidth": 1440,
+      "documentHeight": 950,
+      "viewportHeight": 900,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Create the account",
+        "y": 819,
+        "bottom": 851,
+        "belowTheFold": false
+      },
+      "firstInput": {
+        "y": 425,
+        "bottom": 457
+      },
+      "firstFieldText": "Setup token *\n(required)\nOn a line beginning “setup token”. Installed with zoomies init: zoomies logs. Docker Compose: docker compose logs zoomies. Another container: docker logs and its name. systemd: journalctl -u zoomies. A PaaS: its log viewer.\n\nFrom the controller's log: docker compose logs zoomies | grep 'setup token'"
+    },
+    "first-account-375": {
+      "logos": [
+        {
+          "variant": "mark",
+          "x": 152,
+          "y": 57,
+          "width": 72,
+          "height": 72
+        }
+      ],
+      "images": 1,
+      "scrollWidth": 375,
+      "documentHeight": 1116,
+      "viewportHeight": 812,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Create the account",
+        "y": 985,
+        "bottom": 1017,
+        "belowTheFold": true
+      },
+      "firstInput": {
+        "y": 511,
+        "bottom": 543
+      },
+      "firstFieldText": "Setup token *\n(required)\nOn a line beginning “setup token”. Installed with zoomies init: zoomies logs. Docker Compose: docker compose logs zoomies. Another container: docker logs and its name. systemd: journalctl -u zoomies. A PaaS: its log viewer.\n\nFrom the controller's log: docker compose logs zoomies | grep 'setup token'"
+    },
+    "signin-1440": {
+      "logos": [
+        {
+          "variant": "lockup",
+          "x": 112,
+          "y": 64,
+          "width": 352,
+          "height": 352
+        }
+      ],
+      "images": 1,
+      "scrollWidth": 1440,
+      "documentHeight": 900,
+      "viewportHeight": 900,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Sign in",
+        "y": 542,
+        "bottom": 590,
+        "belowTheFold": false
+      },
+      "firstInput": {
+        "y": 352,
+        "bottom": 400
+      }
+    },
+    "signin-375": {
+      "logos": [
+        {
+          "variant": "lockup",
+          "x": 40,
+          "y": 80,
+          "width": 295,
+          "height": 295
+        }
+      ],
+      "images": 1,
+      "scrollWidth": 375,
+      "documentHeight": 1108,
+      "viewportHeight": 812,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Sign in",
+        "y": 791,
+        "bottom": 839,
+        "belowTheFold": true
+      },
+      "firstInput": {
+        "y": 601,
+        "bottom": 649
+      }
+    },
+    "connect-app-1440": {
+      "logos": [
+        {
+          "variant": "full",
+          "x": 660,
+          "y": 47,
+          "width": 121,
+          "height": 28
+        }
+      ],
+      "images": 2,
+      "scrollWidth": 1440,
+      "documentHeight": 900,
+      "viewportHeight": 900,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Allow",
+        "y": 788,
+        "bottom": 820,
+        "belowTheFold": false
+      },
+      "firstInput": {
+        "y": 485,
+        "bottom": 500
+      }
+    },
+    "connect-app-375": {
+      "logos": [
+        {
+          "variant": "full",
+          "x": 127,
+          "y": 24,
+          "width": 121,
+          "height": 28
+        }
+      ],
+      "images": 2,
+      "scrollWidth": 375,
+      "documentHeight": 1052,
+      "viewportHeight": 812,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Allow",
+        "y": 931,
+        "bottom": 963,
+        "belowTheFold": true
+      },
+      "firstInput": {
+        "y": 518,
+        "bottom": 533
+      }
+    },
+    "connect-app-loopback-1440": {
+      "logos": [
+        {
+          "variant": "full",
+          "x": 660,
+          "y": 24,
+          "width": 121,
+          "height": 28
+        }
+      ],
+      "images": 2,
+      "scrollWidth": 1440,
+      "documentHeight": 962,
+      "viewportHeight": 900,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Allow",
+        "y": 873,
+        "bottom": 905,
+        "belowTheFold": true
+      },
+      "firstInput": {
+        "y": 570,
+        "bottom": 585
+      }
+    },
+    "fleet-status-1440": {
+      "logos": [],
+      "images": 0,
+      "scrollWidth": 1440,
+      "documentHeight": 1724,
+      "viewportHeight": 900,
+      "theme": "dark",
+      "uiStyle": null,
+      "stateWord": "Blocked",
+      "reasons": 12
+    },
+    "fleet-status-375": {
+      "logos": [],
+      "images": 0,
+      "scrollWidth": 375,
+      "documentHeight": 2080,
+      "viewportHeight": 812,
+      "theme": "dark",
+      "uiStyle": null,
+      "stateWord": "Blocked",
+      "reasons": 12
+    },
+    "not-found-1440": {
+      "logos": [
+        {
+          "variant": "mark",
+          "x": 28,
+          "y": 20,
+          "width": 32,
+          "height": 32
+        },
+        {
+          "variant": "mark",
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "variant": "mark",
+          "x": 812,
+          "y": 251,
+          "width": 48,
+          "height": 48
+        },
+        {
+          "variant": "mark",
+          "x": 256,
+          "y": 849,
+          "width": 16,
+          "height": 16
+        }
+      ],
+      "images": 8,
+      "scrollWidth": 1440,
+      "documentHeight": 900,
+      "viewportHeight": 900,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Go to the overview",
+        "y": 413,
+        "bottom": 445,
+        "belowTheFold": false
+      }
+    },
+    "not-found-375": {
+      "logos": [
+        {
+          "variant": "mark",
+          "x": 12,
+          "y": 92,
+          "width": 22,
+          "height": 22
+        },
+        {
+          "variant": "mark",
+          "x": 164,
+          "y": 273,
+          "width": 48,
+          "height": 48
+        },
+        {
+          "variant": "mark",
+          "x": 12,
+          "y": 687,
+          "width": 16,
+          "height": 16
+        }
+      ],
+      "images": 6,
+      "scrollWidth": 375,
+      "documentHeight": 812,
+      "viewportHeight": 812,
+      "theme": "dark",
+      "uiStyle": "mission-control",
+      "action": {
+        "name": "Go to the overview",
+        "y": 459,
+        "bottom": 491,
+        "belowTheFold": false
+      }
+    }
+  },
+  "banners": {
+    "first-account": {
+      "borderRadius": "4px",
+      "padding": "12px",
+      "gap": "8px",
+      "fontSize": "14px",
+      "iconMarginTop": "1px",
+      "iconSize": "15px"
+    },
+    "signin": {
+      "borderRadius": "8px",
+      "padding": "12px",
+      "gap": "8px",
+      "fontSize": "14px",
+      "iconMarginTop": "3px",
+      "iconSize": "15px"
+    },
+    "connect-app": {
+      "borderRadius": "8px",
+      "padding": "12px",
+      "gap": "8px",
+      "fontSize": "14px",
+      "iconMarginTop": "2px",
+      "iconSize": "16px"
+    }
+  },
+  "sources": {
+    "loginSvelteLines": 983
+  }
+}
