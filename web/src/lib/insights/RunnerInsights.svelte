@@ -1,102 +1,24 @@
 <script lang="ts">
   import { fleet } from '$lib/state/fleet.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
-  import { session } from '$lib/state/session.svelte';
-  import MetricGrid, { type Metric } from '$lib/components/MetricGrid.svelte';
-  import Skeleton from '$lib/components/Skeleton.svelte';
   import ChartPanel from '$lib/components/ChartPanel.svelte';
   import LifecycleFlow from './LifecycleFlow.svelte';
   import ProvisioningPulse from './ProvisioningPulse.svelte';
   import StateBreakdown from './StateBreakdown.svelte';
-  import { poolSignals, finite, queueTone } from './signals';
-  import { formatNumber, NO_VALUE } from '$lib/format';
+  import { poolSignals, finite } from './signals';
   import { runnerStatus } from '$lib/status';
   /**
-   * `lean` is the Runners page: the question there is "what are my runners
-   * doing", and the grid answers it, so the page opens with the provisioning
-   * strip and keeps the six tiles' figures (which the Overview and Queue pages
-   * carry) and the lifecycle explanation behind a disclosure.
+   * The context above a runner list: the provisioning strip, and the lifecycle
+   * explanation behind a disclosure. The grid answers "what are my runners doing", and
+   * the Overview and Queue pages carry the figures the old tiles repeated.
    */
-  let {
-    poolId = '',
-    compact = false,
-    lean = false,
-  }: { poolId?: string; compact?: boolean; lean?: boolean } = $props();
+  let { poolId = '' }: { poolId?: string } = $props();
   const signal = $derived(poolSignals(fleet.pools, fleet.stats).find((p) => p.pool.id === poolId));
   const r = $derived(fleet.stats?.runners);
-  const queue = $derived(poolId ? signal?.queued : finite(fleet.stats?.fleet?.queued_jobs));
   const busy = $derived(poolId ? signal?.busy : finite(r?.busy));
   const idle = $derived(poolId ? signal?.idle : finite(r?.idle));
   const scope = $derived(poolId ? (signal?.pool.name ?? 'Selected pool') : 'Fleet');
   const suffix = $derived(poolId ? `&pool_id=${encodeURIComponent(poolId)}` : '');
-  const num = (value: number | null | undefined) =>
-    value == null ? NO_VALUE : formatNumber(value);
-  const metrics = $derived<Metric[]>([
-    {
-      label: 'Job queue depth',
-      value: num(queue),
-      detail: 'Jobs waiting to start',
-      tone: queueTone(queue, session.meta?.queue_warning_threshold),
-      href: `/jobs?state=queued${suffix}`,
-    },
-    {
-      label: 'Busy runners',
-      value: num(busy),
-      detail: 'Executing a job',
-      tone: 'busy',
-      href: `/runners?state=busy${suffix}`,
-    },
-    {
-      label: 'Idle runners',
-      value: num(idle),
-      detail: 'Registered and waiting for work',
-      tone: 'success',
-      href: `/runners?state=idle${suffix}`,
-    },
-    ...(poolId
-      ? [
-          {
-            label: 'Live runners',
-            value: num(signal?.live),
-            detail: 'Includes startup and draining',
-            href: `/runners?pool_id=${encodeURIComponent(poolId)}`,
-          },
-          {
-            label: 'Pool headroom',
-            value: num(signal?.headroom),
-            detail: `Configured maximum: ${num(signal?.max)}; host fit still applies`,
-            tone: signal?.atCeiling ? ('warning' as const) : ('neutral' as const),
-          },
-          {
-            label: 'Busy share',
-            value: signal?.live ? `${Math.round((100 * (busy ?? 0)) / signal.live)}%` : NO_VALUE,
-            detail: 'Busy / live runners right now',
-            progress: signal?.live ? (100 * (busy ?? 0)) / signal.live : null,
-          },
-        ]
-      : [
-          {
-            label: 'Starting runners',
-            value: r ? num((r.provisioning ?? 0) + (r.registering ?? 0)) : NO_VALUE,
-            detail: 'Provisioning + registering',
-            tone: 'accent' as const,
-            href: '/runners?state=provisioning&state=registering',
-          },
-          {
-            label: 'Draining runners',
-            value: num(finite(r?.draining)),
-            detail: 'Finishing or being removed',
-            href: '/runners?state=draining',
-          },
-          {
-            label: 'Failed runners',
-            value: num(finite(r?.failed)),
-            detail: 'Retained failed runner records',
-            tone: (r?.failed ?? 0) > 0 ? ('danger' as const) : ('neutral' as const),
-            href: '/runners?state=failed',
-          },
-        ]),
-  ]);
   const segments = $derived(
     poolId
       ? [
@@ -172,31 +94,11 @@
       >Explore usage history</a
     >
   </div>
-  {#if lean}
-    <ProvisioningPulse {poolId} />
-    {#if fleet.stats}
-      <details class="how">
-        <summary>How runners move through their states</summary>
-        <ChartPanel
-          title="Runner lifecycle"
-          description={poolId
-            ? 'How this pool\u2019s live runners divide up right now. Failed and removed records are excluded from this bar.'
-            : 'The states a runner passes through, in the order the controller allows, with how many are at each step right now. Failed and removed records are excluded from the bar.'}
-        >
-          {#if !poolId && r}<LifecycleFlow runners={r} />{/if}
-          <StateBreakdown {segments} label="Live runner states" noun="live runners" />
-        </ChartPanel>
-        <p class="note">
-          Job queue depth is waiting GitHub work, including jobs whose provisioning demand is held;
-          it is not a count of runner creation requests. Search, host and state filters below do not
-          change this {poolId ? 'pool' : 'fleet'} context.
-        </p>
-      </details>
-    {/if}
-  {:else}
-    {#if !fleet.stats}<Skeleton lines={3} />{:else}<MetricGrid items={metrics} />{/if}
-    <ProvisioningPulse {poolId} />
-    {#if !compact && fleet.stats}<ChartPanel
+  <ProvisioningPulse {poolId} />
+  {#if fleet.stats}
+    <details class="how">
+      <summary>How runners move through their states</summary>
+      <ChartPanel
         title="Runner lifecycle"
         description={poolId
           ? 'How this pool\u2019s live runners divide up right now. Failed and removed records are excluded from this bar.'
@@ -204,13 +106,13 @@
       >
         {#if !poolId && r}<LifecycleFlow runners={r} />{/if}
         <StateBreakdown {segments} label="Live runner states" noun="live runners" />
-      </ChartPanel>{/if}
-    <p class="note">
-      Job queue depth is waiting GitHub work, including jobs whose provisioning demand is held; it
-      is not a count of runner creation requests.
-      {#if compact}These figures describe the whole pool.{:else}Search, host and state filters below
-        do not change this {poolId ? 'pool' : 'fleet'} context.{/if}
-    </p>
+      </ChartPanel>
+      <p class="note">
+        Job queue depth is waiting GitHub work, including jobs whose provisioning demand is held; it
+        is not a count of runner creation requests. Search, host and state filters below do not
+        change this {poolId ? 'pool' : 'fleet'} context.
+      </p>
+    </details>
   {/if}
 </section>
 
