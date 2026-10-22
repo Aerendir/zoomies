@@ -120,49 +120,10 @@ async function apiCatalogResponse(url) {
   return new Response(body, { status: source.status, headers });
 }
 
-// The identity documents this site can back truthfully are the hosted
-// service's own: the portal runs an OpenID Provider whose discovery names a
-// real issuer, real endpoints and signing keys, and its authorization-server
-// metadata carries the agent_auth block. The mirrors serve each document at
-// the site's address for it, exactly as the portal serves it, refetched on
-// every request, so a rotation or an added block can never leave a stale copy
-// here. Where discovery "should" live is the issuer's own well-known address,
-// and the documents say that is where they live: a mirror changes nothing
-// inside their bytes, and a client that insists on fetching at the issuer
-// itself is pointed there by everything in them. The resource's own metadata
-// is not mirrored: it is the site's to declare, and hooks/seo.py writes it.
-const ISSUER_ORIGIN = "https://portal.zoomies.sh";
-const MIRRORS = [
-  { from: "/.well-known/openid-configuration",
-    at: ["/.well-known/openid-configuration"] },
-  { from: "/.well-known/oauth-authorization-server",
-    at: ["/.well-known/oauth-authorization-server"] },
-];
-
-async function mirrorResponse(from) {
-  const upstream = await fetch(new URL(from, ISSUER_ORIGIN), {
-    headers: { accept: "application/json" },
-  });
-  if (!upstream.ok) {
-    return null;
-  }
-  const body = await upstream.text();
-  const headers = new Headers(upstream.headers);
-  headers.set("content-type", "application/json");
-  return new Response(body, { status: upstream.status, headers });
-}
-
 export default {
   async fetch(request) {
     if (request.method === "GET" || request.method === "HEAD") {
       const url = new URL(request.url);
-      const mirror = MIRRORS.find((m) => m.at.includes(url.pathname));
-      if (mirror) {
-        const mirrored = await mirrorResponse(mirror.from);
-        if (mirrored !== null) {
-          return request.method === "HEAD" ? new Response(null, mirrored) : mirrored;
-        }
-      }
       if (url.pathname === "/.well-known/api-catalog" || url.pathname === "/.well-known/api-catalog/") {
         const catalog = await apiCatalogResponse(url);
         if (catalog !== null) {

@@ -14,12 +14,6 @@ Two things the origin cannot do itself, the worker does on the way through:
 * `/.well-known/api-catalog` is served from `api-catalog.json` at the origin,
   with the `application/linkset+json` content type the RFC asks for. GitHub
   Pages picks a content type from a file's extension and cannot set this one.
-* The hosted service's OpenID Provider discovery document is mirrored at
-  `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`,
-  byte for byte from `https://portal.zoomies.sh` and refetched on each
-  request, so the site's identity document is always the one the issuer
-  serves.
-
 The copies it serves are the ones `hooks/seo.py` writes beside the built site,
 at every page's address plus `index.md` (the address the pages already declare
 as their `rel="alternate"` link). Serving a copy is a lookup rather than an
@@ -59,11 +53,9 @@ machine. `.github/workflows/docs.yml` runs them on every site change.
       -H "Accept: text/markdown" | grep -i "content-type"
     curl -sI https://zoomies.sh/ | grep -i "^link"
     curl -s https://zoomies.sh/.well-known/api-catalog
-    curl -s https://zoomies.sh/.well-known/openid-configuration
 
 The second command should say `text/markdown; charset=utf-8`. The third should
 name all four relations (`api-catalog`, `describedby`, `service-desc` and
-`service-doc`). The fourth should be the linkset JSON, the fifth the portal's
-discovery document (its `issuer` must be `https://portal.zoomies.sh`).
+`service-doc`). The fourth should be the linkset JSON.
 Browsers and crawlers that send no markdown header keep receiving the HTML,
 with only the `Link` header added.
