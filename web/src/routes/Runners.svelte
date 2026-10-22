@@ -558,7 +558,7 @@
   }}
 />
 
-<RunnerInsights {poolId} lean />
+<RunnerInsights {poolId} />
 <details class="activity-history">
   <summary>Explore fleet activity over the last 24 hours</summary><FleetHistory />
 </details>

@@ -10,7 +10,11 @@ test('runner context is the provisioning strip, with the way to the queue and no
   const context = page.getByRole('region', { name: 'Runner operational context' });
   // The six tiles are gone from this page: the Overview and the Queue carry those
   // figures, and the grid is what a person came to the Runners page for.
-  await expect(context.getByRole('link', { name: /^Job queue depth:/ })).toHaveCount(0);
+  // The queued-jobs figure is the one that stays, at the top and a click from the jobs.
+  await expect(context.getByRole('link', { name: /^Jobs queued:/ })).toHaveAttribute(
+    'href',
+    /^\/jobs\?state=queued/,
+  );
   await expect(context.getByRole('link', { name: 'Manage queue ↗' })).toHaveAttribute(
     'href',
     '/queue',
