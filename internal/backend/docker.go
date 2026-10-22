@@ -394,7 +394,7 @@ func newContainerBackend(opts DockerOptions, fl flavor, detect func() []string, 
 	if log == nil {
 		log = slog.Default()
 	}
-	dind := opts.DinDImage
+	dind := strings.TrimSpace(opts.DinDImage)
 	if dind == "" {
 		dind = DefaultDinDImage
 	}

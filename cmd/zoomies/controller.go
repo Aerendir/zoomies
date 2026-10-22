@@ -613,6 +613,7 @@ func buildBackends(ctx context.Context, cfg *config.Config, log *slog.Logger) (*
 		WorkDir:      cfg.Agent.WorkDir,
 		RegistryAuth: cfg.Agent.RegistryAuth,
 		ExtraCAFile:  cfg.Agent.ExtraCAFile,
+		DinDImage:    cfg.Agent.DinDImage,
 		Logger:       log,
 	}
 	opts.SharedDir, opts.SharedDirProblem = sharedDirFor(log)
