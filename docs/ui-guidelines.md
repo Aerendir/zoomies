@@ -667,7 +667,11 @@ blue rule and one sentence that answers "is anything wrong" in counts by
 severity, never a problem's own words, and with no status colour in it. It costs
 the Overview some height, so the pools start within the first 1000px of a
 desktop window and no longer within 900px; the hero is left out on a phone,
-where the pools must still be on the first screen. The wrong-address page uses
+where the pools must still be on the first screen. The fleet pages (Runners,
+Pools, Queue, Jobs, Workflows, Hosts and Providers) open on the same stage in a
+slimmer cut, with one sentence from the page's own figures; each is switched off
+per page in Appearance (a list of hidden pages in the browser, so a band added
+later is on), and a phone never shows one. The wrong-address page uses
 the same stage with the dog.
 
 Persistent left navigation, collapsible to icons only (persisted). Order is

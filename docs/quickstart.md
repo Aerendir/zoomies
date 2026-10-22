@@ -338,8 +338,8 @@ If the job waits, use [the queued-job guide](queued-job.md). If setup fails,
 use [troubleshooting](troubleshooting.md). Get this test working before moving
 an existing build.
 
-![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
-![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
+![The Jobs page: a band saying what is running and waiting, then status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
+![The Jobs page: a band saying what is running and waiting, then status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
 
 In a workflow you already have, the one line that changes is `runs-on`:
 
