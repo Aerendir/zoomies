@@ -1484,6 +1484,13 @@ func TestDinDSidecarOwnsTheWorkFolderAndTheRunnerMountsIt(t *testing.T) {
 	if len(host.Volumes) != 0 || !slices.Contains(host.HostConfig.Binds, "/srv/work/r1:"+RunnerWorkMount) {
 		t.Fatalf("sidecar with a host work dir: volumes=%v binds=%v", host.Volumes, host.HostConfig.Binds)
 	}
+	// The runner's externals, which a job in a container: block mounts at
+	// /__e, reach the sidecar read-only at the runner's path.
+	ext := buildDinDConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), ExternalsVolume: "zoomies-externals-abc"})
+	if !slices.Contains(ext.HostConfig.Binds, "zoomies-externals-abc:"+RunnerExternalsMount+":ro") {
+		t.Fatalf("sidecar binds = %v, want the externals volume at %s", ext.HostConfig.Binds, RunnerExternalsMount)
+	}
+
 	runner = buildRunnerConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), WorkDirMount: "/srv/work/r1", VolumesFrom: "sidecar"})
 	for _, b := range runner.HostConfig.Binds {
 		if strings.HasSuffix(b, ":"+RunnerWorkMount) {
