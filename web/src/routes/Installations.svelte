@@ -273,6 +273,7 @@
       arrived read zero, and the quota tile is fed by readings taken after it.
     -->
     <MetricGrid
+      strip
       items={[
         {
           label: 'GitHub connections',
