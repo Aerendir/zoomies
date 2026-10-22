@@ -509,7 +509,7 @@
       </details>
     {/if}
   </div>
-  <RunnerInsights poolId={runner.pool_id ?? ''} compact />
+  <RunnerInsights poolId={runner.pool_id ?? ''} lean />
 {/if}
 
 <RunnerConfirm

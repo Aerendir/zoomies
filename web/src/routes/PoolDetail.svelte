@@ -386,7 +386,7 @@
     <PoolEditor {pool} oncancel={stopEditing} ondone={stopEditing} />
   {/key}
 {:else}
-  <RunnerInsights poolId={pool.id ?? ''} compact />
+  <RunnerInsights poolId={pool.id ?? ''} lean />
   <div class="layout">
     <div class="main">
       <section class="panel" aria-labelledby="runners-heading">
