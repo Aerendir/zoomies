@@ -2688,11 +2688,26 @@ test.describe('the side menu and the switch', () => {
     await untilRead(page);
     await goto(page, '/kennel', 'Kennel Club');
     const summary = await page.locator('#summary').boundingBox();
-    const counts = await page.locator('section.counts').boundingBox();
+    const counts = await page.locator('section[aria-labelledby="counts-heading"]').boundingBox();
     expect(summary).not.toBeNull();
     expect(counts).not.toBeNull();
     // The page's gap is one space-4, which is 16 pixels at the default text size.
     expect(counts!.y - (summary!.y + summary!.height)).toBeGreaterThanOrEqual(16);
+  });
+
+  // The row's small muted count and this section once shared a class, so the section took
+  // the row's margin-left: auto, shrank to its content and floated to the right edge, with
+  // a hole beside it.
+  test('the all-counts section spans the width of the summary above it', async ({ page }) => {
+    await patchSettings(page, on);
+    await untilRead(page);
+    await goto(page, '/kennel', 'Kennel Club');
+    const summary = await page.locator('#summary').boundingBox();
+    const counts = await page.locator('section[aria-labelledby="counts-heading"]').boundingBox();
+    expect(summary).not.toBeNull();
+    expect(counts).not.toBeNull();
+    expect(Math.abs(counts!.x - summary!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(counts!.width - summary!.width)).toBeLessThanOrEqual(1);
   });
 
   test('the rail takes you between the pages', async ({ page }) => {
