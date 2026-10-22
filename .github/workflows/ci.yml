@@ -739,10 +739,20 @@ jobs:
       - name: install.ps1 lint and unit tests
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Force -Scope CurrentUser
-          $findings = foreach ($file in 'install.ps1', 'test/install/install.Tests.ps1', 'test/install/windows-smoke.ps1') {
-            Invoke-ScriptAnalyzer -Path $file -Settings test/install/PSScriptAnalyzerSettings.psd1
-          }
+         # PowerShell Gallery can return an unusable package URL; retry the pinned download before failing this check.
+         for ($attempt = 1; $attempt -le 3; $attempt++) {
+           try {
+             Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Force -Scope CurrentUser -ErrorAction Stop
+             break
+           } catch {
+             if ($attempt -eq 3) { throw }
+             Write-Warning "PSScriptAnalyzer download failed on attempt $attempt of 3: $($_.Exception.Message)"
+             Start-Sleep -Seconds ($attempt * 10)
+           }
+         }
+         $findings = foreach ($file in 'install.ps1', 'test/install/install.Tests.ps1', 'test/install/windows-smoke.ps1') {
+           Invoke-ScriptAnalyzer -Path $file -Settings test/install/PSScriptAnalyzerSettings.psd1
+         }
           $findings | Format-Table RuleName, ScriptName, Line, Message -AutoSize -Wrap
           if ($findings) { throw "PSScriptAnalyzer found $(@($findings).Count) problem(s)" }
           Invoke-Pester -Path test/install/install.Tests.ps1 -CI -Output Detailed
