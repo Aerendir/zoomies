@@ -756,6 +756,13 @@ type Agent struct {
 	// came from. The process backend ignores it -- a bare runner already uses
 	// the host's own trust store.
 	ExtraCAFile string `yaml:"extra_ca_file"`
+	// DinDImage replaces the image a docker-in-docker pool's sidecar runs, for
+	// a host that bakes its own registry mirrors or certificates into it. It
+	// is a host setting and not a pool one for the same reason as ExtraCAFile:
+	// the caches belong to the machine's network, not to any one pool. Empty
+	// keeps the image Zoomies ships with. The sidecar's command stays
+	// dockerd, so the image has to provide it.
+	DinDImage string `yaml:"dind_image"`
 	// FinishedRetention is how long a finished runner's workload -- the exited
 	// container with its output, its sidecar and scratch directory, or the
 	// process backend's runner directory -- stays on the host after the

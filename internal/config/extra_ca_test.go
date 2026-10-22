@@ -103,3 +103,17 @@ func TestTheExtraCAFileHasAnEnvironmentOverride(t *testing.T) {
 		t.Fatalf("agent.extra_ca_file = %q", c.Agent.ExtraCAFile)
 	}
 }
+
+func TestTheDinDImageHasAnEnvironmentOverrideAndNoDefault(t *testing.T) {
+	if got := Default().Agent.DinDImage; got != "" {
+		t.Fatalf("agent.dind_image defaults to %q; empty is what keeps the shipped image", got)
+	}
+	t.Setenv("ZOOMIES_AGENT_DIND_IMAGE", "registry.example.com/ci/dind:27")
+	c := Default()
+	if err := c.applyEnv(); err != nil {
+		t.Fatal(err)
+	}
+	if c.Agent.DinDImage != "registry.example.com/ci/dind:27" {
+		t.Fatalf("agent.dind_image = %q", c.Agent.DinDImage)
+	}
+}

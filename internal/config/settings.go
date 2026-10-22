@@ -495,6 +495,11 @@ var registry = buildRegistry([]Setting{
 		Summary:       "A PEM bundle on this host that container runners and their Docker sidecars trust as well as the image's own, for a network whose proxy re-signs TLS.",
 		RestartReason: "the backend is built with it",
 	},
+	{
+		Key: "agent.dind_image", Label: "Docker-in-Docker sidecar image", Env: "ZOOMIES_AGENT_DIND_IMAGE", Kind: KindString, Scope: ScopeInstance,
+		Summary:       "The image a docker-in-docker pool's sidecar runs, for a host that carries its own registry mirrors or certificates. Empty uses docker:27-dind. The image runs privileged and must provide dockerd.",
+		RestartReason: "the backend is built with it",
+	},
 	// The transport a standalone agent uses to reach a controller. None of it
 	// can come from the controller's database, because a host that cannot yet
 	// reach the controller is exactly the host that needs these values.

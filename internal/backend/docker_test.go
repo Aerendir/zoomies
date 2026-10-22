@@ -1429,3 +1429,30 @@ func TestAPairDividesOnlyTheFieldsTheHostDecided(t *testing.T) {
 		t.Errorf("an older controller's spec changed meaning: %+v", runner)
 	}
 }
+
+// A host that bakes its registry mirrors into its own sidecar image sets
+// DockerOptions.DinDImage, and every sidecar must then run that image. Left
+// empty it has to stay the image Zoomies ships with, so that nobody who does
+// not set the option sees a different sidecar after an upgrade.
+func TestTheDinDSidecarRunsTheConfiguredImageAndDefaultsWhenNoneIsSet(t *testing.T) {
+	for name, tc := range map[string]struct{ set, want string }{
+		"unset":     {"", DefaultDinDImage},
+		"blank":     {"   ", DefaultDinDImage},
+		"an image":  {"registry.example.com/ci/dind:27", "registry.example.com/ci/dind:27"},
+		"by digest": {"registry.example.com/ci/dind@sha256:" + strings.Repeat("a", 64), "registry.example.com/ci/dind@sha256:" + strings.Repeat("a", 64)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			b, err := NewDocker(DockerOptions{Host: "unix:///var/run/docker.sock", DinDImage: tc.set, Logger: quietLogger()})
+			if err != nil {
+				t.Fatalf("NewDocker: %v", err)
+			}
+			if b.dind != tc.want {
+				t.Fatalf("dind image = %q, want %q", b.dind, tc.want)
+			}
+			cfg := buildDinDConfig(Spec{Name: "runner-1"}, dockerFlavor(), containerOptions{Now: time.Now(), DinDImage: b.dind})
+			if cfg.Image != tc.want {
+				t.Fatalf("sidecar image = %q, want %q", cfg.Image, tc.want)
+			}
+		})
+	}
+}

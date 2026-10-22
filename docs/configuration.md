@@ -246,6 +246,7 @@ agent:
   runner_download_url: ""       # ZOOMIES_AGENT_RUNNER_DOWNLOAD_URL -- an internal mirror of the actions/runner releases
   registry_auth: ""             # ZOOMIES_REGISTRY_AUTH -- credentials for a private image registry
   extra_ca_file: ""             # ZOOMIES_AGENT_EXTRA_CA_FILE -- a PEM root CA container runners trust, for a TLS-intercepting proxy
+  dind_image: ""                # ZOOMIES_AGENT_DIND_IMAGE -- the docker-in-docker sidecar image, empty for docker:27-dind
   # Standalone agents only:
   controller_url: ""            # ZOOMIES_CONTROLLER_URL
   join_token: ""                # ZOOMIES_JOIN_TOKEN
@@ -417,6 +418,7 @@ settings page reports rather than refusing the edit.
 | `agent.docker_build_cache_mb` | `ZOOMIES_AGENT_DOCKER_BUILD_CACHE_MB` | next restart | Docker build cache target: The target size for unused Docker builder cache. 0 leaves a shared or externally managed daemon alone. |
 | `agent.docker_host` | `ZOOMIES_DOCKER_HOST` | next restart | Docker socket: The Docker or Podman socket. Empty finds one, preferring a rootless socket over the root one. |
 | `agent.extra_ca_file` | `ZOOMIES_AGENT_EXTRA_CA_FILE` | next restart | Extra CA for runners: A PEM bundle on this host that container runners and their Docker sidecars trust as well as the image's own, for a network whose proxy re-signs TLS. |
+| `agent.dind_image` | `ZOOMIES_AGENT_DIND_IMAGE` | next restart | Docker-in-Docker sidecar image: The image a docker-in-docker pool's sidecar runs, for a host that carries its own registry mirrors or certificates. Empty uses docker:27-dind. The image runs privileged and must provide dockerd. |
 | `agent.embedded` | `ZOOMIES_AGENT_EMBEDDED` | next restart | Run an agent in this controller: Run an agent inside this controller, so a single machine needs one process. Off makes a controller that schedules runners onto other hosts and starts none itself. |
 | `agent.prewarm_timeout` | `ZOOMIES_AGENT_PREWARM_TIMEOUT` | next restart | Background image preparation budget; default 5m, range 1s–15m. Foreground create budgets are independent. |
 | `agent.prewarm_jitter` | `ZOOMIES_AGENT_PREWARM_JITTER` | next restart | Random delay before background preparation; default 30s, range 0s–5m. Foreground work can pass during the delay. |
@@ -1831,6 +1833,29 @@ minimum is held to the same floor any runner is: a quarter of a core and 512
 MB.
 [How big a runner is](hosts-and-pools.md#how-big-a-runner-is-and-how-many-there-are)
 has what the pool editor does with them, and what it checks the answer against.
+
+### `agent.dind_image`: your own docker-in-docker sidecar
+
+```yaml
+agent:
+  dind_image: registry.example.com/ci/dind:27
+```
+
+A pool with `docker_mode: dind` starts a sidecar for every runner, and the
+sidecar's storage starts empty, so every job pulls its images again. A host
+that keeps pull-through caches can build an image of its own, `FROM
+docker:27-dind`, that carries `/etc/docker/daemon.json` and
+`/etc/docker/certs.d/<registry>/hosts.toml` pointing at them, and name it here.
+This is a host setting, not a pool one, because the caches belong to the
+network the host sits on.
+
+The sidecar's command stays `dockerd --host=tcp://127.0.0.1:2375
+--host=unix:///var/run/docker.sock`, so the image has to provide `dockerd` and
+should keep the tag you tested. Empty runs `docker:27-dind`. The sidecar runs
+privileged, so this chooses which image gets that access on the host: build it
+from a source you trust, and give it a digest (`@sha256:...`) if the pool pulls
+only pinned images. The image is pulled under the pool's pull policy and with
+`agent.registry_auth`, like any runner image.
 
 ### `agent.extra_ca_file`: behind a proxy that re-signs TLS
 
