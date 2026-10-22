@@ -111,8 +111,8 @@ export function hostsLine(h: {
     accent: `${h.inUse} of ${h.capacity} slots in use.`,
     lede:
       silent === 0
-        ? 'Every host is sending heartbeats.'
-        : `${silent} ${is(silent)} not sending heartbeats.`,
+        ? 'Every host has checked in.'
+        : `${silent} ${silent === 1 ? 'has' : 'have'} not checked in.`,
   };
 }
 

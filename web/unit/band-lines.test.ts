@@ -72,10 +72,10 @@ test('hosts say how many are connected and how many slots are in use', () => {
   const line = hostsLine({ connected: 2, total: 3, inUse: 4, capacity: 12 });
   assert.equal(line.headline, '2 of 3 hosts are connected.');
   assert.equal(line.accent, '4 of 12 slots in use.');
-  assert.equal(line.lede, '1 is not sending heartbeats.');
+  assert.equal(line.lede, '1 has not checked in.');
   const all = hostsLine({ connected: 3, total: 3, inUse: 0, capacity: 12 });
   assert.equal(all.headline, '3 hosts are connected.');
-  assert.equal(all.lede, 'Every host is sending heartbeats.');
+  assert.equal(all.lede, 'Every host has checked in.');
   assert.equal(
     hostsLine({ connected: 0, total: 0, inUse: 0, capacity: 0 }).headline,
     'No hosts yet.',
