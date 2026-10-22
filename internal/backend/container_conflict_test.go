@@ -156,10 +156,21 @@ func TestForeignConflictSurvivesFailedCreateCleanup(t *testing.T) {
 			writeJSON(w, 200, ContainerInspect{ID: "foreign", Config: &ContainerConfig{Labels: map[string]string{LabelManaged: "true", LabelRunnerID: "another-runner"}}})
 		},
 		"POST " + v + "/containers/create": func(w http.ResponseWriter, r *http.Request) {
+			// The unnamed create fills the externals volume; it is not the
+			// runner's and takes no part in the conflict.
+			if r.URL.Query().Get("name") == "" {
+				writeJSON(w, 201, map[string]string{"Id": "externals"})
+				return
+			}
 			creates++
 			writeJSON(w, 409, map[string]string{"message": "name already in use"})
 		},
-		"DELETE " + v + "/containers/{id}": func(w http.ResponseWriter, r *http.Request) { deletes++; w.WriteHeader(204) },
+		"DELETE " + v + "/containers/{id}": func(w http.ResponseWriter, r *http.Request) {
+			if r.PathValue("id") != "externals" {
+				deletes++
+			}
+			w.WriteHeader(204)
+		},
 	})
 	b := dockerBackendFor(t, f, DockerOptions{})
 	_, err := b.CreateWithResult(context.Background(), spec)
