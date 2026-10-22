@@ -465,6 +465,8 @@ type ContainerCreateRequest struct {
 	AttachStderr bool              `json:"AttachStderr"`
 	StopSignal   string            `json:"StopSignal,omitempty"`
 	Healthcheck  *HealthConfig     `json:"Healthcheck,omitempty"`
+	// Volumes declares anonymous volumes, removed with the container.
+	Volumes map[string]struct{} `json:"Volumes,omitempty"`
 
 	HostConfig       *HostConfig       `json:"HostConfig,omitempty"`
 	NetworkingConfig *NetworkingConfig `json:"NetworkingConfig,omitempty"`
@@ -486,6 +488,7 @@ type ContainerHealth struct {
 type HostConfig struct {
 	LogConfig      *LogConfig        `json:"LogConfig,omitempty"`
 	Binds          []string          `json:"Binds,omitempty"`
+	VolumesFrom    []string          `json:"VolumesFrom,omitempty"`
 	NetworkMode    string            `json:"NetworkMode,omitempty"`
 	AutoRemove     bool              `json:"AutoRemove"`
 	Privileged     bool              `json:"Privileged,omitempty"`

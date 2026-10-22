@@ -523,6 +523,9 @@ type containerOptions struct {
 	SocketGID int
 	// DockerHost is the value of DOCKER_HOST inside the runner.
 	DockerHost string
+	// VolumesFrom is the docker-in-docker sidecar whose volumes the runner
+	// mounts, so the work folder lives at the same path in both.
+	VolumesFrom string
 	// WorkDirMount is a host directory to bind at RunnerWorkMount.
 	WorkDirMount string
 	// WorkDirOwned records that Zoomies created that directory and must delete
@@ -667,7 +670,10 @@ func buildRunnerConfig(spec Spec, fl flavor, o containerOptions) ContainerCreate
 	// Sized from the runner's own limit, which for docker-in-docker is its half
 	// of the pair: the tmpfs is charged to this container's cgroup, not the
 	// sidecar's, so the pair's total would promise room the runner does not have.
-	hc.Tmpfs = tmpfsMounts(spec, res.MemoryMB, o.WorkDirMount != "")
+	hc.Tmpfs = tmpfsMounts(spec, res.MemoryMB, o.WorkDirMount != "" || o.VolumesFrom != "")
+	if o.VolumesFrom != "" {
+		hc.VolumesFrom = []string{o.VolumesFrom}
+	}
 
 	if o.HostSocket != "" {
 		// No relabel suffix here. ":z" relabels the *source*, and the source
@@ -682,7 +688,7 @@ func buildRunnerConfig(spec Spec, fl flavor, o containerOptions) ContainerCreate
 			hc.GroupAdd = append(hc.GroupAdd, strconv.Itoa(o.SocketGID))
 		}
 	}
-	if o.WorkDirMount != "" {
+	if o.WorkDirMount != "" && o.VolumesFrom == "" {
 		hc.Binds = append(hc.Binds, o.WorkDirMount+":"+RunnerWorkMount+fl.mountSuffix)
 	}
 	if source, err := cacheSource(spec); err == nil && source != "" {
@@ -693,7 +699,7 @@ func buildRunnerConfig(spec Spec, fl flavor, o containerOptions) ContainerCreate
 			o.ToolCacheDir+":"+RunnerToolCacheSharedMount+":ro"+strings.ReplaceAll(fl.mountSuffix, ":", ","),
 			o.ToolFarmDir+":"+RunnerToolCacheMount+fl.mountSuffix)
 	}
-	if o.ExtraCAFile != "" {
+	if o.ExtraCAFile != "" && o.VolumesFrom == "" {
 		hc.Binds = append(hc.Binds, extraCABind(fl, o.ExtraCAFile))
 	}
 	if o.Network != "" && o.NetworkMode == "" {
@@ -831,6 +837,17 @@ func buildDinDConfig(spec Spec, fl flavor, o containerOptions) ContainerCreateRe
 	// not reach. It is charged to this container, which is why it is sized from
 	// the daemon's half of the pair, or its full typed limit, and not the runner's.
 	hc.Tmpfs = daemonTmpfsMounts(spec, res.MemoryMB)
+	// The jobs' containers are created by this daemon, so a bind mount of the
+	// checkout (docker compose's ".:/workspace", docker run -v "$PWD:...") names
+	// a path it resolves in its own filesystem. The work folder is therefore
+	// the sidecar's, at the runner's path, and the runner mounts it from here:
+	// a host directory when the spec gives one, an anonymous volume otherwise,
+	// which Docker removes with the last container that uses it.
+	if o.WorkDirMount != "" {
+		hc.Binds = append(hc.Binds, o.WorkDirMount+":"+RunnerWorkMount+fl.mountSuffix)
+	} else {
+		cfg.Volumes = map[string]struct{}{RunnerWorkMount: {}}
+	}
 	// The sidecar pulls every image a dind job uses, so behind a proxy that
 	// re-signs TLS it needs the CA as much as the runner does. dockerd is Go,
 	// and Go adds every file in the SSL_CERT_DIR directories to the system
@@ -1277,6 +1294,7 @@ func (b *DockerBackend) CreateWithResult(ctx context.Context, spec Spec) (result
 		// network attachment of its own.
 		opts.NetworkMode = "container:" + dindID
 		opts.Network = ""
+		opts.VolumesFrom = dindID
 		opts.DockerHost = fmt.Sprintf("tcp://127.0.0.1:%d", dindPort)
 	case store.DockerHostSocket:
 		sock := b.api.SocketPath()
@@ -1400,6 +1418,13 @@ func (b *DockerBackend) startDinD(ctx context.Context, spec Spec, opts container
 				lastErr = errors.New("runtime did not report sidecar health; the runtime must honour container healthchecks and the custom DinD image must provide the docker CLI")
 			}
 			if state.Running && state.Health != nil && state.Health.Status == "healthy" {
+				// The work folder is created by the daemon as root's; the
+				// runner's account has to write to it. A daemon that cannot
+				// run the command is logged, not fatal: the runner then finds
+				// out at checkout, with the folder named in the warning.
+				if res, err := b.api.ContainerExec(readyCtx, id, []string{"chmod", "0777", RunnerWorkMount}, nil); err != nil || res.ExitCode != 0 {
+					b.log.Warn("could not open the shared work folder to the runner", "runner", spec.Name, "folder", RunnerWorkMount, "exit", res.ExitCode, "error", err)
+				}
 				b.log.Warn("docker-in-docker daemon ready: this runner has a privileged container", "runner", spec.Name, "pool", spec.PoolName, "container", shortID(id))
 				return id, nil
 			}
