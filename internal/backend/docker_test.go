@@ -1456,3 +1456,38 @@ func TestTheDinDSidecarRunsTheConfiguredImageAndDefaultsWhenNoneIsSet(t *testing
 		})
 	}
 }
+
+// A dind job's containers are created by the sidecar's daemon, so a bind mount
+// of the checkout is resolved in the sidecar's filesystem: the work folder has
+// to be the sidecar's, at the runner's path, and the runner has to mount it
+// from there rather than keep one of its own.
+func TestDinDSidecarOwnsTheWorkFolderAndTheRunnerMountsIt(t *testing.T) {
+	spec := jitSpec()
+	spec.DockerMode = store.DockerDinD
+
+	dind := buildDinDConfig(spec, dockerFlavor(), containerOptions{Now: time.Now()})
+	if _, ok := dind.Volumes[RunnerWorkMount]; !ok {
+		t.Fatalf("sidecar volumes = %v, want an anonymous volume at %s", dind.Volumes, RunnerWorkMount)
+	}
+
+	runner := buildRunnerConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), NetworkMode: "container:sidecar", VolumesFrom: "sidecar"})
+	if got := runner.HostConfig.VolumesFrom; len(got) != 1 || got[0] != "sidecar" {
+		t.Fatalf("runner VolumesFrom = %v, want [sidecar]", got)
+	}
+	if _, ok := runner.HostConfig.Tmpfs[RunnerWorkMount]; ok {
+		t.Fatalf("runner keeps a tmpfs at %s over the sidecar's work folder", RunnerWorkMount)
+	}
+
+	// A host directory given by the spec is bound into the sidecar instead,
+	// and reaches the runner through the same VolumesFrom.
+	host := buildDinDConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), WorkDirMount: "/srv/work/r1"})
+	if len(host.Volumes) != 0 || !slices.Contains(host.HostConfig.Binds, "/srv/work/r1:"+RunnerWorkMount) {
+		t.Fatalf("sidecar with a host work dir: volumes=%v binds=%v", host.Volumes, host.HostConfig.Binds)
+	}
+	runner = buildRunnerConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), WorkDirMount: "/srv/work/r1", VolumesFrom: "sidecar"})
+	for _, b := range runner.HostConfig.Binds {
+		if strings.HasSuffix(b, ":"+RunnerWorkMount) {
+			t.Fatalf("runner binds %q itself, which would clash with the sidecar's mount", b)
+		}
+	}
+}
