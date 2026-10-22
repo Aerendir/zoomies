@@ -5,6 +5,8 @@ package backend
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -109,6 +111,12 @@ const (
 // RunnerWorkMount is where a per-runner host scratch directory is bind-mounted
 // inside the container.
 const RunnerWorkMount = "/home/runner/_work"
+
+// RunnerExternalsMount is where the runner image keeps the runner's externals,
+// the Node builds a job in a container: block reaches at /__e. Under dind that
+// container is created by the sidecar's daemon, so the sidecar needs them at
+// the same path; see ensureExternalsVolume.
+const RunnerExternalsMount = "/home/runner/externals"
 
 // RunnerTmpMount is the folder a pool may keep in memory beside the work folder.
 const RunnerTmpMount = "/tmp"
@@ -330,7 +338,11 @@ type DockerBackend struct {
 	// because it cannot write to it; see prepareCacheDirs.
 	toolCacheMu      sync.Mutex
 	toolCacheProblem string
-	log              *slog.Logger
+	// externalsMu guards externalsReady, the externals volumes already filled
+	// from their runner image by this agent.
+	externalsMu    sync.Mutex
+	externalsReady map[string]bool
+	log            *slog.Logger
 	// nameRelease is how long a create waits for the daemon to release a name
 	// whose container has gone. A field rather than the constant so a test can
 	// exercise the wait without spending it.
@@ -523,6 +535,9 @@ type containerOptions struct {
 	SocketGID int
 	// DockerHost is the value of DOCKER_HOST inside the runner.
 	DockerHost string
+	// ExternalsVolume is a volume holding the runner image's externals, bound
+	// read-only into the docker-in-docker sidecar at RunnerExternalsMount.
+	ExternalsVolume string
 	// VolumesFrom is the docker-in-docker sidecar whose volumes the runner
 	// mounts, so the work folder lives at the same path in both.
 	VolumesFrom string
@@ -847,6 +862,9 @@ func buildDinDConfig(spec Spec, fl flavor, o containerOptions) ContainerCreateRe
 		hc.Binds = append(hc.Binds, o.WorkDirMount+":"+RunnerWorkMount+fl.mountSuffix)
 	} else {
 		cfg.Volumes = map[string]struct{}{RunnerWorkMount: {}}
+	}
+	if o.ExternalsVolume != "" {
+		hc.Binds = append(hc.Binds, o.ExternalsVolume+":"+RunnerExternalsMount+":ro")
 	}
 	// The sidecar pulls every image a dind job uses, so behind a proxy that
 	// re-signs TLS it needs the CA as much as the runner does. dockerd is Go,
@@ -1281,6 +1299,11 @@ func (b *DockerBackend) CreateWithResult(ctx context.Context, spec Spec) (result
 	case store.DockerDinD:
 		if _, err := b.ensureImage(ctx, b.dind); err != nil {
 			return CreateResult{}, err
+		}
+		if vol, err := b.ensureExternalsVolume(ctx, spec.Image); err != nil {
+			b.log.Warn("could not share the runner's externals with the docker-in-docker sidecar; jobs in a container: block will fail", "runner", spec.Name, "image", spec.Image, "error", err)
+		} else {
+			opts.ExternalsVolume = vol
 		}
 		dindStarted := time.Now()
 		dindID, err = b.startDinD(ctx, spec, opts)
@@ -2279,4 +2302,39 @@ func boolString(v bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// ensureExternalsVolume returns a volume holding the runner image's externals,
+// filled once per image. A job with a container: block mounts the runner's
+// externals into that container, and under dind the container is created by
+// the sidecar's daemon, which resolves the mount in its own filesystem. The
+// externals are several hundred megabytes, so they are not copied per runner:
+// Docker fills an empty named volume from the image the first time a
+// container of that image mounts it, and a container created and removed
+// without starting is enough for that.
+func (b *DockerBackend) ensureExternalsVolume(ctx context.Context, image string) (string, error) {
+	sum := sha256.Sum256([]byte(image))
+	name := "zoomies-externals-" + hex.EncodeToString(sum[:])[:16]
+	b.externalsMu.Lock()
+	defer b.externalsMu.Unlock()
+	if b.externalsReady[name] {
+		return name, nil
+	}
+	id, err := b.api.ContainerCreate(ctx, "", ContainerCreateRequest{
+		Image:      image,
+		Entrypoint: []string{"true"},
+		Labels:     map[string]string{LabelPrefix + "externals": name},
+		HostConfig: &HostConfig{Binds: []string{name + ":" + RunnerExternalsMount}},
+	})
+	if err != nil {
+		return "", fmt.Errorf("filling %s from %s: %w", name, image, err)
+	}
+	if err := b.api.ContainerRemove(ctx, id, true); err != nil {
+		b.log.Warn("could not remove the container that filled the externals volume", "volume", name, "container", shortID(id), "error", err)
+	}
+	if b.externalsReady == nil {
+		b.externalsReady = map[string]bool{}
+	}
+	b.externalsReady[name] = true
+	return name, nil
 }
