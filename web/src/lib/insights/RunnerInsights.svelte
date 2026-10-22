@@ -7,7 +7,6 @@
   import ProvisioningPulse from './ProvisioningPulse.svelte';
   import StateBreakdown from './StateBreakdown.svelte';
   import { poolSignals, finite, queueTone } from './signals';
-  import { formatNumber, NO_VALUE } from '$lib/format';
   import { runnerStatus } from '$lib/status';
   /**
    * The context above a runner list: the provisioning strip, and the lifecycle
@@ -99,16 +98,12 @@
       >Explore usage history</a
     >
   </div>
-  <a
-    class="queued"
-    data-tone={queuedTone}
-    href={`/jobs?state=queued${suffix}`}
-    aria-label={`Jobs queued: ${queued == null ? 'unknown' : formatNumber(queued)}. Open the queued jobs.`}
-  >
-    <strong>{queued == null ? NO_VALUE : formatNumber(queued)}</strong>
-    <span>{queued === 1 ? 'job queued' : 'jobs queued'}</span>
-  </a>
-  <ProvisioningPulse {poolId} />
+  <ProvisioningPulse
+    {poolId}
+    queued={queued ?? null}
+    {queuedTone}
+    queuedHref={`/jobs?state=queued${suffix}`}
+  />
   {#if fleet.stats}
     <details class="how">
       <summary>How runners move through their states</summary>
@@ -145,31 +140,6 @@
   }
   a {
     color: var(--z-accent);
-  }
-  .queued {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--z-space-2);
-    margin-bottom: var(--z-space-3);
-    padding: var(--z-space-2) var(--z-space-4);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-full);
-    background: var(--z-surface);
-    color: var(--z-text);
-    text-decoration: none;
-  }
-  .queued strong {
-    font-size: var(--z-text-xl);
-    font-variant-numeric: tabular-nums;
-  }
-  .queued[data-tone='warning'] {
-    border-color: var(--z-pending);
-  }
-  .queued[data-tone='warning'] strong {
-    color: var(--z-pending);
-  }
-  .queued:hover span {
-    text-decoration: underline;
   }
   .how {
     margin: var(--z-space-3) 0 0;

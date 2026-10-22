@@ -5,7 +5,19 @@
   import { QUEUE_STATUS_LABELS } from '$lib/status';
   import Duration from '$lib/components/Duration.svelte';
   import { untrack } from 'svelte';
-  let { poolId = '' }: { poolId?: string } = $props();
+  import { formatNumber, NO_VALUE } from '$lib/format';
+  let {
+    poolId = '',
+    queued = undefined,
+    queuedTone = 'neutral',
+    queuedHref = '',
+  }: {
+    poolId?: string;
+    /** Jobs waiting for a runner: the first figure of the row, when the page has it. */
+    queued?: number | null;
+    queuedTone?: 'warning' | 'neutral';
+    queuedHref?: string;
+  } = $props();
   let counts = $state<Record<string, number> | null>(null);
   let failed = $state(false);
   let oldest = $state<string | null>(null);
@@ -75,6 +87,14 @@
 
 <div class="pulse" aria-label="Provisioning demand context">
   <span>Provisioning demand</span>
+  {#if queued !== undefined}<a
+      class="queued"
+      data-tone={queuedTone}
+      href={queuedHref}
+      aria-label={`Jobs queued: ${queued == null ? 'unknown' : formatNumber(queued)}. Open the queued jobs.`}
+      ><strong>{queued == null ? NO_VALUE : formatNumber(queued)}</strong>
+      {queued === 1 ? 'job queued' : 'jobs queued'}</a
+    >{/if}
   {#if counts}{#each [{ key: 'ready', label: QUEUE_STATUS_LABELS.ready }, { key: 'expedited', label: QUEUE_STATUS_LABELS.expedited }, { key: 'paused', label: QUEUE_STATUS_LABELS.paused }, { key: 'deleted', label: QUEUE_STATUS_LABELS.deleted }] as item (item.key)}<a
         class={item.key}
         href={`/queue?provisioning=${item.key}${poolId ? `&pool_id=${encodeURIComponent(poolId)}` : ''}`}
@@ -118,6 +138,10 @@
   }
   strong {
     font-variant-numeric: tabular-nums;
+  }
+  .queued[data-tone='warning'] {
+    color: var(--z-pending);
+    background: var(--z-pending-subtle);
   }
   .expedited {
     color: var(--z-accent);

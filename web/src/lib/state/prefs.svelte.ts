@@ -24,6 +24,7 @@ import {
   resolveLogoTreatment,
   type LogoTreatment,
 } from './logo-treatment';
+import { isBandPage, type BandPage } from '../bands/pages';
 import { storage } from './storage';
 
 const PREFS_KEY = 'zoomies.prefs';
@@ -159,6 +160,11 @@ interface StoredPrefs {
    */
   eliStyle?: Partial<EliStyle>;
   logoTreatment?: LogoTreatment;
+  /**
+   * Pages whose band this browser has switched off. The exception, as `hidden` is for
+   * columns, so a band added later is on for everyone.
+   */
+  hiddenBands?: string[];
 }
 
 /** The quick ranges the activity matrix offers, as the buttons name them. */
@@ -217,6 +223,7 @@ class Prefs {
   #statusStyle = $state<StatusStyle>(DEFAULT_STATUS_STYLE);
   #eliStyle = $state<EliStyle>(DEFAULT_ELI_STYLE);
   #logoTreatment = $state<LogoTreatment>(DEFAULT_LOGO_TREATMENT);
+  #hiddenBands = $state<BandPage[]>([]);
   #accountSync = false;
   #accountSave: ReturnType<typeof setTimeout> | null = null;
 
@@ -248,6 +255,10 @@ class Prefs {
     this.#statusStyle = resolveStatusStyle(stored);
     this.#eliStyle = resolveEliStyle(stored.eliStyle);
     this.#logoTreatment = resolveLogoTreatment(stored.logoTreatment);
+    // Validated: a page an older build named and this one does not is not a band to hide.
+    this.#hiddenBands = Array.isArray(stored.hiddenBands)
+      ? stored.hiddenBands.filter(isBandPage)
+      : [];
     this.#applyNav();
   }
 
@@ -518,6 +529,17 @@ class Prefs {
     this.#persist();
   }
 
+  /** Whether this page's band is showing: on unless this browser has switched it off. */
+  bandShown(page: BandPage): boolean {
+    return !this.#hiddenBands.includes(page);
+  }
+
+  setBandShown(page: BandPage, shown: boolean): void {
+    const rest = this.#hiddenBands.filter((p) => p !== page);
+    this.#hiddenBands = shown ? rest : [...rest, page];
+    this.#persist();
+  }
+
   get logoTreatment(): LogoTreatment {
     return this.#logoTreatment;
   }
@@ -571,6 +593,7 @@ class Prefs {
         statusStyle: this.#statusStyle,
         eliStyle: this.#eliStyle,
         logoTreatment: this.#logoTreatment,
+        hiddenBands: this.#hiddenBands,
       } satisfies StoredPrefs),
     );
     this.#scheduleAccountSave();

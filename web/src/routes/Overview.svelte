@@ -38,6 +38,7 @@
   // somebody has put away, so it stays when that is all it has to say.
   const heroSaysIt = $derived(
     fleet.loaded &&
+      prefs.bandShown('overview') &&
       !setupPending &&
       (notifications.active.length > 0 || notifications.dismissed.length === 0),
   );

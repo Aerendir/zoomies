@@ -20,6 +20,8 @@
   most of which ran somewhere else, and "Include other runners" widens it.
 -->
 <script lang="ts">
+  import PageBand from '$lib/bands/PageBand.svelte';
+  import { workflowsLine } from '$lib/bands/lines';
   import Tooltip from '$lib/components/Tooltip.svelte';
   import { CircleX } from '@lucide/svelte';
   import {
@@ -462,6 +464,16 @@
         ]
       : []),
   ]);
+
+  const bandStats = $derived(filters.all ? fleet.stats : (fleet.stats?.fleet ?? fleet.stats));
+  const bandLine = $derived(
+    bandStats
+      ? workflowsLine({
+          running: bandStats.running_jobs ?? 0,
+          queued: bandStats.queued_jobs ?? 0,
+        })
+      : null,
+  );
 </script>
 
 {#snippet stateCell(run: WorkflowRun)}
@@ -582,6 +594,7 @@
     : 'The workflow runs this fleet claims, runs or is waiting to run, and the jobs inside each.'}
   onrefresh={refreshPage}
 />
+<PageBand page="workflows" line={bandLine} />
 
 <div class="content">
   <div class="toolbar">

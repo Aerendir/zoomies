@@ -41,6 +41,8 @@
   already on.
 -->
 <script lang="ts">
+  import PageBand from '$lib/bands/PageBand.svelte';
+  import { jobsLine, windowPhrase } from '$lib/bands/lines';
   import Tooltip from '$lib/components/Tooltip.svelte';
   import { Check } from '@lucide/svelte';
   import { readableJobText } from '$lib/jobs/name';
@@ -73,7 +75,14 @@
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import { fleetFailed } from '$lib/faults';
-  import { NO_VALUE, formatDuration, formatNumber, formatPercent, pluralise } from '$lib/format';
+  import {
+    NO_VALUE,
+    describeWindow,
+    formatDuration,
+    formatNumber,
+    formatPercent,
+    pluralise,
+  } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import {
     HOSTED,
@@ -568,6 +577,20 @@
     cell: triageCell,
   };
   const columns = $derived(filters.attention ? [...shownColumns, triageColumn] : shownColumns);
+
+  // The same scope the page's own figures are in: this fleet's jobs, or every job GitHub reports.
+  const bandStats = $derived(filters.all ? fleet.stats : (fleet.stats?.fleet ?? fleet.stats));
+  const bandLine = $derived(
+    bandStats
+      ? jobsLine({
+          running: bandStats.running_jobs ?? 0,
+          queued: bandStats.queued_jobs ?? 0,
+          succeeded: bandStats.succeeded ?? 0,
+          failed: bandStats.failed ?? 0,
+          windowText: windowPhrase(describeWindow(fleet.stats?.window)),
+        })
+      : null,
+  );
 </script>
 
 {#snippet jobNameCell(job: Job)}
@@ -687,6 +710,7 @@
   onrefresh={refreshPage}
   ><Button href="/comparisons" variant="secondary">Compare runs</Button></PageHeader
 >
+<PageBand page="jobs" line={bandLine} />
 
 {#each layoutSections as section (section)}
   {#if section === 'context'}

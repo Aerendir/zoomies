@@ -16,6 +16,8 @@
   import Tooltip from '$lib/components/Tooltip.svelte';
   import { readableJobText } from '$lib/jobs/name';
   import RunnerInsights from '$lib/insights/RunnerInsights.svelte';
+  import PageBand from '$lib/bands/PageBand.svelte';
+  import { runnersLine } from '$lib/bands/runners-line';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
   import { CircleSlash, Search, Trash2 } from '@lucide/svelte';
   import { analyseStartupFailures, listRunners } from '$lib/api/client';
@@ -558,6 +560,18 @@
   }}
 />
 
+<PageBand
+  page="runners"
+  line={fleet.stats?.runners
+    ? runnersLine({
+        provisioning: fleet.stats.runners.provisioning ?? 0,
+        registering: fleet.stats.runners.registering ?? 0,
+        idle: fleet.stats.runners.idle ?? 0,
+        busy: fleet.stats.runners.busy ?? 0,
+        draining: fleet.stats.runners.draining ?? 0,
+      })
+    : null}
+/>
 <RunnerInsights {poolId} />
 <details class="activity-history">
   <summary>Explore fleet activity over the last 24 hours</summary><FleetHistory />

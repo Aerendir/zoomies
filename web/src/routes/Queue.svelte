@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PageBand from '$lib/bands/PageBand.svelte';
+  import { queueLine } from '$lib/bands/lines';
   import { readableJobText } from '$lib/jobs/name';
   import ChartPanel from '$lib/components/ChartPanel.svelte';
   import StateBreakdown from '$lib/insights/StateBreakdown.svelte';
@@ -13,7 +15,7 @@
   } from '$lib/api/client';
   import type { Job, ProvisioningStatus, Query } from '$lib/api/types';
   import { events } from '$lib/api/sse';
-  import { NO_VALUE } from '$lib/format';
+  import { NO_VALUE, formatDuration } from '$lib/format';
   import { router } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
   import { QUEUE_STATUS_LABELS } from '$lib/status';
@@ -337,6 +339,20 @@
       toasts.fromError(e, 'Could not save this view');
     }
   }
+
+  // The band's figures are this fleet's, as the Overview's are.
+  const bandStats = $derived(fleet.stats?.fleet ?? fleet.stats);
+  const bandLine = $derived(
+    bandStats
+      ? queueLine({
+          queued: bandStats.queued_jobs ?? 0,
+          running: bandStats.running_jobs ?? 0,
+          medianWait: fleet.stats?.median_wait_ms
+            ? formatDuration(fleet.stats.median_wait_ms)
+            : null,
+        })
+      : null,
+  );
 </script>
 
 {#snippet statusCell(job: Job)}
@@ -386,6 +402,7 @@
   <Button variant="secondary" icon={Bookmark} onclick={() => (saveOpen = true)}>Save view</Button>
   <Button variant="ghost" href="/runners">View runners</Button>
 </PageHeader>
+<PageBand page="queue" line={bandLine} />
 
 <div class="queue-content">
   <div class="summary" aria-label="Provisioning status filters">
