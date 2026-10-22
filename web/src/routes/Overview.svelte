@@ -393,7 +393,9 @@
   .work {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-    align-items: start;
+    /* The events column is as tall as Pools and Active jobs beside it, so the two
+       columns end on one line instead of the shorter one trailing off. */
+    align-items: stretch;
     gap: var(--z-space-4);
   }
   .destination,
@@ -419,6 +421,15 @@
   @media (min-width: 1181px) {
     .page-nav {
       display: none;
+    }
+  }
+  @media (min-width: 1181px) {
+    #events {
+      display: flex;
+      flex-direction: column;
+    }
+    #events > :global(.panel) {
+      flex: 1;
     }
   }
   @media (max-width: 1180px) {
