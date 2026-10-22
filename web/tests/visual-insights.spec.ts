@@ -229,6 +229,11 @@ for (const route of [
       // The Runners page keeps its lifecycle behind a disclosure.
       if (route.path === '/runners')
         await page.getByText('How runners move through their states', { exact: true }).click();
+      // The Queue page keeps demand and ordering behind a disclosure.
+      if (route.path === '/queue')
+        await page
+          .getByText('How provisioning is ordered, and how demand splits', { exact: true })
+          .click();
       // And Mission Control folds the Jobs page's context away on a phone.
       if (route.path === '/jobs') await openFleetContext(page);
       await expect(page.getByRole('region', { name: route.panel, exact: true })).toBeVisible();
