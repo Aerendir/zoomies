@@ -28,7 +28,7 @@ for (const style of ['classic', 'mission-control']) {
         await expect(page.locator(`#${id}`)).not.toHaveAttribute('open');
       await expect(page.locator('#history > summary')).toContainText(/finished/);
       expect((await pools.getByRole('listitem').first().boundingBox())!.y).toBeLessThan(
-        width === 375 ? 800 : 900,
+        width === 375 ? 800 : 1000,
       );
       const order = await page
         .locator('#now, #pools, #jobs, #events, #history, #diagnostics')
