@@ -116,22 +116,18 @@ func fileOwner(info fs.FileInfo) (int, int) {
 	}
 	return -1, -1
 }
+
+// preserveOwner hands a temporary file to the owner of the file it replaces.
+// A file the process just created already belongs to it, so a matching owner
+// is left alone: the controller's unit filters fchown out (SystemCallFilter
+// excludes @privileged) and the kernel kills a process that makes the call
+// with SIGSYS, even when the call would have changed nothing.
 func preserveOwner(f *os.File, info fs.FileInfo) error {
-	if info == nil {
+	uid, gid := fileOwner(info)
+	if uid < 0 || gid < 0 || (uid == os.Geteuid() && gid == os.Getegid()) {
 		return nil
 	}
-	v := reflect.ValueOf(info.Sys())
-	if v.Kind() == reflect.Pointer {
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return nil
-	}
-	u, g := v.FieldByName("Uid"), v.FieldByName("Gid")
-	if u.IsValid() && g.IsValid() {
-		return f.Chown(int(u.Uint()), int(g.Uint()))
-	}
-	return nil
+	return f.Chown(uid, gid)
 }
 func (LocalSystem) Lock(p string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
