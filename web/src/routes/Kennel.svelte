@@ -440,7 +440,7 @@
             </dl>
           </section>
 
-          <section class="counts" aria-labelledby="counts-heading">
+          <section class="all-counts" aria-labelledby="counts-heading">
             <h2 id="counts-heading" class="section-title">All counts</h2>
             <MetricGrid items={metrics} compact />
           </section>

@@ -9,6 +9,8 @@
   kinds this page cares about, which costs nothing when nobody is looking.
 -->
 <script lang="ts">
+  import PageBand from '$lib/bands/PageBand.svelte';
+  import { providersLine } from '$lib/bands/lines';
   import { Cloud, Plus } from '@lucide/svelte';
   import {
     checkProvider,
@@ -210,6 +212,18 @@
       await pause(provider, paused);
     }
   }
+
+  const bandLine = $derived(
+    loaded
+      ? providersLine({
+          providers: providers.length,
+          owned: providers.reduce((n, p) => n + (p.owned ?? 0), 0),
+          ceiling: providers.reduce((n, p) => n + (p.max_machines ?? 0), 0),
+          paused: providers.filter((p) => p.paused).length,
+          review: review.length,
+        })
+      : null,
+  );
 </script>
 
 <PageHeader
@@ -230,6 +244,7 @@
     <Button variant="primary" icon={Plus} href="/providers/new">Add a provider</Button>
   {/if}
 </PageHeader>
+<PageBand page="providers" line={bandLine} />
 
 <div class="content">
   <LoadingBoundary

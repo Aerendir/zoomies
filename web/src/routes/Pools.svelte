@@ -6,6 +6,9 @@
   dangerous switched on -- is answerable without opening a row.
 -->
 <script lang="ts">
+  import PageBand from '$lib/bands/PageBand.svelte';
+  import { poolSignals } from '$lib/insights/signals';
+  import { poolsLine } from '$lib/bands/lines';
   import Tooltip from '$lib/components/Tooltip.svelte';
   import PoolPressure from '$lib/insights/PoolPressure.svelte';
   import {
@@ -583,6 +586,22 @@
   function stopRowClick(event: Event): void {
     event.stopPropagation();
   }
+
+  // The band's figures: the same enabled pools, live runners and ceilings the table sums.
+  const bandSignals = $derived(
+    poolSignals(fleet.pools, fleet.stats).filter((signal) => signal.pool.enabled === true),
+  );
+  const bandLine = $derived(
+    fleet.loaded
+      ? poolsLine({
+          enabled: bandSignals.length,
+          total: fleet.pools.length,
+          live: bandSignals.reduce((n, signal) => n + (signal.live ?? 0), 0),
+          max: bandSignals.reduce((n, signal) => n + (signal.max ?? 0), 0),
+          atCeiling: bandSignals.filter((signal) => signal.atCeiling).length,
+        })
+      : null,
+  );
 </script>
 
 {#snippet nameCell(pool: Pool)}
@@ -665,6 +684,7 @@
     {/if}
   {/if}
 </PageHeader>
+<PageBand page="pools" line={bandLine} />
 
 <div class="filters">
   <FilterBar {chips} onclear={clearFilters}>

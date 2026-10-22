@@ -24,6 +24,7 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Switch from '$lib/components/Switch.svelte';
+  import { BAND_PAGES } from '$lib/bands/pages';
   import { visualStyle } from '$lib/state/ui-style.svelte';
   import VisualStylePicker from './VisualStylePicker.svelte';
 
@@ -106,6 +107,26 @@
       checked={prefs.navCollapsed}
       onchange={(on) => (prefs.navCollapsed = on)}
     />
+  </div>
+
+  <div class="setting bands-setting">
+    <div class="text">
+      <p class="label" id="bands-label">Page bands</p>
+      <p class="description">
+        The dark band at the top of a page that says its answer in a sentence. Switch off the ones
+        you do not want. A phone never shows them, and the choice stays in this browser.
+      </p>
+      <div class="bands" role="group" aria-labelledby="bands-label">
+        {#each BAND_PAGES as page (page.key)}
+          <Switch
+            label={page.label}
+            size="sm"
+            checked={prefs.bandShown(page.key)}
+            onchange={(on) => prefs.setBandShown(page.key, on)}
+          />
+        {/each}
+      </div>
+    </div>
   </div>
 
   <div class="setting">
@@ -193,6 +214,19 @@
   .setting > :global(:last-child) {
     flex: none;
     margin-top: var(--z-nudge-1);
+  }
+  /* This row has no control beside its text, so its one child is the text, not the control
+     the rule above is for: it keeps its width and does not size itself to its contents. */
+  .setting.bands-setting > .text {
+    flex: 1 1 20rem;
+    margin-top: 0;
+  }
+  .bands {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr));
+    min-width: 0;
+    gap: var(--z-space-3) var(--z-space-5);
+    margin-top: var(--z-space-4);
   }
   .logo-setting {
     align-items: center;

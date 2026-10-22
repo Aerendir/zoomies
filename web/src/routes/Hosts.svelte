@@ -14,6 +14,8 @@
   fleet does.
 -->
 <script lang="ts">
+  import PageBand from '$lib/bands/PageBand.svelte';
+  import { hostsLine } from '$lib/bands/lines';
   import Tooltip from '$lib/components/Tooltip.svelte';
   import HostCapacityMap from '$lib/insights/HostCapacityMap.svelte';
   import { hostSignals } from '$lib/insights/signals';
@@ -534,6 +536,10 @@
       toasts.fromError(cause, 'The priority could not be re-checked');
     }
   }
+
+  const bandLine = $derived(
+    fleet.loaded ? hostsLine({ connected, total: hosts.length, inUse, capacity }) : null,
+  );
 </script>
 
 <PageHeader
@@ -567,6 +573,7 @@
     <Button variant="primary" icon={Plus} href="/hosts/new">Add a host</Button>
   {/if}
 </PageHeader>
+<PageBand page="hosts" line={bandLine} />
 
 <div class="content">
   {#if canAdmin}

@@ -41,7 +41,7 @@
   );
 </script>
 
-{#if fleet.loaded}
+{#if fleet.loaded && prefs.bandShown('overview')}
   <div class="hero" data-testid="fleet-status">
     <BrandStage
       wide
