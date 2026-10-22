@@ -225,9 +225,10 @@ Every runner that exists right now and what each one is doing. Removed runners
 are hidden by default, because a busy fleet makes and destroys thousands of
 them and they are all history. Rows select for bulk drain or delete, and the
 state filter is a real filter: it narrows the set rather than repainting it.
-Above the grid is the provisioning strip and a way to the queue; the page
-opens on the runners, and the six tiles it used to carry live on the Overview
-and the Queue. Behind a disclosure, **How runners move through their states**,
+Above the grid are the number of jobs queued (a link to them, in the warning
+colour once it reaches the queue threshold), the provisioning strip and a way to
+the queue; the page opens on the runners, and the other tiles it used to carry
+live on the Overview and the Queue. Behind a disclosure, **How runners move through their states**,
 the runner lifecycle is the controller's own state machine drawn out
 (provisioning, registering, idle, busy, draining) with how many runners are at
 each step this moment and a link into each; under it, a bar of the same states

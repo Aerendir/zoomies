@@ -1,11 +1,13 @@
 <script lang="ts">
   import { fleet } from '$lib/state/fleet.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
+  import { session } from '$lib/state/session.svelte';
   import ChartPanel from '$lib/components/ChartPanel.svelte';
   import LifecycleFlow from './LifecycleFlow.svelte';
   import ProvisioningPulse from './ProvisioningPulse.svelte';
   import StateBreakdown from './StateBreakdown.svelte';
-  import { poolSignals, finite } from './signals';
+  import { poolSignals, finite, queueTone } from './signals';
+  import { formatNumber, NO_VALUE } from '$lib/format';
   import { runnerStatus } from '$lib/status';
   /**
    * The context above a runner list: the provisioning strip, and the lifecycle
@@ -15,6 +17,9 @@
   let { poolId = '' }: { poolId?: string } = $props();
   const signal = $derived(poolSignals(fleet.pools, fleet.stats).find((p) => p.pool.id === poolId));
   const r = $derived(fleet.stats?.runners);
+  // The one figure an operator looks for first: how much work is waiting for a runner.
+  const queued = $derived(poolId ? signal?.queued : finite(fleet.stats?.fleet?.queued_jobs));
+  const queuedTone = $derived(queueTone(queued, session.meta?.queue_warning_threshold));
   const busy = $derived(poolId ? signal?.busy : finite(r?.busy));
   const idle = $derived(poolId ? signal?.idle : finite(r?.idle));
   const scope = $derived(poolId ? (signal?.pool.name ?? 'Selected pool') : 'Fleet');
@@ -94,6 +99,15 @@
       >Explore usage history</a
     >
   </div>
+  <a
+    class="queued"
+    data-tone={queuedTone}
+    href={`/jobs?state=queued${suffix}`}
+    aria-label={`Jobs queued: ${queued == null ? 'unknown' : formatNumber(queued)}. Open the queued jobs.`}
+  >
+    <strong>{queued == null ? NO_VALUE : formatNumber(queued)}</strong>
+    <span>{queued === 1 ? 'job queued' : 'jobs queued'}</span>
+  </a>
   <ProvisioningPulse {poolId} />
   {#if fleet.stats}
     <details class="how">
@@ -131,6 +145,31 @@
   }
   a {
     color: var(--z-accent);
+  }
+  .queued {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--z-space-2);
+    margin-bottom: var(--z-space-3);
+    padding: var(--z-space-2) var(--z-space-4);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-full);
+    background: var(--z-surface);
+    color: var(--z-text);
+    text-decoration: none;
+  }
+  .queued strong {
+    font-size: var(--z-text-xl);
+    font-variant-numeric: tabular-nums;
+  }
+  .queued[data-tone='warning'] {
+    border-color: var(--z-pending);
+  }
+  .queued[data-tone='warning'] strong {
+    color: var(--z-pending);
+  }
+  .queued:hover span {
+    text-decoration: underline;
   }
   .how {
     margin: var(--z-space-3) 0 0;
