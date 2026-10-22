@@ -27,7 +27,7 @@
 
 <dl class="metrics" class:compact class:strip>
   {#each items as item (item.label)}
-    <div class="metric" data-tone={item.tone ?? 'neutral'} title={strip ? item.detail : undefined}>
+    <div class="metric" data-tone={item.tone ?? 'neutral'}>
       <dt>
         {#if item.href}<a
             href={item.href}
@@ -100,9 +100,7 @@
     font-size: var(--z-text-xl);
   }
   .metrics.strip .detail {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: var(--z-text-xs);
   }
   .metrics.strip .metric:has(a):hover {
     background: var(--z-surface-hover);

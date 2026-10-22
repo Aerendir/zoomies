@@ -697,14 +697,6 @@
   </FilterBar>
 </div>
 
-<!-- The table is what a person came for, and it carries every pool's own figures. The
-     tiles that repeated them are gone, and how demand compares with headroom is one
-     disclosure away, as the Runners page keeps its lifecycle. -->
-<details class="demand">
-  <summary>How pool demand compares with headroom</summary>
-  <PoolPressure pools={fleet.pools.filter(matches)} summary={false} />
-</details>
-
 <AutoPoolsPanel status={autoStatus} />
 
 <DataGrid
@@ -741,6 +733,14 @@
     {/if}
   {/snippet}
 </DataGrid>
+
+<!-- The table is what a person came for, and it carries every pool's own figures. The
+     tiles that repeated them are gone, and how demand compares with headroom is one
+     disclosure away, under the table, as the Runners page keeps its lifecycle. -->
+<details class="demand">
+  <summary>How pool demand compares with headroom</summary>
+  <PoolPressure pools={fleet.pools.filter(matches)} summary={false} />
+</details>
 
 <ImportPoolsDialog bind:open={importOpen} onapplied={() => void fleet.reconcile()} />
 
