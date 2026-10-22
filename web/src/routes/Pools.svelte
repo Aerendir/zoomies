@@ -697,7 +697,13 @@
   </FilterBar>
 </div>
 
-<PoolPressure pools={fleet.pools.filter(matches)} />
+<!-- The table is what a person came for, and it carries every pool's own figures. The
+     tiles that repeated them are gone, and how demand compares with headroom is one
+     disclosure away, as the Runners page keeps its lifecycle. -->
+<details class="demand">
+  <summary>How pool demand compares with headroom</summary>
+  <PoolPressure pools={fleet.pools.filter(matches)} summary={false} />
+</details>
 
 <AutoPoolsPanel status={autoStatus} />
 
@@ -762,6 +768,21 @@
 </ConfirmDialog>
 
 <style>
+  .demand {
+    margin: 0 0 var(--z-space-4);
+  }
+  .demand summary {
+    padding: var(--z-space-3);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-lg);
+    background: var(--z-surface);
+    color: var(--z-accent);
+    font-size: var(--z-text-sm);
+    cursor: pointer;
+  }
+  .demand[open] summary {
+    margin-bottom: var(--z-space-3);
+  }
   .filters {
     margin-bottom: var(--z-space-4);
   }

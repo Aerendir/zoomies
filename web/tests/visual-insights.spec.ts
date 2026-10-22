@@ -223,6 +223,9 @@ for (const route of [
       await goto(page, route.path, route.heading);
       // The Hosts page folds its map away until it is asked for.
       if (route.path === '/hosts') await openHostCapacityMap(page);
+      // The Pools page keeps demand and headroom behind a disclosure, as Runners keeps its lifecycle.
+      if (route.path === '/pools')
+        await page.getByText('How pool demand compares with headroom', { exact: true }).click();
       // The Runners page keeps its lifecycle behind a disclosure.
       if (route.path === '/runners')
         await page.getByText('How runners move through their states', { exact: true }).click();
