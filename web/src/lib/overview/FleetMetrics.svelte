@@ -269,6 +269,7 @@
     delta={delta(liveSeries, live)}
     deltaLabel="in the hour"
     sparkline={trend(liveSeries)}
+    hint={loading ? undefined : capacityHint}
     {loading}
   />
   <MetricTile
@@ -286,9 +287,7 @@
 </div>
 
 <div class="context">
-  {#if !loading && capacityHint}<span
-      >{capacityHint}. {others ? 'Runners and hosts belong to this fleet.' : ''}</span
-    >{/if}
+  {#if !loading && capacityHint && others}<span>Runners and hosts belong to this fleet.</span>{/if}
   <span class="coverage"
     >{!describeWindow(stats?.window) || describeWindow(stats?.window) === '1 hour'
       ? 'Trends, waits and outcomes cover the last hour.'
