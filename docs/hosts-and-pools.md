@@ -1129,6 +1129,11 @@ chooses another group or Default.
 Explicit group choices remain administrator policy and Zoomies never rewrites
 them. If an incompatible group named `zoomies` already exists, connection
 verification stops with an actionable error instead of silently widening it.
+The group is only needed by pools that leave the runner group empty, so when
+an installation has pools and every one of them names its own group, Zoomies
+neither creates `zoomies` nor minds an existing one that is narrower or closed
+to public repositories. Add a pool without a runner group later and the next
+check creates it.
 If any explicitly selected group cannot be resolved, runners fall back to
 Default and the pool carries a `pool.runner_group_unresolved` warning.
 Repositories have no runner groups, so repository-target pools continue to use

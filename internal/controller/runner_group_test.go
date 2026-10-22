@@ -263,6 +263,43 @@ func TestInstallationProbePreservesAnExplicitPoolRunnerGroup(t *testing.T) {
 	}
 }
 
+// A group nothing uses is not worth an installation's health: an administrator
+// who narrowed it, because every pool names its own, must not lose job tracking.
+func TestInstallationProbeIgnoresTheManagedGroupWhenEveryPoolNamesItsOwn(t *testing.T) {
+	h := newHarness(t)
+	inst, pool, _ := h.fleet()
+	h.gh.AddRunnerGroup("security-reviewed")
+	pool.RunnerGroup = "security-reviewed"
+	if err := h.st.UpdatePool(h.ctx, pool); err != nil {
+		t.Fatalf("UpdatePool: %v", err)
+	}
+	h.gh.AddRunnerGroup(ManagedRunnerGroupName)
+	h.gh.SetRunnerGroupPublicAccess(ManagedRunnerGroupName, false)
+
+	if _, err := h.c.ProbeInstallation(h.ctx, inst.ID); err != nil {
+		t.Fatalf("ProbeInstallation: %v, want a narrowed managed group to be harmless when no pool uses it", err)
+	}
+}
+
+func TestInstallationProbeDoesNotCreateTheManagedGroupWhenEveryPoolNamesItsOwn(t *testing.T) {
+	h := newHarness(t)
+	inst, pool, _ := h.fleet()
+	h.gh.AddRunnerGroup("security-reviewed")
+	pool.RunnerGroup = "security-reviewed"
+	if err := h.st.UpdatePool(h.ctx, pool); err != nil {
+		t.Fatalf("UpdatePool: %v", err)
+	}
+
+	if _, err := h.c.ProbeInstallation(h.ctx, inst.ID); err != nil {
+		t.Fatalf("ProbeInstallation: %v", err)
+	}
+	for _, request := range h.gh.Requests() {
+		if strings.Contains(request, "POST /orgs/acme/actions/runner-groups") {
+			t.Fatalf("request %q created a runner group nothing would use", request)
+		}
+	}
+}
+
 func TestInstallationProbeDoesNotWidenAnExistingIncompatibleZoomiesGroup(t *testing.T) {
 	h := newHarness(t)
 	inst, pool, _ := h.fleet()

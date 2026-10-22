@@ -286,6 +286,31 @@ func (c *Controller) refreshRunnerGroupProblems(ctx context.Context, inst *store
 	}
 }
 
+// needsManagedRunnerGroup says whether any pool of the installation relies on
+// the managed group, that is, leaves runner_group empty. When every pool names
+// its own group the managed one would sit empty and open to public
+// repositories, a standing invitation for a later pool to land in it, and an
+// administrator who narrowed it would see the installation reported as unusable
+// for a group nothing uses. An installation with no pools yet still gets the
+// group, so the first pool created without one has somewhere safe to go.
+func (c *Controller) needsManagedRunnerGroup(ctx context.Context, inst *store.Installation) (bool, error) {
+	pools, err := c.st.ListPools(ctx)
+	if err != nil {
+		return false, err
+	}
+	hasPools := false
+	for _, pool := range pools {
+		if pool.InstallationID != inst.ID {
+			continue
+		}
+		hasPools = true
+		if strings.TrimSpace(pool.RunnerGroup) == "" {
+			return true, nil
+		}
+	}
+	return !hasPools, nil
+}
+
 // ensureManagedRunnerGroup creates the organisation-wide group Zoomies owns,
 // or reuses a compatible one left by an earlier setup attempt. It deliberately
 // does not rewrite a same-named group with a different policy: that group may
@@ -389,10 +414,14 @@ func (c *Controller) ProbeInstallation(ctx context.Context, installationID strin
 	if err == nil {
 		info, err = client.Probe(ctx)
 		if err == nil {
-			var group *github.RunnerGroup
-			group, err = c.ensureManagedRunnerGroup(ctx, inst, client)
-			if err == nil {
-				err = c.adoptManagedRunnerGroup(ctx, inst, group)
+			var needed bool
+			needed, err = c.needsManagedRunnerGroup(ctx, inst)
+			if err == nil && needed {
+				var group *github.RunnerGroup
+				group, err = c.ensureManagedRunnerGroup(ctx, inst, client)
+				if err == nil {
+					err = c.adoptManagedRunnerGroup(ctx, inst, group)
+				}
 			}
 			if err == nil {
 				c.refreshRunnerGroupProblems(ctx, inst, client)
