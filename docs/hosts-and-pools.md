@@ -356,8 +356,8 @@ pass; the runners already on it stay where they are.
 
 ## Adding a pool
 
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-light.webp#only-light){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
 
 One pool is enough until the fleet has to answer two different questions. Add a
 second when a job needs something the first cannot give it:
