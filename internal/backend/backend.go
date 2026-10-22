@@ -307,6 +307,10 @@ type Spec struct {
 	TmpfsHost  store.HostTmpfs  `json:"tmpfs_host,omitzero"`
 	Repository string           `json:"repository,omitempty"`
 	DockerMode store.DockerMode `json:"docker_mode"`
+	// DinDImage is the pool's own sidecar image. Empty uses the host's
+	// (agent.dind_image, then DefaultDinDImage). An agent that predates the
+	// field ignores it and runs the host's image.
+	DinDImage string `json:"dind_image,omitempty"`
 	// RunAsRoot keeps the container's default user instead of dropping to the
 	// unprivileged "runner" account.
 	RunAsRoot bool `json:"run_as_root"`

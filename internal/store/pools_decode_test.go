@@ -33,7 +33,7 @@ func scanPoolDecodingEverything(sc interface{ Scan(...any) error }) (*Pool, erro
 		&idle, &ephemeral, &p.DockerMode, &resources, &cache, &hostSelector, &env,
 		&runAsRoot, &enabled, &created, &updated, &p.RepositoryScaleUpLimit, &p.CostPerRunnerHour,
 		&runnerSettings, &cpuBurst, &noDefaultLabels, &sizeFromProfile, &tmpfs,
-		&p.AutoKey, &p.AutoMin, &p.AutoCap, &autoPaused, &memoryBurst, &providerSelector)
+		&p.AutoKey, &p.AutoMin, &p.AutoCap, &autoPaused, &memoryBurst, &providerSelector, &p.DinDImage)
 	if err != nil {
 		return nil, err
 	}

@@ -103,6 +103,7 @@ function runner(draft: PoolDraft): string {
     draft.backend === 'process' ? false : platformLabel(platform) || 'default image',
     draft.image.trim() !== '' && 'your own image',
     draft.runner_version.trim() !== '' && `runner ${draft.runner_version.trim()}`,
+    draft.docker_mode === 'dind' && draft.dind_image.trim() !== '' && 'your own Docker sidecar',
     draft.run_as_root && 'runs as root',
   ]);
 }

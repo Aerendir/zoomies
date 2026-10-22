@@ -235,6 +235,7 @@ Flags:
   --daemon-cpu-share=0       the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise
   --daemon-memory-share=0    the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower
   --daemon-share=0           for a --docker-mode dind pool sized by its host: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split
+  --dind-image               the docker-in-docker sidecar image (default: the host's agent.dind_image, else docker:27-dind)
   --disk-gb=0                disk limit per runner, in GiB
   --docker-mode=none         none, dind or host-socket (host-socket gives jobs root on the host)
   --docker-wait              override runners.docker_wait for this pool's runners (empty follows the fleet)
@@ -318,6 +319,7 @@ Flags:
   --daemon-cpu-share=0       the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise
   --daemon-memory-share=0    the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower
   --daemon-share=0           for a --docker-mode dind pool sized by its host: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split
+  --dind-image               the docker-in-docker sidecar image (default: the host's agent.dind_image, else docker:27-dind)
   --disk-gb=0                disk limit per runner, in GiB
   --docker-mode=none         none, dind or host-socket (host-socket gives jobs root on the host)
   --docker-wait              override runners.docker_wait for this pool's runners (empty follows the fleet)

@@ -46,6 +46,7 @@ type poolItem struct {
 	EffectiveImage     string            `json:"effective_image"`
 	PullPolicy         string            `json:"pull_policy"`
 	RunnerVersion      string            `json:"runner_version"`
+	DinDImage          string            `json:"dind_image"`
 	MinRunners         int               `json:"min_runners"`
 	MaxRunners         int               `json:"max_runners"`
 	Priority           int               `json:"priority"`

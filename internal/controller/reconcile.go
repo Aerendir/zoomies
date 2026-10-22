@@ -591,6 +591,7 @@ func (c *Controller) finishCreateRunner(ctx context.Context, inst *store.Install
 		// itself, and that is the identity the runner should carry.
 		Repository:    firstNonEmpty(strings.TrimSpace(pool.Cache.Repository), inst.Target),
 		DockerMode:    pool.DockerMode,
+		DinDImage:     pool.DinDImage,
 		RunAsRoot:     pool.RunAsRoot,
 		Network:       c.cfg().Agent.Network,
 		RunnerVersion: r.RunnerVersion,

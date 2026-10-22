@@ -192,6 +192,13 @@
     </div>
   {/if}
 
+  {#if dind && pool.dind_image}
+    <div class="pair">
+      <dt>Docker-in-Docker image</dt>
+      <dd><code>{pool.dind_image}</code></dd>
+    </div>
+  {/if}
+
   <div class="pair">
     <dt>Size per runner</dt>
     <dd class="tabular">

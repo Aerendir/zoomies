@@ -96,13 +96,21 @@ test('the sidecar shares are sent only for a host-sized Docker-in-Docker pool, e
 // server never hears about while the toast says it was saved.
 test('an edit sends the optional fields empty, and a create leaves them out', () => {
   const create = toPoolBody(valid());
-  for (const key of ['runner_group', 'image', 'runner_version', 'host_selector', 'env'] as const) {
+  for (const key of [
+    'runner_group',
+    'image',
+    'runner_version',
+    'dind_image',
+    'host_selector',
+    'env',
+  ] as const) {
     assert.equal(key in create, false, `${key} is left out on create`);
   }
   const edit = toPoolBody(valid(), { complete: true });
   assert.equal(edit.runner_group, '');
   assert.equal(edit.image, '');
   assert.equal(edit.runner_version, '');
+  assert.equal(edit.dind_image, '');
   assert.deepEqual(edit.host_selector, {});
   assert.deepEqual(edit.env, {});
 });
@@ -468,4 +476,16 @@ test('a backend nothing offers is refused while another is on offer', () => {
     draftErrors(valid({ backend: 'podman' }), false, offers, false)['backend'],
     undefined,
   );
+});
+
+// The server refuses a sidecar image on a pool that starts no sidecar, so a pool
+// switched away from dind must not keep sending the one it had.
+test('the sidecar image is sent only for a pool that runs a sidecar', () => {
+  const dind = toPoolBody(valid({ docker_mode: 'dind', dind_image: ' registry.example/dind:27 ' }));
+  assert.equal(dind.dind_image, 'registry.example/dind:27');
+  const none = toPoolBody(valid({ docker_mode: 'none', dind_image: 'registry.example/dind:27' }), {
+    complete: true,
+  });
+  assert.equal(none.dind_image, '');
+  assert.equal('dind_image' in toPoolBody(valid({ docker_mode: 'none', dind_image: 'x' })), false);
 });
