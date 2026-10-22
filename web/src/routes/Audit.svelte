@@ -450,11 +450,6 @@
       {/if}
     {/snippet}
   </DataGrid>
-
-  <p class="footnote">
-    Open an event to see exactly what changed. Secrets were redacted when the row was written, so
-    nothing here can leak one.
-  </p>
 </div>
 
 <Drawer
@@ -590,12 +585,6 @@
   }
   a {
     color: var(--z-accent);
-  }
-  .footnote {
-    margin: 0;
-    max-width: 80ch;
-    color: var(--z-text-subtle);
-    font-size: var(--z-text-xs);
   }
   .detail {
     display: flex;
