@@ -702,7 +702,8 @@ test('a settings switch sits under the sentence it belongs to, not a screen belo
       // box keeps its 20rem and the sentence sits at the top of it.
       const slack = await rows
         .nth(i)
-        .locator('.text')
+        // The row's own text block: a row that holds switches has their text blocks nested in it.
+        .locator(':scope > .text')
         .evaluate((text) => {
           const last = text.lastElementChild ?? text;
           return Math.round(

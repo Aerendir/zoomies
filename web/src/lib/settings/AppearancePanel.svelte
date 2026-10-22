@@ -109,7 +109,7 @@
     />
   </div>
 
-  <div class="setting">
+  <div class="setting bands-setting">
     <div class="text">
       <p class="label" id="bands-label">Page bands</p>
       <p class="description">
@@ -215,9 +215,16 @@
     flex: none;
     margin-top: var(--z-nudge-1);
   }
+  /* This row has no control beside its text, so its one child is the text, not the control
+     the rule above is for: it keeps its width and does not size itself to its contents. */
+  .setting.bands-setting > .text {
+    flex: 1 1 20rem;
+    margin-top: 0;
+  }
   .bands {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr));
+    min-width: 0;
     gap: var(--z-space-3) var(--z-space-5);
     margin-top: var(--z-space-4);
   }
