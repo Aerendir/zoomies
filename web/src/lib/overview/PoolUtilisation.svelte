@@ -13,7 +13,7 @@
   import { fleet } from '$lib/state/fleet.svelte';
   import { session } from '$lib/state/session.svelte';
   import { formatNumber, pluralise } from '$lib/format';
-  import { poolStatus } from '$lib/status';
+  import { poolStatus, runnerStatus } from '$lib/status';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -156,6 +156,20 @@
               {/if}
               {#if row.pinned}
                 <Badge tone="pending" size="sm" label="At its ceiling" dot={false} />
+              {:else if row.enabled}
+                <!-- What the pool is doing, as a word and the fixed shape of that state:
+                     working, waiting for a runner, or ready. -->
+                {#if row.busy > 0}
+                  <Badge status={runnerStatus('busy', false)} label="Working" size="sm" />
+                {:else if row.queued > 0}
+                  <Badge
+                    status={runnerStatus('provisioning', false)}
+                    label="Waiting for a runner"
+                    size="sm"
+                  />
+                {:else}
+                  <Badge status={runnerStatus('idle', false)} label="Ready" size="sm" />
+                {/if}
               {/if}
             </div>
           </div>

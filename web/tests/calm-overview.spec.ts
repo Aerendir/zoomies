@@ -28,7 +28,7 @@ for (const style of ['classic', 'mission-control']) {
         await expect(page.locator(`#${id}`)).not.toHaveAttribute('open');
       await expect(page.locator('#history > summary')).toContainText(/finished/);
       expect((await pools.getByRole('listitem').first().boundingBox())!.y).toBeLessThan(
-        width === 375 ? 800 : 900,
+        width === 375 ? 800 : 1000,
       );
       const order = await page
         .locator('#now, #pools, #jobs, #events, #history, #diagnostics')
@@ -73,7 +73,8 @@ for (const style of ['classic', 'mission-control']) {
 test('jump links reveal history, retain its range and remember explicit disclosure choices', async ({
   page,
 }, info) => {
-  await page.setViewportSize({ width: info.project.name === 'mobile' ? 375 : 1440, height: 900 });
+  // The jump bar is for screens narrower than 1181px: on a wider one the page does not need it.
+  await page.setViewportSize({ width: info.project.name === 'mobile' ? 375 : 1100, height: 900 });
   await goto(page, '/', 'Overview');
   const nav = page.getByRole('navigation', { name: 'Overview sections' });
   if (info.project.name === 'mobile')
@@ -194,6 +195,8 @@ test('a failed history fetch is visible even while its chart is closed', async (
 });
 
 test('page navigation follows the section reached by a jump or scrolling', async ({ page }) => {
+  // Narrower than the width at which the jump bar stands down.
+  await page.setViewportSize({ width: 1100, height: 900 });
   await goto(page, '/', 'Overview');
   const nav = page.getByRole('navigation', { name: 'Overview sections' });
   for (const label of ['Pools', 'Jobs']) {

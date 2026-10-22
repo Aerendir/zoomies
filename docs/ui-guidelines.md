@@ -661,12 +661,14 @@ can collide with), sets the title in the medium weight, and puts a short blue
 rule under it; the Overview, which stands alone, has no section to name. Panels
 are cards with the extra-large radius, on the page's own surface: the quiet
 text colours are only guaranteed to read on it, and a raised one costs the
-gallery's contrast check in dark. The Overview opens with a slim
-band, Zoomies Black in both themes, that answers "is anything wrong" in one
-sentence (counts by severity, never a problem's own words) and has no status
-colour in it; it is a band and not the public pages' tall stage, and it is left out on a
-phone, because the pools must stay on the first screen. The wrong-address page uses the full band
-with the dog.
+gallery's contrast check in dark. The Overview opens with the public pages'
+stage as a hero, Zoomies Black in both themes: the dog, an eyebrow, a large headline with its accent, the short
+blue rule and one sentence that answers "is anything wrong" in counts by
+severity, never a problem's own words, and with no status colour in it. It costs
+the Overview some height, so the pools start within the first 1000px of a
+desktop window and no longer within 900px; the hero is left out on a phone,
+where the pools must still be on the first screen. The wrong-address page uses
+the same stage with the dog.
 
 Persistent left navigation, collapsible to icons only (persisted). Order is
 fixed, because muscle memory is the point:

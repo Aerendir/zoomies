@@ -267,6 +267,7 @@
     <RentingNotice {renting} {canAdmin} onchanged={refreshRenting} />
 
     <MetricGrid
+      strip
       items={[
         {
           label: 'Machines owned',

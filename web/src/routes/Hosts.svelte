@@ -649,6 +649,7 @@
     {/snippet}
 
     <MetricGrid
+      strip
       items={[
         {
           label: 'Available host slots',

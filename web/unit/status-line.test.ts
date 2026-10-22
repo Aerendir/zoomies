@@ -15,7 +15,7 @@ test('a fleet with nothing wrong says everything is running, with the real numbe
 test('problems are counted by severity, worst first, and never quoted', () => {
   const one = statusLine({ ...calm, problems: [{ severity: 'error' }] });
   assert.equal(one.headline, '1 thing needs you.');
-  assert.equal(one.lede, '1 error. Review them below.');
+  assert.equal(one.lede, '1 error needs your attention.');
   assert.equal(one.needsYou, true);
   const many = statusLine({
     ...calm,
@@ -27,7 +27,7 @@ test('problems are counted by severity, worst first, and never quoted', () => {
     ],
   });
   assert.equal(many.headline, '4 things need you.');
-  assert.equal(many.lede, '1 error, 2 warnings and 1 note. Review them below.');
+  assert.equal(many.lede, '1 error, 2 warnings and 1 note need your attention.');
 });
 
 test('a single running job is "job is", not "jobs are"', () => {

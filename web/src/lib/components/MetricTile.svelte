@@ -93,7 +93,7 @@
     gap: var(--z-space-1);
     padding: var(--z-space-4);
     border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-md);
+    border-radius: var(--z-radius-xl);
     background: var(--z-surface);
     text-decoration: none;
     color: inherit;

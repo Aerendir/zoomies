@@ -161,10 +161,13 @@ pool) without leaving the keyboard.
 What runners to make. Each pool's labels, GitHub target, backend, floor and
 ceiling, idle timeout, whether its runners are ephemeral and whether jobs get a
 Docker daemon, and a risk badge on any pool that trades some of the default
-safety away, so the trade is visible from the list.
+safety away, so the trade is visible from the list. The page opens on that list;
+how queue pressure compares with configured headroom is behind a disclosure,
+**How pool demand compares with headroom**, as the Runners page keeps its
+lifecycle.
 
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-light.webp#only-light){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
 
 The page that creates one is the pool editor. It is six sections (**Name and
 labels**, **Hosts**, **Runner**, **Size**, **Scaling** and **Speed-ups**) and
@@ -222,11 +225,13 @@ Every runner that exists right now and what each one is doing. Removed runners
 are hidden by default, because a busy fleet makes and destroys thousands of
 them and they are all history. Rows select for bulk drain or delete, and the
 state filter is a real filter: it narrows the set rather than repainting it.
-Above the grid, the runner lifecycle is the controller's own state machine
-drawn out (provisioning, registering, idle, busy, draining) with how many
-runners are at each step this moment and a link into each; under it, a bar of
-the same states whose segments are links too, and say their share when you
-hover them.
+Above the grid is the provisioning strip and a way to the queue; the page
+opens on the runners, and the six tiles it used to carry live on the Overview
+and the Queue. Behind a disclosure, **How runners move through their states**,
+the runner lifecycle is the controller's own state machine drawn out
+(provisioning, registering, idle, busy, draining) with how many runners are at
+each step this moment and a link into each; under it, a bar of the same states
+whose segments are links too, and say their share when you hover them.
 
 When the state filter includes failed runners, a **What keeps failing to start**
 card above the grid names the host or pool that keeps failing to start runners
@@ -236,8 +241,8 @@ list is narrowed to, and that the list's search is not applied to it. It is the
 answer [`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with
 its evidence folded under the next steps.
 
-![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
-![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
+![The Runners page: the provisioning strip and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
+![The Runners page: the provisioning strip and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
 
 A runner's page carries the job it is on, a timeline of how long it spent in
 each state (provisioning, registering, idle, busy) its resource usage as the

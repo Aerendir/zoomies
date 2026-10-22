@@ -19,7 +19,7 @@ test('Mission Control shows current work before activity history and retains tim
   await goto(page, '/', 'Overview');
   const pools = page.getByRole('heading', { name: 'Pools', exact: true });
   const history = page.locator('#history > summary');
-  expect(await pools.evaluate((node) => node.getBoundingClientRect().top)).toBeLessThan(900);
+  expect(await pools.evaluate((node) => node.getBoundingClientRect().top)).toBeLessThan(1000);
   expect(await history.evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThan(
     await pools.evaluate((node) => node.getBoundingClientRect().top),
   );
