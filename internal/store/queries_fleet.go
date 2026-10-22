@@ -112,10 +112,7 @@ func (s *Store) FindInstallationByTarget(ctx context.Context, repoFullName strin
 	// still out there. Two installations covering the same target are ordered
 	// by age so the answer is the same on every call rather than whichever
 	// row SQLite reached first.
-	row := s.read.QueryRowContext(ctx, `SELECT `+installationCols+` FROM installations
-		WHERE (target_type = 'repo' AND LOWER(target) = ?) OR (target_type = 'org' AND LOWER(target) = ?)
-		ORDER BY CASE target_type WHEN 'repo' THEN 0 ELSE 1 END, created_at, id LIMIT 1`,
-		strings.ToLower(repoFullName), strings.ToLower(owner))
+	row := s.hotRead().QueryRow(ctx, installationByTargetQuery, strings.ToLower(repoFullName), strings.ToLower(owner))
 	i, err := scanInstallation(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no installation covers %s: %w", repoFullName, ErrNotFound)
@@ -123,9 +120,11 @@ func (s *Store) FindInstallationByTarget(ctx context.Context, repoFullName strin
 	return i, err
 }
 
+var listInstallationsQuery = hot(`SELECT ` + installationCols + ` FROM installations ORDER BY created_at`)
+
 // ListInstallations returns every installation, oldest first.
 func (s *Store) ListInstallations(ctx context.Context) ([]*Installation, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+installationCols+` FROM installations ORDER BY created_at`)
+	rows, err := s.hotRead().Query(ctx, listInstallationsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +234,12 @@ const poolCols = `id, name, installation_id, labels, runner_group, backend, os, 
 	cost_per_runner_hour, runner_settings, cpu_burst, no_default_labels, size_from_profile, tmpfs,
 	auto_key, auto_min, auto_cap, auto_paused, memory_burst, provider_selector`
 
+// What each of a pool's struct-valued documents holds until somebody sets it.
+var (
+	zeroResources, zeroCache, zeroRunnerSettings = zeroDoc[Resources](), zeroDoc[CacheConfig](), zeroDoc[RunnerSettings]()
+	zeroCPUBurst, zeroTmpfs, zeroMemoryBurst     = zeroDoc[CPUBurstPolicy](), zeroDoc[TmpfsConfig](), zeroDoc[MemoryBurstPolicy]()
+)
+
 func scanPool(sc interface{ Scan(...any) error }) (*Pool, error) {
 	var p Pool
 	var idle, created, updated int64
@@ -256,22 +261,22 @@ func scanPool(sc interface{ Scan(...any) error }) (*Pool, error) {
 	p.IdleTimeout = Duration(time.Duration(idle) * time.Millisecond)
 	p.Ephemeral, p.RunAsRoot, p.Enabled = ephemeral == 1, runAsRoot == 1, enabled == 1
 	p.CreatedAt, p.UpdatedAt = at(created), at(updated)
-	if err := unmarshalJSON(resources, &p.Resources); err != nil {
+	if err := decodeFresh(resources, zeroResources, &p.Resources); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding resources: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(cache, &p.Cache); err != nil {
+	if err := decodeFresh(cache, zeroCache, &p.Cache); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding cache: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(runnerSettings, &p.RunnerSettings); err != nil {
+	if err := decodeFresh(runnerSettings, zeroRunnerSettings, &p.RunnerSettings); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding runner settings: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(cpuBurst, &p.CPUBurst); err != nil {
+	if err := decodeFresh(cpuBurst, zeroCPUBurst, &p.CPUBurst); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding CPU burst policy: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(tmpfs, &p.Tmpfs); err != nil {
+	if err := decodeFresh(tmpfs, zeroTmpfs, &p.Tmpfs); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding tmpfs settings: %w", p.ID, err)
 	}
-	if err := unmarshalJSON(memoryBurst, &p.MemoryBurst); err != nil {
+	if err := decodeFresh(memoryBurst, zeroMemoryBurst, &p.MemoryBurst); err != nil {
 		return nil, fmt.Errorf("pool %s: decoding memory burst policy: %w", p.ID, err)
 	}
 	return &p, nil
@@ -343,9 +348,19 @@ func poolJSON(p *Pool) (res, cache, settings, burst, tmpfs, memoryBurst string, 
 	return
 }
 
+// The statements a webhook delivery and a poller sweep read the fleet with: see
+// hot.go.
+var (
+	poolByIDQuery             = hot(`SELECT ` + poolCols + ` FROM pools WHERE id = ?`)
+	poolsForClaimQuery        = hot(`SELECT ` + poolClaimCols + ` FROM pools ORDER BY name`)
+	installationByTargetQuery = hot(`SELECT ` + installationCols + ` FROM installations
+		WHERE (target_type = 'repo' AND LOWER(target) = ?) OR (target_type = 'org' AND LOWER(target) = ?)
+		ORDER BY CASE target_type WHEN 'repo' THEN 0 ELSE 1 END, created_at, id LIMIT 1`)
+)
+
 // GetPool returns a pool by ID.
 func (s *Store) GetPool(ctx context.Context, id string) (*Pool, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+poolCols+` FROM pools WHERE id = ?`, id)
+	row := s.hotRead().QueryRow(ctx, poolByIDQuery, id)
 	p, err := scanPool(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("pool %s: %w", id, ErrNotFound)
@@ -377,9 +392,11 @@ func (s *Store) CountHosts(ctx context.Context) (int, error) {
 	return n, err
 }
 
+var listPoolsQuery = hot(`SELECT ` + poolCols + ` FROM pools ORDER BY name`)
+
 // ListPools returns all pools ordered by name.
 func (s *Store) ListPools(ctx context.Context) ([]*Pool, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+poolCols+` FROM pools ORDER BY name`)
+	rows, err := s.hotRead().Query(ctx, listPoolsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -391,6 +408,55 @@ func (s *Store) ListPools(ctx context.Context) ([]*Pool, error) {
 			return nil, err
 		}
 		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// poolClaimCols are the columns ClaimView keeps, in the order ListPoolsForClaim
+// scans them.
+const poolClaimCols = `id, name, installation_id, labels, backend, arch, enabled, no_default_labels, auto_key`
+
+// ClaimView is a pool with only the fields a claim reads, and every other field
+// zero. Which pool takes a job is decided by whether a pool is enabled, which
+// installation it belongs to, the labels it advertises and whether it advertises
+// the ones every runner does, and, where two fit equally, by name, by ID, by
+// whether the controller keeps the pool from its hosts (the auto key) and by its
+// architecture. The backend is there because the queued-to-started histogram is
+// labelled with it. The labels are shared with the pool, not copied.
+//
+// It is what ListPoolsForClaim returns, and the one place that says which fields
+// those are: a test in internal/scheduler fills the others in with values of
+// their own and checks that no claim depends on them.
+func ClaimView(p *Pool) *Pool {
+	return &Pool{
+		ID: p.ID, Name: p.Name, InstallationID: p.InstallationID, Labels: p.Labels,
+		Backend: p.Backend, Platform: Platform{Arch: p.Platform.Arch},
+		Enabled: p.Enabled, NoDefaultLabels: p.NoDefaultLabels, AutoKey: p.AutoKey,
+	}
+}
+
+// ListPoolsForClaim returns every pool ordered by name, as ClaimView sees it. A
+// webhook delivery or a poller sweep reads the pools to claim a job, and a pool
+// row is thirty-nine columns and ten JSON documents, of which a claim reads nine
+// columns and one document: at a hundred pools that was nearly half of a
+// delivery. The pools it returns are for a claim and for naming a job's pool,
+// and for nothing else; any other reader wants ListPools.
+func (s *Store) ListPoolsForClaim(ctx context.Context) ([]*Pool, error) {
+	rows, err := s.hotRead().Query(ctx, poolsForClaimQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Pool
+	for rows.Next() {
+		var p Pool
+		var enabled, noDefaultLabels int
+		if err := rows.Scan(&p.ID, &p.Name, &p.InstallationID, &p.Labels, &p.Backend, &p.Platform.Arch,
+			&enabled, &noDefaultLabels, &p.AutoKey); err != nil {
+			return nil, err
+		}
+		p.Enabled, p.NoDefaultLabels = enabled == 1, noDefaultLabels == 1
+		out = append(out, &p)
 	}
 	return out, rows.Err()
 }
@@ -628,12 +694,12 @@ const hostCols = `id, name, address, embedded, capacity, backends, backend_info,
 	protocol_version, incompatible, connection, usage, throttle, features, incidents, doctor,
 	runner_profile, priority_override, size_class, doctor_checked_at`
 
-const hostReadCols = hostCols + `, EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND (completed_at IS NULL OR retired_at IS NOT NULL)), EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL)`
+const hostReadCols = hostCols + `, EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND (completed_at IS NULL OR retired_at IS NOT NULL)), EXISTS(SELECT 1 FROM host_recovery WHERE host_id=hosts.id AND retired_at IS NOT NULL), COALESCE((SELECT mode FROM host_auto_adjust WHERE host_id=hosts.id),''), COALESCE((SELECT adjusted_at FROM host_auto_adjust WHERE host_id=hosts.id),0)`
 
 func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
 	var embedded, cordoned, incompatible int
-	var heartbeat, created, doctorAt int64
+	var heartbeat, created, doctorAt, adjustedAt int64
 	var altAt sql.NullInt64
 	var override sql.NullInt64
 	err := sc.Scan(&h.ID, &h.Name, &h.Address, &embedded, &h.Capacity, &h.Backends,
@@ -641,7 +707,7 @@ func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 		&h.MemoryMB, &h.CPUMHz, &h.MemoryMTs, &h.DiskKind, &h.Version, &cordoned, &h.TokenHash, &heartbeat, &created,
 		&h.AgentSessionID, &h.AgentSessionPrev, &h.AgentSessionAlternations, &altAt,
 		&h.DiskTotalMB, &h.DiskFreeMB, &h.ReserveCPUs, &h.ReserveMemoryMB, &h.ReserveDiskMB,
-		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &override, &h.SizeClass, &doctorAt, &h.RecoveryRequired, &h.Retired)
+		&h.ProtocolVersion, &incompatible, &h.Connection, &h.Usage, &h.Throttle, &h.Features, &h.Incidents, &h.Doctor, &h.RunnerProfile, &override, &h.SizeClass, &doctorAt, &h.RecoveryRequired, &h.Retired, &h.AutoAdjust, &adjustedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -661,6 +727,9 @@ func scanHost(sc interface{ Scan(...any) error }) (*Host, error) {
 	h.Embedded, h.Cordoned, h.Incompatible = embedded == 1, cordoned == 1, incompatible == 1
 	h.LastHeartbeat, h.CreatedAt = at(heartbeat), at(created)
 	h.AgentSessionAltAt = atp(altAt)
+	if adjustedAt > 0 {
+		h.AutoAdjustedAt = at(adjustedAt)
+	}
 	return &h, nil
 }
 
@@ -745,8 +814,10 @@ type hostRunnerCounts struct {
 const countRunnersByHostSQL = `SELECT host_id, COUNT(*), SUM(allocated_cpus <= 0) FROM runners
 	WHERE state NOT IN ('removed','failed') GROUP BY host_id`
 
+var countRunnersByHostQuery = hot(countRunnersByHostSQL)
+
 func (s *Store) countRunnersByHost(ctx context.Context) (map[string]hostRunnerCounts, error) {
-	rows, err := s.read.QueryContext(ctx, countRunnersByHostSQL)
+	rows, err := s.hotRead().Query(ctx, countRunnersByHostQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -763,9 +834,11 @@ func (s *Store) countRunnersByHost(ctx context.Context) (map[string]hostRunnerCo
 	return out, rows.Err()
 }
 
+var listHostsQuery = hot(`SELECT ` + hostReadCols + ` FROM hosts ORDER BY embedded DESC, name`)
+
 // ListHosts returns every host, with live runner counts.
 func (s *Store) ListHosts(ctx context.Context) ([]*Host, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+hostReadCols+` FROM hosts ORDER BY embedded DESC, name`)
+	rows, err := s.hotRead().Query(ctx, listHostsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -1123,9 +1196,13 @@ func (s *Store) SetRunnerCreatedAt(ctx context.Context, id string, at time.Time)
 	return err
 }
 
+// runnerByIDQuery is read for every runner an agent reports on, twice, on every
+// heartbeat; see hot.go.
+var runnerByIDQuery = hot(`SELECT ` + runnerCols + ` FROM runners WHERE id = ?`)
+
 // GetRunner returns one runner by ID.
 func (s *Store) GetRunner(ctx context.Context, id string) (*Runner, error) {
-	row := s.read.QueryRowContext(ctx, `SELECT `+runnerCols+` FROM runners WHERE id = ?`, id)
+	row := s.hotRead().QueryRow(ctx, runnerByIDQuery, id)
 	r, err := scanRunner(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("runner %s: %w", id, ErrNotFound)
@@ -1251,22 +1328,29 @@ func (s *Store) ListRunnersForPool(ctx context.Context, poolID string) ([]*Runne
 	return out, rows.Err()
 }
 
+// runnersForHostQuery is the list a host's runners are asked for without naming
+// a state, which a heartbeat does three times; see hot.go. A list of states is
+// built around them and is a new statement for each length of it, so it is not
+// hot.
+var runnersForHostQuery = hot(`SELECT ` + runnerCols + ` FROM runners
+	WHERE host_id = ? AND state != 'removed' ORDER BY created_at`)
+
 // ListRunnersForHost returns the runners an agent is responsible for.
 func (s *Store) ListRunnersForHost(ctx context.Context, hostID string, states ...RunnerState) ([]*Runner, error) {
-	q := `SELECT ` + runnerCols + ` FROM runners WHERE host_id = ?`
-	args := []any{hostID}
-	if len(states) > 0 {
+	var rows *sql.Rows
+	var err error
+	if len(states) == 0 {
+		rows, err = s.hotRead().Query(ctx, runnersForHostQuery, hostID)
+	} else {
 		ph := make([]string, len(states))
+		args := []any{hostID}
 		for i, st := range states {
 			ph[i] = "?"
 			args = append(args, string(st))
 		}
-		q += ` AND state IN (` + strings.Join(ph, ",") + `)`
-	} else {
-		q += ` AND state != 'removed'`
+		rows, err = s.read.QueryContext(ctx, `SELECT `+runnerCols+` FROM runners WHERE host_id = ? AND state IN (`+
+			strings.Join(ph, ",")+`) ORDER BY created_at`, args...)
 	}
-	q += ` ORDER BY created_at`
-	rows, err := s.read.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1278,6 +1362,39 @@ func (s *Store) ListRunnersForHost(ctx context.Context, hostID string, states ..
 			return nil, err
 		}
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ListRunnersByHost is ListRunnersForHost for every host at once: the runners in
+// the given states, or every one that has not been removed, grouped by the host
+// each is on and in the order each host's list is in.
+func (s *Store) ListRunnersByHost(ctx context.Context, states ...RunnerState) (map[string][]*Runner, error) {
+	q := `SELECT ` + runnerCols + ` FROM runners WHERE `
+	var args []any
+	if len(states) > 0 {
+		ph := make([]string, len(states))
+		for i, st := range states {
+			ph[i] = "?"
+			args = append(args, string(st))
+		}
+		q += `state IN (` + strings.Join(ph, ",") + `)`
+	} else {
+		q += `state != 'removed'`
+	}
+	q += ` ORDER BY created_at`
+	rows, err := s.read.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]*Runner{}
+	for rows.Next() {
+		r, err := scanRunner(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[r.HostID] = append(out[r.HostID], r)
 	}
 	return out, rows.Err()
 }

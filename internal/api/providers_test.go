@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -384,6 +385,207 @@ func TestPressingAProvidersKillSwitchTwiceIsNotAnError(t *testing.T) {
 		if !strings.Contains(string(audit.body), action) {
 			t.Errorf("%s was not audited", action)
 		}
+	}
+}
+
+// The kill switch is a scope an operator hands to something that watches the
+// bill, so that it can stop spending. Building a test machine is the one route
+// that shared it which clones and starts a billable machine, so a token that may
+// press the switch must not be one that can buy a machine with it.
+func TestATokenScopedToThePauseSwitchCannotBuildATestMachine(t *testing.T) {
+	h := newHarness(t)
+	prov := h.provider("proxmox-lab")
+	// Renting is on and the fleet may rent, so that a request the scope lets
+	// through would reach the machine loop and answer 202. With either off the
+	// refusal would be a 409 and the test would pass for the wrong reason.
+	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
+	base := "/api/v1/providers/" + prov.ID
+	pauseOnly := h.token("on-call", store.RoleOperator, "providers:pause")
+
+	refused := h.do(request{method: http.MethodPost, path: base + "/test-machine", token: pauseOnly})
+	refused.mustStatus(t, http.StatusForbidden, "a token scoped to providers:pause building a test machine")
+	if msg := refused.errorMessage(t); !strings.Contains(msg, "providers:test") {
+		t.Errorf("the refusal must name the scope to add, providers:test, got %q", msg)
+	}
+	if machines, err := h.st.ListMachinesForProvider(h.ctx, prov.ID); err != nil || len(machines) != 0 {
+		t.Errorf("a refused request must not have reserved a machine, got %d (%v)", len(machines), err)
+	}
+
+	// What the scope was minted for is untouched: pressing the switch, and the two
+	// read-only calls that were always the operator's to make against the hypervisor.
+	for _, call := range []struct{ method, path string }{
+		{http.MethodPost, base + "/pause"},
+		{http.MethodPost, base + "/resume"},
+		{http.MethodPost, base + "/check"},
+		{http.MethodGet, base + "/discovery"},
+	} {
+		got := h.do(request{method: call.method, path: call.path, token: pauseOnly})
+		if got.status == http.StatusForbidden || got.status == http.StatusUnauthorized {
+			t.Errorf("%s %s with the pause scope was refused %d: %s", call.method, call.path, got.status, truncate(got.body))
+		}
+	}
+
+	// And an operator whose token carries no scopes, or the provider scopes
+	// whole, is still the person who builds one.
+	for name, token := range map[string]string{
+		"an operator with no scopes": h.token("operator", store.RoleOperator),
+		"providers:test":             h.token("tester", store.RoleOperator, "providers:test"),
+		"providers:*":                h.token("providers", store.RoleOperator, "providers:*"),
+	} {
+		resp := h.do(request{method: http.MethodPost, path: base + "/test-machine", token: token})
+		if resp.status != http.StatusAccepted && resp.status != http.StatusConflict {
+			t.Errorf("%s building a test machine: status %d, want it let through (202, or 409 once one is on its way)\nbody: %s", name, resp.status, truncate(resp.body))
+		}
+	}
+}
+
+// Building a test machine spends money and uses the provider's credential. The
+// request that is accepted answers 202 with the machine it planned, which the
+// page then follows, and leaves a row saying who asked and which machine came of
+// it, because "who started the machine we are paying for" is what that log is
+// read for.
+func TestAcceptingATestMachineAnswersWithThePlannedMachineAndAuditsIt(t *testing.T) {
+	h := newHarness(t)
+	operator, _ := h.user("operator", store.RoleOperator)
+	cookie := h.session(operator)
+	prov := h.provider("proxmox-lab")
+	// A fleet maximum of none is none, for a test machine as for any other, so
+	// the fleet is given room to rent one.
+	h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
+
+	resp := h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", cookie: cookie})
+	resp.mustStatus(t, http.StatusAccepted, "start a test machine")
+	var planned machineResponse
+	resp.into(t, &planned)
+	if !planned.Test || planned.State != store.MachinePlanned || planned.ProviderID != prov.ID {
+		t.Fatalf("the answer is not a planned test machine on the provider: %s", truncate(resp.body))
+	}
+	// The answer describes the machine that was reserved, not one made up for it.
+	row := h.lastMachine(prov.ID)
+	if row.ID != planned.ID || !row.Test || row.State != store.MachinePlanned {
+		t.Errorf("the machine reserved is %s (test %v, %s); the answer was about %s", row.ID, row.Test, row.State, planned.ID)
+	}
+
+	rows, _, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"provider.test_machine"}}, store.Page{})
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("want one provider.test_machine row, got %d", len(rows))
+	}
+	if got := rows[0]; got.TargetKind != "provider" || got.TargetID != prov.ID || got.ActorName != "operator" ||
+		!strings.Contains(got.After, planned.ID) || !strings.Contains(got.After, prov.Name) {
+		t.Errorf("the audit row does not say who asked for which machine on which provider: %+v", got)
+	}
+}
+
+// A test machine that cannot start says why, in a 409 that carries the
+// controller's own sentence and not the marker the handler uses to recognise a
+// refusal. Nothing was spent, so nothing is left behind: no machine row and no
+// audit row for a thing that was not done.
+//
+// The sentence is not worded here. Each case asks the controller what it says
+// about the state the case arranged, and that must reach the caller unchanged;
+// and the cases between them must reach different reasons, so an arrangement
+// that stopped doing what its name says cannot pass by repeating another's.
+func TestARefusedTestMachineIsAConflictThatSaysWhyAndLeavesNothingBehind(t *testing.T) {
+	cases := []struct {
+		name string
+		// arrange puts the provider in the state that makes a test refuse.
+		arrange func(h *harness, prov *store.Provider)
+	}{
+		{"renting is switched off", func(h *harness, prov *store.Provider) {}},
+		{"the provider is paused", func(h *harness, prov *store.Provider) {
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true })
+			if err := h.st.SetProviderPaused(h.ctx, prov.ID, true, "the hypervisor is being patched"); err != nil {
+				h.t.Fatalf("SetProviderPaused: %v", err)
+			}
+		}},
+		{"a test is already on its way", func(h *harness, prov *store.Provider) {
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
+			h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", token: h.token("first", store.RoleOperator)}).
+				mustStatus(h.t, http.StatusAccepted, "the first test machine")
+		}},
+		{"the fleet may rent nothing", func(h *harness, prov *store.Provider) {
+			// Renting is on and the provider has room, but provider.max_machines
+			// is its default of none, which is none for the planner and so for a
+			// test machine that is billed like any other.
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 0 })
+		}},
+		{"the provider has no room under its maximum", func(h *harness, prov *store.Provider) {
+			h.ctrl.UpdateConfig(func(c *config.Config) { c.Provider.Enabled = true; c.Provider.MaxMachines = 5 })
+			prov.MaxMachines = 1
+			if err := h.st.UpdateProvider(h.ctx, prov); err != nil {
+				h.t.Fatalf("UpdateProvider: %v", err)
+			}
+			h.machine(prov, "zoomies-mach-occupant")
+		}},
+	}
+	reasons := map[string]string{}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			operator, _ := h.user("operator", store.RoleOperator)
+			cookie := h.session(operator)
+			prov := h.provider("proxmox-lab")
+			tc.arrange(h, prov)
+
+			// What the controller says about this state. A refusal reserves
+			// nothing, so asking it directly changes nothing.
+			row, err := h.st.GetProvider(h.ctx, prov.ID)
+			if err != nil {
+				t.Fatalf("GetProvider: %v", err)
+			}
+			_, refusal := h.ctrl.StartTestMachine(h.ctx, row)
+			if !errors.Is(refusal, controller.ErrTestMachineRefused) {
+				t.Fatalf("the arrangement does not leave a test machine refused: %v", refusal)
+			}
+			sentence := strings.TrimPrefix(refusal.Error(), controller.ErrTestMachineRefused.Error()+": ")
+			reasons[tc.name] = sentence
+
+			machinesBefore, err := h.st.ListMachinesForProvider(h.ctx, prov.ID)
+			if err != nil {
+				t.Fatalf("ListMachinesForProvider: %v", err)
+			}
+			_, auditedBefore, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"provider.test_machine"}}, store.Page{})
+			if err != nil {
+				t.Fatalf("ListAudit: %v", err)
+			}
+
+			resp := h.do(request{method: http.MethodPost, path: "/api/v1/providers/" + prov.ID + "/test-machine", cookie: cookie})
+			resp.mustStatus(t, http.StatusConflict, "start a test machine that cannot start")
+			if resp.errorCode(t) != codeConflict {
+				t.Errorf("the refusal's code is %q, want %q", resp.errorCode(t), codeConflict)
+			}
+			// The reason alone: the marker is how the handler knows to answer 409,
+			// and is not text for a person.
+			if msg := resp.errorMessage(t); sentence == "" || msg != sentence {
+				t.Errorf("the refusal says %q, want the controller's own sentence %q", msg, sentence)
+			}
+
+			machinesAfter, err := h.st.ListMachinesForProvider(h.ctx, prov.ID)
+			if err != nil {
+				t.Fatalf("ListMachinesForProvider: %v", err)
+			}
+			if len(machinesAfter) != len(machinesBefore) {
+				t.Errorf("a refused test reserved a machine: %d before, %d after", len(machinesBefore), len(machinesAfter))
+			}
+			_, auditedAfter, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{"provider.test_machine"}}, store.Page{})
+			if err != nil {
+				t.Fatalf("ListAudit: %v", err)
+			}
+			if auditedAfter != auditedBefore {
+				t.Errorf("a refused test was audited as if it had started: %d rows before, %d after", auditedBefore, auditedAfter)
+			}
+		})
+	}
+
+	different := map[string]bool{}
+	for _, sentence := range reasons {
+		different[sentence] = true
+	}
+	if len(different) != len(cases) {
+		t.Errorf("%d cases reached %d different reasons, so one no longer arranges what its name says: %v", len(cases), len(different), reasons)
 	}
 }
 

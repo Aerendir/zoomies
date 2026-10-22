@@ -99,6 +99,13 @@ type HostView struct {
 	// decision.
 	Throttle       *store.HostThrottle `json:"throttle,omitempty"`
 	ThrottleReason string              `json:"throttle_reason"`
+	// AutoAdjust is the host's own answer to whether the controller keeps it at
+	// its recommendation (empty follows the fleet), AutoAdjustEffective what is
+	// true once the fleet's default is counted, and AutoAdjustedAt when the
+	// controller last moved it.
+	AutoAdjust          string     `json:"auto_adjust"`
+	AutoAdjustEffective bool       `json:"auto_adjust_effective"`
+	AutoAdjustedAt      *time.Time `json:"auto_adjusted_at,omitempty"`
 	// RuntimeRecovering is the container-runtime cooldown the agent last
 	// reported, absent when there is none, and RuntimeReason the card's
 	// sentence for it. The times are carried rather than written into the
@@ -292,58 +299,60 @@ func (c *Controller) HostView(h *store.Host) HostView {
 		Retired:       h.Retired,
 		// Judged, not raw: the page, the problems and the metrics must read one
 		// answer about what counts.
-		Doctor:             doctorView(h.JudgedDoctor(c.Now())),
-		HealthCheck:        c.hostCheckView(h),
-		ID:                 h.ID,
-		Name:               h.Name,
-		Address:            h.Address,
-		Embedded:           h.Embedded,
-		Connection:         h.Connection,
-		Capacity:           h.Capacity,
-		ActiveRunners:      h.ActiveRunners,
-		Free:               h.Free(),
-		EffectiveCapacity:  h.EffectiveCapacity(),
-		EffectiveProfile:   EffectiveProfile(h, c.cfg().Runners),
-		Priority:           priority.Score,
-		PrioritySource:     string(priority.Source),
-		PriorityReason:     scheduler.HostPriorityReason(h),
-		Tags:               emptySlice(scheduler.HostTags(h, c.tracksClasses())),
-		SizeClass:          c.hostSizeClassView(h),
-		AutoPool:           c.hostAutoPoolView(h),
-		UnlimitedRunners:   h.UnlimitedRunners,
-		ThrottleReason:     scheduler.ThrottleReason(h),
-		Backends:           emptySlice(h.Backends),
-		Labels:             emptyMap(h.Labels),
-		OS:                 h.OS,
-		Distro:             h.Distro,
-		OSVersion:          h.OSVersion,
-		Arch:               h.Arch,
-		CPUs:               h.CPUs,
-		MemoryMB:           h.MemoryMB,
-		UsageFresh:         h.Usage.Fresh(c.Now()),
-		AdmissionReason:    scheduler.HostAdmissionReason(h, c.Now()),
-		DiskTotalMB:        h.DiskTotalMB,
-		DiskFreeMB:         h.DiskFreeMB,
-		ReserveCPUs:        h.ReserveCPUs,
-		ReserveMemoryMB:    h.ReserveMemoryMB,
-		ReserveDiskMB:      h.ReserveDiskMB,
-		Platform:           h.Platform(),
-		PlatformLabel:      h.Platform().Describe(),
-		CanonicalName:      h.CanonicalName(),
-		Version:            h.Version,
-		VersionChannel:     version.Channel(h.Version),
-		Features:           emptySlice(h.Features),
-		ElasticCPU:         h.Supports(agent.FeatureElasticCPU),
-		ElasticMemory:      h.Supports(agent.FeatureElasticMemory),
-		MemoryPool:         c.memoryPoolView(h),
-		Cordoned:           h.Cordoned,
-		ProtocolVersion:    h.ProtocolVersion,
-		Incompatible:       h.Incompatible,
-		IncompatibleReason: incompatibleReason(h),
-		VersionSkew:        string(version.CompareBuilds(h.Version, version.Version)),
-		Healthy:            h.Healthy(c.Now()),
-		LastHeartbeat:      h.LastHeartbeat,
-		CreatedAt:          h.CreatedAt,
+		Doctor:              doctorView(h.JudgedDoctor(c.Now())),
+		HealthCheck:         c.hostCheckView(h),
+		ID:                  h.ID,
+		Name:                h.Name,
+		Address:             h.Address,
+		Embedded:            h.Embedded,
+		Connection:          h.Connection,
+		Capacity:            h.Capacity,
+		ActiveRunners:       h.ActiveRunners,
+		Free:                h.Free(),
+		EffectiveCapacity:   h.EffectiveCapacity(),
+		EffectiveProfile:    EffectiveProfile(h, c.cfg().Runners),
+		Priority:            priority.Score,
+		PrioritySource:      string(priority.Source),
+		PriorityReason:      scheduler.HostPriorityReason(h),
+		Tags:                emptySlice(scheduler.HostTags(h, c.tracksClasses())),
+		SizeClass:           c.hostSizeClassView(h),
+		AutoPool:            c.hostAutoPoolView(h),
+		UnlimitedRunners:    h.UnlimitedRunners,
+		ThrottleReason:      scheduler.ThrottleReason(h),
+		AutoAdjust:          h.AutoAdjust,
+		AutoAdjustEffective: c.AutoAdjustEffective(h),
+		Backends:            emptySlice(h.Backends),
+		Labels:              emptyMap(h.Labels),
+		OS:                  h.OS,
+		Distro:              h.Distro,
+		OSVersion:           h.OSVersion,
+		Arch:                h.Arch,
+		CPUs:                h.CPUs,
+		MemoryMB:            h.MemoryMB,
+		UsageFresh:          h.Usage.Fresh(c.Now()),
+		AdmissionReason:     scheduler.HostAdmissionReason(h, c.Now()),
+		DiskTotalMB:         h.DiskTotalMB,
+		DiskFreeMB:          h.DiskFreeMB,
+		ReserveCPUs:         h.ReserveCPUs,
+		ReserveMemoryMB:     h.ReserveMemoryMB,
+		ReserveDiskMB:       h.ReserveDiskMB,
+		Platform:            h.Platform(),
+		PlatformLabel:       h.Platform().Describe(),
+		CanonicalName:       h.CanonicalName(),
+		Version:             h.Version,
+		VersionChannel:      version.Channel(h.Version),
+		Features:            emptySlice(h.Features),
+		ElasticCPU:          h.Supports(agent.FeatureElasticCPU),
+		ElasticMemory:       h.Supports(agent.FeatureElasticMemory),
+		MemoryPool:          c.memoryPoolView(h),
+		Cordoned:            h.Cordoned,
+		ProtocolVersion:     h.ProtocolVersion,
+		Incompatible:        h.Incompatible,
+		IncompatibleReason:  incompatibleReason(h),
+		VersionSkew:         string(version.CompareBuilds(h.Version, version.Version)),
+		Healthy:             h.Healthy(c.Now()),
+		LastHeartbeat:       h.LastHeartbeat,
+		CreatedAt:           h.CreatedAt,
 	}
 	rented := c.rentedHost(h.ID)
 	out.MachineID = rented.MachineID
@@ -395,6 +404,10 @@ func (c *Controller) HostView(h *store.Host) HostView {
 				Limits:       b.Limits,
 				SharedFolder: b.SharedFolder,
 			})
+		}
+		if !h.AutoAdjustedAt.IsZero() {
+			at := h.AutoAdjustedAt
+			out.AutoAdjustedAt = &at
 		}
 		return out
 	}
@@ -670,6 +683,19 @@ func NewJobView(j *store.Job, poolName string) JobView {
 	}
 }
 
+// For is the job as one audience may read it. A visitor to a public view is
+// told that a failure was marked as known, and when, but never by whom: the
+// name is an account's, and a public view shows nothing about the people who
+// run the fleet. Every other audience reads the job whole.
+//
+// It narrows a copy. The view is rendered once and handed to every audience.
+func (v JobView) For(visitor bool) JobView {
+	if visitor {
+		v.AcknowledgedBy = ""
+	}
+	return v
+}
+
 // throttledShare is the share of its CPU periods a job's runner was held back
 // in, nil when the counters were never sampled: zero is an answer and "nobody
 // looked" is not.
@@ -711,6 +737,33 @@ func (c *Controller) jobView(ctx context.Context, j *store.Job) JobView {
 		}
 	}
 	return NewJobView(j, name)
+}
+
+// jobViewIn is jobView for a caller that has just read the pools to claim the
+// job. It names the job's pool from them, instead of reading the pool again,
+// whole, to learn what the pools in hand already say; that read was a fifth of a
+// poller sweep. A pool that is not among them, made since or named by no job, is
+// looked up as jobView does. The name is as old as the read, the way a page of
+// jobs is named from one listing. Only the name is read from the pools, so the
+// listing made for a claim serves.
+func (c *Controller) jobViewIn(ctx context.Context, j *store.Job, pools []*store.Pool) JobView {
+	if p := poolIn(pools, j.PoolID); p != nil {
+		return NewJobView(j, p.Name)
+	}
+	return c.jobView(ctx, j)
+}
+
+// poolIn finds a pool by ID among pools already read, or returns nil.
+func poolIn(pools []*store.Pool, id string) *store.Pool {
+	if id == "" {
+		return nil
+	}
+	for _, p := range pools {
+		if p.ID == id {
+			return p
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -855,6 +908,19 @@ type RunnerView struct {
 	CleanedUpAt *time.Time `json:"cleaned_up_at,omitempty"`
 }
 
+// For is the runner as one audience may read it: the job it is still pointed at
+// is narrowed as a job is, because the runner's page and frames carry the same
+// job the jobs routes do. It narrows a copy, so the job the view points to,
+// which may be shared, is never changed.
+func (v RunnerView) For(visitor bool) RunnerView {
+	if !visitor || v.CurrentJob == nil {
+		return v
+	}
+	job := v.CurrentJob.For(visitor)
+	v.CurrentJob = &job
+	return v
+}
+
 // CPUResourceView keeps the playful fleet voice beside exact numbers and a
 // stable state. Operators can scan the label; clients and alerts use State.
 type CPUResourceView struct {
@@ -917,8 +983,14 @@ func (c *Controller) RunnerRenderer(ctx context.Context, runners []*store.Runner
 
 // View renders one runner.
 func (v *RunnerRenderer) View(r *store.Runner) RunnerView {
-	pool := v.pools[r.PoolID]
-	host := v.hosts[r.HostID]
+	return runnerView(r, v.pools[r.PoolID], v.hosts[r.HostID], v.jobs[r.CurrentJobID])
+}
+
+// runnerView renders one runner from the rows that name it: its pool, its host
+// and, when it is busy, the job it is executing. It is RunnerRenderer.View
+// for a caller that holds one runner's rows already, which is what a detail
+// route is; the renderer's maps are the same three rows for a whole page.
+func runnerView(r *store.Runner, pool *store.Pool, host *store.Host, job *store.Job) RunnerView {
 	poolName, hostName := "", ""
 	if pool != nil {
 		poolName = pool.Name
@@ -970,15 +1042,41 @@ func (v *RunnerRenderer) View(r *store.Runner) RunnerView {
 		CleanupAttempts:       r.CleanupAttempts,
 		CleanedUpAt:           r.CleanedUpAt,
 	}
-	if j := v.jobs[r.CurrentJobID]; j != nil {
+	if job != nil {
+		// The job's pool name comes from the pool row in hand: a runner
+		// only ever executes a job its own pool claimed, so the row that
+		// names the runner names the job too. The ID is checked rather
+		// than trusted so a row that disagrees renders the way the
+		// renderer's map lookup would, without a name.
 		jobPool := ""
-		if p := v.pools[j.PoolID]; p != nil {
-			jobPool = p.Name
+		if pool != nil && job.PoolID == pool.ID {
+			jobPool = pool.Name
 		}
-		job := NewJobView(j, jobPool)
-		out.CurrentJob = &job
+		jobView := NewJobView(job, jobPool)
+		out.CurrentJob = &jobView
 	}
 	return out
+}
+
+// RunnerViewIn renders one runner for a caller that already holds its host
+// and pool rows, the way jobViewIn names a job from pools in hand: a detail
+// route reads its host and pool anyway, and listing every pool and host to
+// name one runner is the fleet read a single drawer never needed. The busy
+// runner's job is fetched here, and a job row that has gone since the runner
+// was read is tolerated the way RunnerRenderer tolerates it: the runner is
+// rendered without it.
+func (c *Controller) RunnerViewIn(ctx context.Context, run *store.Runner, host *store.Host, pool *store.Pool) (RunnerView, error) {
+	// Only a runner that is actually executing something needs a job, which
+	// on an idle fleet is none of them.
+	var job *store.Job
+	if run.CurrentJobID != "" {
+		j, err := c.st.GetJob(ctx, run.CurrentJobID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return RunnerView{}, fmt.Errorf("reading the job a runner is executing: %w", err)
+		}
+		job = j
+	}
+	return runnerView(run, pool, host, job), nil
 }
 
 func cpuResourceView(r *store.Runner, p *store.Pool, h *store.Host) *CPUResourceView {
@@ -2151,8 +2249,8 @@ type AssistantProviderView struct {
 	// ReasoningEffort is how hard the model is told to think, in the provider's
 	// words, or empty for its default.
 	ReasoningEffort string `json:"reasoning_effort"`
-	// MaxOutputTokens is how much the model may write in one round, or zero
-	// for the controller's default.
+	// MaxOutputTokens is how much the model may write in one round, or zero for
+	// automatic: a chat starts at a default and a repair raises the limit itself.
 	MaxOutputTokens int `json:"max_output_tokens"`
 	// Subscription is a provider that is somebody's own subscription, used through
 	// the vendor's own tool on this machine. Owner says whose, and OwnedByYou whether

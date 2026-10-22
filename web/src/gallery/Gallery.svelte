@@ -20,9 +20,11 @@
   import { visualStyle } from '$lib/state/ui-style.svelte';
   import ControlsSection from './sections/Controls.svelte';
   import DataSection from './sections/Data.svelte';
+  import EliRepairsSection from './sections/EliRepairs.svelte';
   import FeedbackSection from './sections/Feedback.svelte';
   import FormsSection from './sections/Forms.svelte';
   import OverlaysSection from './sections/Overlays.svelte';
+  import PublicSection from './sections/Public.svelte';
   import SurfacesSection from './sections/Surfaces.svelte';
   import { applyChoice, choiceQuery, readChoice, resolveMode, type GalleryChoice } from './style';
 
@@ -87,6 +89,8 @@
     <SurfacesSection />
     <OverlaysSection />
     <DataSection />
+    <EliRepairsSection />
+    <PublicSection />
   </div>
 </main>
 

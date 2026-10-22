@@ -11,20 +11,23 @@ account to begin with.
 ## Flows
 
 - **Consent first**: every credential an agent gets here was approved by a
-  person, on a page, with the second factor behind them. There is no
-  self-issued or anonymous registration.
+  person, on a page. A controller's consent page is its ordinary sign-in,
+  which asks for a second factor only of an account that has two-step
+  verification turned on (or where the instance requires it) and never of a
+  single-sign-on account, whose provider owns that step. Registering a client
+  takes no sign-in, but a registered client holds no credential until a person
+  approves it, so no credential is self-issued or anonymous.
 - **Agent as an OAuth client** (the controller's MCP): dynamic client
   registration, an authorization-code flow with PKCE, a consent page between
   the request and the grant. The full walk is in
   [Registration](#registration-a-complete-flow).
-- **Operator-issued bearer tokens** (the REST interface): a long-lived token
-  with explicit scopes, created by an operator.
+- **API tokens** (the REST interface): a bearer token that anybody signed in
+  creates for themselves, with a role no higher than their own, optionally
+  narrowed by scopes and optionally expiring.
 - In the auth.md vocabulary: `identity_assertion` and its ID-JAG and
   verified-email forms are not enabled, `anonymous` is not enabled, and
-  `service_auth` is replaced by the consent ceremony above. The
-  `identity_types_supported` list is empty in the document that carries it,
-  and nothing here issues a credential an agent can claim without its
-  person's own decision.
+  `service_auth` is replaced by the consent ceremony above. Nothing here
+  issues a credential an agent can claim without its person's own decision.
 
 ## What needs no credentials
 
@@ -55,7 +58,9 @@ live.
 
 - `mcp:read`: read the fleet the way a viewer may.
 - `mcp:operate`: what an operator may change, implying `mcp:read`.
-- The REST interface's tokens carry explicit scopes in `resource.verb` form.
+- The REST interface's tokens may carry scopes, written `resource:verb` (for
+  example `hosts:read`, or `pools:*` for every verb on pools). A scope only
+  narrows the token's role; with none, a token has whatever its role allows.
 
 ## Registration: a complete flow
 
@@ -64,9 +69,9 @@ acting decides on the controller's consent page before the client can do
 anything. An agent that wants its own way in must walk the person through it;
 there is no self-issued credential.
 
-Dynamic client registration is part of the metadata only while the
-deployment's `security.mcp_open_registration` setting is on. The default is
-off, and the operator adds the MCP client by hand first.
+Dynamic client registration is part of the metadata while the deployment's
+`security.mcp_open_registration` setting is on, and the default is on; an
+operator who turns it off adds the MCP client by hand first.
 
 1. **Discover** (two hops):
 
@@ -79,13 +84,15 @@ off, and the operator adds the MCP client by hand first.
     "authorization_servers": ["https://<your controller>"],
     "scopes_supported": ["mcp:read", "mcp:operate"],
     "bearer_methods_supported": ["header"],
-    "resource_documentation": "https://zoomies.sh/auth.md"}
+    "resource_name": "Zoomies",
+    "resource_documentation": "https://zoomies.sh/connect-claude/"}
    ```
 
-   The controller is the authorization server in that answer. Its own
-   discovery documents are at
-   `https://<your controller>/.well-known/oauth-authorization-server` and
-   `https://<your controller>/.well-known/openid-configuration`.
+   The controller is the authorization server in that answer. It publishes
+   OAuth authorization-server metadata at
+   `https://<your controller>/.well-known/oauth-authorization-server`. It
+   issues no ID tokens and publishes no signing keys, so it has no OpenID
+   Connect discovery document.
 
 2. **Register the client** (dynamic client registration, RFC 7591):
 
@@ -121,14 +128,15 @@ off, and the operator adds the MCP client by hand first.
    ```
 
    The controller redirects a browser to its consent page. The person signs
-   in with the deployment's own sign-in (password and a second factor, a
-   passkey or single sign-on), reads what the client named and what the
-   connection may see, and approves. An approval returns to the client's
-   address with `code`; a denial is `error=access_denied`. This page is the
-   whole security decision, and it is the part the controller does not offer
-   to automation: no anonymous or self-issued registration exists, because a
-   token here acts as one named person, and that person consents with the
-   second factor behind them.
+   in with the deployment's own sign-in (password and a second factor where
+   the account or the instance asks for one, or single sign-on), reads what
+   the client named and what the connection may see, and approves. An
+   approval returns to the client's address with `code`; a denial is
+   `error=access_denied`. This page is the whole security decision, and it is
+   the part the controller does not offer to automation: no anonymous or
+   self-issued registration exists, because a token here acts as one named
+   person, and that person consents with the second factor behind them where
+   one applies.
 
 4. **Exchange**:
 
@@ -161,15 +169,17 @@ walk by hand, one screen at a time.
 
 ## Credentials for the REST interface
 
-An operator creates long-lived API tokens in the controller's settings. Each
-token carries an explicit scope list in `resource.verb` form (what a viewer
-may read, what an operator may change), and every request presents it as a
-bearer token:
+Anybody signed in to the controller creates API tokens for themselves, on
+**Settings → API tokens** or with `zoomies tokens create`. A token has a role (a
+viewer's unless another is asked for, and never above the creator's own) and
+may carry scopes in `resource:verb` form that narrow it to part of that role;
+with none, it has whatever the role allows. It may be given an expiry. Every
+request presents it as a bearer token:
 
     Authorization: Bearer <token>
 
-The token answers as the role its scopes give it, never more; a route the
-scope does not cover is refused, and the refusal says which one is missing.
-There is no agent account to create: the token is granted by the person who
-runs the instance, the instance never learns anything else about an agent,
-and revoking it disconnects the agent at once.
+The token answers as its role, narrowed by its scopes if it has any, never
+more; a route the role or the scopes do not cover is refused, and the refusal
+says which one is missing. There is no agent account to create: the token is
+granted by a person with an account on the instance, the instance never learns
+anything else about an agent, and revoking it disconnects the agent at once.

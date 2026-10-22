@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/eyupio/zoomies/internal/prrepair"
 	"github.com/eyupio/zoomies/internal/store"
 	"net/http"
@@ -102,6 +103,11 @@ func TestRepairChecksIncludeLegacyStatusesAndWaitForAnyChecks(t *testing.T) {
 		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"success"}]}`, `{"total_count":1,"state":"pending"}`, "waiting"},
 		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"success"}]}`, `{"total_count":0,"state":"pending"}`, "passed"},
 		{`{"total_count":1,"check_runs":[{"status":"in_progress"}]}`, `{"total_count":1,"state":"success"}`, "waiting"},
+		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"cancelled"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
+		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"skipped"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
+		{`{"total_count":1,"check_runs":[{"status":"completed","conclusion":"neutral"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
+		{`{"total_count":2,"check_runs":[{"status":"in_progress"},{"status":"completed","conclusion":"failure"}]}`, `{"total_count":0,"state":"pending"}`, "failed"},
+		{`{"total_count":2,"check_runs":[{"status":"completed","conclusion":"success"}]}`, `{"total_count":0,"state":"pending"}`, "waiting"},
 	} {
 		t.Run(tc.want, func(t *testing.T) {
 			c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -170,3 +176,135 @@ func TestRepairSourceLeavesOutAFileItMayNotHaveAndNamesIt(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// GitHub omits PR links on some runs. Commit lookup must recover the PR
+// without admitting a closed PR, a fork or a different head.
+func TestRepairRunResolvesMissingPullLinksAndKeepsAdmissionChecks(t *testing.T) {
+	for _, tc := range []struct {
+		name, candidates, pull, message string
+	}{
+		{"open PR", `[{"number":1}]`, testPull, ""},
+		{"missing PR state", `[{"number":1}]`, strings.Replace(testPull, `"open"`, `""`, 1), "open PR"},
+		{"closed PR", `[{"number":1}]`, strings.Replace(testPull, `"open"`, `"closed"`, 1), "PR #1 is closed or merged"},
+		{"stale head", `[{"number":1}]`, strings.Replace(testPull, `"old"`, `"new"`, 1), "newer commits"},
+		{"no PR", `[]`, "", "single PR"},
+		{"ambiguous commit", `[{"number":1},{"number":2}]`, "", "single PR"},
+		{"fork PR", `[{"number":1}]`, strings.Replace(testPull, "acme/repo", "other/repo", 1), "forks"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("readiness wrote: %s", r.Method)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/repos/acme/repo/actions/runs/9":
+					w.Write([]byte(`{"head_sha":"old","event":"pull_request","head_repository":{"full_name":"acme/repo"},"pull_requests":[]}`))
+				case "/repos/acme/repo/commits/old/pulls":
+					if r.URL.Query().Get("per_page") != "2" {
+						t.Error("commit lookup must be bounded and detect ambiguity")
+					}
+					w.Write([]byte(tc.candidates))
+				case "/repos/acme/repo/pulls/1":
+					w.Write([]byte(tc.pull))
+				default:
+					t.Errorf("unexpected request %s", r.URL)
+					http.NotFound(w, r)
+				}
+			})
+			p, err := c.RepairPullForRun(context.Background(), "acme/repo", 9)
+			if tc.message != "" {
+				if !errors.Is(err, ErrRepairUnsupported) || !strings.Contains(err.Error(), tc.message) {
+					t.Fatalf("pull %+v, error %v; want %q", p, err, tc.message)
+				}
+			} else if err != nil || p.Number != 1 || p.HeadSHA != "old" {
+				t.Fatalf("pull %+v, error %v", p, err)
+			}
+		})
+	}
+}
+
+// A repair page names the pull request it is about, and where it is going. The
+// base is not the repository's default branch: a pull request can target a
+// release branch, and the page must say which.
+func TestRepairPullReadsTitleAuthorBranchAndBase(t *testing.T) {
+	c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/repos/acme/repo/pulls/7" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte(`{"number":7,"state":"open","title":"Retry transient 502s","html_url":"https://github.com/acme/repo/pull/7","user":{"id":9,"login":"dana"},"head":{"ref":"fix/retry","sha":"abc","repo":{"full_name":"acme/repo","default_branch":"main"}},"base":{"ref":"release/1.2"}}`))
+	})
+	got, err := c.RepairPull(t.Context(), "acme/repo", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := RepairPull{
+		Number: 7, AuthorID: 9, Author: "dana", Branch: "fix/retry", Base: "release/1.2",
+		HeadSHA: "abc", Title: "Retry transient 502s", URL: "https://github.com/acme/repo/pull/7",
+		DefaultBranch: "main", Open: true,
+	}
+	if got != want {
+		t.Fatalf("got  %+v\nwant %+v", got, want)
+	}
+}
+
+// A push, schedule or manual run on the default branch has no PR of its own,
+// but GitHub answers a commit lookup with the PR whose merge made that commit.
+// Taking that PR for the run's own settled the failure as "closed" on the next
+// tick, so the first red build on main after a merge left the attention list
+// without a word, with nobody having seen it. Only a run a PR started may be
+// resolved by commit, and the lookup is not even made for any other.
+func TestARunNoPRStartedIsNeverTakenForTheMergedPRThatMadeItsCommit(t *testing.T) {
+	for _, event := range []string{"push", "schedule", "workflow_dispatch", "merge_group"} {
+		t.Run(event, func(t *testing.T) {
+			c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/repos/acme/repo/actions/runs/9":
+					w.Write([]byte(`{"head_sha":"merge","head_branch":"main","event":"` + event + `","head_repository":{"full_name":"acme/repo"},"pull_requests":[]}`))
+				case "/repos/acme/repo/commits/merge/pulls":
+					t.Error("a run no PR started was looked up by commit")
+					w.Write([]byte(`[{"number":1}]`))
+				case "/repos/acme/repo/pulls/1":
+					w.Write([]byte(`{"number":1,"state":"closed","head":{"ref":"feature","sha":"prtip","repo":{"full_name":"acme/repo","default_branch":"main"}}}`))
+				default:
+					t.Errorf("unexpected request %s", r.URL)
+					http.NotFound(w, r)
+				}
+			})
+			_, err := c.RepairPullForRun(context.Background(), "acme/repo", 9)
+			var changed *RepairTargetChanged
+			if errors.As(err, &changed) {
+				t.Fatalf("a %s run was settled as %q: %s", event, changed.Code, changed.Message)
+			}
+			if !errors.Is(err, ErrRepairUnsupported) || !strings.Contains(err.Error(), "not started by a PR") {
+				t.Fatalf("error %v; want an unsupported target that says no PR started the run", err)
+			}
+		})
+	}
+}
+
+// The gate is on the lookup by commit, not on the event: a push to a PR's own
+// branch that GitHub links to the PR is that PR's run, and is resolved from
+// the link as before, closed PR and all.
+func TestAPushRunGitHubLinksToItsPRIsStillResolved(t *testing.T) {
+	c := repairTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/acme/repo/actions/runs/9":
+			w.Write([]byte(`{"head_sha":"old","head_branch":"feature","event":"push","head_repository":{"full_name":"acme/repo"},"pull_requests":[{"number":1}]}`))
+		case "/repos/acme/repo/pulls/1":
+			w.Write([]byte(strings.Replace(testPull, `"open"`, `"closed"`, 1)))
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			http.NotFound(w, r)
+		}
+	})
+	_, err := c.RepairPullForRun(context.Background(), "acme/repo", 9)
+	var changed *RepairTargetChanged
+	if !errors.As(err, &changed) || changed.Code != "closed" {
+		t.Fatalf("error %v; want the PR the run is linked to reported closed", err)
+	}
+}

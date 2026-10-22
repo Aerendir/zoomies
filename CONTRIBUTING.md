@@ -136,6 +136,22 @@ make test           # every Go test with the race detector
 so when it is not; CI always runs it, so installing it
 (`go install honnef.co/go/tools/cmd/staticcheck@latest`) saves a round trip.
 
+A change made for speed is held to a number. Run the benchmarks of the package
+it touches before the change and after it, and put the comparison in the commit
+message:
+
+```sh
+make bench BENCH_PKGS=./internal/scheduler | tee before.txt
+# make the change, then
+make bench BENCH_PKGS=./internal/scheduler | tee after.txt
+benchstat before.txt after.txt     # go install golang.org/x/perf/cmd/benchstat@latest
+```
+
+`make bench` runs every benchmark six times, so that `benchstat` can say how
+far apart the runs were; `BENCH=Decide/quiet` narrows it by name. Leave the
+machine alone while it runs, because benchmarks that share the CPU contaminate
+each other, and compare only runs made on the same machine.
+
 For documentation changes, install the pinned dependencies and run the same
 strict build as the site workflow:
 
@@ -168,6 +184,9 @@ Some suites intentionally require more setup:
 - `make test-e2e` exercises Docker-backed end-to-end behaviour and skips when
   required GitHub credentials are absent.
 - `make screenshots` captures documentation screenshots from the real UI.
+- `make vet-tags` vets the suites behind the `e2e`, `drill` and `load` build
+  tags. A plain `go vet` never compiles them; `make lint` and CI both run this
+  target, and it is the quick check after editing a file under one of those tags.
 
 You do not need to run an unrelated privileged or credential-dependent suite.
 State exactly what you ran and what you could not run in the pull request.

@@ -20,6 +20,7 @@
 // @ts-nocheck
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parse } from 'svelte/compiler';
 
 // Punctuation that hugs the word before it, and punctuation that hugs the word
@@ -171,7 +172,12 @@ export function lostSpacesUnder(dir) {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run directly rather than imported. Both sides are file URLs because a path with
+// a space, a letter outside ASCII or a % in it is spelled differently as a URL:
+// comparing import.meta.url with the path as text made `npm run lint` skip this
+// check without a word in any checkout under such a directory. There is no
+// script path when a snippet imports the file, and nothing to run then.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const problems = lostSpacesUnder(join(import.meta.dirname, '..', 'src'));
   for (const { file, line, column, message } of problems) {
     console.error(`src/${file}:${line}:${column}  ${message}`);

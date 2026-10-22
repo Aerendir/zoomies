@@ -37,6 +37,10 @@ func (c *Controller) publishDerived(ctx context.Context) {
 
 	c.derivedMu.Lock()
 	defer c.derivedMu.Unlock()
+	// One set of reads for the figures below, so that the statistics, the
+	// problems list, the update status and the host views read the fleet once
+	// between them and not once each.
+	ctx = withFleetReads(ctx)
 
 	if stats, err := c.Stats(ctx, statsEventWindow); err != nil {
 		c.log.Warn("could not compute fleet statistics for the event stream", "error", err)
@@ -147,7 +151,7 @@ func (c *Controller) publishMachineChanges(ctx context.Context) {
 // is tens -- this is deliberately not how the runners are done, because there
 // are thousands of those and the same idea would be too expensive.
 func (c *Controller) publishHostChanges(ctx context.Context) {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		c.log.Warn("could not read the hosts for the event stream", "error", err)
 		return

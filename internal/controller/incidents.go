@@ -213,11 +213,11 @@ func incidentTime(t time.Time) string { return t.UTC().Format("15:04:05 UTC") }
 // when it changes, and a sentence counting down would be wrong by the time it
 // was read. The card counts down against the viewer's own clock instead.
 func (c *Controller) hostIncidentProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}

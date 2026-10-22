@@ -26,13 +26,74 @@ export const SUGGESTED_CEILING = 8;
 /** Processors are shared between machines, so a node offers this many per core. */
 const CPU_SHARING = 2;
 
+/** The least a node keeps back for the hypervisor, whatever a fifth of it comes to. */
+const NODE_RESERVE_FLOOR_MB = 2048;
+
+/**
+ * The disk each runner is given to work in, above the host's reserve. Mirrors
+ * `scheduler.RunnerDiskMB`; a change to one is a change to both, or the form
+ * and the provider's check would disagree about what a machine needs. A test
+ * in `internal/docs` fails while they differ.
+ */
+export const RUNNER_DISK_MB = 10 * 1024;
+
+/**
+ * The least disk a machine keeps back for itself before any runner is placed.
+ * Mirrors `store.MinHostReserveDiskMB`; a change to one is a change to both.
+ */
+export const HOST_RESERVE_DISK_FLOOR_MB = 2048;
+
+/**
+ * The disk a machine needs for this many slots: the reserve plus a working
+ * room each. A machine always runs at least one runner, so a slot count of
+ * zero (nothing typed yet) is read as one.
+ */
+export function machineDiskNeededMb(slots: number): number {
+  return HOST_RESERVE_DISK_FLOOR_MB + Math.max(slots, 1) * RUNNER_DISK_MB;
+}
+
+/**
+ * A disk figure the way the provider's check writes one (Go's `formatMB`):
+ * whole gigabytes where it divides evenly, one decimal where it does not. The
+ * decimal is floored rather than rounded, so a disk a megabyte short of what
+ * the slots need never prints as that figure and contradicts the sentence it
+ * sits in.
+ */
+function diskSize(mb: number): string {
+  if (mb < 1024) return `${mb} MB`;
+  if (mb % 1024 === 0) return `${mb / 1024} GB`;
+  return `${(Math.floor((mb / 1024) * 10) / 10).toFixed(1)} GB`;
+}
+
+/**
+ * What sits under the Disk field: the arithmetic the provider's check applies,
+ * so an operator sees what the slots imply before saving rather than from a
+ * warning afterwards. A disk of zero means the template decides, and the
+ * template's size is only known once the check has read it.
+ */
+export function machineDiskHint(slots: number, diskMb: number): string {
+  const n = Math.max(slots, 1);
+  const needed = diskSize(machineDiskNeededMb(n));
+  const noun = n === 1 ? 'slot needs' : 'slots need';
+  if (diskMb <= 0) {
+    return `Each runner is given ${diskSize(RUNNER_DISK_MB)} of working room above a ${diskSize(HOST_RESERVE_DISK_FLOOR_MB)} reserve, so ${n} ${noun} at least ${needed}; the template's disk counts once the check has read it.`;
+  }
+  if (diskMb < machineDiskNeededMb(n)) {
+    return `${diskSize(diskMb)} is under the ${needed} ${n} ${noun}.`;
+  }
+  return `${n} ${noun} at least ${needed}.`;
+}
+
 /**
  * Memory kept back for the hypervisor itself: a fifth of the node, and never
  * less than two gigabytes. A node filled to the brim swaps, and every machine
  * on it slows down with it.
  */
 export function nodeReserveMb(memoryMb: number): number {
-  return Math.min(Math.max(2048, Math.round(memoryMb * 0.2)), Math.max(memoryMb - 1024, 0));
+  return Math.min(
+    Math.max(NODE_RESERVE_FLOOR_MB, Math.round(memoryMb * 0.2)),
+    Math.max(memoryMb - 1024, 0),
+  );
 }
 
 /** How many machines of this size one node holds, after its reserve. */
@@ -106,27 +167,35 @@ export function recommendLimits(
     (total, n) => total + machinesPerNode({ cpus: n.cpus ?? 0, memoryMb: n.memory_mb ?? 0 }, size),
     0,
   );
-  const where = sized.length === 1 ? `node ${sized[0]?.value}` : `${sized.length} nodes`;
+  const one = sized.length === 1;
+  const where = one ? `node ${sized[0]?.value}` : `${sized.length} nodes`;
   const basis =
     size.source === 'default'
       ? ` (a guess, because no template size was given: ${machine})`
       : ` at ${machine}`;
+  // The reserve as the arithmetic applies it. An operator checks one against
+  // the other, and "a fifth of its memory" was wrong for every node under 10 GB,
+  // where the two gigabytes are what is kept.
+  const kept = `after keeping memory for Proxmox (at least ${gigabytes(NODE_RESERVE_FLOOR_MB)}, or a fifth of ${one ? 'its' : "each node's"} memory, whichever is larger)`;
   if (fits < 1) {
     return {
       max: 1,
       min: 1,
       fits,
-      reason: `${capitalise(where)} cannot hold even one machine${basis} after keeping a fifth of its memory for Proxmox. Give the machine less, or choose a larger node.`,
+      reason: `${capitalise(where)} cannot hold even one machine${basis} ${kept}. Give the machine less, or choose a larger node.`,
     };
   }
   const max = Math.min(fits, SUGGESTED_CEILING);
   const min = 1;
   const capped = fits > max ? `, held to ${max} as a first ceiling` : '';
+  // The figure is from what a node has, not from what is free on it: the
+  // cluster is not asked what its other guests use, so a shared node holds fewer.
+  const counted = `That counts ${one ? "the node's" : "each node's"} total memory, not what other guests are using, so a node shared with other guests holds fewer.`;
   return {
     max,
     min,
     fits,
-    reason: `${capitalise(where)} can hold ${fits} machine${fits === 1 ? '' : 's'}${basis}, after keeping a fifth of its memory for Proxmox${capped}. One stays warm so the first job after a quiet spell does not wait for a clone.`,
+    reason: `${capitalise(where)} can hold ${fits} machine${fits === 1 ? '' : 's'}${basis}, ${kept}${capped}. ${counted} One stays warm so the first job after a quiet spell does not wait for a clone.`,
   };
 }
 

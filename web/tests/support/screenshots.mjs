@@ -10,8 +10,12 @@
 //   node tests/support/screenshots.mjs DIR           writes them somewhere else
 //   node tests/support/screenshots.mjs DIR hosts,usage  only the shots named
 //
-// Set ZOOMIES_SCREENSHOT_STYLE=mission-control to capture the optional style.
-// Its default output folder is docs/screenshots/mission-control, leaving Classic intact.
+// Set ZOOMIES_SCREENSHOT_STYLE=mission-control to capture Mission Control, into
+// docs/screenshots/mission-control; without it the pass is Classic, into
+// docs/screenshots. Either way each pass stores the look it is photographing
+// (support/look.mjs) and stops if a page opens on any other: an empty browser is
+// dark Mission Control whatever the system says, so emulating a colour scheme and
+// leaving the rest to the defaults would file the wrong pictures under each name.
 //
 // Each theme gets a controller of its own. The fixture is placed relative to
 // the moment it is seeded and the scheduler starts working on it at once --
@@ -28,6 +32,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { controllerEnv } from './controller.mjs';
 import { encodeWebp } from './webp.mjs';
+import { assertLook, rememberLook, storedLook } from './look.mjs';
 import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -204,6 +209,9 @@ const SHOTS = [
     // taken after it would be photographed showing a year.
     device: { viewport: DESKTOP, deviceScaleFactor: SCALE },
     async prepare(page) {
+      // The matrix lives in the History disclosure, which opens closed: the
+      // page is a calm first screen and history is a thing an operator asks for.
+      await page.locator('#history > summary').click();
       const matrix = page.getByRole('region', { name: 'Activity matrix', exact: true });
       // The matrix opens on today, hour by hour, and this shot is of a day
       // and the hours inside it -- so it takes the range that draws days.
@@ -330,6 +338,14 @@ const SHOTS = [
       await page.getByRole('article', { name: 'demo-builder-1', exact: true }).evaluate((el) => {
         window.scrollBy(0, el.getBoundingClientRect().top - 120);
       });
+      // Cards open closed. One is opened so that the picture shows both what a
+      // card says at a glance and what is behind its Details button; it is the
+      // middle one, so the closed cards on either side show what the rest look
+      // like beside it.
+      await page.getByRole('button', { name: 'Details for demo-builder-1' }).click();
+      await page.getByRole('region', { name: 'Tags on demo-builder-1' }).waitFor();
+      // The detail fades in, and a picture taken mid-fade is half a picture.
+      await page.waitForTimeout(400);
       await page.mouse.move(700, 40);
     },
   },
@@ -436,35 +452,80 @@ const SHOTS = [
     },
   },
   {
+    // The hub: the setup bar, and the history with what each repair was about.
     name: 'eli-repairs',
     path: '/repairs',
     heading: 'Eli repairs',
     repairs: true,
     device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
     async prepare(page) {
-      await page.locator('.history').getByText('Checks passed', { exact: true }).waitFor();
-      await page.getByText('Needs attention', { exact: true }).last().waitFor();
+      await page.getByRole('region', { name: 'Repair setup' }).waitFor();
+      const automatic = page.getByRole('region', { name: 'Automatic repairs' });
+      await automatic
+        .locator('details')
+        .first()
+        .evaluate((el) => {
+          el.open = true;
+        });
+      await automatic.getByRole('article').first().waitFor();
+      const history = page.getByRole('region', { name: 'History' });
+      await history
+        .locator('details')
+        .first()
+        .evaluate((el) => {
+          el.open = true;
+        });
+      await history.getByText('Checks passed', { exact: true }).first().waitFor();
     },
   },
   {
-    name: 'eli-repair-readiness',
-    path: '/repairs?repo=acme/widgets&pull=42',
-    heading: 'Eli repairs',
+    // A repair the repository's own policy started: how it ended, and the card that says
+    // where that policy stands and stops it.
+    name: 'eli-repair-automatic',
+    path: (api) => repairAttemptPath(api, 109),
+    heading: 'Cap the retry budget in the gateway client',
     repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1300 }, deviceScaleFactor: SCALE },
     async prepare(page) {
       await page
+        .getByRole('region', { name: 'Automatic repairs on acme/gateway' })
+        .getByText('Automatic repairs are on.')
+        .waitFor();
+    },
+  },
+  {
+    // The repair page for a failure Eli cannot yet act on: the failure it is about,
+    // what stands in the way, and what to do about it.
+    name: 'eli-repair-readiness',
+    path: '/repairs/new?repo=acme/widgets&pull=42',
+    heading: 'Repair a failed check',
+    repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
+    async prepare(page) {
+      await page
+        .getByRole('region', { name: 'Can Eli act on this?' })
         .getByText('Link and confirm your GitHub account in repair setup.', { exact: true })
         .waitFor();
     },
   },
   {
+    // One repair, after it has ended: how, what to try next and what Eli used.
+    name: 'eli-repair-attempt',
+    path: (api) => repairAttemptPath(api, 44),
+    heading: 'Show the retention window on the Usage page',
+    repairs: true,
+    device: { viewport: { width: DESKTOP.width, height: 1500 }, deviceScaleFactor: SCALE },
+    async prepare(page) {
+      await page.getByRole('region', { name: 'What to try next' }).waitFor();
+    },
+  },
+  {
     name: 'eli-repair-setup',
-    path: '/repairs',
-    heading: 'Eli repairs',
+    path: '/repairs/setup',
+    heading: 'Repair setup',
     repairs: true,
     device: { viewport: { width: DESKTOP.width, height: 1200 }, deviceScaleFactor: SCALE },
     async prepare(page) {
-      await page.locator('#repair-setup > summary').click();
       await page
         .getByRole('group', { name: 'Select repositories', exact: true })
         .getByRole('checkbox', { name: 'acme/widgets', exact: true })
@@ -828,6 +889,14 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  * seeded fleet's repositories are not named here, so a shot asks for one by what
  * it concluded, which is also what the shot is of.
  */
+/** The page of the sample repair made for a pull request, whose id is not known until the fixture is seeded. */
+async function repairAttemptPath(api, pull) {
+  const { items } = await (await api.get('/api/v1/assistant/repairs?limit=50')).json();
+  const row = items?.find((repair) => repair.pull_number === pull);
+  if (!row) throw new Error(`there is no sample repair for pull request ${pull} to photograph`);
+  return `/repairs/${row.id}`;
+}
+
 async function kennelRepositoryPath(api, state) {
   const { items } = await (await api.get(`/api/v1/kennel/repositories?state=${state}`)).json();
   if (!items?.length) {
@@ -1014,15 +1083,16 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
     locale: 'en-GB',
     timezoneId: 'Europe/London',
   };
+  // The emulated scheme above no longer reaches a browser that has chosen
+  // nothing, and an empty one is Mission Control, so the look is stored.
+  const look = storedLook(scheme, screenshotStyle);
   try {
     const desktop = await browser.newContext({
       ...common,
       viewport: DESKTOP,
       deviceScaleFactor: SCALE,
     });
-    await desktop.addInitScript((style) => {
-      if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', style);
-    }, screenshotStyle);
+    await desktop.addInitScript(rememberLook, look);
     // The first administrator, created the way the first-run form does it.
     // The 201 sets the session cookie on this context.
     const created = await desktop.request.post('/api/v1/auth/bootstrap', {
@@ -1069,9 +1139,7 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
       let context = desktop;
       if (shot.device) {
         context = await browser.newContext({ ...shot.device, ...common });
-        await context.addInitScript((style) => {
-          if (style === 'mission-control') localStorage.setItem('zoomies.ui-style', style);
-        }, screenshotStyle);
+        await context.addInitScript(rememberLook, look);
         if (!shot.signedOut) await context.addCookies(cookies);
       }
       const address =
@@ -1081,6 +1149,7 @@ async function capture(browser, scheme, pngDir, shots, { updates = false, repair
       // is the one the shot is about rather than a race with it.
       if (shot.stub) await shot.stub(page);
       await page.goto(address, { waitUntil: 'domcontentloaded' });
+      await assertLook(page, `${shot.name}-${scheme}`, scheme, screenshotStyle);
       await settle(page, shot);
       if (shot.prepare) {
         await shot.prepare(page);

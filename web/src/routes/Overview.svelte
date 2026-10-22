@@ -1,227 +1,454 @@
-<!--
-  The Overview: the one page that has to earn a place on a second monitor.
-
-  Classic keeps its familiar history-first order. Mission Control moves problems,
-  failures and live metrics ahead of history without remounting those panels.
-  First-run guidance stays first in either style. In Classic the activity matrix comes first: a year of the
-  fleet's days as one band of squares, the shape an operator recognises from a
-  contribution graph, which says at a glance whether this week looks like last
-  week. The four numbers under it say what the fleet is doing right now;
-  anything that needs a person comes immediately after them, because a problem
-  found at the bottom of a page is a problem found late. Then the two things an
-  operator watches when nothing is wrong -- where the capacity is going, and
-  what has happened to the fleet lately -- and finally the work itself.
-
-  What needs a person comes in two shapes. The fleet's own problems are one
-  line here rather than a full panel: the list lives in the problems drawer,
-  reachable from the top bar on every page, and a fleet whose deliberate
-  configuration warnings pushed its pools and its running jobs below the fold
-  was answering "what is happening right now?" with a month-old decision. The
-  failures nobody has read are a short panel of their own, because each is a
-  separate job with a separate thing to do about it, and each leaves the panel
-  when somebody says they have seen it: the one question GitHub cannot answer
-  is which failures anybody has looked at.
-
-  On a desktop the pools and the running jobs share the left-hand column and
-  the events feed takes the right, cut to their height. The feed is the one
-  panel whose length says nothing about the fleet -- a dozen events is a dozen
-  events whether there is one pool or twenty -- so letting it set the height
-  of the row left a fleet with one pool looking at a screen of blank space
-  under it. The entries that do not fit are a scroll away, inside the panel.
-  A phone stacks everything, in reading order.
-
-  How the last jobs ended used to be a panel of its own across the bottom.
-  It is in the feed now: a job ending is news like anything else, and two
-  reverse-chronological lists on one page -- each with its own idea of what
-  belonged on it -- was one list too many. The distinction that panel existed
-  to make survives with it, because it is the one this page is for: a runner
-  that died under a job is the fleet's failure and is named as such, not the
-  workflow's.
-
-  Fleet panels use the event stream; personal repair offers reconcile once a minute.
-  The fleet cache subscribes to `stats`, `scaling`,
-  `problems.updated`, `runner.*`, `pool.*` and `host.*`; the panels below add
-  `job.updated` for the matrix and the running jobs, and the feed adds
-  whichever kinds its categories are switched on for. A
-  reconnect ends in one reconciling fetch. Refreshing by hand asks for that
-  same fetch, and the matrix's with it: it is never how the numbers keep up,
-  only how an operator settles the question of whether they have.
--->
+<!-- Current work keeps the same place in both styles; supporting detail stays live when closed. -->
 <script lang="ts">
-  import { visualStyle } from '$lib/state/ui-style.svelte';
+  import { onMount, tick } from 'svelte';
+  import { ChevronDown } from '@lucide/svelte';
   import RepairOffers from '$lib/repairs/RepairOffers.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import Switch from '$lib/components/Switch.svelte';
+  import Select from '$lib/components/Select.svelte';
   import HostCapacityMap from '$lib/insights/HostCapacityMap.svelte';
   import { navigate } from '$lib/router';
   import { fleet } from '$lib/state/fleet.svelte';
-  import { describeWindow } from '$lib/format';
+  import { notifications } from '$lib/state/notifications.svelte';
+  import { formatDuration, pluralise } from '$lib/format';
   import { prefs } from '$lib/state/prefs.svelte';
   import ActiveJobs from '$lib/overview/ActiveJobs.svelte';
   import FirstRun from '$lib/overview/FirstRun.svelte';
+  import FleetStatus from '$lib/overview/FleetStatus.svelte';
   import FleetActivity from '$lib/overview/FleetActivity.svelte';
   import FleetMetrics from '$lib/overview/FleetMetrics.svelte';
   import PoolUtilisation from '$lib/overview/PoolUtilisation.svelte';
   import ProblemsSummary from '$lib/overview/ProblemsSummary.svelte';
   import RecentFailures from '$lib/overview/RecentFailures.svelte';
   import EventsFeed from '$lib/overview/EventsFeed.svelte';
+  import OverviewDisclosure from '$lib/overview/OverviewDisclosure.svelte';
+  import StartupTimings from '$lib/overview/StartupTimings.svelte';
 
-  // Raised by the checklist while it is on screen, so the problems summary
-  // knows not to also claim that nothing needs attention, and the matrix
-  // knows not to show a year of empty squares under a fleet's first steps.
   let setupPending = $state(false);
-  const operational = $derived(visualStyle.choice === 'mission-control');
-  const workPanels = $derived(
-    operational ? ['pools', 'jobs', 'events'] : ['pools', 'events', 'jobs'],
-  );
-  const sections = $derived(
-    operational
-      ? ['problems', 'failures', 'metrics', 'repairs', 'work', 'activity', 'capacity']
-      : ['activity', 'metrics', 'problems', 'failures', 'repairs', 'work', 'capacity'],
-  );
-
-  // The matrix fetches its own year of history, so the page's refresh reaches
-  // it by hand: the fleet cache's reconcile does not know it exists.
+  let failures = $state<RecentFailures | null>(null);
   let activity = $state<FleetActivity | null>(null);
-
+  let historySummary = $state('Loading history');
+  let active = $state('now');
+  let moreOpen = $state(false);
+  let pageNav = $state<HTMLElement>();
+  let jumped: { id: string; y: number } | null = null;
   const loading = $derived(!fleet.loaded);
-
-  /**
-   * Whether the page is counting jobs this fleet had no hand in.
-   *
-   * One preference for the whole page: the tiles, the active list and the
-   * outcomes all read it, so a queue depth at the top and the jobs listed
-   * under it are never answering different questions.
-   */
-  const others = $derived(prefs.otherRunners);
-  // A failed reconcile once there is something on screen is not an error state:
-  // the stream may well recover, and the last known truth is better than a
-  // blank page. Only a first load that never landed gets one.
-  const failed = $derived(!fleet.loaded && fleet.error !== null);
-
-  /**
-   * What period the figures on this page cover, from the payload that carries
-   * them.
-   *
-   * The sentence used to be prose -- "Trends and waits cover the last hour" --
-   * which was true of the frames and not of the first fetch, which covered a
-   * day. That is fixed on the controller; this reads the window off the payload
-   * so it stays true for a controller asked for a different one, and says both
-   * periods only when they are actually two.
-   */
-  const waits = $derived(describeWindow(fleet.stats?.window));
-  const coverage = $derived(
-    !waits || waits === '1 hour'
-      ? ' Trends, waits and outcomes cover the last hour.'
-      : ` Trends cover the last hour; waits and outcomes, the last ${waits}.`,
+  // On a desktop the hero says what the problems banner says, with the same way in, so
+  // the banner stands down there. The one thing only it carries is the count of problems
+  // somebody has put away, so it stays when that is all it has to say.
+  const heroSaysIt = $derived(
+    fleet.loaded &&
+      !setupPending &&
+      (notifications.active.length > 0 || notifications.dismissed.length === 0),
   );
+  const failed = $derived(!fleet.loaded && fleet.error !== null);
+  const others = $derived(prefs.otherRunners);
+  const connection = $derived(
+    fleet.connection === 'live'
+      ? 'Live'
+      : fleet.connection === 'offline'
+        ? 'Disconnected'
+        : 'Reconnecting',
+  );
+  const capacity = $derived(fleet.stats?.hosts);
+  const capacitySummary = $derived(
+    !fleet.loaded
+      ? 'Loading capacity'
+      : !capacity
+        ? 'Capacity unavailable'
+        : `${pluralise(capacity.healthy ?? 0, 'connected host')} · ${capacity.used ?? 0} of ${capacity.capacity ?? 0} slots used`,
+  );
+  const timingSummary = $derived(
+    !fleet.loaded
+      ? 'Loading timings'
+      : `p50 startup ${formatDuration(fleet.stats?.p50_startup_ms || undefined)} · registration ${formatDuration(fleet.stats?.p50_registration_ms || undefined)}`,
+  );
+  const links = [
+    { id: 'now', label: 'Now' },
+    { id: 'pools', label: 'Pools' },
+    { id: 'jobs', label: 'Jobs' },
+    { id: 'history', label: 'History' },
+    { id: 'diagnostics', label: 'Diagnostics' },
+  ];
+
+  async function reveal(id: string, focus = true): Promise<void> {
+    moreOpen = false;
+    const target = document.getElementById(id);
+    if (!target) return;
+    if (target instanceof HTMLDetailsElement) target.open = true;
+    for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+    }
+    await tick();
+    target.scrollIntoView({ block: 'start' });
+    jumped = { id: id === 'capacity' || id === 'startup' ? 'diagnostics' : id, y: window.scrollY };
+    if (focus) {
+      const heading =
+        target instanceof HTMLDetailsElement ? target.querySelector('summary') : target;
+      heading?.focus({ preventScroll: true });
+    }
+    active = id === 'capacity' || id === 'startup' ? 'diagnostics' : id;
+  }
+
+  function jump(event: MouseEvent, id: string): void {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return;
+    event.preventDefault();
+    if (location.hash !== `#${id}`) history.pushState(null, '', `#${id}`);
+    void reveal(id);
+  }
+
+  onMount(() => {
+    let frame = 0;
+    function update(): void {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (!pageNav) return;
+        // A destination near the foot cannot reach the sticky bar. Keep its
+        // jump indication until the operator actually scrolls elsewhere.
+        if (jumped && Math.abs(window.scrollY - jumped.y) < 1) {
+          active = jumped.id;
+          return;
+        }
+        jumped = null;
+        const edge =
+          pageNav.getBoundingClientRect().bottom +
+          parseFloat(getComputedStyle(pageNav).marginBottom) +
+          1;
+        let current = 'now';
+        for (const { id } of [...links.slice(0, 3), { id: 'events' }, ...links.slice(3)]) {
+          if (id === 'events' && window.matchMedia('(min-width: 1181px)').matches) continue;
+          const node = document.getElementById(id);
+          if (node && node.getBoundingClientRect().top <= edge) current = id;
+        }
+        if (
+          window.scrollY > 0 &&
+          window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 1
+        )
+          current = 'diagnostics';
+        active = current;
+      });
+    }
+    const fragment = () => void reveal(location.hash.slice(1), false);
+    function escape(event: KeyboardEvent): void {
+      if (event.key === 'Escape' && moreOpen) {
+        moreOpen = false;
+        pageNav?.querySelector('button')?.focus();
+      }
+    }
+    window.addEventListener('keydown', escape);
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    window.addEventListener('hashchange', fragment);
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', escape);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('hashchange', fragment);
+    };
+  });
+  // Native fragment scrolling happens before the asynchronous route is ready.
+  $effect(() => {
+    if (fleet.loaded && !setupPending && location.hash)
+      void tick().then(() => reveal(location.hash.slice(1), false));
+  });
 </script>
 
-<PageHeader
-  title="Overview"
-  subtitle={(others
-    ? 'What is happening across every runner GitHub reports on, this fleet\u2019s and everybody else\u2019s.'
-    : 'What this fleet is doing right now.') + coverage}
-  onrefresh={() => Promise.all([fleet.reconcile(), activity?.reload()]).then(() => undefined)}
->
-  <Switch label="Other runners" checked={others} onchange={(on) => (prefs.otherRunners = on)} />
-</PageHeader>
-
-{#if failed}
-  <ErrorState
-    error={fleet.error}
-    title="The fleet could not be loaded"
-    onretry={() => void fleet.reconcile()}
-  />
-{:else}
-  <div class="stack">
-    <!-- Above the metrics on purpose: on a fleet that has never run a job the
-         four numbers are all zero, and what the operator needs is the next
-         step, not confirmation that nothing is happening. It removes itself
-         for good once a job has run here. -->
-    <FirstRun onpending={(pending) => (setupPending = pending)} />
-    {#each sections as section (section)}
-      {#if section === 'activity'}
-        {#if !setupPending}<FleetActivity bind:this={activity} />{/if}
-      {:else if section === 'metrics'}
-        <FleetMetrics {loading} {operational} />
-      {:else if section === 'problems'}
-        <ProblemsSummary {loading} {setupPending} />
-      {:else if section === 'failures'}
-        <!-- Like the matrix, not the questions panel above it: a fleet that
-             has never run a job has no failures, and the checklist is what
-             the page is for until it has. -->
-        {#if !setupPending}<RecentFailures />{/if}
-      {:else if section === 'repairs'}
-        <RepairOffers />
-      {:else if section === 'work'}
-        <div class="split">
-          {#each workPanels as panel (panel)}
-            {#if panel === 'pools'}<PoolUtilisation {loading} />
-            {:else if panel === 'jobs'}<ActiveJobs />
-            {:else}<div class="feed"><EventsFeed {loading} /></div>{/if}
-          {/each}
+<div class="overview">
+  <PageHeader
+    title="Overview"
+    onrefresh={() =>
+      Promise.all([fleet.reconcile(), activity?.reload(), failures?.reload()]).then(
+        () => undefined,
+      )}
+  >
+    {#snippet meta()}<span class="connection" data-live={fleet.connection === 'live'}
+        >{connection}</span
+      >{/snippet}
+    <div class="scope">
+      <Select
+        ariaLabel="Overview scope"
+        value={others ? 'all' : 'fleet'}
+        options={[
+          { value: 'fleet', label: 'This fleet' },
+          { value: 'all', label: 'Include other runners' },
+        ]}
+        onchange={(value) => (prefs.otherRunners = value === 'all')}
+      />
+    </div>
+  </PageHeader>
+  {#if failed}
+    <ErrorState
+      error={fleet.error}
+      title="The fleet could not be loaded"
+      onretry={() => void fleet.reconcile()}
+    />
+  {:else}
+    <nav class="page-nav" aria-label="Overview sections" bind:this={pageNav}>
+      {#each links as link (link.id)}
+        {#if link.id !== 'history' || !setupPending}
+          <a
+            href="#{link.id}"
+            class:secondary={link.id === 'history' || link.id === 'diagnostics'}
+            aria-current={active === link.id ? 'location' : undefined}
+            onclick={(event) => jump(event, link.id)}>{link.label}</a
+          >
+        {/if}
+      {/each}
+      <div class="more">
+        <button
+          type="button"
+          aria-label="More overview sections"
+          aria-current={['events', 'history', 'diagnostics'].includes(active)
+            ? 'location'
+            : undefined}
+          aria-expanded={moreOpen}
+          aria-controls="overview-more"
+          class:current={['events', 'history', 'diagnostics'].includes(active)}
+          onclick={() => (moreOpen = !moreOpen)}
+          onkeydown={(event) => {
+            if (event.key === 'Escape') moreOpen = false;
+          }}>More <ChevronDown size={14} aria-hidden="true" /></button
+        >
+        {#if moreOpen}
+          <div
+            id="overview-more"
+            class="more-links"
+            role="group"
+            aria-label="More overview sections"
+          >
+            {#each [{ id: 'events', label: 'Events' }, ...links.slice(3)] as link (link.id)}
+              {#if link.id !== 'history' || !setupPending}<a
+                  href="#{link.id}"
+                  aria-current={active === link.id ? 'location' : undefined}
+                  onclick={(event) => jump(event, link.id)}>{link.label}</a
+                >{/if}
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </nav>
+    <FleetStatus {setupPending} />
+    <div class="stack">
+      <section id="now" tabindex="-1" aria-label="Fleet now" class="now">
+        <FirstRun onpending={(pending) => (setupPending = pending)} />
+        {#if fleet.loaded && (fleet.connection !== 'live' || fleet.error)}<p
+            class="stale"
+            role="status"
+          >
+            {fleet.error ? 'The last refresh failed.' : 'Live updates are interrupted.'} Showing the last
+            known figures; they may be out of date.
+          </p>{/if}
+        <div class="attention">
+          <div class="problems" class:in-hero={heroSaysIt}>
+            <ProblemsSummary {loading} {setupPending} />
+          </div>
+          {#if !setupPending}<RecentFailures bind:this={failures} />{/if}<RepairOffers />
         </div>
-      {:else if section === 'capacity' && fleet.loaded}
-        <HostCapacityMap hosts={fleet.hosts} page="overview" onmanage={() => navigate('/hosts')} />
-      {/if}
-    {/each}
-  </div>
-{/if}
+        <FleetMetrics {loading} />
+      </section>
+      <div class="work">
+        <div class="primary">
+          <div id="pools" class="destination" tabindex="-1"><PoolUtilisation {loading} /></div>
+          <div id="jobs" class="destination" tabindex="-1"><ActiveJobs /></div>
+        </div>
+        <div id="events" class="destination" tabindex="-1"><EventsFeed {loading} /></div>
+      </div>
+      {#if !setupPending}<OverviewDisclosure id="history" title="History" summary={historySummary}
+          ><FleetActivity
+            bind:this={activity}
+            onsummary={(value) => (historySummary = value)}
+          /></OverviewDisclosure
+        >{/if}
+      <section
+        id="diagnostics"
+        class="diagnostics destination"
+        tabindex="-1"
+        aria-label="Diagnostics"
+      >
+        <OverviewDisclosure id="capacity" title="Host capacity" summary={capacitySummary}
+          >{#if fleet.loaded}<HostCapacityMap
+              hosts={fleet.hosts}
+              page="overview"
+              onmanage={() => navigate('/hosts')}
+            />{/if}</OverviewDisclosure
+        >
+        <OverviewDisclosure
+          id="startup"
+          title="Startup and registration"
+          summary={timingSummary}
+          class="performance"><StartupTimings {loading} /></OverviewDisclosure
+        >
+      </section>
+    </div>
+  {/if}
+</div>
 
 <style>
-  .stack {
+  .overview :global(.page-header) {
+    margin-bottom: var(--z-space-3);
+  }
+  /* The connection state sits beside the title, so the title's rule is drawn
+     after the pair and not between them. */
+  .overview :global(.page-header .titles) {
+    display: flex;
+    align-items: baseline;
+    gap: var(--z-space-3);
+    flex-wrap: wrap;
+  }
+  .overview :global(.page-header .rule) {
+    display: none;
+  }
+  .overview :global(.page-header .meta) {
+    margin: 0;
+  }
+  .scope {
+    max-width: 100%;
+  }
+  .connection {
+    font-size: var(--z-text-xs);
+    color: var(--z-pending);
+  }
+  .connection[data-live='true'] {
+    color: var(--z-idle);
+  }
+  .page-nav {
+    display: flex;
+    align-items: center;
+    position: sticky;
+    top: var(--z-topbar-height);
+    z-index: calc(var(--z-layer-sticky) - 1);
+    min-height: var(--z-control-touch);
+    margin-bottom: var(--z-space-3);
+    border-bottom: var(--z-border-width) solid var(--z-border);
+    background: var(--z-bg);
+  }
+  .page-nav a,
+  .page-nav button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--z-space-1);
+    min-height: var(--z-control-touch);
+    padding: var(--z-space-2) var(--z-space-3);
+    border: 0;
+    border-bottom: var(--z-nudge-2) solid transparent;
+    background: none;
+    color: var(--z-text-muted);
+    font: inherit;
+    font-size: var(--z-text-sm);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .page-nav a:hover,
+  .page-nav button:hover {
+    color: var(--z-accent);
+    background: var(--z-surface-hover);
+  }
+  .page-nav a[aria-current],
+  .page-nav button.current {
+    color: var(--z-accent);
+    border-bottom-color: var(--z-accent);
+  }
+  .more {
+    display: none;
+    position: relative;
+  }
+  .more-links {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 10rem;
+    padding: var(--z-space-1);
+    border: var(--z-border-width) solid var(--z-border-strong);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
+    box-shadow: var(--z-shadow-md);
+  }
+  .more-links a {
+    justify-content: flex-start;
+  }
+  .stack,
+  .now,
+  .primary,
+  .diagnostics,
+  .attention {
     display: flex;
     flex-direction: column;
     gap: var(--z-space-3);
+    min-width: 0;
   }
-  /*
-    Two rows on the left -- the pools, then the running jobs, placed in source
-    order -- and the feed spanning both on the right. The rows are sized by the
-    left-hand panels alone: the feed is taken out of flow inside its cell, so
-    however many entries it holds, it never makes the row taller. What it
-    gets instead is the height the left column came to, and the panel scrolls
-    inside that.
-  */
-  .split {
+  .attention:empty {
+    display: none;
+  }
+  @media (min-width: 769px) {
+    .problems.in-hero {
+      display: none;
+    }
+  }
+  .work {
     display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    gap: var(--z-space-6);
-    align-items: start;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    /* The events column is as tall as Pools and Active jobs beside it, so the two
+       columns end on one line instead of the shorter one trailing off. */
+    align-items: stretch;
+    gap: var(--z-space-4);
   }
-  .feed {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    align-self: stretch;
-    position: relative;
-    /* Room for the heading and four entries: a fleet with one pool and
-       nothing running still gets a feed rather than a slot. */
-    min-height: 24rem;
+  .destination,
+  .now {
+    min-width: 0;
+    scroll-margin-top: calc(var(--z-topbar-height) + var(--z-control-touch) + var(--z-space-3));
   }
-  .feed > :global(.panel) {
-    position: absolute;
-    inset: 0 0 auto;
-    max-height: 100%;
+  .stale {
+    margin: 0;
+    padding: var(--z-space-2) var(--z-space-3);
+    border-left: var(--z-border-width-rail) solid var(--z-pending);
+    color: var(--z-text-muted);
+    font-size: var(--z-text-sm);
+  }
+  @media (pointer: coarse) {
+    .scope :global(select) {
+      min-height: var(--z-control-touch);
+    }
+  }
+  /* The jump bar is for the screens that scroll to reach what is below: on a wide
+     screen Now, Pools and Jobs are on one screen and History and Diagnostics are
+     the next thing under them, so the bar is a row of tabs that go nowhere. */
+  @media (min-width: 1181px) {
+    .page-nav {
+      display: none;
+    }
+  }
+  @media (min-width: 1181px) {
+    #events {
+      display: flex;
+      flex-direction: column;
+    }
+    #events > :global(.panel) {
+      flex: 1;
+    }
   }
   @media (max-width: 1180px) {
-    .split {
+    .work {
       grid-template-columns: minmax(0, 1fr);
-      gap: var(--z-space-4);
     }
-    .feed {
-      grid-column: auto;
-      grid-row: auto;
-      align-self: auto;
-      position: static;
-      min-height: 0;
+  }
+  @media (max-width: 768px) {
+    .page-nav .secondary {
+      display: none;
     }
-    .feed > :global(.panel) {
-      position: static;
-      max-height: none;
+    .more {
+      display: block;
     }
-    .stack {
-      gap: var(--z-space-4);
+    .overview :global(.page-header .row) {
+      gap: var(--z-space-2);
+    }
+    .overview :global(.page-header .actions) {
+      width: auto;
     }
   }
 </style>

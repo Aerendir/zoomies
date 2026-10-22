@@ -65,6 +65,7 @@ func runUpdatesHelper(ctx context.Context, e *env, args []string) error {
 		{"install", "[--config-dir path]", "Make this host ready to be updated from the controller: install the helper, as root", updatesHelperInstall},
 		{"remove", "[--config-dir path]", "Stop the helper and remove it, its units and its files", updatesHelperRemove},
 		{"run", "", "Answer the request in the update folder; the helper's unit runs it, as root", updatesHelperRun},
+		{"repair", "", "Put a stopped helper right: reset its failed units, rewrite and start them, and clear what is provably abandoned; its unit runs it, as root", updatesHelperRepair},
 		{"status", "", "Where the update folder is, whether the helper is installed, and its last result", updatesHelperStatus},
 	}, args)
 }
@@ -566,6 +567,29 @@ func updatesHelperRun(ctx context.Context, e *env, args []string) error {
 	return installer.RunUpdateHelper(ctx, opts)
 }
 
+func updatesHelperRepair(ctx context.Context, e *env, args []string) error {
+	flags := newFlagSet(e, "zoomies updates helper repair",
+		`Answer the repair request in the update folder. The service writes one when it finds the helper stopped, for instance its path unit disabled after systemd stopped it for starting too often, and the zoomies-update-repair unit runs this as root. It looks at the helper again itself and then, in order, clears the units' failed state, rewrites and starts the path unit, and only then removes a request or upgrade.lock that is older than 15 minutes with nothing running. It does nothing while the helper or an upgrade is running, and repairs at most three times a day and ten minutes apart. It takes no flags: where the folder is comes from root's copy of the pointer in `+installer.UpdateHelperStateDir+`.`)
+	if err := flags.parse(args); err != nil {
+		return err
+	}
+	if err := flags.noMoreArgs(); err != nil {
+		return err
+	}
+	if err := installer.CheckUpdateHelperPlatform(); err != nil {
+		return err
+	}
+	if uid := updatesEUID(); uid != 0 {
+		return fmt.Errorf(`the update helper's repair runs as root, started by the zoomies-update-repair unit when the service asks for it, and this is uid %d; to put the helper right by hand, run "sudo zoomies updates helper install"`, uid)
+	}
+	opts, err := installer.HelperOptionsFromPointer(updateHelperStateDir)
+	if err != nil {
+		return err
+	}
+	opts.Out = e.out
+	return installer.RunUpdateRepair(ctx, installer.RepairOptions{HelperOptions: opts})
+}
+
 func updatesHelperStatus(_ context.Context, e *env, args []string) error {
 	flags := newFlagSet(e, "zoomies updates helper status",
 		"Where this host's update folder is, whether the helper is installed, and the last result it wrote with the end of its log. It reads root's copy of the pointer in "+installer.UpdateHelperStateDir+" when it can and the one beside the configuration file when it cannot, so it works without root wherever those can be read.")
@@ -601,6 +625,16 @@ func updatesHelperStatus(_ context.Context, e *env, args []string) error {
 		row("Helper", "not installed: there is no "+channel.MarkerFile+" in the folder; install it with \"sudo zoomies updates helper install\"")
 	default:
 		row("Helper", fmt.Sprintf("installed %s, by zoomies %s", m.InstalledAt.UTC().Format(time.RFC3339), m.Version))
+	}
+
+	// Before the last result, which returns early when there is none: a helper
+	// that was repaired may never have answered a request.
+	if rr, ok, err := channel.ReadRepairResult(p.Dir); err == nil && ok {
+		state := "did not put the helper right: " + rr.Error
+		if rr.Healed {
+			state = "healed"
+		}
+		row("Last repair", fmt.Sprintf("%s at %s, %s (%s)", rr.ID, rr.FinishedAt.UTC().Format(time.RFC3339), state, strings.Join(rr.Actions, ", ")))
 	}
 
 	r, found, err := channel.ReadResult(p.Dir)

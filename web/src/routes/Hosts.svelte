@@ -19,7 +19,15 @@
   import { hostSignals } from '$lib/insights/signals';
   import MetricGrid from '$lib/components/MetricGrid.svelte';
   import { tick } from 'svelte';
-  import { ChevronDown, ChevronRight, CircleArrowUp, Plus, Server } from '@lucide/svelte';
+  import {
+    ChevronDown,
+    ChevronRight,
+    ChevronsDownUp,
+    ChevronsUpDown,
+    CircleArrowUp,
+    Plus,
+    Server,
+  } from '@lucide/svelte';
   import {
     clearHostThrottle,
     listJoinTokens,
@@ -63,6 +71,13 @@
     type HealthFilter,
   } from '$lib/hosts/health-filter';
   import { slotsOf } from '$lib/hosts/slots';
+  import {
+    EXPANDED_KEY,
+    allExpanded,
+    isIdList,
+    setAllExpanded,
+    setExpanded,
+  } from '$lib/hosts/card-fold';
   import HostDeleteDialog from '$lib/hosts/HostDeleteDialog.svelte';
   import HostPriorityDialog from '$lib/hosts/HostPriorityDialog.svelte';
   import HostRenameDialog from '$lib/hosts/HostRenameDialog.svelte';
@@ -147,6 +162,67 @@
     heading?.scrollIntoView({ block: 'center' });
     heading?.focus({ preventScroll: true });
   }
+
+  /*
+   * The cards that are open.
+   *
+   * A card is closed unless this browser has been asked to open it. The page
+   * holds the choice rather than the card, so a filter that takes a card off the
+   * screen and brings it back does not close it, and it is written when a card is
+   * opened or closed and never on sight, for the same reason as the map's.
+   */
+
+  let openCards = $state(remembered(EXPANDED_KEY, [] as string[], isIdList));
+  function toggleCard(host: Host, open: boolean): void {
+    if (!host.id) return;
+    openCards = setExpanded(
+      openCards,
+      host.id,
+      open,
+      hosts.map((h) => h.id ?? ''),
+    );
+    remember(EXPANDED_KEY, openCards);
+  }
+
+  /*
+   * Every card at once. It acts on the cards on show and on no others: opening
+   * a card nobody can see would be a change made out of sight, and somebody who
+   * has narrowed the page and pressed "Collapse all" has said nothing about the
+   * hosts the filter took away. The button says which way it will go, so a card
+   * opened or closed by hand moves it too.
+   */
+  const shownIds = $derived(shown.map((h) => h.id).filter((id): id is string => Boolean(id)));
+  const allShownOpen = $derived(allExpanded(openCards, shownIds));
+  const toggleShownHelp = $derived.by(() => {
+    const verb = allShownOpen ? 'Close' : 'Open';
+    return shownIds.length === hosts.length
+      ? `${verb} the details of every host.`
+      : `${verb} the details of the ${shownIds.length} hosts shown. The others stay as they are.`;
+  });
+  function toggleShownCards(): void {
+    openCards = setAllExpanded(
+      openCards,
+      shownIds,
+      !allShownOpen,
+      hosts.map((h) => h.id ?? ''),
+    );
+    remember(EXPANDED_KEY, openCards);
+  }
+
+  /*
+   * The button is offered only while two or more cards are on show, and that
+   * count can fall with nobody pressing anything: a host is deleted, or a report
+   * ages out of the filter on the page's clock. Whoever was on the button would
+   * be dropped on the page when it went, so focus goes to the filter that is on,
+   * which is where showAll() sends it too. This runs before the page changes,
+   * because afterwards the button is gone, and so is the proof that it held focus.
+   */
+  $effect.pre(() => {
+    const chip = `hosts-health-${filter}`;
+    if (shownIds.length > 1) return;
+    if (!document.activeElement?.classList.contains('expand-button')) return;
+    void tick().then(() => document.getElementById(chip)?.focus());
+  });
 
   /* -- the machines behind the hosts -------------------------------------------
    * Fetched here and kept out of the fleet cache deliberately: a fourth
@@ -573,6 +649,7 @@
     {/snippet}
 
     <MetricGrid
+      strip
       items={[
         {
           label: 'Available host slots',
@@ -653,19 +730,45 @@
       {/if}
     </div>
     <h2 class="controls-heading">Host controls and configuration</h2>
-    <div class="filters" role="group" aria-label="Show hosts by OS health">
-      {#each HEALTH_FILTERS as option (option.value)}
-        <Tooltip bare text={option.title}>
-          <button
-            type="button"
-            class="filter"
-            id="hosts-health-{option.value}"
-            aria-pressed={filter === option.value}
-            onclick={() => chooseFilter(option.value)}
-            >{option.label} <span class="count">{counts[option.value]}</span></button
+    <div class="toolbar">
+      <div class="filters" role="group" aria-label="Show hosts by OS health">
+        {#each HEALTH_FILTERS as option (option.value)}
+          <Tooltip bare text={option.title}>
+            <button
+              type="button"
+              class="filter"
+              id="hosts-health-{option.value}"
+              aria-pressed={filter === option.value}
+              onclick={() => chooseFilter(option.value)}
+              >{option.label} <span class="count">{counts[option.value]}</span></button
+            >
+          </Tooltip>
+        {/each}
+      </div>
+      <!-- Outside the group, which is a choice of what to show and not a control
+           over the cards. One button for both ways, so a keyboard user who
+           presses it keeps their place and the name says what the next press
+           does. Not offered for a page of one card: that card's own Details is
+           the whole of it, and a second button for the same press is noise. -->
+      {#if shownIds.length > 1}
+        <div class="expand">
+          <!-- Which cards "all" means, in words on the page as well as in the
+               tooltip: a phone has no hover, and "Collapse all" that leaves cards
+               open out of sight would be a surprise. Said only once a filter has
+               taken some away. -->
+          {#if shownIds.length < hosts.length}
+            <span class="expand-hint">Acts on the {pluralise(shownIds.length, 'host')} shown</span>
+          {/if}
+          <Button
+            variant="ghost"
+            size="sm"
+            class="expand-button"
+            icon={allShownOpen ? ChevronsDownUp : ChevronsUpDown}
+            help={toggleShownHelp}
+            onclick={toggleShownCards}>{allShownOpen ? 'Collapse all' : 'Expand all'}</Button
           >
-        </Tooltip>
-      {/each}
+        </div>
+      {/if}
     </div>
     <!--
       Always in the page, so that a screen reader hears the sentence appear in a
@@ -701,6 +804,8 @@
             onrename={rename}
             ondelete={remove}
             onupdate={update}
+            expanded={host.id ? openCards.includes(host.id) : false}
+            ontoggle={toggleCard}
           />
         {/each}
       </div>
@@ -775,11 +880,33 @@
   .map-body {
     margin-top: var(--z-space-3);
   }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--z-space-2) var(--z-space-3);
+    margin-bottom: var(--z-space-3);
+  }
   .filters {
     display: flex;
     flex-wrap: wrap;
     gap: var(--z-space-2);
-    margin-bottom: var(--z-space-3);
+  }
+  /* The hint and the button are one unit, at the end of the row whether it shares
+     the row with the chips or has wrapped onto a line of its own, and they wrap
+     apart from each other only when a narrow window leaves no room for both. */
+  .expand {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--z-space-1) var(--z-space-3);
+    margin-inline-start: auto;
+  }
+  .expand-hint {
+    font-size: var(--z-text-xs);
+    color: var(--z-text-muted);
+    text-align: end;
   }
   .filter {
     display: inline-flex;
@@ -842,18 +969,21 @@
     font-size: var(--z-text-xs);
     color: var(--z-text-muted);
   }
-  /* Cards in a row share a height rather than each stopping where its own
-     content runs out. A host with a cordon notice, or one label more than its
-     neighbour, otherwise leaves a ragged edge and a band of empty page before
-     the next row -- and the whole point of laying hosts out side by side is
-     that their figures can be compared across the row. */
+  /* Cards in a row share a height, and the sections of a card are rows of this
+     grid (HostCard says how), so the slot bars, the three bars and the Details
+     buttons line up across a row instead of sitting wherever a card's own content
+     put them. The row gap is zero because it would also open up the rows inside
+     every card; each card carries the space beneath it instead, and the last
+     row's is taken back. */
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: var(--z-space-4);
-    align-items: stretch;
+    column-gap: var(--z-space-4);
+    row-gap: 0;
+    margin-bottom: calc(-1 * var(--z-space-4));
   }
   .card-skeleton {
+    margin-bottom: var(--z-space-4);
     display: flex;
     flex-direction: column;
     gap: var(--z-space-3);
@@ -906,7 +1036,8 @@
     }
     /* A Button is 32px high at every width, and this one is opened with a
        thumb: it takes the touch height the chips beside it take. */
-    .map-toggle :global(.map-button) {
+    .map-toggle :global(.map-button),
+    .toolbar :global(.expand-button) {
       height: var(--z-control-touch);
     }
   }

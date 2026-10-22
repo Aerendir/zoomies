@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -169,6 +170,30 @@ func TestHostHealthSaysAHostWithNoReportIsNotAnAllClear(t *testing.T) {
 	for _, want := range []string{"doctor.summary", "not an all-clear", "untrusted", "results[].accepted"} {
 		if !strings.Contains(d, want) {
 			t.Errorf("the description does not say %q:\n%s", want, d)
+		}
+	}
+}
+
+// A tool that is not read-only changes something, and only an action is held
+// back until the transport offers it (Options.Offer). One added without the
+// flag would be listed to every token as a read, and the test that keeps Eli's
+// list would only ask whether Eli should have it, which someone could answer
+// yes. So the read-only hint and the action flag must agree.
+func TestEveryToolThatIsNotReadOnlyIsAnAction(t *testing.T) {
+	// A tool that is neither read-only nor an action, each with the reason it
+	// may be offered to every token all the same. There is none today.
+	notActions := map[string]string{}
+	for _, tl := range tools() {
+		if tl.Annotations.ReadOnly || tl.action {
+			continue
+		}
+		if _, ok := notActions[tl.Name]; !ok {
+			t.Errorf("%s is not read-only and not an action, so every token would be offered it; mark it action, or say here why not", tl.Name)
+		}
+	}
+	for name := range notActions {
+		if !slices.ContainsFunc(tools(), func(tl *tool) bool { return tl.Name == name }) {
+			t.Errorf("%s is allowed to be neither read-only nor an action, and there is no such tool", name)
 		}
 	}
 }

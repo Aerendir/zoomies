@@ -2,8 +2,8 @@
 icon: material/rocket-launch-outline
 title: "Install self-hosted Actions runners: quick start"
 description: >-
-  Install Zoomies and run your first job on a self-hosted ephemeral runner,
-  one curl command, one GitHub App, no Kubernetes.
+  Install Zoomies and run your first job on a self-hosted ephemeral runner:
+  one curl command, one GitHub App, no Kubernetes, and a working fleet in minutes.
 ---
 
 # Quick start
@@ -43,7 +43,7 @@ collects the Docker Compose, CLI and API equivalents.
 
 ## Just looking?
 
-Open the [live demo](https://demo.zoomies.sh/) to explore a running fleet in
+Open the [live demo](https://demo.zoomies.sh/){ target=_blank rel="noopener" } to explore a running fleet in
 your browser without installing anything or signing in. It uses [public
 view](public-view.md): visitors can read the fleet, while settings, Eli and
 changes require sign-in.
@@ -338,8 +338,8 @@ If the job waits, use [the queued-job guide](queued-job.md). If setup fails,
 use [troubleshooting](troubleshooting.md). Get this test working before moving
 an existing build.
 
-![The Jobs page: queue depth, running jobs, success rate, P95 wait and outcome composition above the job grid](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
-![The Jobs page: queue depth, running jobs, success rate, P95 wait and outcome composition above the job grid](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
+![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
+![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
 
 In a workflow you already have, the one line that changes is `runs-on`:
 

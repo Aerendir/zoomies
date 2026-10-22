@@ -1,0 +1,109 @@
+{
+  "generated": "2026-10-21T15:20:38.074Z",
+  "widths": [
+    320,
+    375,
+    1440
+  ],
+  "screens": [
+    "signin",
+    "first-account",
+    "connect-app",
+    "fleet-status",
+    "not-found"
+  ],
+  "combinations": 1044,
+  "findings": [],
+  "known": [
+    {
+      "screen": null,
+      "concept": "a",
+      "style": "classic",
+      "mode": "light",
+      "state": null,
+      "width": null,
+      "kind": "contrast",
+      "fg": "--z-border-strong",
+      "bg": "--z-surface",
+      "min": 3,
+      "ratio": 1.6264662433541937,
+      "detail": "--z-border-strong on --z-surface is 1.62:1 and needs 3:1",
+      "reason": "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept."
+    },
+    {
+      "screen": null,
+      "concept": "a",
+      "style": "classic",
+      "mode": "dark",
+      "state": null,
+      "width": null,
+      "kind": "contrast",
+      "fg": "--z-border-strong",
+      "bg": "--z-surface",
+      "min": 3,
+      "ratio": 1.6239531826645752,
+      "detail": "--z-border-strong on --z-surface is 1.62:1 and needs 3:1",
+      "reason": "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept."
+    },
+    {
+      "screen": null,
+      "concept": "b",
+      "style": "classic",
+      "mode": "light",
+      "state": null,
+      "width": null,
+      "kind": "contrast",
+      "fg": "--z-border-strong",
+      "bg": "--z-surface",
+      "min": 3,
+      "ratio": 1.6264662433541937,
+      "detail": "--z-border-strong on --z-surface is 1.62:1 and needs 3:1",
+      "reason": "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept."
+    },
+    {
+      "screen": null,
+      "concept": "b",
+      "style": "classic",
+      "mode": "dark",
+      "state": null,
+      "width": null,
+      "kind": "contrast",
+      "fg": "--z-border-strong",
+      "bg": "--z-surface",
+      "min": 3,
+      "ratio": 1.6239531826645752,
+      "detail": "--z-border-strong on --z-surface is 1.62:1 and needs 3:1",
+      "reason": "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept."
+    },
+    {
+      "screen": null,
+      "concept": "c",
+      "style": "classic",
+      "mode": "light",
+      "state": null,
+      "width": null,
+      "kind": "contrast",
+      "fg": "--z-border-strong",
+      "bg": "--z-surface",
+      "min": 3,
+      "ratio": 1.6264662433541937,
+      "detail": "--z-border-strong on --z-surface is 1.62:1 and needs 3:1",
+      "reason": "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept."
+    },
+    {
+      "screen": null,
+      "concept": "c",
+      "style": "classic",
+      "mode": "dark",
+      "state": null,
+      "width": null,
+      "kind": "contrast",
+      "fg": "--z-border-strong",
+      "bg": "--z-surface",
+      "min": 3,
+      "ratio": 1.6239531826645752,
+      "detail": "--z-border-strong on --z-surface is 1.62:1 and needs 3:1",
+      "reason": "Classic's control edge is about 1.62:1 against the surface in light and in dark, under the 3:1 minimum for the edge of a control; Mission Control's is past 3:1. Raising Classic's --z-border-strong is a token change independent of any concept."
+    }
+  ]
+}

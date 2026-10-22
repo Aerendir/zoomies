@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eyupio/zoomies/internal/auth"
 	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/events"
 	"github.com/eyupio/zoomies/internal/mcp"
@@ -510,5 +511,42 @@ func TestMCPWaitForChangeOnABusyFleetHoldsTheSecondCallForWhatIsNew(t *testing.T
 	got := resultText(second)
 	if n := strings.Count(got, "job.updated"); n != 1 || !strings.Contains(got, "job:job_new") {
 		t.Errorf("the second call answered %d frames, want only the new one:\n%.600s", n, got)
+	}
+}
+
+// A caller that holds more answers at once than the budget allows is told to
+// wait, rather than being allowed to pin this process's memory: every tool
+// call buffers a whole answer, and both model-facing entry points reach every
+// route through the same place.
+func TestAToolCallBeyondItsCallersBudgetIsRefusedWithTheSentence(t *testing.T) {
+	h := newHarness(t)
+	token := h.token("agent", store.RoleViewer)
+
+	// The identity the endpoint resolves, which is the key the budget counts
+	// by, taken from the same call the endpoint makes.
+	id, err := h.ctrl.Auth().Authenticate(h.ctx, auth.AuthInput{Authorization: "Bearer " + token})
+	if err != nil {
+		t.Fatalf("authenticating the token: %v", err)
+	}
+	key := id.String()
+	for i := 0; i < inProcessPerCaller; i++ {
+		if ok, _ := h.api.inProcessBudget.take(key); !ok {
+			t.Fatalf("slot %d for the caller must be allowed", i+1)
+		}
+	}
+
+	r := h.mcpTool(token, "list_runners", nil)
+	if !r.IsError {
+		t.Fatalf("a call beyond the caller's budget must be refused, got %s", resultText(r))
+	}
+	if !strings.Contains(resultText(r), "wait for one to finish and ask again") {
+		t.Errorf("the refusal must say what to do about it, got %s", resultText(r))
+	}
+
+	// With the answers in flight handed back, the same caller is served again.
+	h.api.inProcessBudget.give(key)
+	h.api.inProcessBudget.give(key)
+	if after := h.mcpTool(token, "list_runners", nil); after.IsError {
+		t.Errorf("a call within the caller's budget must be answered: %s", resultText(after))
 	}
 }

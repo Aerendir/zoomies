@@ -191,6 +191,7 @@ var problemAudience = map[string]Audience{
 	"host.reboot_pending":               AudienceFleet,
 	"host.version_behind":               AudienceFleet,
 	"host.update_failed":                AudienceFleet,
+	"host.update_helper_stuck":          AudienceFleet,
 	"host.update_unavailable":           AudienceFleet,
 	"installation.unhealthy":            AudienceFleet,
 	"jobs.oom_killed":                   AudienceFleet,
@@ -269,6 +270,7 @@ var problemAudience = map[string]Audience{
 	"provider.renting_off":                          AudienceFleet,
 	"provider.template_unverified":                  AudienceFleet,
 	"provider.machine_ca_same_as_cluster":           AudienceFleet,
+	"provider.machine_disk_small":                   AudienceFleet,
 	"provider.machines_behind":                      AudienceFleet,
 	"provider.unreachable":                          AudienceFleet,
 	"provider.unservable":                           AudienceFleet,
@@ -385,6 +387,7 @@ func agentUpgradeFix(then string, rented bool) string {
 }
 
 func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
+	ctx = withFleetReads(ctx)
 	out := make([]Problem, 0, 8)
 
 	// Configuration: every warning and error the validator produced. These are
@@ -424,7 +427,7 @@ func (c *Controller) Problems(ctx context.Context) ([]Problem, error) {
 	}
 
 	gather("pool settings", func(ctx context.Context, out *[]Problem) error {
-		pools, err := c.st.ListPools(ctx)
+		pools, err := c.fleetPools(ctx)
 		if err != nil {
 			return fmt.Errorf("listing pools: %w", err)
 		}
@@ -544,7 +547,7 @@ func (c *Controller) machineProblems(ctx context.Context, out *[]Problem) error 
 	if len(providers) == 0 {
 		return nil
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -914,7 +917,7 @@ func severityRank(s config.Severity) int {
 }
 
 func (c *Controller) hostProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -922,7 +925,7 @@ func (c *Controller) hostProblems(ctx context.Context, out *[]Problem) error {
 	if err != nil {
 		return fmt.Errorf("listing queued jobs: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -1029,7 +1032,7 @@ func (c *Controller) hostProblems(ctx context.Context, out *[]Problem) error {
 // telling an operator to upgrade the agent would be telling them to make it
 // worse.
 func (c *Controller) hostSkewProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -1241,11 +1244,11 @@ func agentTemplateFix(provider, target string) string {
 // does not oversubscribe -- but the room is bookkeeping, and a job that runs
 // away takes the host with it.
 func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -1414,11 +1417,11 @@ func (c *Controller) hostResourceProblems(ctx context.Context, out *[]Problem) e
 // runnerProfileProblems is profileProblems over the fleet as it stands, with
 // the pools sized as the scheduler sizes them.
 func (c *Controller) runnerProfileProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -2525,18 +2528,25 @@ func (c *Controller) unmatchedQueuedJobs(ctx context.Context) ([]scheduler.Unmat
 }
 
 // loopProblems reports every background loop that has panicked since the
-// process started. The loop was restarted, so the fleet is still being run;
-// the entry is here because a crash is a bug, and a bug that fixes itself
-// after a minute is one nobody would otherwise report.
+// process started, and every kind of detached work. A loop was restarted, so
+// the fleet is still being run, and detached work was abandoned and has to be
+// asked for again; the entry is here because a crash is a bug, and a bug that
+// fixes itself after a minute is one nobody would otherwise report.
 func (c *Controller) loopProblems() []Problem {
 	panics := c.LoopPanics()
 	names := slices.Sorted(maps.Keys(panics))
 	out := make([]Problem, 0, len(names))
 	for _, name := range names {
 		p := panics[name]
-		title := fmt.Sprintf("the %s loop crashed and was restarted", name)
+		// What the entry says has to be what happened: only a loop is started
+		// again, and each kind logs its stack under its own message.
+		kind, outcome, logged := "loop", "restarted", "controller loop panicked"
+		if p.Detached {
+			kind, outcome, logged = "work", "abandoned", detachedPanicMessage
+		}
+		title := fmt.Sprintf("the %s %s crashed and was %s", name, kind, outcome)
 		if p.Count > 1 {
-			title = fmt.Sprintf("the %s loop has crashed %d times and was restarted each time", name, p.Count)
+			title = fmt.Sprintf("the %s %s has crashed %d times and was %s each time", name, kind, p.Count, outcome)
 		}
 		at := p.At
 		out = append(out, Problem{
@@ -2544,8 +2554,8 @@ func (c *Controller) loopProblems() []Problem {
 			Severity: config.SeverityError,
 			Title:    title,
 			Detail:   "the last panic said: " + p.Last,
-			Fix: "this is a bug in Zoomies. The stack is in the controller's log under \"controller loop panicked\"; " +
-				"please report it with that stack. Restarting the controller clears this entry.",
+			Fix: fmt.Sprintf("this is a bug in Zoomies. The stack is in the controller's log under %q; "+
+				"please report it with that stack. Restarting the controller clears this entry.", logged),
 			Since: &at,
 		})
 	}
@@ -3091,7 +3101,7 @@ func problemSentence(s string) string {
 // nothing else. Neither problem carries a Remedy: the autopilot applies every
 // remedy it finds, and an update must never be one it applies.
 func (c *Controller) hostUpdateProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -3165,6 +3175,14 @@ func failedHostUpdateProblem(h *store.Host, a store.UpdateAttempt, target string
 		how = "timed out"
 	}
 	label := naming.ForSentence(h.Name)
+	if s := stuckOf(a); stuckIsFault(s) && a.State == store.UpdateFailed {
+		p := stuckProblem(h, a, s)
+		if a.FinishedAt != nil {
+			since := *a.FinishedAt
+			p.Since = &since
+		}
+		return p, true
+	}
 	p := Problem{
 		Code:     "host.update_failed",
 		Severity: config.SeverityError,

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +59,46 @@ func TestRunningJobsForNoRunnerIsEmpty(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("got %d jobs, want none for an empty runner id", len(got))
+	}
+}
+
+// The scheduler spares a runner with a job running on it, whatever its row
+// says, so this set is what stands between a returned runner and the reap. A
+// runner missing from it has its container removed under the job; a runner in
+// it that should not be keeps a dead row on the Runners page.
+func TestRunnersWithAJobAreThoseWithAJobInProgress(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+
+	seedJob(t, s, 11, JobInProgress, "run_working")
+	seedJob(t, s, 12, JobCompleted, "run_finished")
+	seedJob(t, s, 13, JobQueued, "run_waiting")
+	seedJob(t, s, 14, JobInProgress, "")
+	cancelled := seedJob(t, s, 15, JobInProgress, "run_cancelling")
+	if _, err := s.MarkCancelRequested(ctx, []string{cancelled.ID}, time.Now()); err != nil {
+		t.Fatalf("MarkCancelRequested: %v", err)
+	}
+
+	got, err := s.RunnersWithAJob(ctx)
+	if err != nil {
+		t.Fatalf("RunnersWithAJob: %v", err)
+	}
+	if want := map[string]bool{"run_working": true, "run_cancelling": true}; !maps.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+// RunnersWithAJob runs on every scheduling pass, so it must seek the
+// in-progress rows by state rather than walk the jobs table, for the reason the
+// test below gives. Which index the planner seeks, and what it seeks on after
+// state, is its own business: several indexes lead with state.
+func TestRunnersWithAJobSeeksRatherThanScans(t *testing.T) {
+	plan := explain(t, newTestStore(t), runnersWithAJobQuery.sql)
+	if !strings.Contains(plan, "SEARCH jobs USING") || !strings.Contains(plan, "(state=?") {
+		t.Fatalf("plan = %q, want a search of jobs led by state", plan)
+	}
+	if strings.Contains(plan, "SCAN jobs") {
+		t.Fatalf("plan = %q, want a seek rather than a scan of the jobs table", plan)
 	}
 }
 

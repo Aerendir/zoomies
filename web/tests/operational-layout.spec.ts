@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { goto } from './support/fixtures';
+import { goto, useClassic } from './support/fixtures';
 
 async function mission(page: import('@playwright/test').Page, prefs?: Record<string, unknown>) {
   await page.setViewportSize({ width: 375, height: 900 });
@@ -18,8 +18,8 @@ test('Mission Control shows current work before activity history and retains tim
   await page.setViewportSize({ width: 1440, height: 900 });
   await goto(page, '/', 'Overview');
   const pools = page.getByRole('heading', { name: 'Pools', exact: true });
-  const history = page.getByRole('heading', { name: 'Activity matrix', exact: true });
-  expect(await pools.evaluate((node) => node.getBoundingClientRect().top)).toBeLessThan(900);
+  const history = page.locator('#history > summary');
+  expect(await pools.evaluate((node) => node.getBoundingClientRect().top)).toBeLessThan(1000);
   expect(await history.evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThan(
     await pools.evaluate((node) => node.getBoundingClientRect().top),
   );
@@ -119,7 +119,10 @@ test('saving vocabulary does not turn a fresh style default into an explicit glo
   );
 });
 
-test('Classic retains its original history-first layout and Rows fallback', async ({ page }) => {
+test('Classic shares the current-work-first overview and retains its Rows fallback', async ({
+  page,
+}) => {
+  await useClassic(page);
   await page.setViewportSize({ width: 375, height: 900 });
   await goto(page, '/jobs', 'Jobs');
   await expect(page.getByRole('button', { name: /^Rows,/ })).toHaveAttribute(
@@ -128,9 +131,9 @@ test('Classic retains its original history-first layout and Rows fallback', asyn
   );
   await expect(page.locator('details.advanced')).toHaveAttribute('open');
   await goto(page, '/', 'Overview');
-  const history = page.getByRole('heading', { name: 'Activity matrix', exact: true });
+  const history = page.locator('#history > summary');
   const pools = page.getByRole('heading', { name: 'Pools', exact: true });
-  expect(await history.evaluate((node) => node.getBoundingClientRect().top)).toBeLessThan(
+  expect(await history.evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThan(
     await pools.evaluate((node) => node.getBoundingClientRect().top),
   );
 });

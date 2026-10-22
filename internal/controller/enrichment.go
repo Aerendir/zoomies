@@ -37,6 +37,7 @@ func (c *Controller) enrichOnce(ctx context.Context) {
 		wg.Add(1)
 		go func(v store.Enrichment) {
 			defer wg.Done()
+			defer c.recoverDetached("enrichment-worker")
 			cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			err := c.enrich(cctx, v)
@@ -120,11 +121,14 @@ func (c *Controller) enrich(ctx context.Context, v store.Enrichment) error {
 			}
 			return err
 		}
-		if run.RunNumber > 0 {
+		if run.RunNumber > 0 || run.Event != "" {
 			if err := c.st.SetRunNumberForRun(ctx, j.Repo, j.GitHubRunID, run.RunNumber); err != nil {
 				return err
 			}
-			j.RunNumber = run.RunNumber
+			if err := c.st.SetRunEventForRun(ctx, j.Repo, j.GitHubRunID, run.Event); err != nil {
+				return err
+			}
+			j.RunNumber, j.RunEvent = run.RunNumber, run.Event
 			c.publishJob(ctx, j)
 		}
 		if cancelled && run.Cancelled() {

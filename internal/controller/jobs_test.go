@@ -414,9 +414,9 @@ func TestAcknowledgingAFailureIsRecordedOnceWithTheFirstName(t *testing.T) {
 		t.Fatalf("UpsertJob: %v", err)
 	}
 
-	got, err := h.c.AcknowledgeJob(h.ctx, job.ID, "alice")
-	if err != nil {
-		t.Fatalf("AcknowledgeJob: %v", err)
+	got, recorded, err := h.c.AcknowledgeJob(h.ctx, job.ID, "alice")
+	if err != nil || !recorded {
+		t.Fatalf("AcknowledgeJob recorded = %v (err %v), want the first press to be the one that recorded", recorded, err)
 	}
 	if got.AcknowledgedAt == nil || got.AcknowledgedBy != "alice" {
 		t.Fatalf("acknowledgement = %+v, want alice named", got)
@@ -430,9 +430,9 @@ func TestAcknowledgingAFailureIsRecordedOnceWithTheFirstName(t *testing.T) {
 		t.Fatalf("timeline entry = %+v, want an acknowledged entry naming alice", last)
 	}
 
-	got, err = h.c.AcknowledgeJob(h.ctx, job.ID, "bob")
-	if err != nil {
-		t.Fatalf("second AcknowledgeJob: %v", err)
+	got, recorded, err = h.c.AcknowledgeJob(h.ctx, job.ID, "bob")
+	if err != nil || recorded {
+		t.Fatalf("second AcknowledgeJob recorded = %v (err %v), want a press that changed nothing to say so", recorded, err)
 	}
 	if got.AcknowledgedBy != "alice" {
 		t.Fatalf("a second acknowledgement replaced the first: %+v", got)
@@ -441,9 +441,9 @@ func TestAcknowledgingAFailureIsRecordedOnceWithTheFirstName(t *testing.T) {
 		t.Fatalf("a second acknowledgement added a timeline entry: %v", kindsOfEvents(entries))
 	}
 
-	got, err = h.c.ReopenJobAttention(h.ctx, job.ID, "bob")
-	if err != nil {
-		t.Fatalf("ReopenJobAttention: %v", err)
+	got, recorded, err = h.c.ReopenJobAttention(h.ctx, job.ID, "bob")
+	if err != nil || !recorded {
+		t.Fatalf("ReopenJobAttention recorded = %v (err %v), want the acknowledgement taken back", recorded, err)
 	}
 	if got.AcknowledgedAt != nil || got.AcknowledgedBy != "" {
 		t.Fatalf("reopening left an acknowledgement behind: %+v", got)
@@ -453,8 +453,8 @@ func TestAcknowledgingAFailureIsRecordedOnceWithTheFirstName(t *testing.T) {
 	if last.Kind != store.JobEventReopened || !strings.Contains(last.Message, "bob") {
 		t.Fatalf("timeline entry = %+v, want a reopened entry naming bob", last)
 	}
-	if _, err := h.c.ReopenJobAttention(h.ctx, job.ID, "bob"); err != nil {
-		t.Fatalf("second ReopenJobAttention: %v", err)
+	if _, recorded, err := h.c.ReopenJobAttention(h.ctx, job.ID, "bob"); err != nil || recorded {
+		t.Fatalf("second ReopenJobAttention recorded = %v (err %v), want a press that changed nothing to say so", recorded, err)
 	}
 	if entries := h.timeline(job.ID); len(entries) != len(events) {
 		t.Fatalf("reopening twice added a timeline entry: %v", kindsOfEvents(entries))
@@ -468,7 +468,7 @@ func TestAcknowledgingAFailureIsRecordedOnceWithTheFirstName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertJob queued: %v", err)
 	}
-	if _, err := h.c.AcknowledgeJob(h.ctx, queued.ID, "alice"); !errors.Is(err, ErrJobDidNotFail) {
+	if _, _, err := h.c.AcknowledgeJob(h.ctx, queued.ID, "alice"); !errors.Is(err, ErrJobDidNotFail) {
 		t.Fatalf("acknowledging a queued job: %v, want ErrJobDidNotFail", err)
 	}
 }

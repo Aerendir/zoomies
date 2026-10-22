@@ -164,6 +164,15 @@ func (c *Controller) snapshot(ctx context.Context) (scheduler.Snapshot, error) {
 		return scheduler.Snapshot{}, fmt.Errorf("listing queued jobs: %w", err)
 	}
 	jobs = c.routableJobs(jobs)
+	// Which runners a job is running on is read apart from the queue, not added
+	// to it, because the queue-age figures read every job in that list as
+	// waiting. Without it every guard that spares a runner with work on it
+	// guards nothing, and the reap removes a runner the late-report path kept
+	// alive, with the job still running in it.
+	working, err := c.st.RunnersWithAJob(ctx)
+	if err != nil {
+		return scheduler.Snapshot{}, fmt.Errorf("listing the runners with a job in progress: %w", err)
+	}
 	activeByRepository, queuedByRepository, err := c.st.RepositoryJobCounts(ctx)
 	if err != nil {
 		return scheduler.Snapshot{}, fmt.Errorf("counting jobs by repository: %w", err)
@@ -228,6 +237,7 @@ func (c *Controller) snapshot(ctx context.Context) (scheduler.Snapshot, error) {
 		Pools:              pools,
 		Runners:            runners,
 		Jobs:               jobs,
+		RunnersWithAJob:    working,
 		ActiveByRepository: activeByRepository,
 		QueuedByRepository: queuedByRepository,
 		Hosts:              hosts,
@@ -350,6 +360,11 @@ func (c *Controller) apply(ctx context.Context, snap scheduler.Snapshot, plan sc
 			}
 		}
 	}
+	// Every pool's observation goes in together, after the loop: the fleet's
+	// size would otherwise be the number of writes a pass makes, each taking the
+	// writer for a transaction of its own (a quarter of a quiet pass at a
+	// hundred pools, in a profile). Each keeps the moment it was made.
+	capacity := make([]store.UsageCapacitySample, 0, len(plan.Pools))
 	for _, pp := range plan.Pools {
 		if pools[pp.PoolID] == nil {
 			continue
@@ -358,9 +373,10 @@ func (c *Controller) apply(ctx context.Context, snap scheduler.Snapshot, plan sc
 			c.recordScaling(ctx, pp, n.created, n.drained)
 		}
 		c.noteBlocked(pp)
-		if err := c.st.RecordUsageCapacity(ctx, pp.PoolID, c.Now(), pp.BlockedAtCapacity); err != nil {
-			c.log.Error("could not record usage capacity", "pool", pp.PoolID, "error", err)
-		}
+		capacity = append(capacity, store.UsageCapacitySample{PoolID: pp.PoolID, At: c.Now(), Blocked: pp.BlockedAtCapacity})
+	}
+	if err := c.st.RecordUsageCapacityBatch(ctx, capacity); err != nil {
+		c.log.Error("could not record usage capacity", "pools", len(capacity), "error", err)
 	}
 }
 
@@ -474,7 +490,7 @@ func (c *Controller) createRunner(ctx context.Context, pool *store.Pool, host *s
 		}
 	}
 	resources.MinCPUs, resources.MinMemoryMB = 0, 0
-	name := github.RunnerName(pool)
+	name := github.RunnerNameOn(pool, host)
 	r := &store.Runner{
 		PoolID:            pool.ID,
 		HostID:            a.HostID,
@@ -510,6 +526,7 @@ func (c *Controller) createRunner(ctx context.Context, pool *store.Pool, host *s
 		defer c.lifecycleCalls.Done()
 		// Release admission before signalling completion to lifecycle waiters.
 		defer c.releaseCredentialMint(inst.ID)
+		defer c.recoverDetached("create-runner")
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lifecycleCallTimeout)
 		defer cancel()
 		c.finishCreateRunner(cctx, inst, pool, r, a, name, resources, source)
@@ -986,6 +1003,7 @@ func (c *Controller) removeRunnerID(ctx context.Context, id, reason string, pool
 	go func() {
 		defer c.lifecycleCalls.Done()
 		defer c.releaseRemoval(r.ID)
+		defer c.recoverDetached("remove-runner")
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lifecycleCallTimeout)
 		defer cancel()
 		if _, err := c.finishRemoveRunner(cctx, r, reason, pool); err != nil {

@@ -13,8 +13,10 @@ failed PR checks. Everything on the fleet pages is live (every page updates in
 place from the controller's event stream, so you never have to press refresh,
 though the same button sits at the top of each one for when you want to be sure)
 and nothing is reachable from the UI that is not reachable from the
-[REST API](api-surface.md). Light and dark follow your system until you
-choose one, and the screenshots below follow this site's. Start with
+[REST API](api-surface.md). A browser that has chosen nothing opens in
+Mission Control and the dark theme; **Settings → Appearance** changes either,
+including to follow your system. The screenshots below follow this site's light
+or dark and show the Classic style. Start with
 [Signing in](#signing-in), [Overview](#overview), [Jobs](#jobs),
 [Ask Eli](#ask-eli) or [Eli repairs](#eli-repairs).
 
@@ -33,26 +35,32 @@ The Eli conversation uses the built-in demo model and a real fleet lookup.
 Before any of them, the page everyone meets first, and often the only one met
 by people who did not install the controller. The form is on the right, under
 the address of the instance being signed in to, so telling a staging controller
-from a production one does not rest on reading the address bar. On the left,
-the full logo sits on a rounded Zoomies Black stage in either theme. Below it
-are **A fresh runner. For every job.**, a short description, and links to [zoomies.sh](https://zoomies.sh),
-the source on GitHub and [EyUp.io](https://eyup.io), who make it. A failed
+from a production one does not rest on reading the address bar. On the left, the dog stands on a rounded Zoomies Black stage in either theme,
+under **A fresh runner. For every job.** and a short description. A header
+above carries the logo and the appearance switch, and a footer panel below has
+the build and links to [zoomies.sh](https://zoomies.sh), the source on GitHub
+and [EyUp.io](https://eyup.io), who make it. A failed
 sign-in says which kind of failure it was (wrong credentials, too many
 attempts, or a controller that cannot be reached) and caps lock is called out
-before it costs an attempt. On a phone the full logo keeps its rounded black stage
-above the form, the introductory copy is hidden and the links move below it.
+before it costs an attempt. The first account, the consent screen and the
+public status page use the same header, stage and footer. On a phone the
+stage becomes a strip above the form with the dog beside its words, and the
+sentence under them is hidden.
 
-![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
-![The sign-in page: the lockup on a rounded Zoomies Black stage at the top left, a short introduction and links to zoomies.sh, GitHub and EyUp.io under it; the form on the right, under the address of the instance being signed in to](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
+![The sign-in page: a header with the paw and wordmark and the appearance switch; a rounded Zoomies Black stage on the left holding the dog on its backdrop, the words "Your infrastructure. Your control." and "A fresh runner. For every job." with a short blue rule; the form on the right under the address of the instance; and a Zoomies Black footer panel with the build and the links](screenshots/sign-in-dark.webp#only-dark){ .zoomies-shot }
+![The sign-in page: a header with the paw and wordmark and the appearance switch; a rounded Zoomies Black stage on the left holding the dog on its backdrop, the words "Your infrastructure. Your control." and "A fresh runner. For every job." with a short blue rule; the form on the right under the address of the instance; and a Zoomies Black footer panel with the build and the links](screenshots/sign-in-light.webp#only-light){ .zoomies-shot }
 
-![The phone sign-in page: the full Zoomies logo on its rounded black stage above the instance address and sign-in form](screenshots/sign-in-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
-![The phone sign-in page: the full Zoomies logo on its rounded black stage above the instance address and sign-in form](screenshots/sign-in-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
+![The phone sign-in page: a strip of Zoomies Black with the dog beside its words above the instance address and sign-in form, and the footer panel below](screenshots/sign-in-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
+![The phone sign-in page: a strip of Zoomies Black with the dog beside its words above the instance address and sign-in form, and the footer panel below](screenshots/sign-in-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }
 
 ## Overview
 
-The page that has to earn the second monitor. It opens on the activity
-matrix, showing today by the hour: a row of twenty-four squares coloured by
-what finished, greener as more jobs finish and red the moment any fail. Widen
+The page that has to earn the second monitor. Mission Control, the default,
+puts problems, unread failures and the four numbers ahead of history; this
+section and its screenshots describe the Classic order, which opens on the
+activity matrix, showing today by the hour: a row of twenty-four squares
+coloured by what finished, greener as more jobs finish and red the moment
+any fail. Widen
 it to the year and the same band becomes the fleet's days laid out the way a
 contribution graph is; a column per week, a row per weekday, the month named
 above the week it begins in. Hover a square and it says everything
@@ -91,13 +99,22 @@ renting, a pool somebody changed, and what the controller changed on its own abo
 runners 5 → 10: host build-2 joined*. What went right is in it as much as what
 went wrong. Which of those it carries is yours to choose, one switch per
 kind on **Settings → Events**, and the panel counts what it is showing rather
-than quietly leaving the rest out. When
-something needs a person it is one line and a *Review* button, never a list
-that pushes the fleet below the fold. The
+than quietly leaving the rest out. When the
+fleet itself needs a person it is one line and a *Review* button, never a list
+that pushes the fleet below the fold. The exception is the failures nobody has
+read, because each is a separate job with a separate thing to do about it:
+**Recent failures** shows the newest two of what failed in the last week and
+nobody has marked as known or replaced with a later attempt, with the whole
+count in its header and a link to the rest on the Jobs page's **Needs
+attention** view. A row opens the job's drawer and **Fix with Eli** opens the
+repair page for it, except on a failure of a run no pull request started, which
+Eli cannot repair and is not offered. An operator can also mark a failure as known, which takes it
+off the list and changes nothing else: it keeps its row in the failed view, a
+re-run that passes is what settles it, and the toast carries an *Undo*. The
 *Other runners* switch says whether these numbers count only the jobs this
-fleet ran or every job GitHub reported on an installed repository; the
-default is this fleet's own work, because that is the question an operator is
-usually asking.
+fleet ran or every job GitHub reported on an installed repository, and the
+panel and its link to the rest follow it; the default is this fleet's own work,
+because that is the question an operator is usually asking.
 
 A new instance is different. It opens on a checklist in place of the matrix,
 which has nothing to draw yet: create the first account, connect GitHub, add a
@@ -111,8 +128,8 @@ runner took it, and when it finishes, to how long the job waited for a runner
 and how long it ran. Only this fleet's own jobs count; a job on a hosted
 runner elsewhere in the organisation neither ticks a step nor retires the list.
 
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
-![The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-dark.webp#only-dark){ .zoomies-shot }
+![The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-light.webp#only-light){ .zoomies-shot }
 
 ![The activity matrix with a day selected: the day's figures, its outcomes hour by hour, and links to its jobs](screenshots/activity-dark.webp#only-dark){ .zoomies-shot }
 ![The activity matrix with a day selected: the day's figures, its outcomes hour by hour, and links to its jobs](screenshots/activity-light.webp#only-light){ .zoomies-shot }
@@ -144,10 +161,13 @@ pool) without leaving the keyboard.
 What runners to make. Each pool's labels, GitHub target, backend, floor and
 ceiling, idle timeout, whether its runners are ephemeral and whether jobs get a
 Docker daemon, and a risk badge on any pool that trades some of the default
-safety away, so the trade is visible from the list.
+safety away, so the trade is visible from the list. The page opens on that list;
+how queue pressure compares with configured headroom is behind a disclosure,
+**How pool demand compares with headroom**, as the Runners page keeps its
+lifecycle.
 
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-light.webp#only-light){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
 
 The page that creates one is the pool editor. It is six sections (**Name and
 labels**, **Hosts**, **Runner**, **Size**, **Scaling** and **Speed-ups**) and
@@ -205,18 +225,28 @@ Every runner that exists right now and what each one is doing. Removed runners
 are hidden by default, because a busy fleet makes and destroys thousands of
 them and they are all history. Rows select for bulk drain or delete, and the
 state filter is a real filter: it narrows the set rather than repainting it.
-Above the grid, the runner lifecycle is the controller's own state machine
-drawn out (provisioning, registering, idle, busy, draining) with how many
-runners are at each step this moment and a link into each; under it, a bar of
-the same states whose segments are links too, and say their share when you
-hover them.
+Above the grid is the provisioning strip and a way to the queue; the page
+opens on the runners, and the six tiles it used to carry live on the Overview
+and the Queue. Behind a disclosure, **How runners move through their states**,
+the runner lifecycle is the controller's own state machine drawn out
+(provisioning, registering, idle, busy, draining) with how many runners are at
+each step this moment and a link into each; under it, a bar of the same states
+whose segments are links too, and say their share when you hover them.
 
-![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
-![The Runners page: job queue depth, runner state totals, provisioning demand and lifecycle composition above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
+When the state filter includes failed runners, a **What keeps failing to start**
+card above the grid names the host or pool that keeps failing to start runners
+over the last day: since when, at which stage, and whether the image, an
+incident on its host or a throttle explains it. It says which pool and host the
+list is narrowed to, and that the list's search is not applied to it. It is the
+answer [`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with
+its evidence folded under the next steps.
+
+![The Runners page: the provisioning strip and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
+![The Runners page: the provisioning strip and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
 
 A runner's page carries the job it is on, a timeline of how long it spent in
 each state (provisioning, registering, idle, busy) its resource usage as the
-host's agent last reported it, and the live log. Beside the usage is the
+host's agent last reported it, and its output. Beside the usage is the
 **allocation**: the CPU and memory the runner was created with, and whether the
 pool set them or the host gave it its default share of the machine. The source
 is the thing to read when a runner was killed for exceeding its memory: a limit
@@ -243,6 +273,16 @@ to. Hover, focus or tap a pill for its card; the runner's page repeats them
 beside its status and draws the cards open in a **Memory and folders** panel.
 [Elastic memory](elastic-memory.md#what-you-see) has the whole list.
 
+The output on a runner's page opens on the **Build log** while the runner has a
+job: the workflow's console output after the GitHub runner has masked secrets.
+**Runner diagnostics**, the second tab, is the raw startup, registration and
+worker messages, and a runner with no job has only those, folded under that
+name. When the stream drops and reopens, the build log marks the join with a dim
+*reconnected to the log stream* line, because the relay sends its backlog again
+and what follows may repeat what is above it. **Save log** keeps the build
+output received in that view, and **Open on GitHub** is the complete archived
+log.
+
 ![A busy runner's page: its current job, a timeline of its states, details and resource usage](screenshots/runner-dark.webp#only-dark){ .zoomies-shot }
 ![A busy runner's page: its current job, a timeline of its states, details and resource usage](screenshots/runner-light.webp#only-light){ .zoomies-shot }
 
@@ -259,16 +299,18 @@ of grid filters, while selecting a pool scopes the headline runner metrics.
 
 ## Queue
 
-Provisioning demand has its own view, with ready, expedited, paused and removed
-counts alongside filtering and bulk controls. Job queue depth can remain high
+Provisioning demand has its own view: ready, expedited, paused and removed
+counts as status buttons, then the table with its filtering and bulk controls.
+How demand splits and how provisioning is ordered sit in a disclosure under the
+table. Job queue depth can remain high
 when provisioning demand is paused; these are separate measures. Removing an
 item is the exception: an operator who takes work out of the queue has said it
 is not for this fleet, so it stops counting as queued everywhere; the
 Overview's queue depth and pool bars, `zoomies_jobs_queued` and the queue age
 with it. Restoring it from the Removed view puts it back.
 
-![The Queue page: provisioning demand composition, status filters and bulk controls](screenshots/queue-dark.webp#only-dark){ .zoomies-shot }
-![The Queue page: provisioning demand composition, status filters and bulk controls](screenshots/queue-light.webp#only-light){ .zoomies-shot }
+![The Queue page: status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-dark.webp#only-dark){ .zoomies-shot }
+![The Queue page: status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-light.webp#only-light){ .zoomies-shot }
 
 ## Workflows
 
@@ -320,11 +362,22 @@ Workflows has the run each belongs to. It is not in the navigation, Workflows
 is, but every link that names a job lands here, and **Workflow runs** at the
 top goes back up with the same filters in force. Everything this fleet claims,
 runs or is waiting to run is listed, with each job's queue wait and duration.
+The fleet's own figures, the outcome mix, the activity history and the size
+advice are one fold, **Fleet context and activity**, under the grid.
 Status is the filter this page is opened for, so it is a row of buttons above
-the grid (**Running**, **Queued**, **Failed**, **Finished**, **All**) and
-the page opens on *Running*, which is the question an operator arrives with. That default is for a bare visit only: every link into this page
-that already carries a filter keeps it, so the problems drawer's unmatched link
-and the Overview's outcome links still show what they promised.
+the grid (**Needs attention**, **Running**, **Queued**, **Failed**, **Our
+failures**, **Finished**, **All**) and the page opens on *Running*, which is the
+question an operator arrives with. That default is for a bare visit only: every
+link into this page that already carries a filter keeps it, so the problems
+drawer's unmatched link and the Overview's outcome links still show what they
+promised.
+
+Two of the buttons are questions about a failure more than a status.
+**Needs attention** is the failures from the last week that nobody has marked as
+known and no later attempt has replaced, the list the Overview's **Recent
+failures** counts, with room for the rest of it. **Our failures** is the half of
+**Failed** this fleet caused, a runner that never started or one that stopped
+under the job, which GitHub records as an ordinary failure.
 
 The rest of the filters (repository, workflow, pool, host, label, outcome, dates)
 live in the URL alongside it, so a view can be pasted into a chat. *Host* is the
@@ -345,6 +398,15 @@ out a job whose workflow run has been cancelled, and *Queued* also leaves out
 anything an operator removed from the queue; the same sets the Overview's two
 tiles count, and a chip above the grid says so where a filter is in force.
 
+On *Queued*, a **Why jobs waited** card puts the wait of the jobs queued in the
+page's dates (the last day when none are set) down to its causes, for every
+pool or for the one pool the list is narrowed to, and names any of the list's
+other filters it does not apply. Like the list, it leaves out the jobs another
+vendor's runners ran; with **Include other runners** on, it says the list holds
+jobs it does not. It sits above the grid, and below it on a
+Mission Control phone, and it is the answer
+[`zoomies analyse queue-wait`](cli.md#zoomies-analyse) prints.
+
 None of those jobs is hidden: they are in the history under *All*, badged
 **Cancelling**, **Removed** or **Paused**. GitHub goes on calling all three
 `queued` or `in_progress`, because Zoomies can neither unqueue a job nor
@@ -360,8 +422,8 @@ immediately (queued demand paused, runners taken back) and records that it
 did, so the tiles and the lists agree from that moment rather than from
 whenever GitHub gets round to it.
 
-![The Jobs page: queue depth, running jobs, success rate, P95 wait and outcome composition above the job grid](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
-![The Jobs page: queue depth, running jobs, success rate, P95 wait and outcome composition above the job grid](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
+![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
+![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
 
 Opening a job says where it went wrong first: the step that failed and how
 long it ran, with a link to that step's log on GitHub, or, when the runner
@@ -441,6 +503,14 @@ leaves out cancelled and skipped jobs. Jobs only go back as far as
 `retention.jobs`, and the range may not exceed `limits.job_stats_window` (90
 days unless set).
 
+Under it, a **What got worse and what got better** card compares the range's
+two latest releases measure by measure, or says the sample is too small to rank
+when either has fewer than 30 jobs, or says to widen the range when fewer than
+two releases ran a job in it. It leaves cancelled and skipped jobs out of every
+figure read from the job rows, and says so, so its counts can be lower than the
+table's. It compares releases, never periods, and is the answer
+[`zoomies analyse compare`](cli.md#zoomies-analyse) prints.
+
 The same activity matrix as the Overview's draws the
 chosen range in the squares the Overview uses for a window that long (a
 square per hour for up to a fortnight, each day cut into six four-hour
@@ -461,7 +531,10 @@ and memory against what may be placed on it, the backends its agent found (and
 the exact command to run when one is missing) and the labels pools select it
 by. Slots and the committed bars answer different questions: the first is
 whether the fleet will place another runner here, the second whether the machine
-can carry it, and a host with free slots and no memory left takes nothing.
+can carry it, and a host with free slots and no memory left takes nothing. The
+closed card says so when it matters: with a slot free and 90% or more of the
+CPU or memory the scheduler may place already committed, a notice names the
+figures.
 Each of the two settings a host has is reached from the thing it describes.
 *Adjust*, beside the slot bar, owns the resources: how many runners the host may
 hold, and the reserve; the cores, memory and disk the scheduler leaves alone
@@ -473,12 +546,82 @@ tags and nothing else. A cordoned host keeps its runners and takes no new
 ones. *Add a host* mints a join token and prints the one line to paste on the
 new machine.
 
-**Agent connected** describes the heartbeat. Recent **CPU usage**,
+A card opens **closed**, and a closed card answers one question: does this host
+have room, and if not, why. It carries the host's name and state pills, the
+platform and agent release with the neutral chips that say what kind of host it
+is (**Tailcat host**, **Embedded**, the machine it was rented as), the slot bar
+with **Adjust**, and three bars for how loaded the machine is. **CPU**,
+**Memory** and **Disk** are each a share of the whole machine as the agent last
+measured it, with the figures it is a share of beside the bar (`6.4 / 16 GB`,
+written in terabytes from one up, unless under a tenth of a terabyte is used,
+when it stays in gigabytes as `20 / 1,024 GB` because it would round to
+`0 / 1 TB`).
+They are the shares the capacity map draws, so for a host that is sending
+heartbeats the newest point on that chart and the card are one figure. A figure
+turns amber, takes a warning triangle and says so in
+its label where the product itself acts on it, and that is not one line for all
+three. **CPU** turns amber from 85%, the line from which the scheduler places one
+runner at a time, counted without the CPU it has lent to runners: a host at 92%
+with 30 points of it lent is not amber, and its label says why. **Memory** is not
+judged as a share of the machine. It turns amber when the memory still available
+is at or below the host's reserve, the point at which the scheduler holds new
+starts, so a 16 GiB host at 94% used has 983 MB left against a reserve of 819 MB
+and is not amber. **Disk** turns amber when the *Work directory free space* check
+would warn: under 10% or under 10 GiB free. Each is compared as the unrounded
+figure, as the scheduler and the check compare it, and not as the figure printed
+beside the bar: a CPU of 84.6% reads 85% and is a fraction under the line, so it
+is not amber. A figure that is not measured reads
+`--`. For a host that has stopped sending heartbeats, or whose agent reports
+nothing to measure, the bars give way to one sentence saying why, because the
+agent's last disk figure would otherwise read as now. The capacity map has no
+such rule, and still draws that last disk figure as the newest point of a silent
+host's line.
+
+Nothing that keeps a host from taking work is folded away. The sentence for a
+cordon, a throttle, a hold on new starts, a busy CPU, a runtime that is
+recovering, an image that will not pull, an incompatible agent or a machine that
+is draining, the line naming a failed health check and the update row all stay on
+the closed card, and so does the **Backends** block, with the
+agent's own explanation, for a host with no backend that works. A host with
+Docker and no Podman is the ordinary case and is not one of them. Two more
+sentences stay because the numbers beside them cannot say what they say. The
+line under the slot bar that says why the slot count is what it is (a capacity
+set below what the machine holds, or a machine that holds fewer runners than the
+capacity) explains a host that is full at fewer runners than its capacity. The
+**Committed** notice is for a host with a slot free whose committed CPU or
+memory has reached 90% of what may be placed, the line the **Committed** bars
+turn amber at: the slot line counts slots, and the **Memory** bar beside it is
+what the machine is using, so neither shows that the runners already on the host
+have promised the rest away. A full host has every slot used, which the slot
+line already says, so it does not carry the notice for being full.
+
+**Details** opens the rest beneath it: the size class and the other neutral
+chips, the disk figure with its link to the check, the heartbeat and usage
+lines, the **Committed** bars, **Memory to lend**, **Runner sizes**,
+**Priority**, **Backends** and **Tags**. The cards in a row are
+one height and their sections line up across it: the pills, the slot bars, the
+three utilisation bars and the **Details** buttons sit at the same height from
+card to card, so a row reads straight across. A card with a notice leaves the
+same space on the cards beside it, and opening one makes its row as tall as that
+card needs. The button names its host for a screen reader, says whether it is
+open, and is 44 pixels tall on a touch screen. This browser
+remembers which cards are open, writing it when one is opened or closed and never
+on sight, and forgets a host that no longer exists.
+
+**Expand all**, at the end of the row of filters, opens every card on the page at
+once, and becomes **Collapse all** when they are all open, so a card opened or
+closed by hand turns it over too. A host that joins later arrives closed, and the
+button then offers **Expand all** again. With a filter on, it acts on the hosts
+the filter shows and leaves the others as they were, and a line beside it says
+how many that is (**Acts on the 2 hosts shown**). A page with one card does not
+have it, because that card's **Details** button is the whole of it.
+
+Under **Details**, **Agent connected** describes the heartbeat. Recent **CPU usage**,
 **memory available** and the one-minute **load** describe the machine's actual
-load, separately from its committed resources. A pressure warning says whether
-new starts are held or limited to one at a time; recovery happens automatically
-and keeps any manual cordon. A missing or stale reading is shown as unavailable.
-See
+load, separately from its committed resources. A missing or stale reading is
+shown as unavailable. The pressure warning is not one of these lines: it is on
+the closed card, where it says whether new starts are held or limited to one at a
+time, and recovery happens automatically and keeps any manual cordon. See
 [current usage and automatic holds](hosts-and-pools.md#current-usage-and-automatic-holds)
 for the thresholds and the limits of these measurements.
 
@@ -516,8 +659,14 @@ throttle by hand once the cause is fixed. The adjust dialog's note about the
 floors under a reserve names the CPU floor too: half a core, or a twentieth of
 the machine, held back for the daemon whatever the operator sets.
 
-![The Hosts page scrolled to its host cards, below the capacity map: each card shows its connection state beside a health link, then the slots in use, committed CPU and memory, the memory it can lend and its backends](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
-![The Hosts page scrolled to its host cards, below the capacity map: each card shows its connection state beside a health link, then the slots in use, committed CPU and memory, the memory it can lend and its backends](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
+A host's own page carries a **Whether its failures came under pressure** card:
+whether the failures, OOM kills and slow startups of the jobs it ran over the
+last day came in the minutes it was busy, and the line that separates them when
+one does. It is the answer
+[`zoomies analyse host-pressure`](cli.md#zoomies-analyse) prints.
+
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
 
 ### Updating every host that is behind
 
@@ -555,7 +704,7 @@ reads **Updating**, and afterwards **Updated**, **Failed**, **Timed out** or
 ![Two host cards on the Hosts page, both behind the controller's release: one says it can be updated, with its Update button, and the other says to update it by command because its update helper is not installed, with the button drawn but not pressable; under each, folded away, is the command that updates the host by hand](screenshots/hosts-update-light.webp#only-light){ .zoomies-shot }
 
 **Tags and size class.** A host's tags are the labels pools select it by, and its
-card lists them in two groups: those stored on the host, which **Edit** changes,
+card lists them, under **Details**, in two groups: those stored on the host, which **Edit** changes,
 and those the controller works out from the machine (`os`, `arch` and, while a
 size switch is on, `size`) under a caption saying so. Once either switch is
 `shadow` or `on`, a **Size class** block says which class the host is in, in the
@@ -575,13 +724,17 @@ Where machines come from. A provider is one place Zoomies may rent a machine,
 a hypervisor, today [Proxmox VE](proxmox.md), and its card leads with what is
 being spent: the machines it holds against the ceiling it may not pass, the
 shape it builds, and, in the controller's own sentence, why no new machine may
-be bought this moment. A new provider starts at a ceiling of zero and rents
-nothing, so turning a provider on and saying how much of it you are willing to
-pay for are the same act. *Check* runs the preflight against the real provider
-(read-only there, audited here) and a provider nobody has ever checked says
-so rather than looking healthy. Under the cards is every machine across every
-provider, narrowed by a state filter that lives in the URL, so a link to one
-part of the lifecycle is a link somebody else can open.
+be bought this moment. The wizard opens a new provider on a maximum of two
+machines with one kept warm, and for a Proxmox provider replaces both with a
+recommendation worked out from its nodes: as many machines as they hold, up to
+eight, with one kept warm. Saving creates nothing, and nothing is rented while
+**Rent machines** (`provider.enabled`) is off, which it is until an
+administrator turns it on, or while the fleet's own ceiling
+(`provider.max_machines`) is zero. *Check* runs the preflight against the real
+provider (read-only there, audited here) and a provider nobody has ever checked
+says so rather than looking healthy. Under the cards is every machine across
+every provider, narrowed by a state filter that lives in the URL, so a link to
+one part of the lifecycle is a link somebody else can open.
 
 An administrator can tick machines in that list, or in a provider's own
 Machines tab, and delete them together. It exists for the pile a wrong template
@@ -654,11 +807,21 @@ host Zoomies rented says so on its card, and its remove action sends you to
 delete the machine instead: removing the host here would leave the machine
 running, and on the bill.
 
-There is no way to make a machine by hand, here or anywhere else. A machine
-exists because a pool had queued work and nowhere to put it, and a second
-source of supply would be a second thing the reconciler would then decide to
-delete. An operator who wants more machines raises a ceiling. [What a provider
-has to implement](providers.md) is the contract behind all of this.
+There is one way to ask for a machine by hand, and it is a test. **Run a test
+machine**, in the **Test machine** panel on a provider's own page, builds a
+single real machine and follows it through each step a first job would depend
+on (cloned, powered on, agent installed, enrolled as a host, reported ready),
+then releases it; one that fails is left in place so that what it said can be
+read. It is held to the rules every machine is: it counts against the
+provider's maximum and the fleet's, it is refused while renting is off or the
+provider is paused, disabled or standing down, and only one runs at a time.
+Starting one needs the operator role, and [Proxmox
+VE](proxmox.md#proving-it-works-the-test-machine) has the rest. Every other
+machine exists because a pool had queued work and nowhere to put it, or because
+a provider's warm minimum asked for one, and a second source of supply would be
+a second thing the reconciler would then decide to delete. An operator who wants
+more machines raises a ceiling. [What a provider has to
+implement](providers.md) is the contract behind all of this.
 
 ## Installations
 
@@ -693,42 +856,143 @@ figures. It needs no credentials. A configured model supports fuller investigati
 
 ## Eli repairs
 
-Where a failed pull request check becomes a repair. **Needs attention** lists
-the offers Eli has made for pull requests whose checks failed on a repository
-set to *Ask me first*, one per pull request head; each can be reviewed, which
-checks readiness (the payer, the model, the remaining allowance and anything
-that would stop the repair) before a model is asked anything, or dismissed for
-that commit. Pasting a pull request link does the same for a pull request Eli
-has not offered on. Below that is the history, a page at a time and filtered by
-state, repository and what began the repair, with each repair's state (queued,
-investigating, waiting for CI, passed, or why it stopped); a failed one can be
-sent again. Repairs can be chosen and cleared from the history, which hides them
-and does nothing else: a cleared repair leaves the list and its total, but still
-counts towards the daily limit. Administrators set the **Repository repair
-policies** here, choosing an installation, the repositories to enable together,
-whether Eli asks first, waits to be told or repairs automatically, and the
-daily attempt budget, and link each requester's GitHub account to their Zoomies
+Where a failed pull request check becomes a repair. It is one entry in the
+navigation and four pages, each doing one job: the hub, for what needs you, what
+is running and what happened; the repair page, for one failure; an attempt, for
+one repair; and setup. [How repairs work](eli.md#set-up-pr-repairs).
+
+The hub opens on **Now**: one line about setup (whether you can repair, your
+GitHub account and, for an administrator, how many repositories repair
+themselves and how many ask first) and an attention rail for each thing that is
+owed. A sticky section navigation, **On this page**, counts the offers, the
+running repairs and the automatic repositories, and carries History. On a phone
+the last destinations move behind **More**.
+
+* **Needs you** opens when it holds offers, and is one line when it does not.
+  It lists the offers Eli has made for pull requests whose checks failed on a
+  repository set to *Ask me first*, one per pull request head. Each says which
+  pull request it is about (its title and number, the repository and the
+  branch), when it failed, and which jobs stopped at which step, so the decision
+  to look can be made from the list. **Review repair** opens the repair page for
+  that offer, and **Dismiss** hides it for that commit.
+* **In progress** appears while a repair is running, with the step it is on and
+  how long it has been going. **Follow** opens it. You can leave: the result
+  appears here and in History.
+* **Automatic repairs** is a closed summary until an administrator opens it,
+  and appears when at least one
+  repository is set to *Automatic*, and for nobody else: where nothing repairs
+  itself the hub says nothing about it. Each repository has a row. It says who
+  pays (the installation provider and its model) and whether that can work, with
+  a sentence and a **Fix in setup** link when the provider is missing, disabled
+  or a person's; how much of the allowance the last 24 hours have used, which is
+  the repository's and is shared with repairs people ask for, and, when it is all
+  used, when a place frees; the latest automatic repair, which opens, and how
+  many are running now. **Stop automatic repairs** opens a dialog that asks what
+  should happen instead, **Ask me first** or **Turn repairs off**, and says what
+  becomes of a repair already under way: one that has not pushed yet stops
+  before it changes the branch, unless it is already publishing, and one that
+  has pushed carries on watching its checks. With two or more repositories **Stop all** does the same for every
+  row. Stopping never turns anything on; starting Automatic is a decision made
+  in setup.
+* **History** is a closed summary that says how many repairs there are and how
+  recent the latest is. It opens by itself when nothing else needs a person, and
+  otherwise is one press away. It is a page at a time and filtered by state,
+  repository and who or what began the repair; the filter fields sit behind
+  **Filters**, and an active filter is a chip in the toolbar. A row says what
+  the repair was about: its state, the pull request's title, repository and
+  branch, the job and step that failed, the commit Eli pushed or why it did not,
+  who or what began it, and when. A row opens the repair. Choosing repairs to
+  clear them from the list is behind **Select**, so the list reads as a record
+  until you mean to edit it. Clearing hides a repair and does nothing else: a
+  cleared repair leaves the list and its total, but still counts towards the
+  daily limit.
+
+**Repair a PR** asks for a pull request's address and opens its repair page,
+where Eli checks it before anything is spent.
+
+![Eli repairs: the Now line about setup, an empty Needs you, an open Automatic repairs panel with each repository's provider, allowance, latest repair and Stop automatic repairs, and History with each repair's pull request, failed job and when it ran, under an On this page navigation](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
+![Eli repairs: the Now line about setup, an empty Needs you, an open Automatic repairs panel with each repository's provider, allowance, latest repair and Stop automatic repairs, and History with each repair's pull request, failed job and when it ran, under an On this page navigation](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
+
+The repair page opens from **Fix with Eli** on a failure in the Overview or in a
+job's **Why** drawer, from an offer, or from a pasted pull request. Its **On
+this page** navigation moves between the next step, the setup when it is missing,
+the failure and the checks. It shows the failure before anything is spent: the
+pull request's title, author, branch, commit and run, each linked to GitHub,
+where the job ran, and every job that failed, with the step it stopped at and
+whether the fault was the workflow's or this deployment's. Open a job to read the
+end of its log. Zoomies fetches the error lines from GitHub when you ask, takes
+out anything that looks like a credential and keeps nothing, and does so only for
+a person whose linked GitHub account can write to the repository. **Can Eli act
+on this?** lists the blocked checks first, with **Show all 9 checks** for the
+rest: your GitHub account, the model provider, the GitHub App installation,
+write access, the repository policy, attempts left, the pull request, its
+failing checks and the app's permissions. Each says what passed, what is in the
+way and what to do about it, and a check an earlier one stopped is shown as
+never reached. Checking never calls a model or spends an attempt. When nothing
+is in the way, the decision card says who pays (the provider and its model), how
+many attempts are left today, whether Eli may edit workflow files and which
+branch it pushes to, with room to tell Eli what to look at, and **Fix with Eli**
+starts the repair and opens its page. A failure
+that Eli is already repairing opens that repair instead of offering another, and
+one that has since been fixed, closed or replaced by a newer commit says so
+instead of offering a repair; for a newer commit, **Check the current PR** asks
+again about the pull request as it stands now. When GitHub does not answer, the
+card says so and offers to ask again, whichever check was being made.
+
+On a repository set to Automatic, a note sits above that card. For an
+administrator it says whether Eli already tried this failure on its own, with a
+link to the attempt (Eli does not try the same commit twice by itself, so
+starting another attempt here is the retry), or that nothing has started and the
+most likely reason: the provider cannot pay, the allowance is used up, or Eli
+starts from GitHub's report of a failed job and this failure was reported before
+Automatic was switched on or never arrived. For anyone else it is one sentence
+saying the repository repairs itself, because an ordinary person cannot read what
+Eli did on its own.
+
+![The repair page for a pull request Eli cannot yet act on: the failure it is about, the next step naming the GitHub account and model provider in the way, What failed, and the checks with Show all 9 checks](screenshots/eli-repair-readiness-dark.webp#only-dark){ .zoomies-shot }
+![The repair page for a pull request Eli cannot yet act on: the failure it is about, the next step naming the GitHub account and model provider in the way, What failed, and the checks with Show all 9 checks](screenshots/eli-repair-readiness-light.webp#only-light){ .zoomies-shot }
+
+A repair has a page of its own, at `/repairs/<id>`, that follows it from the
+moment it is queued. While Eli works it shows five steps, where the repair has
+got to and how long it has been going, and asks again every few seconds for as
+long as the tab is open and the repair has not finished. When it has finished it
+says how it ended in the controller's own words and what to try next. **What Eli
+was asked to fix** is a closed summary that opens the pull request, the run and
+the failed jobs as they were when the repair began, so the page still reads once
+Zoomies has pruned the job records. **Technical details** is closed too, with the
+number of model calls, the source supplied and the time in its summary; opening
+it holds the model, the stage reached, the failure
+code when there is one, and every model call with its tokens in and out, its
+request size and its time; a call whose provider did not report usage says
+Unknown and is never shown as zero. **Copy investigation details** puts the ids,
+states and sizes on the clipboard for a bug report, and nothing Eli read.
+
+![One repair that could not fix its failure: how it ended, what to try next, What Eli was asked to fix and Technical details closed, with the attempt facts and timeline beside](screenshots/eli-repair-attempt-dark.webp#only-dark){ .zoomies-shot }
+![One repair that could not fix its failure: how it ended, what to try next, What Eli was asked to fix and Technical details closed, with the attempt facts and timeline beside](screenshots/eli-repair-attempt-light.webp#only-light){ .zoomies-shot }
+
+A repair the repository's policy started says so under **This attempt**
+(**Started by** Automatic repairs, by the repository's policy), and an
+administrator also gets a card, **Automatic repairs on** the repository, beside
+it. The card says where that policy stands now: still automatic (who pays, how
+much of the allowance is used), with **Stop automatic repairs** and a link to the
+policy in setup, or no longer automatic. While the repair has not pushed yet it
+says that stopping now also stops this repair.
+
+![An automatic repair that did not fix its failure: Started automatically, the outcome and next steps, and the Automatic repairs card with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-dark.webp#only-dark){ .zoomies-shot }
+![An automatic repair that did not fix its failure: Started automatically, the outcome and next steps, and the Automatic repairs card with who pays, the allowance used, Stop automatic repairs and a link to its policy](screenshots/eli-repair-automatic-light.webp#only-light){ .zoomies-shot }
+
+**Repair setup** has its own **On this page** navigation for the account, the
+repositories, the allowance and the account link. It is where administrators
+choose the repositories and **When
+should Eli help?**, and link each requester's GitHub account to their Zoomies
 user; the requester then confirms that their own provider pays for the repairs
-they ask for. [How repairs work](eli.md#set-up-pr-repairs). `g e` opens it
-from anywhere.
-
-![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-dark.webp#only-dark){ .zoomies-shot }
-![Eli repairs with sample history: the PR request form, then Recent repairs with its filters, a checkbox on each row, a passed repair, an attempt needing attention and the page controls](screenshots/eli-repairs-light.webp#only-light){ .zoomies-shot }
-
-**Check readiness** explains what must be set up before starting. This example
-asks for a confirmed GitHub account link and an enabled personal provider;
-checking readiness does not call a model or spend a repair attempt.
-
-![PR repair readiness for acme/widgets: missing account and personal-provider setup, with buttons to finish setup or open provider settings](screenshots/eli-repair-readiness-dark.webp#only-dark){ .zoomies-shot }
-![PR repair readiness for acme/widgets: missing account and personal-provider setup, with buttons to finish setup or open provider settings](screenshots/eli-repair-readiness-light.webp#only-light){ .zoomies-shot }
-
-Administrators choose the repositories and **When should Eli help?** in
-**Repair setup**. Start with **Ask me first** to review offers before spending
+they ask for. Start with **Ask me first** to review offers before spending
 tokens. Workflow edits stay disabled until explicitly allowed, and the daily
-attempt budget bounds repair work.
+attempt budget bounds repair work. When a repair page is blocked on setup, a
+short wizard for that failure fixes what is missing and leaves you on it.
 
-![PR repair setup: the repository policy form with Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-dark.webp#only-dark){ .zoomies-shot }
-![PR repair setup: the repository policy form with Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-light.webp#only-light){ .zoomies-shot }
+![Repair setup: an On this page navigation for Account, Policies, Allowance and Link account, with the repository policy form open, Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-dark.webp#only-dark){ .zoomies-shot }
+![Repair setup: an On this page navigation for Account, Policies, Allowance and Link account, with the repository policy form open, Ask me first selected, acme/widgets checked, workflow edits disabled and a daily attempt budget](screenshots/eli-repair-setup-light.webp#only-light){ .zoomies-shot }
 
 ## Migrate
 
@@ -746,13 +1010,13 @@ works](migration.md).
 
 How the repositories this fleet serves measure up against what affects CI and the fleet: a public repository whose pull requests run on a machine that keeps state between jobs, or a label no pool serves. It is off until an administrator turns on `kennel.enabled`, and until then the page says what it would do, what it would read and what it never does, and lists the checks it would make. The section has a side menu (**Overview**, **Repositories** and **AI Context**) which on a narrower screen becomes a row of buttons above the page, wrapped rather than scrolled so none of them is out of sight on a phone. At the head of it is a switch, **Check repository standards**, which is the `kennel.enabled` setting itself: an administrator turns Kennel Club on or off from the page without going to Settings, and anybody else sees which it is and who can change it. Turning it off asks first and says what it does: it stops reading from GitHub, its problem leaves the problems list, and what it found is kept for when it is turned back on. If the controller's environment holds the setting the other way, the switch says so and stays where it is. `g k` opens it from anywhere.
 
-Once it is on, the **Overview** counts the repositories by standing and what is open across them by severity, and names the repositories to open first. A card, **Not tracked**, appears once somebody has told Kennel Club to stop looking at a repository: it counts those, which are in none of the other numbers, and opens them. Each count opens the repositories behind it: the total, the ones with nothing open, the ones that are only partly checked, the ones that need attention, the repositories with an error or a warning open, and the ones with a waived finding. A count of nothing has no link, since it would open an empty list. Under that, **By check** says which repositories have each check open, and **What Kennel Club can see** says how far each source of facts could be read. When something could not be read, the counts are a minimum, and the page says so above them rather than letting a count read as a total.
+Once it is on, the **Overview** answers first: a verdict band says what needs attention, names the worst repository and offers the action, and the full counts follow as one compact strip. A page nav marks the sections. A card, **Not tracked**, appears once somebody has told Kennel Club to stop looking at a repository: it counts those, which are in none of the other numbers, and opens them. Each count opens the repositories behind it: the total, the ones with nothing open, the ones that are only partly checked, the ones that need attention, the repositories with an error or a warning open, and the ones with a waived finding. A count of nothing has no link, since it would open an empty list. Under that, **What is open by check** says which repositories have each check open, with the affected checks first; the checks with nothing open and the checks somebody turned off each fold away in their own disclosure, because "nothing open" and "not running" are not the same sentence. **What Kennel Club can see** says how far each source of facts could be read. When something could not be read, the counts are a minimum, and the page says so above them rather than letting a count read as a total.
 
 A repository's standing is one of four: **Best in show** (or **No open findings**, with plain status words), **Needs attention**, **Partly checked** and **Pending**. Nothing is shown as all clear on a read that was not whole.
 
-**Repositories** lists the ones the fleet is serving, worst first, and narrows by standing, severity and check; each filter is in the address, so a view is a link to send. *Serving* means a job the fleet had a hand in within the last thirty days, or within as long as it keeps its jobs if that is shorter. Kennel Club keeps a row for a repository for a quarter after its last job, and under the installation scope for every repository the App can see, so a switch, **Active on Zoomies**, leaves the quiet ones out, and a line under the filters says how many it has left out and offers them. The switch is each person's own and is remembered in their browser; it starts on. The Overview's counts, its cards and the Kennel Club problem still cover every repository it is tracking, so an error on a quiet repository is never hidden, and a link from any of them opens the list on every one of them (`?active=all`) so that it shows as many rows as the number it came from. A repository Kennel Club has been told not to look at is left out of the list the same way, and for the same reason, and the **Tracking** filter brings them back (`?tracked=false` for those alone, `?tracked=all` for both): a row for one says **Not tracked**, that nothing is evaluated for it, and since when. Opening one shows it in sections, and each has an address of its own, so a link opens on the one you were looking at. **Overview** is what the fleet knows of the repository from the jobs it ran for it: how many finished in the last 7 or 30 days and how they ended, the share that succeeded, how long they waited for a runner and how long they took, the pools and hosts that ran them, and any job queued for a label no pool serves. Each figure opens the Jobs page on the jobs it counted: the finished jobs, the ones that failed and the ones this fleet lost, each pool's and each host's count, and the two timings with the slowest first. The list starts at the same minute the window did and leaves out the same hosted-runner jobs, so it shows the number on the tile. None of it is read from GitHub, so it is there whatever Kennel Club could or could not read. Jobs on somebody else's hosted runners are left out, because the fleet did not run them, and a window as long as the fleet keeps jobs says so, because it is only what is still held. **CI** is what Kennel Club concluded: each finding as what is wrong, what to change and where it was seen, the pools and runs it is about, and then what could be read and what could not, with the permission that would fix it. Operators can press **Recheck** to have it read again, and **Waive** a finding they have decided is acceptable here. A waiver needs a reason of at least ten characters and an end, at most a year away, because a decision nobody is asked to make again is how an exception becomes the rule. Waiving an error is an administrator's decision; an operator can waive a warning or a note. A waived finding is not counted while the waiver runs, and it is never hidden: it is listed under **Waived** with who decided, why and until when, and it comes back by itself if it gets worse. Any operator can end a waiver, which puts the finding back. **Agent guidance** shows optional instruction-file checks and lets an administrator preview safe changes and open a draft pull request. It checks structure and references separately from AI Context freshness. **Protection** gathers the findings about the repository's settings and the status checks its default branch requires, with what was read of each, the permission that would fix a gap, and a link to the GitHub page where each is fixed; until `kennel.settings_checks` is on it says the checks are off. **AI Context** is the card the AI Context page lists, for this repository: its state, what it last verified, why a run failed and what Zoomies will do about it, and the actions that fit where it is. It is found by the installation and GitHub's ID for the repository, it offers setup to an administrator or the installation's owner when there is none, which opens with this repository already selected (they can untick it), and it adds no switch, because AI Context is set up and removed by reviewed pull requests and not turned on and off. Somebody who may not configure the installation is answered the same whether or not the repository has AI Context, so for them the tab says it cannot tell, and offers only the AI Context page.
+**Repositories** lists the ones the fleet is serving, worst first. The Overview's five questions are quick views with counts above the list, and the filters are one row: severity, check and tracking (the standing now lives in the quick views). Each filter is in the address, so a view is a link to send. **Visibility** is hidden by default and stays in the Columns chooser. *Serving* means a job the fleet had a hand in within the last thirty days, or within as long as it keeps its jobs if that is shorter. Kennel Club keeps a row for a repository for a quarter after its last job, and under the installation scope for every repository the App can see, so a switch, **Active on Zoomies**, leaves the quiet ones out, and a line under the filters says how many it has left out and offers them. The switch is each person's own and is remembered in their browser; it starts on. The Overview's counts, its cards and the Kennel Club problem still cover every repository it is tracking, so an error on a quiet repository is never hidden, and a link from any of them opens the list on every one of them (`?active=all`) so that it shows as many rows as the number it came from. A repository Kennel Club has been told not to look at is left out of the list the same way, and for the same reason, and the **Tracking** filter brings them back (`?tracked=false` for those alone, `?tracked=all` for both): a row for one says **Not tracked**, that nothing is evaluated for it, and since when. Opening one shows it in sections, and each has an address of its own, so a link opens on the one you were looking at. **Findings** leads when the repository has something open, and **Fleet activity** usually leads when it does not. **Fleet activity** is what the fleet knows of the repository from the jobs it ran for it: how many finished in the last 7 or 30 days and how they ended, the share that succeeded, how long they waited for a runner and how long they took, the pools and hosts that ran them, and any job queued for a label no pool serves. Each figure opens the Jobs page on the jobs it counted: the finished jobs, the ones that failed and the ones this fleet lost, each pool's and each host's count, and the two timings with the slowest first. The list starts at the same minute the window did and leaves out the same hosted-runner jobs, so it shows the number on the tile. None of it is read from GitHub, so it is there whatever Kennel Club could or could not read. Jobs on somebody else's hosted runners are left out, because the fleet did not run them, and a window as long as the fleet keeps jobs says so, because it is only what is still held. **Findings** is what Kennel Club concluded: each finding as what is wrong, what to change and where it was seen, the pools and runs it is about, and then what could be read and what could not, with the permission that would fix it. **Protection** and **Agent guidance** are areas of Findings, reachable as filter chips, and their old addresses, `/protection` and `/agent-guidance`, open the area they name. Operators can press **Recheck** to have it read again, and **Waive** a finding they have decided is acceptable here. A waiver needs a reason of at least ten characters and an end, at most a year away, because a decision nobody is asked to make again is how an exception becomes the rule. Waiving an error is an administrator's decision; an operator can waive a warning or a note. A waived finding is not counted while the waiver runs, and it is never hidden: it is listed under **Waived** with who decided, why and until when, and it comes back by itself if it gets worse. Any operator can end a waiver, which puts the finding back. The **Agent guidance** area shows optional instruction-file checks and lets an administrator preview safe changes and open a draft pull request. It checks structure and references separately from AI Context freshness. The **Protection** area gathers the findings about the repository's settings and the status checks its default branch requires, with what was read of each, the permission that would fix a gap, and a link to the GitHub page where each is fixed; until `kennel.settings_checks` is on it says the checks are off. **AI Context** is the card the AI Context page lists, for this repository: its state, what it last verified, why a run failed and what Zoomies will do about it, and the actions that fit where it is. It is found by the installation and GitHub's ID for the repository, it offers setup to an administrator or the installation's owner when there is none, which opens with this repository already selected (they can untick it), and it adds no switch, because AI Context is set up and removed by reviewed pull requests and not turned on and off. Somebody who may not configure the installation is answered the same whether or not the repository has AI Context, so for them the tab says it cannot tell, and offers only the AI Context page.
 
-A repository's page has a switch, **Track this repository**, beside **Recheck**. Every repository is tracked until somebody says otherwise. An administrator can stop Kennel Club looking at one, and it asks for a reason of at least ten characters first, because stopping silences the repository's errors and whoever finds it quiet in a year will want to know why. An operator can start it again with one press, because that can only make Kennel Club stricter. Anybody else sees the state and who can change it, instead of a switch that would answer 403. A repository that is not tracked is not read from GitHub and nothing is evaluated for it: it has no findings, raises no problem, is counted on the Overview as **Not tracked** and in no other number, and has no **Recheck**. Its page says who stopped it, when and why, and its **CI** tab says that having no findings is not an all clear. Its **Overview** still works, because that is the fleet's own record (its summary of what Kennel Club says reads **Not tracked**, not a standing), and so does **AI Context**, which is not Kennel Club's to stop. Its waivers are kept and do nothing until it is tracked again. It is kept however long it has been quiet, so a sandbox does not come back tracked, and read, the day somebody pushes to it. On the **Repositories** list an administrator can tick several rows and press **Stop tracking**, which asks for one reason, names what it is about to stop, leaves alone any that are already stopped, and sends a request for each, one after another, so that each has its own audit entry and a refusal is named; anything it could not stop stays ticked. Nobody else is offered the tick boxes.
+A repository's page has a switch, **Track this repository**, in the meta line under the title; **Recheck** is the page's primary action. Every repository is tracked until somebody says otherwise. An administrator can stop Kennel Club looking at one, and it asks for a reason of at least ten characters first, because stopping silences the repository's errors and whoever finds it quiet in a year will want to know why. An operator can start it again with one press, because that can only make Kennel Club stricter. Anybody else sees the state and who can change it, instead of a switch that would answer 403. A repository that is not tracked is not read from GitHub and nothing is evaluated for it: it has no findings, raises no problem, is counted on the Overview as **Not tracked** and in no other number, and has no **Recheck**. Its page says who stopped it, when and why, and its **CI** tab says that having no findings is not an all clear. Its **Overview** still works, because that is the fleet's own record (its summary of what Kennel Club says reads **Not tracked**, not a standing), and so does **AI Context**, which is not Kennel Club's to stop. Its waivers are kept and do nothing until it is tracked again. It is kept however long it has been quiet, so a sandbox does not come back tracked, and read, the day somebody pushes to it. On the **Repositories** list an administrator can tick several rows and press **Stop tracking**, which asks for one reason, names what it is about to stop, leaves alone any that are already stopped, and sends a request for each, one after another, so that each has its own audit entry and a refusal is named; anything it could not stop stays ticked. Nobody else is offered the tick boxes.
 
 AI Context lives under Kennel Club, at `/kennel/ai-context`, with a row of its own in the side menu. The row carries a count when a repository's last workflow run has failed (red if any of them is an error, amber if all are warnings) and nothing otherwise, so a fleet where AI Context works, or where it is not used, has no badge to learn to ignore. It counts the same failures the problems list names, one for each repository, and follows them live; it does not count repositories that are only waiting for their setup pull request to be merged. It sits apart from the switch because it works with Kennel Club off, and the confirmation for turning Kennel Club off says so. Its setup wizard is a task rather than a place, so it has no side menu and a way back instead. The old address, `/ai-context`, opens the same page, so links and bookmarks keep working.
 
@@ -763,17 +1027,20 @@ Repositories prepared for AI coding assistants, and the way to prepare more.
 installation's permissions, pick where the context lives, set exclusions and
 retention, choose source readers, and review. Saving makes resumable drafts.
 **Review setup changes** then shows every file the setup pull request would
-write before one is opened. Each repository's card shows its status, when it was
-last checked and the last commit verified, with **Recheck context**,
-**Reinstall / repair**, **Amend** and **Remove**, and the AI instructions and
-badge to copy.
+write before one is opened. The page lists repositories before it explains itself, with a summary band
+and views that count what is in setup, ready and needing attention. Each
+repository's card shows its status, when it was last checked and the last commit
+verified, with the action that fits its state and **Reinstall / repair**;
+**Amend** and **Remove** are under **More actions**, and the AI instructions and
+badge under their own disclosure. How AI Context works, and Installation owners,
+sit below the list.
 
 Administrators can also choose **Installation owners**, who enable repositories
 for one installation without being administrators. A person who is only a
 source reader sees just the repositories shared with them.
 
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
 
 [AI Context](ai-context.md) walks through setting it up and using it.
 
@@ -827,10 +1094,11 @@ Markdown safely, follow the stream until you scroll up, and offer **Latest**, **
 when the provider’s **Let Eli read this fleet** switch is enabled, and run with
 the person’s own permissions.
 
-The settings page also shows your verified GitHub account link, personal-provider
-consent and PR repair history. Administrators configure repository policies,
-installation providers and automatic repair budgets. See [Eli](eli.md) for setup,
-GitHub permissions and repair limits.
+Under the providers, a **PR repairs** card opens [Eli repairs](#eli-repairs) and
+its **Repair setup**, where your verified GitHub account link, your consent to
+repairs on your own provider and, for administrators, the repository policies and
+automatic repair budgets now are. Administrators still manage installation
+providers here. See [Eli](eli.md) for setup, GitHub permissions and repair limits.
 
 ![Eli AI Assistant settings: the personal provider area, the built-in demo model, provider controls and the card that opens Eli](screenshots/eli-providers-dark.webp#only-dark){ .zoomies-shot }
 ![Eli AI Assistant settings: the personal provider area, the built-in demo model, provider controls and the card that opens Eli](screenshots/eli-providers-light.webp#only-light){ .zoomies-shot }
@@ -864,9 +1132,15 @@ in [Backup and restore](backup-and-restore.md).
 ### Updates
 
 Which release the update mode would take, and when, and for the platform role
-the one thing on the page that installs anything: the **Update** button for this
-controller. A host is updated from its own card on **Hosts**, or with every
-other host that is behind in a [rollout](#updating-every-host-that-is-behind).
+what installs anything on the page: **Review update to v1.3.2…** for this
+controller, which opens a confirmation naming the release, whose own button
+reads **Update to v1.3.2**, and **Review dev upgrade…** (**Reinstall latest
+dev…** when the controller already runs the newest build from `main`) for the
+development build, with a warning that it may include untested changes. Where
+updating is off, or the controller's host has no update helper, the page says
+why and, where there is one, gives the command to run there instead. A host is
+updated from its own card on **Hosts**, or with every other host that is behind
+in a [rollout](#updating-every-host-that-is-behind).
 
 At the top, Installed build and release status labels the controller as
 Standard, Development or Custom. A stamped development build shows its commit,
@@ -904,7 +1178,7 @@ controller restart itself without another request. One built
 from `main` is offered the newest release as a replacement, with a warning in
 the confirmation that it may take the controller back to older code, since a
 build from `main` is usually ahead of the newest release. Auto never takes it:
-only a person pressing the button does.
+only a person confirming it does.
 
 ![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-dark.webp#only-dark){ .zoomies-shot }
 ![Settings → Updates: the installed standard build, Check for updates, the available standard release and its notes, and the controller update choices](screenshots/settings-updates-light.webp#only-light){ .zoomies-shot }
@@ -945,11 +1219,12 @@ Read-only monitoring from a phone is a stated requirement, so it is tested. The
 navigation moves to the bottom edge, the tiles stack, and everything still
 updates in place.
 
-Every grid stays the table it is on a desktop, one line per runner, scrolling
-sideways inside its own frame to the columns that do not fit, never taking the
-page with it. If you would rather read a row downwards, the **Cards / Rows**
-toggle above each grid gives every value a line of its own, with nothing cut
-off; **Settings → Appearance** sets which of the two every grid starts in.
+In Mission Control, the default, a grid starts as cards on a phone: every value
+on a line of its own, with nothing cut off. In Classic every grid stays the
+table it is on a desktop, one line per runner, scrolling sideways inside its own
+frame to the columns that do not fit, never taking the page with it. The
+**Cards / Rows** toggle above each grid switches between the two;
+**Settings → Appearance** sets which of them every grid starts in.
 
 ![The Overview: four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-phone-dark.webp#only-dark){ .zoomies-shot .zoomies-phone }
 ![The Overview: four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events](screenshots/overview-phone-light.webp#only-light){ .zoomies-shot .zoomies-phone }

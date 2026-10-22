@@ -215,14 +215,18 @@ type UpdatesTarget struct {
 // It narrows a copy. The view is rendered once and handed to every audience, and
 // the attempt it points to is shared.
 func (v UpdatesView) For(platform bool) UpdatesView {
-	if platform || v.Controller == nil || v.Controller.Error == "" {
+	if platform || v.Controller == nil {
 		return v
 	}
 	attempt := *v.Controller
-	attempt.Error = withheldAttemptError(attempt.State)
+	if attempt.Error != "" {
+		attempt.Error = withheldAttemptError(attempt.State)
+	}
 	// The copy's directory is a path on the controller's host, so it is withheld
-	// with the error. RolledBack is a fact about what happened, not a path, and
-	// stays.
+	// in every state and not only along with an error: a succeeded update records
+	// one too, and an attempt with nothing to say about a failure was once passed
+	// through with its path. RolledBack is a fact about what happened, not a path,
+	// and stays.
 	attempt.Backup = ""
 	v.Controller = &attempt
 	return v

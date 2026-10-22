@@ -18,16 +18,29 @@ import (
 // ErrRepairUnsupported identifies a run that cannot be admitted as a PR repair.
 var ErrRepairUnsupported = errors.New("unsupported PR repair target")
 
+// RepairTargetChanged describes an authoritative change since a failed run.
+// Transport and permission errors never use this type: neither proves a fix.
+type RepairTargetChanged struct {
+	Code    string
+	Message string
+}
+
+func (e *RepairTargetChanged) Error() string { return e.Message }
+func (e *RepairTargetChanged) Unwrap() error { return ErrRepairUnsupported }
+
 type RepairActor struct {
 	ID       int64
 	Login    string
 	CanWrite bool
 }
 type RepairPull struct {
-	Number        int
-	AuthorID      int64
-	Author        string
-	Branch        string
+	Number   int
+	AuthorID int64
+	Author   string
+	Branch   string
+	// Base is the branch the pull request merges into, which is not always the
+	// repository's default branch: it can target a release branch.
+	Base          string
 	HeadSHA       string
 	Title         string
 	Body          string
@@ -117,11 +130,17 @@ func (c *appClient) RepairPull(ctx context.Context, repo string, number int) (Re
 				DefaultBranch string `json:"default_branch"`
 			} `json:"repo"`
 		} `json:"head"`
+		Base struct {
+			Ref string `json:"ref"`
+		} `json:"base"`
 	}
 	if err := c.repairRequest(ctx, http.MethodGet, base+"/pulls/"+strconv.Itoa(number), nil, &p); err != nil {
 		return RepairPull{}, err
 	}
-	out := RepairPull{Number: p.Number, AuthorID: p.User.ID, Author: p.User.Login, Branch: p.Head.Ref, HeadSHA: p.Head.SHA, Title: p.Title, Body: p.Body, URL: p.HTMLURL, DefaultBranch: p.Head.Repo.DefaultBranch, Fork: p.Head.Repo.FullName != repo, Open: p.State == "open"}
+	out := RepairPull{Number: p.Number, AuthorID: p.User.ID, Author: p.User.Login, Branch: p.Head.Ref, Base: p.Base.Ref, HeadSHA: p.Head.SHA, Title: p.Title, Body: p.Body, URL: p.HTMLURL, DefaultBranch: p.Head.Repo.DefaultBranch, Fork: p.Head.Repo.FullName != repo, Open: p.State == "open"}
+	if out.Number > 0 && p.State == "closed" {
+		return out, &RepairTargetChanged{Code: "closed", Message: fmt.Sprintf("PR #%d is closed or merged. This failure no longer needs a PR repair. You can still inspect the original run on GitHub.", out.Number)}
+	}
 	if out.Number <= 0 || !out.Open || out.Fork || out.HeadSHA == "" || out.Branch == "" || out.Branch == out.DefaultBranch {
 		return out, fmt.Errorf("%w: an Eli repair needs an open PR on a non-default branch in this repository; forks are not writable", ErrRepairUnsupported)
 	}
@@ -134,6 +153,7 @@ func (c *appClient) RepairPullForRun(ctx context.Context, repo string, run int64
 	}
 	var r struct {
 		HeadSHA        string `json:"head_sha"`
+		Event          string `json:"event"`
 		HeadRepository struct {
 			FullName string `json:"full_name"`
 		} `json:"head_repository"`
@@ -147,15 +167,28 @@ func (c *appClient) RepairPullForRun(ctx context.Context, repo string, run int64
 	if r.HeadRepository.FullName != repo {
 		return RepairPull{}, fmt.Errorf("%w: fork workflow runs are not writable", ErrRepairUnsupported)
 	}
+	// GitHub can omit the run's PR links, including after a PR is merged.
+	// Resolve by commit, never by a branch name that may have been reused, and
+	// only for a run a PR started: the commit of a push, schedule or manual run
+	// on the default branch resolves to the PR whose merge made it, and that
+	// PR being closed would settle a failure that never belonged to it.
+	if len(r.Pulls) == 0 && r.HeadSHA != "" {
+		if r.Event != "pull_request" && r.Event != "pull_request_target" {
+			return RepairPull{}, fmt.Errorf("%w: the failed run was not started by a PR (its event is %q), so there is no PR to repair", ErrRepairUnsupported, r.Event)
+		}
+		if err := c.repairRequest(ctx, http.MethodGet, base+"/commits/"+url.PathEscape(r.HeadSHA)+"/pulls?per_page=2", nil, &r.Pulls); err != nil {
+			return RepairPull{}, err
+		}
+	}
 	if len(r.Pulls) != 1 {
-		return RepairPull{}, fmt.Errorf("%w: the failed run must identify exactly one pull request", ErrRepairUnsupported)
+		return RepairPull{}, fmt.Errorf("%w: the failed run does not identify a single PR. Choose an open PR or paste its GitHub URL", ErrRepairUnsupported)
 	}
 	p, err := c.RepairPull(ctx, repo, r.Pulls[0].Number)
 	if err != nil {
 		return p, err
 	}
 	if p.HeadSHA != r.HeadSHA {
-		return p, ErrRepairUnsupported
+		return p, &RepairTargetChanged{Code: "superseded", Message: fmt.Sprintf("PR #%d has newer commits than this failed run. This failure is out of date. Check the current PR to see whether its latest checks need a repair.", p.Number)}
 	}
 	return p, nil
 }
@@ -412,19 +445,26 @@ func (c *appClient) RepairChecks(ctx context.Context, repo, sha string) (string,
 	if statuses.Total > 0 && (statuses.State == "failure" || statuses.State == "error") {
 		return "failed", nil
 	}
-	if checks.Total == 0 && statuses.Total == 0 || statuses.Total > 0 && statuses.State != "success" {
-		return "waiting", nil
-	}
-	if checks.Total > len(checks.Runs) {
-		return "waiting", nil
-	}
+	pending := checks.Total > len(checks.Runs) || statuses.Total > 0 && statuses.State != "success"
+	passed := statuses.Total > 0 && statuses.State == "success"
 	for _, r := range checks.Runs {
 		if r.Status != "completed" {
-			return "waiting", nil
+			pending = true
+			continue
 		}
-		if r.Conclusion != "success" && r.Conclusion != "neutral" && r.Conclusion != "skipped" {
+		switch r.Conclusion {
+		case "failure", "timed_out", "action_required", "startup_failure":
 			return "failed", nil
+		case "success":
+			passed = true
+		case "neutral", "skipped":
+		default:
+			// A cancellation or missing outcome is not evidence of a fix.
+			pending = true
 		}
+	}
+	if pending || !passed {
+		return "waiting", nil
 	}
 	return "passed", nil
 }

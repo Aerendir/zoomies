@@ -533,7 +533,7 @@ export interface paths {
         };
         /**
          * Why jobs waited
-         * @description Every second the jobs queued in the period waited, each put down to exactly one cause, for the fleet or for one pool. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
+         * @description Every second the jobs queued in the period waited, each put down to exactly one cause, for the fleet or for one pool. Only the jobs this fleet has a hand in are read: one whose labels all name another vendor's runners, and that no pool here claimed and no runner here ran, is left out, as the Jobs page's default view leaves it out. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
          */
         get: operations["analyseQueueWait"];
         put?: never;
@@ -553,7 +553,7 @@ export interface paths {
         };
         /**
          * What got worse and what got better
-         * @description Two releases' jobs in the period, or the period against the one of the same length before it, measure by measure. Cancelled and skipped jobs are left out of every figure, and the response says so in `excluded`. Under 30 jobs on either side nothing is ranked, and the summary says the sample is too small. A side older than `retention.jobs` is read from the daily roll-up: counts only, in whole UTC days. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
+         * @description Two releases' jobs in the period, or the period against the one of the same length before it, measure by measure. Cancelled and skipped jobs are left out of every figure read from the job rows, and the response says so in `excluded`. Under 30 jobs on either side nothing is ranked, and the summary says the sample is too small. A side older than `retention.jobs` is read from the daily roll-up: counts only, in whole UTC days, of every job that ran here, cancelled ones included. Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is refused before anything is read.
          */
         get: operations["analyseCompare"];
         put?: never;
@@ -907,7 +907,7 @@ export interface paths {
         put?: never;
         /**
          * Approve an MCP connection
-         * @description Creates the connection at the role chosen and returns the client's redirect carrying a single-use authorisation code, for the browser to follow. Audited as `mcp_connection.grant`.
+         * @description Creates the connection at the role chosen and returns the client's redirect carrying a single-use authorisation code, for the browser to follow. The client is read again here and not only when the sign-in began, up to fifteen minutes earlier, so an edit to its redirect URIs since then still reaches a request that is waiting. When the address the sign-in was going to is no longer one of them, nothing is created and the answer is a 422 rather than a redirect, so the person stays on the consent screen, which shows its message as it is: `<client>'s redirect URIs changed after it asked to connect, and the address it asked to send you back to is no longer one of them, so nothing was shared; start the connection again from <client>, and if that is refused too, ask an administrator to check its redirect URIs in Settings, MCP clients`, with the client's name for `<client>`. Audited as `mcp_connection.grant`.
          */
         post: operations["approveMCPRequest"];
         delete?: never;
@@ -2724,6 +2724,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hosts/{id}/recommendation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What Adjust recommends for a host
+         * @description The capacity and reserve the Adjust dialog's "Set to recommendations" puts on a host, worked out on the controller from the machine's CPUs, memory and disk and the largest runner an enabled pool asks for. The same numbers the controller applies when the host is kept at its recommendation. `available` is false for a host that has not reported how big it is.
+         */
+        get: operations["getHostRecommendation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hosts/{id}/throttle/clear": {
         parameters: {
             query?: never;
@@ -3233,7 +3256,7 @@ export interface paths {
         put?: never;
         /**
          * Run the live preflight
-         * @description Asks the provider what it would refuse, changing nothing there. The result is recorded on the row as well as returned, so a check run in a terminal quiets the warning the UI is showing. Audited, because it uses the credential.
+         * @description Asks the provider what it would refuse, changing nothing there. The result is recorded on the row as well as returned, so a check run in a terminal quiets the warning the UI is showing. Audited, because it uses the credential. A token narrowed by scopes needs `providers:pause`, the kill switch's scope; the test machine has a scope of its own, `providers:test`.
          */
         post: operations["checkProvider"];
         delete?: never;
@@ -3256,7 +3279,7 @@ export interface paths {
         put?: never;
         /**
          * Build one machine to prove the provider works
-         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential.
+         * @description Reserves a single test machine, which the machine loop then clones, starts, bootstraps and enrols like any other, so a pass proves every step a real machine needs. It is released as soon as it reports ready, and left in place if it fails, so its message and errors can be read. It costs like any machine and counts against the provider's and the fleet's maximums, only one runs at a time per provider, and it is never kept warm. The answer is the planned machine (`test` is true); follow it on the event stream or `GET /machines`. 409 says why it cannot start: renting is off or paused, a test is already running, or there is no room under a maximum. Audited, because it spends money and uses the credential. Requires the operator role and, for a token narrowed by scopes, `providers:test`. The kill switch's scope, `providers:pause`, does not cover it: a token minted to stop spending cannot start a machine somebody pays for.
          */
         post: operations["testProviderMachine"];
         delete?: never;
@@ -3277,7 +3300,7 @@ export interface paths {
         };
         /**
          * What this credential can actually see
-         * @description The nodes, storages, bridges and templates a provider offers, so the form presents a menu rather than asking somebody to go and look an identifier up. A driver that cannot list them answers 409 and the form asks for the identifiers instead.
+         * @description The nodes, storages, bridges and templates a provider offers, so the form presents a menu rather than asking somebody to go and look an identifier up. A driver that cannot list them answers 409 and the form asks for the identifiers instead. A token narrowed by scopes needs `providers:pause`, the kill switch's scope; the test machine has a scope of its own, `providers:test`.
          */
         get: operations["getProviderDiscovery"];
         put?: never;
@@ -3325,7 +3348,7 @@ export interface paths {
         put?: never;
         /**
          * Stop this provider buying new machines
-         * @description The kill switch. It blocks new machines only: draining, deleting, recovering and verifying ownership all continue, because a switch that stopped those would strand running machines nobody is watching. Pressing it twice is not an error.
+         * @description The kill switch. It blocks new machines only: draining, deleting, recovering and verifying ownership all continue, because a switch that stopped those would strand running machines nobody is watching. Pressing it twice is not an error. A token narrowed by scopes needs `providers:pause`, which also covers resume, the live preflight and discovery, and not the test machine, which has `providers:test`.
          */
         post: operations["pauseProvider"];
         delete?: never;
@@ -3856,6 +3879,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assistant/repairs/error-output": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the error lines of one failed job, when asked
+         * @description The lines of the job's log that say why it failed, read from GitHub when the request is made and passed through the same credential redaction a repair's evidence gets. They are kept nowhere: held in memory for a minute so a second look is not a second download, and never stored or logged. Personal accounts only, like readiness, and only for a caller whose confirmed GitHub account can write to the repository; anyone else is a 409 that says what is needed. A log GitHub no longer has, or a job that printed no error lines, is an empty `lines` with a `note`.
+         */
+        get: operations["getEliErrorOutput"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/automatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * See the repositories that repair themselves, what they have used and whether they can run
+         * @description One entry for each enabled repository policy set to Automatic, the ones that cannot run first and then by name. `used` is every attempt on the repository in the last 24 hours, by anyone and by any trigger, a repair cleared from the history included: the number the daily limit is held against. Automatic repairs have no owner, so this is an administrator's view and nobody else can read it.
+         */
+        get: operations["getEliAutomaticRepairs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/automatic/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop automatic repairs on one or more repositories
+         * @description Only ever relaxes a policy, so it needs no working provider, which is the day it is wanted. `ask_first` sets the repository to Ask me first. `off` clears the policy's enable switch and keeps its mode, so switching it back on in setup resumes Automatic as it was. A repair already queued is blocked when the worker reaches it, and one that has not pushed yet stops before it does. Each repository is answered for on its own: one that is not automatic any more is `changed: false` and no error, one with no policy has an `error`. One audit row `assistant.repair_automatic_stop` is written for each repository that changed.
+         */
+        post: operations["stopEliAutomaticRepairs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/repairs/opportunities": {
         parameters: {
             query?: never;
@@ -3905,6 +3988,26 @@ export interface paths {
         put?: never;
         /** Request a repair using the caller’s personal provider */
         post: operations["requestEliRepair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assistant/repairs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one repair
+         * @description One repair by id, in the shape the list returns. Administrators reach any repair and everyone else their own; a repair that is not the caller's is a 404 word for word the same as one that does not exist. A repair cleared from the history still opens, so a link someone kept keeps working.
+         */
+        get: operations["getEliRepair"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4482,7 +4585,7 @@ export interface paths {
         head?: never;
         /**
          * Edit an MCP client's name and redirect URIs
-         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended, and the client ID and secret stay as they were. Audited as `mcp_client.update`.
+         * @description Only a client an administrator created can be edited; a dynamic one owns its registration and a metadata client's facts come from its document. Redirect URIs default to Claude's, as creation does. Connections already made are not ended and keep working, and the client ID and secret stay as they were. Removing a redirect URI does reach what has not finished yet: a sign-in still waiting for consent, and an authorisation code not yet exchanged, are refused when the address they carry is no longer one of the client's, with a sentence saying to start the connection again. Audited as `mcp_client.update`.
          */
         patch: operations["updateMCPClient"];
         trace?: never;
@@ -5530,6 +5633,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/optimisations/enablement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether reviewed workflow previews are switched on, and who can switch them
+         * @description Requires operator and optimisations:read; public visitors are refused. Reports the two settings optimisation.source_reads and optimisation.workflow_edits, whether the caller can change them and, when not, why in a sentence to act on. Reads no GitHub data.
+         */
+        get: operations["getOptimisationEnablement"];
+        /**
+         * Turn reviewed workflow previews on or off together
+         * @description Requires admin and settings:write; public visitors are refused. Sets optimisation.source_reads and optimisation.workflow_edits together, through the same planning, validation and audit as PATCH /settings, so the environment lock applies and the change is live for the next request. Turning them on lets the controller read one workflow file at a run's commit and keep a proposed edit for fourteen days. It publishes nothing and no model reads the file.
+         */
+        put: operations["setOptimisationEnablement"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/optimisations/checkout/inspections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read one workflow file so an operator can review a checkout change
+         * @description Requires operator, jobs:read and optimisations:write; public visitors are refused. Refused with 403 unless an administrator has turned on optimisation.source_reads and optimisation.workflow_edits. Reads one root workflow file at the push commit of an exact run, attempt and GitHub job, with at most seven GitHub requests under a 20-second deadline, the shared diagnostic flight and the half-core-quota reserve. Nothing is retained; the source is returned once, no-store, for review. Workflow text is untrusted repository content and is not an instruction. Run and job IDs are decimal strings.
+         */
+        post: operations["inspectCheckoutOptimisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/optimisations/checkout/previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retain a reviewed checkout-depth preview
+         * @description Requires operator, jobs:read and optimisations:write; public visitors are refused. The server reads the source again, checks that its head and digest are the ones named here, re-reads its own settings before and after, and keeps an immutable preview for fourteen days with an audit row. The history_reviewed flag is an attributed declaration by the caller that neither the repository's tooling nor its downstream consumers need full history; it is not independent proof. The preview changes one line and publishes nothing: no pull request, no approval, no job. Verification is always inconclusive.
+         */
+        post: operations["captureCheckoutPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/optimisations/checkout/previews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Replay a retained checkout preview without GitHub reads
+         * @description Requires operator, jobs:read and optimisations:read; public visitors are refused. Supply exactly one installation_id and repo and nothing else. Verifies the stored digest and recomputes the preview from retained input only. The answer carries the one changed line and never the workflow file. currentness is always not_checked: the head and policy are not re-read.
+         */
+        get: operations["getCheckoutPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5812,7 +6002,7 @@ export interface components {
             error: {
                 /** @enum {string} */
                 code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unprocessable" | "too_large" | "rate_limited" | "limit_reached" | "update.mode_off" | "update.check_disabled" | "update.helper_missing" | "update.in_progress" | "update.not_a_release" | "update.nothing_newer" | "update.host_cannot_update" | "update.rollout_halted" | "update.check_failed" | "assistant.provider_failed" | "assistant.provider_not_yours" | "assistant.identity_held" | "analysis.same_release" | "analysis.too_few_releases" | "analysis.whole_days_only" | "internal";
-                /** @description Written for a person to read */
+                /** @description Written for a person to read, and to act on. */
                 message: string;
                 /** @description The form field at fault, or on a `limit_reached` refusal the `limits.*` setting that refused. */
                 field?: string;
@@ -8629,6 +8819,8 @@ export interface components {
              * @description GitHub's own sequential number for this workflow run - the "#1009" its Actions UI shows next to the workflow name, for cross-referencing the two. Zero until a workflow_run lookup backfills it, since the webhook that recorded the job never carries it.
              */
             run_number?: number;
+            /** @description What started the run: `push`, `pull_request`, `schedule` and so on. Absent until the controller has read the run from GitHub, since the webhook that recorded the job never carries it. Eli repairs a pull request's branch and nothing else, so a failure of a run that is not a pull request's is never offered to it. */
+            run_event?: string;
             /** @description The controller version that claimed the job, stamped once and never rewritten, so jobs can be grouped by release. Absent on a job recorded before this field existed and on one no pool here claimed; neither is guessed at. Filter with `controller_version=unknown` to find them. */
             controller_version?: string;
             /** @description The install channel of that controller build. */
@@ -8723,10 +8915,10 @@ export interface components {
             fault_fix?: string;
             /**
              * Format: date-time
-             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Null on a failure nobody has triaged, which is the ordinary state.
+             * @description When somebody marked this failure as known, taking it out of the attention list without changing anything about the failure itself. Absent on a failure nobody has triaged, which is the ordinary state.
              */
             acknowledged_at?: string | null;
-            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Empty when nobody has, and on an instance with authentication off, where there is no account behind the action. */
+            /** @description The name the person who acknowledged the failure went by, kept as a snapshot the way an audit row's actor name is. Absent when nobody has acknowledged the failure, on an instance with authentication off, where there is no account behind the action, and for a visitor to a public view, who is told a failure was marked as known and when but never by whom. */
             acknowledged_by?: string;
             /** Format: date-time */
             queued_at?: string;
@@ -9172,7 +9364,7 @@ export interface components {
             since: string;
             /**
              * Format: date-time
-             * @description End of what the finding covers, not included.
+             * @description End of what the finding covers, not included. Never later than when it was computed.
              */
             until: string;
             /** @description The answer in one or two sentences. Always set. */
@@ -9302,7 +9494,7 @@ export interface components {
             b: components["schemas"]["CompareSide"];
             /** @description One row for every measure, in a fixed order, so a reader finds a measure by name whether or not it moved. */
             changes: components["schemas"]["CompareChange"][];
-            /** @description The conclusions left out of every figure, `cancelled` and `skipped`. */
+            /** @description The conclusions left out of every figure read from the job rows, `cancelled` and `skipped`. */
             excluded: string[];
             /** @description The database could not compute percentiles, so no time was compared. */
             percentiles_unavailable: boolean;
@@ -9537,10 +9729,10 @@ export interface components {
          */
         FaultKind: "host_lost" | "out_of_memory" | "out_of_disk" | "removed" | "image" | "registration" | "backend" | "backend_busy" | "container_conflict" | "config" | "runner_exited";
         /**
-         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits. `acknowledged` and `reopened` are the fleet's triage of a failure: somebody said they had read it, and somebody put it back in front of whoever looks next. Neither changes the job, which is why they are entries here rather than a move of the job.
+         * @description What happened. `runner_lost` is the one entry GitHub cannot produce: the runner stopped under the job, and GitHub will report an ordinary failure. `waiting` and `approved` bracket a deployment review: the time between them is GitHub's, and the queue wait starts at `approved`. `runner_returned` withdraws a `runner_lost`: the host was silent long enough to be given up on, came back with the runner still executing this job, and the job is being left to finish. `runner_start_failed` is the failure that touches no job: a runner this pool started died before it could take one, so the job is still queued and the next runner may run it -- said here because a pool that cannot start a container otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel killing the job's runner, or one of its steps, for its memory limit -- which can be recorded after `completed`, because a runner whose step was killed finishes the job and reports the kill only when it exits. `sized` is the controller's sizing of a waiting job: it put the job in a size class, sent it to the pool of another class, or took that back when `scheduler.size_routing` was switched `off`, with the sentence that says why; a fleet that leaves size routing `off` writes none. `acknowledged` and `reopened` are the fleet's triage of a failure: somebody said they had read it, and somebody put it back in front of whoever looks next. Neither changes the job, which is why they are entries here rather than a move of the job.
          * @enum {string}
          */
-        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed" | "acknowledged" | "reopened";
+        JobEventKind: "queued" | "waiting" | "approved" | "claimed" | "unmatched" | "started" | "completed" | "runner_lost" | "runner_returned" | "cancel_requested" | "runner_start_failed" | "rerun_requested" | "oom_killed" | "sized" | "acknowledged" | "reopened";
         JobEvent: {
             id?: string;
             job_id?: string;
@@ -9993,6 +10185,29 @@ export interface components {
              */
             next_at?: string;
         };
+        HostRecommendation: {
+            available: boolean;
+            /** @description How many runners the machine holds after the reserve. */
+            capacity?: number;
+            reserve_cpus?: number;
+            /** Format: int64 */
+            reserve_memory_mb?: number;
+            /** Format: int64 */
+            reserve_disk_mb?: number;
+            /**
+             * @description The figure that set the capacity.
+             * @enum {string}
+             */
+            limited_by?: "cpu" | "memory" | "disk";
+            /** @description The CPUs one runner asks for. */
+            ask_cpus?: number;
+            /** Format: int64 */
+            ask_memory_mb?: number;
+            /** @description The pool whose runner size set the ask. Absent when the fleet default did. */
+            ask_pool?: string;
+            /** @description The recommendation as one sentence. */
+            reason?: string;
+        };
         /** @description The host's part in updating Zoomies from the web UI: whether it can be updated from here, why in a sentence, and its latest attempt while that attempt still says something about the host. Nothing in it moves with the clock or with a heartbeat. */
         HostUpdate: {
             /**
@@ -10012,6 +10227,11 @@ export interface components {
              * @example upd_k3fqz2mx7abcd
              */
             attempt_id: string;
+            /**
+             * @description The problem code of the failure `state` describes, when it has a cause of its own worth naming, and empty otherwise. `host.update_helper_stuck` says the update helper on the host had stopped reading requests (its path unit disabled, inactive or failed, or a request nobody had read for longer than a healthy helper takes), so the attempt failed before anything ran. `reason` is then built by the controller from fixed words and numbers, with the attempt, how long the request had waited and what systemd says of the units, and carries no path, so every role reads it rather than the fixed sentence below the `platform` role is otherwise given.
+             * @enum {string}
+             */
+            code: "" | "host.update_helper_stuck";
         };
         RecoveryHost: {
             host_id: string;
@@ -10050,6 +10270,18 @@ export interface components {
             runtime_reason?: string;
             /** @description The last start or prewarm here whose image could not be made ready. Absent when there is none. */
             image_pull_failed?: components["schemas"]["ImagePullIncident"];
+            /**
+             * @description The operator's answer to whether the controller keeps this host at its recommended capacity and reserve. Empty follows the fleet.
+             * @enum {string}
+             */
+            auto_adjust?: "" | "on" | "off";
+            /** @description Whether the controller is keeping this host at its recommendation now, once the fleet's default is counted. */
+            auto_adjust_effective?: boolean;
+            /**
+             * Format: date-time
+             * @description When the controller last moved this host's capacity or reserve. Absent if it never has.
+             */
+            auto_adjusted_at?: string;
             /**
              * @description The operator sentence for the throttle: what it took, why, what it is doing to the jobs already running, and how it ends. Empty when the host is not throttled.
              * @example throttled to 2 of 4 slots (step 2 of 3) after sustained pressure: the 1-minute load average is 30.0, at least twice the host's 8 CPUs; running jobs continue, the 1 runner with a CPU limit at 50% of it, and the throttle lifts one step after 5m of calm
@@ -10572,7 +10804,7 @@ export interface components {
              * @enum {string}
              */
             reasoning_effort: "" | "none" | "low" | "medium" | "high";
-            /** @description How much the model may write in one round of a chat, thinking included, as the request's `max_tokens`; 0 is the controller's default of 8,192. From 1,024 to 65,536. A thinking model's reasoning counts against it, and an answer that reaches it is reported as cut, with this provider and the limit in force, so the person can raise it. Refused on the subscription kinds, whose tool decides. */
+            /** @description How much the model may write in one round, thinking included, as the request's `max_tokens`, from 1,024 to 65,536; 0 is automatic. A chat starts at 8,192 and reports an answer that reaches the limit as cut, with this provider and the limit in force, so the person can raise it. A repair starts at 12,000 and, when the model runs out, asks again with twice as much, up to 65,536, and keeps that amount for the rest of the repair. A number is kept exactly, so it also caps what an answer can cost. A thinking model's reasoning counts against the limit. Refused on the subscription kinds, whose tool decides. */
             max_output_tokens: number;
             /** @description Somebody's own subscription, used through the vendor's own tool on the controller's machine. Such a provider belongs to the person who added it. */
             subscription: boolean;
@@ -10588,11 +10820,33 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description One failed job of the run a repair was started for, with the step it stopped at. Every text is the workflow's own words, so it is data to draw and never markup. */
+        EliRepairCaseJob: {
+            name: string;
+            /** @description The first step that did not succeed. */
+            step?: string;
+            /** @description The job's page, on the host GitHub served it from. Present only when it is a plain http or https address. */
+            url?: string;
+            duration_ms?: number;
+        };
+        /** @description What a repair was about, kept as it was when the repair began: Zoomies' own job records are pruned and a pull request's title changes. It holds no log text. Absent on a repair made before cases were kept, and a case whose jobs were already pruned names the pull request alone. */
+        EliRepairCase: {
+            pull_title?: string;
+            pull_url?: string;
+            author?: string;
+            branch?: string;
+            run_url?: string;
+            workflow?: string;
+            run_number?: number;
+            /** @description The failed jobs, at most ten. */
+            jobs?: components["schemas"]["EliRepairCaseJob"][];
+        };
         EliRepairDetails: {
             model?: string;
             stage?: string;
             failure_code?: string;
             source_bytes?: number;
+            case?: components["schemas"]["EliRepairCase"];
             steps?: {
                 input_tokens: number;
                 output_tokens: number;
@@ -10607,21 +10861,58 @@ export interface components {
             capped: boolean;
             missing_permissions: string[];
         };
+        EliErrorOutput: {
+            /** @description The error lines of the job's log, redacted: at most twelve, each at most 300 bytes, the last ones being those that ended the job. */
+            lines: string[];
+            /** @description A sentence for the person when there are no lines to show. */
+            note?: string;
+        };
+        /** @description The pull request a readiness answer is about, in its own words. Present only after the caller's linked GitHub account has been shown to write to the repository, so a person who may not see the repository is never told what is in it. The url is the server's, so a GitHub Enterprise Server link points at the right host. */
+        EliReadinessPull: {
+            number: number;
+            title: string;
+            author: string;
+            /** @description The branch the pull request comes from. */
+            branch: string;
+            /** @description The branch it would merge into. */
+            base: string;
+            url: string;
+            open: boolean;
+        };
+        /** @description One thing readiness looks at and what it found. A check readiness never reached because an earlier one stopped it is unchecked, which is not the same as passed. */
+        EliReadinessCheck: {
+            /** @enum {string} */
+            code: "identity" | "provider" | "installation" | "access" | "policy" | "budget" | "pull" | "checks" | "permissions";
+            /** @enum {string} */
+            status: "ok" | "blocked" | "unchecked";
+            message: string;
+            /** @description On a blocked check, the code of the blocker that stopped it, as it appears in `blockers`. The check says where readiness stopped and the blocker says why, and they are not the same: GitHub not answering (`github`) or the allowance not being readable (`budget_unavailable`) is reported on whichever check it was making. When the target has changed, `blockers` holds that change alone, and a check blocked before it was found still names what stopped it. Absent on a check that passed or was not reached, and from a controller older than this field. */
+            blocker?: string;
+        };
         EliReadiness: {
             ready: boolean;
             repo: string;
             pull_number: number;
             head_sha: string;
+            pull?: components["schemas"]["EliReadinessPull"];
             provider: string;
             model: string;
             allow_workflows: boolean;
             remaining: number;
             /** Format: date-time */
             reset_at?: string;
+            /**
+             * @description How the repository's policy lets Eli help, so a page can say whether the repository would have started a repair itself. Present once readiness has reached the policy check, and not before.
+             * @enum {string}
+             */
+            policy_mode?: "automatic" | "ask_first" | "manual";
+            /** @description What stands in the way. When the target has changed (fixed, closed or superseded) this is that alone, which is the answer to what the person asked; checks still say what each check found. */
             blockers: {
                 code: string;
                 message: string;
             }[];
+            /** @description Every check readiness makes, always the same nine in the order they are made, so a page can show what passed as well as what did not. */
+            checks: components["schemas"]["EliReadinessCheck"][];
         };
         EliOpportunity: {
             id: string;
@@ -10678,6 +10969,8 @@ export interface components {
             instruction: string;
             /** @description PR head reviewed by the requester */
             head_sha?: string;
+            /** @description The run whose failure the requester was looking at, when they came from one. The repair records it and says it was started for that run. */
+            run_id?: number;
         };
         EliRepair: {
             details?: components["schemas"]["EliRepairDetails"];
@@ -10718,6 +11011,57 @@ export interface components {
             identities: components["schemas"]["EliIdentity"][];
             policies: components["schemas"]["EliRepairPolicy"][];
         };
+        /** @description The newest automatic repair on a repository that is still in the history. */
+        EliAutomaticLast: {
+            id: string;
+            state: string;
+            pull_number: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        EliAutomaticRepository: {
+            repo: string;
+            installation_id: string;
+            /** @description Empty when the policy's provider was deleted, which leaves a policy with none. */
+            provider_id: string;
+            /** @description Empty when there is no provider. */
+            provider_name: string;
+            model: string;
+            /** @description Present only when automatic repairs here cannot run: the provider is missing, disabled or a person's. One sentence that says what to do in setup. */
+            problem?: string;
+            allow_workflows: boolean;
+            daily_limit: number;
+            /** @description Attempts on this repository in the last 24 hours, by anyone and by any trigger, cleared ones included. The same figure the daily limit is held against. */
+            used: number;
+            /**
+             * Format: date-time
+             * @description When a full allowance has a place again: the oldest of those attempts leaves the 24-hour window, or, when the limit was lowered below what is spent, the one whose leaving brings the count under it. Present when `used` is above zero.
+             */
+            next_free_at?: string;
+            /** @description Automatic repairs queued, working or waiting on checks now. */
+            running: number;
+            last?: components["schemas"]["EliAutomaticLast"];
+        };
+        EliAutomaticRepairs: {
+            repositories: components["schemas"]["EliAutomaticRepository"][];
+        };
+        EliAutomaticStopRequest: {
+            repos: string[];
+            /**
+             * @description What the repository does instead. `ask_first` offers a repair under Needs you and waits. `off` clears the policy's switch: nothing is offered, started or requested until it is switched back on in setup.
+             * @enum {string}
+             */
+            then: "ask_first" | "off";
+        };
+        EliAutomaticStopResult: {
+            repo: string;
+            /** @description False for a repository that was not automatic any more. */
+            changed: boolean;
+            error?: string;
+        };
+        EliAutomaticStopResponse: {
+            results: components["schemas"]["EliAutomaticStopResult"][];
+        };
         /** @description Creating, editing and checking a provider take the same body. On a PATCH every field is optional; what is not named is left alone. */
         AssistantProviderInput: {
             /** @description On a draft check only: the saved provider this draft is an edit of, so a blank `api_key` borrows the sealed key that row holds. Ignored elsewhere. */
@@ -10735,7 +11079,7 @@ export interface components {
              * @enum {string}
              */
             reasoning_effort?: "" | "none" | "low" | "medium" | "high";
-            /** @description How much the model may write in one round, from 1,024 to 65,536, or 0 for the controller's default of 8,192. Refused with a `max_output_tokens` field error on a subscription kind, whose tool decides, rather than ignored. */
+            /** @description How much the model may write in one round, from 1,024 to 65,536, or 0 for automatic, where a chat starts at 8,192 and a repair raises the limit itself when the model runs out. A number is kept exactly. Refused with a `max_output_tokens` field error on a subscription kind, whose tool decides, rather than ignored. */
             max_output_tokens?: number;
             /** @description Sealed with the instance key and never returned. An empty string leaves the stored key alone, so a form with a blank key box does not erase it. */
             api_key?: string;
@@ -10847,11 +11191,11 @@ export interface components {
             label?: string;
             /** @description What picking it means */
             consequence?: string;
-            /** @description The processors a node has or a template gives */
+            /** @description The processors a node has or a template gives, when the provider said. The limits step's recommendation is arithmetic on it. */
             cpus?: number;
             /**
              * Format: int64
-             * @description The memory in MiB a node has or a template gives
+             * @description The memory in MiB a node has or a template gives, when the provider said.
              */
             memory_mb?: number;
         };
@@ -10923,7 +11267,7 @@ export interface components {
             labels: {
                 [key: string]: string;
             };
-            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready */
+            /** @description True for the machine an operator asked for to prove the provider works. It is released once it reports ready, and the provider page reads the result of the test from it. */
             test?: boolean;
             /**
              * @description The operation in flight
@@ -11174,7 +11518,7 @@ export interface components {
             redirect_uri: string;
             /** @description Where approving sends you */
             redirect_host: string;
-            /** @description Every redirect the client registered is on your own machine */
+            /** @description Whether `redirect_uri`, the address approving sends you back to, is on your own machine, where any program could listen and claim to be the client. It judges that one address, not every address the client registered. */
             loopback_only: boolean;
             /** @example https://zoomies.example.com/mcp */
             resource: string;
@@ -11334,7 +11678,7 @@ export interface components {
         UpdatesDevelopment: {
             /** @description The commit in the running build. */
             current: string;
-            /** @description The last observed commit on main */
+            /** @description The last observed commit on main, or empty before a successful check. */
             latest: string;
             /** @enum {string} */
             state: "unknown" | "current" | "available";
@@ -11886,6 +12230,117 @@ export interface components {
              */
             backoff?: number;
         };
+        OptimisationEnablement: {
+            source_reads: boolean;
+            workflow_edits: boolean;
+            /** @description True when both settings are on. */
+            enabled: boolean;
+            /** @description Whether the caller may change them here. */
+            can_change: boolean;
+            /** @description Why the caller cannot, as a sentence to act on. Absent when they can. */
+            reason?: string;
+        };
+        OptimisationEnablementRequest: {
+            enabled: boolean;
+        };
+        /** @description One exact run, attempt and GitHub job. IDs are decimal strings. Leave both positions out and the server finds the job's one previewable checkout step in the workflow file; name both to choose a step yourself. Naming only one is refused. Responses always carry the positions that were used. */
+        CheckoutSelection: {
+            run_id: string;
+            attempt: number;
+            github_job_id: string;
+            job_index?: number;
+            step_index?: number;
+        };
+        CheckoutInspectionRequest: {
+            installation_id: string;
+            repository: string;
+            selection: components["schemas"]["CheckoutSelection"];
+        };
+        /** @description Untrusted workflow source shown once for review, with descriptive checkout timing. Not retained. */
+        CheckoutInspection: {
+            installation_id: string;
+            repository: string;
+            selection: components["schemas"]["CheckoutSelection"];
+            head_sha: string;
+            path: string;
+            mode: string;
+            /** @description The workflow file; untrusted text. */
+            content: string;
+            source_sha256: string;
+            /** Format: int64 */
+            step_number: number;
+            /** @description The literal name the workflow gives the job. */
+            job_name: string;
+            /** @description The literal name of the checkout step that was found. */
+            step_name: string;
+            /**
+             * Format: int64
+             * @description Milliseconds the successful checkout step took in the selected attempt; descriptive
+             */
+            checkout_ms: number;
+            evidence_id: string;
+            basis: string;
+            /** Format: date-time */
+            inspected_at: string;
+        };
+        CheckoutPreviewRequest: {
+            installation_id: string;
+            repository: string;
+            selection: components["schemas"]["CheckoutSelection"];
+            /** @description The head of the source that was reviewed. */
+            head_sha: string;
+            /** @description The digest of the source that was reviewed. */
+            source_sha256: string;
+            /** @description Must be true. The caller declares that neither the repository's tooling nor its downstream consumers need full history. */
+            history_reviewed: boolean;
+        };
+        /** @description How the source and timing were collected. Null for a preview retained before collection was recorded. */
+        CheckoutCollection: {
+            version: string;
+            basis: string;
+            /** Format: int64 */
+            step_number: number;
+            blob_sha: string;
+            source_funding: string;
+        } | null;
+        CheckoutPreviewDetail: {
+            version: string;
+            kind: string;
+            state: string;
+            head_sha: string;
+            source_sha256: string;
+            after_sha256: string;
+            evidence_id: string;
+            run_id: string;
+            attempt: number;
+            job_index: number;
+            step_index: number;
+            /** @description The one-based line of the workflow file that changes. */
+            line: number;
+            /** Format: int64 */
+            checkout_ms: number;
+            path: string;
+            /** @description The line as it is; untrusted text. */
+            before: string;
+            /** @description The line as it would be; untrusted text. */
+            after: string;
+            /** @enum {string} */
+            verification: "inconclusive";
+            explanation: string;
+        };
+        CheckoutPreview: {
+            id: string;
+            installation_id: string;
+            repository: string;
+            reviewed_by: string;
+            sha256: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            currentness: "not_checked";
+            collection: components["schemas"]["CheckoutCollection"];
+            preview: components["schemas"]["CheckoutPreviewDetail"];
+        };
         ComparisonCaptureRequest: {
             baseline: components["schemas"]["ExperimentAttemptSelection"][];
             candidate: components["schemas"]["ExperimentAttemptSelection"][];
@@ -12241,7 +12696,7 @@ export interface components {
                 };
             };
         };
-        /** @description A `since` or `until` that is not an RFC 3339 instant, a period that does not end after it starts, or one longer than `limits.job_stats_window`, each on the field at fault, and on host pressure a request naming no `host_id`. */
+        /** @description A `since` or `until` that is not an RFC 3339 instant, a period that does not end after it starts, one that begins at or after now, or one longer than `limits.job_stats_window`, each on the field at fault, and on host pressure a request naming no `host_id`. */
         AnalysisBadRequest: {
             headers: {
                 [name: string]: unknown;
@@ -12267,9 +12722,9 @@ export interface components {
         PathID: string;
         Limit: number;
         Offset: number;
-        /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+        /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
         AnalysisSince: string;
-        /** @description End of the period, not included. Defaults to now. */
+        /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
         AnalysisUntil: string;
         /** @description Only repairs in this group of states. `attention` is every state that is neither running nor passed, `active` is queued, working and checking, and `passed` is succeeded. Anything else is a 422. */
         EliRepairGroup: "attention" | "active" | "passed";
@@ -12282,7 +12737,10 @@ export interface components {
         Order: "asc" | "desc";
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description The URL of the resource this request created, to read it back with `GET`. */
+        Location: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -13210,11 +13668,11 @@ export interface operations {
     analyseQueueWait: {
         parameters: {
             query?: {
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
-                /** @description Only the jobs of this pool, and its own conditions. A pool the fleet does not have is a 404. */
+                /** @description Only the jobs of this pool, and its own conditions. A pool the fleet does not have, and none of the period's jobs name, is a 404; one deleted since is read from its jobs. */
                 pool_id?: string;
             };
             header?: never;
@@ -13241,15 +13699,15 @@ export interface operations {
     analyseCompare: {
         parameters: {
             query?: {
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
                 /** @description `version` compares two releases, `period` the period with the one before it. Anything else is a 400. */
                 by?: "version" | "period";
-                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400. */
+                /** @description The earlier release. Left out, it is the newest release whose last job came before `b`'s. Only with `by=version`; sent with `by=period` it is a 400. A release's name is at most 128 bytes, and a longer one is a 400 too. */
                 a?: string;
-                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400. */
+                /** @description The later release. Left out, it is the newest release to complete a job in the period. Only with `by=version`; sent with `by=period` it is a 400. A release's name is at most 128 bytes, and a longer one is a 400 too. */
                 b?: string;
             };
             header?: never;
@@ -13267,7 +13725,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompareFinding"];
                 };
             };
-            /** @description A period that does not end after it starts or is longer than `limits.job_stats_window` (on `since`), a `by` that is neither `version` nor `period`, a release named to a comparison by period, or `analysis.same_release` (on `a`) when `a` and `b` name one release. The message says what to change. */
+            /** @description A period that does not end after it starts, begins at or after now, or is longer than `limits.job_stats_window` (on `since`), a `by` that is neither `version` nor `period`, a release named to a comparison by period or longer than a release's name can be, or `analysis.same_release` (on `a`) when `a` and `b` name one release. The message says what to change. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -13294,9 +13752,9 @@ export interface operations {
             query: {
                 /** @description The host to read. Left out it is a 400; a host the fleet does not have is a 404. */
                 host_id: string;
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
             };
             header?: never;
@@ -13323,13 +13781,13 @@ export interface operations {
     analyseStartupFailures: {
         parameters: {
             query?: {
-                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting. */
+                /** @description Start of the period, included. Defaults to a day before `until`. A period that does not end after it starts, or one longer than `limits.job_stats_window` (90 days unless set), is a 400 on `since` naming the setting, and so is a `since` at or after now: nothing in that period has happened yet. */
                 since?: components["parameters"]["AnalysisSince"];
-                /** @description End of the period, not included. Defaults to now. */
+                /** @description End of the period, not included. Defaults to now. A later instant is read as now: the rest has not happened, and a job still waiting would be counted as waiting through it. The finding's `until` is the instant read. */
                 until?: components["parameters"]["AnalysisUntil"];
-                /** @description Only the starts for this pool. A pool the fleet does not have is a 404. */
+                /** @description Only the starts for this pool. A pool the fleet does not have, and none of the period's runners name, is a 404. */
                 pool_id?: string;
-                /** @description Only the starts on this host. A host the fleet does not have is a 404. */
+                /** @description Only the starts on this host. A host the fleet does not have, and none of the period's runners name, is a 404. */
                 host_id?: string;
             };
             header?: never;
@@ -14360,6 +14818,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14882,6 +15341,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -15835,8 +16295,10 @@ export interface operations {
                 managed?: boolean;
                 /** @description Only jobs that went wrong, on either side: a conclusion GitHub counts as a failure (failure, timed_out, startup_failure), or a runner of this fleet that stopped under the job -- including one GitHub still believes is running. */
                 failed?: boolean;
-                /** @description Only the failures that still want a person: failed, queued within the last week, acknowledged by nobody, and not replaced by a later attempt of the same job in the same run. This is the question behind the Jobs page's "Needs attention" view and the Overview's failures panel, asked as one parameter so a link into it cannot compose half of it. Acknowledging a job removes it from this list without changing the failure; a re-run that passes is what settles the failure itself. */
+                /** @description Only the failures that still want a person: failed, queued within the last week, acknowledged by nobody, and not replaced by a later attempt or run of the same job and workflow on the same known branch. Cancelled, skipped and neutral outcomes do not settle an earlier failure. Background GitHub checks also remove failures whose PR closed, whose head was superseded, or whose checks passed. Failed GitHub reads do not establish a resolution. This is the question behind the Jobs page's "Needs attention" view and the Overview's failures panel, asked as one parameter so a link into it cannot compose half of it. Acknowledging a job removes it from this list without changing the failure; a re-run that passes is what settles the failure itself. */
                 attention?: boolean;
+                /** @description Only the jobs of runs a pull request started, plus those whose trigger the controller has not read yet. Eli repairs a pull request's branch and nothing else, so the failure of a push, merge or scheduled run is left out. The Overview's failures panel sends it with `attention` so that every row it lists is one Eli can be offered. */
+                eli_repairable?: boolean;
                 /** @description Only the failures this fleet caused: the `failed` list narrowed to the jobs whose runner never started or stopped under them. This is the list to open when somebody says CI is flaky, because it is the half nobody else can fix. */
                 faulted?: boolean;
                 /** @description The other half: jobs GitHub failed with nothing wrong on this side. Sending this and `faulted` together is a 400, because they ask for opposite halves of one list. */
@@ -16481,6 +16943,11 @@ export interface operations {
                     reserve_memory_mb?: number;
                     /** Format: int64 */
                     reserve_disk_mb?: number;
+                    /**
+                     * @description Whether the controller keeps this host's capacity and reserve at what `GET /hosts/{id}/recommendation` says. `on` and `off` decide for this host; an empty string hands the decision back to the fleet's `scheduler.host_auto_adjust`. Leave it out to change nothing. Turning it on adjusts the host at the controller's next housekeeping pass, not within the request.
+                     * @enum {string}
+                     */
+                    auto_adjust?: "" | "on" | "off";
                     /** @description Where this host stands in placement. Leave the whole field out to change nothing; send `{ "override": null }` to hand the ranking back to the score the reported specs earn; send a number on the 0..100 scale to pin the host above every host with a lower one while its specs stay out of the decision. */
                     priority?: {
                         override: number | null;
@@ -16672,6 +17139,32 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getHostRecommendation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The recommendation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostRecommendation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     clearHostThrottle: {
         parameters: {
             query?: never;
@@ -16765,6 +17258,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17169,6 +17663,7 @@ export interface operations {
             /** @description Setup command; keep private and run within one hour. */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17277,6 +17772,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -18412,6 +18908,78 @@ export interface operations {
             422: components["responses"]["Unprocessable"];
         };
     };
+    getEliErrorOutput: {
+        parameters: {
+            query: {
+                /** @description The repository, as `owner/name`. */
+                repo: string;
+                /** @description GitHub's id for the job. */
+                job_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliErrorOutput"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    getEliAutomaticRepairs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliAutomaticRepairs"];
+                };
+            };
+        };
+    };
+    stopEliAutomaticRepairs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EliAutomaticStopRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliAutomaticStopResponse"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+        };
+    };
     listEliOpportunities: {
         parameters: {
             query?: never;
@@ -18517,6 +19085,29 @@ export interface operations {
             };
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    getEliRepair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EliRepair"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     selectEliRepairs: {
@@ -19064,6 +19655,7 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -19452,7 +20044,6 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
         };
     };
@@ -19639,6 +20230,7 @@ export interface operations {
             /** @description Taken */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -19756,6 +20348,7 @@ export interface operations {
             /** @description Upload created */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -20914,6 +21507,7 @@ export interface operations {
             /** @description Audited retained snapshot; Cache-Control is no-store. */
             201: {
                 headers: {
+                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -20978,6 +21572,230 @@ export interface operations {
                 };
             };
             /** @description Invalid query, comparison ID or unsupported/inconsistent evidence version. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Stored content integrity cannot be verified. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getOptimisationEnablement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current state; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptimisationEnablement"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setOptimisationEnablement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptimisationEnablementRequest"];
+            };
+        };
+        responses: {
+            /** @description The state after the change; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptimisationEnablement"];
+                };
+            };
+            /** @description enabled is missing or the body is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A setting could not be changed, for example because the environment sets it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    inspectCheckoutOptimisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description The source and descriptive checkout timing; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutInspection"];
+                };
+            };
+            /** @description Invalid or oversized request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The step cannot be previewed, or the read exceeded its limit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Diagnostic or GitHub quota refusal; Retry-After says when to retry manually. */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    captureCheckoutPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Audited retained preview; Cache-Control is no-store. */
+            201: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutPreview"];
+                };
+            };
+            /** @description Invalid request or history review not confirmed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Unsupported step, moved source, or read limit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Diagnostic or GitHub quota refusal; Retry-After says when to retry manually. */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getCheckoutPreview: {
+        parameters: {
+            query: {
+                installation_id: string;
+                repo: string;
+            };
+            header?: never;
+            path: {
+                /** @description The resource ID, e.g. `pool_k3f9qz2m`. */
+                id: components["parameters"]["PathID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified retained preview; Cache-Control is no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutPreview"];
+                };
+            };
+            /** @description Invalid query or preview ID. */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -149,6 +149,44 @@ func TestANodeThatIsDownIsOfferedWithItsConsequence(t *testing.T) {
 	}
 }
 
+// The limits recommendation is arithmetic on these two numbers: how many
+// machines of the template's size the chosen nodes hold. A choice that arrives
+// without them, because a field was dropped on the way in or a unit slipped,
+// leaves the form recommending against a size it silently takes to be the
+// default, and nothing on the page says so. The words in Consequence already
+// carried the figures; these are the numbers beside the words.
+func TestChoicesCarryTheSizesTheLimitsRecommendationReads(t *testing.T) {
+	f := newFakePVE(t, nil)
+	// A second template of a different size, so a size read from the wrong
+	// guest is not the right answer by luck.
+	f.vms[9001] = &fakeVM{vmid: 9001, node: "pve-2", name: "debian-12-template", status: "stopped", template: true, cpus: 2, memory: 4 << 30}
+
+	found, err := Discover(context.Background(), f.client(t))
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	for _, want := range []struct {
+		kind     string
+		choices  []provider.Choice
+		value    string
+		cpus     int
+		memoryMB int64
+	}{
+		{"node", found.Nodes, "pve-1", 8, 32768},
+		{"node", found.Nodes, "pve-2", 8, 32768},
+		// A node that is down has no figures to give, and zero means unknown.
+		{"node", found.Nodes, "pve-3", 0, 0},
+		{"template", found.Templates, "9000", 4, 8192},
+		{"template", found.Templates, "9001", 2, 4096},
+	} {
+		got := choice(t, want.choices, want.value)
+		if got.CPUs != want.cpus || got.MemoryMB != want.memoryMB {
+			t.Errorf("%s %s: %d CPUs and %d MB, want %d and %d",
+				want.kind, want.value, got.CPUs, got.MemoryMB, want.cpus, want.memoryMB)
+		}
+	}
+}
+
 // A cluster with one node down still has a form to fill in, and the answers the
 // other nodes gave are still the right ones.
 func TestANodeThatWillNotAnswerDoesNotEmptyTheForm(t *testing.T) {

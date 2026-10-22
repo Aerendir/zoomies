@@ -30,9 +30,17 @@ test('Cute keeps its existing gait and speed tiers when Standard changes style',
 });
 
 test('every state holds a pose that separates it at grid size', () => {
-  // Posture and ears carry the state when the props have stepped aside, so
-  // states that share a posture must differ in the ears or the eyes, and the
-  // four sitting states must not all wear the same ears.
+  // At 31px and below CuteStatusIcon hides the props, the brows, the freckles
+  // and the highlights, so posture, ears, eyes and mouth are all that tell one
+  // state from another. Two states that agree on all four are the same picture
+  // in a grid whatever their props say, so only the pairs named here may, and
+  // each has to be there for a reason.
+  const mayCoincide: { pair: [string, string]; why: string }[] = [
+    {
+      pair: ['zoomies', 'maximum_zoomies'],
+      why: 'the sparkle that sets maximum zoomies apart steps aside at grid size, so its faster run, which the first test pins, carries the tier',
+    },
+  ];
   const states = [
     'idle',
     'busy',
@@ -46,10 +54,34 @@ test('every state holds a pose that separates it at grid size', () => {
     'zoomies',
     'maximum_zoomies',
   ];
-  const poses = states.map((state) => cutePose(state));
-  assert.equal(
-    new Set(poses.map((p) => `${p.pose}/${p.ears}/${p.eyes}/${p.mouth}/${p.props}`)).size,
-    states.length,
+  const atGridSize = (state: string) => {
+    const p = cutePose(state);
+    return `${p.pose}/${p.ears}/${p.eyes}/${p.mouth}`;
+  };
+  for (const [i, a] of states.entries()) {
+    for (const b of states.slice(i + 1)) {
+      const listed = mayCoincide.find(({ pair }) => pair.includes(a) && pair.includes(b));
+      if (listed) {
+        assert.equal(
+          atGridSize(a),
+          atGridSize(b),
+          `${a} and ${b} no longer look alike at grid size; take the pair off mayCoincide (it was there because ${listed.why})`,
+        );
+      } else {
+        assert.notEqual(
+          atGridSize(a),
+          atGridSize(b),
+          `${a} and ${b} are the same picture at grid size (${atGridSize(a)}); give one a different posture, ears, eyes or mouth, or name the pair in mayCoincide with the reason`,
+        );
+      }
+    }
+  }
+  // Posture cannot tell the sitting states from one another, so their ears
+  // have to vary: they must not all wear the same pair.
+  const sitting = states.filter((state) => cutePose(state).pose === 'sit');
+  assert.ok(
+    new Set(sitting.map((state) => cutePose(state).ears)).size > 1,
+    `the sitting states (${sitting.join(', ')}) all wear the same ears`,
   );
   // The collar tag and props borrow the status tone, the same fixed mapping
   // the rest of the UI uses.

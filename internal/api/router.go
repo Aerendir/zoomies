@@ -304,6 +304,11 @@ func (s *Server) apiRoutes() chi.Router {
 
 		r.With(s.require(auth.ActionComparisonsWrite), s.require(auth.ActionJobsRead), s.refuseVisitors).Post("/comparisons", s.handleCaptureComparison)
 		r.With(s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/comparisons/{id}", s.handleGetComparison)
+		r.With(s.require(auth.ActionOptimisationsRead), s.refuseVisitors).Get("/optimisations/enablement", s.handleGetOptimisationEnablement)
+		r.With(s.require(auth.ActionSettingsWrite), s.refuseVisitors).Put("/optimisations/enablement", s.handleSetOptimisationEnablement)
+		r.With(s.require(auth.ActionOptimisationsWrite), s.require(auth.ActionJobsRead), s.refuseVisitors).Post("/optimisations/checkout/inspections", s.handleInspectCheckout)
+		r.With(s.require(auth.ActionOptimisationsWrite), s.require(auth.ActionJobsRead), s.refuseVisitors).Post("/optimisations/checkout/previews", s.handleCaptureCheckoutPreview)
+		r.With(s.require(auth.ActionOptimisationsRead), s.require(auth.ActionJobsRead), s.refuseVisitors).Get("/optimisations/checkout/previews/{id}", s.handleGetCheckoutPreview)
 
 		// Jobs.
 		r.With(s.require(auth.ActionUsageRead)).Get("/usage", s.handleUsage)
@@ -350,6 +355,7 @@ func (s *Server) apiRoutes() chi.Router {
 			// Before /{id}, or chi would look for a host whose id is "samples".
 			r.With(s.require(auth.ActionHostsRead)).Get("/samples", s.handleListHostSamples)
 			r.With(s.require(auth.ActionHostsRead)).Get("/{id}", s.handleGetHost)
+			r.With(s.require(auth.ActionHostsRead)).Get("/{id}/recommendation", s.handleGetHostRecommendation)
 			r.With(s.require(auth.ActionHostsWrite)).Patch("/{id}", s.handleUpdateHost)
 			r.With(s.require(auth.ActionHostsCordon)).Post("/{id}/cordon", s.handleCordonHost)
 			r.With(s.require(auth.ActionHostsWrite)).Post("/{id}/throttle/clear", s.handleClearHostThrottle)
@@ -415,9 +421,13 @@ func (s *Server) apiRoutes() chi.Router {
 			r.With(s.require(auth.ActionProvidersDelete)).Delete("/{id}", s.handleDeleteProvider)
 			// The preflight and discovery both use the credential to talk to
 			// the hypervisor, and both change nothing there, so they are the
-			// operator's to run rather than the admin's.
+			// operator's to run rather than the admin's, and they share the
+			// kill switch's scope.
 			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/check", s.handleCheckProvider)
-			r.With(s.require(auth.ActionProvidersPause)).Post("/{id}/test-machine", s.handleTestProviderMachine)
+			// The test machine does not share it. It clones and starts a machine
+			// somebody pays for, and a token minted to stop spending would
+			// otherwise be able to start it.
+			r.With(s.require(auth.ActionProvidersTest)).Post("/{id}/test-machine", s.handleTestProviderMachine)
 			r.With(s.require(auth.ActionProvidersPause)).Get("/{id}/discovery", s.handleProviderDiscovery)
 			// The orphan review is admin because its one act is destructive
 			// and because it names resources this fleet does not own.
@@ -431,6 +441,7 @@ func (s *Server) apiRoutes() chi.Router {
 		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs/selection", s.handleEliRepairSelection)
 		r.With(s.require(auth.ActionAssistantOwn)).Post("/assistant/repairs/bulk", s.handleBulkEliRepairs)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/readiness", s.handleEliReadiness)
+		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/error-output", s.handleEliErrorOutput)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Get("/assistant/repairs/opportunities", s.handleEliOpportunities)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Post("/assistant/repairs/opportunities/{id}", s.handleEliOpportunityAction)
 		r.With(s.require(auth.ActionAssistantWrite)).Get("/assistant/repairs/repositories", s.handleEliRepositories)
@@ -438,7 +449,10 @@ func (s *Server) apiRoutes() chi.Router {
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Put("/assistant/repairs/consent", s.handleEliRepairConsent)
 		r.With(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner).Post("/assistant/repairs", s.handleRequestEliRepair)
 		r.With(s.require(auth.ActionAssistantWrite)).Put("/assistant/repairs/policy", s.handleSetEliPolicy)
+		r.With(s.require(auth.ActionAssistantRead)).Get("/assistant/repairs/automatic", s.handleEliAutomatic)
+		r.With(s.require(auth.ActionAssistantWrite)).Post("/assistant/repairs/automatic/stop", s.handleStopEliAutomatic)
 		r.With(s.require(auth.ActionUsersWrite)).Put("/assistant/repairs/identity", s.handleSetEliIdentity)
+		r.With(s.require(auth.ActionAssistantOwn)).Get("/assistant/repairs/{id}", s.handleGetEliRepair)
 		r.With(s.require(auth.ActionAssistantChat)).Post("/assistant/chat", s.handleAssistantChat)
 		r.Route("/assistant/personal", func(r chi.Router) {
 			r.Use(s.require(auth.ActionAssistantOwn), s.requirePersonalAssistantOwner)

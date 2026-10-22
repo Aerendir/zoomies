@@ -48,13 +48,32 @@
   import { viewport } from '$lib/state/viewport.svelte';
   import JobsInsights from '$lib/insights/JobsInsights.svelte';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
-  import { acknowledgeJob, getJobFacets, listJobs, reopenJobAttention } from '$lib/api/client';
-  import type { Job } from '$lib/api/types';
+  import {
+    acknowledgeJob,
+    analyseQueueWait,
+    getJobFacets,
+    listJobs,
+    reopenJobAttention,
+  } from '$lib/api/client';
+  import { PROVISIONING_STATUSES, type Job, type QueueWaitFinding } from '$lib/api/types';
+  import AnalysisCard from '$lib/insights/AnalysisCard.svelte';
+  import { router } from '$lib/router';
+  import {
+    analysisWindow,
+    refusalOf,
+    type AnalysisNarrowing,
+    CAUSE_WORDS,
+    jobWords,
+    longestWaits,
+    queueWaitScope,
+    whyNoWindow,
+    wordFor,
+  } from '$lib/insights/analysis';
   import { events } from '$lib/api/sse';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
   import { fleetFailed } from '$lib/faults';
-  import { NO_VALUE, formatDuration } from '$lib/format';
+  import { NO_VALUE, formatDuration, formatNumber, formatPercent, pluralise } from '$lib/format';
   import { fleet } from '$lib/state/fleet.svelte';
   import {
     HOSTED,
@@ -97,7 +116,9 @@
   const operational = $derived(visualStyle.choice === 'mission-control');
   const compact = $derived(operational && viewport.phone);
   let contextExpanded = $state(false);
-  const layoutSections = $derived(compact ? ['records', 'context'] : ['context', 'records']);
+  // The rows are what the page is for, on every screen: the tiles, outcomes and activity
+  // history are one fold under them.
+  const layoutSections = ['records', 'context'];
   const filterState = jobFilterState();
   const filters = $derived(filterState.filters);
   const view = $derived(filterState.view);
@@ -151,6 +172,99 @@
 
   /** Bumped by the refresh button so the size-label report reads again too. */
   let adviceKey = $state(0);
+
+  /* Why the queued jobs waited ------------------------------------------------
+   * The Queued view is where "why is this waiting?" is asked of the whole
+   * queue, so the queue-wait analysis sits there and nowhere else on the page.
+   * It reads the page's own dates, or the day before now when none are set,
+   * and the one pool the filter names; filtered to several pools it reads the
+   * fleet, since the analysis narrows to one pool or none.
+   * ------------------------------------------------------------------------ */
+
+  let wait = $state.raw<QueueWaitFinding | null>(null);
+  let waitError = $state<{ message: string; refused: boolean } | null>(null);
+  let waitLoading = $state(false);
+  // Queued work, whether or not a view button says so: an address that keeps
+  // the list's state at queued while narrowing it (with unmatched, say) is
+  // still the queue somebody is asking about, and the card then says it does
+  // not apply the narrowing (below). The UI itself never writes such an
+  // address: the "Unmatched only" switch clears the state.
+  //
+  // Never for a public view's visitor: the route refuses one before it reads
+  // anything, and a card that can only say "sign in to do this" is one more
+  // thing a visitor learns to distrust (lib/shell/sections.ts).
+  const queuedShown = $derived(
+    !session.visitor &&
+      (view === 'queued' || (filters.state.length === 1 && filters.state[0] === 'queued')),
+  );
+  const waitPool = $derived(filters.pool_id.length === 1 ? filters.pool_id[0] : undefined);
+  // Primitives, so a change to a filter the analysis does not read (a
+  // repository, a label) does not ask it again.
+  const waitSince = $derived(filters.since);
+  const waitUntil = $derived(filters.until);
+
+  $effect(() => {
+    if (!queuedShown) return;
+    void adviceKey;
+    const since = startOfMoment(waitSince);
+    const until = endOfMoment(waitUntil);
+    const period = analysisWindow(since, until, Date.now());
+    const controller = new AbortController();
+    // The last window's answer goes at once: left standing while the next
+    // loads, it would sit under the new dates, as HostDetail's does not.
+    wait = null;
+    waitError = null;
+    if (!period) {
+      // The date picker points out a range typed backwards, and nothing points
+      // out one that has not started; the card says why it asked nothing,
+      // since a titled frame with nothing under it says nothing.
+      waitError = { message: whyNoWindow(since, until), refused: true };
+      waitLoading = false;
+      return;
+    }
+    waitLoading = true;
+    analyseQueueWait({ ...period, pool_id: waitPool }, controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) wait = next;
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        // The grid below is still true; only this card says what went wrong.
+        waitError = refusalOf(cause);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) waitLoading = false;
+      });
+    return () => controller.abort();
+  });
+
+  // What the card covers, and which of the list's filters it leaves out:
+  // the route reads one pool or none, the list beside it much more.
+  const waitScope = $derived(
+    queueWaitScope(
+      {
+        ...filters,
+        // Only a provisioning status the address chose. The Queued view's own
+        // default is every waiting job, and the card's period already says it
+        // reads more than what waits now.
+        provisioning: router
+          .paramList('provisioning')
+          .some((v) => (PROVISIONING_STATUSES as readonly string[]).includes(v))
+          ? filters.provisioning
+          : [],
+      },
+      (poolId) => fleet.pool(poolId)?.name ?? poolId,
+    ),
+  );
+
+  // The pool the card was asked about, for Ask Eli to pass to its tool: the
+  // finding for one pool never names it unless that pool waited most.
+  const waitNarrowed = $derived<AnalysisNarrowing>(
+    waitPool ? { pool: { id: waitPool, name: fleet.pool(waitPool)?.name } } : {},
+  );
+
+  /** Every pool's longest waits, longest first, as one list. */
+  const longest = $derived(longestWaits(wait?.evidence.pools ?? []));
 
   /** Labels worth offering in the filter: what the pools answer to, plus what this page asked for. */
   const labelOptions = $derived.by(() => {
@@ -578,13 +692,10 @@
   {#if section === 'context'}
     <details
       class="fleet-context"
-      class:compact
-      open={!compact || contextExpanded}
-      ontoggle={(event) => {
-        if (compact) contextExpanded = event.currentTarget.open;
-      }}
+      open={contextExpanded}
+      ontoggle={(event) => (contextExpanded = event.currentTarget.open)}
     >
-      <summary hidden={!compact}>Fleet context and activity</summary>
+      <summary>Fleet context and activity</summary>
       {@render fleetContext()}
     </details>
   {:else}
@@ -605,6 +716,11 @@
         onchange={patch}
         onclear={clearFilters}
       />
+
+      <!-- Before the list, where its question is asked; on a Mission Control
+           phone after it, since records come before supplementary analytics
+           there (docs/ui-guidelines.md). -->
+      {#if !compact}{@render queuedCard()}{/if}
 
       {#if filters.unmatched && unmatchedOnPage > 0}
         <UnmatchedNote count={unmatchedOnPage} />
@@ -648,6 +764,8 @@
         {/snippet}
       </DataGrid>
 
+      {#if compact}{@render queuedCard()}{/if}
+
       <p class="footnote">
         Sort by queue wait to find work that waited, or by duration to find work that took its time.
         Both are sorted by the server, so the slowest job in the fleet is one click away rather than
@@ -656,6 +774,110 @@
     </div>
   {/if}
 {/each}
+
+{#snippet queuedCard()}
+  {#if queuedShown}
+    <AnalysisCard
+      title="Why jobs waited"
+      finding={wait}
+      error={waitError}
+      loading={waitLoading}
+      scope={waitScope.scope}
+      narrowedTo={waitNarrowed}
+      note={waitScope.unapplied}
+    >
+      {#if wait}
+        {@const ev = wait.evidence}
+        <dl class="facts">
+          <div>
+            <dt>Jobs</dt>
+            <dd class="figure">
+              {pluralise(ev.jobs, 'job')} queued, {formatNumber(ev.waited)} waited, {formatDuration(
+                ev.wait_seconds * 1000,
+              )} of waiting
+            </dd>
+          </div>
+          {#if !waitPool && ev.pools_cut > 0}
+            <div>
+              <dt>Pools</dt>
+              <dd>
+                {pluralise(ev.pools_cut, 'pool')} left out below and counted in the totals; filter to
+                one pool to read it whole.
+              </dd>
+            </div>
+          {/if}
+        </dl>
+        {#if ev.fleet.length}
+          <p class="rows-label" id="wait-causes">Where the wait went</p>
+          <ul class="rows" aria-labelledby="wait-causes">
+            {#each ev.fleet as c (c.cause)}
+              <li>
+                <span>{wordFor(CAUSE_WORDS, c.cause)}</span>
+                <span class="figure muted"
+                  >{formatPercent(c.share)}, {formatDuration(c.seconds * 1000)}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ev.pools.length > 1}
+          <p class="rows-label" id="wait-pools">By pool</p>
+          <ul class="rows" aria-labelledby="wait-pools">
+            {#each ev.pools as p (p.pool_id)}
+              <li>
+                {#if p.pool_id && !p.deleted}
+                  <a href="/pools/{p.pool_id}">{p.pool_name || p.pool_id}</a>
+                {:else}
+                  <span>{p.pool_name || (p.pool_id ? p.pool_id : 'No pool claimed them')}</span>
+                {/if}
+                {#if p.deleted}<span class="muted">deleted since</span>{/if}
+                <span class="figure muted"
+                  >{pluralise(p.jobs, 'job')}, {formatDuration(p.wait_seconds * 1000)} waiting{p.dominant
+                    ? `, most of it ${wordFor(CAUSE_WORDS, p.dominant).toLowerCase()}`
+                    : ''}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if longest.length}
+          <p class="rows-label" id="wait-longest">Longest waits</p>
+          <ul class="rows" aria-labelledby="wait-longest">
+            {#each longest as j (j.job_id)}
+              <li>
+                <span class="quoted">{jobWords(j) || j.job_id}</span>
+                <span class="figure muted"
+                  >{formatDuration(j.wait_seconds * 1000)} in {j.pool}, {wordFor(
+                    CAUSE_WORDS,
+                    j.cause,
+                  ).toLowerCase()}</span
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if ev.no_runner_record > 0}
+          <p class="evidence-note">
+            {pluralise(ev.no_runner_record, 'job')} waited past becoming eligible with no record of its
+            runner left, so that wait could not be split into startup and GitHub's hand-off.
+          </p>
+        {/if}
+        {#if ev.runner_kept > 0}
+          <p class="evidence-note">
+            {pluralise(ev.runner_kept, 'job')} waited on a runner its pool keeps between jobs, so that
+            wait could not be split either.
+          </p>
+        {/if}
+        {#if ev.jobs_truncated || ev.runners_truncated}
+          <p class="evidence-note">
+            A read stopped at its limit, so the newest records were read; a shorter period reads all
+            of them.
+          </p>
+        {/if}
+      {/if}
+    </AnalysisCard>
+  {/if}
+{/snippet}
 
 {#snippet fleetContext()}
   <JobsInsights others={filters.all} />
@@ -687,9 +909,6 @@
   }
 
   .fleet-context {
-    display: contents;
-  }
-  .fleet-context.compact {
     display: block;
     margin-block: var(--z-space-4);
   }

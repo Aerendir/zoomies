@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -145,7 +146,55 @@ func PlanSetupFiles(key RepositoryKey, fullName string, config Config, files []S
 		if p == ".claude/CLAUDE.md" {
 			wrapper = "@../AGENTS.md"
 		}
-		if p != "AGENTS.md" && strings.TrimSpace(f.Content) == wrapper {
+		// AGENTS.md holds the managed block, and the Claude entry point
+		// reaches it by import. A block in both files is loaded twice, because
+		// Claude Code expands the import, and a repository that checks for one
+		// copy fails its build.
+		if p != "AGENTS.md" {
+			clean, seam, err := removeManagedSectionAt(f.Content)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", p, err)
+			}
+			// Removing a block at the end of the file would otherwise leave the
+			// blank line that separated it, so the healed file fails a format check.
+			newline := "\n"
+			if strings.Contains(f.Content, "\r\n") {
+				newline = "\r\n"
+			}
+			if strings.HasSuffix(clean, newline+newline) {
+				clean = strings.TrimSuffix(clean, newline)
+			}
+			// A block in the middle leaves the blank line that separated it
+			// from the text behind it, and two blank lines are not what a
+			// formatter leaves behind. Only the seam the block left is
+			// touched: the operator's own spacing is theirs.
+			if seam >= 0 && seam < len(clean) {
+				// The text before the block ended with a blank line and the
+				// text after it begins with one, so the block's removal
+				// leaves two. One is what a formatter leaves behind.
+				before := clean[:seam]
+				after := clean[seam:]
+				if strings.HasSuffix(before, newline+newline) && strings.HasPrefix(after, newline) {
+					clean = strings.TrimSuffix(before, newline) + after
+				}
+			}
+			// A file that already imports AGENTS.md is left as it is: its own
+			// words and the import the operator wrote are theirs.
+			if importsAgentGuidance(p, clean) {
+				add(p, clean)
+				continue
+			}
+			// A file with rules of its own keeps them, and is given the import
+			// that reaches the block in AGENTS.md. The import goes first: it is
+			// the entry point, and the operator's own rules follow it.
+			if strings.TrimSpace(clean) != "" {
+				add(p, wrapper+newline+newline+clean)
+				continue
+			}
+			// A file that is not there yet, or is empty, becomes the import
+			// alone: the entry point is AGENTS.md, and this is how Claude Code
+			// reaches it.
+			add(p, wrapper+newline)
 			continue
 		}
 		content, err := mergeSetupSection(f.Content, assistantEntryPoint(p), repositoryFirstAssistantInstructions(key, fullName, config), previousAssistantInstructions(key, fullName, config))
@@ -183,6 +232,43 @@ func PlanSetupFiles(key RepositoryKey, fullName string, config Config, files []S
 
 func assistantDocument(p string) bool {
 	return p == "AGENTS.md" || p == "CLAUDE.md" || p == ".claude/CLAUDE.md"
+}
+
+// importsAgentGuidance reports whether a Claude entry point imports the
+// repository's AGENTS.md. Only a line that Claude Code executes as an import
+// counts, so an example inside a fenced code block is not one.
+func importsAgentGuidance(p, content string) bool {
+	if p != "CLAUDE.md" && p != ".claude/CLAUDE.md" {
+		return false
+	}
+	fence := ""
+	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "```") || strings.HasPrefix(trim, "~~~") {
+			// Only the delimiter that opened the fence closes it: a backtick
+			// fence inside a tilde fence is an example, not an end.
+			mark := trim[:3]
+			if fence == "" {
+				fence = mark
+			} else if fence == mark {
+				fence = ""
+			}
+			continue
+		}
+		if fence != "" || !strings.HasPrefix(trim, "@") || strings.ContainsAny(trim, " \t") {
+			continue
+		}
+		target := trim[1:]
+		// An absolute path names a file outside the repository, so it is not
+		// the repository's AGENTS.md however it resolves.
+		if strings.HasPrefix(target, "/") {
+			continue
+		}
+		if path.Clean(path.Join(path.Dir(p), target)) == "AGENTS.md" {
+			return true
+		}
+	}
+	return false
 }
 
 func assistantEntryPoint(p string) string {

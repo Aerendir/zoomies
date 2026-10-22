@@ -118,6 +118,16 @@
    * Overview's failures panel writes the same two, through the same routes.
    */
   const canAcknowledge = $derived(session.can('operator') && Boolean(job?.id) && failed);
+  // A successful job that a push started is the only kind whose workflow can be
+  // read at the commit that ran it, so it is the only kind that offers this.
+  const canPreviewCheckout = $derived(
+    session.can('operator') &&
+      !session.visitor &&
+      job?.state === 'completed' &&
+      job?.conclusion === 'success' &&
+      job?.run_event === 'push' &&
+      Boolean(job?.installation_id),
+  );
   const acknowledged = $derived(job?.acknowledged_at != null);
   let rerunning = $state(false);
   let acking = $state(false);
@@ -125,14 +135,18 @@
   let forceCancel = $state(false);
 
   async function acknowledge(): Promise<void> {
-    if (!job?.id || acking) return;
+    // The toast outlives the selection: Escape clears `job`, and another row's
+    // drawer may be open by the time Undo is pressed. Undo is for this failure,
+    // so it carries it rather than reading whatever the drawer shows by then.
+    const target = job;
+    if (!target?.id || acking) return;
     acking = true;
     try {
-      await acknowledgeJob(job.id);
+      await acknowledgeJob(target.id);
       toasts.success(
         'Marked as known',
         'The failure stays in the failed view; a re-run that passes is what settles it.',
-        { label: 'Undo', run: () => void reopen() },
+        { label: 'Undo', run: () => void reopen(target) },
       );
     } catch (cause) {
       toasts.fromError(cause, 'Could not mark the failure as known');
@@ -141,11 +155,11 @@
     }
   }
 
-  async function reopen(): Promise<void> {
-    if (!job?.id || acking) return;
+  async function reopen(target: Job): Promise<void> {
+    if (!target.id || acking) return;
     acking = true;
     try {
-      await reopenJobAttention(job.id);
+      await reopenJobAttention(target.id);
       toasts.success('Back on the attention list', 'Whoever looks next will see this failure.');
     } catch (cause) {
       toasts.fromError(cause, 'Could not put the failure back');
@@ -451,7 +465,12 @@
     <div class="footer-actions">
       {#if canAcknowledge}
         {#if acknowledged}
-          <Button variant="secondary" icon={Undo2} loading={acking} onclick={() => void reopen()}>
+          <Button
+            variant="secondary"
+            icon={Undo2}
+            loading={acking}
+            onclick={() => job && void reopen(job)}
+          >
             Needs attention again
           </Button>
         {:else}
@@ -464,6 +483,14 @@
             Mark as known
           </Button>
         {/if}
+      {/if}
+      {#if canPreviewCheckout && job}
+        <Button
+          variant="secondary"
+          href={`/optimisations/checkout?installation_id=${encodeURIComponent(job.installation_id ?? '')}&repo=${encodeURIComponent(job.repo ?? '')}&run_id=${job.github_run_id}&attempt=${job.run_attempt ?? 1}&job_id=${job.github_job_id}`}
+        >
+          Preview a checkout change
+        </Button>
       {/if}
       {#if canCancel}
         <Button variant="danger" icon={CircleX} onclick={() => (cancelOpen = true)}>

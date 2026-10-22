@@ -1,19 +1,16 @@
 import { expect, test } from '@playwright/test';
-import { goto, openHostCapacityMap } from './support/fixtures';
+import { goto, openFleetContext, openHostCapacityMap } from './support/fixtures';
 
-test('runner queue context uses fleet totals and links to provisioning controls', async ({
+test('runner context is the provisioning strip, with the way to the queue and no tiles', async ({
   page,
 }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await goto(page, '/runners', 'Runners');
-  const stats = await (await page.request.get('/api/v1/stats')).json();
   const context = page.getByRole('region', { name: 'Runner operational context' });
-  await expect(
-    context.getByRole('link', {
-      name: new RegExp(`Job queue depth: ${stats.fleet.queued_jobs}\\.`),
-    }),
-  ).toBeVisible();
+  // The six tiles are gone from this page: the Overview and the Queue carry those
+  // figures, and the grid is what a person came to the Runners page for.
+  await expect(context.getByRole('link', { name: /^Job queue depth:/ })).toHaveCount(0);
   await expect(context.getByRole('link', { name: 'Manage queue ↗' })).toHaveAttribute(
     'href',
     '/queue',
@@ -42,6 +39,7 @@ test('a chart panel titles itself at the size every other card does', async ({ p
       });
 
   await goto(page, '/', 'Overview');
+  await page.locator('#history > summary').click();
   await expect(title('Activity matrix').first()).toBeVisible();
   const panel = await measure('Activity matrix');
 
@@ -176,6 +174,7 @@ test('the runner lifecycle draws the state machine with live counts and links', 
   page,
 }) => {
   await goto(page, '/runners', 'Runners');
+  await page.getByText('How runners move through their states', { exact: true }).click();
   const lifecycle = page.getByRole('region', { name: 'Runner lifecycle', exact: true });
   const steps = lifecycle.getByRole('list', { name: 'Runner lifecycle, in order' });
   await expect(steps.getByRole('listitem')).toHaveCount(5);
@@ -224,6 +223,19 @@ for (const route of [
       await goto(page, route.path, route.heading);
       // The Hosts page folds its map away until it is asked for.
       if (route.path === '/hosts') await openHostCapacityMap(page);
+      // The Pools page keeps demand and headroom behind a disclosure, as Runners keeps its lifecycle.
+      if (route.path === '/pools')
+        await page.getByText('How pool demand compares with headroom', { exact: true }).click();
+      // The Runners page keeps its lifecycle behind a disclosure.
+      if (route.path === '/runners')
+        await page.getByText('How runners move through their states', { exact: true }).click();
+      // The Queue page keeps demand and ordering behind a disclosure.
+      if (route.path === '/queue')
+        await page
+          .getByText('How provisioning is ordered, and how demand splits', { exact: true })
+          .click();
+      // And Mission Control folds the Jobs page's context away on a phone.
+      if (route.path === '/jobs') await openFleetContext(page);
       await expect(page.getByRole('region', { name: route.panel, exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,

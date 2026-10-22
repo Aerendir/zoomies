@@ -62,7 +62,7 @@ you press Ctrl-C.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-dark.webp">
-  <img src="docs/screenshots/overview-light.webp" alt="The Overview: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events" width="100%">
+  <img src="docs/screenshots/overview-light.webp" alt="The Overview in the Classic style: the activity matrix across the top, then four metric tiles with an hour of sparkline behind each, runner startup and registration times, a one-line problems summary, per-pool utilisation bars and a feed of the fleet's recent events" width="100%">
 </picture>
 
 </div>
@@ -390,7 +390,7 @@ from there first; the CLI, Compose and the API are
     <td width="50%" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hosts-dark.webp">
-  <img src="docs/screenshots/hosts-light.webp" alt="The Hosts page scrolled to its host cards, below the capacity map: each card shows its connection state beside a health link, then the slots in use, committed CPU and memory, the memory it can lend and its backends" width="100%">
+  <img src="docs/screenshots/hosts-light.webp" alt="The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority" width="100%">
 </picture>
       <p align="center"><sub>Hosts, their room left, and the backends their agents found.</sub></p>
     </td>
@@ -596,12 +596,19 @@ hooks/              the site's build-time metadata: git dates, llms.txt, and the
                     latest release and star count the header shows
 site-worker/        the Cloudflare Worker in front of zoomies.sh: answers
                     Accept: text/markdown with the page's Markdown copy
+weekly-seo/         the weekly search check for zoomies.sh: its config, notes and
+                    the report and memory files the .claude/agents/weekly-seo.md
+                    agent writes
 ROADMAP.md          the sole active roadmap: scope, order and owner decisions
 roadmap/            supporting status/evidence, decision records, model guidance,
                     dated plans, an archive and historical source material; its
                     README is the index, and it does not compete with ROADMAP.md
 skills/             what a coding agent installs: the zoomies skill, with a command
                     reference generated from the binary
+plans/              the improve advisor's output: prioritised, self-contained
+                    implementation plans and their index, each stamped with the
+                    commit it was written against; executors update the status
+                    table in plans/README.md
 install.sh          the one-line installer, served from the site root
 mkdocs.yml          how docs/ becomes zoomies.sh
 nixpacks.toml       how a Nixpacks-based PaaS builds and runs the controller

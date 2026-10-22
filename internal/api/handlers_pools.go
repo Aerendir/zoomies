@@ -994,7 +994,7 @@ func (s *Server) handleCreatePool(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, "reading the pool back", err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, poolFor(r, view.View(p)))
+	writeCreated(w, r, p.ID, poolFor(r, view.View(p)))
 }
 
 // validatePoolResponse is the wizard's review step: the errors that would stop

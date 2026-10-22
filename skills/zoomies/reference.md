@@ -747,13 +747,13 @@ Usage:
   zoomies jobs list [filters]
 
 Flags:
-  --attention                only failures still waiting on a person: recent, acknowledged by nobody, and not replaced by a later attempt
+  --attention                only failures still waiting on a person: recent, acknowledged by nobody, not replaced by a later attempt or a later run of the job on the same branch, and not one GitHub reports closed, superseded or fixed
   --before                   continue after the previous page: the cursor it printed, or the next field of --output json
   --ca-file                  PEM file holding the controller's certificate
   --conclusion               success, failure, cancelled or skipped (repeatable)
   --controller-version       only jobs claimed by this controller version; "unknown" is the jobs never stamped (repeatable)
   --failed                   only jobs that went wrong: a failing conclusion, or a runner that stopped under the job
-  --fault                    only this fault category: out_of_memory, host_lost, image, registration, backend, config, out_of_disk, removed, runner_exited (repeatable)
+  --fault                    only this fault category: host_lost, out_of_memory, out_of_disk, removed, image, registration, backend, backend_busy, container_conflict, config, runner_exited (repeatable)
   --host-id                  only jobs that ran on this host, by ID (repeatable)
   --hosted                   true: only jobs on somebody else's hosted runners; false: only jobs that are not
   --include-steps=true       with --output json, include each job's steps; --include-steps=false returns short summaries
@@ -1879,6 +1879,7 @@ Subcommands:
   install [--config-dir path]        Make this host ready to be updated from the controller: install the helper, as root
   remove [--config-dir path]         Stop the helper and remove it, its units and its files
   run                                Answer the request in the update folder; the helper's unit runs it, as root
+  repair                             Put a stopped helper right: reset its failed units, rewrite and start them, and clear what is provably abandoned; its unit runs it, as root
   status                             Where the update folder is, whether the helper is installed, and its last result
 
 Run "zoomies updates helper <subcommand> --help" for the flags each one takes.

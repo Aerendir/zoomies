@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -174,6 +175,19 @@ func (c *Controller) enqueueRepairWebhook(ctx context.Context, inst *store.Insta
 		if ownCommit {
 			return nil
 		}
+		// A provider that cannot pay would only queue an attempt that fails at once,
+		// spend a place of the allowance and comment on the pull request. The
+		// repository's panel already tells an administrator why nothing starts.
+		if policy.Automatic {
+			canPay, err := c.automaticProviderCanPay(ctx, *policy)
+			if err != nil {
+				return err
+			}
+			if !canPay {
+				c.log.Info("Eli automatic repair skipped: the repository's provider cannot pay", "repo", r.Repo)
+				return nil
+			}
+		}
 		// A failing default-branch run must not spend a PR's budget. GitHub's job
 		// delivery has no PR association, so resolve the pinned run before admission.
 		admissionCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -269,18 +283,45 @@ func repairBudgetReason(err error, repoLimit int) string {
 	return fmt.Sprintf("This repository has used its %s for the last 24 hours. Explicit requests and automatic repairs share that limit, and an attempt frees its place when it is more than 24 hours old. An administrator can raise the limit, up to 50, under Repository repair policies on the Eli AI Assistant page.", plural(repoLimit, "repair attempt"))
 }
 
+// repairOutputTokens is the room a repair asks a model for when its provider
+// leaves the limit to Eli, and where an automatic limit starts.
+const repairOutputTokens = 12000
+
 type repairModel struct {
-	provider   assistant.Provider
-	model      string
+	provider assistant.Provider
+	model    string
+	// kind is what the provider is, which decides what the messages that end a
+	// repair may advise: only some kinds can be told to think less.
+	kind       assistant.Kind
 	record     func(store.EliRepairStep)
 	sourceUsed func(int)
-	maxTokens  int
+	// maxTokens is the limit the provider sets, or zero when it leaves the limit
+	// to Eli. A number is kept exactly, because it may be there to cap what an
+	// attempt costs. Zero is automatic: room starts at repairOutputTokens and
+	// completeWithRoom raises it when the model runs out.
+	maxTokens int
+	// raised is the room an automatic repair has found it needs. It is kept for
+	// the steps after the one that needed it, so that only that step pays to find
+	// out, and given up if a provider refuses it beside a longer prompt.
+	raised int
 }
 
-func (m repairModel) SourceUsed(n int) {
+func (m *repairModel) SourceUsed(n int) {
 	if m.sourceUsed != nil {
 		m.sourceUsed(n)
 	}
+}
+
+// room is the ceiling to ask the provider for now: the operator's number when
+// they set one, and otherwise where an automatic repair has got to.
+func (m *repairModel) room() int {
+	switch {
+	case m.maxTokens > 0:
+		return m.maxTokens
+	case m.raised > 0:
+		return m.raised
+	}
+	return repairOutputTokens
 }
 
 // Answer asks the model for the next repair step. A repair offers the model no
@@ -294,13 +335,13 @@ func (m repairModel) SourceUsed(n int) {
 // call it made, saying there are no tools and what to send instead. A model
 // that calls again is stopped, and the failure names the tool, so an operator
 // can tell a model ignoring its instructions from a prompt that was wrong.
-func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
+func (m *repairModel) Answer(ctx context.Context, messages []prrepair.Message) (string, error) {
 	turns := make([]assistant.Message, 0, len(messages)+2)
 	for _, v := range messages {
 		turns = append(turns, assistant.Message{Role: assistant.Role(v.Role), Content: v.Content})
 	}
 	for attempt := 0; ; attempt++ {
-		text, calls, err := m.complete(ctx, turns)
+		text, calls, err := m.completeWithRoom(ctx, turns)
 		if err != nil {
 			return "", err
 		}
@@ -326,10 +367,79 @@ func (m repairModel) Answer(ctx context.Context, messages []prrepair.Message) (s
 	}
 }
 
+// outputCut is the provider stopping an answer at the room it was given.
+type outputCut struct{ limit int }
+
+func (e *outputCut) Error() string {
+	return fmt.Sprintf("provider output limit reached at %d tokens", e.limit)
+}
+
+// completeWithRoom is complete, asked again with more room each time the
+// provider says the model ran out of it, when the room is Eli's to choose. A
+// thinking model's reasoning counts against the room, so a repair that fits
+// easily in one model can need several times as much in another, and whoever set
+// the provider up should not have to learn that from a failed attempt. Each
+// attempt is a step of its own, with the usage the provider counted for it.
+//
+// A provider that refuses the larger request has reached its model's own
+// ceiling, or has no context left beside the prompt. It took the room asked for
+// before, so that is where the answer was cut, and the repair ends there and
+// says so.
+func (m *repairModel) completeWithRoom(ctx context.Context, turns []assistant.Message) (string, []assistant.ToolCall, error) {
+	cutAt := 0
+	for {
+		limit := m.room()
+		text, calls, err := m.complete(ctx, turns, limit)
+		var cut *outputCut
+		switch {
+		case errors.As(err, &cut):
+			if m.maxTokens > 0 {
+				return "", nil, fmt.Errorf("provider output limit reached at %d tokens: leave the provider's output limit empty so that Eli raises it as needed, choose a model with more output room, or request a smaller fix", limit)
+			}
+			if limit >= AssistantOutputTokensMax {
+				return "", nil, fmt.Errorf("provider output limit reached at %d tokens, the most Eli asks for: %schoose a model with more output room, or request a smaller fix", limit, m.lowerEffort())
+			}
+			cutAt = limit
+			m.raised = nextOutputLimit(limit)
+		case cutAt > 0 && refusedRoom(err):
+			return "", nil, fmt.Errorf("provider output limit reached at %d tokens, and the provider would not allow more room: set the provider's Output limit to that model's maximum, %schoose a model with more output room, or request a smaller fix", cutAt, m.lowerEffort())
+		case cutAt == 0 && m.maxTokens == 0 && m.raised > repairOutputTokens && refusedRoom(err):
+			// The room kept from an earlier step has to fit beside a prompt that is
+			// longer now. This step has not run out of room, so it starts again from
+			// where a repair starts, once: a refusal there is something else.
+			m.raised = 0
+		default:
+			return text, calls, err
+		}
+	}
+}
+
+// lowerEffort is the advice to make a model think less, for a model that keeps
+// running out of room. It is given only to a provider that can be told to: the
+// others refuse the setting, and their form has nothing to change.
+func (m *repairModel) lowerEffort() string {
+	if assistant.SupportsReasoningEffort(m.kind) {
+		return "lower the model's reasoning effort, "
+	}
+	return ""
+}
+
+// refusedRoom is whether the provider turned down the request itself, which is
+// how a provider answers a ceiling above its model's, or above what its context
+// holds beside the prompt. Any other failure is not about room.
+func refusedRoom(err error) bool {
+	var status interface{ HTTPStatus() int }
+	if !errors.As(err, &status) {
+		return false
+	}
+	code := status.HTTPStatus()
+	return code == http.StatusBadRequest || code == http.StatusUnprocessableEntity
+}
+
 // complete is one call to the provider, recorded as one step of the repair,
 // so the history shows the turn the model spent on a tool call as well as the
-// one that answered.
-func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (string, []assistant.ToolCall, error) {
+// one that answered. limit is how much the model may write, thinking included.
+func (m *repairModel) complete(ctx context.Context, turns []assistant.Message, limit int) (string, []assistant.ToolCall, error) {
 	step := store.EliRepairStep{RequestBytes: len(prrepair.SystemPrompt)}
 	started := time.Now()
 	defer func() {
@@ -340,10 +450,6 @@ func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (s
 	}()
 	for _, v := range turns {
 		step.RequestBytes += len(v.Content)
-	}
-	limit := m.maxTokens
-	if limit <= 0 {
-		limit = 12000
 	}
 	stream, err := m.provider.Chat(ctx, assistant.Request{Model: m.model, System: prrepair.SystemPrompt, Messages: turns, MaxTokens: limit})
 	if err != nil {
@@ -364,7 +470,7 @@ func (m repairModel) complete(ctx context.Context, turns []assistant.Message) (s
 			step.UsageReported = true
 		}
 		if ev.Cut {
-			return "", nil, fmt.Errorf("provider output limit reached: choose a model with more output room or request a smaller fix")
+			return "", nil, &outputCut{limit: limit}
 		}
 		if ev.Err != nil {
 			return "", nil, repairProviderError(ev.Err)
@@ -548,6 +654,10 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 	if err != nil || r.Trigger == "automatic" && !policy.Automatic {
 		r.State = "blocked"
 		r.Message = "Repository repairs are disabled or the installation changed."
+		if err == nil {
+			// Ask me first leaves repairs on, so "disabled" would contradict the page.
+			r.Message = "Automatic repairs were stopped for this repository before this one ran."
+		}
 		_ = c.persistEliRepair(ctx, r)
 		return
 	}
@@ -578,6 +688,21 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		_ = c.persistEliRepair(ctx, r)
 		c.repairNotice(ctx, client, r, r.Message)
 	}
+	// failWith ends the repair with an error the controller did not write, and
+	// keeps the failure code that error carries: a provider that cannot pay is
+	// not the same thing as a provider that could not be reached, and the code
+	// is what the advice on the page is chosen by.
+	failWith := func(err error) {
+		r.State = "failed"
+		r.Message = prrepair.Redact(err.Error())
+		r.Details.FailureCode = repairFailureCode(r.Message)
+		var coded interface{ RepairFailureCode() string }
+		if errors.As(err, &coded) && coded.RepairFailureCode() != "" {
+			r.Details.FailureCode = coded.RepairFailureCode()
+		}
+		_ = c.persistEliRepair(ctx, r)
+		c.repairNotice(ctx, client, r, r.Message)
+	}
 	var pull github.RepairPull
 	if r.Trigger == "automatic" {
 		pull, err = client.RepairPullForRun(ctx, r.Repo, r.RunID)
@@ -594,6 +719,31 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		return
 	}
 	r.HeadSHA = pull.HeadSHA
+	// A repair asked for in a comment reaches the worker with no case: the
+	// webhook knew the pull request and nothing more. Reading it here gives the
+	// attempt page the same facts as one started from the UI. A case a request
+	// already recorded is the failure the person saw and is left as it was.
+	if r.Details.Case == nil {
+		r.Details.Case = c.repairCase(ctx, r.Repo, pull, r.RunID)
+	}
+	stillNeeded := func() bool {
+		state, err := client.RepairChecks(ctx, r.Repo, pull.HeadSHA)
+		if err != nil {
+			fail("GitHub could not confirm whether this failure still needs fixing. No branch was changed.")
+			return false
+		}
+		if state == "passed" {
+			r.State = "superseded"
+			r.Message = "The latest checks have already passed. No repair commit is needed and no branch was changed."
+			_ = c.persistEliRepair(ctx, r)
+			c.repairNotice(ctx, client, r, r.Message)
+			return false
+		}
+		return true
+	}
+	if !stillNeeded() {
+		return
+	}
 	var provider *store.AssistantProvider
 	if r.Trigger == "mention" {
 		actor, err := client.RepairActor(ctx, r.Repo, r.GitHubLogin)
@@ -674,12 +824,12 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 		return
 	}
 	r.Details.Stage = "prepare_fix"
-	plan, err := prrepair.Generate(ctx, repairModel{provider: p, model: provider.Model, maxTokens: provider.MaxOutputTokens, sourceUsed: func(n int) { r.Details.SourceBytes = n }, record: func(step store.EliRepairStep) {
+	plan, err := prrepair.Generate(ctx, &repairModel{provider: p, model: provider.Model, kind: assistant.Kind(provider.Kind), maxTokens: provider.MaxOutputTokens, sourceUsed: func(n int) { r.Details.SourceBytes = n }, record: func(step store.EliRepairStep) {
 		r.Details.Steps = append(r.Details.Steps, step)
 		_ = c.persistEliRepair(ctx, r)
 	}}, source, source.Snapshot, r.Instruction, policy.AllowWorkflows)
 	if err != nil {
-		fail(err.Error())
+		failWith(err)
 		return
 	}
 	// Re-read both authorisation and credentials after the model's work, before the first repository write.
@@ -719,6 +869,9 @@ func (c *Controller) runEliRepair(parent context.Context, r *store.EliRepair) {
 	}
 	if !c.mayAct() || c.transferDraining.Load() || ctx.Err() != nil {
 		fail("The repair stopped before publication.")
+		return
+	}
+	if !stillNeeded() {
 		return
 	}
 	r.Details.Stage = "publish"
@@ -809,12 +962,16 @@ func (c *Controller) checkEliRepairs(ctx context.Context) {
 
 // RequestEliRepair is the same owner-scoped operation as a GitHub mention, reachable from the UI.
 func (c *Controller) RequestEliRepair(ctx context.Context, userID, repo string, pull int, instruction string, requesterAdmin bool) (*store.EliRepair, error) {
-	return c.RequestPinnedEliRepair(ctx, userID, repo, pull, instruction, "", requesterAdmin)
+	return c.RequestPinnedEliRepair(ctx, userID, repo, pull, instruction, "", 0, requesterAdmin)
 }
-func (c *Controller) RequestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead string, requesterAdmin bool) (*store.EliRepair, error) {
-	return c.requestPinnedEliRepair(ctx, userID, repo, pull, instruction, expectedHead, "", requesterAdmin)
+
+// RequestPinnedEliRepair is the request the repair page makes. runID is the run
+// whose failure the person was looking at, or 0 when they came from the pull
+// request alone; it is what the attempt later says the repair was started for.
+func (c *Controller) RequestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead string, runID int64, requesterAdmin bool) (*store.EliRepair, error) {
+	return c.requestPinnedEliRepair(ctx, userID, repo, pull, instruction, expectedHead, "", runID, requesterAdmin)
 }
-func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead, dedup string, requesterAdmin bool) (*store.EliRepair, error) {
+func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo string, pull int, instruction, expectedHead, dedup string, runID int64, requesterAdmin bool) (*store.EliRepair, error) {
 	repo = normaliseRepairRepo(repo)
 	if pull < 1 || len(instruction) > 4000 {
 		return nil, store.ErrConflict
@@ -855,10 +1012,24 @@ func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo st
 	}
 	pr, err := client.RepairPull(ctx, repo, pull)
 	if err != nil {
+		var changed *github.RepairTargetChanged
+		if errors.As(err, &changed) {
+			return nil, changed
+		}
 		return nil, store.ErrConflict
 	}
 	if expectedHead != "" && pr.HeadSHA != expectedHead {
-		return nil, fmt.Errorf("%w: the PR has a newer commit; review it before requesting a repair", store.ErrConflict)
+		return nil, &github.RepairTargetChanged{Code: "superseded", Message: "The PR has a newer commit since you reviewed this failure. No repair was started and no attempt was used. Check the current PR before requesting a repair."}
+	}
+	state, err := client.RepairChecks(ctx, repo, pr.HeadSHA)
+	if err != nil {
+		return nil, fmt.Errorf("could not recheck the PR's current checks: %w", err)
+	}
+	if state == "passed" {
+		return nil, &github.RepairTargetChanged{Code: "fixed", Message: "The latest checks have passed since you reviewed this failure. No repair was started and no attempt was used."}
+	}
+	if state != "failed" {
+		return nil, &github.RepairTargetChanged{Code: "checks_pending", Message: "There are no current failed checks to repair. No repair was started and no attempt was used. Wait for the checks, then review again."}
 	}
 	provider, err := c.personalChatProvider(ctx, "", userID)
 	if err != nil {
@@ -870,7 +1041,8 @@ func (c *Controller) requestPinnedEliRepair(ctx context.Context, userID, repo st
 	if instruction == "" {
 		instruction = "Fix the underlying issue in this PR using the failed-job evidence."
 	}
-	row := &store.EliRepair{Repo: repo, InstallationID: inst.ID, PullNumber: pull, HeadSHA: pr.HeadSHA, UserID: userID, GitHubUserID: identity.GitHubUserID, GitHubLogin: identity.GitHubLogin, ProviderID: provider.ID, Trigger: "mention", RequesterAdmin: requesterAdmin, Instruction: instruction, DedupKey: fmt.Sprintf("ui:%s:%d:%s:%s", repo, pull, pr.HeadSHA, userID)}
+	row := &store.EliRepair{Repo: repo, InstallationID: inst.ID, PullNumber: pull, HeadSHA: pr.HeadSHA, RunID: runID, UserID: userID, GitHubUserID: identity.GitHubUserID, GitHubLogin: identity.GitHubLogin, ProviderID: provider.ID, Trigger: "mention", RequesterAdmin: requesterAdmin, Instruction: instruction, DedupKey: fmt.Sprintf("ui:%s:%d:%s:%s", repo, pull, pr.HeadSHA, userID)}
+	row.Details.Case = c.repairCase(ctx, repo, pr, runID)
 	if dedup != "" {
 		row.DedupKey = dedup
 	}
@@ -884,6 +1056,8 @@ func repairFailureCode(message string) string {
 	// name such as read_file would otherwise read as a source failure.
 	case strings.Contains(message, "tool call"):
 		return "provider_unavailable"
+	case strings.Contains(message, "cannot pay") || strings.Contains(message, "out of credit"):
+		return "provider_billing"
 	case strings.Contains(message, "rate limit"):
 		return "rate_limited"
 	case strings.Contains(message, "provider credentials"):
@@ -903,24 +1077,88 @@ func repairFailureCode(message string) string {
 	}
 }
 
+// repairProviderFailure is a provider's error as a repair words it, with the
+// status the provider answered kept. The words are for whoever reads the PR
+// comment; the status is for the repair, which has to tell a provider refusing
+// the room it was asked for from the other ways a provider fails.
+type repairProviderFailure struct {
+	message string
+	status  int
+	// code is the failure the repair records. It is carried rather than read
+	// back out of the words, because the words are the controller's own and a
+	// provider's answer quoted in them would say what it means to say.
+	code string
+}
+
+func (e *repairProviderFailure) Error() string   { return e.message }
+func (e *repairProviderFailure) HTTPStatus() int { return e.status }
+
+// RepairFailureCode is the code the repair records for this failure.
+func (e *repairProviderFailure) RepairFailureCode() string { return e.code }
+
 func repairProviderError(err error) error {
-	message := strings.ToLower(err.Error())
-	if strings.Contains(message, "context length") || strings.Contains(message, "context window") {
-		return fmt.Errorf("the provider context limit was reached; narrow the investigation or choose a model with more input room")
+	var carried interface{ HTTPStatus() int }
+	status := 0
+	if errors.As(err, &carried) {
+		status = carried.HTTPStatus()
 	}
-	var status interface{ HTTPStatus() int }
-	if errors.As(err, &status) {
-		switch status.HTTPStatus() {
-		case 429:
-			return fmt.Errorf("the provider rate limited this repair; check quota or try again later")
-		case 401, 403:
-			return fmt.Errorf("the provider credentials were refused; update or test your provider in Eli settings")
-		case 404:
-			return fmt.Errorf("the provider model or endpoint was not found; check your provider settings")
+	fail := func(message, code string) error {
+		return &repairProviderFailure{message: message, status: status, code: code}
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "context length") || strings.Contains(message, "context window"):
+		return fail("the provider context limit was reached; narrow the investigation or choose a model with more input room", "context_limit")
+	case status == http.StatusPaymentRequired || providerOutOfCredit(message):
+		// A provider with no credit left is not a provider that could not be
+		// reached, and "test its connection" names nothing the person can act
+		// on. The status is kept so the provider's own page can be matched.
+		paid := "the provider's account cannot pay for this repair"
+		if status > 0 {
+			paid += " (HTTP " + strconv.Itoa(status) + ")"
 		}
+		return fail(paid+"; add credit to the provider's account or choose another provider in Eli settings", "provider_billing")
+	}
+	switch status {
+	case 429:
+		return fail("the provider rate limited this repair; check quota or try again later", "rate_limited")
+	case 401, 403:
+		return fail("the provider credentials were refused; update or test your provider in Eli settings", "provider_credentials")
+	case 404:
+		return fail("the provider model or endpoint was not found; check your provider settings", "provider_unavailable")
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("the provider timed out; try again later")
+		return fail("the provider timed out; try again later", "provider_unavailable")
 	}
-	return fmt.Errorf("the provider could not complete this repair; test its connection in Eli settings")
+	return fail("the provider could not complete this repair; test its connection in Eli settings", "provider_unavailable")
+}
+
+// providerOutOfCredit is whether a provider said it cannot pay: an account
+// with no credit left, a balance too low, or a quota it has already spent.
+// The words differ between providers, so the ones that mean it are listed.
+// A provider that is merely slow says rate limit, and is left to that.
+func providerOutOfCredit(message string) bool {
+	for _, phrase := range []string{
+		"insufficient funds",
+		"insufficient balance",
+		"insufficient credit",
+		"insufficient account funds",
+		"insufficient quota",
+		"insufficient_quota",
+		"out of credit",
+		"out of funds",
+		"not enough funds",
+		"no funds",
+		"credits exhausted",
+		"credit balance is too low",
+		"balance is too low",
+		"payment required",
+		"payment failed",
+		"check your plan and billing",
+	} {
+		if strings.Contains(message, phrase) {
+			return true
+		}
+	}
+	return false
 }

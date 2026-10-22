@@ -52,15 +52,11 @@ test('every design token a component reads is defined somewhere', () => {
 const UNREAD_ON_PURPOSE: Record<string, string> = {
   '--z-brand-mid-grey': 'the brand record; --z-text-muted darkens it, as tokens.css says',
   '--z-brand-paw-black': 'the favicon artwork is a PNG, not a colour any rule sets',
-  // docs/ui-guidelines.md ("The panel") documents these six, with measured
-  // contrast, as the colours drawn on a Zoomies Black ground, but the sign-in
-  // page and the Appearance preview read only the ground. Either the page
-  // should read them or they and their table rows should go; that is a design
-  // decision, so they are named here rather than deleted.
-  '--z-panel-text': 'documented, not yet read',
-  '--z-panel-text-muted': 'documented, not yet read',
-  '--z-panel-text-subtle': 'documented, not yet read',
-  '--z-panel-border': 'documented, not yet read',
+  // docs/ui-guidelines.md ("The panel") documents these as the colours drawn on
+  // a Zoomies Black ground. The stage and the footer of the pages before sign
+  // in now read the text, muted text, subtle text and border; these two are
+  // still documented and not yet read, which is a design decision, so they are
+  // named here rather than deleted.
   '--z-panel-raised': 'documented, not yet read',
   '--z-panel-ring': 'documented, not yet read',
 };

@@ -13,10 +13,19 @@
     progress?: number | null;
     tone?: 'neutral' | 'success' | 'danger' | 'warning' | 'accent' | 'busy';
   }
-  let { items }: { items: Metric[] } = $props();
+  /**
+   * `strip` is the figures as one row of a single card, each a label, a number and one
+   * line of detail (the whole of it in the title), for a page whose list is what it is
+   * for and whose figures are context.
+   */
+  let {
+    items,
+    compact = false,
+    strip = false,
+  }: { items: Metric[]; compact?: boolean; strip?: boolean } = $props();
 </script>
 
-<dl class="metrics">
+<dl class="metrics" class:compact class:strip>
   {#each items as item (item.label)}
     <div class="metric" data-tone={item.tone ?? 'neutral'}>
       <dt>
@@ -51,6 +60,50 @@
     grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
     gap: var(--z-space-3);
     margin: 0 0 var(--z-space-5);
+  }
+  .metrics.compact {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--z-space-2);
+    margin-bottom: 0;
+  }
+  .metrics.compact .metric {
+    padding: var(--z-space-3);
+  }
+  .metrics.compact .value {
+    margin: var(--z-space-1) 0;
+    font-size: var(--z-text-xl);
+  }
+  .metrics.compact .detail {
+    font-size: var(--z-text-2xs);
+    line-height: var(--z-leading-2xs);
+  }
+  .metrics.strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin-bottom: var(--z-space-4);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-xl);
+    background: var(--z-surface);
+    overflow: hidden;
+  }
+  .metrics.strip .metric {
+    flex: 1 1 11rem;
+    padding: var(--z-space-3) var(--z-space-4);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: inset var(--z-border-width) 0 0 var(--z-border);
+  }
+  .metrics.strip .value {
+    margin: var(--z-space-1) 0;
+    font-size: var(--z-text-xl);
+  }
+  .metrics.strip .detail {
+    font-size: var(--z-text-xs);
+  }
+  .metrics.strip .metric:has(a):hover {
+    background: var(--z-surface-hover);
   }
   .metric {
     position: relative;

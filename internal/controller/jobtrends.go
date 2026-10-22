@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
@@ -36,6 +37,21 @@ const (
 	slowerRatio   = 1.5
 	slowerMinGain = 60 * time.Second
 )
+
+// slowerFor is how long what the slower-job check found is reused. It reads eight
+// days of jobs, which is the dearest thing a pass that someone is watching does
+// (about two thirds of one over 10,000 jobs, and more of it the more jobs there
+// are), and it sets a day of runs against the week before, which a minute moves
+// very little. The rest of the problems list is worked out afresh for every
+// request (see problems_flight.go); this check is up to a minute old.
+const slowerFor = time.Minute
+
+// slowerMemo is what the slower-job check last found, and when it read the jobs.
+type slowerMemo struct {
+	mu    sync.Mutex
+	read  time.Time
+	found []Problem
+}
 
 // workflowFailingProblems is jobs.workflow_failing: a job that failed at the same
 // step failingRuns times or more in the window and did not succeed once.
@@ -121,12 +137,36 @@ func jobKey(j *store.Job) string { return j.Repo + "\x00" + j.Workflow + "\x00" 
 
 // jobsSlowerProblems is jobs.duration_regressed: a job whose typical run over the
 // last day took at least half as long again, and a minute more, than over the week
-// before, on the jobs this fleet ran.
+// before, on the jobs this fleet ran. It reads the jobs at most once in slowerFor.
 func (c *Controller) jobsSlowerProblems(ctx context.Context, out *[]Problem) error {
+	m := &c.slower
+	// Held while the jobs are read, so a request that arrives meanwhile waits for
+	// the answer and does not read them a second time.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := c.Now()
+	// A clock that has gone back is no reason to trust what was found before it.
+	if !m.read.IsZero() && !now.Before(m.read) && now.Sub(m.read) < slowerFor {
+		*out = append(*out, m.found...)
+		return nil
+	}
+	var found []Problem
+	if err := c.readSlowerJobs(ctx, &found); err != nil {
+		// Not kept: the next request reads the jobs again.
+		return err
+	}
+	m.read, m.found = now, found
+	*out = append(*out, found...)
+	return nil
+}
+
+// readSlowerJobs reads the last day of jobs and the week before it, and says which
+// jobs got slower.
+func (c *Controller) readSlowerJobs(ctx context.Context, out *[]Problem) error {
 	now := c.Now()
 	recentFrom, baseFrom := now.Add(-slowerRecent), now.Add(-slowerRecent-slowerBase)
 	read := func(from, until time.Time) (map[string]store.JobStatsGroup, error) {
-		res, err := c.st.JobStats(ctx, store.JobFilter{Since: &from, Until: &until, ManagedOnly: true}, []string{store.GroupByJobName})
+		res, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &from, Until: &until, ManagedOnly: true}, []string{store.GroupByJobName}, store.MeasureDuration)
 		if err != nil {
 			return nil, fmt.Errorf("reading how long jobs took: %w", err)
 		}

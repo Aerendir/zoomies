@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"context"
 	"sync"
 	"testing"
+	"time"
 )
 
 // Eight operators opening the Overview at once used to mean eight computations
@@ -46,6 +48,28 @@ func TestOverlappingProblemRequestsEachGetTheirOwnCopyOfTheList(t *testing.T) {
 		if got[0].Title == "edited by the first caller" {
 			t.Fatalf("caller %d saw the first caller's edit: the list is shared, not copied", i+1)
 		}
+	}
+}
+
+// The list is computed on a goroutine of its own, so neither a loop's guard nor
+// net/http's recovery of a request reaches it, and a panic in it used to end
+// the process. It has to fail the requests waiting on it and nothing more. It
+// also has to leave the flight clear: a computation that stayed registered
+// would make every request after it wait for a result that is never coming.
+func TestAPanicWhileComputingTheProblemsListFailsThoseRequestsAndNotTheProcess(t *testing.T) {
+	h := newHarness(t)
+	live := h.c.live
+	h.c.live = nil // the configuration every pass reads; nil is what a bug leaves behind
+
+	if _, err := h.c.SharedProblems(h.ctx); err == nil {
+		t.Fatal("a computation that panicked reported no error to the request that waited for it")
+	}
+
+	h.c.live = live
+	ctx, cancel := context.WithTimeout(h.ctx, 5*time.Second)
+	defer cancel()
+	if _, err := h.c.SharedProblems(ctx); err != nil {
+		t.Fatalf("the request after the panic got %v: the failed computation was left registered", err)
 	}
 }
 

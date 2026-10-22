@@ -32,12 +32,47 @@ type EliRepairStep struct {
 	RequestBytes  int   `json:"request_bytes"`
 	ElapsedMS     int64 `json:"elapsed_ms"`
 }
+
+// MaxEliRepairCaseJobs is how many failed jobs a repair's case names. A run can
+// fail dozens of matrix jobs; the case is a summary of what was being fixed, and
+// the rest are one click away in the job list.
+const MaxEliRepairCaseJobs = 10
+
+// EliRepairCaseJob is one failed job of the run a repair was started for, with
+// the step it stopped at. Names are the workflow's own words and are untrusted.
+type EliRepairCaseJob struct {
+	Name       string `json:"name"`
+	Step       string `json:"step,omitempty"`
+	URL        string `json:"url,omitempty"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
+}
+
+// EliRepairCase is what a repair was about, as it was when the repair began:
+// the pull request, the run and the jobs that failed. Zoomies' own job records
+// are pruned and a pull request's title changes, so the repair keeps its own
+// copy; the page that follows it can then say what it was fixing long after.
+// It holds no log text.
+type EliRepairCase struct {
+	PullTitle string             `json:"pull_title,omitempty"`
+	PullURL   string             `json:"pull_url,omitempty"`
+	Author    string             `json:"author,omitempty"`
+	Branch    string             `json:"branch,omitempty"`
+	RunURL    string             `json:"run_url,omitempty"`
+	Workflow  string             `json:"workflow,omitempty"`
+	RunNumber int64              `json:"run_number,omitempty"`
+	Jobs      []EliRepairCaseJob `json:"jobs,omitempty"`
+}
+
+// EliRepairDetails is the one JSON column the worker rewrites on every save, so
+// whatever lives here survives each stage without a second write path. A row
+// made before Case existed has none, and every reader has to cope with that.
 type EliRepairDetails struct {
 	Model       string          `json:"model"`
 	Stage       string          `json:"stage"`
 	FailureCode string          `json:"failure_code,omitempty"`
 	SourceBytes int             `json:"source_bytes"`
 	Steps       []EliRepairStep `json:"steps"`
+	Case        *EliRepairCase  `json:"case,omitempty"`
 }
 type EliRepair struct {
 	Details        EliRepairDetails `json:"details"`
@@ -137,8 +172,11 @@ func (s *Store) SetEliRepairPolicy(ctx context.Context, p EliRepairPolicy) error
  ON CONFLICT(repo) DO UPDATE SET installation_id=excluded.installation_id,provider_id=excluded.provider_id,enabled=excluded.enabled,automatic=excluded.automatic,ask_first=excluded.ask_first,allow_workflows=excluded.allow_workflows,daily_limit=excluded.daily_limit,updated_at=excluded.updated_at`, p.Repo, p.InstallationID, p.ProviderID, boolInt(p.Enabled), boolInt(p.Automatic), boolInt(p.AskFirst), boolInt(p.AllowWorkflows), p.DailyLimit, ms(s.Now()))
 	return wrapWrite(err)
 }
+
+var eliRepairPoliciesQuery = hot(`SELECT repo,installation_id,COALESCE(provider_id,''),enabled,automatic,ask_first,allow_workflows,daily_limit FROM eli_repair_policies ORDER BY repo`)
+
 func (s *Store) EliRepairPolicies(ctx context.Context) ([]EliRepairPolicy, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT repo,installation_id,COALESCE(provider_id,''),enabled,automatic,ask_first,allow_workflows,daily_limit FROM eli_repair_policies ORDER BY repo`)
+	rows, err := s.hotRead().Query(ctx, eliRepairPoliciesQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -168,6 +206,26 @@ func scanEliRepair(row interface{ Scan(...any) error }) (*EliRepair, error) {
 	v.CreatedAt, v.UpdatedAt = at(created), at(updated)
 	v.PublishedAt = atp(published)
 	return &v, err
+}
+
+// GetEliRepair reads one repair by its id under the rule the history is read by:
+// with scoped, only a repair whose owner is ownerID, and an empty owner matches
+// nothing (an automatic repair has none). A missing id and one the caller may
+// not see are the same ErrNotFound, so the answer cannot be used to find out
+// which ids exist. A repair cleared from the history is still returned: clearing
+// hides a row from the list and does nothing else.
+func (s *Store) GetEliRepair(ctx context.Context, id, ownerID string, scoped bool) (*EliRepair, error) {
+	r, err := scanEliRepair(s.read.QueryRowContext(ctx, `SELECT `+eliRepairCols+` FROM eli_repairs WHERE id=?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if scoped && (r.UserID == "" || r.UserID != ownerID) {
+		return nil, ErrNotFound
+	}
+	return r, nil
 }
 
 // Admission and deduplication share the writer transaction, so a webhook burst cannot outrun the budget.

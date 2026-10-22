@@ -25,11 +25,11 @@
   import { router } from '$lib/router';
   import { session } from '$lib/state/session.svelte';
   import { toasts } from '$lib/state/toasts.svelte';
-  import Logo from '$lib/components/Logo.svelte';
   import Button from '$lib/components/Button.svelte';
   import Field from '$lib/components/Field.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import Input from '$lib/components/Input.svelte';
+  import SplitPage from '$lib/public/SplitPage.svelte';
 
   const MIN_LENGTH = MIN_PASSWORD_LENGTH;
 
@@ -182,243 +182,193 @@
   }
 </script>
 
-<div class="card">
-  <!-- The standalone mark, not the lockup. The lockup is a 298px black square
-       (the brand guide keeps it above 220px wide), which on this card put the
-       submit button 270px below the fold of a 1440x900 laptop screen before the
-       first field had been seen. The guide's own answer for less room is the
-       mark above 64px: the original circular dog. -->
-  <div class="brand">
-    <Logo variant="mark" size={72} label="Zoomies" />
-  </div>
-  <!-- "First", not "1 of 4". How many steps there are depends on what this
-       install is: a controller with an agent of its own has one fewer than one
-       without, and this page runs before there is a session to ask with. The
-       Overview's checklist counts the real list from the fleet's own state, so
-       this says only which end of it we are at. -->
-  <p class="step">First step</p>
-  <h1>Create the first account</h1>
-  <p class="lede">
-    Nobody has an account on this instance yet. This form creates the first one, with the highest
-    role (Platform), and stops being available the moment it exists. The setup token is how it knows
-    you are the one who deployed Zoomies.
-  </p>
-  <p class="next">
-    Then: connect a GitHub App, add a host if Zoomies has no agent of its own, create a pool, and
-    point a workflow at it. The Overview keeps the list and ticks it off.
-  </p>
+<!-- "First", not "1 of 4". How many steps there are depends on what this
+     install is: a controller with an agent of its own has one fewer than one
+     without, and this page runs before there is a session to ask with. The
+     Overview's checklist counts the real list from the fleet's own state, so
+     the stage says only which end of it we are at, and what the rest of it is. -->
+<SplitPage
+  eyebrow="First step"
+  headline="First, an account."
+  lede="Then: connect a GitHub App, add a host if Zoomies has no agent of its own, create a pool, and point a workflow at it. The Overview keeps the list and ticks it off."
+  version={session.meta?.version}
+>
+  <div class="column">
+    <h1>Create the first account</h1>
+    <p class="lede">
+      Nobody has an account on this instance yet. This form creates the first one, with the highest
+      role (Platform), and stops being available the moment it exists. The setup token is how it
+      knows you are the one who deployed Zoomies.
+    </p>
 
-  {#if failure}
-    <div class="failure" role="alert">
-      <TriangleAlert size={15} aria-hidden="true" />
-      <div>
-        <p>{failureText}</p>
-        {#if closed}
-          <!-- The page already knows the state is stale, so it flips itself
-               rather than asking the operator to reload it by hand. -->
-          <Button variant="secondary" size="sm" onclick={() => void session.boot()}>
-            Go to sign in
-          </Button>
-        {/if}
+    {#if failure}
+      <div class="failure" role="alert">
+        <TriangleAlert size={15} aria-hidden="true" />
+        <div>
+          <p>{failureText}</p>
+          {#if closed}
+            <!-- The page already knows the state is stale, so it flips itself
+                 rather than asking the operator to reload it by hand. -->
+            <Button variant="secondary" size="sm" onclick={() => void session.boot()}>
+              Go to sign in
+            </Button>
+          {/if}
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  <form onsubmit={submit} novalidate>
-    <!-- Every field carries a hint, so the message row is occupied before an
-         error needs it and the form does not move as one appears. -->
-    <Field
-      label="Setup token"
-      hint="From the controller's log: docker compose logs zoomies | grep 'setup token'"
-      help="On a line beginning “setup token”. Installed with zoomies init: zoomies logs. Docker Compose: docker compose logs zoomies. Another container: docker logs and its name. systemd: journalctl -u zoomies. A PaaS: its log viewer."
-      error={setupTokenError ?? fieldErrors.setup_token}
-      required
-    >
-      {#snippet children({ id, describedBy, invalid })}
-        <Input
-          bind:value={setupToken}
-          bind:element={setupTokenInput}
-          {id}
-          {describedBy}
-          {invalid}
-          name="setup-token"
-          autocomplete="off"
-          autocapitalize="none"
-          spellcheck={false}
-          mono
-          disabled={submitting}
-          onblur={() => (touched = { ...touched, setupToken: true })}
-        />
-      {/snippet}
-    </Field>
+    <form onsubmit={submit} novalidate>
+      <!-- Every field carries a hint, so the message row is occupied before an
+           error needs it and the form does not move as one appears. -->
+      <Field
+        label="Setup token"
+        hint="From the controller's log: docker compose logs zoomies | grep 'setup token'"
+        help="On a line beginning “setup token”. Installed with zoomies init: zoomies logs. Docker Compose: docker compose logs zoomies. Another container: docker logs and its name. systemd: journalctl -u zoomies. A PaaS: its log viewer."
+        error={setupTokenError ?? fieldErrors.setup_token}
+        required
+      >
+        {#snippet children({ id, describedBy, invalid })}
+          <Input
+            bind:value={setupToken}
+            bind:element={setupTokenInput}
+            {id}
+            {describedBy}
+            {invalid}
+            size="lg"
+            name="setup-token"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck={false}
+            mono
+            disabled={submitting}
+            onblur={() => (touched = { ...touched, setupToken: true })}
+          />
+        {/snippet}
+      </Field>
 
-    <Field
-      label="Username"
-      hint="You will sign in with this."
-      error={usernameError ?? fieldErrors.username}
-      required
-    >
-      {#snippet children({ id, describedBy, invalid })}
-        <Input
-          bind:value={username}
-          bind:element={usernameInput}
-          {id}
-          {describedBy}
-          {invalid}
-          name="username"
-          autocomplete="username"
-          autocapitalize="none"
-          spellcheck={false}
-          disabled={submitting}
-          onkeydown={readCapsLock}
-          onblur={() => (touched = { ...touched, username: true })}
-        />
-      {/snippet}
-    </Field>
+      <Field
+        label="Username"
+        hint="You will sign in with this."
+        error={usernameError ?? fieldErrors.username}
+        required
+      >
+        {#snippet children({ id, describedBy, invalid })}
+          <Input
+            bind:value={username}
+            bind:element={usernameInput}
+            {id}
+            {describedBy}
+            {invalid}
+            size="lg"
+            name="username"
+            autocomplete="username"
+            autocapitalize="none"
+            spellcheck={false}
+            disabled={submitting}
+            onkeydown={readCapsLock}
+            onblur={() => (touched = { ...touched, username: true })}
+          />
+        {/snippet}
+      </Field>
 
-    <Field
-      label="Password"
-      hint={strength}
-      notice={capsLock ? 'Caps lock is on.' : undefined}
-      error={passwordError ?? fieldErrors.password}
-      required
-    >
-      {#snippet children({ id, describedBy, invalid })}
-        <Input
-          bind:value={password}
-          bind:element={passwordInput}
-          {id}
-          {describedBy}
-          {invalid}
-          type={revealed ? 'text' : 'password'}
-          name="password"
-          autocomplete="new-password"
-          minlength={MIN_LENGTH}
-          disabled={submitting}
-          onkeydown={readCapsLock}
-          onblur={() => {
-            touched = { ...touched, password: true };
-            capsLock = false;
-          }}
-        >
-          {#snippet trailing()}
-            <IconButton
-              icon={revealed ? EyeOff : Eye}
-              label={revealed ? 'Hide password' : 'Show password'}
-              size="sm"
-              pressed={revealed}
-              disabled={submitting}
-              onclick={() => (revealed = !revealed)}
-            />
-          {/snippet}
-        </Input>
-      {/snippet}
-    </Field>
+      <Field
+        label="Password"
+        hint={strength}
+        notice={capsLock ? 'Caps lock is on.' : undefined}
+        error={passwordError ?? fieldErrors.password}
+        required
+      >
+        {#snippet children({ id, describedBy, invalid })}
+          <Input
+            bind:value={password}
+            bind:element={passwordInput}
+            {id}
+            {describedBy}
+            {invalid}
+            type={revealed ? 'text' : 'password'}
+            size="lg"
+            name="password"
+            autocomplete="new-password"
+            minlength={MIN_LENGTH}
+            disabled={submitting}
+            onkeydown={readCapsLock}
+            onblur={() => {
+              touched = { ...touched, password: true };
+              capsLock = false;
+            }}
+          >
+            {#snippet trailing()}
+              <IconButton
+                icon={revealed ? EyeOff : Eye}
+                label={revealed ? 'Hide password' : 'Show password'}
+                size="sm"
+                pressed={revealed}
+                disabled={submitting}
+                onclick={() => (revealed = !revealed)}
+              />
+            {/snippet}
+          </Input>
+        {/snippet}
+      </Field>
 
-    <Field
-      label="Confirm the password"
-      hint="Type it again, so a slip cannot lock you out of your own controller."
-      notice={capsLock ? 'Caps lock is on.' : undefined}
-      error={confirmError}
-      required
-    >
-      {#snippet children({ id, describedBy, invalid })}
-        <Input
-          bind:value={confirm}
-          bind:element={confirmInput}
-          {id}
-          {describedBy}
-          {invalid}
-          type={revealed ? 'text' : 'password'}
-          name="confirm-password"
-          autocomplete="new-password"
-          minlength={MIN_LENGTH}
-          disabled={submitting}
-          onkeydown={readCapsLock}
-          onblur={() => {
-            touched = { ...touched, confirm: true };
-            capsLock = false;
-          }}
-        />
-      {/snippet}
-    </Field>
+      <Field
+        label="Confirm the password"
+        hint="Type it again, so a slip cannot lock you out of your own controller."
+        notice={capsLock ? 'Caps lock is on.' : undefined}
+        error={confirmError}
+        required
+      >
+        {#snippet children({ id, describedBy, invalid })}
+          <Input
+            bind:value={confirm}
+            bind:element={confirmInput}
+            {id}
+            {describedBy}
+            {invalid}
+            type={revealed ? 'text' : 'password'}
+            size="lg"
+            name="confirm-password"
+            autocomplete="new-password"
+            minlength={MIN_LENGTH}
+            disabled={submitting}
+            onkeydown={readCapsLock}
+            onblur={() => {
+              touched = { ...touched, confirm: true };
+              capsLock = false;
+            }}
+          />
+        {/snippet}
+      </Field>
 
-    <Button type="submit" variant="primary" full loading={submitting}>Create the account</Button>
-  </form>
-
-  <p class="version">Zoomies {session.meta?.version ?? ''}</p>
-</div>
+      <Button type="submit" variant="primary" size="lg" full loading={submitting}>
+        Create the account
+      </Button>
+    </form>
+  </div>
+</SplitPage>
 
 <style>
-  /* A card, where sign-in is a page with a brand panel beside the form. The
-     panel is for people who did not install the controller and have been sent
-     its address; the only person who ever sees this screen has just installed
-     it, knows what it is, and wants the form and nothing to read on the way to
-     it. The card's width, weight and elevation are the ones the product's
-     dialogs use, so it still reads as the same product. */
-  .card {
-    position: relative;
-    width: 100%;
-    max-width: 25rem;
-    padding: var(--z-space-8);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-lg);
-    background: var(--z-surface);
-    box-shadow: var(--z-shadow-lg);
-  }
-  .card::before {
-    content: '';
-    position: absolute;
-    inset: 0 0 auto;
-    height: var(--z-border-width);
-    margin: 0 var(--z-radius-lg);
-    background: linear-gradient(90deg, transparent, var(--z-border-strong), transparent);
-  }
-  .brand {
+  .column {
     display: flex;
-    justify-content: center;
-    margin-bottom: var(--z-space-6);
-    color: var(--z-text);
+    flex-direction: column;
+    width: 100%;
+    max-width: var(--z-width-dialog-sm);
+    min-width: 0;
   }
   h1 {
     margin: 0;
-    font-size: var(--z-text-xl);
-    line-height: var(--z-leading-xl);
+    font-size: var(--z-text-2xl);
+    line-height: var(--z-leading-2xl);
     font-weight: var(--z-weight-semibold);
     letter-spacing: var(--z-tracking-tight);
     color: var(--z-text);
-    text-align: center;
     text-wrap: balance;
   }
-  .step {
-    margin: 0 0 var(--z-space-1);
-    font-size: var(--z-text-2xs);
-    font-weight: var(--z-weight-medium);
-    letter-spacing: var(--z-tracking-wider);
-    text-transform: uppercase;
-    color: var(--z-text-subtle);
-    text-align: center;
-  }
-  .next {
-    margin: 0 0 var(--z-space-6);
-    font-size: var(--z-text-xs);
-    line-height: var(--z-leading-xs);
-    color: var(--z-text-subtle);
-    text-align: center;
-    text-wrap: pretty;
-  }
-  .version {
-    margin: var(--z-space-5) 0 0;
-    font-size: var(--z-text-2xs);
-    color: var(--z-text-subtle);
-    text-align: center;
-  }
   .lede {
-    margin: var(--z-space-2) 0 var(--z-space-2);
-    font-size: var(--z-text-sm);
-    line-height: var(--z-leading-sm);
+    margin: var(--z-space-1) 0 var(--z-space-6);
+    font-size: var(--z-text-base);
+    line-height: var(--z-leading-base);
     color: var(--z-text-muted);
-    text-align: center;
     text-wrap: pretty;
   }
   .failure {
@@ -428,7 +378,7 @@
     margin: 0 0 var(--z-space-5);
     padding: var(--z-space-3);
     border: var(--z-border-width) solid var(--z-danger-border);
-    border-radius: var(--z-radius-sm);
+    border-radius: var(--z-radius-md);
     background: var(--z-danger-subtle);
     font-size: var(--z-text-sm);
     line-height: var(--z-leading-sm);
@@ -449,7 +399,7 @@
   }
   .failure :global(svg) {
     flex: none;
-    margin-top: var(--z-nudge-1);
+    margin-top: var(--z-nudge-3);
     color: var(--z-danger);
   }
   form {

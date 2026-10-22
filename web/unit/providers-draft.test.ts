@@ -4,9 +4,12 @@ import {
   applyDiscovery,
   emptyDraft,
   draftErrors,
+  savedNote,
   toProviderBody,
   normaliseEndpoint,
   suggestName,
+  warmForMaximum,
+  WIZARD_STEPS,
 } from '../src/lib/providers/draft.ts';
 import type { ProviderDiscovery, ProviderSetting } from '../src/lib/api/types.ts';
 
@@ -111,4 +114,64 @@ test('a ready Proxmox setup supplies the connection without sending secrets', ()
   assert.equal(body.tailcat_address, undefined);
   assert.equal(body.max_machines, 2);
   assert.equal(body.min_machines, 1);
+});
+
+// The box under Maximum says zero rents nothing. A draft opens on one warm
+// machine, and a warm machine counts against the maximum, so a zero typed on its
+// own was refused for a figure in the other box, with no word of why until that
+// box was touched: "rents nothing" took two answers. It takes one now.
+test('a maximum of zero takes the warm machine with it, so one answer rents nothing', () => {
+  const draft = emptyDraft();
+  draft.max_machines = '0';
+  assert.ok(draftErrors(draft, []).min_machines, 'zero beside the opening one warm is refused');
+
+  draft.min_machines = warmForMaximum(draft.max_machines, draft.min_machines);
+  assert.equal(draft.min_machines, '0');
+  assert.equal(draftErrors(draft, []).min_machines, undefined);
+  assert.equal(draftErrors(draft, []).max_machines, undefined);
+  assert.equal(toProviderBody(draft).max_machines, 0);
+  assert.equal(toProviderBody(draft).min_machines, 0);
+});
+
+// Only a maximum that is zero changes the warm figure, and only when the
+// maximum is what is being typed. A warm figure the operator typed after raising
+// the maximum again is theirs, and no later keystroke in the other box moves it.
+test('any other maximum leaves the warm figure the operator has alone', () => {
+  assert.equal(warmForMaximum('3', '1'), '1');
+  assert.equal(warmForMaximum('3', '2'), '2');
+  assert.equal(warmForMaximum('1', '1'), '1');
+  assert.equal(warmForMaximum('', '1'), '1', 'an empty box is not a zero');
+  assert.equal(warmForMaximum('-1', '1'), '1', 'a wrong answer is left for the box to explain');
+  assert.equal(warmForMaximum('0.5', '1'), '1');
+  assert.equal(warmForMaximum('0', '0'), '0');
+});
+
+// A new provider opens on two and one, so words that say nothing is rented
+// until a ceiling is raised describe a form that no longer exists.
+test('the words about a ceiling of zero do not claim it is where a provider starts', () => {
+  const limits = WIZARD_STEPS.find((step) => step.id === 'limits');
+  assert.ok(limits?.description);
+  assert.doesNotMatch(limits.description, /until the first of these is above zero/);
+  assert.match(limits.description, /zero rents nothing/i);
+  assert.equal(emptyDraft().max_machines, '2');
+  assert.equal(emptyDraft().min_machines, '1');
+});
+
+// Saving creates nothing. What happens next is the next pass buying the warm
+// machine, which is why the check is worth running now rather than before a
+// first machine that nothing waits for.
+test('saving says what happens next: the warm machine is bought on the next pass', () => {
+  assert.match(savedNote(4, 1), /warm machine is bought on the next pass/);
+  assert.match(savedNote(4, 1), /run the check/);
+  assert.doesNotMatch(savedNote(4, 1), /before the first machine is built/);
+});
+
+test('saving a provider with no warm machine says machines wait for a pool that needs one', () => {
+  assert.match(savedNote(4, 0), /rented when a pool has work with nowhere to run/);
+  assert.doesNotMatch(savedNote(4, 0), /warm machine/);
+});
+
+test('saving a ceiling of zero says nothing is rented yet', () => {
+  assert.match(savedNote(0, 0), /Nothing is rented yet/);
+  assert.match(savedNote(0, 0), /ceiling is zero/);
 });

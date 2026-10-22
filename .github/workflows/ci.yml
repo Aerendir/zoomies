@@ -31,6 +31,10 @@ concurrency:
   # moving :dev channel: cancelling it before Images has pushed can leave every
   # successful merge unavailable to `zoomies upgrade`. Queue main runs so the
   # newest one always gets a chance to publish.
+  #
+  # GitHub keeps only the newest run still waiting in a group and cancels the
+  # rest, so the changes job diffs a push to main against the last run that was
+  # not cancelled, and the newest run covers the files of the ones it replaced.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The Go version is in .github/actions/setup-go, which every job uses.
@@ -75,6 +79,10 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
     timeout-minutes: 15 # the longest successful run seen was 3 minutes
+    # actions: read is for the base step, which lists this workflow's runs.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       go: ${{ steps.filter.outputs.go }}
       shards: ${{ steps.filter.outputs.shards }}
@@ -84,11 +92,49 @@ jobs:
       publish: ${{ steps.filter.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Main queues its runs and keeps only the newest of those still waiting,
+      # so the run for a push that another push overtook is cancelled before it
+      # starts. The run that overtook it would be diffed against the push before
+      # its own and never see that push's files: a Go change merged just before
+      # a docs change ran no Go shard on main, and a change to what ships was
+      # not published. Diff against the last run of main that was not cancelled
+      # instead, so the newest run covers what the ones it replaced would have.
+      # A run that failed still ran; one that was cancelled, or never started,
+      # did not finish what its diff asked for.
+      - id: base
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -eu
+          # The runs endpoint takes the workflow's file name, which this run
+          # knows as owner/repo/.github/workflows/ci.yml@ref.
+          workflow=${GITHUB_WORKFLOW_REF#*/.github/workflows/}
+          workflow=${workflow%%@*}
+          # Only runs before this one, so that running it again sees what it
+          # saw the first time.
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&status=completed&per_page=100" \
+            --jq '[.workflow_runs[]
+                   | select(.event == "push" or .event == "workflow_dispatch")
+                   | select(.run_number < '"$RUN_NUMBER"')
+                   | select(.conclusion == "success" or .conclusion == "failure" or .conclusion == "timed_out")]
+                  | max_by(.run_number) | .head_sha // empty') || sha=
+          # A base that cannot be named says nothing about what changed, so the
+          # filter is given the all-zero commit, which it answers by running
+          # everything.
+          if [ -z "$sha" ]; then
+            echo "No earlier run of main to diff against, so everything runs."
+            sha=0000000000000000000000000000000000000000
+          else
+            echo "Diffing against $sha, the head of the last run of main that was not cancelled."
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ steps.base.outputs.sha || github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -eu
           # Main publishes the dev channel from any commit that changes what
@@ -109,11 +155,12 @@ jobs:
             everything
           fi
           # A pull request's checkout is the merge into its base, so its diff
-          # against the base commit is exactly what it changes; a push's is
-          # the diff against the commit main was at before. A base that cannot
-          # be fetched -- a force push, a new branch's all-zero "before", a
-          # base that moved on -- says nothing about what changed, so run
-          # everything rather than guess.
+          # against the base commit is exactly what it changes; a push to main
+          # is diffed against the last run of main that was not cancelled (the
+          # base step), so it covers the pushes that were overtaken before they
+          # ran. A base that cannot be named or fetched, such as a force push, a
+          # new branch's all-zero "before" or a base that moved on, says nothing
+          # about what changed, so run everything rather than guess.
           case "$BASE" in ''|0000000000000000000000000000000000000000) everything ;; esac
           if ! git fetch --no-tags --depth=1 origin "$BASE" 2>/dev/null; then
             everything
@@ -131,6 +178,13 @@ jobs:
               web/package.json|web/package-lock.json) web=true; deploy=true; docs=true ;;
               # internal/docs reads the UI's source for the pages it names.
               web/*) web=true; docs=true ;;
+              # Prose is prose wherever it sits: a README in deploy/ or test/ is
+              # read by internal/docs and built into nothing. It has to come
+              # before the directory rules below, which send everything under
+              # them to an image build or an installer check. The UI's source
+              # is above it on purpose, because web/public is copied into the
+              # bundle whatever a file is called.
+              *.md) docs=true ;;
               # What the images are made of. The runner scripts are also read
               # by the installer job's shell checks, and every deploy/ file by
               # tests in internal/backend, internal/installer and internal/docs,
@@ -147,15 +201,24 @@ jobs:
               # The marketplace image's bootstrap is shell the installer job lints.
               deploy/marketplace/*.sh) deploy=true; installer=true; rest=true ;;
               deploy/*|docker-compose.yml|.dockerignore) deploy=true; rest=true ;;
-              # The check each built runner image is run through.
-              test/runner-image/*) deploy=true; installer=true ;;
+              # The check each built runner image is run through. It is read by
+              # internal/docs' whole-tree scans like every other file.
+              test/runner-image/*) deploy=true; installer=true; docs=true ;;
               # Shell the binary embeds, and the installer job lints.
               internal/proxmoxsetup/release_signature.sh) go=true; installer=true ;;
-              # The script people curl is checked by the install.sh job and
-              # exercised by the upgrade test. No Go test reads it, and no
-              # binary or image carries it: the site serves it, and the site's
-              # own workflow rebuilds when it changes.
-              install.sh|install.ps1|connect-proxmox.sh|test/install/*|test/upgrade/*) installer=true ;;
+              # The scripts people curl are checked by the install.sh job and
+              # exercised by the upgrade test, and internal/docs reads them: it
+              # holds install.sh's release key to the binary's and its verifier
+              # to the other scripts', and its whole-tree scans read every file,
+              # the checks under test/ included. No binary or image carries
+              # them (the site serves them, and the site's own workflow
+              # rebuilds when they change), so the docs shard is enough.
+              install.sh|install.ps1|test/install/*|test/upgrade/*) installer=true; docs=true ;;
+              # connect-proxmox.sh is also read by internal/proxmoxsetup, whose
+              # tests hold its signature check equal to the one the provider
+              # wizard's command carries. That package is in the rest shard,
+              # which carries internal/docs as well.
+              connect-proxmox.sh) installer=true; rest=true ;;
               # Shell that nothing else in CI runs: the package-cleanup scripts
               # delete from a registry on a schedule, the marketplace image's
               # bootstrap runs as root on a new machine (matched above, with the
@@ -169,7 +232,7 @@ jobs:
               # code, and internal/naming the image table; those two packages
               # are the docs shard, a minute rather than the hour the rest of
               # the suite takes. Nothing heavier runs.
-              docs/*|roadmap/*|overrides/*|hooks/*|mkdocs.yml|*.md|.github/*) docs=true ;;
+              docs/*|roadmap/*|overrides/*|hooks/*|mkdocs.yml|.github/*) docs=true ;;
               # Files that neither ship nor are read by a test.
               .gitignore|.gitattributes|.editorconfig|LICENSE|NOTICE|.claude/*|.devcontainer/*|nixpacks.toml) ;;
               # Everything else is Go, or something Go embeds.
@@ -396,6 +459,89 @@ jobs:
         env:
           ZOOMIES_TEST_REPOMIX_CLI: ${{ runner.temp }}/zoomies-tools/node_modules/.bin/repomix
         run: go test -race ./internal/aicontext -count=1
+      # The managed workflow's action versions are excluded from Dependabot,
+      # because a bump there is read as somebody's edit and closes the
+      # context's access gate. They move only when a release of Zoomies changes
+      # the template, which is how they fell behind: a repository that took an
+      # update of its own was moved back by the next reinstall. This asks
+      # GitHub which release each action is at, and says so when the template
+      # is behind, so a stale template is caught here rather than by a
+      # repository's build going red.
+      - name: Check the managed workflow's action versions are the current ones
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import os
+          import json
+          import re
+          import urllib.request
+
+          token = os.environ.get("GITHUB_TOKEN", "")
+          headers = {"Accept": "application/vnd.github+json"}
+          if token:
+              headers["Authorization"] = "token " + token
+
+          def get(url):
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          template = open("internal/aicontext/workflow.go", encoding="utf-8").read()
+          # The pins the template holds, as "actions/name@ref # vX.Y.Z". The
+          # Enterprise Server versions are in the same file but are the ones
+          # that server bundles, so they are not compared with the releases.
+          body = template.split("enterpriseActionPins")[0].split("olderActionPins")[0]
+          pins = re.findall(
+              r"(actions/[A-Za-z0-9_.-]+)@([0-9a-f]{40}) # (v[0-9][^\"\s]*)", body
+          )
+          if not pins:
+              raise SystemExit("no action versions found in the managed workflow template")
+
+          def latest_release(repo):
+              for release in get(f"https://api.github.com/repos/{repo}/releases?per_page=20"):
+                  tag = release.get("tag_name", "")
+                  if not tag or release.get("draft"):
+                      continue
+                  return tag
+              return None
+
+          def commit_of(repo, tag):
+              ref = get(f"https://api.github.com/repos/{repo}/git/ref/tags/{tag}")
+              obj = ref.get("object", {})
+              if obj.get("type") == "tag":
+                  obj = get(f"https://api.github.com/repos/{repo}/git/tags/{obj['sha']}")["object"]
+              return obj.get("sha", "")
+
+          behind = []
+          seen = set()
+          for action, ref, version in pins:
+              # The same action is used by more than one job.
+              if action in seen:
+                  continue
+              seen.add(action)
+              tag = latest_release(action)
+              if not tag:
+                  behind.append(f"{action} has no published release")
+                  continue
+              if tag != version:
+                  behind.append(
+                      f"{action} is at {tag} and the template pins {version}"
+                  )
+                  continue
+              if commit_of(action, tag) != ref:
+                  behind.append(f"{action} {tag} is not the commit the template pins")
+          if behind:
+              for line in behind:
+                  print(f"::error::{line}")
+              raise SystemExit(
+                  "the managed workflow's action versions are behind: take the new "
+                  "version, and keep the one it replaces in olderActionPins so the "
+                  "repositories that installed it are still recognised"
+              )
+          print("the managed workflow's action versions are the current ones")
+          PY
 
   coverage:
     name: Coverage
@@ -1220,8 +1366,12 @@ jobs:
             build_it
           fi
 
+          # Everything a runner image is made of: its Dockerfile, the scripts
+          # and the tool-cache lock it copies in, and the catalogue whose
+          # base-image digests every variant is built FROM, which the weekly
+          # refresh moves.
           if git diff --name-only "$BASE" HEAD |
-             grep -qE '^(deploy/(Dockerfile\.runner|runner-entrypoint\.sh|runner-[a-z-]+\.sh)|test/runner-image/.*)$'; then
+             grep -qE '^(deploy/(Dockerfile\.runner|runner-entrypoint\.sh|runner-[a-z-]+\.sh|toolcache\.lock)|internal/naming/images\.go|test/runner-image/.*)$'; then
             echo "runner=true" >> "$GITHUB_OUTPUT"
           else
             echo "runner=false" >> "$GITHUB_OUTPUT"
@@ -1328,7 +1478,7 @@ jobs:
   runner-images:
     name: Runner image (${{ matrix.tag }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || (((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64') }}
-    timeout-minutes: 30 # the longest successful run seen was 8 minutes
+    timeout-minutes: 60 # the longest successful run seen was 25 minutes (rocky-9 on arm64)
     needs: [images]
     if: github.event.action != 'closed' && needs.images.outputs.runner == 'true'
     permissions:
@@ -1734,3 +1884,50 @@ jobs:
             done
           done
           exit "$failed"
+
+  # The one status check to require on main. A ruleset can require a check only
+  # by name, and the jobs above are several matrices and a filter that skips
+  # most of them on most changes, so none of them is a name that can be
+  # required without either blocking every merge or protecting nothing. This
+  # job waits on all of them and fails if any failed or was cancelled, so a pull
+  # request whose CI never ran, or ran red, has no passing check to merge on.
+  # Two pull requests were merged with no CI run on their heads before this
+  # existed. A skipped job is one the changes filter decided this run did not
+  # need, and counts as passed. A test in internal/docs holds the needs list to
+  # every other job in this file, so a new job cannot be left outside the gate.
+  ci-gate:
+    name: CI gate
+    needs:
+      - changes
+      - go
+      - ai-context-workflow
+      - coverage
+      - drill
+      - arm64
+      - windows
+      - upgrade
+      - staticcheck
+      - ui
+      - playwright
+      - build-matrix
+      - dev-binaries
+      - installer
+      - images
+      - runner-images
+      - runner-manifests
+    # !cancelled() rather than always(): a dependency that was skipped skips its
+    # dependants, so the gate has to run whatever the jobs before it did, but a
+    # run cancelled by a newer push has a newer run to report for it.
+    if: ${{ !cancelled() && github.event.action != 'closed' }}
+    runs-on: ${{ ((github.event_name == 'workflow_dispatch' && inputs.runner == 'github') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)) && 'ubuntu-latest' || 'zoomies-linux-x64' }}
+    timeout-minutes: 5 # two shell steps and no checkout
+    steps:
+      - name: What each job did
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -r 'to_entries[] | "\(.value.result)\t\(.key)"' <<<"$RESULTS" | sort
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::a job in this run failed or was cancelled; the step above names it"
+          exit 1

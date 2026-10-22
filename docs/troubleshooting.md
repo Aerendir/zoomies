@@ -146,11 +146,13 @@ tools; a code repair uses the separate workflow below.
 
 ### From diagnosis to a PR repair
 
-For a failed job on an existing PR, open **Review a repair with Eli** beside
-the job, or paste the PR URL into **Eli repairs**. Review readiness, the model,
-who pays and the remaining attempt budget before choosing **Repair with Eli**.
-Repository repair policy, GitHub App permissions and requester consent must
-be in place; [set up PR repairs](eli.md#set-up-pr-repairs) covers them.
+For a failed job on an existing PR, choose **Fix with Eli** beside the job, or
+choose **Repair a PR** on **Eli repairs** and paste the PR URL. The repair page
+shows the failure first, then whether Eli can act on it: the model, who pays and
+the remaining attempt budget are on it, and nothing is spent until you choose
+**Fix with Eli** there. Repository repair policy, GitHub App permissions and
+requester consent must be in place; [set up PR repairs](eli.md#set-up-pr-repairs)
+covers them.
 
 A linked maintainer can also request a repair in a new PR comment:
 
@@ -269,9 +271,12 @@ page.
 
 ## The agent is connected but new runners are held
 
-Read the host card's reason before changing a pool. **Committed** CPU and
-memory are reservations; **CPU usage** and **memory available** are recent
-measurements of the whole host, including work outside Zoomies.
+Read the host card's reason before changing a pool. Every sentence that says why
+a host takes no work is on the closed card. Under its **Details**, **Committed**
+CPU and memory are reservations; **CPU usage** and **memory available** are
+recent measurements of the whole host, including work outside Zoomies. A host
+with a slot free whose committed CPU or memory is 90% or more says so on the
+closed card, because that is what keeps a free slot empty.
 
 A host can be under pressure while the room **held back for the machine** looks
 generous, and the two do not contradict each other. The reserve is what the
@@ -373,6 +378,7 @@ failed job in the run, and the panel says so before you press it.
 does the same thing without waiting for a person, for the fleet's own
 failures only and bounded by `scheduler.auto_rerun_limit`. It is off by
 default, because it spends the installation's GitHub minutes without asking.
+When it fires, the job's timeline says so, marked *via recovery*.
 
 None of that answers the other half of the question, which is whether anybody
 has read the failure. The Overview's **Recent failures** lists what failed in
@@ -381,7 +387,6 @@ replaced, with the whole count in its header; the Jobs page's **Needs
 attention** view is the same list with room for the rest. Marking a failure as
 known takes it off that list without changing anything about it, a re-run that
 passes settles it, and either decision can be taken back.
-When it fires, the job's timeline says so, marked *via recovery*.
 
 **On the Overview**, the failure badge reads "11 failed, 9 ours" rather than
 "11 failed", and links straight to whichever half is worth opening.

@@ -56,6 +56,7 @@ import {
 } from '@lucide/svelte';
 import type { LucideIcon } from '@lucide/svelte';
 import DogSitting from './icons/DogSitting.svelte';
+import { stateLabel as repairStateLabel } from './repairs/history';
 import type {
   APIToken,
   Host,
@@ -631,6 +632,16 @@ const JOB_EVENTS: Record<JobEventKind, StatusMeta> = {
     "Zoomies asked GitHub to run this run's failed jobs again. They arrive as a new run attempt, so GitHub remains authoritative about what happens next.",
   ),
   oom_killed: OOM_KILLED,
+  // The controller's own sizing of a waiting job. Neutral because it is a
+  // decision on the fleet's side, not an outcome of the job and not a fault.
+  sized: meta(
+    'sized',
+    'Sized',
+    'neutral',
+    'hollow',
+    Circle,
+    'The controller put this job in a size class, or sent it to the pool of another class. The entry says why.',
+  ),
   acknowledged: meta(
     'acknowledged',
     'Acknowledged',
@@ -858,6 +869,192 @@ export function poolStatus(pool: Pick<Pool, 'enabled'>): StatusMeta {
         'Existing runners drain; no new ones are made.',
       )
     : meta('enabled', 'Enabled', 'idle', 'hollow', Circle);
+}
+
+/* Eli repairs ---------------------------------------------------------------- */
+
+/*
+ * A repair's state, drawn as every other status is. The words are the history's
+ * own, so a badge never disagrees with the line beside it. The three failures
+ * share the danger tone and the triangle because they are the same news to the
+ * person reading: it did not end well, and the card says why.
+ */
+const REPAIR: Record<string, StatusMeta> = {
+  queued: meta(
+    'queued',
+    repairStateLabel('queued'),
+    'pending',
+    'dashed',
+    Clock,
+    'Waiting for Eli to pick this repair up.',
+  ),
+  working: meta(
+    'working',
+    repairStateLabel('working'),
+    'busy',
+    'filled',
+    Activity,
+    'Eli is reading the failure and preparing a fix.',
+  ),
+  checking: meta(
+    'checking',
+    repairStateLabel('checking'),
+    'busy',
+    'filled',
+    Hourglass,
+    'Eli pushed a commit and its checks are running.',
+  ),
+  succeeded: meta(
+    'succeeded',
+    repairStateLabel('succeeded'),
+    'idle',
+    'filled',
+    CircleCheck,
+    'The checks on Eli\u2019s commit passed. Review it like any other change.',
+  ),
+  checks_failed: meta(
+    'checks_failed',
+    repairStateLabel('checks_failed'),
+    'danger',
+    'triangle',
+    CircleX,
+    'Eli pushed a commit and its checks still fail.',
+  ),
+  failed: meta(
+    'failed',
+    repairStateLabel('failed'),
+    'danger',
+    'triangle',
+    CircleX,
+    'Eli could not produce a fix to push.',
+  ),
+  blocked: meta(
+    'blocked',
+    repairStateLabel('blocked'),
+    'danger',
+    'triangle',
+    TriangleAlert,
+    'Something stopped the repair before it began.',
+  ),
+  interrupted: meta(
+    'interrupted',
+    repairStateLabel('interrupted'),
+    'danger',
+    'triangle',
+    TriangleAlert,
+    'The controller restarted while Eli was working.',
+  ),
+  superseded: meta(
+    'superseded',
+    repairStateLabel('superseded'),
+    'neutral',
+    'square',
+    CircleMinus,
+    'The pull request has a newer commit.',
+  ),
+  unverified: meta(
+    'unverified',
+    repairStateLabel('unverified'),
+    'pending',
+    'hollow',
+    CircleQuestionMark,
+    'No complete check result was seen within an hour.',
+  ),
+};
+
+/**
+ * The status of a repair from its state. A state this build does not know is
+ * neutral and keeps its own word, so a newer controller's state is shown rather
+ * than hidden.
+ */
+export function repairStatus(state: string): StatusMeta {
+  if (Object.hasOwn(REPAIR, state)) return REPAIR[state]!;
+  return meta(
+    state || 'unknown',
+    state ? repairStateLabel(state) : 'Unknown',
+    'neutral',
+    'square',
+    CircleQuestionMark,
+  );
+}
+
+/**
+ * The hub's setup bar: whether the person looking can repair. Ready is the
+ * healthy green and needing setup is the amber of something waiting on a person.
+ * Sign-in being off is neutral, because nothing is wrong, there is simply nobody
+ * to repair as.
+ */
+export function repairSetupStatus(state: 'ready' | 'needed' | 'off' | 'loading'): StatusMeta {
+  switch (state) {
+    case 'ready':
+      return meta(
+        'ready',
+        'Ready to repair',
+        'idle',
+        'filled',
+        CircleCheck,
+        'Your GitHub account is linked and has allowed repairs.',
+      );
+    case 'needed':
+      return meta(
+        'needed',
+        'Setup needed',
+        'pending',
+        'dashed',
+        CircleDashed,
+        'Something has to be set up before Eli can repair as you.',
+      );
+    case 'off':
+      return meta(
+        'off',
+        'Sign-in is off',
+        'neutral',
+        'square',
+        CircleMinus,
+        'Repairs are made for a signed-in person, and nobody is signed in.',
+      );
+    default:
+      return meta('loading', 'Checking setup', 'neutral', 'hollow', Clock);
+  }
+}
+
+/**
+ * The health of a repository that repairs itself, in the rows of the hub's
+ * Automatic repairs panel. Ready is the healthy green, a spent allowance is the
+ * amber of something that will start again by itself, and a provider that cannot
+ * pay is the red of something a person has to fix, because nothing will change
+ * until they do.
+ */
+export function automaticStatus(state: 'ready' | 'waiting' | 'problem'): StatusMeta {
+  switch (state) {
+    case 'ready':
+      return meta(
+        'ready',
+        'Ready',
+        'idle',
+        'filled',
+        CircleCheck,
+        'Automatic repairs can start here when a check fails.',
+      );
+    case 'waiting':
+      return meta(
+        'waiting',
+        'Allowance used',
+        'pending',
+        'dashed',
+        Hourglass,
+        'Every attempt in the last 24 hours is used. Automatic repairs here start again when a place frees.',
+      );
+    default:
+      return meta(
+        'problem',
+        'Needs attention',
+        'danger',
+        'triangle',
+        TriangleAlert,
+        'Automatic repairs cannot start here until this is fixed.',
+      );
+  }
 }
 
 /* -- problems and deliveries ---------------------------------------------- */

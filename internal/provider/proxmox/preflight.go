@@ -494,6 +494,13 @@ func (pf *preflight) checkTemplate(ctx context.Context, usable []string) {
 		pf.report.BuildsCPUs = cores * max(int(cfg.Sockets), 1)
 	}
 	pf.report.BuildsMemoryMB = int64(cfg.Memory)
+	// The disk is the one a cloud image keeps small, which is why it is read
+	// here at all: a clone keeps the template's boot disk unless the row asks
+	// for more. A line with no size to read leaves it zero, not guessed.
+	_, spec := bootDisk(cfg)
+	if mb, ok := diskSizeMB(spec); ok {
+		pf.report.BuildsDiskMB = mb
+	}
 	if !cfg.HasDisk() {
 		pf.add(config.Finding{
 			Code: "proxmox.template_no_disk", Severity: config.SeverityError, Setting: SettingTemplateID,

@@ -3,6 +3,8 @@ package controller
 import (
 	"bytes"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -165,6 +167,37 @@ func TestALogStreamSpendsItsBudgetAndRefillsWithTime(t *testing.T) {
 	}
 }
 
+// One goroutine is meant to read an agent's POST, but nothing makes that so:
+// an agent that opens a stream again while this side is still blocked on the
+// first connection, a half-open one that has not failed yet, puts a second
+// reader on the same stream. Two readers have to share one budget; with no lock
+// they read the same balance and each spend it, and the byte limit that exists
+// to protect the controller from a noisy agent doubles.
+func TestTwoReadersOfOneLogStreamShareItsBudget(t *testing.T) {
+	const chunk = 8 << 10 // the burst is 1024 of these
+	s := &logStream{}
+	now := time.Unix(1_000_000, 0) // a clock that never moves refills nothing
+
+	var spent atomic.Int64
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 2 * logStreamBurst / chunk {
+				if s.spend(chunk, now) {
+					spent.Add(chunk)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := spent.Load(); got != logStreamBurst {
+		t.Errorf("two readers spent %d bytes against a budget of %d", got, logStreamBurst)
+	}
+}
+
 // An agent pushing output faster than the budget is read and dropped, never
 // waited on: the relay returns as soon as the agent stops writing, the viewer
 // gets the burst's worth, and the rest is counted.
@@ -195,15 +228,23 @@ func TestALogStreamOverItsByteBudgetIsDroppedRatherThanBlocked(t *testing.T) {
 	}
 
 	got := 0
+	// The relay now says in band how much it refused, so the viewer's bytes
+	// are the accepted flood plus that notice. The notice is the corrected
+	// expectation: a silently gapped log is what the marker exists to prevent.
+	noticed := 0
 	for chunk := range ch {
 		got += len(chunk)
+		if bytes.Contains(chunk, []byte("dropped")) {
+			noticed += len(chunk)
+		}
 	}
 	// A little refills while the flood is read, so the bound is the burst plus
-	// a second's worth rather than the burst exactly.
-	if got > logStreamBurst+logStreamBytesPerSecond {
-		t.Errorf("the viewer received %d of %d bytes; the budget is a burst of %d", got, flood, logStreamBurst)
+	// a second's worth rather than the burst exactly. The notice is not part
+	// of the flood, so it does not count against the bound.
+	if accepted := got - noticed; accepted > logStreamBurst+logStreamBytesPerSecond {
+		t.Errorf("the viewer received %d of %d bytes; the budget is a burst of %d", accepted, flood, logStreamBurst)
 	}
-	if dropped := testutil.ToFloat64(h.c.metrics.logRelayDropped); int(dropped) != flood-got {
-		t.Errorf("zoomies_log_relay_dropped_bytes_total = %v, want %d", dropped, flood-got)
+	if dropped := testutil.ToFloat64(h.c.metrics.logRelayDropped); int(dropped) != flood-(got-noticed) {
+		t.Errorf("zoomies_log_relay_dropped_bytes_total = %v, want %d", dropped, flood-(got-noticed))
 	}
 }

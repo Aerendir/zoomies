@@ -23,7 +23,9 @@ type Transport interface {
 	Join(ctx context.Context, req JoinRequest) (*JoinResponse, error)
 
 	// Heartbeat reports liveness, capacity and the agent's own view of its
-	// runners.
+	// runners. A transport that returns a nil error returns a non-nil
+	// response; the agent dereferences the answer unguarded, so this is part
+	// of the contract, not a courtesy.
 	Heartbeat(ctx context.Context, req HeartbeatRequest) (*HeartbeatResponse, error)
 
 	// PollTasks blocks for up to wait, returning as soon as there is work. An
@@ -59,6 +61,16 @@ type Credentials struct {
 	AgentToken     string `json:"agent_token" yaml:"agent_token"`
 	Controller     string `json:"controller_url" yaml:"controller_url"`
 	TailcatAddress string `json:"tailcat_address,omitempty" yaml:"-"`
+	// JoinTokenHash and FallbackTokenHash remember which join tokens this host
+	// has already spent, as hashes, because the tokens themselves are worth
+	// keeping out of the file: the first is the token that was redeemed for
+	// these credentials, the second the last one offered after the controller
+	// refused them. A host that is refused for good offers the token its
+	// environment still holds only if it matches neither, so a deleted host
+	// does not ask the controller to enrol it with a spent token on every
+	// restart. A file written before they existed has neither, which loads.
+	JoinTokenHash     string `json:"join_token_hash,omitempty" yaml:"-"`
+	FallbackTokenHash string `json:"fallback_token_hash,omitempty" yaml:"-"`
 }
 
 // Valid reports whether the credentials are complete enough to use. A host

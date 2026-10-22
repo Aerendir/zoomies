@@ -10,10 +10,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   clearStoredPreferences,
+  closeHostCard,
   expectNoReload,
   FIXTURE,
   goto,
   openHostCapacityMap,
+  openHostCard,
   pageHeading,
   plantMarker,
   reload,
@@ -228,16 +230,23 @@ test('host usage distinguishes a connected agent from held new starts and recove
     await heartbeat(0);
     await goto(page, '/hosts', 'Hosts');
     const card = page.getByRole('article', { name, exact: true });
-    await expect(card).toContainText('Agent connected');
-    await expect(card).toContainText('CPU usage 20%');
-    await expect(card).toContainText('0 B memory available');
     // Two slots stepped to one: the controller's sentence names the rung,
-    // the measurement and what the running work is doing.
+    // the measurement and what the running work is doing. It is why this host
+    // takes less work, so it is on the card before anything is opened.
+    await expect(card.getByRole('button', { name: /^Details for / })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     await expect(card).toContainText(
       "throttled to 1 of 2 slots (step 1 of 3) after sustained pressure: available memory is at or below the host's reserve",
     );
     await expect(card).toContainText('running jobs continue');
     await expect(card).toContainText(/0 of 1 slots in use\s*· throttled from 2/);
+    // The heartbeat and the usage lines are detail, and are behind Details.
+    await openHostCard(card);
+    await expect(card).toContainText('Agent connected');
+    await expect(card).toContainText('CPU usage 20%');
+    await expect(card).toContainText('0 B memory available');
     await testInfo.attach('host-pressure-hold', {
       body: await card.screenshot(),
       contentType: 'image/png',
@@ -247,7 +256,9 @@ test('host usage distinguishes a connected agent from held new starts and recove
     // Still on its rung: calm has to last before a step is given back.
     await expect(card).toContainText('throttled from 2');
 
-    // retry_in is a Go duration on the wire: nanoseconds.
+    // A runtime that is cooling down is a reason too, so it is looked for with
+    // the fold shut. retry_in is a Go duration on the wire: nanoseconds.
+    await closeHostCard(card);
     await heartbeat(8192, {
       failures: 3,
       kind: 'unavailable',
@@ -326,6 +337,12 @@ test('a host under sustained pressure is throttled, says why, and an operator ca
 
     await goto(page, '/hosts', 'Hosts');
     const card = page.getByRole('article', { name, exact: true });
+    // All of this is why the host takes less work than it was given, so it is
+    // on the card as it opens, with Details still shut.
+    await expect(card.getByRole('button', { name: /^Details for / })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
     // The badge carries the step in its tooltip, so hovering answers "how bad".
     await card.getByText('Throttled', { exact: true }).hover();
     await expect(page.locator('.bubble:popover-open')).toContainText(/^Throttled, step 1 of 3/);
@@ -334,6 +351,8 @@ test('a host under sustained pressure is throttled, says why, and an operator ca
     );
     await expect(card).toContainText('the throttle lifts one step after 5m of calm');
     await expect(card).toContainText(/0 of 3 slots in use\s*· throttled from 4/);
+    // The load average is a figure about the machine, and is behind Details.
+    await openHostCard(card);
     await expect(card).toContainText('load 20');
     await testInfo.attach('host-throttled', {
       body: await card.screenshot(),
@@ -706,6 +725,7 @@ test('a host says how much disk its runners have, and marks the one that is near
   await goto(page, '/hosts', 'Hosts');
 
   const roomy = page.getByRole('article', { name: 'demo-builder-1', exact: true });
+  await openHostCard(roomy);
   await expect(roomy).toContainText('GB free of');
   // 717 GB of 1024: the figure is the work directory's filesystem, in the
   // same units the rest of the card uses.
@@ -714,6 +734,7 @@ test('a host says how much disk its runners have, and marks the one that is near
   // The one at six percent is marked, because "31 GB free" beside "512" is
   // not something anybody reads as urgent on its own.
   const tight = page.getByRole('article', { name: 'demo-builder-2', exact: true });
+  await openHostCard(tight);
   const low = tight.locator('.low');
   await expect(low).toHaveText(/31 GB free of 512/);
 
@@ -736,6 +757,7 @@ test('a host shows what the fleet has committed on it, and lets an operator hold
   await goto(page, '/hosts', 'Hosts');
 
   const card = page.getByRole('article', { name: 'demo-builder-1', exact: true });
+  await openHostCard(card);
   const committed = card.getByRole('region', { name: /Resources committed/ });
   await expect(committed).toBeVisible();
   // 16 CPUs and 32 GB, less the floors, against what the runners on it hold:
@@ -981,6 +1003,7 @@ test("a host's memory to lend opens its ledger from the keyboard and from a tap"
   );
   await goto(page, '/hosts', 'Hosts');
   const card = page.getByRole('article', { name: 'demo-builder-1', exact: true });
+  await openHostCard(card, 'keyboard');
   const figure = card.getByTestId('host-memory-pool');
   const ledger = page.locator('.host-pool-tip .bubble:popover-open');
 
@@ -1339,6 +1362,7 @@ test('a host whose agent cannot lend CPU says so, until its agent can', async ({
 
     await goto(page, '/hosts', 'Hosts');
     const card = page.getByRole('article', { name, exact: true });
+    await openHostCard(card);
     await expect(card.getByText('Cannot lend CPU')).toBeVisible();
 
     const beat = await page.request.post('/api/v1/agent/heartbeat', {

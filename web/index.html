@@ -101,8 +101,9 @@
          fixed near-black put a black bar above a white page for every
          light-theme operator on Android and iOS. These are --z-bg in each
          theme, spelled out because a meta tag cannot read a custom property.
-         The media queries cover the "system" setting, which is the default; an
-         explicit choice is pinned by theme.svelte.ts, which rewrites them. -->
+         The media queries cover the "system" setting. Any other choice (dark,
+         when none is stored) is pinned by the script below before the first
+         paint and by theme.svelte.ts afterwards: both rewrite these tags. -->
     <meta
       name="theme-color"
       data-theme-colour="light"
@@ -133,16 +134,25 @@
       // flashes light before the app boots, which on a dark-mode dashboard is
       // genuinely unpleasant. Kept inline and tiny on purpose.
       (function () {
-        try {
-          var t = localStorage.getItem('zoomies.theme');
-          if (t === 'dark' || t === 'light') {
-            document.documentElement.setAttribute('data-theme', t);
+        // Blocked storage reads as "nothing chosen", which is the default
+        // look rather than no look: the app's own state resolves the same way.
+        function read(key) {
+          try {
+            return localStorage.getItem(key);
+          } catch (e) {
+            return null;
           }
-          var style = localStorage.getItem('zoomies.ui-style');
-          if (style === 'mission-control') {
+        }
+        try {
+          var t = read('zoomies.theme');
+          // Dark is the default; only a stored 'system' or 'light' differs.
+          if (t !== 'system' && t !== 'light') t = 'dark';
+          if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+          // Mission Control is the default; only a stored 'classic' differs.
+          var style = read('zoomies.ui-style');
+          if (style !== 'classic') {
+            style = 'mission-control';
             document.documentElement.setAttribute('data-ui-style', style);
-          } else {
-            style = 'classic';
           }
           document.querySelectorAll('meta[data-theme-colour]').forEach(function (tag) {
             var which = tag.getAttribute('data-theme-colour');
@@ -156,7 +166,7 @@
                 : '(prefers-color-scheme: ' + which + ')',
             );
           });
-          var n = localStorage.getItem('zoomies.nav.collapsed');
+          var n = read('zoomies.nav.collapsed');
           // No choice recorded: a tablet-width window starts collapsed, as
           // the guidelines promise. A phone is excluded -- its navigation is a
           // bar along the bottom edge, which has nothing to collapse.
@@ -167,7 +177,7 @@
             matchMedia('(min-width: 769px) and (max-width: 1180px)').matches;
           if (n === '1' || tablet) document.documentElement.setAttribute('data-nav', 'collapsed');
         } catch (e) {
-          /* private mode: fall back to the system preference */
+          /* no document to style: nothing to do */
         }
       })();
     </script>

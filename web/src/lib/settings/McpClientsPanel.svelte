@@ -136,12 +136,14 @@
   /* edit the name and redirections, the facts a mis-registered callback is repaired with */
 
   let editOpen = $state(false);
+  let editing = $state<MCPClient | null>(null);
   let editName = $state('');
   let editRedirectText = $state('');
   let saving = $state(false);
   let editErrors = $state<Record<string, string>>({});
 
   function openEdit(c: MCPClient): void {
+    editing = c;
     editName = c.name;
     editRedirectText = c.redirect_uris.join('\n');
     editErrors = {};
@@ -156,12 +158,13 @@
   );
 
   async function saveEdit(): Promise<void> {
-    const id = editName.trim();
-    if (!id) return;
+    const client = editing;
+    const name = editName.trim();
+    if (!client || !name) return;
     saving = true;
     editErrors = {};
     try {
-      const fresh = await updateMCPClient(id, { name: id, redirect_uris: editRedirects });
+      const fresh = await updateMCPClient(client.id, { name, redirect_uris: editRedirects });
       editOpen = false;
       toasts.success(
         `${fresh.name} updated`,

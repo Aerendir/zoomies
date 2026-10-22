@@ -97,10 +97,7 @@ func (c *Controller) recoverMachine(ctx context.Context, env *machineEnv, m *sto
 		}
 	case store.MachineEnrolling:
 		if overdue(m.BootstrappedAt, m.StartedAt, now, cfg.EnrolTimeout) {
-			c.failMachine(ctx, env, m, store.MachineErrorBootstrap, fmt.Sprintf(
-				"the agent was installed but no host joined within %s. The machine is running and is still being "+
-					"paid for: check that it can reach this controller's external URL",
-				roundDuration(cfg.EnrolTimeout)))
+			c.failMachine(ctx, env, m, store.MachineErrorBootstrap, c.enrolTimeoutDetail(ctx, m, cfg.EnrolTimeout))
 		}
 	case store.MachineDeleting:
 		// A delete that has not confirmed is a machine somebody may still be
@@ -114,6 +111,39 @@ func (c *Controller) recoverMachine(ctx context.Context, env *machineEnv, m *sto
 				roundDuration(now.Sub(deref(m.DeleteStartedAt, now))), providerLabelFor(env.rows, m.ProviderID)))
 		}
 	}
+}
+
+// enrolTimeoutDetail is what a machine is failed with when the window in which
+// its agent should have joined ran out, and what this machine's own token says
+// decides which half of "no host joined" an operator is looking at.
+//
+// A guest that could not reach this controller never offered the credential,
+// and neither did a guest carrying its template's host identity: a template
+// that was ever joined itself clones that identity into every machine made
+// from it, and such a clone heartbeats under the template's name instead of
+// joining as this machine, which leaves this machine's token unspent beside
+// it. A spent token is the other failure: a host did redeem it, and what
+// stopped the machine joining is the link between the two rows.
+func (c *Controller) enrolTimeoutDetail(ctx context.Context, m *store.Machine, d time.Duration) string {
+	spent, err := c.machineTokenSpent(ctx, m)
+	if err != nil {
+		c.log.Warn("could not read a machine's join token for its enrolment timeout", "machine", m.ID, "error", err)
+	}
+	if spent {
+		return fmt.Sprintf(
+			"the agent was installed but no host joined within %s, although this machine's join token was redeemed: "+
+				"the host it enrolled as could not be linked to this machine. The machine is running and is still being "+
+				"paid for: check that it can reach this controller's external URL",
+			roundDuration(d))
+	}
+	return fmt.Sprintf(
+		"the agent was installed but no host joined within %s, and nothing redeemed this machine's join token, so the "+
+			"guest never asked this controller to enrol it. The machine is running and is still being paid for: a guest "+
+			"that cannot reach this controller arrives here, and so does a template that was ever joined itself, because "+
+			"a template carrying a host identity clones it into every machine made from it, and such a clone heartbeats "+
+			"under that name instead of joining as this machine. Look on the Hosts page for a host this fleet did not "+
+			"expect, and check that the machine can reach this controller's external URL",
+		roundDuration(d))
 }
 
 // failMachine records which half complained and gives up on the lifecycle,
@@ -196,6 +226,7 @@ func (c *Controller) sweepProviders(ctx context.Context, env *machineEnv) {
 		go func() {
 			defer c.machines.calls.Done()
 			defer func() { c.machines.mu.Lock(); delete(c.machines.sweeps, pr.row.ID); c.machines.mu.Unlock() }()
+			defer c.recoverDetached("machine-sweep")
 			c.sweepProvider(ctx, &inventory, pr)
 		}()
 	}

@@ -13,7 +13,7 @@
   import { fleet } from '$lib/state/fleet.svelte';
   import { session } from '$lib/state/session.svelte';
   import { formatNumber, pluralise } from '$lib/format';
-  import { poolStatus } from '$lib/status';
+  import { poolStatus, runnerStatus } from '$lib/status';
   import Badge from '$lib/components/Badge.svelte';
   import Button from '$lib/components/Button.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -107,16 +107,12 @@
   const canCreate = $derived(session.can('operator'));
 </script>
 
-<Panel
-  title="Pools"
-  description="Busy runners against live ones, with each pool's floor and ceiling marked."
-  class={className}
-  flush
->
+<Panel title="Pools" class={className} flush>
   {#snippet actions()}
     {#if pinnedCount > 0}
       <Badge tone="pending" label="{formatNumber(pinnedCount)} at the ceiling" dot={false} />
     {/if}
+    <a class="view-all" href="/pools">View all</a>
   {/snippet}
 
   {#if loading}
@@ -160,6 +156,20 @@
               {/if}
               {#if row.pinned}
                 <Badge tone="pending" size="sm" label="At its ceiling" dot={false} />
+              {:else if row.enabled}
+                <!-- What the pool is doing, as a word and the fixed shape of that state:
+                     working, waiting for a runner, or ready. -->
+                {#if row.busy > 0}
+                  <Badge status={runnerStatus('busy', false)} label="Working" size="sm" />
+                {:else if row.queued > 0}
+                  <Badge
+                    status={runnerStatus('provisioning', false)}
+                    label="Waiting for a runner"
+                    size="sm"
+                  />
+                {:else}
+                  <Badge status={runnerStatus('idle', false)} label="Ready" size="sm" />
+                {/if}
               {/if}
             </div>
           </div>
@@ -169,8 +179,14 @@
               live={row.live}
               min={row.min}
               max={row.max}
+              showText={false}
               label="{row.name} utilisation"
             />
+            <p class="capacity tabular">
+              <strong>{formatNumber(row.busy)}</strong> of {formatNumber(row.live)} busy · {formatNumber(
+                row.live,
+              )} / {formatNumber(row.max)} live / max
+            </p>
           </div>
           <p class="queued tabular" class:waiting={row.queued > 0}>
             {#if row.pinned}
@@ -185,6 +201,16 @@
 </Panel>
 
 <style>
+  .view-all {
+    color: var(--z-accent);
+    font-size: var(--z-text-xs);
+  }
+  .capacity {
+    margin: var(--z-space-1) 0 0;
+    color: var(--z-text-muted);
+    font-size: var(--z-text-xs);
+    overflow-wrap: anywhere;
+  }
   .rows {
     margin: 0;
     padding: 0;
@@ -192,7 +218,7 @@
   }
   .row {
     display: grid;
-    grid-template-columns: minmax(9rem, 1fr) minmax(10rem, 1.6fr) auto;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--z-space-4);
     padding: var(--z-space-3) var(--z-space-5);
@@ -256,8 +282,23 @@
   }
   @media (max-width: 768px) {
     .row {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: var(--z-space-2);
+    }
+    .head {
+      grid-column: 1 / -1;
+    }
+    .bar {
+      grid-column: 1;
+    }
+    .queued {
+      grid-column: 2;
+    }
+    .row .badges {
+      width: auto;
+    }
+    .row .head {
+      gap: var(--z-space-1);
     }
     .queued {
       justify-self: start;

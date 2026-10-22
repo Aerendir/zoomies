@@ -379,6 +379,9 @@ func (s *Server) handleRequestEliRepair(w http.ResponseWriter, r *http.Request) 
 		PullNumber  int    `json:"pull_number"`
 		Instruction string `json:"instruction"`
 		HeadSHA     string `json:"head_sha"`
+		// RunID is the run whose failure the person was looking at. The page
+		// that starts a repair knows it and the attempt later says it.
+		RunID int64 `json:"run_id"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -393,8 +396,11 @@ func (s *Server) handleRequestEliRepair(w http.ResponseWriter, r *http.Request) 
 		conflict(w, ready.Blockers[0].Message)
 		return
 	}
-	row, err := s.ctrl.RequestPinnedEliRepair(r.Context(), owner, in.Repo, in.PullNumber, in.Instruction, in.HeadSHA, s.isAssistantAdmin(r))
+	row, err := s.ctrl.RequestPinnedEliRepair(r.Context(), owner, in.Repo, in.PullNumber, in.Instruction, in.HeadSHA, in.RunID, s.isAssistantAdmin(r))
+	var changed *github.RepairTargetChanged
 	switch {
+	case errors.As(err, &changed):
+		conflict(w, changed.Message)
 	case errors.Is(err, controller.ErrAssistantSubscriptionRestricted):
 		forbidden(w, err.Error())
 	case errors.Is(err, store.ErrNotFound):
@@ -433,6 +439,63 @@ func (s *Server) handleEliReadiness(w http.ResponseWriter, r *http.Request) {
 	run, _ := strconv.ParseInt(r.URL.Query().Get("run_id"), 10, 64)
 	writeJSON(w, http.StatusOK, s.ctrl.EliReadiness(ctx, Identity(ctx).UserID, r.URL.Query().Get("repo"), pull, run))
 }
+
+// handleGetEliRepair answers GET /api/v1/assistant/repairs/{id}: one repair, for
+// the page that follows it.
+//
+// It reaches what the list reaches and nothing more, through the same scope. A
+// repair that is not the caller's is answered word for word as one that does
+// not exist, because an id is not a secret: it travels in links and logs, and
+// the answer must not tell a stranger that it names something. A repair
+// cleared from the history still opens; clearing tidies the list, and a link a
+// person kept should not stop working because they did.
+func (s *Server) handleGetEliRepair(w http.ResponseWriter, r *http.Request) {
+	owner, scoped := eliRepairScope(r, auth.ActionAssistantRead)
+	row, err := s.ctrl.Store().GetEliRepair(r.Context(), chiURLParam(r, "id"), owner, scoped)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		notFound(w, "there is no repair with that id")
+	case err != nil:
+		s.internal(w, r, "reading an Eli repair", err)
+	default:
+		writeJSON(w, http.StatusOK, row)
+	}
+}
+
+// handleEliErrorOutput answers GET /api/v1/assistant/repairs/error-output: the
+// error lines of one failed job, read from GitHub when the person asks.
+//
+// A caller who may not read them is answered 409, as the request for a repair
+// answers a caller with no write access, and not 403: that status is this API's
+// word for a role or a scope that is missing, and a person whose GitHub account
+// cannot write has neither lost a role nor been scoped out.
+func (s *Server) handleEliErrorOutput(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	repo := strings.TrimSpace(q.Get("repo"))
+	var fields []fieldError
+	if owner, name, ok := strings.Cut(repo, "/"); !ok || owner == "" || name == "" || strings.Contains(name, "/") || len(repo) > maxEliRepairSearch {
+		fields = append(fields, fieldError{"repo", "name the repository as owner/name"})
+	}
+	jobID, err := strconv.ParseInt(strings.TrimSpace(q.Get("job_id")), 10, 64)
+	if err != nil || jobID < 1 {
+		fields = append(fields, fieldError{"job_id", "give GitHub's id for the job, a whole number above zero"})
+	}
+	if len(fields) > 0 {
+		unprocessable(w, "the error output could not be read as asked", fields)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+	defer cancel()
+	out, err := s.ctrl.EliErrorOutput(ctx, Identity(ctx).UserID, repo, jobID)
+	switch {
+	case errors.Is(err, controller.ErrEliErrorOutputDenied):
+		conflict(w, "Your linked GitHub account needs write access to this repository to read a job's error output. Link and confirm it in Eli repair setup.")
+	case err != nil:
+		s.internal(w, r, "reading a job's error output", err)
+	default:
+		writeJSON(w, http.StatusOK, out)
+	}
+}
 func (s *Server) handleEliOpportunities(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
@@ -452,6 +515,11 @@ func (s *Server) handleEliOpportunityAction(w http.ResponseWriter, r *http.Reque
 	}
 	row, err := s.ctrl.ActEliOpportunity(r.Context(), Identity(r.Context()).UserID, chiURLParam(r, "id"), in.Action, s.isAssistantAdmin(r))
 	if err != nil {
+		var changed *github.RepairTargetChanged
+		if errors.As(err, &changed) {
+			conflict(w, changed.Message)
+			return
+		}
 		s.fail(w, r, "acting on repair offer; refresh the PR and repair setup", err)
 		return
 	}
@@ -505,4 +573,77 @@ func (s *Server) handleEliRepositories(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": names[offset:end], "total": len(names), "capped": capped, "missing_permissions": missing})
+}
+
+// maxEliAutomaticStop bounds one stop. A fleet has a handful of repositories on
+// Automatic, and a request for hundreds is a mistake worth refusing.
+const maxEliAutomaticStop = 50
+
+// handleEliAutomatic answers GET /api/v1/assistant/repairs/automatic: the
+// repositories that repair themselves, with who pays, whether they can, what has
+// been spent and what the automation did last. Automatic repairs have no owner,
+// so it is an administrator's route and the gate is the same one that lets an
+// administrator read every repair.
+func (s *Server) handleEliAutomatic(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	rows, err := s.ctrl.EliAutomaticRepairs(ctx)
+	if err != nil {
+		s.internal(w, r, "reading the repositories that repair themselves", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"repositories": rows})
+}
+
+// handleStopEliAutomatic answers POST /api/v1/assistant/repairs/automatic/stop.
+// It writes one audit row for each repository it changed and none for one it
+// found already stopped, so the log says who stopped what and never claims a
+// press that changed nothing.
+func (s *Server) handleStopEliAutomatic(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Repos []string `json:"repos"`
+		Then  string   `json:"then"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	var fields []fieldError
+	repos := make([]string, 0, len(in.Repos))
+	blank := false
+	for _, repo := range in.Repos {
+		repo = strings.TrimSpace(repo)
+		if repo == "" {
+			blank = true
+			continue
+		}
+		repos = append(repos, repo)
+	}
+	switch {
+	case len(in.Repos) == 0:
+		fields = append(fields, fieldError{"repos", "choose at least one repository to stop"})
+	case len(in.Repos) > maxEliAutomaticStop:
+		fields = append(fields, fieldError{"repos", fmt.Sprintf("%d repositories is more than the %d one stop accepts; stop them in batches", len(in.Repos), maxEliAutomaticStop)})
+	case blank:
+		fields = append(fields, fieldError{"repos", "a repository name is blank"})
+	}
+	if in.Then != controller.EliStopAskFirst && in.Then != controller.EliStopOff {
+		fields = append(fields, fieldError{"then", fmt.Sprintf("say what the repository does instead: %s or %s", controller.EliStopAskFirst, controller.EliStopOff)})
+	}
+	if len(fields) > 0 {
+		unprocessable(w, "this stop could not be carried out", fields)
+		return
+	}
+
+	ctx := r.Context()
+	results, err := s.ctrl.StopEliAutomatic(ctx, repos, in.Then)
+	if err != nil {
+		s.internal(w, r, "stopping automatic repairs", err)
+		return
+	}
+	for _, res := range results {
+		if res.Changed {
+			s.auth.Auditor().Act(ctx, Identity(ctx), "assistant.repair_automatic_stop", "repository", res.Repo, map[string]any{"then": in.Then})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }

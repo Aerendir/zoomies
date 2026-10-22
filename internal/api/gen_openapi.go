@@ -62,9 +62,10 @@ func main() {
 	out.WriteString("// openapiSpecGzB64 is api/openapi.yaml, gzipped and base64 encoded.\n")
 	out.WriteString("//\n")
 	out.WriteString("// It is generated rather than embedded because go:embed cannot reach a file\n")
-	out.WriteString("// outside its package directory. openapi_spec_test.go compares it with the\n")
-	out.WriteString("// original on every test run, so the two cannot drift apart unnoticed; when it\n")
-	out.WriteString("// fails, run `go run internal/api/gen_openapi.go` from the repository root.\n")
+	out.WriteString("// outside its package directory. TestEmbeddedSpecMatchesTheSource (web_test.go)\n")
+	out.WriteString("// compares it with the original on every test run, so the two cannot drift\n")
+	out.WriteString("// apart unnoticed; when it fails, run `go run internal/api/gen_openapi.go`\n")
+	out.WriteString("// from the repository root.\n")
 	out.WriteString("const openapiSpecGzB64 = \"\" +\n")
 	for i := 0; i < len(encoded); i += lineWidth {
 		end := min(i+lineWidth, len(encoded))

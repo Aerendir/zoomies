@@ -248,7 +248,7 @@ test.describe('with Kennel Club on', () => {
     await expect(tile(page, 'Errors')).toContainText(String(now.counts.error));
     expect(now.counts.error, 'only the public repository has errors').toBe(2);
 
-    const attention = page.getByRole('region', { name: 'Needs attention' });
+    const attention = page.getByRole('region', { name: 'Needs attention', exact: true });
     await expect(attention.getByRole('link', { name: new RegExp(PUBLIC_REPO) })).toBeVisible();
     await expect(attention).toContainText('2 errors');
 
@@ -391,7 +391,7 @@ test.describe('with Kennel Club on', () => {
   }) => {
     await goto(page, '/kennel', 'Kennel Club');
     await page
-      .getByRole('region', { name: 'Needs attention' })
+      .getByRole('region', { name: 'Needs attention', exact: true })
       .getByRole('link', { name: new RegExp(PUBLIC_REPO) })
       .click();
     // A link about findings opens the section that lists them.
@@ -601,10 +601,12 @@ test.describe('with Kennel Club on', () => {
     await expect(page.locator('.connection')).toHaveAttribute('data-state', 'live');
     // The setup and workflow checks are opt-in, so some rows say "Turned off" before
     // anything is changed here. The test is about one row, the one it turns off.
-    const unserved = page
-      .getByRole('table', { name: 'Checks and the repositories that have each open' })
-      .getByRole('row')
-      .filter({ hasText: 'capacity.unserved_label' });
+    await expect(
+      page.getByRole('table', { name: 'Checks and the repositories that have each open' }),
+    ).toBeVisible();
+    const folds = page.getByText(/^Show \d+ checks (?:with nothing open|turned off)$/);
+    for (const summary of await folds.all()) await summary.click();
+    const unserved = page.getByRole('row').filter({ hasText: 'capacity.unserved_label' });
     await expect(unserved).toBeVisible();
     await expect(unserved).not.toContainText('Turned off');
 
@@ -833,13 +835,13 @@ test.describe('with Kennel Club on', () => {
       };
     }
 
-    test('it opens on the Overview, and the figures are what the jobs API counted', async ({
+    test('it opens on fleet activity, and the figures are what the jobs API counted', async ({
       page,
     }) => {
       for (const name of FIXTURE.repos) {
         const row = await repository(page, name);
-        await goto(page, `/kennel/repositories/${row.id}`, name);
-        await expect(page.getByRole('tab', { name: 'Overview' }), name).toHaveAttribute(
+        await goto(page, `/kennel/repositories/${row.id}/overview`, name);
+        await expect(page.getByRole('tab', { name: 'Fleet activity' }), name).toHaveAttribute(
           'aria-selected',
           'true',
         );
@@ -883,7 +885,7 @@ test.describe('with Kennel Club on', () => {
 
       for (const name of FIXTURE.repos) {
         const row = await repository(page, name);
-        const overview = `/kennel/repositories/${row.id}`;
+        const overview = `/kennel/repositories/${row.id}/overview`;
         const [all] = await stats(page, name);
         expect(all, `${name} ran jobs this week`).toBeTruthy();
 
@@ -972,7 +974,7 @@ test.describe('with Kennel Club on', () => {
         return route.fulfill({ response: real, json: body });
       });
 
-      await goto(page, `/kennel/repositories/${row.id}`, PUBLIC_REPO);
+      await goto(page, `/kennel/repositories/${row.id}/overview`, PUBLIC_REPO);
       // Zero is a rate. A dash would say nobody had asked.
       await expect(figure(page, 'Success rate')).toHaveText('0%');
       await expect(page.locator('.metric').filter({ hasText: 'Jobs finished' })).toContainText(
@@ -995,7 +997,7 @@ test.describe('with Kennel Club on', () => {
       page,
     }) => {
       const row = await repository(page, 'acme/api');
-      await goto(page, `/kennel/repositories/${row.id}`, 'acme/api');
+      await goto(page, `/kennel/repositories/${row.id}/overview`, 'acme/api');
       await expect(page.getByRole('button', { name: '7 days', exact: true })).toHaveAttribute(
         'aria-pressed',
         'true',
@@ -1039,7 +1041,7 @@ test.describe('with Kennel Club on', () => {
           queued.push(url);
       });
 
-      await goto(page, `/kennel/repositories/${row.id}`, 'acme/api');
+      await goto(page, `/kennel/repositories/${row.id}/overview`, 'acme/api');
       await expect(figure(page, 'Jobs finished')).toBeVisible();
       // The totals, then the same jobs by pool and by host.
       expect(counted.map((url) => url.searchParams.get('group_by') ?? '').sort()).toEqual([
@@ -1083,7 +1085,7 @@ test.describe('with Kennel Club on', () => {
         await route.continue().catch(() => undefined);
       });
 
-      await goto(page, `/kennel/repositories/${row.id}`, 'acme/api');
+      await goto(page, `/kennel/repositories/${row.id}/overview`, 'acme/api');
       await page.getByRole('button', { name: '30 days', exact: true }).click();
       await page.waitForTimeout(400);
       await expect(page.locator('.overview .stack')).toBeVisible();
@@ -1100,7 +1102,7 @@ test.describe('with Kennel Club on', () => {
       page.on('request', (request) => {
         if (new URL(request.url()).pathname.endsWith('/jobs/stats')) counted += 1;
       });
-      await goto(page, `/kennel/repositories/${row.id}`, 'acme/api');
+      await goto(page, `/kennel/repositories/${row.id}/overview`, 'acme/api');
       await expect(figure(page, 'Jobs finished')).toBeVisible();
       await expect(page.locator('.connection')).toHaveAttribute('data-state', 'live');
       const before = counted;
@@ -1144,7 +1146,7 @@ test.describe('with Kennel Club on', () => {
         return route.fulfill({ response: real, json: body });
       });
 
-      await goto(page, `/kennel/repositories/${row.id}`, 'acme/api');
+      await goto(page, `/kennel/repositories/${row.id}/overview`, 'acme/api');
       await expect(page.getByText('No jobs finished in the last 7 days')).toBeVisible();
       await expect(page.locator('.metric')).toHaveCount(0);
       await page.getByRole('button', { name: 'Look at 30 days' }).click();
@@ -1175,7 +1177,7 @@ test.describe('with Kennel Club on', () => {
 
       for (const name of FIXTURE.repos) {
         const row = await repository(page, name);
-        await goto(page, `/kennel/repositories/${row.id}`, name);
+        await goto(page, `/kennel/repositories/${row.id}/overview`, name);
         for (const [key, region, path] of [
           ['pool', 'Pools', 'pools'],
           ['host', 'Hosts', 'hosts'],
@@ -1229,11 +1231,11 @@ test.describe('with Kennel Club on', () => {
       expect(waiting, 'the demo fleet queues a job no pool claims').toBeTruthy();
       expect(idle, 'and a repository with none').toBeTruthy();
 
-      await goto(page, `/kennel/repositories/${idle!.id}`, idle!.name);
+      await goto(page, `/kennel/repositories/${idle!.id}/overview`, idle!.name);
       await expect(page.getByText('Nothing is waiting for a label no pool serves.')).toBeVisible();
       await expect(page.getByRole('link', { name: 'See them in the queue' })).toHaveCount(0);
 
-      await goto(page, `/kennel/repositories/${waiting!.id}`, waiting!.name);
+      await goto(page, `/kennel/repositories/${waiting!.id}/overview`, waiting!.name);
       const sentence =
         waiting!.total === 1 ? '1 job is waiting' : `${waiting!.total} jobs are waiting`;
       await expect(page.getByText(`${sentence} for a label no pool serves.`)).toBeVisible();
@@ -1244,57 +1246,57 @@ test.describe('with Kennel Club on', () => {
       await expect(page.getByRole('heading', { level: 1, name: 'Queue' })).toBeVisible();
     });
 
-    test('each section has an address, back returns to the one before, and an unknown one opens the Overview', async ({
+    test('each section has an address, back returns to the one before, and an unknown one opens the first section', async ({
       page,
     }) => {
       const row = await repository(page, PUBLIC_REPO);
       const base = `/kennel/repositories/${row.id}`;
       const selected = (label: string) =>
-        expect(page.getByRole('tab', { name: label, exact: true })).toHaveAttribute(
-          'aria-selected',
-          'true',
-        );
+        expect(
+          page.getByRole('tab', { name: new RegExp(`^${label}(?:\\s+\\d+)?$`) }),
+        ).toHaveAttribute('aria-selected', 'true');
 
-      await goto(page, base, PUBLIC_REPO);
+      await goto(page, `${base}/overview`, PUBLIC_REPO);
       await plantMarker(page);
       // What Kennel Club says is one link away from what the fleet knows.
-      await page.getByRole('link', { name: 'Open the CI tab' }).click();
+      await page.getByRole('link', { name: 'Open findings' }).click();
       await expect(page).toHaveURL(new RegExp(`${base}/ci$`));
-      await selected('CI');
+      await selected('Findings');
       await page.goBack();
-      await expect(page).toHaveURL(new RegExp(`${base}$`));
-      await page.getByRole('tab', { name: 'CI', exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`${base}/overview$`));
+      await page.getByRole('tab', { name: 'Findings' }).click();
       await expect(page).toHaveURL(new RegExp(`${base}/ci$`));
-      await selected('CI');
+      await selected('Findings');
       await expect(page.getByRole('article')).toHaveCount(2);
 
       await page.goBack();
-      await expect(page).toHaveURL(new RegExp(`${base}$`));
-      await selected('Overview');
+      await expect(page).toHaveURL(new RegExp(`${base}/overview$`));
+      await selected('Fleet activity');
       await expect(page.getByRole('article')).toHaveCount(0);
       // Moving between sections is the page's own business, never a reload.
       await expectNoReload(page);
 
       // An address somebody was sent opens on the section it names.
       await goto(page, `${base}/ci`, PUBLIC_REPO);
-      await selected('CI');
+      await selected('Findings');
 
-      // One that names no section is replaced, not left to show nothing.
+      // One that names no section is replaced by the first section the repository
+      // has: findings when something is open, fleet activity when nothing is.
       await goto(page, `${base}/nonsense`, PUBLIC_REPO);
       await expect(page).toHaveURL(new RegExp(`${base}$`));
-      await selected('Overview');
+      await selected('Findings');
     });
 
     // The settings checks are an opt-in, off in the fixture controller, so what the
     // tab says there is the sentence that explains it. The states that need a
     // GitHub which answers are put on the page by the API's own shapes.
-    test('the Protection tab says the settings checks are off when nothing reads settings', async ({
+    test('the Protection area says the settings checks are off when nothing reads settings', async ({
       page,
     }) => {
       const row = await repository(page, PUBLIC_REPO);
       await goto(page, `/kennel/repositories/${row.id}/protection`, PUBLIC_REPO);
-      await expect(page.getByRole('tab', { name: 'Protection', exact: true })).toHaveAttribute(
-        'aria-selected',
+      await expect(page.getByRole('button', { name: /^Protection/ })).toHaveAttribute(
+        'aria-pressed',
         'true',
       );
       await expect(page.getByText('Repository settings checks are off.')).toBeVisible();
@@ -1302,7 +1304,7 @@ test.describe('with Kennel Club on', () => {
       await expect(page.getByRole('article')).toHaveCount(0);
     });
 
-    test('the Protection tab shows what was read and links each finding to its setting on GitHub', async ({
+    test('the Protection area shows what was read and links each finding to its setting on GitHub', async ({
       page,
     }) => {
       const row = await repository(page, PUBLIC_REPO);
@@ -1390,8 +1392,8 @@ test.describe('with Kennel Club on', () => {
         `https://ghe.example.test/${PUBLIC_REPO}/settings/rules`,
       );
 
-      // The same findings are on the CI tab, where they are waived.
-      await page.getByRole('tab', { name: 'CI', exact: true }).click();
+      // The same findings are in the all-findings area, where they are waived.
+      await page.getByRole('button', { name: /^All\b/ }).click();
       await expect(
         page.getByRole('article', { name: 'The default workflow token can write' }),
       ).toBeVisible();
@@ -1935,7 +1937,7 @@ test.describe('with Kennel Club on', () => {
       await expect(page.locator('p.meta')).not.toContainText('Not tracked');
       const standing = page.locator('p.standing');
       await expect(standing).toContainText('No open findings');
-      await expect(standing.getByRole('link', { name: 'Open the CI tab' })).toBeVisible();
+      await expect(standing.getByRole('link', { name: 'Open findings' })).toBeVisible();
 
       await trackSwitch(page).click();
       const dialog = stopDialog(page);
@@ -2000,7 +2002,7 @@ test.describe('with Kennel Club on', () => {
       ).toBeVisible();
       await expect(standing).not.toContainText('Pending');
       await expect(standing).not.toContainText('No open findings');
-      await expect(standing.getByRole('link', { name: 'Open the CI tab' })).toHaveCount(0);
+      await expect(standing.getByRole('link', { name: 'Open findings' })).toHaveCount(0);
 
       const now = await tracking(page, row.id);
       expect(now.tracking.tracked).toBe(false);
@@ -2014,13 +2016,13 @@ test.describe('with Kennel Club on', () => {
 
       // The CI tab has nothing to show, and says that is not an all clear. The AI
       // Context tab is not Kennel Club's to stop and carries on.
-      await page.getByRole('tab', { name: 'CI' }).click();
+      await page.getByRole('tab', { name: 'Findings' }).click();
       await expect(
         page.getByText('Nothing to show for a repository that is not tracked'),
       ).toBeVisible();
       await page.getByRole('tab', { name: 'AI Context' }).click();
       await expect(notice).toHaveCount(0);
-      await page.getByRole('tab', { name: 'Overview' }).click();
+      await page.getByRole('tab', { name: 'Fleet activity' }).click();
       await expect(notice).toBeVisible();
 
       // Starting again asks for nothing.
@@ -2662,6 +2664,35 @@ test.describe('the side menu and the switch', () => {
     ]);
     expect(toggleBox!.y).toBeLessThan(standardsBox!.y);
     expect(standardsBox!.y).toBeLessThanOrEqual(assistantsBox!.y);
+  });
+
+  test('the switch label wraps inside the rail, and does not run out of its box', async ({
+    page,
+  }) => {
+    // Wide enough for the rail to sit beside the page, which is where the switch is a column.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await goto(page, '/kennel', 'Kennel Club');
+    const box = await rail(page).locator('.rail-switch').boundingBox();
+    const label = await rail(page)
+      .getByText('Check repository standards', { exact: true })
+      .boundingBox();
+    expect(box).not.toBeNull();
+    expect(label).not.toBeNull();
+    expect(label!.x + label!.width).toBeLessThanOrEqual(box!.x + box!.width);
+  });
+
+  test('the sections of the overview are set apart, not flush against each other', async ({
+    page,
+  }) => {
+    await patchSettings(page, on);
+    await untilRead(page);
+    await goto(page, '/kennel', 'Kennel Club');
+    const summary = await page.locator('#summary').boundingBox();
+    const counts = await page.locator('section.counts').boundingBox();
+    expect(summary).not.toBeNull();
+    expect(counts).not.toBeNull();
+    // The page's gap is one space-4, which is 16 pixels at the default text size.
+    expect(counts!.y - (summary!.y + summary!.height)).toBeGreaterThanOrEqual(16);
   });
 
   test('the rail takes you between the pages', async ({ page }) => {
@@ -3318,6 +3349,8 @@ test.describe('the cards on the Overview', () => {
     const box = page.locator('.metric').filter({ has: link });
     const size = (await box.boundingBox())!;
     expect(size.height, 'the card is a finger-sized target').toBeGreaterThanOrEqual(44);
+    // The verdict comes first now, so the counts are a scroll away on a phone.
+    await box.scrollIntoViewIfNeeded();
     await expect(box).toBeInViewport({ ratio: 1 });
     // Its far corner is nowhere near the label, and still opens the list.
     await box.click({ position: { x: size.width - 6, y: size.height - 6 } });
@@ -4000,7 +4033,14 @@ test.describe('the list of repositories shows the ones being served', () => {
     await page.route('**/api/v1/kennel/repositories?*', async (route) => {
       const params = new URL(route.request().url()).searchParams;
       const response = await route.fetch();
-      const body = (await response.json()) as { items?: unknown[]; total: number };
+      // The grid can give up on a read while this handler is between the fetch
+      // and the parse, and a disposed body is that, not a failure of the page.
+      let body: { items?: unknown[]; total: number };
+      try {
+        body = (await response.json()) as { items?: unknown[]; total: number };
+      } catch {
+        return route.fallback();
+      }
       if (!Array.isArray(body.items)) return route.fulfill({ response, json: body });
       return route.fulfill({
         response,
@@ -4074,6 +4114,9 @@ test.describe('the list of repositories shows the ones being served', () => {
       await page.setViewportSize({ width, height: 780 });
       await goto(page, '/kennel/repositories', 'Repositories');
       await expect(everyone(page), `the switch at ${width}px`).toBeInViewport({ ratio: 1 });
+      // The quick views come first now, so the scope sentence is a scroll down
+      // on the narrowest phone; the point is that it is there and whole.
+      await scope(page).scrollIntoViewIfNeeded();
       await expect(scope(page), `the sentence at ${width}px`).toBeInViewport({ ratio: 1 });
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

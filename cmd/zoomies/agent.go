@@ -166,6 +166,17 @@ func runAgentDaemon(ctx context.Context, e *env, args []string) error {
 		Logger:             log,
 		UpdateDir:          agentUpdateDir(cfg.Path()),
 		HelperHost:         agent.LocalHelperHost,
+		// Asked only to look at the helper's units, so that a helper that has
+		// stopped is told from one that is slow; the repair itself is root's.
+		UnitRun:   channel.RunCommand,
+		ConfigDir: configDirOf(cfg.Path()),
+		// The token this host was handed is its way back from a refusal of the
+		// credentials it had saved: a machine's environment keeps it beside the
+		// unit, and a host nobody handed one has none to fall back on. The
+		// environment keeps it after it has been spent too, so the agent
+		// remembers, in the state file, which tokens it has used and offers each
+		// one only once.
+		FallbackJoinToken: token,
 	})
 	if err != nil {
 		return err
@@ -393,4 +404,13 @@ func startWSLSelfManagement(ctx context.Context, log *slog.Logger, workDir strin
 			}
 		}
 	}()
+}
+
+// configDirOf is the directory of the --config file, or nothing without one:
+// the lock is looked for beside the configuration and nowhere else.
+func configDirOf(configPath string) string {
+	if configPath == "" {
+		return ""
+	}
+	return filepath.Dir(configPath)
 }

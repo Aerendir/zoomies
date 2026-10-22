@@ -31,7 +31,7 @@ func (h *harness) autoFleet(mode string) {
 
 // rolloutAssets is a release complete for the system the tests run on, for the
 // controller, and for linux/amd64, which is what every seeded host says it is.
-func rolloutAssets(t *testing.T) []string {
+func rolloutAssets(t testing.TB) []string {
 	t.Helper()
 	return append(completeAssets(t), updates.AssetName("linux", "amd64"))
 }

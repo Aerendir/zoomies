@@ -1,0 +1,467 @@
+/*
+ * Concept C, bold. The brand moment is the page: a scene, the tagline at the
+ * largest size the product has, and the form as a raised panel. Every --z-gate-*
+ * token is proposed, and defined in concept-c-tokens.css.
+ */
+.s-c {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 30rem);
+  grid-template-areas:
+    'hero panel'
+    'footer footer';
+  align-items: center;
+  gap: var(--z-space-8) var(--z-space-16);
+  min-height: 100%;
+  padding: var(--z-space-12) var(--z-space-16) var(--z-space-6);
+  overflow: clip;
+  background: var(--z-gate-ground);
+  color: var(--z-panel-text);
+}
+.s-c .c-scene {
+  position: absolute;
+  z-index: -1;
+  /* Behind the panel, so every word on the left sits on plain ground: text
+     over an image has no contrast pair a checker can compute. */
+  inset: -25% -10% -25% 45%;
+  background: var(--z-logo-orbital) center / contain no-repeat;
+  opacity: var(--z-gate-scene-opacity);
+  mask-image: var(--z-logo-edge-fade);
+  mask-composite: intersect;
+  pointer-events: none;
+}
+.s-c .c-hero {
+  grid-area: hero;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--z-space-4);
+  max-width: 36rem;
+}
+.s-c .c-eyebrow {
+  font-size: var(--z-text-2xs);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-wider);
+  text-transform: uppercase;
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-tagline {
+  font-size: var(--z-gate-display);
+  line-height: var(--z-gate-display-leading);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  color: var(--z-panel-text);
+}
+.s-c .c-lede {
+  max-width: 24rem;
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-lg);
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-panel {
+  grid-area: panel;
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  min-width: 0;
+  padding: var(--z-space-8);
+  border: var(--z-border-width) solid var(--z-gate-edge);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-surface);
+  box-shadow: var(--z-gate-shadow);
+  color: var(--z-text);
+}
+.s-c .c-panel h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+}
+.s-c .c-panel-lede {
+  margin-top: calc(-1 * var(--z-space-2));
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  color: var(--z-text-muted);
+  text-wrap: pretty;
+}
+.s-c .c-instance {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-xs);
+  color: var(--z-text-muted);
+}
+.s-c .c-footer {
+  grid-area: footer;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--z-space-2) var(--z-space-6);
+  color: var(--z-panel-text-muted);
+  font-size: var(--z-text-xs);
+}
+.s-c .c-appearance {
+  position: absolute;
+  top: var(--z-space-6);
+  right: var(--z-space-8);
+}
+.s-c .c-appearance .m-icon-btn {
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-appearance .m-icon-btn:hover {
+  background: var(--z-panel-raised);
+  color: var(--z-panel-text);
+}
+@media (max-width: 900px) {
+  .s-c {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'hero'
+      'panel'
+      'footer';
+    align-items: start;
+    gap: var(--z-space-5);
+    padding: var(--z-space-6) var(--z-space-4) var(--z-space-4);
+  }
+  .s-c .c-scene {
+    inset: 20% -40% 14% -40%;
+  }
+  .s-c .c-hero {
+    align-items: center;
+    gap: var(--z-space-2);
+    max-width: none;
+    text-align: center;
+  }
+  .s-c .c-hero .art {
+    width: var(--z-space-16);
+  }
+  .s-c .c-eyebrow,
+  .s-c .c-lede {
+    display: none;
+  }
+  .s-c .c-tagline {
+    font-size: var(--z-text-xl);
+    line-height: var(--z-leading-xl);
+  }
+  .s-c .c-panel {
+    padding: var(--z-space-5);
+  }
+  .s-c .c-footer {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .s-c .c-appearance {
+    top: var(--z-space-3);
+    right: var(--z-space-4);
+  }
+}
+
+/*
+ * First account, concept C: a rail of what comes after the account, on the
+ * scene, echoing the checklist the Overview keeps. The count is not shown, since
+ * how many steps there are depends on the install.
+ */
+.s-c .c-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--z-text-base);
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-rail li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-3);
+}
+.s-c .c-rail li[aria-current='step'] {
+  color: var(--z-panel-text);
+  font-weight: var(--z-weight-semibold);
+}
+.s-c .c-rail-dot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--z-space-5);
+  height: var(--z-space-5);
+  margin-top: var(--z-nudge-1);
+  border: var(--z-border-width) solid var(--z-gate-edge);
+  border-radius: var(--z-radius-full);
+}
+.s-c .c-rail li[aria-current='step'] .c-rail-dot {
+  border-color: var(--z-accent);
+  background: var(--z-accent);
+  color: var(--z-accent-contrast);
+}
+.s-c .c-rail small {
+  display: block;
+  font-size: var(--z-text-xs);
+  font-weight: var(--z-weight-normal);
+  color: var(--z-panel-text-muted);
+}
+.s-c .c-then-phone {
+  display: none;
+}
+@media (max-width: 900px) {
+  .s-c .c-rail {
+    display: none;
+  }
+  .s-c .c-then-phone {
+    display: block;
+  }
+}
+
+/*
+ * Connect an app, concept C: the connection drawn as two ends, with the
+ * address the app sends you back to as the checked destination. The diagram is
+ * decoration of what the text beside it already says, so it is hidden from a
+ * screen reader.
+ */
+.s-ca-c .c-hero {
+  gap: var(--z-space-5);
+}
+.s-ca-c .cc-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+  width: 100%;
+  margin: 0;
+  color: var(--z-panel-text);
+}
+.s-ca-c .cc-ends {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-3);
+}
+.s-ca-c .cc-node {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--z-space-2);
+  min-width: 0;
+  padding: var(--z-space-4) var(--z-space-5);
+  border: var(--z-border-width) solid var(--z-gate-edge);
+  border-radius: var(--z-radius-md);
+  background: var(--z-panel-raised);
+  color: var(--z-panel-text);
+}
+.s-ca-c .cc-node--client {
+  max-width: 16rem;
+  font-size: var(--z-text-lg);
+  font-weight: var(--z-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-link {
+  flex: none;
+  fill: none;
+  stroke: var(--z-panel-text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.s-ca-c .cc-dest {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-2);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+  color: var(--z-panel-text-muted);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-dest .icon {
+  margin-top: var(--z-nudge-2);
+}
+.s-ca-c .c-lede strong {
+  color: var(--z-panel-text);
+  font-weight: var(--z-weight-medium);
+}
+.s-ca-c .c-panel h1 {
+  font-size: var(--z-text-xl);
+  line-height: var(--z-leading-xl);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-back {
+  font-size: var(--z-text-sm);
+  color: var(--z-text-muted);
+  overflow-wrap: anywhere;
+}
+.s-ca-c .cc-local {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--z-space-2);
+  padding: var(--z-space-3);
+  border: var(--z-border-width) solid var(--z-border-strong);
+  border-radius: var(--z-radius-md);
+  background: var(--z-surface-sunken);
+  font-size: var(--z-text-sm);
+  line-height: var(--z-leading-sm);
+}
+.s-ca-c .cc-local .icon {
+  margin-top: var(--z-nudge-3);
+}
+.s-ca-c .cc-hero-line {
+  max-width: 18rem;
+}
+@media (max-width: 900px) {
+  /* The toggle gets its own row, and the two ends share what is left: the link
+     shrinks to an arrow so the app's name is never squeezed into a column. */
+  .s-ca-c .c-hero {
+    padding-top: var(--z-space-8);
+  }
+  .s-ca-c .cc-ends {
+    justify-content: center;
+    gap: var(--z-space-2);
+  }
+  .s-ca-c .cc-node {
+    padding: var(--z-space-3);
+  }
+  .s-ca-c .cc-node--client {
+    flex: 1 1 8rem;
+    min-width: 8rem;
+    font-size: var(--z-text-base);
+  }
+  .s-ca-c .cc-link {
+    width: var(--z-space-10);
+  }
+  .s-ca-c .cc-dest {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* A long name is a long name, and the heading already carries all of it: the
+   diagram's node shows the first few lines, so it cannot push the form away. */
+.s-ca-c .cc-node--client .m-host {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/*
+ * Fleet status, concept C: a board. The state and the queue are held in view on
+ * one side while the reasons scroll on the other, so the cause of a blocked
+ * fleet is beside the word that says it is blocked and never two screens below.
+ */
+.s-fs-c {
+  position: relative;
+  min-height: 100%;
+  background: var(--z-bg);
+}
+.s-fs-c .fs-c-page {
+  display: grid;
+  gap: var(--z-space-6);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--z-space-8) var(--z-space-6);
+}
+.s-fs-c .fs-head {
+  display: flex;
+  align-items: center;
+  gap: var(--z-space-3);
+}
+.s-fs-c .fs-c-board {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--z-space-8);
+}
+.s-fs-c .fs-c-hold {
+  position: sticky;
+  top: var(--z-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-4);
+}
+.s-fs-c .fs-c-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--z-space-3);
+  padding: var(--z-space-6);
+  border: var(--z-border-width) solid;
+  border-radius: var(--z-radius-lg);
+}
+.s-fs-c .fs-c-hero .m-shape {
+  width: var(--z-hero-shape);
+  height: var(--z-hero-shape);
+}
+.s-fs-c .fs-c-hero .m-state-word {
+  font-size: var(--z-hero-word);
+  line-height: 1.05;
+}
+.s-fs-c .fs-headline {
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  text-wrap: pretty;
+}
+@media (max-width: 900px) {
+  .s-fs-c .fs-c-page {
+    padding: var(--z-space-8) var(--z-space-4);
+  }
+  .s-fs-c .fs-c-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .s-fs-c .fs-c-hold {
+    position: static;
+  }
+  /* Shape and word on one line, the sentence and the time beneath them. */
+  .s-fs-c .fs-c-hero {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--z-space-3);
+    row-gap: var(--z-space-2);
+  }
+  .s-fs-c .fs-c-hero .m-shape {
+    width: var(--z-space-12);
+    height: var(--z-space-12);
+  }
+  .s-fs-c .fs-c-hero .m-state-word {
+    font-size: var(--z-text-3xl);
+    overflow-wrap: anywhere;
+  }
+  .s-fs-c .fs-c-hero .fs-headline,
+  .s-fs-c .fs-c-hero .fs-since {
+    grid-column: 1 / -1;
+  }
+}
+
+/*
+ * Not found, concept C: the mark large and one calm action, with nothing else
+ * to read. The line that is the heading is the only sentence the page needs.
+ */
+.s-nf-c {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--z-space-12) var(--z-space-6);
+  background: var(--z-bg);
+}
+.s-nf-c .nf-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--z-space-5);
+  max-width: var(--z-width-dialog-md);
+  text-align: center;
+}
+.s-nf-c .nf-hero h1 {
+  font-size: var(--z-text-2xl);
+  line-height: var(--z-leading-2xl);
+  font-weight: var(--z-weight-semibold);
+  letter-spacing: var(--z-tracking-tight);
+  text-wrap: balance;
+}
+.s-nf-c .nf-hero p {
+  color: var(--z-text-muted);
+  font-size: var(--z-text-base);
+  line-height: var(--z-leading-base);
+  text-wrap: pretty;
+}

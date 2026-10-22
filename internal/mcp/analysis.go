@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/eyupio/zoomies/internal/analysis"
 )
@@ -59,6 +58,12 @@ type renderer[F any] struct {
 	rows func(F) []findingRow
 	// keep is the finding with only its first n rows.
 	keep func(F, int) F
+	// clip is the finding with its head's sentences and names held to the
+	// bounds the text holds them to, for the structured copy. The rows are
+	// bounded by being cut whole; the head never is, so without this a host
+	// name or a release label long enough would carry the copy past its
+	// block with no row left to cut.
+	clip func(F) F
 	// noun is what a row is, for the line that says how many were cut.
 	noun string
 	// more is the argument that shows what a cut left out; "" when none does.
@@ -105,6 +110,9 @@ func renderFinding[F any](body []byte, want string, block int, r renderer[F]) ([
 		top.WriteString(line + "\n")
 	}
 	rows := r.rows(f)
+	// The text is drawn from f as it came, so its own clips are not applied
+	// twice; the structured copy from here on is the clipped one.
+	f = r.clip(f)
 	// An answer that fits whole, text and structured copy alike, needs no
 	// trailer, so none is reserved: a note reserved up front would cut the
 	// last row of an answer that fitted. Once any cut is needed, the trailer
@@ -165,6 +173,31 @@ func renderFinding[F any](body []byte, want string, block int, r renderer[F]) ([
 		)
 	}
 	return content, answer, nil
+}
+
+// clippedHead is a finding's own sentences and names held to the bounds
+// writeFindingHead holds them to in the text.
+func clippedHead[E any](f analysis.Finding[E]) analysis.Finding[E] {
+	f.Summary, f.ConfidenceReason = clip(f.Summary, maxSentence), clip(f.ConfidenceReason, maxSentence)
+	f.Dominant = clip(f.Dominant, maxTrustedValue)
+	steps := make([]analysis.NextStep, len(f.NextSteps))
+	for i, s := range f.NextSteps {
+		steps[i] = analysis.NextStep{Text: clip(s.Text, maxSentence), Setting: clip(s.Setting, maxTrustedValue),
+			Code: clip(s.Code, maxTrustedValue), Link: clip(s.Link, maxTrustedValue)}
+	}
+	f.NextSteps = steps
+	f.Codes = clipAll(f.Codes)
+	return f
+}
+
+// clipAll is a list of names, each held to maxTrustedValue, in a copy: the
+// finding's own slice may be shared with the text being drawn.
+func clipAll(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = clip(n, maxTrustedValue)
+	}
+	return out
 }
 
 // rowsFit is whether every row fits: the trusted lines within budget and the
@@ -234,13 +267,14 @@ func writeFindingHead(b *strings.Builder, f analysis.Finding[json.RawMessage]) {
 }
 
 // sentence is one of the controller's sentences on a line of its own. It may
-// name a pool or a host, so a control character in one is a space: a name
-// inside the controller's sentence must not be able to begin a line that reads
-// as the controller's. It is clipped at maxSentence and marked as clip marks
-// any value, so the head, which is never cut, fits the smallest block.
+// name a pool or a host, so a control character or a line separator in one is
+// a space: a name inside the controller's sentence must not be able to begin a
+// line that reads as the controller's. It is clipped at maxSentence and marked
+// as clip marks any value, so the head, which is never cut, fits the smallest
+// block.
 func sentence(s string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if breaksALine(r) {
 			return ' '
 		}
 		return r
@@ -288,6 +322,10 @@ func plural(n int, one, many string) string {
 	return strconv.Itoa(n) + " " + many
 }
 
+// unclaimedPool is the row of the jobs no pool claimed, in the words the
+// Jobs page's card uses for it (UNCLAIMED_POOL in web/src/lib/insights).
+const unclaimedPool = "unclaimed (no pool claimed these jobs)"
+
 var queueWaitRenderer = renderer[analysis.QueueWaitFinding]{
 	analysis: "queue_wait",
 	head: func(f analysis.QueueWaitFinding) []string {
@@ -318,7 +356,13 @@ var queueWaitRenderer = renderer[analysis.QueueWaitFinding]{
 		rows := make([]findingRow, 0, len(f.Evidence.Pools))
 		for _, p := range f.Evidence.Pools {
 			var line, quoted strings.Builder
-			fmt.Fprintf(&line, "pool %s name=%s", token(p.PoolID), token(p.PoolName))
+			if p.PoolID == "" {
+				// The jobs no pool claimed have no pool to name, and two empty
+				// quoted strings would read as a pool whose names were lost.
+				line.WriteString(unclaimedPool)
+			} else {
+				fmt.Fprintf(&line, "pool %s name=%s", token(p.PoolID), token(p.PoolName))
+			}
 			if p.Deleted {
 				line.WriteString(" deleted")
 			}
@@ -338,6 +382,16 @@ var queueWaitRenderer = renderer[analysis.QueueWaitFinding]{
 	},
 	keep: func(f analysis.QueueWaitFinding, n int) analysis.QueueWaitFinding {
 		f.Evidence.Pools = f.Evidence.Pools[:n:n]
+		return f
+	},
+	clip: func(f analysis.QueueWaitFinding) analysis.QueueWaitFinding {
+		f = clippedHead(f)
+		fleet := make([]analysis.CauseShare, len(f.Evidence.Fleet))
+		for i, c := range f.Evidence.Fleet {
+			c.Cause = analysis.WaitCause(clip(string(c.Cause), maxTrustedValue))
+			fleet[i] = c
+		}
+		f.Evidence.Fleet = fleet
 		return f
 	},
 	noun:   "pools",
@@ -410,7 +464,10 @@ var compareRenderer = renderer[analysis.CompareFinding]{
 			for _, x := range e.Excluded {
 				names = append(names, token(x))
 			}
-			lines = append(lines, strings.Join(names, " and ")+" jobs were left out of every figure")
+			// Of the job rows' figures only: a side read from the roll-up counts
+			// every job that ran here, cancelled ones included, and its own
+			// reason in the confidence says so.
+			lines = append(lines, strings.Join(names, " and ")+" jobs are left out of every figure read from the job rows")
 		}
 		if e.PercentilesUnavailable {
 			lines = append(lines, "percentiles are unavailable: a side was read from the daily roll-up, which keeps counts only")
@@ -433,6 +490,14 @@ var compareRenderer = renderer[analysis.CompareFinding]{
 	},
 	keep: func(f analysis.CompareFinding, n int) analysis.CompareFinding {
 		f.Evidence.Changes = f.Evidence.Changes[:n:n]
+		return f
+	},
+	clip: func(f analysis.CompareFinding) analysis.CompareFinding {
+		f = clippedHead(f)
+		e := &f.Evidence
+		e.By = clip(e.By, maxTrustedValue)
+		e.A.Label, e.B.Label = clip(e.A.Label, maxTrustedValue), clip(e.B.Label, maxTrustedValue)
+		e.Excluded = clipAll(e.Excluded)
 		return f
 	},
 	noun:   "changes",
@@ -489,6 +554,17 @@ var hostPressureRenderer = renderer[analysis.HostPressureFinding]{
 	},
 	keep: func(f analysis.HostPressureFinding, n int) analysis.HostPressureFinding {
 		f.Evidence.Events = f.Evidence.Events[:n:n]
+		return f
+	},
+	clip: func(f analysis.HostPressureFinding) analysis.HostPressureFinding {
+		f = clippedHead(f)
+		e := &f.Evidence
+		e.HostID, e.HostName = clip(e.HostID, maxTrustedValue), clip(e.HostName, maxTrustedValue)
+		if e.Threshold != nil {
+			t := *e.Threshold
+			t.Measure = clip(t.Measure, maxTrustedValue)
+			e.Threshold = &t
+		}
 		return f
 	},
 	noun: "events",
@@ -557,6 +633,7 @@ var startupRenderer = renderer[analysis.StartupFailuresFinding]{
 		f.Evidence.Groups = f.Evidence.Groups[:n:n]
 		return f
 	},
+	clip:   clippedHead[analysis.StartupEvidence],
 	noun:   "hosts and pools",
 	more:   "pool_id or host_id",
 	reach:  "pass pool_id or host_id to narrow the answer and read the rest",
@@ -649,7 +726,7 @@ func analysisTools() []*tool {
 			Description: "What got worse and what got better, from GET /api/v1/analysis/compare: by version (the default), two releases' jobs in the period, " +
 				"b the later (left out, the newest release to complete a job in the period) and a the earlier (left out, the newest whose last job came before b's); by period, the period against the one of the same length before it, with no a or b. " +
 				"Measure by measure: duration, queue wait and startup at p50 and p95, and the fleet failure, failure and OOM kill rates, with each side's own dates and figures. " +
-				"Cancelled and skipped jobs are left out of every figure. With fewer than 30 jobs on either side nothing is ranked, and the summary says the sample is too small. " +
+				"Cancelled and skipped jobs are left out of every figure read from the job rows. With fewer than 30 jobs on either side nothing is ranked, and the summary says the sample is too small. " +
 				"A side older than retention.jobs is read from the daily roll-up, counts only, in whole UTC days. " +
 				"A refusal (one release named twice, fewer than two releases in the period, a side that cannot be read in whole days) is the controller's sentence saying what to change. " +
 				analysisAnswerText + analysisDefault + "The same answer is also returned as structured content.",
@@ -662,7 +739,7 @@ func analysisTools() []*tool {
 				"a":        map[string]any{"type": "object", "description": "the earlier side, with its own dates and figures"},
 				"b":        map[string]any{"type": "object", "description": "the later side, with its own dates and figures"},
 				"changes":  map[string]any{"type": "array", "description": "the changes the text shows, one a measure"},
-				"excluded": map[string]any{"type": "array", "description": "the conclusions left out of every figure: cancelled and skipped", "items": map[string]any{"type": "string"}},
+				"excluded": map[string]any{"type": "array", "description": "the conclusions left out of every figure read from the job rows: cancelled and skipped", "items": map[string]any{"type": "string"}},
 			}),
 			Annotations: readOnly,
 			structured: func(ctx context.Context, c API, raw json.RawMessage) ([]Content, any, error) {

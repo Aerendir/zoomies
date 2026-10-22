@@ -15,6 +15,7 @@ const HOST_PAGE_CODES: ReadonlySet<string> = new Set([
   'host.health_stale',
   'host.reboot_pending',
   'host.update_failed',
+  'host.update_helper_stuck',
   'host.update_unavailable',
 ]);
 

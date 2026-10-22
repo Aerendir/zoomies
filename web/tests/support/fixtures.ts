@@ -231,7 +231,7 @@ export async function reload(page: Page, heading?: string | RegExp): Promise<voi
 
 /** The persistent navigation: the left sidebar, or the phone's bottom bar. */
 export function nav(page: Page): Locator {
-  return page.getByRole('navigation', { name: 'Sections' });
+  return page.getByRole('navigation', { name: 'Sections', exact: true });
 }
 
 /**
@@ -259,7 +259,7 @@ export function navMenu(page: Page): Locator {
 
 /** Press "More" in the bottom bar and wait for the sheet it opens. */
 export async function openNavMenu(page: Page): Promise<Locator> {
-  await nav(page).getByRole('button', { name: 'More' }).click();
+  await nav(page).getByRole('button', { name: 'More', exact: true }).click();
   const menu = navMenu(page);
   await expect(menu).toBeVisible();
   return menu;
@@ -389,6 +389,102 @@ export function facetTrigger(page: Page, label: string, open = false): Locator {
   return page.getByRole('button', { name: label, expanded: open });
 }
 
+/**
+ * Store a choice before the app runs, once for each tab.
+ *
+ * An init script runs again on every navigation, so one that wrote its value
+ * every time would put a test back on it after the test had chosen otherwise in
+ * the page and then reloaded, which is exactly what a test about choosing a
+ * style or a theme does. `sessionStorage` lasts as long as the tab and survives
+ * a reload: the first document seeds, and the ones after it leave the choice
+ * alone.
+ */
+async function seedOnce(page: Page, key: string, value: string): Promise<void> {
+  await page.addInitScript(
+    ([key, value]) => {
+      const seeded = `seeded ${key}`;
+      if (sessionStorage.getItem(seeded)) return;
+      sessionStorage.setItem(seeded, '1');
+      localStorage.setItem(key, value);
+    },
+    [key, value] as const,
+  );
+}
+
+/**
+ * Start the page on Classic, the visual style these specs were written for.
+ *
+ * Mission Control is the default, so a test that measures Classic's type
+ * scale or its history-first layout says so rather than relying on an empty
+ * browser. Storage starts empty in every context, so this runs before the app.
+ * It seeds once for each tab, so a test may choose another style in the page
+ * and reload.
+ */
+export async function useClassic(page: Page): Promise<void> {
+  await seedOnce(page, 'zoomies.ui-style', 'classic');
+}
+
+/**
+ * Start the page following the operating system's colour scheme.
+ *
+ * Dark is the default, so a test that flips `prefers-color-scheme` to see both
+ * themes opts into System first. Seeded once for each tab, like useClassic.
+ */
+export async function useSystemTheme(page: Page): Promise<void> {
+  await seedOnce(page, 'zoomies.theme', 'system');
+}
+
+/**
+ * Open the Jobs page's Filters disclosure when the page has folded it away.
+ *
+ * Mission Control does that on a phone, behind a summary that counts what is in
+ * force, so the facet menus, the date range and the switches are not there to be
+ * pressed until it is opened; everywhere else they are simply on the page and the
+ * summary is hidden. Idempotent, and safe to call before the grid has answered:
+ * the disclosure is part of the page's frame.
+ */
+export async function openFilters(page: Page): Promise<void> {
+  const fold = page.locator('details.advanced');
+  if ((await fold.count()) === 0 || (await fold.evaluate((el: HTMLDetailsElement) => el.open))) {
+    return;
+  }
+  await fold.locator(':scope > summary').click();
+}
+
+/**
+ * Open the Jobs page's "Fleet context and activity" fold when the page has
+ * folded it away.
+ *
+ * Mission Control does that on a phone to put the rows first; the summary is
+ * hidden at other widths, where the section is simply open.
+ */
+export async function openFleetContext(page: Page): Promise<void> {
+  const fold = page.locator('details.fleet-context');
+  if ((await fold.count()) === 0 || (await fold.evaluate((el: HTMLDetailsElement) => el.open))) {
+    return;
+  }
+  await fold.locator(':scope > summary').click();
+}
+
+/**
+ * A size token as the page in front of the test computes it, in pixels.
+ *
+ * A test that pins a size to a number is pinned to one visual style's type
+ * scale, and Mission Control's is larger than Classic's. Asking the page what the
+ * token comes to makes the claim "this is the size the token says", which holds
+ * in both styles, so the test need not choose one.
+ */
+export async function tokenPixels(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement('span');
+    probe.style.fontSize = `var(${name})`;
+    document.body.append(probe);
+    const pixels = getComputedStyle(probe).fontSize;
+    probe.remove();
+    return pixels;
+  }, token);
+}
+
 /** What the theme currently is: the attribute on `<html>` and what was stored. */
 export async function readTheme(
   page: Page,
@@ -426,10 +522,12 @@ export async function openAccountMenu(page: Page): Promise<Locator> {
  * Choose a theme the way an operator does: from the account menu, where the
  * three options are visible and the one in force is marked.
  */
-export async function chooseTheme(page: Page, choice: 'light' | 'dark'): Promise<void> {
+export async function chooseTheme(page: Page, choice: 'light' | 'dark' | 'system'): Promise<void> {
   const menu = await openAccountMenu(page);
-  await menu.getByRole('menuitemradio', { name: choice === 'dark' ? 'Dark' : 'Light' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', choice);
+  const name = choice === 'dark' ? 'Dark' : choice === 'light' ? 'Light' : 'System';
+  await menu.getByRole('menuitemradio', { name }).click();
+  if (choice === 'system') await expect(page.locator('html')).not.toHaveAttribute('data-theme');
+  else await expect(page.locator('html')).toHaveAttribute('data-theme', choice);
 }
 
 /**
@@ -472,6 +570,51 @@ export async function openHostCapacityMap(page: Page): Promise<Locator> {
   const map = page.getByRole('region', { name: 'Host capacity map', exact: true });
   await expect(map).toBeVisible();
   return map;
+}
+
+/**
+ * Open a host card's Details, which a card does not show until it is asked, and
+ * return the card.
+ *
+ * Idempotent, because the choice is remembered: a test that opened it and then
+ * reloads, or that visits the page twice, finds it open and must not close it.
+ * It waits for the card, so it is also how a test says "once the host is on the
+ * page".
+ *
+ * `keyboard` opens it with Enter instead of a click. A test about what keyboard
+ * focus does needs it: after a mouse click the browser stops counting a scripted
+ * `focus()` as keyboard focus (`:focus-visible`), and that is what opens help
+ * on focus.
+ */
+export async function openHostCard(
+  card: Locator,
+  via: 'pointer' | 'keyboard' = 'pointer',
+): Promise<Locator> {
+  const toggle = card.getByRole('button', { name: /^Details for / });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    if (via === 'keyboard') {
+      await toggle.focus();
+      await card.page().keyboard.press('Enter');
+    } else {
+      await toggle.click();
+    }
+  }
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  return card;
+}
+
+/**
+ * Close a host card's Details again, for a test that has looked at what is behind
+ * it and then needs to see what the card says without it: a reason is meant to be
+ * there with the fold shut, and a spec that left it open could not tell.
+ *
+ * Idempotent, like openHostCard, and returns the card.
+ */
+export async function closeHostCard(card: Locator): Promise<Locator> {
+  const toggle = card.getByRole('button', { name: /^Details for / });
+  if ((await toggle.getAttribute('aria-expanded')) === 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  return card;
 }
 
 /** True when the element currently holds focus. */
@@ -547,3 +690,18 @@ export async function expectNoSidewaysScroll(page: Page, where: string): Promise
 /** A dialog by its accessible name. */
 export const dialog = (page: Page, name: string | RegExp): Locator =>
   page.getByRole('dialog', { name });
+
+/**
+ * The Overview's feed, opened out. It previews its three newest entries and
+ * keeps the rest behind "Expand events", so a test that is about what the feed
+ * carries, rather than about what it previews, asks for all of it. The
+ * choice is remembered by the browser, and this is harmless when it already is.
+ */
+export async function openEventsFeed(page: Page): Promise<Locator> {
+  const feed = page.getByRole('region', { name: 'Recent events', exact: true });
+  await expect(feed).toBeVisible();
+  const expand = feed.getByRole('button', { name: 'Expand events' });
+  if (await expand.isVisible().catch(() => false)) await expand.click();
+  await expect(feed.getByRole('button', { name: 'Show fewer events' })).toBeVisible();
+  return feed;
+}

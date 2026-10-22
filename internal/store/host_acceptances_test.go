@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -217,5 +218,68 @@ func TestAHostWithoutAReportHasNothingToJudge(t *testing.T) {
 		Acceptances: []HostCheckAcceptance{{CheckID: "docker.logs", Current: "none", ExpiresAt: acceptanceNow.Add(time.Hour)}}}
 	if r := c.JudgedDoctor(acceptanceNow); r == nil || r.Results[0].Accepted != nil {
 		t.Errorf("a container report was judged: %+v", r)
+	}
+}
+
+// A host's acceptances come back in the order of their checks whichever statement
+// read them, and a read of some of the hosts carries theirs and nobody else's:
+// one host is read by its ID, several by reading every host's and keeping the
+// ones that were asked about, so the keeping is what these hold.
+func TestAcceptancesAreFilledInCheckOrderForTheHostsAskedAboutAndNoOthers(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStoreAt(t, func() time.Time { return acceptanceNow })
+	a := acceptanceHost(t, s, "vm-a", "none")
+	b := acceptanceHost(t, s, "vm-b", "none")
+	c := acceptanceHost(t, s, "vm-c", "none")
+	for _, h := range []*Host{a, b, c} {
+		// Written in an order that is not the order of the checks.
+		for _, check := range []string{"kernel.vm", "docker.logs", "docker.cgroup"} {
+			if err := s.UpsertHostCheckAcceptance(ctx, acceptingFor(h, check, "none", acceptanceNow.Add(time.Hour))); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	want := []string{"docker.cgroup", "docker.logs", "kernel.vm"}
+
+	cases := map[string][]*Host{
+		"one host":            {a},
+		"two of three hosts":  {a, b},
+		"all three":           {a, b, c},
+		"the same host twice": {b, b},
+		"one host and a copy": {a, {ID: a.ID}},
+	}
+	for name, asked := range cases {
+		t.Run(name, func(t *testing.T) {
+			// Fresh structs, as a read makes them: nothing carries acceptances yet.
+			hosts := make([]*Host, len(asked))
+			for i, h := range asked {
+				hosts[i] = &Host{ID: h.ID, Name: h.Name}
+			}
+			if err := s.fillHostAcceptances(ctx, hosts); err != nil {
+				t.Fatalf("fillHostAcceptances: %v", err)
+			}
+			for _, h := range hosts {
+				var got []string
+				for _, acc := range h.Acceptances {
+					if acc.HostID != h.ID {
+						t.Errorf("host %s carries an acceptance of host %s", h.ID, acc.HostID)
+					}
+					got = append(got, acc.CheckID)
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("host %s carries the checks %v; want %v", h.ID, got, want)
+				}
+			}
+		})
+	}
+
+	// And a host that is asked about with none to its name has none.
+	d := acceptanceHost(t, s, "vm-d", "none")
+	hosts := []*Host{{ID: d.ID}, {ID: a.ID}}
+	if err := s.fillHostAcceptances(ctx, hosts); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts[0].Acceptances) != 0 || len(hosts[1].Acceptances) != 3 {
+		t.Errorf("a host with none carries %d and one with three carries %d", len(hosts[0].Acceptances), len(hosts[1].Acceptances))
 	}
 }

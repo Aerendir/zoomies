@@ -51,6 +51,24 @@ export const ROUTES: readonly RouteDef[] = [
     load: () => import('../routes/EliRepairs.svelte'),
   },
   {
+    name: 'eli-repair-new',
+    path: '/repairs/new',
+    title: 'New repair',
+    load: () => import('../routes/EliRepairNew.svelte'),
+  },
+  {
+    name: 'eli-repair-setup',
+    path: '/repairs/setup',
+    title: 'Repair setup',
+    load: () => import('../routes/EliRepairSetup.svelte'),
+  },
+  {
+    name: 'eli-repair',
+    path: '/repairs/:id',
+    title: 'Repair',
+    load: () => import('../routes/EliRepairAttempt.svelte'),
+  },
+  {
     name: 'overview',
     path: '/',
     title: 'Overview',
@@ -95,6 +113,12 @@ export const ROUTES: readonly RouteDef[] = [
     path: '/comparisons',
     title: 'Comparisons',
     load: () => import('../routes/Comparisons.svelte'),
+  },
+  {
+    name: 'checkout-preview',
+    path: '/optimisations/checkout',
+    title: 'Checkout preview',
+    load: () => import('../routes/CheckoutPreview.svelte'),
   },
   { name: 'jobs', path: '/jobs', title: 'Jobs', load: () => import('../routes/Jobs.svelte') },
   { name: 'usage', path: '/usage', title: 'Usage', load: () => import('../routes/Usage.svelte') },

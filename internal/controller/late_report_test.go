@@ -149,6 +149,62 @@ func TestARunnerThatComesBackWithNoJobLeftIsRemoved(t *testing.T) {
 	}
 }
 
+// The late-report path leaves a returned runner's container to finish its job,
+// and the scheduler's reap has to agree with it. The reap spares a failed
+// runner only while it knows a job is running on it, and a pass used to tell it
+// about queued jobs alone, so ten minutes after the failure it removed the row
+// and the container with it, and GitHub failed the job as the runner losing
+// communication. A fleet lost a job exactly that way, three minutes after the
+// controller had written that the job was still running on the runner.
+func TestAReturnedRunnerIsNotReapedWhileItsJobIsStillRunning(t *testing.T) {
+	h := newHarness(t)
+	r, _ := lostRunnerOnAJob(t, h)
+	if err := h.c.ReportRunners(h.ctx, r.HostID, liveReport(r)); err != nil {
+		t.Fatalf("ReportRunners: %v", err)
+	}
+
+	// The first pass crosses failed retention; the second crosses the host
+	// cleanup grace too. Each deletion path must spare the same live job.
+	for _, elapsed := range []time.Duration{11 * time.Minute, 5 * time.Minute} {
+		h.advance(elapsed)
+		if err := h.c.Reconcile(h.ctx); err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		h.c.lifecycleCalls.Wait()
+		if h.hasTaskOfKind(r.HostID, agent.TaskRemoveRunner) {
+			t.Fatal("a deletion path queued a remove task while the job was still running; that kills the job the late-report path kept alive")
+		}
+		kept, err := h.st.GetRunner(h.ctx, r.ID)
+		if err != nil {
+			t.Fatalf("GetRunner: %v", err)
+		}
+		if kept.State != store.RunnerFailed {
+			t.Fatalf("state = %q, want it to stay failed while its job runs", kept.State)
+		}
+	}
+
+	// Once the job is over the row is litter like any other failed runner's,
+	// and the next pass reaps it. The state is what says the reap did it: the
+	// pass's host cleanup queues the container's removal for a finished job on
+	// its own, and leaves the row where it was.
+	h.deliverJob(jobEvent{Action: "completed", JobID: 8801, Name: "build", Workflow: "CI",
+		Labels: []string{"self-hosted", "linux", "x64", "demo"}, RunnerName: r.Name, Conclusion: "success"})
+	if err := h.c.Reconcile(h.ctx); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	h.c.lifecycleCalls.Wait()
+	reaped, err := h.st.GetRunner(h.ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetRunner: %v", err)
+	}
+	if reaped.State != store.RunnerRemoved {
+		t.Fatalf("state = %q once the job had ended, want removed: nothing is running on it any more", reaped.State)
+	}
+	if !h.hasTaskOfKind(r.HostID, agent.TaskRemoveRunner) {
+		t.Fatal("no remove task once the job had ended; the container would stay on the host for ever")
+	}
+}
+
 // A removed row is already the answer: the heartbeat names it as unknown, the
 // agent releases it and the reconciler collects the workload. Reaching the
 // late-report path for one would enqueue a second removal for a runner whose

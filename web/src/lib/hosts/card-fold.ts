@@ -1,0 +1,65 @@
+/**
+ * Which host cards an operator has opened, remembered per browser.
+ *
+ * A card is closed unless its host is on this list, so a host nobody has chosen
+ * for costs nothing. That stops being a short list once "Expand all" is pressed:
+ * it puts every host that was on show on the list, and a host that joins later
+ * is not on it, so it arrives closed. The list is written when a choice is made
+ * and never on sight, for the reason the capacity map gives: a browser that had
+ * merely looked would otherwise have "chosen".
+ */
+export const EXPANDED_KEY = 'zoomies.hosts.expanded';
+
+/**
+ * Whether a stored value is still something to trust. A value left by an older
+ * build, or edited by hand, falls back to every card closed rather than
+ * throwing on the first card that asks.
+ */
+export function isIdList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((id) => typeof id === 'string');
+}
+
+/**
+ * The list after one card is opened or closed. Hosts that no longer exist are
+ * dropped on the way past: machines come and go as pools scale, and without
+ * this the list would keep an id for every host anyone ever opened. It returns
+ * a new list and leaves the one it was given alone, because the page replaces
+ * its state with the answer and an edit in place would repaint nothing.
+ */
+export function setExpanded(
+  ids: readonly string[],
+  id: string,
+  open: boolean,
+  known: readonly string[],
+): string[] {
+  const kept = ids.filter((held) => held !== id && known.includes(held));
+  return open ? [...kept, id] : kept;
+}
+
+/**
+ * Whether every card on show is open. No card on show is not "all open": the
+ * page offers to close what it can see, and with nothing to see it has nothing
+ * to offer.
+ */
+export function allExpanded(ids: readonly string[], shown: readonly string[]): boolean {
+  return shown.length > 0 && shown.every((id) => ids.includes(id));
+}
+
+/**
+ * The list after every card on show is opened or closed together. Only the
+ * cards on show are asked: somebody who narrowed the page to the hosts that need
+ * attention and pressed "Collapse all" has said nothing about the others, so a
+ * card the filter has taken off the page keeps whatever it had. Hosts that no
+ * longer exist are dropped on the way past, as setExpanded drops them, and the
+ * lists it is handed are left alone.
+ */
+export function setAllExpanded(
+  ids: readonly string[],
+  shown: readonly string[],
+  open: boolean,
+  known: readonly string[],
+): string[] {
+  const kept = ids.filter((held) => known.includes(held));
+  if (!open) return kept.filter((held) => !shown.includes(held));
+  return [...kept, ...shown.filter((id) => known.includes(id) && !kept.includes(id))];
+}

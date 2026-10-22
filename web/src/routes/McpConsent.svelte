@@ -8,13 +8,16 @@
   may do.
 
   The redirect host is shown plainly because it is the one thing about the
-  client the controller has checked, and a client whose every redirect is on
-  this computer gets a warning of its own: any program running here can listen
-  on a loopback port and claim to be it.
+  client the controller has checked, and a request that sends the person back to
+  an address on this computer gets a warning of its own: any program running
+  here can listen on a loopback port and claim to be it. The warning is about
+  the address this request sends them to and not about the client's list (see
+  LoopbackOnly in internal/auth/mcp_oauth.go), so a client that also registered
+  an https address is warned about on its loopback one.
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Cable, Laptop, ShieldCheck, TriangleAlert } from '@lucide/svelte';
+  import { Laptop, ShieldCheck, TriangleAlert } from '@lucide/svelte';
   import { ApiError, approveMCPRequest, denyMCPRequest, getMCPRequest } from '$lib/api/client';
   import type { MCPConsent, Role } from '$lib/api/types';
   import { router } from '$lib/router';
@@ -22,9 +25,9 @@
   import { session } from '$lib/state/session.svelte';
   import Button from '$lib/components/Button.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
-  import Logo from '$lib/components/Logo.svelte';
   import RadioGroup from '$lib/components/RadioGroup.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
+  import SplitPage from '$lib/public/SplitPage.svelte';
 
   const ROLE_TEXT: Record<string, string> = {
     viewer: 'Read jobs, runners, pools, hosts, problems and runner logs.',
@@ -120,177 +123,184 @@
   }
 
   const expired = $derived(failure instanceof ApiError && failure.status === 404);
+
+  /*
+    What the stage says. It is the page's purpose in a line, so it changes with
+    the state: a refusal is not a decision, and "you decide" over a page that
+    asks for nothing would be wrong.
+  */
+  const stage = $derived.by(() => {
+    if (refusal.code) {
+      return { headline: 'Nothing was shared.', lede: 'You have not been sent anywhere else.' };
+    }
+    if (!requestId) {
+      return {
+        headline: 'Start from the app.',
+        lede: 'This page is where an app sends you to approve a connection to Zoomies.',
+      };
+    }
+    if (expired) return { headline: 'Start again\nfrom the app.', lede: undefined };
+    return {
+      headline: 'You decide what\nit may do.',
+      lede: 'Zoomies has checked where the app sends you back. Everything else about it is its own description.',
+    };
+  });
 </script>
 
-<div class="consent">
-  <div class="brand"><Logo variant="full" size={28} /></div>
-
-  {#if refusal.code}
-    <section class="card" aria-labelledby="page-heading">
-      <h1 id="page-heading" tabindex="-1">This connection cannot go ahead</h1>
-      <p class="failure" role="alert">
-        <TriangleAlert size={16} aria-hidden="true" />
-        <span>{refusal.description}</span>
-      </p>
-      <p class="muted">
-        Nothing was shared and you have not been sent anywhere else. Go back to the app you came
-        from and try connecting again; if it keeps happening, the app's connector settings need
-        changing. The code was <span class="mono">{refusal.code}</span>; an administrator can find
-        the reason in the controller's log.
-      </p>
-      <div class="actions"><Button href="/">Go to Zoomies</Button></div>
-    </section>
-  {:else if !requestId}
-    <section class="card" aria-labelledby="page-heading">
-      <h1 id="page-heading" tabindex="-1">Nothing to approve</h1>
-      <p class="muted">
-        This page is where an app such as Claude sends you to approve a connection to Zoomies. Start
-        from the app: add a connector with this controller's <span class="mono">/mcp</span> address.
-      </p>
-      <div class="actions"><Button href="/">Go to Zoomies</Button></div>
-    </section>
-  {:else if loading}
-    <section class="card" aria-busy="true" aria-label="Loading the request">
-      <Skeleton width="60%" height="1.75rem" />
-      <Skeleton lines={3} />
-      <Skeleton height="120px" />
-    </section>
-  {:else if expired || (!consent && failure)}
-    <section class="card" aria-labelledby="page-heading">
-      {#if expired}
-        <h1 id="page-heading" tabindex="-1">This request has expired</h1>
-        <p class="muted">
-          It was answered already, or it waited more than fifteen minutes. Go back to the app you
-          came from and connect again.
-        </p>
-      {:else}
-        <ErrorState
-          error={failure}
-          title="The request could not be loaded"
-          onretry={() => location.reload()}
-        />
-      {/if}
-    </section>
-  {:else if consent}
-    <section class="card" aria-labelledby="page-heading">
-      <div class="icon" aria-hidden="true"><Cable size={22} /></div>
-      <h1 id="page-heading" tabindex="-1">
-        Connect <span class="client">{consent.client.name}</span> to Zoomies
-      </h1>
-      <p class="lede">
-        It is asking to use this fleet's MCP tools as you, <strong>{session.displayName}</strong>.
-      </p>
-
-      <dl class="facts">
-        <div>
-          <dt>Sends you back to</dt>
-          <dd><span class="mono host">{consent.redirect_host}</span></dd>
-        </div>
-        <div>
-          <dt>About this app</dt>
-          <dd>{kindText}</dd>
-        </div>
-      </dl>
-
-      {#if consent.loopback_only}
-        <p class="warning" role="note">
-          <Laptop size={16} aria-hidden="true" />
-          <span>
-            Every address this app registered is on <strong>this computer</strong>. Any program
-            running here could claim to be it, so continue only if you started this yourself, from
-            an app you trust such as Claude Code.
-          </span>
-        </p>
-      {/if}
-
-      <RadioGroup bind:value={role} name="connection-role" legend="What it may do" {options} />
-      {#if consent.roles.length === 1}
-        <p class="hint">
-          Your own role is {roleLabel(consent.your_role).toLowerCase()}, so this is the most you can
-          give it.
-        </p>
-      {/if}
-
-      <p class="hint">
-        Repository source access starts with no grants. After connecting, use Source access under
-        Settings, MCP connections to choose available repositories explicitly.
-      </p>
-
-      <p class="scope">
-        <ShieldCheck size={16} aria-hidden="true" />
-        <span>
-          It works on <span class="mono">/mcp</span> only, not the API or this interface, and never with
-          more than your own role. Disconnect it any time under Settings, MCP connections.
-        </span>
-      </p>
-
-      {#if failure}
+<SplitPage
+  eyebrow="Connect an app"
+  headline={stage.headline}
+  lede={stage.lede}
+  version={session.meta?.version}
+>
+  <div class="column">
+    {#if refusal.code}
+      <section class="panel" aria-labelledby="page-heading">
+        <h1 id="page-heading" tabindex="-1">This connection cannot go ahead</h1>
         <p class="failure" role="alert">
           <TriangleAlert size={16} aria-hidden="true" />
-          <span>{failure instanceof Error ? failure.message : 'That did not work; try again.'}</span
-          >
+          <span>{refusal.description}</span>
         </p>
-      {/if}
+        <p class="muted">
+          Nothing was shared and you have not been sent anywhere else. Go back to the app you came
+          from and try connecting again; if it keeps happening, the app's connector settings need
+          changing. The code was <span class="mono">{refusal.code}</span>; an administrator can find
+          the reason in the controller's log.
+        </p>
+        <div class="actions single"><Button href="/" size="lg" full>Go to Zoomies</Button></div>
+      </section>
+    {:else if !requestId}
+      <section class="panel" aria-labelledby="page-heading">
+        <h1 id="page-heading" tabindex="-1">Nothing to approve</h1>
+        <p class="muted">
+          This page is where an app such as Claude sends you to approve a connection to Zoomies.
+          Start from the app: add a connector with this controller's <span class="mono">/mcp</span> address.
+        </p>
+        <div class="actions single"><Button href="/" size="lg" full>Go to Zoomies</Button></div>
+      </section>
+    {:else if loading}
+      <section class="panel" aria-busy="true" aria-label="Loading the request">
+        <Skeleton width="60%" height="1.75rem" />
+        <Skeleton lines={3} />
+        <Skeleton height="120px" />
+      </section>
+    {:else if expired || (!consent && failure)}
+      <section class="panel" aria-labelledby="page-heading">
+        {#if expired}
+          <h1 id="page-heading" tabindex="-1">This request has expired</h1>
+          <p class="muted">
+            It was answered already, or it waited more than fifteen minutes. Go back to the app you
+            came from and connect again.
+          </p>
+        {:else}
+          <ErrorState
+            error={failure}
+            title="The request could not be loaded"
+            onretry={() => location.reload()}
+          />
+        {/if}
+      </section>
+    {:else if consent}
+      <section class="panel" aria-labelledby="page-heading">
+        <h1 id="page-heading" tabindex="-1">
+          Connect <span class="client">{consent.client.name}</span> to Zoomies
+        </h1>
+        <p class="lede">
+          It is asking to use this fleet's MCP tools as you, <strong>{session.displayName}</strong>.
+        </p>
 
-      {#if leavingFor}
-        <p class="leaving" role="status">Taking you back to {leavingFor}…</p>
-      {/if}
+        <dl class="facts">
+          <div>
+            <dt>Sends you back to</dt>
+            <dd><span class="mono host">{consent.redirect_host}</span></dd>
+          </div>
+          <div>
+            <dt>About this app</dt>
+            <dd>{kindText}</dd>
+          </div>
+        </dl>
 
-      <div class="actions">
-        <Button
-          variant="secondary"
-          loading={deciding === 'deny'}
-          disabled={deciding !== null}
-          onclick={() => void decide(false)}>Deny</Button
-        >
-        <Button
-          variant="primary"
-          loading={deciding === 'approve'}
-          disabled={deciding !== null}
-          onclick={() => void decide(true)}>Allow</Button
-        >
-      </div>
-    </section>
-  {/if}
-</div>
+        {#if consent.loopback_only}
+          <p class="warning" role="note">
+            <Laptop size={16} aria-hidden="true" />
+            <span>
+              This app is sending you back to an address on <strong>this computer</strong>. Any
+              program running here could claim to be it, so continue only if you started this
+              yourself, from an app you trust such as Claude Code.
+            </span>
+          </p>
+        {/if}
+
+        <RadioGroup bind:value={role} name="connection-role" legend="What it may do" {options} />
+        {#if consent.roles.length === 1}
+          <p class="hint">
+            Your own role is {roleLabel(consent.your_role).toLowerCase()}, so this is the most you
+            can give it.
+          </p>
+        {/if}
+
+        <p class="hint">
+          Repository source access starts with no grants. After connecting, use Source access under
+          Settings, MCP connections to choose available repositories explicitly.
+        </p>
+
+        <p class="scope">
+          <ShieldCheck size={16} aria-hidden="true" />
+          <span>
+            It works on <span class="mono">/mcp</span> only, not the API or this interface, and never
+            with more than your own role. Disconnect it any time under Settings, MCP connections.
+          </span>
+        </p>
+
+        {#if failure}
+          <p class="failure" role="alert">
+            <TriangleAlert size={16} aria-hidden="true" />
+            <span
+              >{failure instanceof Error ? failure.message : 'That did not work; try again.'}</span
+            >
+          </p>
+        {/if}
+
+        {#if leavingFor}
+          <p class="leaving" role="status">Taking you back to {leavingFor}…</p>
+        {/if}
+
+        <div class="actions">
+          <Button
+            variant="secondary"
+            loading={deciding === 'deny'}
+            disabled={deciding !== null}
+            onclick={() => void decide(false)}>Deny</Button
+          >
+          <Button
+            variant="primary"
+            loading={deciding === 'approve'}
+            disabled={deciding !== null}
+            onclick={() => void decide(true)}>Allow</Button
+          >
+        </div>
+      </section>
+    {/if}
+  </div>
+</SplitPage>
 
 <style>
-  .consent {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--z-space-5);
+  .column {
     width: 100%;
     max-width: var(--z-width-dialog-md);
+    min-width: 0;
   }
-  .brand {
-    color: var(--z-text);
-  }
-  .card {
+  .panel {
     display: flex;
     flex-direction: column;
-    gap: var(--z-space-4);
-    width: 100%;
-    padding: var(--z-space-8);
-    border: var(--z-border-width) solid var(--z-border);
-    border-radius: var(--z-radius-lg);
-    background: var(--z-surface);
-    box-shadow: var(--z-shadow-md);
-  }
-  .icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--z-space-10);
-    height: var(--z-space-10);
-    border-radius: var(--z-radius-full);
-    background: var(--z-accent-subtle);
-    color: var(--z-accent);
+    gap: var(--z-space-3);
+    min-width: 0;
   }
   h1 {
     margin: 0;
-    font-size: var(--z-text-xl);
-    line-height: var(--z-leading-xl);
+    font-size: var(--z-text-2xl);
+    line-height: var(--z-leading-2xl);
+    letter-spacing: var(--z-tracking-tight);
     font-weight: var(--z-weight-semibold);
     color: var(--z-text);
     overflow-wrap: anywhere;
@@ -383,20 +393,33 @@
     color: var(--z-text-muted);
   }
   .actions {
-    display: flex;
-    justify-content: flex-end;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--z-space-3);
     margin-top: var(--z-space-2);
   }
-  @media (max-width: 768px) {
-    .card {
-      padding: var(--z-space-5);
+  /* One action alone is not two columns of half a button. */
+  .actions.single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* On a phone the page is long and the decision is at its foot, so the two
+     buttons stay at the bottom of the screen, side by side, until the page ends.
+     What is focused is kept clear of them by scroll-margin. */
+  @media (max-width: 800px) {
+    .actions:not(.single) {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      margin-inline: calc(-1 * var(--z-space-2));
+      padding: var(--z-space-3) var(--z-space-2) calc(var(--z-space-3) + var(--z-safe-bottom));
+      border-top: var(--z-border-width) solid var(--z-border);
+      background: var(--z-surface);
     }
-    .actions {
-      flex-direction: column-reverse;
-    }
-    .actions :global(> *) {
-      width: 100%;
+    .panel :global(input),
+    .panel :global(button),
+    .panel :global(a),
+    .panel :global(summary) {
+      scroll-margin-bottom: calc(var(--z-space-12) * 2);
     }
   }
 </style>

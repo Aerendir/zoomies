@@ -24,36 +24,17 @@ import {
   resolveLogoTreatment,
   type LogoTreatment,
 } from './logo-treatment';
+import { storage } from './storage';
 
 const PREFS_KEY = 'zoomies.prefs';
 const PREFS_ACCOUNT_KEY = 'zoomies.prefs.account';
 /** Read by the inline script in index.html before first paint. */
 const NAV_KEY = 'zoomies.nav.collapsed';
 
-export const storage = {
-  get(key: string): string | null {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  set(key: string, value: string): void {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // Nothing to do and nothing worth telling the operator: the session simply
-      // does not persist.
-    }
-  },
-  remove(key: string): void {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      /* as above */
-    }
-  },
-};
+// Re-exported so the many modules that read it from here keep doing so; it lives
+// apart because a page that wants only localStorage, such as the status page,
+// must not have to take the API client this module imports along with it.
+export { storage };
 
 /**
  * A choice this browser has made, read back: the stored JSON while it is

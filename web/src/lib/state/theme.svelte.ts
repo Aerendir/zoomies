@@ -1,19 +1,19 @@
 /**
  * Light, dark or whatever the operating system says.
  *
- * `system` is the default and writes no attribute, so `prefers-color-scheme`
- * decides. An explicit choice writes `data-theme` on `<html>` and persists. The
+ * `dark` is the default. `system` writes no attribute, so `prefers-color-scheme`
+ * decides. Every choice writes `data-theme` (bar `system`) and persists. The
  * inline script in index.html applies the stored value before first paint; this
  * module keeps subsequent choices in sync.
  *
  * The one thing an attribute on `<html>` cannot reach is the browser's own
  * chrome, which reads `<meta name="theme-color">`. The two tags in index.html
- * are media-scoped so the "system" default needs no JavaScript at all; an
- * explicit choice pins them here, because otherwise an operator on a dark
- * laptop who asks for the light theme still gets a black bar above a white
- * page.
+ * are media-scoped so "system" needs no JavaScript at all; any other choice
+ * pins them (the inline script before first paint, this module afterwards),
+ * because otherwise an operator on a dark laptop who asks for the light theme
+ * still gets a black bar above a white page.
  */
-import { storage } from './prefs.svelte';
+import { storage } from './storage';
 
 export type ThemeChoice = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
@@ -58,9 +58,10 @@ export function syncBrowserChrome(choice: ThemeChoice): void {
   }
 }
 
+/** Dark is the default; following the system is a choice that has to be stored. */
 function stored(): ThemeChoice {
   const value = storage.get(KEY);
-  return value === 'light' || value === 'dark' ? value : 'system';
+  return value === 'light' || value === 'system' ? value : 'dark';
 }
 
 class Theme {
@@ -94,13 +95,9 @@ class Theme {
   set(choice: ThemeChoice): void {
     this.#choice = choice;
     if (typeof document === 'undefined') return;
-    if (choice === 'system') {
-      document.documentElement.removeAttribute('data-theme');
-      storage.remove(KEY);
-    } else {
-      document.documentElement.setAttribute('data-theme', choice);
-      storage.set(KEY, choice);
-    }
+    if (choice === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', choice);
+    storage.set(KEY, choice);
     syncBrowserChrome(choice);
   }
 

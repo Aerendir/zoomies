@@ -54,12 +54,11 @@ func (a *Agent) applyResourceDirectives(ctx context.Context, d *ThrottleDirectiv
 	a.applyThrottle(ctx, changed)
 }
 
-// boostExpiryMisses is how many heartbeats in a row may go unanswered before a
-// boost is given back.
+// boostExpiryMisses is how many normal heartbeat intervals a boost may go
+// without renewal.
 const boostExpiryMisses = 3
 
-// expireBoosts gives back every boost once the controller has missed
-// boostExpiryMisses heartbeats in a row.
+// expireBoosts checks overdue CPU loans after unanswered heartbeats.
 //
 // A boost is lent on the controller's say-so, from what it judged the host
 // could spare, and is only ever withdrawn by the next plan. With the controller
@@ -72,7 +71,11 @@ const boostExpiryMisses = 3
 func (a *Agent) expireBoosts(ctx context.Context) {
 	a.mu.Lock()
 	a.missedBeats++
-	expire := a.missedBeats >= boostExpiryMisses
+	// A quick retry is another attempt, not another normal interval of
+	// silence. Keep the same time lease as the independent watchdog so a
+	// short controller restart does not take a running job's borrowed CPU.
+	expire := a.missedBeats >= boostExpiryMisses &&
+		!a.boostRenewedAt.IsZero() && time.Since(a.boostRenewedAt) >= boostExpiryMisses*a.heartbtI
 	hadBoost := len(a.elasticCPU) > 0
 	if expire {
 		a.elasticCPU = map[string]float64{}

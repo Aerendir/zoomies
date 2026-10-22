@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { resolveUIStyle, UI_STYLE_KEY } from '../src/lib/state/ui-style';
+import { assertLook, expectedLook, storedLook } from '../tests/support/look.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const bootstrap = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+const bootstrap = /<script>([\s\S]*?)<\/script>/i.exec(html)?.[1];
 assert.ok(bootstrap);
 
 function boot(style: unknown, mode: string | null = null, blocked = false) {
@@ -39,10 +40,23 @@ function boot(style: unknown, mode: string | null = null, blocked = false) {
   return { attrs, tags };
 }
 
-test('unknown visual styles retain Classic in the resolver and before first paint', () => {
-  for (const value of [undefined, null, '', 'classic', 'dark', 'MISSION-CONTROL', {}, '<style>']) {
-    assert.equal(resolveUIStyle(value), 'classic');
-    assert.equal(boot(value).attrs.has('data-ui-style'), false);
+test('unset and unknown visual styles get Mission Control; only a stored classic opts out', () => {
+  for (const value of [undefined, null, '', 'dark', 'MISSION-CONTROL', {}, '<style>']) {
+    assert.equal(resolveUIStyle(value), 'mission-control');
+    assert.equal(boot(value).attrs.get('data-ui-style'), 'mission-control');
+  }
+  assert.equal(resolveUIStyle('classic'), 'classic');
+  assert.equal(boot('classic').attrs.has('data-ui-style'), false);
+});
+
+test('an unset colour mode boots dark', () => {
+  const { attrs, tags } = boot(null, null);
+  assert.equal(attrs.get('data-theme'), 'dark');
+  for (const tag of tags) {
+    assert.equal(
+      tag.data.get('media'),
+      tag.data.get('data-theme-colour') === 'dark' ? 'all' : 'not all',
+    );
   }
 });
 
@@ -63,7 +77,7 @@ test('the stored style and explicit colour mode apply together before first pain
 
 test('system mode keeps its native media queries independently of visual style', () => {
   for (const style of ['classic', 'mission-control']) {
-    const { attrs, tags } = boot(style);
+    const { attrs, tags } = boot(style, 'system');
     assert.equal(attrs.has('data-theme'), false);
     for (const tag of tags) {
       assert.equal(
@@ -74,8 +88,10 @@ test('system mode keeps its native media queries independently of visual style',
   }
 });
 
-test('blocked storage does not prevent the page from booting with Classic and system mode', () => {
-  assert.equal(boot('mission-control', 'dark', true).attrs.size, 0);
+test('blocked storage boots the defaults, the same look the app state resolves to', () => {
+  const { attrs } = boot('classic', 'light', true);
+  assert.equal(attrs.get('data-ui-style'), 'mission-control');
+  assert.equal(attrs.get('data-theme'), 'dark');
 });
 
 test('browser-chrome colours match the actual palette tokens in both styles', () => {
@@ -97,4 +113,50 @@ test('browser-chrome colours match the actual palette tokens in both styles', ()
       /--z-mission-bg:\s*(#[\da-f]{6});/.exec(missionScope)?.[1],
     );
   }
+});
+
+// Every other test here reads the Mission Control colours back, so a bootstrap
+// that gave each look Mission Control's ground left the suite green while a
+// Classic operator's phone drew its address bar in the wrong navy.
+test('Classic keeps its own browser-chrome colours in every colour mode', () => {
+  for (const mode of ['light', 'dark', 'system', null]) {
+    const { attrs, tags } = boot('classic', mode);
+    assert.equal(attrs.has('data-ui-style'), false, `${mode}: Classic names no style`);
+    for (const tag of tags) {
+      const which = tag.data.get('data-theme-colour');
+      assert.equal(
+        tag.data.get('content'),
+        tag.data.get('data-classic-colour'),
+        `${mode}: the ${which} tag`,
+      );
+    }
+  }
+});
+
+// The picture runner (tests/support/screenshots.mjs) photographs one look per
+// pass. An empty browser is dark Mission Control whatever the system says, so a
+// pass has to store the look it means, and this holds it to the bootstrap it relies
+// on: the pass that said light, or Classic, once photographed neither.
+test('a capture pass opens the page on the look it is photographing', () => {
+  for (const scheme of ['light', 'dark'] as const) {
+    for (const style of ['classic', 'mission-control'] as const) {
+      const stored = storedLook(scheme, style);
+      const { attrs } = boot(stored['zoomies.ui-style'], stored['zoomies.theme']);
+      const want = expectedLook(scheme, style);
+      assert.equal(attrs.get('data-theme') ?? null, want.theme, `${scheme} ${style}: theme`);
+      assert.equal(attrs.get('data-ui-style') ?? null, want.style, `${scheme} ${style}: style`);
+    }
+  }
+});
+
+test('a pass whose page opened on another look stops instead of filing the picture', async () => {
+  const opened = (theme: string | null, style: string | null) => ({
+    evaluate: async () => ({ theme, style }),
+  });
+  await assertLook(opened('light', null), 'overview', 'light', 'classic');
+  await assertLook(opened('dark', 'mission-control'), 'overview', 'dark', 'mission-control');
+  await assert.rejects(
+    assertLook(opened('dark', 'mission-control'), 'overview', 'light', 'classic'),
+    /overview opened on dark mission-control but this pass is light classic/,
+  );
 });

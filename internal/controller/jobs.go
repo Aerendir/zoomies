@@ -362,51 +362,56 @@ func (c *Controller) askGitHubToRerun(ctx context.Context, j *store.Job, trigger
 // Only a job that failed can be acknowledged: there is nothing to triage
 // about one that is still running, and marking it would take it out of the
 // attention list before it has an outcome to be out of the list for.
-func (c *Controller) AcknowledgeJob(ctx context.Context, jobID, by string) (*store.Job, error) {
+//
+// Both report whether this call is the one that changed the row. A second
+// press on a failure somebody has already marked changes nothing, and writes
+// no timeline entry; the caller writes its audit row from the same flag, so
+// that the log never credits a person with a decision that was another's.
+func (c *Controller) AcknowledgeJob(ctx context.Context, jobID, by string) (*store.Job, bool, error) {
 	j, err := c.st.GetJob(ctx, jobID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if !j.Failed() {
-		return nil, ErrJobDidNotFail
+		return nil, false, ErrJobDidNotFail
 	}
 	updated, recorded, err := c.st.AcknowledgeJob(ctx, jobID, by)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if recorded {
 		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
 			JobID: updated.ID, Kind: store.JobEventAcknowledged, Source: sourceController,
-			Message: actorName(by) + " marked this failure as known; the attention list stops asking about it, and a re-run that passes is what settles it",
+			Message: acknowledgedMessage(actorName(by)),
 			At:      c.Now(),
 		}); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	c.publishJob(ctx, updated)
-	return updated, nil
+	return updated, recorded, nil
 }
 
 // ReopenJobAttention puts an acknowledged failure back in front of whoever
 // looks next. It is the undo for a row put away by mistake, and it is
 // deliberately as easy as the acknowledgement: a triage decision nobody can
 // take back is one people learn not to make.
-func (c *Controller) ReopenJobAttention(ctx context.Context, jobID, by string) (*store.Job, error) {
+func (c *Controller) ReopenJobAttention(ctx context.Context, jobID, by string) (*store.Job, bool, error) {
 	updated, removed, err := c.st.ClearJobAcknowledgement(ctx, jobID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if removed {
 		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
 			JobID: updated.ID, Kind: store.JobEventReopened, Source: sourceController,
-			Message: actorName(by) + " put this failure back in the failures needing attention",
+			Message: reopenedMessage(actorName(by)),
 			At:      c.Now(),
 		}); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	c.publishJob(ctx, updated)
-	return updated, nil
+	return updated, removed, nil
 }
 
 // actorName is who a timeline sentence credits, given the name an account goes
@@ -417,6 +422,40 @@ func actorName(by string) string {
 		return "an operator"
 	}
 	return by
+}
+
+// The two timeline sentences that name a person are built from the actor, so
+// that a reader who may not be told who it was is given the same sentence with
+// nobody's name in it, rather than the stored one with a guess made at where
+// the name ends.
+func acknowledgedMessage(actor string) string {
+	return actor + " marked this failure as known; the attention list stops asking about it, and a re-run that passes is what settles it"
+}
+
+func reopenedMessage(actor string) string {
+	return actor + " put this failure back in the failures needing attention"
+}
+
+// unnamedActor is who those sentences credit when the reader is a visitor to a
+// public view.
+const unnamedActor = "Somebody"
+
+// JobEventFor is a timeline entry as one audience may read it. A visitor to a
+// public view reads that a failure was marked as known, or put back, and when,
+// and not by whom. The sentence is rebuilt from the entry's kind rather than
+// the stored one being trimmed, so no name can survive in what an older
+// version, or a rename, left in the row.
+func JobEventFor(e store.JobEvent, visitor bool) store.JobEvent {
+	if !visitor {
+		return e
+	}
+	switch e.Kind {
+	case store.JobEventAcknowledged:
+		e.Message = acknowledgedMessage(unnamedActor)
+	case store.JobEventReopened:
+		e.Message = reopenedMessage(unnamedActor)
+	}
+	return e
 }
 
 // A job's timeline is the answer to "what happened to my job?", told in the
@@ -904,6 +943,59 @@ func (c *Controller) expireStaleQueuedJobs(ctx context.Context, now time.Time) {
 	if retired > 0 {
 		// Demand has dropped, and a runner created for the retired job may
 		// now be surplus.
+		c.Nudge()
+	}
+}
+
+// GitHub limits a self-hosted job to five days of execution. The extra hour
+// leaves room for delayed completion delivery and clock disagreement before
+// releasing a runner to the reap. Without a start time, the queue time may
+// include waiting for approval, so use the whole 35-day workflow limit instead.
+const (
+	staleRunningAfter   = 5*24*time.Hour + time.Hour
+	staleUnstartedAfter = 35*24*time.Hour + time.Hour
+)
+
+// expireStaleRunningJobs releases runners pinned by jobs whose run or repository
+// disappeared. A failed GitHub read is not proof of cancellation: only age past
+// GitHub's lifetime limit, including our margin, permits this deletion path.
+func (c *Controller) expireStaleRunningJobs(ctx context.Context, now time.Time) {
+	jobs, err := c.st.ListStaleRunningJobs(ctx, now.Add(-staleRunningAfter), now.Add(-staleUnstartedAfter))
+	if err != nil {
+		c.log.Warn("could not list running jobs to retire stale ones", "error", err)
+		return
+	}
+	retired := false
+	for _, j := range jobs {
+		basis := "recorded start"
+		age := now.Sub(j.QueuedAt)
+		if j.StartedAt != nil {
+			age = now.Sub(*j.StartedAt)
+		} else {
+			basis = "recorded queue time (start unknown, using the 35-day workflow limit)"
+		}
+		done := now
+		saved, change, err := c.st.ApplyJob(ctx, &store.Job{
+			GitHubJobID: j.GitHubJobID, State: store.JobCompleted, Conclusion: "stale", CompletedAt: &done,
+		}, store.JobCondition{State: j.State, StartedAt: j.StartedAt})
+		if err != nil {
+			c.log.Warn("could not retire a stale running job", "job", j.ID, "error", err)
+			continue
+		}
+		if !change.StateChanged {
+			continue
+		}
+		message := fmt.Sprintf("in progress for %s since %s with no completion from GitHub; past GitHub's lifetime limit plus an hour, presumed cancelled or lost, so its runner is no longer protected from cleanup", age.Truncate(time.Minute), basis)
+		if err := c.st.AppendJobEvent(ctx, &store.JobEvent{
+			JobID: saved.ID, Kind: store.JobEventCompleted, Source: sourceController, Message: message, At: now,
+		}); err != nil {
+			c.log.Warn("could not record a job timeline entry", "job", saved.ID, "kind", store.JobEventCompleted, "error", err)
+		}
+		c.log.Warn("retired a running job GitHub never completed", "job", saved.ID, "repo", saved.Repo, "age", age.Truncate(time.Minute))
+		c.publishJob(ctx, saved)
+		retired = true
+	}
+	if retired {
 		c.Nudge()
 	}
 }

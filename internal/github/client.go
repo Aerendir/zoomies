@@ -210,6 +210,8 @@ type WorkflowRunState struct {
 	// name. workflow_job deliveries never carry it, which is what this lookup
 	// is for.
 	RunNumber int64
+	// Event is what started the run: push, pull_request, schedule and so on.
+	Event string
 }
 
 // Cancelled reports whether GitHub has finished the whole run as cancelled.
@@ -417,6 +419,12 @@ type Factory interface {
 // The 64-character limit GitHub enforces is internal/naming's MaxNameLength, so
 // a name is trimmed to fit here rather than refused by the API at registration.
 func RunnerName(pool *store.Pool) string { return store.NewRunnerName(pool) }
+
+// RunnerNameOn names a runner that is going to a known host, so the name GitHub
+// shows says which machine a job ran on.
+func RunnerNameOn(pool *store.Pool, host *store.Host) string {
+	return store.NewRunnerNameOn(pool, host)
+}
 
 // SplitTarget parses "owner" or "owner/repo" into its parts.
 func SplitTarget(target string) (owner, repo string, kind store.TargetType) {

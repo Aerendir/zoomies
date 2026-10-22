@@ -21,7 +21,16 @@
  * every test that turns one on puts it back.
  */
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { dataRows, documentWidth, goto, grid } from './support/fixtures';
+import {
+  dataRows,
+  documentWidth,
+  goto,
+  grid,
+  openEventsFeed,
+  openFleetContext,
+  openHostCard,
+  tokenPixels,
+} from './support/fixtures';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -138,6 +147,8 @@ test.describe('a host and its class', () => {
   }) => {
     await goto(page, '/hosts', 'Hosts');
     const host = card(page);
+    // The class, its sentence and the tags are the card's second tier.
+    await openHostCard(host);
     await expect(host.getByText('Medium class', { exact: true })).toBeVisible();
     await expect(host.getByTestId('host-size-class')).toContainText('Medium');
     // The controller's own sentence, in the open and not only in a tooltip:
@@ -161,6 +172,7 @@ test.describe('a host and its class', () => {
     page,
   }) => {
     await goto(page, '/hosts', 'Hosts');
+    await openHostCard(card(page));
     const dialog = await openTags(page);
     const worked = dialog.getByTestId('derived-tags');
     await expect(worked).toContainText('size=medium');
@@ -194,6 +206,7 @@ test.describe('a host and its class', () => {
     page,
   }) => {
     await goto(page, '/hosts', 'Hosts');
+    await openHostCard(card(page));
     const dialog = await openTags(page);
     await dialog.getByRole('button', { name: 'Add a tag' }).click();
     // The rack and the flag from the last test are rows 1 and 2.
@@ -237,6 +250,7 @@ test.describe('a host and its class', () => {
     page,
   }) => {
     await goto(page, '/hosts', 'Hosts');
+    await openHostCard(card(page));
     const dialog = await openTags(page);
     await dialog.getByRole('button', { name: 'Remove the tag size' }).click();
     await dialog.getByRole('button', { name: 'Save changes' }).click();
@@ -253,7 +267,7 @@ test.describe('a host and its class', () => {
     page,
   }) => {
     await goto(page, '/', 'Overview');
-    const feed = page.getByRole('region', { name: 'Recent events', exact: true });
+    const feed = await openEventsFeed(page);
     // The controller's own sentence, under a title that says what kind of change
     // it was, and named for the host rather than for its id.
     const entry = feed.getByRole('listitem').filter({ hasText: NAME }).first();
@@ -670,7 +684,10 @@ test.describe('pools the controller keeps', () => {
     const valve = dialog.getByRole('group', { name: 'Elastic memory' });
     await expect(valve).toHaveCSS('display', 'flex');
     await expect(valve.locator('legend')).toHaveCSS('border-top-width', '1px');
-    await expect(valve.locator('.hint').first()).toHaveCSS('font-size', '12px');
+    await expect(valve.locator('.hint').first()).toHaveCSS(
+      'font-size',
+      await tokenPixels(page, '--z-text-xs'),
+    );
     await dialog.getByRole('radio', { name: /^Lend memory/ }).check();
     // Swap past a terabyte is a typo, and is said where it is typed.
     const swap = dialog.getByRole('textbox', { name: 'Swap as the last resort', exact: true });
@@ -888,6 +905,8 @@ test.describe('job size', () => {
     });
 
     await goto(page, '/jobs', 'Jobs');
+    // Mission Control folds the page's context away on a phone.
+    await openFleetContext(page);
     const panel = page.getByTestId('size-advice');
     await expect(panel).toContainText('Size labels and pins');
     // The count is on the closed summary, so the report is not found by chance,
@@ -970,6 +989,7 @@ test.describe('job size', () => {
       return route.fulfill({ json: { items: [] } });
     });
     await goto(page, '/jobs', 'Jobs');
+    await openFleetContext(page);
     const panel = page.getByTestId('size-advice');
     await panel.locator('summary').click();
     await expect(panel.getByTestId('advice-none')).toContainText('Nothing to suggest');

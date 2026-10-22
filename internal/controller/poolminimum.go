@@ -92,7 +92,7 @@ func (c *Controller) pairMemoryPeaks(poolID string) (halfPeaks, bool) {
 
 // poolMinimumAdviceProblems is pool.minimum_overcharges.
 func (c *Controller) poolMinimumAdviceProblems(ctx context.Context, out *[]Problem) error {
-	pools, err := c.st.ListPools(ctx)
+	pools, err := c.fleetPools(ctx)
 	if err != nil {
 		return fmt.Errorf("listing pools: %w", err)
 	}
@@ -131,7 +131,7 @@ func (c *Controller) poolMinimumAdviceProblems(ctx context.Context, out *[]Probl
 		return nil
 	}
 	since := c.Now().Add(-minimumEvidenceWindow)
-	stats, err := c.st.JobStats(ctx, store.JobFilter{Since: &since, PoolIDs: ids}, []string{store.GroupByPool})
+	stats, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since, PoolIDs: ids}, []string{store.GroupByPool}, store.MeasurePeaks)
 	if err != nil {
 		return fmt.Errorf("reading what jobs used: %w", err)
 	}
@@ -251,7 +251,7 @@ func (c *Controller) poolMinimumAdviceProblems(ctx context.Context, out *[]Probl
 // for it. Nothing is proposed to apply, because lowering the minimum before that job
 // is somewhere else is what gets it killed; the notice names it and the ways to move it.
 func (c *Controller) minimumHeldByJob(ctx context.Context, p *store.Pool, fleet config.Runners, floor int64, since time.Time) (*Problem, error) {
-	stats, err := c.st.JobStats(ctx, store.JobFilter{Since: &since, PoolIDs: []string{p.ID}}, []string{store.GroupByPool, store.GroupByJobName})
+	stats, err := c.st.JobStatsOf(ctx, store.JobFilter{Since: &since, PoolIDs: []string{p.ID}}, []string{store.GroupByPool, store.GroupByJobName}, store.MeasurePeaks)
 	if err != nil {
 		return nil, fmt.Errorf("reading which job holds pool %s's floor: %w", p.Name, err)
 	}

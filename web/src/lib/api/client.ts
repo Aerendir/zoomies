@@ -477,6 +477,26 @@ export const getJobFacets = (signal?: AbortSignal) =>
 export const listWorkflowRuns = (query?: Query<'listWorkflowRuns'>, signal?: AbortSignal) =>
   api.get<Result<'listWorkflowRuns'>>('/workflow-runs', { query, signal });
 
+/* Analyses ----------------------------------------------------------------- */
+
+/*
+ * The four analyses the CLI, the MCP tools and Eli read too, so the card on a
+ * page and every other reader render one computed answer.
+ */
+export const analyseQueueWait = (query?: Query<'analyseQueueWait'>, signal?: AbortSignal) =>
+  api.get<Result<'analyseQueueWait'>>('/analysis/queue-wait', { query, signal });
+
+export const analyseCompare = (query?: Query<'analyseCompare'>, signal?: AbortSignal) =>
+  api.get<Result<'analyseCompare'>>('/analysis/compare', { query, signal });
+
+export const analyseHostPressure = (query?: Query<'analyseHostPressure'>, signal?: AbortSignal) =>
+  api.get<Result<'analyseHostPressure'>>('/analysis/host-pressure', { query, signal });
+
+export const analyseStartupFailures = (
+  query?: Query<'analyseStartupFailures'>,
+  signal?: AbortSignal,
+) => api.get<Result<'analyseStartupFailures'>>('/analysis/startup-failures', { query, signal });
+
 export const getJobEvents = (id: string, signal?: AbortSignal) =>
   api.get<Result<'getJobEvents'>>(`/jobs/${enc(id)}/events`, { signal });
 
@@ -1380,6 +1400,10 @@ export const requestEliRepair = (body: Body<'requestEliRepair'>) =>
   api.post<Result<'requestEliRepair'>>('/assistant/repairs', { body });
 export const setEliRepairPolicy = (body: Body<'setEliRepairPolicy'>) =>
   api.put<Result<'setEliRepairPolicy'>>('/assistant/repairs/policy', { body });
+export const getEliAutomaticRepairs = (signal?: AbortSignal) =>
+  api.get<Result<'getEliAutomaticRepairs'>>('/assistant/repairs/automatic', { signal });
+export const stopEliAutomaticRepairs = (body: Body<'stopEliAutomaticRepairs'>) =>
+  api.post<Result<'stopEliAutomaticRepairs'>>('/assistant/repairs/automatic/stop', { body });
 export const setEliIdentity = (body: Body<'setEliIdentity'>) =>
   api.put<Result<'setEliIdentity'>>('/assistant/repairs/identity', { body });
 
@@ -1396,6 +1420,11 @@ export const listEliRepairRepositories = (
   });
 export const getEliReadiness = (query: Query<'getEliReadiness'>, signal?: AbortSignal) =>
   api.get<Result<'getEliReadiness'>>('/assistant/repairs/readiness', { query, signal });
+export const getEliRepair = (id: string, signal?: AbortSignal) =>
+  api.get<Result<'getEliRepair'>>(`/assistant/repairs/${enc(id)}`, { signal });
+/** The error lines of one failed job, read from GitHub when asked and kept nowhere. */
+export const getEliErrorOutput = (query: Query<'getEliErrorOutput'>, signal?: AbortSignal) =>
+  api.get<Result<'getEliErrorOutput'>>('/assistant/repairs/error-output', { query, signal });
 export const listEliOpportunities = () =>
   api.get<Result<'listEliOpportunities'>>('/assistant/repairs/opportunities');
 export const actEliOpportunity = (id: string, body: Body<'actEliOpportunity'>) =>
@@ -1414,3 +1443,44 @@ export const getComparison = (
     query: { installation_id: installation, repo },
     signal,
   });
+
+/** Reading workflow source spends GitHub requests, so these are asked for, never polled. */
+export const inspectCheckout = (
+  body: import('./types').CheckoutInspectionRequest,
+  signal?: AbortSignal,
+) =>
+  api.post<import('./types').CheckoutInspection>('/optimisations/checkout/inspections', {
+    body,
+    signal,
+  });
+export const retainCheckoutPreview = (
+  body: import('./types').CheckoutPreviewRequest,
+  signal?: AbortSignal,
+) =>
+  api.post<import('./types').CheckoutPreview>('/optimisations/checkout/previews', { body, signal });
+export const getCheckoutPreview = (
+  id: string,
+  installation: string,
+  repo: string,
+  signal?: AbortSignal,
+) =>
+  api.get<import('./types').CheckoutPreview>(
+    '/optimisations/checkout/previews/' + encodeURIComponent(id),
+    { query: { installation_id: installation, repo }, signal },
+  );
+
+export const getOptimisationEnablement = (signal?: AbortSignal) =>
+  api.get<import('./types').OptimisationEnablement>('/optimisations/enablement', { signal });
+export const setOptimisationEnablement = (enabled: boolean) =>
+  api.put<import('./types').OptimisationEnablement>('/optimisations/enablement', {
+    body: { enabled },
+  });
+
+/** What Adjust recommends for a host, worked out where the controller applies it. */
+export const getHostRecommendation = (id: string, signal?: AbortSignal) =>
+  api.get<import('./types').HostRecommendation>(
+    '/hosts/' + encodeURIComponent(id) + '/recommendation',
+    {
+      signal,
+    },
+  );

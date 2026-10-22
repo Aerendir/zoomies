@@ -168,16 +168,17 @@
     />
   </main>
 {:else if session.phase === 'bootstrap'}
-  <main id="main" class="centred"><Bootstrap /></main>
+  <!-- A page of its own, on the shared public frame, as sign-in is. -->
+  <main id="main"><Bootstrap /></main>
 {:else if (!authenticated || router.pathname === '/login') && !(router.route.bare && router.query.has('error'))}
-  <!-- Full bleed, not centred: the sign-in page is a layout of its own, a
-       brand panel beside the form, and it fills the window. -->
+  <!-- Not centred: the sign-in page is a layout of its own, the stage beside
+       the form on the public frame, and it fills the window. -->
   <main id="main"><InstanceNotice showFence={false} /><Login /></main>
 {:else if router.route.bare}
   <!-- A page that stands alone: the MCP consent screen. A refusal it shows
        needs nobody signed in, because the client's request was the problem,
        not the person reading it. -->
-  <main id="main" class="centred" tabindex="-1">
+  <main id="main" class:centred={router.error || router.loading || !Page} tabindex="-1">
     {#if router.error}
       <ErrorState
         error={router.error}

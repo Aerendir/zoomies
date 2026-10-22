@@ -51,6 +51,7 @@ type Config struct {
 	UI             UI             `yaml:"ui"`
 	Backup         Backup         `yaml:"backup"`
 	Assistant      Assistant      `yaml:"assistant"`
+	Optimisation   Optimisation   `yaml:"optimisation"`
 
 	// Bootstrap is the first identity an unattended install asks for. It is
 	// read from the environment only -- see Bootstrap.
@@ -562,6 +563,19 @@ type Assistant struct {
 	LocalOnly bool `yaml:"local_only"`
 }
 
+// Optimisation holds the two switches that gate reviewed workflow
+// optimisations. Both default to off: reading a repository's workflow source and
+// previewing an edit to it are separate grants, and neither is implied by
+// Eli being enabled.
+type Optimisation struct {
+	// SourceReads lets the controller read a workflow file at a run's commit so
+	// an operator can review it.
+	SourceReads bool `yaml:"source_reads"`
+	// WorkflowEdits lets the controller compute and retain a proposed change to
+	// a workflow file. It publishes nothing.
+	WorkflowEdits bool `yaml:"workflow_edits"`
+}
+
 type Security struct {
 	// EncryptionKey is a base64 or hex 32-byte key. Prefer EncryptionKeyFile
 	// or the ZOOMIES_ENCRYPTION_KEY environment variable; a key written into
@@ -878,6 +892,13 @@ type Scheduler struct {
 	// pressure holds still refuse new starts while the pressure is acute, and
 	// nothing outlasts them.
 	HostThrottling bool `yaml:"host_throttling"`
+	// HostAutoAdjust is the fleet's default for whether the controller keeps a
+	// host's capacity and reserve at what it recommends for the machine and the
+	// pools' runner size, re-working the figures as the machine's reports and the
+	// pools change. A host's own setting, on or off, overrides it. On by
+	// default, so a machine nobody sized does not fill its disk; a host set to
+	// never adjust keeps the figures an operator typed.
+	HostAutoAdjust bool `yaml:"host_auto_adjust"`
 }
 
 // Log configures structured logging.
@@ -1236,6 +1257,7 @@ func Default() *Config {
 			HostOrder:               "headroom",
 			HistorySizing:           "shadow",
 			HostThrottling:          true,
+			HostAutoAdjust:          true,
 			AutoRerunLimit:          1,
 			// Everything about size classes is off until an operator turns it
 			// on, and the figures below are what it does when they do. They are
@@ -1988,7 +2010,7 @@ func (c *Config) applyEnvFrom(lookup func(string) (string, bool)) error {
 	var errs []string
 	for _, s := range Settings() {
 		raw, ok := lookup(s.Env)
-		if !ok {
+		if !ok || s.blankSaysNothing(raw) {
 			continue
 		}
 		if _, err := c.SetValueString(s.Key, raw); err != nil {

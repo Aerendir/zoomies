@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -156,6 +157,14 @@ func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) 
 			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "by=version"},
 		"a release named as b to a comparison by period": {query: analysisQuery(since, until, url.Values{"by": {"period"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "by=version"},
+		"an a longer than a release's name can be": {query: analysisQuery(since, until, url.Values{"a": {strings.Repeat("v", maxReleaseName+1)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "longer than a release's name can be"},
+		"a b longer than a release's name can be": {query: analysisQuery(since, until, url.Values{"b": {strings.Repeat("v", maxReleaseName+1)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "b", wantSubstring: "longer than a release's name can be"},
+		// The bound is bytes, as the installer's is: a hundred characters of two
+		// bytes each is two hundred.
+		"an a of a hundred two-byte characters": {query: analysisQuery(since, until, url.Values{"a": {strings.Repeat("é", 100)}}),
+			status: http.StatusBadRequest, code: codeBadRequest, field: "a", wantSubstring: "128 bytes at most"},
 		"the same release twice": {query: analysisQuery(since, until, url.Values{"a": {"v1.3.3"}, "b": {"v1.3.3"}}),
 			status: http.StatusBadRequest, code: codeAnalysisSameRelease, field: "a", want: controller.ErrSameRelease},
 		"a fleet with no two releases": {query: analysisQuery(since, until, nil),
@@ -180,6 +189,37 @@ func TestCompareRouteRefusesWhatItCannotCompareWithItsOwnSentence(t *testing.T) 
 		if !strings.Contains(env.Error.Message, c.wantSubstring) {
 			t.Errorf("%s: the refusal says %q; want it to say %q", name, env.Error.Message, c.wantSubstring)
 		}
+	}
+}
+
+// JSON Schema counts maxLength in characters and the route counts bytes, the
+// unit the installer holds a binary's version to. Declared as maxLength: 128
+// the contract promised that a name of a hundred two-byte characters would be
+// taken, and the route answered it with a 400. The two parameters say how many
+// bytes instead, and declare no maxLength for a client to read as characters.
+func TestTheContractBoundsAReleaseNameInTheBytesTheRouteCounts(t *testing.T) {
+	doc := loadSpec(t)
+	paths, _ := doc["paths"].(map[string]any)
+	compare, _ := paths["/analysis/compare"].(map[string]any)
+	get, _ := compare["get"].(map[string]any)
+	params, _ := get["parameters"].([]any)
+	found := map[string]bool{}
+	for _, p := range params {
+		param, _ := p.(map[string]any)
+		name, _ := param["name"].(string)
+		if name != "a" && name != "b" {
+			continue
+		}
+		found[name] = true
+		if schema, _ := param["schema"].(map[string]any); schema["maxLength"] != nil {
+			t.Errorf("parameter %s declares maxLength %v, which JSON Schema counts in characters; the route counts bytes", name, schema["maxLength"])
+		}
+		if d, _ := param["description"].(string); !strings.Contains(d, fmt.Sprintf("at most %d bytes", maxReleaseName)) {
+			t.Errorf("parameter %s does not say it is at most %d bytes: %q", name, maxReleaseName, d)
+		}
+	}
+	if len(found) != 2 {
+		t.Fatalf("the contract's compare operation has parameters %v; want both a and b", found)
 	}
 }
 
@@ -246,14 +286,25 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 	pool := h.pool(h.installation(), "linux")
 	host := h.host("failing")
 	_, cookie := h.user("viewer", store.RoleViewer)
+	// The route ends the window at its own instant, and the store stamps and
+	// reads whole milliseconds with a strict "<", so a runner stamped by the
+	// real clock a few microseconds before the request can share its
+	// millisecond and fall outside the window: this test counted two failures
+	// instead of three about one run in forty. The runners were asked for ten
+	// minutes ago instead.
+	asked := time.Now().Add(-10 * time.Minute)
 	for i := 0; i < 3; i++ {
 		r := h.runner(pool, host, store.RunnerProvisioning)
+		if err := h.st.SetRunnerCreatedAt(h.ctx, r.ID, asked); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := h.st.FailRunner(h.ctx, r.ID, "pull access denied for ghcr.io/acme/missing", store.FaultImage); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// The runners are stamped by the store's clock, so the window reaches a
-	// minute past now to hold them.
+	// The window reaches a minute past now. The controller reads an until past
+	// now as now, so each read ends at its own instant, and the route's is the
+	// one the controller's answer is compared at.
 	until := time.Now().UTC().Truncate(time.Second).Add(time.Minute)
 	since := until.Add(-time.Hour)
 
@@ -262,7 +313,14 @@ func TestStartupFailuresRouteAnswersTheControllersFinding(t *testing.T) {
 	} {
 		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/startup-failures" + analysisQuery(since, until, extra), cookie: cookie})
 		resp.mustStatus(t, http.StatusOK, "the startup failures of "+name)
-		want, err := h.ctrl.AnalyseStartupFailures(h.ctx, controller.AnalysisWindow{Since: since, Until: until}, extra.Get("pool_id"), extra.Get("host_id"))
+		var read struct {
+			Until time.Time `json:"until"`
+		}
+		resp.into(t, &read)
+		if !read.Until.Before(until) || read.Until.After(time.Now()) {
+			t.Errorf("%s: the finding ends at %v, past the instant it was read", name, read.Until)
+		}
+		want, err := h.ctrl.AnalyseStartupFailures(h.ctx, controller.AnalysisWindow{Since: since, Until: read.Until}, extra.Get("pool_id"), extra.Get("host_id"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -353,6 +411,57 @@ func TestAnAnalysisRefusesAWindowThatEndsBeforeItStarts(t *testing.T) {
 		}
 		if env.Error.Field != want {
 			t.Errorf("%s: the refusal is on %q; want %q: %s", name, env.Error.Field, want, env.Error.Message)
+		}
+	}
+}
+
+// A period that begins in the future holds nothing that has happened. The
+// route says so on since, in the controller's sentence, rather than answering
+// for an empty period as if it had been quiet.
+func TestAnAnalysisRefusesAPeriodThatBeginsAfterNow(t *testing.T) {
+	h := newHarness(t)
+	host := h.host("vm-1")
+	_, cookie := h.user("viewer", store.RoleViewer)
+	ahead := time.Now().UTC().Truncate(time.Second).Add(time.Hour)
+	for _, path := range []string{"queue-wait", "compare", "host-pressure", "startup-failures"} {
+		extra := url.Values{}
+		if path == "host-pressure" {
+			extra.Set("host_id", host.ID)
+		}
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/" + path + analysisQuery(ahead, ahead.Add(time.Hour), extra), cookie: cookie})
+		resp.mustStatus(t, http.StatusBadRequest, path+" over a period that begins after now")
+		var env errorEnvelope
+		resp.into(t, &env)
+		if env.Error.Field != "since" || env.Error.Message != controller.ErrSinceNotPast.Error() {
+			t.Errorf("%s: the refusal is %q on %q; want the controller's sentence on since", path, env.Error.Message, env.Error.Field)
+		}
+	}
+}
+
+// An until past now ends now before the route works anything out from it. An
+// operator who asks about today up to tomorrow's midnight, as the CLI's
+// whole-day form invites, is answered for today: not refused on a since they
+// never sent, and not refused as too long for hours that have not happened.
+func TestAnAnalysisWindowEndingInTheFutureIsReadUpToNow(t *testing.T) {
+	h := newHarness(t)
+	_, cookie := h.user("viewer", store.RoleViewer)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	for name, q := range map[string]string{
+		"no since, until two days out":          analysisQuery(time.Time{}, now.Add(48*time.Hour), nil),
+		"since at the limit, until an hour out": analysisQuery(now.Add(-90*24*time.Hour+time.Minute), now.Add(time.Hour), nil),
+	} {
+		before := time.Now()
+		resp := h.do(request{method: http.MethodGet, path: "/api/v1/analysis/queue-wait" + q, cookie: cookie})
+		after := time.Now()
+		resp.mustStatus(t, http.StatusOK, name)
+		var got struct{ Since, Until time.Time }
+		resp.into(t, &got)
+		if got.Until.Before(before.Add(-time.Second)) || got.Until.After(after) {
+			t.Errorf("%s: until is %v; want now, between %v and %v", name, got.Until, before, after)
+		}
+		if !got.Since.Before(got.Until) {
+			t.Errorf("%s: since %v is not before until %v", name, got.Since, got.Until)
 		}
 	}
 }

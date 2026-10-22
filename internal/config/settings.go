@@ -302,6 +302,14 @@ var registry = buildRegistry([]Setting{
 		Summary: "Refuse any assistant connection that resolves to a public address, after resolving it, so nothing the assistant is told can leave this machine or the LAN whatever a provider row says. A hosted provider cannot be reached while this is on.",
 	},
 	{
+		Key: "optimisation.source_reads", Label: "Read workflow source for optimisation previews", Env: "ZOOMIES_OPTIMISATION_SOURCE_READS", Kind: KindBool, Scope: ScopeInstance, Live: true,
+		Summary: "Let the controller read one workflow file at a run's commit, through the installation's own GitHub access, so an operator can review it before a checkout optimisation is previewed. Off, no source is read. It does not turn on workflow edits and no model sees the file.",
+	},
+	{
+		Key: "optimisation.workflow_edits", Label: "Preview workflow edits", Env: "ZOOMIES_OPTIMISATION_WORKFLOW_EDITS", Kind: KindBool, Scope: ScopeInstance, Live: true,
+		Summary: "Let the controller compute and keep, for fourteen days, a proposed change to a workflow file, such as reading one commit instead of the full history. Nothing is published, no pull request is opened and no job is run. Needs optimisation.source_reads as well.",
+	},
+	{
 		Key: "security.disable_auth", Label: "Disable authentication", Env: "ZOOMIES_DISABLE_AUTH", Kind: KindBool, Scope: ScopePlatform,
 		Summary:       "Remove all authentication. It exists for local development, and it is refused wherever this controller looks reachable.",
 		RestartReason: "the authentication service takes its security settings when it is built",
@@ -685,6 +693,10 @@ var registry = buildRegistry([]Setting{
 	{
 		Key: "scheduler.host_throttling", Label: "Throttle hosts under pressure", Env: "ZOOMIES_HOST_THROTTLING", Kind: KindBool, Scope: ScopeInstance, Live: true,
 		Summary: "Let the controller throttle a host its measurements say is overwhelmed, and step it back up after a stretch of calm.",
+	},
+	{
+		Key: "scheduler.host_auto_adjust", Label: "Keep hosts at their recommended size", Env: "ZOOMIES_HOST_AUTO_ADJUST", Kind: KindBool, Scope: ScopeInstance, Live: true,
+		Summary: "Let the controller keep every host's capacity and reserve at what Zoomies recommends for its machine, disk and the pools' runner size, and re-work them as the host reports and the pools change. This covers hosts the fleet rents from a provider. A host can be set on or off by itself. On by default; a host set to never adjust keeps the figures an operator typed.",
 	},
 	{
 		Key: "scheduler.auto_rerun", Label: "Re-run jobs the fleet broke", Env: "ZOOMIES_AUTO_RERUN", Kind: KindBool, Scope: ScopeInstance, Live: true,
@@ -1183,7 +1195,7 @@ func StoredSettings() []Setting {
 var SectionOrder = []string{
 	"server", "database", "security", "github", "agent", "runners", "scheduler",
 	"log", "oidc", "metrics", "status", "retention", "limits", "backup", "images", "updates", "capacity_demand",
-	"provider", "kennel", "ui", "assistant",
+	"provider", "kennel", "optimisation", "ui", "assistant",
 }
 
 // CompareKeys orders two dotted keys by section first and then alphabetically,

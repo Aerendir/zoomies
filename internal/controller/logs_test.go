@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -332,5 +333,201 @@ func TestAFailedLogTaskEndsTheRelayWithTheAgentsReason(t *testing.T) {
 				t.Fatal("no fresh stream_logs task was queued for the second viewer")
 			}
 		})
+	}
+}
+
+// A viewer must never join the stream the last one is leaving: its channel
+// would be closed under it moments later. The maps are emptied under the same
+// lock that decides "last viewer", so every join either attaches to a live
+// stream or starts a fresh one, and every channel is ended by the relay itself.
+func TestUnsubscribeAndSubscribeCannotInterleave(t *testing.T) {
+	h := newHarness(t)
+	_, pool, host := h.fleet()
+	r := h.runnerRow(pool, host, store.RunnerBusy)
+
+	const joiners = 16
+	for round := 0; round < 20; round++ {
+		_, cancel, err := h.c.OpenLogStream(h.ctx, r.ID, backend.LogOptions{Follow: true})
+		if err != nil {
+			t.Fatalf("round %d: first OpenLogStream: %v", round, err)
+		}
+		oldID := h.c.relay.streamIDFor(r.ID)
+
+		type joined struct {
+			ch     <-chan []byte
+			cancel func()
+			err    error
+		}
+		results := make(chan joined, joiners)
+		for i := 0; i < joiners; i++ {
+			go func() {
+				ch, joinCancel, err := h.c.OpenLogStream(h.ctx, r.ID, backend.LogOptions{Follow: true})
+				results <- joined{ch: ch, cancel: joinCancel, err: err}
+			}()
+		}
+
+		// The last viewer leaves while the others are arriving.
+		cancel()
+
+		for i := 0; i < joiners; i++ {
+			res := <-results
+			if res.err != nil {
+				if !errors.Is(res.err, ErrStreamUnknown) {
+					t.Fatalf("round %d: a join failed with %v, want a stream or ErrStreamUnknown", round, res.err)
+				}
+				continue
+			}
+			res.cancel()
+			select {
+			case <-res.ch:
+			case <-time.After(2 * time.Second):
+				t.Fatalf("round %d: a joined subscriber was neither fed nor closed", round)
+			}
+		}
+
+		if id := h.c.relay.streamIDFor(r.ID); id != "" {
+			t.Fatalf("round %d: stream %s is still registered after every viewer left", round, id)
+		}
+		// A viewer arriving after the teardown gets a stream of its own, never
+		// the one that was just removed.
+		_, cancelNext, err := h.c.OpenLogStream(h.ctx, r.ID, backend.LogOptions{Follow: true})
+		if err != nil {
+			t.Fatalf("round %d: OpenLogStream after teardown: %v", round, err)
+		}
+		if id := h.c.relay.streamIDFor(r.ID); id == "" || id == oldID {
+			t.Fatalf("round %d: a later viewer got stream %q, want a new one (old was %q)", round, id, oldID)
+		}
+		cancelNext()
+	}
+}
+
+// budgetResettingReader produces one chunk while the stream has no allowance,
+// then refills it for the next chunk, so the relay has something to drop and a
+// later send on which to report it.
+type budgetResettingReader struct {
+	stream *logStream
+	now    func() time.Time
+	step   int
+}
+
+func (r *budgetResettingReader) Read(p []byte) (int, error) {
+	switch r.step {
+	case 0:
+		r.step++
+		r.stream.budgetMu.Lock()
+		r.stream.budget = 0
+		r.stream.budgetAt = r.now().Add(time.Hour)
+		r.stream.budgetMu.Unlock()
+		return copy(p, "refused bytes\n"), nil
+	case 1:
+		r.step++
+		r.stream.budgetMu.Lock()
+		r.stream.budget = logStreamBurst
+		r.stream.budgetAt = r.now()
+		r.stream.budgetMu.Unlock()
+		return copy(p, "accepted after the gap\n"), nil
+	default:
+		return 0, io.EOF
+	}
+}
+
+// The agent says in band what its buffer refused, and the controller owes the
+// same sentence: without it a downloaded file cannot be told from one with a
+// silent hole in the middle.
+func TestTheRelaySaysWhatItDropped(t *testing.T) {
+	h := newHarness(t)
+	_, pool, host := h.fleet()
+	r := h.runnerRow(pool, host, store.RunnerBusy)
+
+	ch, cancel, err := h.c.OpenLogStream(h.ctx, r.ID, backend.LogOptions{Follow: true})
+	if err != nil {
+		t.Fatalf("OpenLogStream: %v", err)
+	}
+	defer cancel()
+	streamID := h.taskOfKind(host.ID, agent.TaskStreamLogs).StreamID
+
+	h.c.relay.mu.Lock()
+	stream := h.c.relay.streams[streamID]
+	h.c.relay.mu.Unlock()
+	if stream == nil {
+		t.Fatal("the stream the viewer joined is not registered")
+	}
+
+	reader := &budgetResettingReader{stream: stream, now: h.c.Now}
+	if err := h.c.AcceptLogStream(host.ID, streamID, reader); err != nil {
+		t.Fatalf("AcceptLogStream: %v", err)
+	}
+
+	got := drain(t, ch, 2*time.Second)
+	if !bytes.Contains(got, []byte("dropped")) {
+		t.Fatalf("the viewer received %q, want a notice naming the dropped bytes", got)
+	}
+	if !bytes.Contains(got, []byte("accepted after the gap")) {
+		t.Fatalf("the accepted output after the gap did not arrive: %q", got)
+	}
+}
+
+// A second tab asks for a tail too. It joins the live stream for what comes
+// next, and gets a short-lived relay of its own for the backlog it asked for;
+// the first viewer's stream must not be restarted or duplicated.
+func TestASecondViewerGetsTheTailItAskedFor(t *testing.T) {
+	h := newHarness(t)
+	_, pool, host := h.fleet()
+	r := h.runnerRow(pool, host, store.RunnerBusy)
+
+	_, cancel1, err := h.c.OpenLogStream(h.ctx, r.ID, backend.LogOptions{Follow: true, Tail: 10})
+	if err != nil {
+		t.Fatalf("first OpenLogStream: %v", err)
+	}
+	defer cancel1()
+	liveID := h.taskOfKind(host.ID, agent.TaskStreamLogs).StreamID
+
+	ch, cancel2, err := h.c.OpenLogStream(h.ctx, r.ID, backend.LogOptions{Follow: true, Tail: 3})
+	if err != nil {
+		t.Fatalf("second OpenLogStream: %v", err)
+	}
+	defer cancel2()
+
+	var tailTask agent.Task
+	var streams int
+	for _, task := range h.tasksFor(host.ID) {
+		if task.Kind != agent.TaskStreamLogs {
+			continue
+		}
+		streams++
+		if task.StreamID != liveID {
+			tailTask = task
+		}
+	}
+	if streams != 2 {
+		t.Fatalf("queued %d stream tasks for a joiner asking for a tail, want 2", streams)
+	}
+	if tailTask.StreamID == "" || tailTask.LogOptions == nil {
+		t.Fatalf("no tail relay was queued: %v", h.tasksFor(host.ID))
+	}
+	if tailTask.LogOptions.Follow || tailTask.LogOptions.Tail != 3 {
+		t.Fatalf("tail relay options = %+v, want a non-following tail of 3", tailTask.LogOptions)
+	}
+	// The tail relay is a second stream; it must not become the one later
+	// viewers join in place of the live stream.
+	if id := h.c.relay.streamIDFor(r.ID); id != liveID {
+		t.Fatalf("the runner's live stream is %q, want the original %q", id, liveID)
+	}
+
+	if err := h.c.AcceptLogStream(host.ID, tailTask.StreamID, strings.NewReader("the old tail\n")); err != nil {
+		t.Fatalf("tail AcceptLogStream: %v", err)
+	}
+	if err := h.c.AcceptLogStream(host.ID, liveID, strings.NewReader("the new output\n")); err != nil {
+		t.Fatalf("live AcceptLogStream: %v", err)
+	}
+
+	got := string(drain(t, ch, 2*time.Second))
+	tailAt := strings.Index(got, "the old tail")
+	liveAt := strings.Index(got, "the new output")
+	if tailAt < 0 || liveAt < 0 {
+		t.Fatalf("the second viewer received %q, want both the tail and the live output", got)
+	}
+	if tailAt > liveAt {
+		t.Fatalf("the tail arrived after the live output: %q", got)
 	}
 }

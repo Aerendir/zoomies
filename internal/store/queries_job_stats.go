@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -112,18 +113,58 @@ type JobStatsResult struct {
 	Truncated bool
 }
 
-// JobStats aggregates the completed jobs f selects, grouped by up to two keys.
+// JobMeasures chooses which of the figures of a JobStatsGroup are worked out. Each
+// is a statement of its own over the same window, and the dearest are the three
+// that find a percentile, so a caller that reads one figure should not pay for
+// the rest: the problems list reads the queue wait of the pools, the duration of
+// the job names and the peak memory of a pool, each by itself, on every pass a
+// browser is watching.
+type JobMeasures uint8
+
+const (
+	// MeasureCounts is Count, Succeeded, Failed, Cancelled, FleetFailed and
+	// FleetFailureRate.
+	MeasureCounts JobMeasures = 1 << iota
+	// MeasureFaultKinds is FleetFailedByKind.
+	MeasureFaultKinds
+	// MeasurePeaks is PeakCPUs, PeakMemoryMB, OOMKilled, MeasuredMemory and the
+	// three figures about the halves of a docker-in-docker pair.
+	MeasurePeaks
+	// MeasureDuration, MeasureQueueWait and MeasureStartup are the percentiles of
+	// the same names.
+	MeasureDuration
+	MeasureQueueWait
+	MeasureStartup
+
+	// MeasureAll is every figure, which is what JobStats gives.
+	MeasureAll = MeasureCounts | MeasureFaultKinds | MeasurePeaks | MeasureDuration | MeasureQueueWait | MeasureStartup
+)
+
+// JobStats aggregates the completed jobs f selects, grouped by up to two keys,
+// with every figure worked out.
+func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*JobStatsResult, error) {
+	return s.JobStatsOf(ctx, f, groupBy, MeasureAll)
+}
+
+// JobStatsOf is JobStats for the figures in want. The groups are the same
+// whatever is asked for, with the same keys, in the same order, cut off at the
+// same place, and a figure that was not asked for holds its zero value (nil for
+// FleetFailedByKind and the peaks), which reads as "none", not as "unknown": a
+// caller reads only what it asked for.
 //
 // Everything is computed in SQL, on the window the caller bounded: the counts
-// with GROUP BY, and each percentile with a window function that numbers a
-// group's samples in order and keeps the ones at the p50 and p95 positions.
-// SQLite has no percentile aggregate, and reading every sample into Go to
-// sort it would make the cost of a request the size of the window rather than
-// of the answer.
+// with GROUP BY, and each percentile from the group's samples in order, which
+// SQLite sorts and joins into one string (group_concat with an ORDER BY of its
+// own), with the two positions worked out beside it. SQLite has no percentile
+// aggregate. The window functions this replaced counted a group and numbered its
+// samples in passes that sorted the window three times, and took a third to a half
+// longer at ten thousand jobs; Go is left with a pass over the text to the two
+// samples, and holds a group's samples as text, about seven bytes each, for as
+// long as that takes.
 //
-// The position is the one the Overview's percentiles use -- index
-// round((n-1)*q) into the sorted samples -- so a figure here and the same one
-// on the Overview cannot differ by a rounding rule.
+// The position is the one the Overview's percentiles use, index round((n-1)*q)
+// into the sorted samples, so a figure here and the same one on the Overview
+// cannot differ by a rounding rule.
 //
 // Duration leaves out cancelled and skipped jobs, which stop when somebody
 // says so rather than when the work is done, and would drag a release's median
@@ -132,7 +173,7 @@ type JobStatsResult struct {
 // container start less its creation, so it exists only for jobs whose runner
 // row is still kept (retention.runners) and is measured from the same two
 // stamps as the Overview's startup figures.
-func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*JobStatsResult, error) {
+func (s *Store) JobStatsOf(ctx context.Context, f JobFilter, groupBy []string, want JobMeasures) (*JobStatsResult, error) {
 	if len(groupBy) > 2 {
 		return nil, fmt.Errorf("store: at most two group_by keys, got %d", len(groupBy))
 	}
@@ -175,115 +216,198 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 		return m
 	}
 
-	rows, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, COUNT(*), MIN(q),
-		SUM(CASE WHEN conclusion = 'success' AND runner_fault = '' THEN 1 ELSE 0 END),
-		SUM(CASE WHEN `+failedJobSQL()+` THEN 1 ELSE 0 END),
-		SUM(CASE WHEN conclusion IN ('cancelled','skipped') AND runner_fault = '' THEN 1 ELSE 0 END),
-		SUM(CASE WHEN `+fleetFailedJobSQL()+` THEN 1 ELSE 0 END)
-		FROM base GROUP BY k1, k2`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var k gk
-		var g JobStatsGroup
-		var firstQueued int64
-		if err := rows.Scan(&k.a, &k.b, &g.Count, &firstQueued, &g.Succeeded, &g.Failed, &g.Cancelled, &g.FleetFailed); err != nil {
-			return nil, err
+	byKind := func() map[string]int {
+		if want&MeasureFaultKinds == 0 {
+			return nil
 		}
-		g.Keys, g.FleetFailedByKind = keyMap(k), map[string]int{}
-		if g.Count > 0 {
-			g.FleetFailureRate = float64(g.FleetFailed) / float64(g.Count)
-		}
-		groups[k], first[k] = &g, firstQueued
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		return map[string]int{}
 	}
 
-	kinds, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, COALESCE(NULLIF(fault_kind, ''), 'unclassified'), COUNT(*)
-		FROM base WHERE `+fleetFailedJobSQL()+` GROUP BY 1, 2, 3`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer kinds.Close()
-	for kinds.Next() {
-		var k gk
-		var kind string
-		var n int
-		if err := kinds.Scan(&k.a, &k.b, &kind, &n); err != nil {
-			return nil, err
-		}
-		if g := groups[k]; g != nil {
-			g.FleetFailedByKind[kind] = n
-		}
-	}
-	if err := kinds.Err(); err != nil {
-		return nil, err
-	}
-
-	peaks, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, MAX(pc), MAX(pm), SUM(oom), COUNT(pm), MAX(prm), MAX(pdm),
-		SUM(CASE WHEN prm > 0 AND pdm > 0 THEN 1 ELSE 0 END) FROM base GROUP BY k1, k2`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer peaks.Close()
-	for peaks.Next() {
-		var k gk
-		var pc sql.NullFloat64
-		var pm sql.NullInt64
-		var oom, measured, halves int
-		var prm, pdm int64
-		if err := peaks.Scan(&k.a, &k.b, &pc, &pm, &oom, &measured, &prm, &pdm, &halves); err != nil {
-			return nil, err
-		}
-		if g := groups[k]; g != nil {
-			if pc.Valid {
-				g.PeakCPUs = &pc.Float64
-			}
-			if pm.Valid {
-				g.PeakMemoryMB = &pm.Int64
-			}
-			g.OOMKilled = oom
-			g.MeasuredMemory = measured
-			g.PeakRunnerMemoryMB, g.PeakDaemonMemoryMB, g.MeasuredHalves = prm, pdm, halves
-		}
-	}
-	if err := peaks.Err(); err != nil {
-		return nil, err
-	}
-
-	for _, m := range []struct {
+	// The percentiles. col is one of the three literals below, never caller input.
+	type figure struct {
 		col  string
+		is   JobMeasures
 		into func(*JobStatsGroup) *JobPercentiles
-	}{
-		{"dur", func(g *JobStatsGroup) *JobPercentiles { return &g.Duration }},
-		{"wait", func(g *JobStatsGroup) *JobPercentiles { return &g.QueueWait }},
-		{"startup", func(g *JobStatsGroup) *JobPercentiles { return &g.Startup }},
-	} {
-		// col is one of the three literals above, never caller input.
-		pr, err := s.read.QueryContext(ctx, base+`SELECT k1, k2, MAX(n),
-			MAX(CASE WHEN rn = CAST((n - 1) * 0.5 + 0.5 AS INTEGER) + 1 THEN v END),
-			MAX(CASE WHEN rn = CAST((n - 1) * 0.95 + 0.5 AS INTEGER) + 1 THEN v END)
-			FROM (SELECT k1, k2, `+m.col+` AS v,
-					ROW_NUMBER() OVER (PARTITION BY k1, k2 ORDER BY `+m.col+`) AS rn,
-					COUNT(*) OVER (PARTITION BY k1, k2) AS n
-				FROM base WHERE `+m.col+` IS NOT NULL)
-			GROUP BY k1, k2`, args...)
+		// common is true for the figures that nearly every job has. A job without
+		// one still goes through a statement over every job.
+		common bool
+	}
+	figures := []figure{
+		{"dur", MeasureDuration, func(g *JobStatsGroup) *JobPercentiles { return &g.Duration }, true},
+		{"wait", MeasureQueueWait, func(g *JobStatsGroup) *JobPercentiles { return &g.QueueWait }, true},
+		{"startup", MeasureStartup, func(g *JobStatsGroup) *JobPercentiles { return &g.Startup }, false},
+	}
+	spread := func(g *JobStatsGroup, f *figure, n, at50, at95 int, samples string) error {
+		if n == 0 {
+			return nil
+		}
+		p50, p95, err := samplesAt(samples, at50, at95)
+		if err != nil {
+			return err
+		}
+		*f.into(g) = JobPercentiles{Samples: n, P50MS: &p50, P95MS: &p95}
+		return nil
+	}
+	// lone is the figure asked for when it is the only one and a common one. The
+	// statement that names the groups groups every job, so it gathers the samples
+	// as well, and the groups are named for nothing extra: asking again for the
+	// samples would be a second pass over the window to find what the first has.
+	var lone *figure
+	for i := range figures {
+		if f := &figures[i]; f.common && want == f.is {
+			lone = f
+		}
+	}
+
+	// The groups come from this statement whatever is asked for, so which groups
+	// an answer has, their order and where it is cut short do not depend on the
+	// figures. Counting is most of what it costs, so when the counts are not wanted
+	// it only names the groups.
+	if want&MeasureCounts != 0 {
+		rows, err := s.texts.query(ctx, base+`SELECT k1, k2, COUNT(*), MIN(q),
+			SUM(CASE WHEN conclusion = 'success' AND runner_fault = '' THEN 1 ELSE 0 END),
+			SUM(CASE WHEN `+failedJobSQL()+` THEN 1 ELSE 0 END),
+			SUM(CASE WHEN conclusion IN ('cancelled','skipped') AND runner_fault = '' THEN 1 ELSE 0 END),
+			SUM(CASE WHEN `+fleetFailedJobSQL()+` THEN 1 ELSE 0 END)
+			FROM base GROUP BY k1, k2`, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var k gk
+			var g JobStatsGroup
+			var firstQueued int64
+			if err := rows.Scan(&k.a, &k.b, &g.Count, &firstQueued, &g.Succeeded, &g.Failed, &g.Cancelled, &g.FleetFailed); err != nil {
+				return nil, err
+			}
+			g.Keys, g.FleetFailedByKind = keyMap(k), byKind()
+			if g.Count > 0 {
+				g.FleetFailureRate = float64(g.FleetFailed) / float64(g.Count)
+			}
+			groups[k], first[k] = &g, firstQueued
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	} else {
+		gather := ""
+		if lone != nil {
+			gather = ", " + spreadColumns(lone.col)
+		}
+		rows, err := s.texts.query(ctx, base+`SELECT k1, k2, MIN(q)`+gather+` FROM base GROUP BY k1, k2`, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var k gk
+			var firstQueued int64
+			var n, at50, at95 int
+			var samples string
+			dest := []any{&k.a, &k.b, &firstQueued}
+			if lone != nil {
+				dest = append(dest, &n, &at50, &at95, &samples)
+			}
+			if err := rows.Scan(dest...); err != nil {
+				return nil, err
+			}
+			g := &JobStatsGroup{Keys: keyMap(k), FleetFailedByKind: byKind()}
+			if lone != nil {
+				if err := spread(g, lone, n, at50, at95, samples); err != nil {
+					return nil, err
+				}
+			}
+			groups[k], first[k] = g, firstQueued
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if len(groups) == 0 {
+		// The other statements only fill in groups that exist.
+		return &JobStatsResult{}, nil
+	}
+
+	if want&MeasureFaultKinds != 0 {
+		kinds, err := s.texts.query(ctx, base+`SELECT k1, k2, COALESCE(NULLIF(fault_kind, ''), 'unclassified'), COUNT(*)
+			FROM base WHERE `+fleetFailedJobSQL()+` GROUP BY 1, 2, 3`, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer kinds.Close()
+		for kinds.Next() {
+			var k gk
+			var kind string
+			var n int
+			if err := kinds.Scan(&k.a, &k.b, &kind, &n); err != nil {
+				return nil, err
+			}
+			if g := groups[k]; g != nil {
+				g.FleetFailedByKind[kind] = n
+			}
+		}
+		if err := kinds.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	if want&MeasurePeaks != 0 {
+		peaks, err := s.texts.query(ctx, base+`SELECT k1, k2, MAX(pc), MAX(pm), SUM(oom), COUNT(pm), MAX(prm), MAX(pdm),
+			SUM(CASE WHEN prm > 0 AND pdm > 0 THEN 1 ELSE 0 END) FROM base GROUP BY k1, k2`, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer peaks.Close()
+		for peaks.Next() {
+			var k gk
+			var pc sql.NullFloat64
+			var pm sql.NullInt64
+			var oom, measured, halves int
+			var prm, pdm int64
+			if err := peaks.Scan(&k.a, &k.b, &pc, &pm, &oom, &measured, &prm, &pdm, &halves); err != nil {
+				return nil, err
+			}
+			if g := groups[k]; g != nil {
+				if pc.Valid {
+					g.PeakCPUs = &pc.Float64
+				}
+				if pm.Valid {
+					g.PeakMemoryMB = &pm.Int64
+				}
+				g.OOMKilled = oom
+				g.MeasuredMemory = measured
+				g.PeakRunnerMemoryMB, g.PeakDaemonMemoryMB, g.MeasuredHalves = prm, pdm, halves
+			}
+		}
+		if err := peaks.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	for i := range figures {
+		m := &figures[i]
+		if want&m.is == 0 || m == lone {
+			continue
+		}
+		pr, err := s.texts.query(ctx, base+`SELECT k1, k2, `+spreadColumns(m.col)+`
+			FROM base WHERE `+m.col+` IS NOT NULL GROUP BY k1, k2`, args...)
 		if err != nil {
 			return nil, err
 		}
 		for pr.Next() {
 			var k gk
-			var n int
-			var p50, p95 int64
-			if err := pr.Scan(&k.a, &k.b, &n, &p50, &p95); err != nil {
+			var n, at50, at95 int
+			var samples string
+			if err := pr.Scan(&k.a, &k.b, &n, &at50, &at95, &samples); err != nil {
 				pr.Close()
 				return nil, err
 			}
 			if g := groups[k]; g != nil {
-				*m.into(g) = JobPercentiles{Samples: n, P50MS: &p50, P95MS: &p95}
+				if err := spread(g, m, n, at50, at95, samples); err != nil {
+					pr.Close()
+					return nil, err
+				}
 			}
 		}
 		err = pr.Err()
@@ -319,4 +443,38 @@ func (s *Store) JobStats(ctx context.Context, f JobFilter, groupBy []string) (*J
 		out.Groups = append(out.Groups, *groups[k])
 	}
 	return out, nil
+}
+
+// spreadColumns are the columns that give a percentile of col: how many samples a
+// group has, the index of the two that are wanted, which is worked out here so that
+// there is one spelling of the rounding rule, and the samples in order.
+func spreadColumns(col string) string {
+	return `COUNT(` + col + `), CAST((COUNT(` + col + `) - 1) * 0.5 + 0.5 AS INTEGER), CAST((COUNT(` + col + `) - 1) * 0.95 + 0.5 AS INTEGER),
+		COALESCE(group_concat(` + col + `, ',' ORDER BY ` + col + `), '')`
+}
+
+// samplesAt reads the samples at indexes i and j, i <= j, from the comma-separated
+// integers of a group, which SQLite has put in order. It looks at no other sample
+// than the two, so what it costs is a pass over the text and not a parse of it.
+func samplesAt(samples string, i, j int) (atI, atJ int64, err error) {
+	for at := 0; at <= j; at++ {
+		item, rest, more := strings.Cut(samples, ",")
+		if at == i || at == j {
+			v, err := strconv.ParseInt(item, 10, 64)
+			if err != nil {
+				return 0, 0, fmt.Errorf("store: sample %d of a job statistic is not a whole number of milliseconds: %w", at, err)
+			}
+			if at == i {
+				atI = v
+			}
+			if at == j {
+				atJ = v
+			}
+		}
+		if !more && at < j {
+			return 0, 0, fmt.Errorf("store: a job statistic has %d samples, and was asked for sample %d", at+1, j)
+		}
+		samples = rest
+	}
+	return atI, atJ, nil
 }

@@ -6,12 +6,15 @@ go 1.27.1
 // into go vet, staticcheck and go test as if it were ours.
 ignore ./web/node_modules
 
+// tailscale.com rides the pre-release channel tailcat tracks, at or above
+// the version tailcat itself requires; the rule, and why the pin carries a
+// graph with it, is in docs/dependencies.md.
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/coreos/go-oidc/v3 v3.21.0
-	github.com/go-chi/chi/v5 v5.4.0
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/go-github/v88 v88.0.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3

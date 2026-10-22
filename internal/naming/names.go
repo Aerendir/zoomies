@@ -83,3 +83,33 @@ func RunnerName(pool, discriminator string) string {
 	}
 	return truncate(strings.Join(parts, "-") + "-" + tail)
 }
+
+// MaxHostSegment is the most of a host's name a runner's name will carry. It is
+// short on purpose: the runner's token must survive, and the shape in the middle
+// is spent first, so a long host name would otherwise cost a runner the "how
+// much machine" half of its name.
+const MaxHostSegment = 20
+
+// HostSegment is the part of a host's name a runner registered on it carries, so
+// the name GitHub shows, in the runner list, the job header and the "Set up job"
+// step of the log, says which machine ran the job. It is cut a whole word at a
+// time for the reason RunnerName cuts the shape that way, and is empty when the
+// name leaves nothing the grammar allows.
+func HostSegment(machine string) string {
+	s := Slug(machine)
+	if len(s) <= MaxHostSegment {
+		return s
+	}
+	parts := strings.Split(s, "-")
+	for len(parts) > 1 && len(strings.Join(parts, "-")) > MaxHostSegment {
+		parts = parts[:len(parts)-1]
+	}
+	return strings.TrimRight(truncateTo(strings.Join(parts, "-"), MaxHostSegment), "-")
+}
+
+func truncateTo(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}

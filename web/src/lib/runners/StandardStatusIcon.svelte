@@ -110,7 +110,7 @@
     {#if animation.state === 'maximum_zoomies'}
       <!-- The charge fill borrows the chin path so the bolt's flash fills the
            face without thickening the stroke that draws it. -->
-      <path class="part charge" d={FACE_OUTLINE} fill="currentColor" stroke="none" />
+      <path class="part charge" d={FACE_OUTLINE} />
     {/if}
     <path class="part" d={EARS} />
     <g class="eyes">
@@ -311,7 +311,14 @@
     animation: flicker calc(var(--period) * 2) linear infinite;
     animation-delay: var(--phase);
   }
+  /* The charge is a part, so it takes the part rule's `fill: none`, and a rule
+     beats the fill and stroke attributes it was drawn with: this has to follow
+     that one. The fill starts clear and only the animation raises it, so a dog
+     held still by reduced motion has no flash rather than a solid chin. */
   .charge {
+    fill: currentColor;
+    fill-opacity: 0;
+    stroke: none;
     animation: charge 1.6s linear infinite;
   }
 

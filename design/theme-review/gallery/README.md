@@ -35,6 +35,7 @@ overflow at 1440 and 375 pixels.
 
 Open the live page with `make gallery` and browse to
 `http://127.0.0.1:5173/gallery.html?style=mission-control&mode=dark`. The
-`style` and `mode` query parameters choose the combination; an unknown value
-falls back to Classic and System. The switcher on the page changes the same
+`style` and `mode` query parameters choose the combination; an unknown or
+missing `style` is Mission Control, as in the product, and an unknown or missing
+`mode` is System. The switcher on the page changes the same
 combination in place and writes no browser preference.

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func newTestStore(t *testing.T) *Store {
+func newTestStore(t testing.TB) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), Options{Path: ":memory:"})
 	if err != nil {
@@ -23,7 +23,7 @@ func newTestStore(t *testing.T) *Store {
 
 // newTestStoreAt is newTestStore with the clock in the test's hands, for the
 // rows whose value is a moment rather than a fact.
-func newTestStoreAt(t *testing.T, now func() time.Time) *Store {
+func newTestStoreAt(t testing.TB, now func() time.Time) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), Options{Path: ":memory:", Now: now})
 	if err != nil {
@@ -791,7 +791,7 @@ func TestTheJobsRebuildKeepsEveryRowAndItsIndexes(t *testing.T) {
 			 '0054_jobs_run_index.sql', '0060_job_versions.sql', '0061_job_usage.sql',
 			 '0062_job_indexes_for_scans.sql', '0071_job_granted_size.sql',
 			 '0075_job_size_routing.sql', '0085_job_output_tail.sql', '0098_job_scratch_peaks.sql',
-			 '0111_job_attention.sql')`,
+			 '0111_job_attention.sql', '0113_job_run_event.sql')`,
 		`DROP INDEX runners_provisioning_order`,
 		`ALTER TABLE runner_sessions DROP COLUMN controller_version`,
 		`ALTER TABLE runner_sessions DROP COLUMN controller_channel`,

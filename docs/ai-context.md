@@ -351,10 +351,14 @@ change, in full:
 * `zoomies-ai-context.config.json`: the settings you chose.
 * `.zoomies/AI_CONTEXT.md`: the shared guide to context access, revision checks
   and selective retrieval.
-* Short marked entry points in `AGENTS.md` and `CLAUDE.md` (or an existing
-  `.claude/CLAUDE.md`). An exact Claude import wrapper pointing to `AGENTS.md`
-  keeps that single entry point. The guide stays on the source branch; generated
-  source packs continue to live on the separate context branch or in Zoomies.
+* A short marked entry point in `AGENTS.md`, and an import of it in `CLAUDE.md`
+  (or an existing `.claude/CLAUDE.md`). The block is written once, in
+  `AGENTS.md`, and the Claude file reaches it with `@AGENTS.md`: Claude Code
+  expands the import, so a block in both files is loaded twice. A Claude file
+  that has rules of its own keeps them and is given the import; one that
+  already imports `AGENTS.md` is left alone. The guide stays on the source
+  branch; generated source packs continue to live on the separate context
+  branch or in Zoomies.
 * The AI Context badge near the top of the README.
 
 Your own text in those files is kept as it is; only the marked sections are
@@ -368,9 +372,9 @@ retrying submits only the ones that failed.
 
 ### 4. Merge, and let it generate
 
-Merge the pull request as you would any other. The repository shows
-**Awaiting merge** until you do. The merge is a push to the default branch, and
-that push runs the workflow. It has two jobs:
+Merge the pull request as you would any other, once its checks pass. The
+repository shows **Awaiting merge** until you do. The merge is a push to the
+default branch, and that push runs the workflow. It has two jobs:
 
 * **Generate** reads the source at that exact commit, applies the exclusions,
   runs Repomix with its secret scanning, and fails if anything is too large,
@@ -386,8 +390,8 @@ straight away when you choose **Recheck context**. A *Zoomies only* upload is
 verified the moment it arrives. Once verification passes,
 the repository shows **Context verified**.
 
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
-![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel above them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-dark.webp#only-dark){ .zoomies-shot }
+![The AI Context page listing two repositories in the acme installation, each a saved draft with its source branch, output and installation, and the Installation owners panel below them](screenshots/ai-context-light.webp#only-light){ .zoomies-shot }
 
 Every later push to the default branch regenerates the context. Zoomies notices
 on its next check.
@@ -636,10 +640,12 @@ fixes it), Repomix altering source it was given, a repository where nothing
 eligible remains, and more than 5,000 omitted files, which means the exclusions
 need work.
 
-A workflow written by an earlier Zoomies release keeps working: Zoomies recognises
-it as out of date rather than edited, marks the repository **Workflow out of
-date** on the AI Context page with **Reinstall / repair** as the first action, and
-**Reinstall / repair** moves it to the current generator. The badge is set by the
+A workflow, or the generator's lockfile, written by an earlier Zoomies release
+keeps working: Zoomies recognises it as out of date rather than edited, marks the
+repository **Workflow out of date** on the AI Context page with **Reinstall /
+repair** as the first action, and **Reinstall / repair** moves it to the current
+generator. A lockfile changes when a dependency of Repomix needs a fix, which is
+why it can be behind while the workflow is current. The badge is set by the
 last verification that reached the workflow, so after you merge a repair it
 clears at the next check rather than the moment of the merge. Until then it behaves as it did, so a text file over 1 MiB
 stops that run with `A source file exceeds the context size limit; add an
@@ -648,9 +654,9 @@ file the secret scan withholds fails it with `Repomix omitted or changed source`
 Repair it and neither failure happens again; or exclude the files with **Amend**.
 
 **A formatter fails on the managed files.** The workflow, the generator's
-`package.json` and the marked sections in `README.md` and `CLAUDE.md` are written
-by Zoomies and rewritten by every **Reinstall / repair**, so reformatting them
-by hand only lasts until the next one. Add the workflow and
+`package.json` and the marked sections in `README.md`, `AGENTS.md` and
+`CLAUDE.md` are written by Zoomies and rewritten by every **Reinstall / repair**,
+so reformatting them by hand only lasts until the next one. Add the workflow and
 `.github/zoomies-ai-context/package.json` to your formatter's ignore file
 (`.prettierignore` for Prettier) rather than reformatting them.
 

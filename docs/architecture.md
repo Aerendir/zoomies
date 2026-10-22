@@ -157,6 +157,31 @@ problems list -- are worked out again after every pass and sent when they
 differ. Each frame is the resource's `GET` shape, rendered by the same code
 (see [api-surface.md](api-surface.md#sse-event-kinds)).
 
+### Jobs GitHub no longer reports
+
+The background sweep completes a job still queued after 24 hours as `stale`,
+so a deleted run stops creating demand. An in-progress job instead protects
+its runner from cleanup: a 404, revoked access or a GitHub outage cannot safely
+prove that the workload stopped.
+
+GitHub [limits self-hosted job execution to five days](https://docs.github.com/en/actions/reference/limits).
+The sweep retires an in-progress row only after its `started_at` is more than
+five days and one hour old. The hour allows for completion delivery and clock
+skew. If the start is unknown, it waits 35 days and one hour from `queued_at`,
+using GitHub's whole workflow lifetime limit because that queue timestamp may
+precede an approval wait. Such rows deliberately linger longer rather than
+risk killing a newly started job.
+
+The controller records `completed` with conclusion `stale` and a timeline
+explanation, then wakes the scheduler. `stale` is not a workflow failure.
+Normal cleanup can now remove the runner and its workload. Incorrect timestamps,
+clock skew beyond the margin, or a future increase to GitHub's limits could
+therefore stop live work; this is an age-based presumption, not confirmation
+from GitHub. A failed database read or completion write leaves the job protecting
+its runner for a later sweep. A failed timeline write is logged; completion
+still stands and cleanup remains possible. Cleanup delivery failures follow
+the existing task retry path.
+
 ### Runner starts on one host
 
 See [Runner startup under host load](runner-startup-stability.md) for controls,
@@ -329,6 +354,16 @@ by trying again.
 | `internal/events` | In-process pub/sub that the SSE endpoint fans out. |
 | `internal/mcp` | The fleet over the Model Context Protocol: the tools, and both transports, stdio for `zoomies mcp`, Streamable HTTP for the controller's `/mcp`. Every tool is a documented REST route called with the caller's own token, so it adds no authority. |
 | `internal/migrate` | Rewriting a workflow's `runs-on` line, and nothing else in the file. |
+| `internal/registry` | What a container registry says a tag points at, so the digest-pinning generators can pin what they build; a hand-rolled client, for the reason the Docker one is. |
+| `internal/aicontext` | Commit-pinned repository context, independent of the fleet's own jobs: verified snapshots of a repository's files, admitted only after the controller has verified the publication itself. See [Verified AI Context snapshots](#verified-ai-context-snapshots). |
+| `internal/assistant` | The model-provider contract behind the assistant chat and its adapters; the assistant reaches the fleet only through the MCP tools, with the chatting person's identity, so it adds no authority of its own. |
+| `internal/prrepair` | The bounds on what a model may edit when it proposes a pull request: an allow-list, blob caps, and a refusal of anything credential-shaped, enforced on the server before a file is written. |
+| `internal/toolscan` | Reads workflow files for the toolchains their jobs install, so a pool's tool cache can be filled with the versions its jobs will ask for before the jobs arrive. |
+| `internal/agentguidance` | Inspects a repository's agent instruction files (AGENTS.md, CLAUDE.md and their neighbours) without executing them. |
+| `internal/optimisation` | Reviewable proposals computed from explicitly supplied evidence, such as a proposed change to a workflow's checkout depth; it fetches nothing and calls no model, so a proposal is reproducible from its inputs. |
+| `internal/analysis` | Evidence-backed findings computed from explicit snapshots: why jobs waited, what got worse, whether a host's failures came when it was busy. |
+| `internal/hosttune` | Host health and tuning: detection that never writes, and changes only an operator approved. See [Host health](host-health.md). |
+| `internal/catalog` | The one machine-readable list of problem codes and Kennel Club checks, shared by the controller, the API and the MCP tools. |
 
 Kennel Club follows the scheduler's rule: the decisions are pure and the wiring is
 not. `internal/kennel` takes a snapshot and returns findings and a standing. The
@@ -461,9 +496,9 @@ to one is made knowing the rest. Three tests in `internal/controller`
 | A task is offered at most three times, so a host is given up on after three leases: an hour for a create, thirty minutes for a stop, fifteen for a remove. A dropped create is noticed by the runner's provision timeout, which says so on the Runners page; a dropped stop would be noticed by nothing, so the sweep fails that runner itself and the next pass frees its slot. | `maxTaskAttempts` = 3 | `internal/controller` (`sweepTasks`) |
 | A host check has no runner behind it to notice a lost task, so it carries its own lease: 90 seconds, above the 45 seconds the agent allows one run. It is offered once, not three times, because the operator has given up long before a third delivery. A check still waiting after 20 seconds is dropped, since a long-polling agent takes a task at once and anything older means nobody is listening; without that, a click on a down host would run hours later. Without a lease the task's key would stay outstanding for ever and the button would die for that host. | `hostCheckLease` 90 s; `hostCheckPendingTTL` 20 s; `hosttune.MonitorRunTimeout` 45 s; `HostCheckCooldown` 15 s | `internal/controller` (`maxAttempts`, `sweepTasks`, `applyHostCheck`); `internal/agent` (`handleCheckHost`) |
 | A host's queue is in memory. A controller restart loses every task in flight; the runner a lost create was for waits out the provision timeout and is replaced with a freshly minted credential. Removal intent from completed jobs and failed host cleanup is recovered from database rows until the host confirms removal. | - | `internal/controller` |
-| A host is late, then unhealthy, then lost, in that order. The controller hands the agent its heartbeat interval on every heartbeat, and the validator warns when that interval is more than half the timeout, so one late heartbeat never counts. After ninety seconds without one the host is unhealthy and the scheduler places nothing new on it. After five minutes it is lost: every runner still recorded as live on it is failed, and a job one was running is marked the fleet's failure. Both judgements are made on the thirty-second housekeeping tick. | `agent.heartbeat_interval` 30 s; `config.MaxQuietHeartbeatInterval` 45 s; `store.HeartbeatTimeout` 90 s; `hostLostAfter` 5 min; `housekeepingTick` 30 s | `internal/config` (`Validate`); `internal/store` (`Host.Healthy`); `internal/controller` (`checkHostHealth`, `reclaimLostRunners`) |
+| A host is late, then unhealthy, then lost, in that order. The controller hands the agent its heartbeat interval on every heartbeat, and the validator warns when that interval is more than half the timeout, so one late heartbeat never counts. After ninety seconds without one the host is unhealthy and the scheduler places nothing new on it. After five minutes it is lost: every runner still recorded as live on it is failed, and a job one was running is marked the fleet's failure. Both judgements are made on the thirty-second housekeeping tick. The agent health-checks a silent HTTP/2 connection after fifteen seconds and closes it after ten more without a PING reply. A failed heartbeat retries after one second, doubling up to the smaller of thirty seconds and the configured interval, and a success resets the backoff. At the longest interval that draws no warning, the interval, ping budget and first retry total 71 s, inside the unhealthy boundary. | `agent.heartbeat_interval` 30 s; `config.MaxQuietHeartbeatInterval` 45 s; `agent.defaultPingAfter` 15 s; `agent.defaultPingTimeout` 10 s; `agent.heartbeatRetryInitial` 1 s; `agent.heartbeatRetryMax` 30 s; `store.HeartbeatTimeout` 90 s; `hostLostAfter` 5 min; `housekeepingTick` 30 s | `internal/agent` (`heartbeatLoop`, `NewHTTPTransport`, `TestTheControllerConnectionIsHealthCheckedInsideTheHeartbeatTimeout`, `TestAFailedHeartbeatIsRetriedBeforeTheHostBecomesUnhealthy`); `internal/config` (`Validate`); `internal/store` (`Host.Healthy`); `internal/controller` (`checkHostHealth`, `reclaimLostRunners`) |
 | A runner that has not come online in time is failed. The timeout covers both `provisioning` and `registering`; there is no second "registration timeout", and the `runners.not_progressing` problem is raised at half of it. The maximum lifetime retires only a runner that is idle; nothing the scheduler does touches a busy one. | `scheduler.provision_timeout`, 20 min by default; `scheduler.max_runner_lifetime` | `internal/scheduler` (`Decide`); `internal/controller` (`Problems`) |
-| A failed runner stays for ten minutes, then goes. It holds no host slot, its message is the only record of why it failed, and the failures still on the page decide how long the pool waits before creating another: ten seconds, doubling to five minutes, and never longer than the retention, because the failures the wait is computed from are gone by then. | `failedRetention` 10 min; `startBackoff` 10 s; `maxStartBackoff` 5 min | `internal/scheduler` |
+| A failed runner stays for ten minutes, then goes; one given up as lost that came back with its job still running stays until the job has ended. It holds no host slot, its message is the only record of why it failed, and the failures still on the page decide how long the pool waits before creating another: ten seconds, doubling to five minutes, and never longer than the retention, because the failures the wait is computed from are gone by then. | `failedRetention` 10 min; `startBackoff` 10 s; `maxStartBackoff` 5 min | `internal/scheduler` |
 | A repeated state is legal and a wrong one is dropped. `CanTransition(s, s)` is true, so an agent that reports what the row already says changes nothing, not even the idle clock the scale-down reads; a transition outside the allow-list is ignored with a log line, never forced. `finished_at` is stamped once, on the first entry to a terminal state, and is what the failed retention counts from. | `validRunnerTransitions` | `internal/store` (`TransitionRunner`); `internal/controller` (`applyRunnerState`) |
 | Capacity is derived from rows. A host's free capacity is its `capacity` minus the runners recorded on it in a state other than `removed` or `failed`, counted on every read; no counter is kept anywhere, and every scheduling decision starts from rows, the clock and the policy. A dead host's rows therefore count until they are failed, which is what the host-lost reclaim is for. | `Host.ActiveRunners` | `internal/store` (`ListHosts`); `internal/scheduler` (`HostCanRun`) |
 | The pools the controller keeps are recomputed from the hosts as they are, never from what changed. `PlanAutoPools` is pure: given the hosts and the pools it says what each pool should be, so a second pass changes nothing, a missed event costs at most a pass, and an event is only a hint to look sooner. The reconciler runs on its own loop -- a timer and a one-slot wake channel -- one pass at a time, and holds neither `reconcileMu` nor anything the scheduling pass takes, because everything it writes is a narrow statement on columns the scheduler only reads. `ApplyAutoPool` names only the columns the controller owns, touches only a pool with an `auto_key`, and applies only while the operator's warm count, cap and pause are what the pass worked from, so an edit saved while a pass was working is never put back. A host's silence is counted from the later of its last heartbeat and the controller's start, above the fleet's own `hostLostAfter`, so neither a brief network drop nor a controller restart reshuffles a pool. | `autoPoolInterval` 1 min; `scheduler.auto_pools_host_grace` 10 min; `scheduler.size_class_hold` 10 min | `internal/scheduler` (`PlanAutoPools`); `internal/controller` (`ReconcileAutoPools`); `internal/store` (`ApplyAutoPool`) |
@@ -477,7 +512,7 @@ to one is made knowing the rest. Three tests in `internal/controller`
 | The agent deletes a finished workload after the controller has acknowledged its end and the finished retention has passed. Completed GitHub jobs also trigger ephemeral runner removal; failed removals are retried until confirmed by the host. | `agent.finished_retention`, 0 s by default | `internal/agent` (`ReconcileOnce`) |
 | An agent stopping leaves its runners running. Shutdown starts no new task, waits up to thirty seconds for the ones in flight, sends one last report, and never stops or removes a runner; a create, stop or remove already under way runs to its own timeout on a context shutdown cannot cancel. | `shutdownGrace` 30 s | `internal/agent` (`Run`) |
 | A host reports what it is, and the hosts table has room for what an operator will hold back from it (nothing sets that yet; ZF-103's third pull request adds the route, and until then the floors under it are what hold anything back). How much machine it has is the daemon's answer where there is one: a runner started through Docker or Podman is a sibling on the host, outside whatever cgroup holds a containerised agent, so the agent's own view would describe a fleet at a fraction of its size. Where no daemon answers, a runner is a child of the agent and its cgroup share is the honest bound. The agent measures its work directory's filesystem and sends the size and the free space on join and on every heartbeat; the controller records those and never the reserve, which is the operator's the way capacity is. Free space is the one figure that moves on its own, so it is written only when it has moved by more than a twentieth or by 256 MB, whichever is larger -- otherwise a fleet takes one row write per host per beat for a number that is never twice the same. Whether a reading was taken and what it said are separate questions with separate encodings: the size is what says a measurement happened, so a disk with nothing left records a free space of zero, while an agent too old to look, or a platform with no portable way to ask, sends no size and leaves what was known alone. | `diskFreeToleranceFraction` 0.05; `diskFreeToleranceFloorMB` 256 | `internal/agent` (`hostSize`, `workDirSpace`); `internal/backend` (`Probe`); `internal/controller` (`diskFreeMoved`, `Heartbeat`); `internal/store` (`SetHostReserve`) |
-| The agent keeps nothing across a restart but its credentials: `agent.json` holds the join token, and the set of runners it manages is in memory. It rebuilds that set before its loops start, by listing every backend and adopting each workload whose labels carry a runner id, and adopts again whenever a task arrives for a workload it does not know. Both passes are load-bearing: without the start-up one the reconciler's first sweep sees an empty set and removes every job running on the host, which on a single-VM install is every controller restart; without the per-task one a create redelivered after a restart would build a second workload for a runner that already has one. | `StateFile` | `internal/agent` (`adoptExisting`, `adopt`) |
+| The agent keeps nothing across a restart but its credentials: `agent.json` holds the host's id, the agent token it was issued, the controller's address (and a private host's tunnel address) and hashes of the join tokens it has spent, never the tokens themselves. The hashes are what stop a host the controller has deleted from offering a spent token, which its environment still holds, on every restart. The set of runners it manages is in memory. It rebuilds that set before its loops start, by listing every backend and adopting each workload whose labels carry a runner id, and adopts again whenever a task arrives for a workload it does not know. Both passes are load-bearing: without the start-up one the reconciler's first sweep sees an empty set and removes every job running on the host, which on a single-VM install is every controller restart; without the per-task one a create redelivered after a restart would build a second workload for a runner that already has one. | `StateFile` | `internal/agent` (`adoptExisting`, `adopt`) |
 | Registrations are compared with rows a minute after start and every ten minutes after that. A registration with the `zoomies-` prefix that GitHub does not report busy and that no live row explains is an orphan, untidy rather than urgent, and one API call per installation is what the comparison costs. | `reapInterval` 10 min | `internal/controller` (`reap`) |
 
 What holds them together, pinned by the four tests:
@@ -486,7 +521,10 @@ What holds them together, pinned by the four tests:
   default heartbeat intervals, so one slow heartbeat never makes a host
   unhealthy, and `hostLostAfter` is later than `store.HeartbeatTimeout`, so
   runners are never failed on a host the scheduler is still placing new ones
-  on.
+  on. `TestTheControllerConnectionIsHealthCheckedInsideTheHeartbeatTimeout`
+  also holds the maximum quiet interval plus the agent's HTTP/2 ping budget
+  and first retry below that unhealthy boundary. The retry loop is held by
+  `TestAFailedHeartbeatIsRetriedBeforeTheHostBecomesUnhealthy`.
 * **Every lease outlasts the work it covers.** The create lease exceeds the
   time the agent gives itself for a create, the stop lease exceeds the stop
   timeout the controller hands out plus the agent's margin, and the remove
@@ -703,3 +741,22 @@ separate gateway service. The browser polls only the name, endpoint and readines
 validation, discovery and creation resolve the staged credentials on the server
 and bind them to their enrolled endpoint and CA. Saving the provider removes its
 staged connection. Setup never invokes agent join or changes runner host state.
+
+## The model-facing subsystems and their bounds
+
+The assistant, the pull request repair, the AI Context verification and the
+optimisation previews follow the rule the kennel loop set: they run outside the
+reconcile lock, and the two that watch for work of their own, AI Context
+verification and Eli's repair loop, each in a bounded loop of its own, because a
+model answer and a GitHub read are slow and nothing about scaling should wait
+with them. Each is bounded at its edges before anything is written:
+`internal/redact` strips credentials and commit authors' email addresses from
+text bound for a model, and `internal/prrepair` holds the path allow-list, the
+blob caps and the refusal of anything credential-shaped on the server, where
+the file would be written.
+
+None of them adds authority. The assistant reaches the fleet through the MCP
+tools, in process, with the identity of the person it is talking to, and MCP
+itself reaches the router with the caller's own token, so the model-facing half
+inherits what the person driving it could do with their own token, and cannot
+exceed it.

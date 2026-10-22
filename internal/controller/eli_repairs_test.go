@@ -80,6 +80,14 @@ type repairFake struct {
 	comments []string
 	// sourceErr, when set, is what reading the PR's source fails with.
 	sourceErr error
+	// checkErr, when set, is what asking GitHub for the PR's checks fails with.
+	checkErr error
+	// title, author, url and base are what the pull request says about itself,
+	// for the tests that read it back.
+	title, author, url, base string
+	// onFailures, when set, answers a read of a job's error output, so a test
+	// chooses what comes back and counts the reads.
+	onFailures func(jobID int64) ([]string, error)
 }
 
 func (f *repairFake) RepairActor(context.Context, string, string) (github.RepairActor, error) {
@@ -90,7 +98,7 @@ func (f *repairFake) RepairPull(context.Context, string, int) (github.RepairPull
 	if f.commits > 0 {
 		head = "fixed"
 	}
-	return github.RepairPull{Number: 1, Branch: "feature", HeadSHA: head, Open: true}, nil
+	return github.RepairPull{Number: 1, Branch: "feature", HeadSHA: head, Open: true, Title: f.title, Author: f.author, URL: f.url, Base: f.base}, nil
 }
 func (f *repairFake) RepairPullForRun(ctx context.Context, repo string, _ int64) (github.RepairPull, error) {
 	if f.unsupportedRun {
@@ -107,7 +115,10 @@ func (f *repairFake) RepairSource(context.Context, string, github.RepairPull, bo
 	}
 	return &github.RepairSource{Snapshot: prrepair.Snapshot{Files: []prrepair.File{{Path: "main.go", Content: "old", Mode: "100644"}}}}, nil
 }
-func (f *repairFake) RepairFailures(context.Context, string, github.RepairPull, int64) ([]string, error) {
+func (f *repairFake) RepairFailures(_ context.Context, _ string, _ github.RepairPull, jobID int64) ([]string, error) {
+	if f.onFailures != nil {
+		return f.onFailures(jobID)
+	}
 	return []string{"main.go: test failed"}, nil
 }
 func (f *repairFake) CommitRepair(_ context.Context, _ string, p github.RepairPull, plan prrepair.Plan) (string, error) {
@@ -133,7 +144,7 @@ func (f *repairFake) RepairReact(_ context.Context, _ string, id int64, content 
 	return nil
 }
 func (f *repairFake) RepairChecks(context.Context, string, string) (string, error) {
-	return f.check, nil
+	return f.check, f.checkErr
 }
 func TestRepairWorkerSelectsTheHybridProviderAndRecordsRealCheckOutcome(t *testing.T) {
 	for _, trigger := range []string{"mention", "automatic", "revoked", "expired-lease", "cancelled", "queued-old"} {
@@ -562,3 +573,90 @@ func TestARepairReadsAToolCallNamedAfterAReplyAsThatReply(t *testing.T) {
 		t.Fatalf("the repair did not go on to publish the fix: %+v", row)
 	}
 }
+
+// A provider with no credit left answers with a status and a sentence of its
+// own, and the repair filed it as a provider that could not be reached: the
+// person reading the comment was told to test a connection that was fine, and
+// nothing said the account had run out. The repair says what the provider
+// could not do, and records it as its own failure, so the advice on the page
+// is about paying for the repair rather than about testing a provider.
+func TestARepairThatCannotPaySaysTheProviderIsOutOfCredit(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	fake := &repairFake{Client: h.gh.Client(inst.Target, inst.TargetType), check: "waiting"}
+	h.c.clients.entries[inst.ID] = &clientEntry{client: fake, updatedAt: inst.UpdatedAt.Truncate(time.Millisecond)}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		w.Write([]byte(`{"error":{"type":"server_error","message":"Upstream request failed: Insufficient account funds"}}`))
+	}))
+	defer srv.Close()
+	user := &store.User{Username: "octo", Role: store.RoleViewer}
+	h.st.CreateUser(h.ctx, user)
+	h.st.SetEliIdentity(h.ctx, store.EliIdentity{UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"})
+	h.st.ConfirmEliIdentity(h.ctx, user.ID, 42, true)
+	personal := &store.AssistantProvider{Name: "Personal", OwnerID: user.ID, Kind: "openai_compatible", BaseURL: srv.URL, Model: "paid-model", Enabled: true}
+	if e := h.st.CreateAssistantProvider(h.ctx, personal); e != nil {
+		t.Fatal(e)
+	}
+	h.st.SetDefaultAssistantProvider(h.ctx, personal.ID)
+	h.st.SetEliRepairPolicy(h.ctx, store.EliRepairPolicy{Repo: "acme/repo", InstallationID: inst.ID, ProviderID: personal.ID, Enabled: true, DailyLimit: 5})
+	row := &store.EliRepair{DedupKey: "comment:acme/repo:77", Repo: "acme/repo", InstallationID: inst.ID, PullNumber: 1, Trigger: "mention", UserID: user.ID, GitHubUserID: 42, GitHubLogin: "octo"}
+	h.st.EnqueueEliRepair(h.ctx, row, 5)
+	h.c.runEliRepair(h.ctx, row)
+
+	if row.State != "failed" {
+		t.Fatalf("the repair did not fail: %+v", row)
+	}
+	if row.Details.FailureCode != "provider_billing" {
+		t.Fatalf("the failure code is %q, not provider_billing: %+v", row.Details.FailureCode, row)
+	}
+	for _, want := range []string{"cannot pay", "402", "credit"} {
+		if !strings.Contains(row.Message, want) {
+			t.Errorf("the message does not say %q: %s", want, row.Message)
+		}
+	}
+	last := fake.comments[len(fake.comments)-1]
+	if !strings.Contains(last, "cannot pay") {
+		t.Errorf("the comment on the pull request does not say what happened:\n%s", last)
+	}
+}
+
+// A provider says it cannot pay in its own words, and the words differ
+// between providers: an account with no credit, a balance too low, a quota
+// already spent. Each is a payment the person can make, not a connection to
+// test, and each is recorded as one.
+func TestARepairNamesAProviderThatCannotPayWhateverTheProviderCalledIt(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		status  int
+		message string
+		code    string
+	}{
+		{"payment required", http.StatusPaymentRequired, "the provider answered 402", "provider_billing"},
+		{"no funds", http.StatusInternalServerError, "the provider answered 500: Insufficient account funds", "provider_billing"},
+		{"quota spent", http.StatusTooManyRequests, "the provider answered 429: You exceeded your current quota, insufficient_quota", "provider_billing"},
+		{"balance too low", http.StatusForbidden, "the provider answered 403: credit balance is too low", "provider_billing"},
+		{"rate limited", http.StatusTooManyRequests, "the provider answered 429: rate limit reached", "rate_limited"},
+		{"key refused", http.StatusUnauthorized, "the provider answered 401: the provider refused the key", "provider_credentials"},
+		{"context", http.StatusBadRequest, "the provider answered 400: maximum context length is 8192 tokens", "context_limit"},
+		{"unknown", http.StatusInternalServerError, "the provider answered 500: upstream exploded", "provider_unavailable"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			failure := repairProviderError(&providerRefusal{status: tt.status, message: tt.message})
+			var coded interface{ RepairFailureCode() string }
+			if !errors.As(failure, &coded) || coded.RepairFailureCode() != tt.code {
+				t.Fatalf("the failure is %v, recorded as %q, not %q", failure, coded.RepairFailureCode(), tt.code)
+			}
+		})
+	}
+}
+
+// providerRefusal is a provider's answer as the adapters hand it over: the
+// status it replied with, and the words it used.
+type providerRefusal struct {
+	status  int
+	message string
+}
+
+func (e *providerRefusal) Error() string   { return e.message }
+func (e *providerRefusal) HTTPStatus() int { return e.status }

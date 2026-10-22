@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -16,6 +17,13 @@ const (
 var setupTemplates embed.FS
 
 func SetupWorkflow(key RepositoryKey, config Config) (string, error) {
+	return setupWorkflowWithPins(key, config, nil)
+}
+
+// setupWorkflowWithPins builds the managed workflow with a set of action
+// versions in place of the ones the template carries. A nil set is the
+// template's own versions.
+func setupWorkflowWithPins(key RepositoryKey, config Config, pins map[string]string) (string, error) {
 	if err := key.Validate(); err != nil {
 		return "", err
 	}
@@ -63,7 +71,7 @@ jobs:
           persist-credentials: false
           submodules: false
           lfs: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           package-manager-cache: false
@@ -87,7 +95,7 @@ jobs:
         shell: python
         run: |
 @@GENERATE@@
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: zoomies-ai-context
           path: ${{ runner.temp }}/zoomies-context/
@@ -105,7 +113,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: zoomies-ai-context
           path: ${{ runner.temp }}/zoomies-context
@@ -130,7 +138,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: zoomies-ai-context
           path: ${{ runner.temp }}/zoomies-context
@@ -154,11 +162,26 @@ jobs:
 	condition := "${{ github.ref == 'refs/heads/" + strings.ReplaceAll(config.SourceBranch, "'", "''") + "' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}"
 	workflow = strings.ReplaceAll(workflow, "github.ref == TRUSTED_REF && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')", quote(condition))
 	workflow = strings.ReplaceAll(workflow, "github.ref == TRUSTED_REF", trustedRef)
+	// The action versions go in before the Enterprise Server rewrite, which
+	// replaces the actions by name: an earlier release's versions are
+	// rewritten to the Enterprise ones in the same way. The Enterprise versions
+	// have not moved, so the Enterprise workflow is the same either way.
+	if pins != nil {
+		workflow = withActionPins(workflow, pins)
+	}
 	if key.GitHubHost != "github.com" {
 		workflow = enterpriseServerWorkflow(workflow)
 	}
 	workflow = strings.NewReplacer("@@PUSH_BRANCH@@", string(pushBranch), "@@BRANCH@@", string(branch), "@@CONFIG@@", quote(string(cfg)), "@@IDENTITY@@", quote(string(identity)), "@@HASH@@", quote(hash), "@@GENERATE@@", indentScript(string(generate)), "@@PUBLISH@@", indentScript(string(publish)), "@@UPLOAD_URL@@", quote(config.UploadURL), "@@UPLOAD@@", indentScript(string(upload))).Replace(workflow)
 	return workflow, nil
+}
+
+// enterpriseActionPins are the versions Enterprise Server bundles, by action.
+var enterpriseActionPins = map[string]string{
+	"actions/checkout":          "actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0",
+	"actions/setup-node":        "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0",
+	"actions/upload-artifact":   "actions/upload-artifact@c6a366c94c3e0affe28c06c8df20a878f24da3cf # v3.2.2",
+	"actions/download-artifact": "actions/download-artifact@a9bc5e6ef2cb54c177f32aa5726adaa15e7e2d59 # v3.1.0",
 }
 
 // enterpriseServerWorkflow rewrites the GitHub.com workflow for GitHub
@@ -167,18 +190,50 @@ jobs:
 // that cannot write to the repository -- and every action is pinned to the
 // release Enterprise Server bundles, so the workflow runs without GitHub
 // Connect. Enterprise Server has no GitHub-hosted runners: the jobs ask for
-// any self-hosted Linux runner, which a Zoomies pool is.
+// any self-hosted Linux runner, which is a Zoomies pool.
+//
+// The actions are replaced by name rather than by the version the template
+// happens to hold, so this works the same for the template's own versions and
+// for an earlier release's, which the recognition of an installed workflow
+// needs.
 func enterpriseServerWorkflow(workflow string) string {
-	return strings.NewReplacer(
-		"runs-on: ubuntu-latest", "runs-on: [self-hosted, linux]",
-		"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1", "actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0",
-		// setup-node v4 has no package-manager-cache input, and caches nothing
-		// unless asked, which is what the GitHub.com workflow sets it to.
-		"actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0", "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0",
-		"          package-manager-cache: false\n", "",
-		"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1", "actions/upload-artifact@c6a366c94c3e0affe28c06c8df20a878f24da3cf # v3.2.2",
-		"actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5", "actions/download-artifact@a9bc5e6ef2cb54c177f32aa5726adaa15e7e2d59 # v3.1.0",
-	).Replace(workflow)
+	workflow = strings.ReplaceAll(workflow, "runs-on: ubuntu-latest", "runs-on: [self-hosted, linux]")
+	workflow = workflowActionUse.ReplaceAllStringFunc(workflow, func(line string) string {
+		m := workflowActionUse.FindStringSubmatch(line)
+		pin, ok := enterpriseActionPins[m[workflowActionUse.SubexpIndex("action")]]
+		if !ok {
+			return line
+		}
+		return m[1] + pin
+	})
+	// setup-node v4 has no package-manager-cache input, and caches nothing
+	// unless asked, which is what the GitHub.com workflow sets it to.
+	return strings.ReplaceAll(workflow, "          package-manager-cache: false\n", "")
+}
+
+var workflowActionUse = regexp.MustCompile(`(?m)^(?P<prefix>[ \t]*(?:-[ \t]+)?uses:[ \t]+)(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@(?P<ref>[^ \t\r\n]+)(?P<trail>[^\r\n]*)$`)
+
+// keepInstalledActionPins leaves each action at the version the repository
+// already has. Regenerating the workflow around them is the repair; silently
+// moving a pin backwards, even to one this release ships, is a change nobody
+// reviewed and can undo a security update the repository had taken.
+func keepInstalledActionPins(installed, generated string) string {
+	pins := map[string]string{}
+	for _, m := range workflowActionUse.FindAllStringSubmatch(installed, -1) {
+		pins[m[workflowActionUse.SubexpIndex("action")]] = m[workflowActionUse.SubexpIndex("ref")] + m[workflowActionUse.SubexpIndex("trail")]
+	}
+	if len(pins) == 0 {
+		return generated
+	}
+	return workflowActionUse.ReplaceAllStringFunc(generated, func(line string) string {
+		m := workflowActionUse.FindStringSubmatch(line)
+		action := m[workflowActionUse.SubexpIndex("action")]
+		pin, ok := pins[action]
+		if !ok {
+			return line
+		}
+		return m[workflowActionUse.SubexpIndex("prefix")] + action + "@" + pin
+	})
 }
 
 func indentScript(s string) string {
@@ -194,7 +249,13 @@ func indentScript(s string) string {
 // LegacySetupWorkflow recognises the exact initial template during upgrades;
 // arbitrary changes still close the ingestion gate.
 func LegacySetupWorkflow(key RepositoryKey, config Config) (string, error) {
-	w, err := SetupWorkflow(key, config)
+	return legacySetupWorkflowWithPins(key, config, nil)
+}
+
+// legacySetupWorkflowWithPins is the initial template with a set of action
+// versions in place of the template's own.
+func legacySetupWorkflowWithPins(key RepositoryKey, config Config, pins map[string]string) (string, error) {
+	w, err := setupWorkflowWithPins(key, config, pins)
 	if err != nil {
 		return "", err
 	}
@@ -220,8 +281,49 @@ var olderGenerations = []struct{ generate, publish string }{
 	{"templates/previous_generate.py", "templates/older_publish.py"},
 }
 
+// olderActionPins are the action versions earlier releases wrote into an
+// installed workflow, newest first. A workflow is recognised by the pins it
+// carries as well as by the scripts it runs, so taking a new version of an
+// action does not read as somebody's edit: it would close the access gate of
+// every repository that had installed the earlier version, and the only way
+// back would be a repair nobody asked for. Add the pins being replaced here,
+// in the same change that replaces them.
+//
+// The set is written for GitHub.com, which is what the template holds before
+// the Enterprise Server rewrite; the Enterprise Server versions are the ones
+// that rewrite has always put there, and they have not moved.
+var olderActionPins = []map[string]string{
+	// The versions before the actions were taken up to their current ones.
+	{
+		"actions/checkout":          "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+		"actions/setup-node":        "820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+		"actions/upload-artifact":   "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+		"actions/download-artifact": "634f93cb2916e3fdff6788551b99b062d0335ce0 # v5",
+	},
+}
+
+// withActionPins puts a set of action versions into a workflow, replacing the
+// ones it carries now. The set is by action, so a workflow that uses an
+// action the set does not mention is left as it is.
+func withActionPins(workflow string, pins map[string]string) string {
+	return workflowActionUse.ReplaceAllStringFunc(workflow, func(line string) string {
+		m := workflowActionUse.FindStringSubmatch(line)
+		pin, ok := pins[m[workflowActionUse.SubexpIndex("action")]]
+		if !ok {
+			return line
+		}
+		return m[workflowActionUse.SubexpIndex("prefix")] + m[workflowActionUse.SubexpIndex("action")] + "@" + pin
+	})
+}
+
 func olderSetupWorkflow(key RepositoryKey, config Config, generation int) (string, error) {
-	w, err := SetupWorkflow(key, config)
+	return olderSetupWorkflowWithPins(key, config, generation, nil)
+}
+
+// olderSetupWorkflowWithPins is the workflow of an earlier script generation
+// with a set of action versions in place of the template's own.
+func olderSetupWorkflowWithPins(key RepositoryKey, config Config, generation int, pins map[string]string) (string, error) {
+	w, err := setupWorkflowWithPins(key, config, pins)
 	if err != nil {
 		return "", err
 	}
@@ -243,14 +345,72 @@ func PreviousSetupWorkflow(key RepositoryKey, config Config) (string, error) {
 // Zoomies release wrote for this repository and configuration. Such a workflow
 // is still owned and still safe; it is merely due a repair. Anything else is
 // somebody's edit.
+//
+// The action versions count as part of what an earlier release wrote: a
+// repository that installed the workflow before an action was taken up to a
+// newer version still owns what it installed, and reading it as an edit would
+// close its access gate.
 func IsOlderSetupWorkflow(key RepositoryKey, config Config, content string) bool {
-	for i := range olderGenerations {
-		if w, err := olderSetupWorkflow(key, config, i); err == nil && w == content {
+	// The action versions an earlier release wrote are the GitHub.com ones:
+	// the Enterprise Server workflow has always carried the versions that
+	// server bundles, and those have not moved.
+	pins := olderActionPins
+	if key.GitHubHost != "github.com" {
+		pins = nil
+	}
+	// The scripts the template runs now, with the action versions it used to
+	// carry: a release that took a new version of an action changed nothing
+	// else in the workflow.
+	for _, set := range pins {
+		w, err := setupWorkflowWithPins(key, config, set)
+		if err == nil && w == content {
 			return true
 		}
 	}
-	if w, err := LegacySetupWorkflow(key, config); err == nil && w == content {
-		return true
+	for i := range olderGenerations {
+		for _, set := range append([]map[string]string{nil}, pins...) {
+			w, err := olderSetupWorkflowWithPins(key, config, i, set)
+			if err == nil && w == content {
+				return true
+			}
+		}
+	}
+	for _, set := range append([]map[string]string{nil}, pins...) {
+		w, err := legacySetupWorkflowWithPins(key, config, set)
+		if err == nil && w == content {
+			return true
+		}
+	}
+	return false
+}
+
+// olderGeneratorLocks are the generator lockfiles earlier releases put in
+// installed repositories, newest first. An installed lockfile is verified byte
+// for byte like the workflow, so a template change that left the one it replaced
+// unrecognised would read every installed copy as somebody's edit and close the
+// access gate of its repository until somebody ran a repair. Keep the file being
+// replaced here, in the same change that replaces it. They are kept under a name
+// that is not package-lock.json, because nothing installs them and a dependency
+// scanner has no reason to read a tree that exists only to be recognised.
+var olderGeneratorLocks = []string{
+	// handlebars 4.7.9, which carried two critical advisories; 4.7.10 is the fix.
+	"templates/older_package-lock.json",
+}
+
+// PreviousGeneratorLock is the lockfile immediately before the current one.
+func PreviousGeneratorLock() (string, error) {
+	older, err := setupTemplates.ReadFile(olderGeneratorLocks[0])
+	return string(older), err
+}
+
+// IsOlderGeneratorLock reports whether content is exactly a lockfile an earlier
+// Zoomies release wrote. Such a file is still owned and still installs the
+// version of Repomix it names; it is merely due a repair.
+func IsOlderGeneratorLock(content string) bool {
+	for _, name := range olderGeneratorLocks {
+		if older, err := setupTemplates.ReadFile(name); err == nil && string(older) == content {
+			return true
+		}
 	}
 	return false
 }

@@ -77,7 +77,7 @@ func (s *Server) handleCreateProviderSetup(w http.ResponseWriter, r *http.Reques
 	if pinned, ok := version.InstallTag(version.Version); ok {
 		tag = pinned
 	}
-	writeJSON(w, http.StatusCreated, providerSetupView{
+	writeCreated(w, r, p.ID, providerSetupView{
 		ID: p.ID, ExpiresAt: p.ExpiresAt,
 		Command:      proxmoxsetup.Command(controllerURL, p.ID, token, tag),
 		ShortCommand: proxmoxsetup.ShortCommand(controllerURL, p.ID, token, tag),

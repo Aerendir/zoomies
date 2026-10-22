@@ -355,7 +355,7 @@ can put them beside the class's reason and see the margin and the growth applied
 
 | To see | Where |
 | --- | --- |
-| A host's class, why it is in it, a move it is waiting out, its tags and whether its slots count towards a pool | The host's card on [Hosts](ui.md#hosts), and `zoomies hosts list`. **Edit** changes the tags, as does `zoomies hosts edit --tag`. |
+| A host's class, why it is in it, a move it is waiting out, its tags and whether its slots count towards a pool | The host's card on [Hosts](ui.md#hosts), under **Details**, and `zoomies hosts list`. **Edit** changes the tags, as does `zoomies hosts edit --tag`. |
 | What the controller keeps, would keep and could not, the hosts left out, and where each class begins | The panel above the grid on [Pools](ui.md#pools), and `zoomies auto-pools`. It opens by itself when something needs an operator. |
 | One automatic pool, and what its maximum is made of | Marked **Automatic** in the grid; its own page lists the hosts that count. **Settings** sets the warm count, the cap and the idle timeout; **Pause** and **Resume** are the switch. |
 | A job's class, why, the pool it was sent to, where it ran, and whether that was a fallback | The job's drawer on [Jobs](ui.md#jobs), `zoomies jobs get`, and a **Size class** column you can switch on. |

@@ -42,8 +42,8 @@ machine without touching a pool, and add a pool without touching a machine.
 
 ## Adding a host
 
-![The Hosts page scrolled to its host cards, below the capacity map: each card shows its connection state beside a health link, then the slots in use, committed CPU and memory, the memory it can lend and its backends](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
-![The Hosts page scrolled to its host cards, below the capacity map: each card shows its connection state beside a health link, then the slots in use, committed CPU and memory, the memory it can lend and its backends](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-dark.webp#only-dark){ .zoomies-shot }
+![The Hosts page scrolled to its host cards, below the capacity map: three cards in one row, lined up, each closed on its connection state beside a health link, the slots in use and CPU, memory and disk utilisation as bars, with the disk of one host in amber because it is nearly full, and the middle card open beneath its Details button on its heartbeat and usage, committed CPU and memory, the memory it can lend and its priority](screenshots/hosts-light.webp#only-light){ .zoomies-shot }
 
 **Hosts → Add a host** in the UI does the whole thing on one page: it mints a
 join token and prints the command to paste on the new machine, already filled in
@@ -161,7 +161,7 @@ shows it as a different build. Only a **protocol** mismatch stops work reaching
 a host, and then it is excluded from placement exactly as a cordon excludes it
 and says `incompatible` on its card.
 
-The disk figure on a host's card is the filesystem holding the work directory, the one the [host health](host-health.md) `disk.space` check reads. The card follows each heartbeat and the check runs about once a minute, and the figure turns amber by the check's rule (under 10% or under 10 GiB free) and links to that check.
+The **Disk** bar on a host's card is the filesystem holding the work directory, the one the [host health](host-health.md) `disk.space` check reads. The card follows each heartbeat and the check runs about once a minute, and the bar turns amber by the check's rule (under 10% or under 10 GiB free). Under **Details**, the figure in gigabytes links to that check.
 
 ### A host in WSL2
 
@@ -285,9 +285,16 @@ systemd does not run it, or its agent runs in a container under a rootless
 runtime), the card says **Update by command** and which of those it is, draws no
 button and suggests no install: the command beneath it is the way.
 A host that matches the controller has no row at all. The agent inside the controller is updated with the
-controller, from **Settings → Updates**. The copyable command stays beneath the
-button on every card, for an operator to run on the host, whatever the button
-does.
+controller, from **Settings → Updates**. On the card of a remote host whose
+release differs from the controller's (or whose agent speaks a protocol the
+controller cannot work with), the copyable command is at the foot, beneath the
+row, in a folded **Update this agent** section, for an operator to run on the
+host whatever the button does. The row is for administrators, so an operator who
+is not one sees the section alone, and the host's own page has the row and not
+the command. Where no command can work (an agent newer than the controller, a
+machine Zoomies rents, or a controller built from no release) the section is
+called **Agent version guidance** and holds only the sentence that says what to
+do.
 
 ## Priority among hosts
 
@@ -300,7 +307,7 @@ axis a host cannot measure is left out rather than scored last, so an agent too
 old to report a clock does not lose to one that can; a host that reports no size
 at all scores 0 and is placed by headroom exactly as it always was.
 
-The score is the number on the host's card (**Priority**), and the reason
+The score is the number on the host's card (**Priority**, under **Details**), and the reason
 beneath it says what it was computed from. A pool that keeps warm runners also
 stands them up through this ranking, so the fleet's fastest machine fills before
 a slower one is touched. Among hosts that score the same, `scheduler.host_order`
@@ -308,7 +315,7 @@ still decides: `headroom` spreads work, `largest_standard` goes where the big
 runners are, `best_fit` packs.
 
 An operator can pin a host to their own number on the same scale (0 keeps it for
-last, 100 asks for it first) from the card's **Priority** control or a `PATCH`
+last, 100 asks for it first) from the **Priority** control under the card's **Details** or a `PATCH`
 to `/api/v1/hosts/{id}`; the pin outranks the specs and survives a re-join,
 like the labels. Clearing it hands the ranking back to the machine.
 
@@ -349,8 +356,8 @@ pass; the runners already on it stay where they are.
 
 ## Adding a pool
 
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
-![The Pools page: queue pressure and configured headroom above each pool's runner and configuration details](screenshots/pools-light.webp#only-light){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
+![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
 
 One pool is enough until the fleet has to answer two different questions. Add a
 second when a job needs something the first cannot give it:
@@ -507,8 +514,8 @@ must not be reduced gives its own figure instead. See
 [`runners.minimum_cpus`](configuration.md#runnersminimum_cpus-and-runnersminimum_memory_mb-the-least-a-runner-will-take).
 
 Disk and the process limit are independent of the choice. Neither has a share
-to be given (free disk is a measurement rather than a budget) so a pool may
-cap its cache's disk and still leave its size to the host.
+to be given (a runner is charged a fixed working room on disk, not a slot's
+share) so a pool may cap its cache's disk and still leave its size to the host.
 
 In the editor the size is a section of its own, after the hosts and before the
 count, because that is the order the decision is made in: these are the
@@ -574,7 +581,7 @@ by the standard on each of CPU and memory, the smaller count winning) and never
 more than its capacity. Capacity becomes the operator's ceiling on that count
 rather than the count itself: a host that holds three runners and has a capacity
 of eight takes three, and one that holds eight with a capacity of two takes two.
-The host's card says which of the two it is (`slots_limited_by` on the API is
+The host's card says which of the two it is, under the slot bar (`slots_limited_by` on the API is
 `cpu`, `memory` or `capacity`). A capacity of zero still takes nothing, because
 that is how a host is paused and a size must never un-pause one, and a host that
 has not reported its machine is counted by its capacity alone until it does.
@@ -674,8 +681,8 @@ zoomies pools create --name zoomies-lint --labels zoomies-lint \
 Every figure says whose it is (the pool's, the host's or the fleet's) so an
 operator told a runner is 3 CPU knows which setting to change to move it:
 
-* A host's card lists its runner sizes with where each came from, and says what
-  its slots are limited by when a standard made them so.
+* A host's card lists its runner sizes, under **Details**, with where each came
+  from, and says what its slots are limited by when a standard made them so.
 * A pool's page has a **Size on each host** panel, for operators, and only
   where a size is somebody's choice per host: a pool that takes its size from its
   hosts, or a fleet where some host has a profile. The pool editor's size
@@ -1015,7 +1022,9 @@ say:
 ![The Runner sizes dialog for a host, scrolled to In-memory folders, where its owner sets the size each folder is asked for on the machine and a ceiling, or falls back to disk as a temporary fix.](screenshots/host-runner-sizes-dark.webp#only-dark){ .zoomies-shot }
 ![The Runner sizes dialog for a host, scrolled to In-memory folders, where its owner sets the size each folder is asked for on the machine and a ceiling, or falls back to disk as a temporary fix.](screenshots/host-runner-sizes-light.webp#only-light){ .zoomies-shot }
 
-Set them under **Runner sizes** on the host's card, with
+Set them in the host's runner sizes (*Set runner sizes* in its menu, or **Edit**
+on the **Runner sizes** block under the card's **Details**, which a host has once
+it has a profile), with
 `zoomies hosts edit <host> --tmpfs-work-mb 16384` (also `--tmpfs-tmp-mb`,
 `--tmpfs-docker-mb` and `--tmpfs-max-mb`), `--tmpfs-off` for the tactical
 fallback, or with
@@ -1175,11 +1184,12 @@ anything: load keeps counting what is queued behind the cores, so it is what
 says a host has been pushed *past* them rather than merely to them. Sampling
 reads procfs and makes no extra Docker requests.
 
-The Hosts page shows actual usage separately from **Committed** resources.
-Committed CPU is a reservation, not a measurement of CPU saturation. A fresh
-reading tightens memory admission and influences host ranking; it never raises
-the configured capacity or overrides the pool's limits and host reserves.
-Measured memory already contains running workloads, so their reservations are
+The Hosts page shows actual usage separately from **Committed** resources, both
+under a card's **Details**; the closed card says so when committed resources are
+why a free slot goes unused. Committed CPU is a reservation, not a measurement of
+CPU saturation. A fresh reading tightens memory admission and influences host
+ranking; it never raises the configured capacity or overrides the pool's limits
+and host reserves. Measured memory already contains running workloads, so their reservations are
 not subtracted from that measurement again. Runners still provisioning or
 registering, starts newer than the measurement, and all placements in the
 current pass are charged before another placement is allowed. The independent
@@ -1289,6 +1299,37 @@ Two ceilings apply at once, and both are hard: a pool never exceeds its
 `max_runners`, and a host never exceeds its capacity. A pool's `max_runners`
 is therefore only as real as the capacity available on the hosts it can select;
 setting it to 20 across two hosts of capacity 4 buys nothing.
+
+### Keeping a host at its recommended size
+
+**Adjust** on a host's card recommends how many runners the machine can hold and what
+it should keep for itself, and **Set to recommendations** puts those numbers there.
+By default the controller keeps every host there, so a machine nobody sized stops
+being a problem. That is the fleet setting
+[`scheduler.host_auto_adjust`](configuration.md#schedulerhost_auto_adjust), on unless
+turned off, and it includes hosts a provider rents. In **Adjust**, **Keep at
+recommendations** and **Never adjust** decide for one host: **Never adjust** keeps a
+host's typed figures whatever the fleet says.
+
+The recommendation is the smallest of three counts of runners:
+
+| Limit | What it counts |
+| --- | --- |
+| CPU | the cores left after the reserve, over what one runner asks for |
+| Memory | the memory left after the reserve, over what one runner asks for |
+| Disk | the work filesystem less its reserve, at 10 GB of working room per runner |
+
+A runner asks for the largest size an enabled pool sets, or the fleet's default size
+where none does. The reserve is a core on anything up to sixteen, a tenth of the
+memory (1 to 8 GB) and a tenth of the disk (2 to 64 GB). The page names the limit that
+set the count, so a machine with many cores and a small disk says that the disk did.
+
+The controller re-works these as the host reports and the pools change, no more than
+once every five minutes for a host, and leaves a host alone when it is paused
+(capacity 0), cordoned, silent or has not reported its size. Running jobs are never
+stopped; a lower capacity only stops new runners starting until the host is under it.
+Each move is in the audit log as `host.auto_adjust` with the reason, and **Adjust**
+shows when it last happened.
 
 ### What a runner reserves
 
@@ -1517,11 +1558,18 @@ fits.
 pools that set no limits, and is warned about as
 `scheduler.default_runner_limits_off` for as long as it stands.
 
-Free disk is a gate rather than a budget. A host at or below its disk reserve
-takes no new runner at all, whatever the pool asks for; nothing is evicted to
-make room, because a runner's caches outlive it on purpose. Two things follow:
-disk is the one shortage that no job finishing will clear, and a pool that sets
-`resources.disk_gb` is charged it against what is free right now.
+Free disk is a gate, and every runner is charged working room against it. A
+host at or below its disk reserve takes no new runner at all; above it, each
+runner a pass places is charged 10 GB of working room, or the figure the pool
+types as `resources.disk_gb`, so a job is never started on a machine that cannot
+hold its checkout and caches. A runner holds its room for as long as it lives:
+free disk measures what has been written, not what was promised, so a runner
+placed thirty seconds ago that has written nothing yet is still charged its
+room by the next pass. A runner that has written most of its room is counted
+for the whole of it, which errs towards not placing. Nothing is evicted to make room, because a
+runner's caches outlive it on purpose. Two things follow: disk is the one
+shortage that no job finishing will clear, and a host with less than about 12 GB
+free takes no new runner until space is freed or a pool asks for less.
 
 A host whose agent never reported its size is placed by slots alone, exactly as
 before, which is what stops an upgrade emptying a fleet, and it is worth
@@ -1617,14 +1665,14 @@ Read the counts, because they name the fix:
 
 | What it says | What to do |
 | --- | --- |
-| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. Nor is one the pool's size excludes through its runner profile, or one already at its disk reserve, because a finishing job gives neither back. |
+| `at capacity` | Nothing is wrong. Wait for a job to finish, raise a host's capacity, or add a host. A host that could never run the pool (another backend, platform or selector, or too small) is not counted when judging whether the fleet is full. Nor is one the pool's size excludes through its runner profile, or one already at its disk reserve, or short of the working room above it, because a finishing job gives neither back. |
 | `cordoned` | Uncordon the host, if the maintenance is over. |
 | `unhealthy` | The agent is not heartbeating. Check that it is running on that machine and can reach this controller. |
 | `without the docker backend` | Fix the socket on that host, or point the pool at a backend your hosts already offer. When every other host is out for that reason, the sentence carries the agent's own words about the socket, and names the backends it could move to. |
 | `not matching the pool's host selector` | Relax the selector, or label a host to match. |
 | `too small for this pool's limits` | The machine could not hold one runner of this pool even when empty. Lower the pool's CPU or memory limits, or add a bigger host. Waiting will not help. |
 | `short of memory`, `short of CPU` | The host is the right size and has already promised what it has to the runners on it. Wait, lower the pool's limits, or add a host. When runners of yours hold it, that counts as full rather than as a fault, because a finishing job returns what they hold; memory taken by work outside the fleet does not. |
-| `low on disk` | The work directory's filesystem is at or below the host's disk reserve. Free space on it, lower the pool's `disk_gb`, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
+| `low on disk` | The work directory's filesystem is at or below the host's disk reserve, or short of the working room a runner is given above it (10 GB, or the pool's `resources.disk_gb`). Free space on it, set the pool's `resources.disk_gb` lower, or add a host; no job finishing will return this, because a runner leaves its caches behind on purpose. |
 | `throttled after sustained pressure` | The host is on a rung of the [throttle ladder](#current-usage-and-automatic-holds) and every slot the rung left it is in use. Wait for it to lift, lower the host's capacity or the pools' limits so its runners fit the machine, or add a host; running jobs continue. A host that keeps being throttled has too many slots for its machine, or pools whose limits let a job take more than a slot's worth of it. |
 
 The distinction the reasons keep is between a fleet that is merely **full**,

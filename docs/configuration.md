@@ -272,6 +272,7 @@ scheduler:
   max_creates_per_tick: 10      # ZOOMIES_MAX_CREATES_PER_TICK
   default_runner_limits: true   # ZOOMIES_DEFAULT_RUNNER_LIMITS -- a pool with no cpus or memory_mb gets one slot's share of its host; off is warned about
   host_throttling: true         # ZOOMIES_HOST_THROTTLING -- step an overwhelmed host down and lift it after calm; off is warned about
+  host_auto_adjust: true        # ZOOMIES_HOST_AUTO_ADJUST -- keep every host at its recommended capacity and reserve; a host can override
   auto_rerun: false             # ZOOMIES_AUTO_RERUN -- re-run a job whose runner died under it; on is warned about
   auto_rerun_limit: 1           # ZOOMIES_AUTO_RERUN_LIMIT -- automatic re-runs per workflow run, 1–5
 
@@ -548,6 +549,13 @@ if you set `keep: 0` and never expect the page to say what is there.
 | `kennel.workflow_checks` | `ZOOMIES_KENNEL_WORKFLOW_CHECKS` | at once | Check workflow best practices: Whether Kennel Club reads default-branch workflow contents for timeouts, concurrency, action pins and token permission declarations. Off by default. Needs Contents read for private repositories; changes no files or App permissions. |
 | `kennel.scope` | `ZOOMIES_KENNEL_SCOPE` | at once | Repositories to check, served checks the repositories this fleet has run a job for; installation checks every repository the GitHub App can see, up to 500. installation multiplies the requests Kennel Club makes, so it is a choice and not the default. |
 
+### `optimisation`
+
+| Key | Environment | Takes effect | What it is |
+| --- | --- | --- | --- |
+| `optimisation.source_reads` | `ZOOMIES_OPTIMISATION_SOURCE_READS` | at once | Read workflow source for optimisation previews: Let the controller read one workflow file at a run's commit, through the installation's own GitHub access, so an operator can review it before a checkout optimisation is previewed. Off, no source is read. It does not turn on workflow edits and no model sees the file. |
+| `optimisation.workflow_edits` | `ZOOMIES_OPTIMISATION_WORKFLOW_EDITS` | at once | Preview workflow edits: Let the controller compute and keep, for fourteen days, a proposed change to a workflow file, such as reading one commit instead of the full history. Nothing is published, no pull request is opened and no job is run. Needs optimisation.source_reads as well. |
+
 ### `limits`
 
 | Key | Environment | Takes effect | What it is |
@@ -673,6 +681,7 @@ the validator says so with `limits.loopback`.
 | `scheduler.default_runner_limits` | `ZOOMIES_DEFAULT_RUNNER_LIMITS` | at once | Default runner limits: Give a runner whose pool sets no CPU or memory limit one slot's share of its host as a real limit. Off, a host's worth of them can each take every core. |
 | `scheduler.drain_timeout` | `ZOOMIES_DRAIN_TIMEOUT` | at once | Drain timeout: Fail a runner that has been draining this long with no job left on it. A runner still finishing a job is never touched by it. |
 | `scheduler.host_throttling` | `ZOOMIES_HOST_THROTTLING` | at once | Throttle hosts under pressure: Let the controller throttle a host its measurements say is overwhelmed, and step it back up after a stretch of calm. |
+| `scheduler.host_auto_adjust` | `ZOOMIES_HOST_AUTO_ADJUST` | at once | Keep hosts at their recommended size: Let the controller keep every host's capacity and reserve at what Zoomies recommends for its machine, disk and the pools' runner size, and re-work them as the host reports and the pools change. This covers hosts the fleet rents from a provider. A host can be set on or off by itself. On by default; a host set to never adjust keeps the figures an operator typed. |
 | `scheduler.host_order` | `ZOOMIES_HOST_ORDER` | at once | Host placement order: Which host a runner prefers once the spec score has decided. `headroom` (default) picks the one with the most CPU and memory left afterwards, which spreads work. `largest_standard` picks the one whose runner of the pool is biggest, which suits a mixed fleet sized by runner profile. `best_fit` picks the one with the least left, filling one host before starting the next. Hosts are ranked first by what their agents report (more and faster CPU, memory and disk score higher) and by any operator's pin, so the order only chooses between hosts of the same priority. It only ever chooses among hosts that already fit, so it moves where runners go and never whether they start. |
 | `scheduler.history_sizing` | `ZOOMIES_HISTORY_SIZING` | at once | Job-history placement, `shadow` (default) records where it would place differently, `on` places each runner only on a host with room for what the jobs waiting on its pool used on their recent runs (the ninetieth percentile of their peaks, memory with a fifth more) and sizes it up to that where the pool leaves its size to the host, `off` ignores history. See [Sizing from job history](hosts-and-pools.md#sizing-from-job-history). |
 | `scheduler.size_routing` | `ZOOMIES_SIZE_ROUTING` | at once | Route jobs by size class, `off` (default) classes nothing. `shadow` classes each job small, medium or large from what its recent runs used and records the class and where the job ran, and sends nothing anywhere. `on` sends each job to the pool for its class. A workflow that writes `zoomies-large` in `runs-on` is always honoured and never moved; a job that writes only `zoomies` is routed best effort, because GitHub decides which waiting job a runner takes. Changing it puts the jobs already waiting through the new mode. See [size classes and automatic pools](auto-pools.md). |
@@ -1599,6 +1608,38 @@ allocations](hosts-and-pools.md#default-allocations) has the rules in full.
 for as long as it stands. Set `cpus` and `memory_mb` on every pool if you turn
 it off; a fleet whose pools all set their own limits is unaffected either way.
 
+### `scheduler.host_auto_adjust`
+
+Whether the controller keeps hosts at the figures **Adjust** recommends. On a host's
+card, **Adjust** shows how many runners the machine can hold, and what it should keep
+for itself, worked out from its CPUs, memory and disk and from what a runner in this
+fleet asks for; **Set to recommendations** puts the numbers there. With this on, the
+controller does that by itself and keeps doing it: the capacity (how many runners),
+and the CPU, memory and disk reserves, are re-worked as the host reports a different
+machine and as the pools' runner sizes change.
+
+It exists for hosts that nobody sized. A rented machine with a small disk and a
+capacity typed for a bigger one fills its disk and fails jobs part-way through. The
+recommendation for the number of runners is the smallest of what the CPUs, the memory
+and the disk allow (the disk gets 10 GB of working room per runner beyond its
+reserve), and the page says which one set it.
+
+On by default, so a machine nobody sized does not fill its disk. It replaces figures
+an operator typed, so a fleet that sizes its hosts by hand turns it off here, or sets
+the hosts it wants left alone to **Never adjust** in **Adjust**, where **Follow the
+fleet setting**, **Keep at recommendations** and **Never adjust** choose. This covers
+hosts a provider rents. Care is taken not to surprise anyone:
+
+* A host at capacity 0 is paused, and is never un-paused. Only a person does that.
+* A host that has not reported how big it is, or has not been heard from lately, is
+  left alone.
+* A move is audited under the system's name, and a host is moved at most every five
+  minutes, so a pool being edited does not make a host's capacity flap.
+* A change that would leave a pool with nowhere to run is refused, as it is for a
+  person, and the host is left as it was.
+* Running jobs are never stopped. Lowering capacity only stops new runners starting
+  until the host is under it.
+
 ### `scheduler.host_throttling`
 
 Whether the controller steps a host down when its measurements say it is
@@ -2190,7 +2231,7 @@ the CLI or the API. These are their fields:
 | `ephemeral` | One job per runner. Leave it on. |
 | `no_default_labels` | Off. On, runners register with only the pool's `labels` (no `self-hosted`, operating system or architecture) as `config.sh --no-default-labels` does, and a job asking for one of those no longer matches the pool unless it lists it. Only a non-ephemeral pool may set it: GitHub adds those labels to every just-in-time runner itself. See [Leaving out the default labels](hosts-and-pools.md#leaving-out-the-default-labels). |
 | `docker_mode` | `none`, `dind`, or `host-socket`. Anything but `none` switches a pool on the stock runner image to its Docker variant, under the same tag, see [below](#jobs-that-build-container-images) and [security.md](security.md). |
-| `resources` | `cpus`, `memory_mb`, `disk_gb`, `pids_limit` per runner. Leaving `cpus` and `memory_mb` out is how a pool says “the host decides”: each runner is then given one slot's share of whichever machine it lands on, charged against that host and applied as a real cgroup limit. Set them for the same size on every host. `disk_gb` is advisory, enforced only where the backend can, and independent of that choice. |
+| `resources` | `cpus`, `memory_mb`, `disk_gb`, `pids_limit` per runner. Leaving `cpus` and `memory_mb` out is how a pool says “the host decides”: each runner is then given one slot's share of whichever machine it lands on, charged against that host and applied as a real cgroup limit. Set them for the same size on every host. `disk_gb` is advisory, enforced only where the backend can, and independent of that choice. Left unset, each runner is charged 10 GB of working room against the host's free disk; a typed figure is charged instead. |
 | `cpu_burst` | The elastic CPU policy: `mode` is `off`, `observe` (decide and publish metrics, move nothing) or `automatic` (lend the host's spare CPU to a busy runner above its guarantee), and `max_cpus` is the most one runner may be lent up to, with `0` meaning the host's allocatable CPU. Needs automatic sizing on `docker` or `podman`; a new pool that qualifies starts on `observe`, an existing one stays `off`. See [Elastic CPU zoomies](elastic-cpu.md). |
 | `memory_burst` | The [elastic memory](elastic-memory.md) policy: `mode` is `off`, `observe` (decide what would be lent and record it, change nothing) or `automatic` (raise a running container's memory limit out of memory the host has not promised to a runner), `max_memory_mb` is the most one runner may hold, its own share and what it is lent together, with `0` meaning half as much again as it starts with, and `spill_mb` is the swap each container may use as the last resort, with `0` allowing none. Needs the `docker` or `podman` backend; a new pool on one starts on `observe`, an existing one stays `off`. The only setting of a pool the controller keeps that is yours beyond its warm count, cap, pause and idle timeout. A host's `runner_profile.standard.burst_max_memory_mb` can lower the ceiling and never raise it. |
 | `runner_settings` | The fleet timings this pool overrides: `provision_timeout`, `drain_timeout`, `max_runner_lifetime`, `scale_up_delay` and `docker_wait`. Every field is optional and a pool follows the fleet on the ones it leaves alone, including after the fleet's own figure changes. Zero is an answer in each rather than an absence, so an absent field, an explicit `null` and `"0s"` are three different things. See [Runner settings a pool can override](hosts-and-pools.md#runner-settings-a-pool-can-override). |
@@ -2217,9 +2258,9 @@ request that introduces it can tell the job has left GitHub's runners, which
 every pool, so `runs-on: zoomies` means "anywhere in this fleet", useful for a
 repository nobody has assigned a pool to yet.
 
-Runners are named for the brand too, and for their pool's shape:
-`zoomies-4vcpu-ubuntu-2404-biscuit-a3f9qz2m`, which is what GitHub shows in its
-runner list and in every job's log header. See
+Runners are named for the brand too, for their pool's shape and for the host they
+were placed on: `zoomies-4vcpu-ubuntu-2404-fido-a3f9qz2m`, which is what GitHub shows
+in its runner list and in every job's log header, so a failed job names its machine. See
 [Naming and platforms](naming.md#runner-names).
 
 ### The pool cache

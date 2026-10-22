@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_from": "ba0c4267",
+  "generated_from": "42d21ba",
   "entries": [
     {
       "id": "agent.backend_missing",
@@ -910,8 +910,8 @@
       "category": "capacity",
       "severity": "error",
       "detection": "runtime",
-      "detects": "A background loop panicked and was restarted. The fleet keeps running, but this is a bug: the stack is in the log, and it is worth reporting.",
-      "fix": "A background loop panicked and was restarted. The fleet keeps running, but this is a bug: the stack is in the log, and it is worth reporting.",
+      "detects": "A background loop panicked and was restarted, or work that a loop hands to a goroutine of its own (a provider call, creating or removing a runner, a capacity-demand delivery, a scan) panicked and was abandoned; the entry says which. The fleet keeps running, but this is a bug: the stack is in the log, under \"controller loop panicked\" for a loop and \"detached controller work panicked\" for the rest, and it is worth reporting.",
+      "fix": "A background loop panicked and was restarted, or work that a loop hands to a goroutine of its own (a provider call, creating or removing a runner, a capacity-demand delivery, a scan) panicked and was abandoned; the entry says which. The fleet keeps running, but this is a bug: the stack is in the log, under \"controller loop panicked\" for a loop and \"detached controller work panicked\" for the rest, and it is worth reporting.",
       "verify": null,
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-pools-jobs-and-runners"
@@ -1455,6 +1455,19 @@
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-hosts-and-installations"
     },
     {
+      "id": "host.update_helper_stuck",
+      "kind": "problem",
+      "title": "host.update_helper_stuck",
+      "category": "reliability",
+      "severity": "error",
+      "detection": "runtime",
+      "detects": "The update helper on a host had stopped reading requests when an update was handed to it, so the attempt failed before anything ran and the host still runs the release it had, placing work as normal. The agent found `request.json` waiting in the update folder and looked at why: the helper's path unit disabled, inactive or failed (systemd stops it when the service starts too often), or a request older than a healthy helper takes. The entry names the host, the release it was asked to take, the attempt, how long the request had waited and what systemd says of the two units, and carries no path, so every role reads it. The agent cannot touch the root-owned units, so it asks root for a repair through the update folder: the repair clears the units' failed state, rewrites and starts the path unit, and only then removes a request or `upgrade.lock` that is older than 15 minutes with no helper or upgrade running. It does nothing while the helper or an upgrade is running, and repairs at most three times a day and ten minutes apart. The entry appears when the repair did not put the helper right, was held back by those limits, or was not answered, which happens on a host whose repair units were never installed. Run `sudo zoomies updates helper install` on the host, which does the same by hand and installs the repair units, then `sudo zoomies updates helper status`, then update again from the Hosts page. A repair that worked is not a problem: it is in the audit as `update.helper_repair`. It offers no one-click fix and never reaches the public status page.",
+      "fix": "The update helper on a host had stopped reading requests when an update was handed to it, so the attempt failed before anything ran and the host still runs the release it had, placing work as normal. The agent found `request.json` waiting in the update folder and looked at why: the helper's path unit disabled, inactive or failed (systemd stops it when the service starts too often), or a request older than a healthy helper takes. The entry names the host, the release it was asked to take, the attempt, how long the request had waited and what systemd says of the two units, and carries no path, so every role reads it. The agent cannot touch the root-owned units, so it asks root for a repair through the update folder: the repair clears the units' failed state, rewrites and starts the path unit, and only then removes a request or `upgrade.lock` that is older than 15 minutes with no helper or upgrade running. It does nothing while the helper or an upgrade is running, and repairs at most three times a day and ten minutes apart. The entry appears when the repair did not put the helper right, was held back by those limits, or was not answered, which happens on a host whose repair units were never installed. Run `sudo zoomies updates helper install` on the host, which does the same by hand and installs the repair units, then `sudo zoomies updates helper status`, then update again from the Hosts page. A repair that worked is not a problem: it is in the audit as `update.helper_repair`. It offers no one-click fix and never reaches the public status page.",
+      "verify": "The entry leaves the list when a new attempt for the host opens, or when the host reports the release it was asked to take, however it got there.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-hosts-and-installations",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-hosts-and-installations"
+    },
+    {
       "id": "host.update_unavailable",
       "kind": "problem",
       "title": "host.update_unavailable",
@@ -1572,8 +1585,8 @@
       "category": "reliability",
       "severity": "info",
       "detection": "runtime",
-      "detects": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine.",
-      "fix": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine.",
+      "detects": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine. The check reads eight days of jobs, so it reads them at most once a minute, and an entry can lag the jobs by that long.",
+      "fix": "A job's typical run over the last day took at least half as long again, and at least a minute more, than over the seven days before, with at least ten measured runs in each window, on jobs this fleet ran. It carries no remedy: the detail says to compare a run with an older one and to group the job's runs by host and controller version, which tells a slow workflow from a slow machine. The check reads eight days of jobs, so it reads them at most once a minute, and an entry can lag the jobs by that long.",
       "verify": "The job's typical duration on the Jobs page falls back towards the seven-day figure and the entry leaves the list after the next day of runs.",
       "status_sentence": "A job now typically takes much longer than it did the week before.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-hosts-and-installations",
@@ -2241,8 +2254,8 @@
       "category": "capacity",
       "severity": "warning",
       "detection": "runtime",
-      "detects": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts.",
-      "fix": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts.",
+      "detects": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts. A pool whose room is bounded by disk (each runner is charged 10 GB of working room unless the pool sets `resources.disk_gb`) can also set `resources.disk_gb` lower, or free space on its hosts.",
+      "fix": "The pool's maximum is more runners than its hosts have room for at the size one of its runners is given there; a pool with a minimum counts the one reduced runner a host too small for another standard one still takes, at what it would be given. It is not wrong (the maximum is a backstop rather than a target) but the runners above the room are runners the scheduler will never create, and the jobs that ask for them wait with nothing else on any page saying why. Lower the maximum, ask for less per runner, or give the pool more hosts. A pool whose room is bounded by disk (each runner is charged 10 GB of working room unless the pool sets `resources.disk_gb`) can also set `resources.disk_gb` lower, or free space on its hosts.",
       "verify": "The pool's maximum is at or below the room its page shows, and the entry leaves the list.",
       "status_sentence": "The fleet is allowed more runners than its machines have room for.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
@@ -2479,8 +2492,8 @@
       "category": "capacity",
       "severity": "info",
       "detection": "runtime",
-      "detects": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* under Runner sizes on the host's card, or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
-      "fix": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* under Runner sizes on the host's card, or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
+      "detects": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* in the host's runner sizes (*Set runner sizes* in its menu, or **Edit** on the **Runner sizes** block under the card's **Details**), or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
+      "fix": "The pool keeps folders in memory, and an operator turned in-memory folders off in the runner profile of some of the hosts it can land on. A runner placed there has its folders on disk, as it would with the setting off. It is information and not a warning, because a machine's owner knows how much memory it has and the pool's does not, so the host having the last word is the design; it is said where the pool is saved because nothing on the pool says which of its runners that happened to. The fallback is a tactical fix and is kept visible for that reason. Clear *Fall back to disk on this machine (temporary)* in the host's runner sizes (*Set runner sizes* in its menu, or **Edit** on the **Runner sizes** block under the card's **Details**), or `zoomies hosts edit --tmpfs-off=false`, to use memory there, set the host's folder sizes instead, or point the pool at other hosts with its host selector.",
       "verify": "The entry leaves the list once the hosts' profiles allow in-memory folders or the pool stops asking for them.",
       "status_sentence": "Some machines keep runners' working files on disk by choice, so runners placed there are not sped up.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-pools-jobs-and-runners",
@@ -2651,6 +2664,20 @@
       "fix": "Clear the certificate for machines if the controller is on a public certificate, or paste the authority that signed the controller's certificate.",
       "verify": null,
       "status_sentence": "Machines may refuse this controller's certificate and never join.",
+      "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
+      "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
+    },
+    {
+      "id": "provider.machine_disk_small",
+      "kind": "problem",
+      "title": "provider.machine_disk_small",
+      "category": "reliability",
+      "severity": "warning",
+      "detection": "runtime",
+      "detects": "The machines this provider builds have less disk than their slots are charged for. Each runner is given 10 GB of working room above the host's 2 GB reserve, so a job on a smaller machine fills the disk part-way through and fails with `no space left on device`. Found by the provider's check.",
+      "fix": "Raise the machine's disk to the figure the finding names, give the machine fewer slots, or enlarge the template it clones.",
+      "verify": null,
+      "status_sentence": "Machines may run out of disk part-way through a job.",
       "docs_html": "https://zoomies.sh/problem-codes/#runtime-infrastructure-providers",
       "docs_md": "https://github.com/eyupio/zoomies/blob/main/docs/problem-codes.md#runtime-infrastructure-providers"
     },

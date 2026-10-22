@@ -3,9 +3,12 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +29,7 @@ const jobInsertCols = `id, github_job_id, github_run_id, repo, workflow, job_nam
 const jobCols = jobInsertCols + `, peak_cpus, peak_memory_mb, oom_killed,
 	granted_cpus, granted_memory_mb, granted_source,
 	size_class, size_reason, size_basis, size_floor_mb, routed_class, routed_note, ran_class,
-	cpu_periods, cpu_throttled_periods, output_tail, scratch_peaks, acknowledged_at, acknowledged_by`
+	cpu_periods, cpu_throttled_periods, output_tail, scratch_peaks, acknowledged_at, acknowledged_by, run_event`
 
 func scanJob(sc interface{ Scan(...any) error }) (*Job, error) {
 	var j Job
@@ -43,7 +46,7 @@ func scanJob(sc interface{ Scan(...any) error }) (*Job, error) {
 		&j.GrantedCPUs, &j.GrantedMemoryMB, &j.GrantedSource,
 		&j.SizeClass, &j.SizeReason, &j.SizeBasis, &j.SizeFloorMB, &j.RoutedClass, &j.RoutedNote, &j.RanClass,
 		&j.CPUPeriods, &j.CPUThrottledPeriods, &j.OutputTail, &j.ScratchPeaks,
-		&acknowledged, &j.AcknowledgedBy)
+		&acknowledged, &j.AcknowledgedBy, &j.RunEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -68,20 +71,111 @@ func (s *Store) UpsertJob(ctx context.Context, j *Job) (*Job, error) {
 	return out, err
 }
 
+// The statements a job's arrival runs, on every webhook delivery and for every
+// job a poller sweep meets: see hot.go.
+var (
+	jobByGitHubIDQuery = hot(`SELECT ` + jobCols + ` FROM jobs WHERE github_job_id = ?`)
+	jobByIDQuery       = hot(`SELECT ` + jobCols + ` FROM jobs WHERE id = ?`)
+	insertJobQuery     = hot(`INSERT INTO jobs (` + jobInsertCols + `)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+	updateJobQuery = hot(`UPDATE jobs SET github_run_id=?, repo=?, workflow=?,
+		job_name=?, labels=?, state=?, conclusion=?, installation_id=?, pool_id=?,
+		runner_id=?, runner_name=?, html_url=?, started_at=?, completed_at=?, matched=?,
+		eligible_at=?, head_branch=?, head_sha=?, run_attempt=?, run_number=?, steps=?,
+		runner_fault=?, fault_kind=?, queued_at=? WHERE id=?`)
+	stampJobVersionsQuery = hot(`UPDATE jobs SET
+		controller_version = COALESCE(controller_version, NULLIF(?1, '')),
+		controller_channel = COALESCE(controller_channel, NULLIF(?2, '')),
+		agent_version      = COALESCE(agent_version,      NULLIF(?3, '')),
+		host_id            = COALESCE(host_id,            NULLIF(?4, ''))
+		WHERE id = ?5`)
+	insertJobEventQuery  = hot(`INSERT INTO job_events (` + jobEventCols + `) VALUES (?,?,?,?,?,?,?,?)`)
+	runNumberForRunQuery = hot(`SELECT run_number FROM jobs WHERE github_run_id = ? AND run_number != 0 LIMIT 1`)
+	insertDeliveryQuery  = hot(`INSERT INTO webhook_deliveries
+		(id, delivery_id, event, action, repo, status, error, installation_id, received_at)
+		VALUES (?,?,?,?,?,?,?,?,?)`)
+)
+
+// jobUpdateArgs are the arguments of updateJobQuery, in its order. They are made
+// in one place so that what ApplyJob compares to find it has nothing to write is
+// exactly what it would write, and a column added to the statement is compared
+// as soon as it is added here.
+func jobUpdateArgs(j *Job) []any {
+	return []any{
+		j.GitHubRunID, j.Repo, j.Workflow, j.JobName, j.Labels, string(j.State),
+		j.Conclusion, j.InstallationID, j.PoolID, j.RunnerID, j.RunnerName, j.HTMLURL,
+		msp(j.StartedAt), msp(j.CompletedAt), boolInt(j.Matched), msp(j.EligibleAt),
+		j.HeadBranch, j.HeadSHA, j.RunAttempt, j.RunNumber, j.Steps,
+		j.RunnerFault, j.FaultKind, ms(j.QueuedAt), j.ID,
+	}
+}
+
+// sameArguments reports whether two lists of arguments bind the same values. A
+// JSON document is compared as the text it is written as: a nil list and an
+// empty one are the same, and a step's time written in another zone is not,
+// because it would be stored differently.
+func sameArguments(a, b []any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	// The documents last. Each is encoded to be compared, and a delivery that
+	// changes something has usually changed something that costs nothing to see.
+	for _, documents := range [...]bool{false, true} {
+		for i := range a {
+			if _, isDocument := a[i].(driver.Valuer); isDocument == documents && !sameArgument(a[i], b[i]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func sameArgument(a, b any) bool {
+	if va, ok := a.(driver.Valuer); ok {
+		vb, ok := b.(driver.Valuer)
+		if !ok {
+			return false
+		}
+		x, errA := va.Value()
+		y, errB := vb.Value()
+		return errA == nil && errB == nil && sameArgument(x, y)
+	}
+	if t := reflect.TypeOf(a); t != nil && !t.Comparable() {
+		return reflect.DeepEqual(a, b)
+	}
+	return a == b
+}
+
+// JobCondition keeps an age-based retirement tied to the row it selected.
+// A newly learned start or a completed delivery makes that selection obsolete.
+type JobCondition struct {
+	State     JobState
+	StartedAt *time.Time
+}
+
 // ApplyJob is UpsertJob that also says what changed.
 //
 // The change is worked out inside the write transaction, against the row as it
 // was, so two deliveries for the same job arriving together cannot both be
 // told they moved it: exactly one of them did. That is what lets the caller
 // write a job's timeline from deliveries GitHub may send twice.
-func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
+//
+// A delivery that leaves the row as it is writes nothing. Most of what a job is
+// sent after its first delivery is that: GitHub sends at least once, and the
+// poller finds jobs the webhook already announced.
+// Optional conditions are checked against the current row before writing;
+// a mismatch leaves it untouched and reports no state change.
+func (s *Store) ApplyJob(ctx context.Context, j *Job, conditions ...JobCondition) (*Job, JobChange, error) {
 	var out *Job
 	var change JobChange
 	err := s.tx(ctx, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE github_job_id = ?`, j.GitHubJobID)
+		row := s.hotTx(tx).QueryRow(ctx, jobByGitHubIDQuery, j.GitHubJobID)
 		existing, err := scanJob(row)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
+			if len(conditions) != 0 {
+				return ErrConflict
+			}
 			if j.ID == "" {
 				j.ID = NewID(PrefixJob)
 			}
@@ -95,8 +189,7 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 				now := s.Now()
 				j.EligibleAt = &now
 			}
-			_, err := tx.ExecContext(ctx, `INSERT INTO jobs (`+jobInsertCols+`)
-				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			_, err := s.hotTx(tx).Exec(ctx, insertJobQuery,
 				j.ID, j.GitHubJobID, j.GitHubRunID, j.Repo, j.Workflow, j.JobName, j.Labels,
 				string(j.State), j.Conclusion, j.InstallationID, j.PoolID, j.RunnerID,
 				j.RunnerName, j.HTMLURL, ms(j.QueuedAt), msp(j.StartedAt), msp(j.CompletedAt),
@@ -124,6 +217,17 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 		// true before the job moved on. The steps are the sharpest case: an
 		// "in_progress" that arrives after "completed" would put every step
 		// back to "queued".
+		for _, condition := range conditions {
+			sameStart := existing.StartedAt == nil && condition.StartedAt == nil
+			if existing.StartedAt != nil && condition.StartedAt != nil {
+				sameStart = existing.StartedAt.Equal(*condition.StartedAt)
+			}
+			if existing.State != condition.State || !sameStart {
+				out = existing
+				change.PreviousState = existing.State
+				return nil
+			}
+		}
 		merged := *existing
 		current := jobRank(j.State) >= jobRank(existing.State)
 		if current {
@@ -191,19 +295,16 @@ func (s *Store) ApplyJob(ctx context.Context, j *Job) (*Job, JobChange, error) {
 			merged.EligibleAt = &now
 		}
 
-		_, err = tx.ExecContext(ctx, `UPDATE jobs SET github_run_id=?, repo=?, workflow=?,
-			job_name=?, labels=?, state=?, conclusion=?, installation_id=?, pool_id=?,
-			runner_id=?, runner_name=?, html_url=?, started_at=?, completed_at=?, matched=?,
-			eligible_at=?, head_branch=?, head_sha=?, run_attempt=?, run_number=?, steps=?,
-			runner_fault=?, fault_kind=?, queued_at=? WHERE id=?`,
-			merged.GitHubRunID, merged.Repo, merged.Workflow, merged.JobName, merged.Labels,
-			string(merged.State), merged.Conclusion, merged.InstallationID, merged.PoolID,
-			merged.RunnerID, merged.RunnerName, merged.HTMLURL, msp(merged.StartedAt),
-			msp(merged.CompletedAt), boolInt(merged.Matched), msp(merged.EligibleAt),
-			merged.HeadBranch, merged.HeadSHA, merged.RunAttempt, merged.RunNumber, merged.Steps,
-			merged.RunnerFault, merged.FaultKind, ms(merged.QueuedAt), merged.ID)
-		if err != nil {
-			return err
+		// Putting back what the row already holds is a write transaction's worth
+		// of work for nothing: a third of a poller sweep over known jobs, and on
+		// disk most of what a redelivery cost. The row was read a moment ago under
+		// the writer, so nothing can have moved it since. A job that moved on has
+		// something to write, which is the one answer that costs nothing to find.
+		args := jobUpdateArgs(&merged)
+		if merged.State != existing.State || !sameArguments(args, jobUpdateArgs(existing)) {
+			if _, err = s.hotTx(tx).Exec(ctx, updateJobQuery, args...); err != nil {
+				return err
+			}
 		}
 		out = &merged
 		change = JobChange{
@@ -239,15 +340,11 @@ type JobVersions struct {
 func (s *Store) StampJobVersions(ctx context.Context, jobID string, v JobVersions) (*Job, error) {
 	var out *Job
 	err := s.tx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `UPDATE jobs SET
-			controller_version = COALESCE(controller_version, NULLIF(?1, '')),
-			controller_channel = COALESCE(controller_channel, NULLIF(?2, '')),
-			agent_version      = COALESCE(agent_version,      NULLIF(?3, '')),
-			host_id            = COALESCE(host_id,            NULLIF(?4, ''))
-			WHERE id = ?5`, v.ControllerVersion, v.ControllerChannel, v.AgentVersion, v.HostID, jobID); err != nil {
+		if _, err := s.hotTx(tx).Exec(ctx, stampJobVersionsQuery,
+			v.ControllerVersion, v.ControllerChannel, v.AgentVersion, v.HostID, jobID); err != nil {
 			return err
 		}
-		j, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE id = ?`, jobID))
+		j, err := scanJob(s.hotTx(tx).QueryRow(ctx, jobByIDQuery, jobID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 		}
@@ -274,7 +371,7 @@ func (s *Store) StampJobGranted(ctx context.Context, jobID string, cpus float64,
 				return err
 			}
 		}
-		j, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE id = ?`, jobID))
+		j, err := scanJob(s.hotTx(tx).QueryRow(ctx, jobByIDQuery, jobID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 		}
@@ -314,7 +411,7 @@ func (s *Store) SetJobRunnerFault(ctx context.Context, jobID, fault string, kind
 		if n, err := res.RowsAffected(); err == nil && n > 0 {
 			recorded = true
 		}
-		j, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobCols+` FROM jobs WHERE id = ?`, jobID))
+		j, err := scanJob(s.hotTx(tx).QueryRow(ctx, jobByIDQuery, jobID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 		}
@@ -338,7 +435,7 @@ func (s *Store) AppendJobEvent(ctx context.Context, e *JobEvent) error {
 	if e.At.IsZero() {
 		e.At = s.Now()
 	}
-	_, err := s.exec(ctx, `INSERT INTO job_events (`+jobEventCols+`) VALUES (?,?,?,?,?,?,?,?)`,
+	_, err := s.execHot(ctx, insertJobEventQuery,
 		e.ID, e.JobID, ms(e.At), string(e.Kind), e.Source, e.Message, e.RunnerID, e.RunnerName)
 	return err
 }
@@ -411,8 +508,7 @@ func (s *Store) RunNumberForRun(ctx context.Context, runID int64) (int64, error)
 		return 0, ErrNotFound
 	}
 	var n int64
-	err := s.read.QueryRowContext(ctx,
-		`SELECT run_number FROM jobs WHERE github_run_id = ? AND run_number != 0 LIMIT 1`, runID).Scan(&n)
+	err := s.hotRead().QueryRow(ctx, runNumberForRunQuery, runID).Scan(&n)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
 	}
@@ -430,6 +526,20 @@ func (s *Store) SetRunNumberForRun(ctx context.Context, repo string, runID, numb
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
 			`UPDATE jobs SET run_number=? WHERE repo=? AND github_run_id=? AND run_number=0`, number, repo, runID)
+		return err
+	})
+}
+
+// SetRunEventForRun records the event that started a workflow run on every job
+// of it. Unlike the run number it is overwritten, because the answer is
+// GitHub's and a later read is as good as the first.
+func (s *Store) SetRunEventForRun(ctx context.Context, repo string, runID int64, event string) error {
+	if runID == 0 || event == "" {
+		return nil
+	}
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE jobs SET run_event=? WHERE repo=? AND github_run_id=? AND run_event!=?`, event, repo, runID, event)
 		return err
 	})
 }
@@ -465,7 +575,12 @@ type JobFilter struct {
 	// RunIDs narrows to the jobs of particular workflow runs, by GitHub's run
 	// ID. It is how the Workflows page opens a run to the jobs inside it; sent
 	// with the repository as well, because a run ID keys a run only within one.
-	RunIDs      []int64
+	RunIDs []int64
+	// HeadSHA keeps the jobs that ran one commit. A repair started from a pull
+	// request alone has no run to name, and the commit its checks failed on is
+	// what ties the jobs to it; sent with the repository, because two
+	// repositories can share a commit.
+	HeadSHA     string
 	PoolIDs     []string
 	RunnerIDs   []string
 	States      []JobState
@@ -529,6 +644,12 @@ type JobFilter struct {
 	// attention" view and the Overview's failures panel, answered in one
 	// place so the two cannot disagree about what is still owed.
 	AttentionOnly bool
+	// EliRepairableOnly keeps the jobs of a run a pull request started, or whose
+	// trigger has not been read yet. Eli pushes one commit to an existing PR's
+	// branch and never raises one, so a failed push, merge or scheduled run is
+	// not something it can be asked to fix; the Overview's failures panel offers
+	// Eli on every row and so asks for only these.
+	EliRepairableOnly bool
 	// FaultedOnly keeps only the jobs whose runner stopped under them. This is
 	// the fleet's own failure rate, as distinct from the workflows'.
 	FaultedOnly bool
@@ -671,6 +792,45 @@ func (s *Store) ListJobsAfter(ctx context.Context, f JobFilter, after *JobCursor
 	return out, total, next, nil
 }
 
+// jobStateTerm is the condition that keeps the jobs in one of states, and the
+// states it is asked of.
+//
+// A list that includes completed, the state nearly every job in a history is in,
+// and another state besides is written with a unary plus, which tells SQLite not
+// to read the term through an index. Left to itself it does, because a state is
+// something an index can seek; but a list like that narrows almost nothing, and
+// having sought each state SQLite has most of the table in hand and still has to
+// put it in order, which it does by reading every row whole and sorting. The
+// listing is ordered by queued_at, and the index that serves that order,
+// idx_jobs_queued_id, stops after the page's fifty rows when the states are only
+// a test each row passes. That was 61 ms against 5.7 ms for the Jobs page's All
+// view over 10,000 jobs, and the first grows with the table where the second
+// grows with its count.
+//
+// Every other list is left to the index. Without completed the states are few,
+// an index finds them at once, and walking the whole history for the rare job
+// that is in one would cost far more than the plus saves. Completed alone is the
+// state index too: it reads that in queued order with no sort of the rows, and
+// with a window of dates it reads only the window.
+func jobStateTerm(states []JobState) (string, []any) {
+	var distinct []JobState
+	for _, st := range states {
+		if !slices.Contains(distinct, st) {
+			distinct = append(distinct, st)
+		}
+	}
+	ph := make([]string, len(distinct))
+	args := make([]any, len(distinct))
+	for i, st := range distinct {
+		ph[i], args[i] = "?", string(st)
+	}
+	term := `state IN (` + strings.Join(ph, ",") + `)`
+	if len(distinct) > 1 && slices.Contains(distinct, JobCompleted) {
+		term = "+" + term
+	}
+	return term, args
+}
+
 func jobWhere(f JobFilter, now time.Time) (string, []any) {
 	var cond []string
 	var args []any
@@ -712,6 +872,10 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 			args = append(args, id)
 		}
 		cond = append(cond, `github_run_id IN (`+strings.Join(ph, ",")+`)`)
+	}
+	if f.HeadSHA != "" {
+		cond = append(cond, `head_sha = ?`)
+		args = append(args, f.HeadSHA)
 	}
 	inClause("pool_id", f.PoolIDs)
 	inClause("runner_id", f.RunnerIDs)
@@ -757,12 +921,9 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 		}
 	}
 	if len(f.States) > 0 {
-		ph := make([]string, len(f.States))
-		for i, st := range f.States {
-			ph[i] = "?"
-			args = append(args, string(st))
-		}
-		cond = append(cond, `state IN (`+strings.Join(ph, ",")+`)`)
+		term, stateArgs := jobStateTerm(f.States)
+		cond = append(cond, term)
+		args = append(args, stateArgs...)
 	}
 	// Labels are stored as a JSON array; a LIKE on the quoted label is exact
 	// because NormalizeLabels guarantees no embedded quotes and likeEscape
@@ -802,6 +963,9 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 		cond = append(cond, failedJobSQL(), `acknowledged_at IS NULL`, attentionJobSQL(), `queued_at >= ?`)
 		args = append(args, ms(now.Add(-AttentionWindow)))
 	}
+	if f.EliRepairableOnly {
+		cond = append(cond, `run_event IN ('', 'pull_request', 'pull_request_target')`)
+	}
 	if f.Cancelling != nil {
 		if *f.Cancelling {
 			cond = append(cond, `cancel_requested_at IS NOT NULL AND state != ?`)
@@ -829,6 +993,9 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 	return "WHERE " + strings.Join(cond, " AND "), args
 }
 
+var listQueuedJobsQuery = hot(`SELECT ` + jobCols + ` FROM jobs
+	WHERE ` + queuedJobSQL("jobs") + ` ORDER BY queued_at`)
+
 // ListQueuedJobs returns jobs still waiting for a runner here, oldest first.
 // This is the scheduler's demand signal, and the source of every figure that
 // answers "how much work is waiting?": the Overview's tiles and pool bars, the
@@ -840,8 +1007,7 @@ func jobWhere(f JobFilter, now time.Time) (string, []any) {
 // retires jobs GitHub stopped talking about wants the rows regardless of what
 // an operator did with them, and asks for them with ListStaleQueuedJobs.
 func (s *Store) ListQueuedJobs(ctx context.Context) ([]*Job, error) {
-	rows, err := s.read.QueryContext(ctx, `SELECT `+jobCols+` FROM jobs
-		WHERE `+queuedJobSQL("jobs")+` ORDER BY queued_at`)
+	rows, err := s.hotRead().Query(ctx, listQueuedJobsQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -940,6 +1106,41 @@ func (s *Store) ListRunningJobsForRunner(ctx context.Context, runnerID string) (
 			return nil, err
 		}
 		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
+// runnersWithAJobQuery runs on every scheduling pass, and the equality on state
+// is what lets the planner seek an index that leads with state, as it does for
+// ListRunningJobsForRunner, rather than walk the whole jobs table. The
+// query-plan test reads the statement that ships from here.
+var runnersWithAJobQuery = hot(`SELECT DISTINCT runner_id FROM jobs
+	WHERE state = 'in_progress' AND runner_id != ''`)
+
+// RunnersWithAJob returns, by ID, every runner GitHub says a job is executing
+// on: ListRunningJobsForRunner's question asked of the whole fleet at once, for
+// the scheduler, which decides from one snapshot and cannot ask runner by
+// runner. Like that question it is read from the jobs, because a runner failed
+// as lost has forgotten its job.
+//
+// A job whose run an operator cancelled still counts, unlike in runningJobSQL.
+// Until GitHub says the job has ended, the container is where the cancellation
+// is carried out, including any steps that run when a job is cancelled, and
+// this is the answer the late-report path gets about the same container: the
+// reap must never take back a workload that path decided to keep.
+func (s *Store) RunnersWithAJob(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.hotRead().Query(ctx, runnersWithAJobQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
 	}
 	return out, rows.Err()
 }
@@ -1094,21 +1295,55 @@ func workflowFailedJobSQL() string {
 // failed view, and its run's own page still tells its story.
 const AttentionWindow = 7 * 24 * time.Hour
 
-// attentionJobSQL is the "still unresolved" half of the attention question: a
-// failure no later attempt of the same job has replaced. A re-run writes new
-// job rows under the same job name with a higher run attempt, and the latest
-// attempt is the one whose outcome matters: if it passed, the earlier
-// failure is settled; if it is still running, somebody is already on it; if it
-// failed too, the earlier row is history and the later one carries the
-// question. It names the jobs table unqualified, as jobWhere applies it, and
-// takes a job that never reported a run ID at face value rather than guessing
-// which run it belonged to.
+// attentionJobSQL keeps the unresolved inbox separate from failure history.
+// New attempts and runs replace the same job on a known branch; a cancelled,
+// skipped or neutral result is not evidence of a fix. GitHub observations can
+// also settle a run, but only failures older than that observation, so a new
+// failure is never hidden by a previous passing result. Missing run or branch
+// metadata is not a licence to guess which failure a newer job replaces.
 func attentionJobSQL() string {
-	return `NOT EXISTS (
+	return unreplacedJobSQL() + ` AND NOT EXISTS (
+		SELECT 1 FROM job_attention_runs a
+		WHERE a.repo = jobs.repo AND a.run_id = jobs.github_run_id
+			AND ` + settledOnGitHubSQL("a", "jobs") + `)`
+}
+
+// settledOnGitHubSQL is the observation that takes a failure out of the
+// attention list: GitHub said, after the job finished, that its PR is closed,
+// that newer commits replaced it or that its checks pass. The list and the loop
+// that asks GitHub again both read it, so that "settled" cannot mean one thing
+// to the page and another to the schedule.
+func settledOnGitHubSQL(observation, jobs string) string {
+	return `(` + observation + `.reason IN ('closed','superseded','fixed')
+		AND ` + observation + `.checked_at >= COALESCE(` + jobs + `.completed_at, ` + jobs + `.queued_at))`
+}
+
+// unreplacedJobSQL says that no later job has taken this one's place. A later
+// job does that in one of two ways, and each is its own NOT EXISTS: a later
+// attempt of the same run is found through idx_jobs_run, and a later run of the
+// same workflow on the same branch through idx_jobs_attention_branch. Joined
+// by an OR inside a single NOT EXISTS, SQLite could use neither and walked
+// every retained job with the same name in every repository, which took seconds
+// on a month of history and queued every other read behind it.
+// TestTheAttentionFilterIsReadFromTheRunAndBranchIndexes holds the plan, and
+// TestSplittingTheReplacementTestKeepsTheSameJobs holds the meaning.
+func unreplacedJobSQL() string {
+	const countsAsReplacement = `(later.state != 'completed' OR later.conclusion NOT IN ('cancelled','skipped','neutral')
+				OR later.runner_fault != '' OR later.fault_kind != '')`
+	return `(NOT EXISTS (
 		SELECT 1 FROM jobs later
-		WHERE later.github_run_id = jobs.github_run_id AND later.github_run_id != 0
-			AND later.repo = jobs.repo AND later.job_name = jobs.job_name
-			AND later.run_attempt > jobs.run_attempt)`
+		WHERE later.github_run_id = jobs.github_run_id AND later.repo = jobs.repo
+			AND later.github_run_id != 0 AND later.job_name = jobs.job_name
+			AND later.run_attempt > jobs.run_attempt
+			AND ` + countsAsReplacement + `)
+	AND NOT EXISTS (
+		SELECT 1 FROM jobs later
+		WHERE jobs.github_run_id != 0 AND jobs.head_branch != '' AND jobs.workflow != ''
+			AND later.repo = jobs.repo AND later.head_branch = jobs.head_branch
+			AND later.workflow = jobs.workflow AND later.job_name = jobs.job_name
+			AND later.github_run_id != 0 AND later.github_run_id != jobs.github_run_id
+			AND later.queued_at > jobs.queued_at
+			AND ` + countsAsReplacement + `))`
 }
 
 // StatsSince counts the jobs behind the Overview.
@@ -1444,9 +1679,7 @@ func (s *Store) RecordDelivery(ctx context.Context, d *WebhookDelivery) error {
 	if d.ReceivedAt.IsZero() {
 		d.ReceivedAt = s.Now()
 	}
-	_, err := s.exec(ctx, `INSERT INTO webhook_deliveries
-		(id, delivery_id, event, action, repo, status, error, installation_id, received_at)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
+	_, err := s.execHot(ctx, insertDeliveryQuery,
 		d.ID, d.DeliveryID, d.Event, d.Action, d.Repo, d.Status, d.Error,
 		d.InstallationID, ms(d.ReceivedAt))
 	return err
@@ -1667,4 +1900,25 @@ func (s *Store) PruneSamples(ctx context.Context, before time.Time) (int64, erro
 		}
 		return res.RowsAffected()
 	})
+}
+
+// ListStaleRunningJobs finds jobs whose execution or workflow lifetime has elapsed.
+func (s *Store) ListStaleRunningJobs(ctx context.Context, startedBefore, queuedBefore time.Time) ([]*Job, error) {
+	rows, err := s.read.QueryContext(ctx, `SELECT `+jobCols+` FROM jobs
+        WHERE state = ? AND ((started_at IS NOT NULL AND started_at < ?)
+        OR (started_at IS NULL AND queued_at < ?)) ORDER BY queued_at`,
+		string(JobInProgress), ms(startedBefore), ms(queuedBefore))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Job
+	for rows.Next() {
+		j, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
 }

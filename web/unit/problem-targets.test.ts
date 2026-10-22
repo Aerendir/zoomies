@@ -13,7 +13,11 @@ test('the OS health problems open the host itself', () => {
 // An update that failed, or one that cannot be offered, is about a single host,
 // and its page holds the Update button and the reason it did not work.
 test('the update problems open the host itself', () => {
-  for (const code of ['host.update_failed', 'host.update_unavailable']) {
+  for (const code of [
+    'host.update_failed',
+    'host.update_helper_stuck',
+    'host.update_unavailable',
+  ]) {
     assert.deepEqual(hostTarget(code, 'hst_1'), { href: '/hosts/hst_1', label: 'Open the host' });
   }
 });

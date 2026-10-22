@@ -1,0 +1,1358 @@
+<!doctype html>
+<html lang="en" data-style="mission" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kennel Club layout review</title>
+<style>
+  :root {
+    color-scheme: light;
+    --font: Inter, "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --raised: #ffffff;
+    --sunken: #eef0f3;
+    --hover: #f1f3f6;
+    --border: #e2e5ea;
+    --border-strong: #c7cbd3;
+    --text: #0b0c0e;
+    --muted: #5b6069;
+    --subtle: #666b74;
+    --accent: #1a63d8;
+    --accent-hover: #154fb0;
+    --accent-subtle: #e8f0fd;
+    --accent-border: #bcd4f8;
+    --accent-contrast: #ffffff;
+    --idle: #0f7a3d;
+    --idle-subtle: #e7f1eb;
+    --idle-border: #bbd9c8;
+    --busy: #00757f;
+    --busy-subtle: #e9f3f4;
+    --busy-border: #bddcde;
+    --pending: #9a6100;
+    --pending-subtle: #f6f2e9;
+    --pending-border: #e6d8c1;
+    --draining: #4d3f5c;
+    --draining-subtle: #edecef;
+    --draining-border: #d2cfd6;
+    --danger: #bd2018;
+    --danger-subtle: #faedec;
+    --danger-border: #efc9c8;
+    --neutral: #686d76;
+    --neutral-subtle: #f4f4f5;
+    --neutral-border: #dddee0;
+    --text-2xs: 11px;
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-base: 14px;
+    --text-lg: 16px;
+    --text-xl: 20px;
+    --text-2xl: 28px;
+    --leading-2xs: 16px;
+    --leading-xs: 18px;
+    --leading-sm: 20px;
+    --leading-base: 22px;
+    --leading-lg: 24px;
+    --leading-xl: 28px;
+    --leading-2xl: 34px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --rail: 200px;
+    --shadow: 0 14px 34px rgb(8 12 20 / 0.16);
+    --motion: 160ms;
+  }
+  :root[data-mode="dark"] {
+    color-scheme: dark;
+    --bg: #0a0b0d;
+    --surface: #131519;
+    --raised: #1b1e23;
+    --sunken: #050607;
+    --hover: #1b1e23;
+    --border: #262a31;
+    --border-strong: #363b44;
+    --text: #f4f5f7;
+    --muted: #b9bcc2;
+    --subtle: #868b94;
+    --accent: #78b4ff;
+    --accent-hover: #9bc9ff;
+    --accent-subtle: #10203a;
+    --accent-border: #1e3a63;
+    --accent-contrast: #08131f;
+    --idle: #5fd68c;
+    --idle-subtle: #111b17;
+    --idle-border: #20402e;
+    --busy: #3bd6e8;
+    --busy-subtle: #0e1c1f;
+    --busy-border: #174148;
+    --pending: #f2b246;
+    --pending-subtle: #1d1912;
+    --pending-border: #3c2f19;
+    --draining: #d0bee0;
+    --draining-subtle: #201f25;
+    --draining-border: #3c3842;
+    --danger: #ff8d84;
+    --danger-subtle: #1d1516;
+    --danger-border: #3f2727;
+    --neutral: #7f858e;
+    --neutral-subtle: #16181a;
+    --neutral-border: #27292d;
+    --shadow: 0 18px 44px rgb(0 0 0 / 0.62);
+  }
+  :root[data-style="mission"] {
+    --bg: #f4f7fb;
+    --surface: #ffffff;
+    --raised: #ffffff;
+    --sunken: #eaf0f7;
+    --hover: #e3ecf8;
+    --border: #c3cede;
+    --border-strong: #697d96;
+    --text: #122235;
+    --muted: #405570;
+    --subtle: #536780;
+    --accent: #1762bc;
+    --accent-hover: #12509e;
+    --accent-subtle: #e3edfc;
+    --accent-border: #9ab8e2;
+    --accent-contrast: #ffffff;
+    --text-2xs: 12px;
+    --text-xs: 13px;
+    --text-sm: 14px;
+    --text-base: 15px;
+    --text-lg: 17px;
+    --text-xl: 22px;
+    --text-2xl: 30px;
+    --leading-2xs: 18px;
+    --leading-xs: 20px;
+    --leading-sm: 22px;
+    --leading-base: 24px;
+    --leading-lg: 26px;
+    --leading-xl: 30px;
+    --leading-2xl: 38px;
+  }
+  :root[data-style="mission"][data-mode="dark"] {
+    --bg: #090e18;
+    --surface: #111b2b;
+    --raised: #19263b;
+    --sunken: #0c1421;
+    --hover: #1a2b43;
+    --border: #2b3a50;
+    --border-strong: #7389a5;
+    --text: #eef4fc;
+    --muted: #afbed2;
+    --subtle: #9baec8;
+    --accent: #8ac2ff;
+    --accent-hover: #b0d7ff;
+    --accent-subtle: #142b47;
+    --accent-border: #55769c;
+    --accent-contrast: #07131d;
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); color: var(--text); font-family: var(--font); font-size: var(--text-sm); scroll-padding-top: 120px; }
+  body { margin: 0; min-height: 100vh; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  button, a, input, select, summary { outline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--accent); }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  button { cursor: pointer; }
+  summary { cursor: pointer; }
+  h1, h2, h3, h4, p { margin: 0; }
+  h1 { font-size: var(--text-xl); line-height: var(--leading-xl); font-weight: 640; letter-spacing: -0.02em; }
+  h2 { font-size: var(--text-base); line-height: var(--leading-base); font-weight: 600; }
+  h3 { font-size: var(--text-sm); line-height: var(--leading-sm); font-weight: 600; }
+  h4 { font-size: var(--text-2xs); line-height: var(--leading-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  code, .mono { font-family: var(--mono); font-variant-ligatures: none; }
+  .muted { color: var(--muted); }
+  .subtle { color: var(--subtle); }
+  .small { font-size: var(--text-xs); line-height: var(--leading-xs); }
+  .tiny { font-size: var(--text-2xs); line-height: var(--leading-2xs); }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  .reviewbar {
+    position: relative;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--sunken);
+    color: var(--muted);
+    font-size: var(--text-xs);
+  }
+  .reviewbar strong { color: var(--accent); letter-spacing: 0.04em; text-transform: uppercase; font-size: var(--text-2xs); }
+  .reviewbar .spacer { flex: 1; }
+  .reviewbar .control { display: inline-flex; align-items: center; gap: 6px; }
+  .reviewbar select {
+    min-height: 30px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .reviewbar .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  .app { display: flex; align-items: flex-start; min-height: 100vh; }
+  .global {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    width: 216px;
+    height: 100vh;
+    flex: none;
+    padding: 20px 12px;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 22px; font-size: 19px; font-weight: 750; letter-spacing: -0.03em; }
+  .brand .logo { display: grid; place-items: center; width: 28px; height: 28px; color: var(--text); }
+  .global .group { margin: 16px 10px 5px; color: var(--subtle); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .global a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .global a:hover { background: var(--hover); color: var(--text); }
+  .global a.active { background: var(--accent-subtle); color: var(--accent); font-weight: 550; }
+  .global a svg { flex: none; opacity: 0.9; }
+  .global .foot { margin-top: auto; padding: 14px 10px 0; border-top: 1px solid var(--border); color: var(--subtle); font-size: var(--text-2xs); }
+
+  .work { flex: 1; min-width: 0; }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 56px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  .crumb { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: var(--text-xs); }
+  .crumb strong { color: var(--text); font-weight: 550; }
+  .topbar .grow { flex: 1; }
+  .topbar .live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--text-xs); }
+  .topbar .search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 220px;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--subtle);
+    font-size: var(--text-xs);
+  }
+  .topbar .search kbd { margin-left: auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--sunken); font-family: var(--mono); font-size: 10px; }
+  .topbar .user { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 9px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); font-size: var(--text-xs); }
+
+  .main { padding: 20px 24px 48px; }
+  .section { display: flex; align-items: flex-start; gap: var(--space-6); max-width: 1220px; margin: 0 auto; }
+  .rail { position: sticky; top: 76px; width: var(--rail); flex: none; }
+  .rail .group + .group { margin-top: var(--space-5); }
+  .rail .group-label { margin: 0 0 6px; padding: 0 8px; color: var(--subtle); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .rail ul { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .rail a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    padding: 0 8px;
+    border-radius: var(--radius-md);
+    color: var(--muted);
+    text-decoration: none;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .rail a:hover { background: var(--hover); color: var(--text); }
+  .rail a.current { background: var(--accent-subtle); color: var(--accent); }
+  .rail a svg { flex: none; }
+  .rail a .label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .rail .badge { flex: none; }
+
+  .switch-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
+  .switch-row .copy { min-width: 0; flex: 1; }
+  .switch-row .copy strong { display: block; font-size: var(--text-xs); line-height: var(--leading-xs); font-weight: 550; }
+  .switch-row .copy span { display: block; margin-top: 2px; color: var(--subtle); font-size: var(--text-2xs); line-height: var(--leading-2xs); }
+  .toggle { position: relative; width: 32px; height: 19px; flex: none; border: 0; border-radius: 999px; background: var(--accent); }
+  .toggle::after { content: ""; position: absolute; top: 3px; right: 3px; width: 13px; height: 13px; border-radius: 50%; background: #ffffff; }
+  .toggle.off { background: var(--border-strong); }
+  .toggle.off::after { right: auto; left: 3px; }
+
+  .page { flex: 1; min-width: 0; }
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-4); }
+  .page-header .heading { min-width: 0; }
+  .page-header .subtitle { max-width: 70ch; margin-top: 3px; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+  .page-header .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 9px; color: var(--muted); font-size: var(--text-xs); }
+  .page-header .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .page-header .actions .menu { position: relative; }
+
+  .page-nav {
+    position: sticky;
+    top: 64px;
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-bottom: var(--space-5);
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    text-decoration: none;
+  }
+  .page-nav a:hover { background: var(--hover); color: var(--text); }
+  .page-nav a.active { background: var(--accent-subtle); color: var(--accent); font-weight: 550; }
+  .page-nav .count { color: var(--subtle); font-variant-numeric: tabular-nums; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color var(--motion), border-color var(--motion), color var(--motion);
+  }
+  .btn:hover { background: var(--hover); border-color: var(--accent-border); }
+  .btn.primary { border-color: transparent; background: var(--accent); color: var(--accent-contrast); }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn.ghost:hover { background: var(--hover); color: var(--text); }
+  .btn.active { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); font-weight: 550; }
+  .btn.icon { width: 34px; padding: 0; }
+  .btn.sm { min-height: 28px; padding: 0 9px; font-size: var(--text-xs); }
+  .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 22px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .badge[data-tone="danger"] { border-color: var(--danger-border); background: var(--danger-subtle); color: var(--danger); }
+  .badge[data-tone="warning"] { border-color: var(--pending-border); background: var(--pending-subtle); color: var(--pending); }
+  .badge[data-tone="success"] { border-color: var(--idle-border); background: var(--idle-subtle); color: var(--idle); }
+  .badge[data-tone="info"] { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); }
+  .badge[data-tone="neutral"] { border-color: var(--neutral-border); background: var(--neutral-subtle); color: var(--neutral); }
+  .mark { display: inline-block; width: 9px; height: 9px; flex: none; background: currentColor; }
+  .mark.circle { border-radius: 50%; }
+  .mark.ring { border: 1.5px dashed currentColor; background: transparent; border-radius: 50%; }
+  .mark.triangle { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .mark.square { border-radius: 2px; }
+  .mark.slash { transform: skewX(-20deg); }
+
+  .panel { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  .panel-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+  .panel-head .heading { flex: 1; min-width: 0; }
+  .panel-head p { margin-top: 3px; color: var(--muted); font-size: var(--text-xs); line-height: var(--leading-xs); }
+  .panel-head .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .panel-body { padding: 16px 18px; }
+  .panel-foot { padding: 10px 18px; border-top: 1px solid var(--border); color: var(--subtle); font-size: var(--text-xs); }
+  .flush { padding: 0; }
+  .stack { display: flex; flex-direction: column; gap: var(--space-4); }
+  .split { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.9fr); gap: var(--space-4); align-items: start; }
+  .aside-stack { display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .verdict { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.9fr); gap: var(--space-4); margin-bottom: var(--space-5); }
+  .verdict-main {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: 18px 20px;
+    border: 1px solid var(--danger-border);
+    border-left: 3px solid var(--danger);
+    border-radius: var(--radius-lg);
+    background: var(--danger-subtle);
+  }
+  .verdict-main .eyebrow { color: var(--danger); font-size: var(--text-2xs); font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; }
+  .verdict-main h2 { margin-top: 4px; font-size: var(--text-2xl); line-height: var(--leading-2xl); letter-spacing: -0.025em; }
+  .verdict-main p { max-width: 62ch; margin-top: 5px; color: var(--text); font-size: var(--text-sm); line-height: var(--leading-sm); opacity: 0.86; }
+  .verdict-main .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .verdict-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
+  .verdict-stats > div { padding: 14px 16px; border-right: 1px solid var(--border); }
+  .verdict-stats > div:last-child { border-right: 0; }
+  .verdict-stats .label { color: var(--muted); font-size: var(--text-2xs); line-height: var(--leading-2xs); }
+  .verdict-stats .value { margin-top: 4px; font-size: var(--text-xl); line-height: 1.15; font-weight: 640; font-variant-numeric: tabular-nums; }
+  .verdict-stats .value.success { color: var(--idle); }
+  .verdict-stats .value.warning { color: var(--pending); }
+  .verdict-stats .detail { margin-top: 4px; color: var(--subtle); font-size: var(--text-2xs); line-height: var(--leading-2xs); }
+  .all-counts { margin-top: var(--space-3); }
+  .all-counts > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    list-style: none;
+  }
+  .all-counts > summary::-webkit-details-marker { display: none; }
+  .all-counts > summary:hover { border-color: var(--accent-border); color: var(--text); }
+  .all-counts[open] > summary { margin-bottom: 8px; border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); }
+  .all-counts > summary svg { transition: transform var(--motion); }
+  .all-counts[open] > summary svg { transform: rotate(90deg); }
+  .count-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--border); }
+  .count-grid > div { padding: 10px 12px; background: var(--surface); }
+  .count-grid dt { color: var(--muted); font-size: var(--text-2xs); }
+  .count-grid dd { margin: 3px 0 0; font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .attention-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .attention-row:last-child { border-bottom: 0; }
+  .attention-row .repo { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .attention-row .repo a { color: var(--text); font-family: var(--mono); font-size: var(--text-sm); font-weight: 600; text-decoration: none; }
+  .attention-row .repo a:hover { color: var(--accent); text-decoration: underline; }
+  .finding-lines { display: flex; flex-direction: column; gap: 5px; margin-top: 7px; }
+  .finding-line { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: var(--text-xs); line-height: var(--leading-xs); }
+  .finding-line .mark { width: 7px; height: 7px; }
+  .attention-row .actions { display: flex; align-items: center; gap: 8px; }
+
+  .check-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .check-row:last-child { border-bottom: 0; }
+  .check-row .title { font-size: var(--text-sm); line-height: var(--leading-sm); }
+  .check-row .code { margin-top: 2px; color: var(--subtle); font-family: var(--mono); font-size: var(--text-2xs); }
+  .check-row .affected { min-width: 48px; text-align: right; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .check-row .affected a { font-weight: 600; text-decoration: none; }
+  .more-checks > summary { display: flex; align-items: center; gap: 6px; padding: 11px 18px; color: var(--muted); font-size: var(--text-xs); }
+  .more-checks .check-row { background: var(--sunken); }
+
+  .confidence { padding: 16px 18px; }
+  .confidence .top { display: flex; align-items: flex-start; gap: 10px; justify-content: space-between; }
+  .confidence .top .badge { flex: none; }
+  .confidence p { margin-top: 7px; color: var(--muted); font-size: var(--text-xs); line-height: var(--leading-xs); }
+  .segments { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin-top: 12px; }
+  .segments span { height: 5px; border-radius: 999px; background: var(--idle); }
+  .segments span.missing { background: var(--pending); }
+  .confidence details { margin-top: 12px; }
+  .confidence details > summary { color: var(--accent); font-size: var(--text-xs); }
+  .source-list { display: flex; flex-direction: column; gap: 9px; margin: 10px 0 0; padding: 0; list-style: none; }
+  .source-list li { display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-xs); line-height: var(--leading-xs); }
+  .source-list li .mark { margin-top: 4px; }
+  .source-list strong { font-weight: 550; }
+  .source-list span { color: var(--muted); }
+
+  .scope-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .scope-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: var(--text-xs); }
+  .scope-list dt { color: var(--muted); }
+  .scope-list dd { margin: 0; text-align: right; }
+
+  .quick-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: var(--space-4); }
+  .quick-filter { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: var(--text-xs); }
+  .quick-filter:hover { border-color: var(--accent-border); color: var(--text); }
+  .quick-filter.active { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); font-weight: 550; }
+  .quick-filter .count { color: var(--subtle); font-variant-numeric: tabular-nums; }
+  .quick-filter.active .count { color: var(--accent); }
+
+  .filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .search-field { display: flex; align-items: center; gap: 8px; flex: 1 1 240px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--subtle); }
+  .search-field input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: var(--text-sm); }
+  .search-field input::placeholder { color: var(--subtle); }
+  .filter-menu { position: relative; }
+  .filter-menu > summary { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font-size: var(--text-sm); list-style: none; }
+  .filter-menu > summary::-webkit-details-marker { display: none; }
+  .filter-menu[open] > summary { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); }
+  .filter-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; display: flex; flex-direction: column; gap: 12px; width: 290px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--raised); box-shadow: var(--shadow); }
+  .filter-pop label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: var(--text-xs); }
+  .filter-pop select { min-height: 32px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+  .scope-toggle { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+  .scope-toggle button { min-height: 28px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font-size: var(--text-xs); }
+  .scope-toggle button.active { background: var(--accent-subtle); color: var(--accent); font-weight: 550; }
+
+  .scope-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; color: var(--muted); font-size: var(--text-xs); }
+  .scope-line .link { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; text-decoration: underline; }
+
+  .grid-frame { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  thead th { padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--sunken); color: var(--muted); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.06em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--hover); }
+  td .repo-link { color: var(--text); font-family: var(--mono); font-size: var(--text-sm); font-weight: 550; text-decoration: none; }
+  td .repo-link:hover { color: var(--accent); text-decoration: underline; }
+  .cell-open { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-xs); }
+  .cell-open .errors { color: var(--danger); font-weight: 550; }
+  .cell-open .warnings { color: var(--pending); font-weight: 550; }
+  .cell-open .clean { color: var(--idle); }
+  .row-go { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--subtle); }
+  tbody tr:hover .row-go { border-color: var(--border); background: var(--surface); color: var(--text); }
+  .grid-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs); }
+  .grid-foot .pager { display: flex; align-items: center; gap: 6px; }
+  .checkbox { width: 15px; height: 15px; accent-color: var(--accent); }
+
+  .tabs { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; margin-bottom: var(--space-4); border-bottom: 1px solid var(--border); }
+  .tab { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 11px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font-size: var(--text-sm); }
+  .tab:hover { color: var(--text); }
+  .tab.active { border-bottom-color: var(--accent); color: var(--text); font-weight: 550; }
+  .tab .count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger-subtle); color: var(--danger); font-size: var(--text-2xs); font-weight: 600; }
+
+  .area-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: var(--space-4); }
+  .area-filter { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: var(--text-xs); }
+  .area-filter.active { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); font-weight: 550; }
+  .area-filter .count { color: var(--subtle); }
+  .area-filter.active .count { color: var(--accent); }
+
+  .track-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 7px; color: var(--muted); font-size: var(--text-xs); }
+  .track-line .mark { color: var(--idle); }
+  .track-line button { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; text-decoration: underline; }
+
+  .workbench { display: grid; grid-template-columns: minmax(270px, 340px) minmax(0, 1fr); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
+  .finding-list { border-right: 1px solid var(--border); background: var(--surface); }
+  .finding-item { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 13px 15px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; }
+  .finding-item:last-child { border-bottom: 0; }
+  .finding-item:hover { background: var(--hover); }
+  .finding-item.active { background: var(--accent-subtle); box-shadow: inset 3px 0 0 var(--accent); }
+  .finding-item .line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .finding-item .title { color: var(--text); font-size: var(--text-sm); line-height: var(--leading-sm); font-weight: 550; }
+  .finding-item .code { color: var(--subtle); font-family: var(--mono); font-size: var(--text-2xs); overflow-wrap: anywhere; }
+  .finding-detail { padding: 20px; min-width: 0; }
+  .finding-detail .detail-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .finding-detail h2 { flex: 1; min-width: 0; font-size: var(--text-lg); line-height: var(--leading-lg); }
+  .finding-detail .summary { margin-top: 8px; max-width: 72ch; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+  .fix-block { margin-top: 16px; padding: 14px 15px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--sunken); }
+  .fix-block h3 { margin-bottom: 6px; font-size: var(--text-sm); }
+  .fix-block p { max-width: 72ch; font-size: var(--text-sm); line-height: var(--leading-sm); }
+  .finding-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .evidence { margin-top: 16px; }
+  .evidence h3 { margin-bottom: 7px; }
+  .chip-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font-size: var(--text-xs); }
+  .chip strong { color: var(--text); font-weight: 550; }
+  .finding-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .finding-foot .code { color: var(--subtle); font-family: var(--mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
+  .tech { margin-top: 14px; border-top: 1px solid var(--border); }
+  .tech > summary { padding-top: 12px; color: var(--accent); font-size: var(--text-xs); }
+  .tech pre { margin: 10px 0 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--sunken); color: var(--text); font-family: var(--mono); font-size: var(--text-2xs); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .single-list { display: none; padding: 14px; }
+  .single-finding { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+  .single-finding + .single-finding { margin-top: 10px; }
+  .single-finding > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 14px; list-style: none; }
+  .single-finding > summary::-webkit-details-marker { display: none; }
+  .single-finding > summary .title { flex: 1; min-width: 180px; font-weight: 550; }
+  .single-finding .single-body { padding: 0 14px 14px; border-top: 1px solid var(--border); }
+  .layout-single .workbench { display: block; }
+  .layout-single .finding-list, .layout-single .finding-detail { display: none; }
+  .layout-single .single-list { display: block; }
+
+  .finding-confidence { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs); }
+  .finding-confidence details summary { color: var(--accent); }
+
+  .metric-band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
+  .metric-band > div { padding: 14px 16px; border-right: 1px solid var(--border); }
+  .metric-band > div:last-child { border-right: 0; }
+  .metric-band .label { color: var(--muted); font-size: var(--text-2xs); }
+  .metric-band .value { margin-top: 3px; font-size: var(--text-xl); line-height: 1.15; font-weight: 640; font-variant-numeric: tabular-nums; }
+  .metric-band .detail { margin-top: 3px; color: var(--subtle); font-size: var(--text-2xs); }
+  .places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+  .place-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .place-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: var(--text-sm); }
+  .place-list .count { flex: none; color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+
+  .ai-summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: var(--space-4); padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  .ai-summary .stats { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .ai-summary .stat strong { display: block; font-size: var(--text-xl); line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .ai-summary .stat span { color: var(--muted); font-size: var(--text-xs); }
+  .ai-list { display: flex; flex-direction: column; gap: 10px; }
+  .ai-card { padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  .ai-card .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .ai-card .name { color: var(--text); font-family: var(--mono); font-size: var(--text-sm); font-weight: 600; text-decoration: none; }
+  .ai-card .name:hover { color: var(--accent); text-decoration: underline; }
+  .ai-card .facts { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 12px; }
+  .ai-card .fact .label { color: var(--subtle); font-size: var(--text-2xs); }
+  .ai-card .fact .value { margin-top: 2px; font-size: var(--text-xs); }
+  .ai-card .actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 14px; }
+  .ai-card details.instructions { margin-top: 12px; border-top: 1px solid var(--border); }
+  .ai-card details.instructions > summary { padding-top: 11px; color: var(--accent); font-size: var(--text-xs); }
+
+  .menu { position: relative; display: inline-flex; }
+  .menu > summary { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--muted); list-style: none; }
+  .menu > summary::-webkit-details-marker { display: none; }
+  .menu[open] > summary { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); }
+  .menu-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; display: flex; flex-direction: column; min-width: 190px; padding: 5px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--raised); box-shadow: var(--shadow); }
+  .menu-panel button, .menu-panel a { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0 9px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); font-size: var(--text-xs); text-align: left; text-decoration: none; }
+  .menu-panel button:hover, .menu-panel a:hover { background: var(--hover); }
+  .menu-panel .danger { color: var(--danger); }
+
+  .how { margin-top: var(--space-4); }
+  .how > summary { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px; color: var(--muted); font-size: var(--text-sm); font-weight: 550; }
+  .how .body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); padding: 4px 0 14px; }
+  .how h3 { margin-bottom: 4px; }
+  .how p { color: var(--muted); font-size: var(--text-xs); line-height: var(--leading-xs); }
+
+  .empty-note { display: flex; align-items: center; gap: 9px; padding: 14px 18px; color: var(--muted); font-size: var(--text-xs); }
+
+  .review-notes { margin-top: var(--space-6); padding: 16px 18px; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); background: var(--sunken); }
+  .review-notes summary { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--text-sm); font-weight: 550; }
+  .review-notes ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin: 14px 0 0; padding-left: 20px; color: var(--muted); font-size: var(--text-xs); line-height: var(--leading-xs); }
+  .review-notes li strong { color: var(--text); }
+
+  .callout {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border: 1px solid var(--accent-border);
+    border-radius: 999px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 700;
+    vertical-align: middle;
+  }
+  body.annotations .callout { display: inline-flex; }
+  body.annotations .page-header .callout, body.annotations .rail .callout { margin-left: 6px; }
+
+  .link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+  .inline { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); }
+
+  @media (pointer: coarse) {
+    .btn, .quick-filter, .area-filter, .tab, .rail a, .global a, .page-nav a { min-height: 44px; }
+    .toggle { width: 44px; height: 26px; }
+    .menu > summary { width: 44px; height: 44px; }
+    .menu-panel button, .menu-panel a { min-height: 44px; }
+    .row-go { width: 44px; height: 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+  }
+  @media (max-width: 1180px) {
+    .global { display: none; }
+    .section { flex-direction: column; gap: var(--space-4); }
+    .rail { position: static; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: auto; max-width: 100%; }
+    .rail .group { display: contents; }
+    .rail .group + .group { margin-top: 0; }
+    .rail .group-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .rail .switch-row { flex: 1 0 100%; margin: 0; }
+    .rail ul { flex-direction: row; flex-wrap: wrap; }
+    .rail a { padding: 0 12px; border: 1px solid var(--border); background: var(--surface); }
+    .rail a.current { border-color: var(--accent-border); }
+    .main { padding: 16px; }
+  }
+  @media (max-width: 980px) {
+    .split, .verdict { grid-template-columns: 1fr; }
+    .verdict-stats { min-height: 0; }
+    .workbench { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+    .how .body { grid-template-columns: 1fr; gap: 12px; }
+  }
+  @media (max-width: 760px) {
+    .topbar { height: 52px; padding: 0 14px; gap: 10px; }
+    .topbar .search, .topbar .live, .topbar .grow { display: none; }
+    .main { padding: 14px 14px 40px; }
+    .page-header .actions { width: 100%; }
+    .page-header .actions .btn { flex: 1; }
+    .page-header .actions .btn.icon { flex: 0 0 34px; }
+    .page-nav { top: 58px; }
+    .verdict-main h2 { font-size: var(--text-xl); line-height: var(--leading-xl); }
+    .verdict-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .verdict-stats > div { padding: 11px 12px; }
+    .quick-filters { gap: 5px; }
+    .quick-filter { padding: 0 9px; }
+    .filter-row { align-items: stretch; }
+    .search-field { flex-basis: 100%; }
+    .filter-pop { right: auto; left: 0; width: min(290px, calc(100vw - 52px)); }
+    .grid-frame { border: 0; background: transparent; overflow: visible; }
+    table, thead, tbody, tr, td { display: block; }
+    thead { display: none; }
+    tbody { display: flex; flex-direction: column; gap: 10px; }
+    tbody tr { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+    tbody td { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; }
+    tbody td::before { content: attr(data-label); flex: none; color: var(--subtle); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.05em; }
+    tbody td:first-child { justify-content: flex-start; }
+    tbody td:first-child::before, tbody td:last-child::before { content: ""; }
+    tbody td:first-child { display: none; }
+    tbody td:last-child { justify-content: flex-end; }
+    tbody tr:hover { background: var(--surface); }
+    .split-actions { display: none !important; }
+    .grid-foot { border-top: 0; padding: 10px 0 0; }
+    .workbench { display: block; border: 0; background: transparent; overflow: visible; }
+    .finding-list { border: 0; border-radius: var(--radius-md); overflow: hidden; }
+    .finding-detail { margin-top: 10px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+    .finding-item { border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; background: var(--surface); }
+    .metric-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metric-band > div:nth-child(2) { border-right: 0; }
+    .metric-band > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+    .places { grid-template-columns: 1fr; }
+    .ai-card .actions .btn:first-child { flex: 1; }
+    .review-notes ol { grid-template-columns: 1fr; }
+    .reviewbar { padding: 8px 12px; gap: 10px; }
+    .reviewbar .spacer { display: none; }
+    .reviewbar .control select { max-width: 160px; }
+    .all-counts > summary .subtle { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="reviewbar">
+    <strong>Design concept</strong>
+    <span>Kennel Club layout review. Illustrative data, no live actions.</span>
+    <span class="spacer"></span>
+    <label class="control">Screen
+      <select id="screen">
+        <option value="overview">Overview</option>
+        <option value="repositories">Repositories</option>
+        <option value="repository">Repository</option>
+        <option value="ai-context">AI Context</option>
+      </select>
+    </label>
+    <label class="control">Style
+      <select id="style">
+        <option value="mission" selected>Mission Control</option>
+        <option value="classic">Classic</option>
+      </select>
+    </label>
+    <label class="control">Mode
+      <select id="mode">
+        <option value="dark" selected>Dark</option>
+        <option value="light">Light</option>
+      </select>
+    </label>
+    <label class="check"><input id="annotations" type="checkbox"> Show callouts</label>
+  </div>
+
+  <div class="app">
+    <aside class="global" aria-label="Zoomies">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13.5c-2.6 0-4.7 1.5-4.7 3.2 0 1.4 2 2.3 4.7 2.3s4.7-.9 4.7-2.3c0-1.7-2.1-3.2-4.7-3.2Z"/><circle cx="5.2" cy="9.4" r="1.7"/><circle cx="9.1" cy="5.8" r="1.9"/><circle cx="14.9" cy="5.8" r="1.9"/><circle cx="18.8" cy="9.4" r="1.7"/></svg>
+        </span>
+        Zoomies
+      </div>
+      <a href="#" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Overview</a>
+      <div class="group">Fleet</div>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Pools</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg>Runners</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Queue</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M8.6 8.4 10.8 15M15.4 8.4 13.2 15"/></svg>Workflows</a>
+      <div class="group">Infrastructure</div>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg>Hosts</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.5 19a4.5 4.5 0 0 0 .4-9A6.5 6.5 0 0 0 5.4 8.7 4 4 0 0 0 6 16.5"/></svg>Providers</a>
+      <div class="group">GitHub</div>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 19c-4 1.5-4-2.5-6-3m12 6v-3.9a3.4 3.4 0 0 0-1-2.7c3.3-.4 6.8-1.6 6.8-7.4A5.8 5.8 0 0 0 19.2 3 5.4 5.4 0 0 0 19 7s-1.3.5-4 .5S11 7 11 7a5.4 5.4 0 0 0-.2-4A5.8 5.8 0 0 0 6.8 7.1C6.8 12.9 10.3 14 13.6 14.5A3.4 3.4 0 0 0 12.6 17V23"/></svg>Installations</a>
+      <a href="#" class="active" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v1a4 4 0 0 0 4 4M17 6h3v1a4 4 0 0 1-4 4"/></svg>Kennel Club</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Audit</a>
+      <div class="foot">Local build 9235f5fa</div>
+    </aside>
+
+    <div class="work">
+      <header class="topbar">
+        <nav class="crumb" aria-label="Breadcrumb" id="crumb"></nav>
+        <span class="grow"></span>
+        <span class="live"><span class="dot"></span> Live</span>
+        <span class="search" role="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Search or jump to<kbd>Ctrl K</kbd></span>
+        <span class="user">alice <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>
+      </header>
+      <main class="main" id="main"></main>
+    </div>
+  </div>
+
+<script>
+  const state = {
+    screen: 'overview',
+    style: 'mission',
+    mode: 'dark',
+    annotations: false,
+    finding: 0,
+    area: 'all',
+    findingsLayout: 'workbench',
+  };
+
+  const ICONS = {
+    overview: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+    list: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/></svg>',
+    book: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 7v14M3 5h6a3 3 0 0 1 3 3v12a3 3 0 0 0-3-3H3V5Zm18 0h-6a3 3 0 0 0-3 3v12a3 3 0 0 1 3-3h6V5Z"/></svg>',
+    refresh: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>',
+    chevron: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 18 6-6-6-6"/></svg>',
+    more: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
+    filter: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z"/></svg>',
+    search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>',
+    warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 9 17H3L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg>',
+    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 12 4 4L19 6"/></svg>',
+    copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+    spark: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></svg>',
+    trophy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v1a4 4 0 0 0 4 4M17 6h3v1a4 4 0 0 1-4 4"/></svg>',
+    x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 6 12 12M18 6 6 18"/></svg>',
+  };
+
+  const findings = [
+    {
+      title: 'A public repository is running jobs on this fleet',
+      severity: 'error',
+      area: 'Workflow',
+      code: 'exposure.public_repo_on_fleet',
+      detail: 'Anyone who can open a pull request against a public repository can ask GitHub to run code on a self-hosted runner. In the last 30 days, this fleet ran or queued 33 jobs for it.',
+      fix: "Move this repository's jobs to GitHub-hosted runners, or serve it only from a pool that is ephemeral, has no Docker socket and runs on hosts you are willing to lose. If you have decided this is acceptable, waive this finding and say why.",
+      evidence: ['Run 1841: pull_request from a fork', 'Run 1837: pull_request from a fork'],
+      subject: '',
+    },
+    {
+      title: "A public repository's jobs ran on a pool with weak isolation",
+      severity: 'error',
+      area: 'Workflow',
+      code: 'exposure.public_repo_weak_pool',
+      detail: "1 pool that ran this repository's jobs is set up with less isolation than the default: persistent runners, a privileged Docker daemon. A pull request from a stranger can reach whatever those settings expose.",
+      fix: 'Change the pool, or stop serving this repository from it. The pool page says what each setting exposes. This finding clears by itself once the pools that run this repository are ephemeral, have no Docker socket, drop root and run in a container.',
+      evidence: ['Pool: zoomies-demo-linux-arm64', 'Run 1841: pull_request from a fork'],
+      subject: 'zoomies-demo-linux-arm64',
+    },
+  ];
+
+  const checks = [
+    { title: 'A public repository is running jobs on this fleet', code: 'exposure.public_repo_on_fleet', severity: 'error', affected: 1 },
+    { title: "A public repository's jobs ran on a pool with weak isolation", code: 'exposure.public_repo_weak_pool', severity: 'error', affected: 1 },
+  ];
+  const quietChecks = [
+    { title: 'No job timeout is set', code: 'workflow.no_timeout', severity: 'warning' },
+    { title: 'A workflow downloads and runs a remote script', code: 'workflow.remote_script', severity: 'warning' },
+    { title: 'No recognised agent instruction file was found', code: 'guidance.missing', severity: 'info' },
+    { title: 'A required status check is not configured', code: 'protection.missing_check', severity: 'warning' },
+    { title: 'The default workflow token has write access', code: 'protection.token_write', severity: 'error' },
+    { title: 'Docker socket is available to jobs', code: 'workflow.docker_socket', severity: 'error' },
+    { title: 'A job uses a label no pool serves', code: 'capacity.unserved_label', severity: 'warning' },
+    { title: 'A pull request target is checked out with write access', code: 'workflow.pr_target_write', severity: 'warning' },
+    { title: 'A runner keeps state between jobs', code: 'capacity.persistent_runner', severity: 'warning' },
+    { title: 'The App lacks permission to read repository settings', code: 'coverage.settings_missing', severity: 'info' },
+  ];
+
+  const repos = [
+    { name: 'acme/site', standing: 'attention', label: 'Needs attention', tone: 'danger', visibility: 'Public', errors: 2, warnings: 0, evaluated: '2 minutes ago' },
+    { name: 'acme/api', standing: 'best', label: 'No open findings', tone: 'success', visibility: 'Private', errors: 0, warnings: 0, evaluated: '3 minutes ago' },
+    { name: 'acme/widgets', standing: 'best', label: 'No open findings', tone: 'success', visibility: 'Private', errors: 0, warnings: 0, evaluated: '4 minutes ago' },
+  ];
+
+  const aiRepos = [
+    { name: 'acme/api', status: 'Draft saved', tone: 'warning', branch: 'main', output: 'Repository and Zoomies', installation: 'acme', checked: 'Not checked yet', action: 'Resume setup' },
+    { name: 'acme/widgets', status: 'Draft saved', tone: 'warning', branch: 'main', output: 'Repository', installation: 'acme', checked: 'Not checked yet', action: 'Resume setup' },
+  ];
+
+  function icon(name) { return ICONS[name] || ''; }
+  function mark(severity) {
+    const shape = severity === 'error' ? 'triangle' : severity === 'warning' ? 'ring' : severity === 'success' ? 'circle' : 'square';
+    return '<span class="mark ' + shape + '" aria-hidden="true"></span>';
+  }
+  function severityBadge(severity) {
+    const tone = severity === 'error' ? 'danger' : severity === 'warning' ? 'warning' : 'info';
+    const label = severity === 'error' ? 'Error' : severity === 'warning' ? 'Warning' : 'Note';
+    return '<span class="badge" data-tone="' + tone + '">' + mark(severity) + label + '</span>';
+  }
+  function statusBadge(label, tone) {
+    const severity = tone === 'danger' ? 'error' : tone === 'warning' ? 'warning' : tone === 'success' ? 'success' : 'info';
+    return '<span class="badge" data-tone="' + tone + '">' + mark(severity) + label + '</span>';
+  }
+  function callout(n) { return '<span class="callout" aria-hidden="true">' + n + '</span>'; }
+
+  function shell(page, railCurrent) {
+    return '<div class="section">' + rail(railCurrent) + '<div class="page">' + page + '</div></div>';
+  }
+
+  function rail(current) {
+    return '<aside class="rail" aria-label="Kennel Club">' +
+      '<div class="group">' +
+        '<p class="group-label">Standards ' + callout(1) + '</p>' +
+        '<div class="switch-row">' +
+          '<button class="toggle" aria-label="Turn Kennel Club off" aria-pressed="true"></button>' +
+          '<div class="copy"><strong>Check repository standards</strong><span>On. 4 of 5 sources read.</span></div>' +
+        '</div>' +
+        '<ul>' +
+          '<li><a href="#overview" class="' + (current === 'overview' ? 'current' : '') + '" ' + (current === 'overview' ? 'aria-current="page"' : '') + '>' + icon('overview') + '<span class="label">Overview</span></a></li>' +
+          '<li><a href="#repositories" class="' + (current === 'repositories' ? 'current' : '') + '" ' + (current === 'repositories' ? 'aria-current="page"' : '') + '>' + icon('list') + '<span class="label">Repositories</span></a></li>' +
+        '</ul>' +
+      '</div>' +
+      '<div class="group">' +
+        '<p class="group-label">For assistants</p>' +
+        '<ul><li><a href="#ai-context" class="' + (current === 'ai-context' ? 'current' : '') + '" ' + (current === 'ai-context' ? 'aria-current="page"' : '') + '>' + icon('book') + '<span class="label">AI Context</span></a></li></ul>' +
+      '</div>' +
+    '</aside>';
+  }
+
+  function pageNav(items) {
+    return '<nav class="page-nav" aria-label="On this page">' + items.map((item, index) =>
+      '<a href="#' + item.id + '" class="' + (index === 0 ? 'active' : '') + '">' + item.label + (item.count ? ' <span class="count">' + item.count + '</span>' : '') + '</a>'
+    ).join('') + '</nav>';
+  }
+
+  function notes(items) {
+    return '<details class="review-notes"><summary>Why this layout</summary><ol>' + items.map((item) =>
+      '<li><strong>' + item[0] + '.</strong> ' + item[1] + '</li>'
+    ).join('') + '</ol></details>';
+  }
+
+  function overview() {
+    const page =
+      '<header class="page-header">' +
+        '<div class="heading"><h1>Kennel Club</h1><p class="subtitle">How the repositories this fleet serves measure up against what affects CI and the fleet.</p>' +
+          '<div class="meta"><span class="small muted">Oldest evaluation 4 minutes ago</span><span class="tiny subtle">Scope: acme installation</span></div>' +
+        '</div>' +
+        '<div class="actions"><button class="btn">' + icon('refresh') + 'Refresh</button></div>' +
+      '</header>' +
+      pageNav([
+        { id: 'summary', label: 'Summary' + callout(5) },
+        { id: 'attention', label: 'Attention', count: 1 },
+        { id: 'checks', label: 'Checks', count: 12 },
+        { id: 'confidence', label: 'Read confidence' },
+      ]) +
+      '<section id="summary" class="verdict">' +
+        '<div class="verdict-main">' +
+          '<div><p class="eyebrow">' + callout(2) + ' Needs attention</p><h2>1 repository needs attention</h2>' +
+          '<p><strong>acme/site</strong> has 2 errors open. It is public, so a pull request from a stranger can reach this fleet.</p></div>' +
+          '<div class="actions"><a class="btn primary" href="#repository">Review acme/site' + icon('chevron') + '</a><a class="btn ghost" href="#attention">See all findings</a></div>' +
+        '</div>' +
+        '<div class="verdict-stats">' +
+          '<div><div class="label">Best in show</div><div class="value success">2</div><div class="detail">Nothing open</div></div>' +
+          '<div><div class="label">Partly checked</div><div class="value warning">0</div><div class="detail">Reads that were cut short</div></div>' +
+          '<div><div class="label">Repositories</div><div class="value">3</div><div class="detail">This fleet has run jobs for</div></div>' +
+        '</div>' +
+      '</section>' +
+      '<details class="all-counts"><summary><span>All counts</span><span class="subtle">Errors 2, warnings 0, waived 0, not tracked 0</span>' + icon('chevron') + '</summary>' +
+        '<dl class="count-grid">' +
+          '<div><dt>Errors</dt><dd>2</dd></div><div><dt>Warnings</dt><dd>0</dd></div><div><dt>Waived</dt><dd>0</dd></div><div><dt>Not tracked</dt><dd>0</dd></div><div><dt>Partly checked</dt><dd>0</dd></div><div><dt>Repositories</dt><dd>3</dd></div>' +
+        '</dl>' +
+      '</details>' +
+      '<div class="split" style="margin-top: 20px;">' +
+        '<div class="stack">' +
+          '<section class="panel" id="attention">' +
+            '<div class="panel-head"><div class="heading"><h2>Needs attention</h2><p>The repositories with the worst findings open, worst first.</p></div><a class="small" href="#repositories">See all</a></div>' +
+            '<div class="attention-row">' +
+              '<div><div class="repo"><a href="#repository">acme/site</a>' + statusBadge('Needs attention', 'danger') + '<span class="badge" data-tone="neutral">Public</span>' + callout(3) + '</div>' +
+                '<div class="finding-lines">' +
+                  '<div class="finding-line">' + mark('error') + 'A public repository is running jobs on this fleet</div>' +
+                  '<div class="finding-line">' + mark('error') + "A public repository's jobs ran on a pool with weak isolation</div>" +
+                '</div>' +
+              '</div>' +
+              '<div class="actions"><a class="btn sm" href="#repository">Review' + icon('chevron') + '</a></div>' +
+            '</div>' +
+          '</section>' +
+          '<section class="panel" id="checks">' +
+            '<div class="panel-head"><div class="heading"><h2>What is open by check</h2><p>Which checks are affecting a repository right now. Everything else is quiet.</p></div><span class="badge" data-tone="neutral">2 affected of 12</span></div>' +
+            checks.map((check) =>
+              '<div class="check-row"><div><div class="title">' + check.title + '</div><div class="code">' + check.code + '</div></div>' + severityBadge(check.severity) + '<div class="affected"><a href="#repositories">' + check.affected + '</a></div></div>'
+            ).join('') +
+            '<details class="more-checks"><summary>Show 10 checks with nothing open' + icon('chevron') + '</summary>' +
+              quietChecks.map((check) =>
+                '<div class="check-row"><div><div class="title">' + check.title + '</div><div class="code">' + check.code + '</div></div>' + severityBadge(check.severity) + '<div class="affected subtle">0</div></div>'
+              ).join('') +
+            '</details>' +
+            '<div class="panel-foot">A check with nothing open is still checked. The number is repositories, not findings.</div>' +
+          '</section>' +
+        '</div>' +
+        '<div class="aside-stack" id="confidence">' +
+          '<section class="panel"><div class="confidence">' +
+            '<div class="top"><div><h2>Read confidence</h2><p class="small muted">Four of five sources were read.</p></div>' + statusBadge('Partial', 'warning') + callout(4) + '</div>' +
+            '<div class="segments" aria-label="Four of five sources read"><span></span><span></span><span></span><span></span><span class="missing"></span></div>' +
+            '<p>Repository settings could not be read, so counts are a minimum. Everything else is current.</p>' +
+            '<details><summary>Sources and permissions</summary><ul class="source-list">' +
+              '<li>' + mark('success') + '<div><strong>Repository metadata</strong><br><span>Read for 3 repositories.</span></div></li>' +
+              '<li>' + mark('success') + '<div><strong>Workflow runs</strong><br><span>Read for public repositories.</span></div></li>' +
+              '<li>' + mark('success') + '<div><strong>Repository files</strong><br><span>Read for 1 repository.</span></div></li>' +
+              '<li>' + mark('warning') + '<div><strong>Repository settings</strong><br><span>Needs the App\'s Administration: read permission.</span> <a href="#">Open installations</a></div></li>' +
+              '<li>' + mark('success') + '<div><strong>Fleet records</strong><br><span>Jobs, pools and hosts.</span></div></li>' +
+            '</ul></details>' +
+          '</div></section>' +
+          '<section class="panel"><div class="panel-head"><div class="heading"><h2>Scope</h2><p>What the numbers above cover.</p></div></div>' +
+            '<div class="panel-body"><dl class="scope-list">' +
+              '<li><dt>Installation</dt><dd>acme</dd></li>' +
+              '<li><dt>Repositories</dt><dd>3 tracked</dd></li>' +
+              '<li><dt>Activity</dt><dd>Last 30 days</dd></li>' +
+              '<li><dt>Tracking</dt><dd><a href="#repositories">Manage</a></dd></li>' +
+            '</dl></div>' +
+          '</section>' +
+        '</div>' +
+      '</div>' +
+      notes([
+        ['Verdict first', 'The page answers "is anything wrong?" before it lists numbers. The old seven equal cards asked the reader to rank them.'],
+        ['One summary band', 'The primary finding, the clean count and the partial count sit together. Supporting totals move into one disclosure instead of two rows of cards.'],
+        ['Progressive depth', 'A repository row names the findings behind its count, so the next click is informed. Checks with nothing open are folded away.'],
+        ['Trust is visible', 'Read confidence is a first-class aside, not a panel at the bottom. A partial read says the counts are a minimum next to the counts themselves.'],
+        ['In-page navigation', 'The anchor row carries counts and sticks under the top bar, so the page can be long without becoming a scroll hunt.'],
+      ]);
+
+    return shell(page, 'overview');
+  }
+
+  function repositories() {
+    const page =
+      '<header class="page-header">' +
+        '<div class="heading"><h1>Repositories</h1><p class="subtitle">Every repository Kennel Club has looked at, and what is open on it.</p>' +
+          '<div class="meta"><span class="small muted">3 tracked. 1 needs attention.</span></div>' +
+        '</div>' +
+        '<div class="actions"><button class="btn">' + icon('refresh') + 'Refresh</button></div>' +
+      '</header>' +
+      '<div class="quick-filters" role="group" aria-label="Quick filters">' +
+        '<button class="quick-filter active">All <span class="count">3</span></button>' +
+        '<button class="quick-filter">Needs attention <span class="count">1</span></button>' +
+        '<button class="quick-filter">No open findings <span class="count">2</span></button>' +
+        '<button class="quick-filter">Partly checked <span class="count">0</span></button>' +
+        '<button class="quick-filter">Not tracked <span class="count">0</span></button>' + callout(1) +
+      '</div>' +
+      '<div class="filter-row">' +
+        '<label class="search-field">' + icon('search') + '<input type="search" placeholder="Search repository names" aria-label="Search repositories"></label>' +
+        '<details class="filter-menu"><summary>' + icon('filter') + 'Filters</summary>' +
+          '<div class="filter-pop">' +
+            '<label>Severity<select><option>Any severity</option><option>Errors</option></select></label>' +
+            '<label>Check<select><option>Any check</option><option>exposure.public_repo_on_fleet</option><option>exposure.public_repo_weak_pool</option></select></label>' +
+            '<label>Tracking<select><option>Tracked</option><option>Not tracked</option><option>Tracked and not tracked</option></select></label>' +
+            '<label>Installation<select><option>Any installation</option><option>acme</option></select></label>' +
+            '<button class="btn sm">Apply filters</button>' +
+          '</div>' +
+        '</details>' + callout(2) +
+        '<div class="scope-toggle" role="group" aria-label="Activity scope"><button class="active">Active last 30 days</button><button>All repositories</button></div>' +
+      '</div>' +
+      '<div class="scope-line"><span>Showing 3 repositories with a job in the last 30 days.</span><button class="link">2 quiet repositories are hidden</button>' + callout(4) + '</div>' +
+      '<div class="grid-frame">' +
+        '<table><caption class="sr-only">Kennel Club repositories</caption><thead><tr>' +
+          '<th style="width:38px;"><input class="checkbox" type="checkbox" aria-label="Select all repositories"></th>' +
+          '<th>Repository</th><th>Standing</th><th>Open findings</th><th>Last read' + callout(3) + '</th><th style="width:44px;"><span class="sr-only">Open</span></th>' +
+        '</tr></thead><tbody>' +
+        repos.map((repo) =>
+          '<tr>' +
+            '<td data-label="Select"><input class="checkbox" type="checkbox" aria-label="Select ' + repo.name + '"></td>' +
+            '<td data-label="Repository"><a class="repo-link" href="#repository">' + repo.name + '</a></td>' +
+            '<td data-label="Standing">' + statusBadge(repo.label, repo.tone) + '</td>' +
+            '<td data-label="Open findings"><div class="cell-open">' + (repo.errors ? '<span class="errors">' + repo.errors + ' errors</span>' : '<span class="clean">' + icon('check') + ' No open findings</span>') + (repo.warnings ? '<span class="warnings">' + repo.warnings + ' warnings</span>' : '') + '</div></td>' +
+            '<td data-label="Last read"><span class="small muted">' + repo.evaluated + '</span></td>' +
+            '<td><a class="row-go" href="#repository" aria-label="Open ' + repo.name + '">' + icon('chevron') + '</a></td>' +
+          '</tr>'
+        ).join('') +
+        '</tbody></table>' +
+        '<div class="grid-foot"><span>1 to 3 of 3 repositories</span><span class="pager"><span>Rows</span><select aria-label="Rows per page" style="min-height:28px; border:1px solid var(--border); border-radius:4px; background:var(--surface); padding:0 6px;"><option>50</option></select><button class="btn sm icon" disabled aria-label="Previous page">‹</button><button class="btn sm icon" disabled aria-label="Next page">›</button></span></div>' +
+      '</div>' +
+      notes([
+        ['Quick filters carry counts', 'The five questions an operator actually asks are one click away. The dropdowns remain for the long tail.'],
+        ['The filter bar is one row', 'Selects are width:100% flex items today, so they stack. Give each control a measured width and the page regains its first screen.'],
+        ['Fewer default columns', 'Visibility moves into Columns. Repository, standing, open findings and last read are the scanning set.'],
+        ['Scope is explained once', 'The scope control and the sentence agree, and the number of hidden quiet repositories is a link, not a paragraph.'],
+      ]);
+
+    return shell(page, 'repositories');
+  }
+
+  function findingDetail(finding) {
+    return '<div class="finding-detail">' +
+      '<div class="detail-head">' + severityBadge(finding.severity) + '<span class="badge" data-tone="neutral">' + finding.area + '</span><h2>' + finding.title + '</h2></div>' +
+      '<p class="summary">' + finding.detail + '</p>' +
+      '<div class="fix-block"><h3>What to change</h3><p>' + finding.fix + '</p></div>' +
+      '<div class="finding-actions">' +
+        '<button class="btn sm">' + icon('copy') + 'Copy prompt for your coding agent</button>' +
+        '<button class="btn sm">' + icon('spark') + 'Ask Eli</button>' +
+        '<button class="btn sm">Waive</button>' +
+      '</div>' +
+      '<div class="evidence"><h3>Where it was seen</h3><div class="chip-row">' + finding.evidence.map((item, index) =>
+        '<span class="chip">' + (index === 0 && item.startsWith('Pool') ? '<strong>Pool</strong>' : '<strong>Run</strong>') + item.replace(/^(Pool|Run): /, '') + '</span>'
+      ).join('') + '</div></div>' +
+      '<details class="tech"><summary>Technical details and the exact prompt</summary><pre>' + finding.code + '\n\n' + finding.detail + '\n\nCopy the prompt to hand this finding to a coding agent. The prompt is generated by the controller and includes the evidence above.</pre></details>' +
+      '<div class="finding-foot"><span class="code">' + finding.code + '</span><span class="tiny subtle">' + (finding.subject ? 'About ' + finding.subject : 'Repository finding') + '</span></div>' +
+      '<div class="finding-confidence"><span>' + mark('success') + ' Read from 5 of 5 sources for this finding.' + callout(4) + '</span><details><summary>Details</summary><p class="tiny muted" style="margin-top:6px; max-width:60ch;">Repository metadata, workflow runs, files, settings and fleet records were all readable when this finding was evaluated.</p></details></div>' +
+    '</div>';
+  }
+
+  function repositoryTabs(active) {
+    return '<div class="tabs" role="tablist" aria-label="Repository sections">' +
+      '<button class="tab ' + (active === 'findings' ? 'active' : '') + '" role="tab" aria-selected="' + (active === 'findings') + '" data-tab="findings">Findings <span class="count">2</span></button>' +
+      '<button class="tab ' + (active === 'activity' ? 'active' : '') + '" role="tab" aria-selected="' + (active === 'activity') + '" data-tab="activity">Fleet activity</button>' +
+      '<button class="tab ' + (active === 'ai' ? 'active' : '') + '" role="tab" aria-selected="' + (active === 'ai') + '" data-tab="ai">AI Context</button>' +
+    '</div>';
+  }
+
+  function repository(findingsActive) {
+    const page =
+      '<header class="page-header">' +
+        '<div class="heading"><h1>acme/site</h1>' +
+          '<div class="meta">' + statusBadge('Needs attention', 'danger') + '<span class="badge" data-tone="neutral">Public</span><span class="small muted">Evaluated 2 minutes ago</span></div>' +
+          '<div class="track-line">' + mark('success') + 'Kennel Club is tracking this repository. <button>Stop tracking</button>' + callout(2) + '</div>' +
+        '</div>' +
+        '<div class="actions"><button class="btn icon" aria-label="Refresh">' + icon('refresh') + '</button><button class="btn primary">' + icon('refresh') + 'Recheck</button>' +
+          '<details class="menu"><summary aria-label="More actions">' + icon('more') + '</summary><div class="menu-panel"><button>Open on GitHub</button><button>Copy repository name</button><button class="danger">Stop tracking</button></div></details>' +
+        '</div>' +
+      '</header>' +
+      repositoryTabs(findingsActive ? 'findings' : 'activity') +
+      '<div id="repository-body">' + (findingsActive ? findingsTab() : activityTab()) + '</div>' +
+      notes([
+        ['Three tabs, not five', 'Findings, fleet activity and AI Context are the three jobs. Protection and agent guidance become areas inside Findings, with their own deep links.'],
+        ['Destructive actions leave the header', 'Tracking state is a sentence with a link. Refresh is an icon. Recheck is the one primary action.'],
+        ['List and detail, not a stack of cards', 'The left list is scannable; the selected finding gets the room it needs. Technical detail is folded away.'],
+        ['Coverage sits with the conclusion', 'Read confidence is a line under the finding, with details on demand, instead of a separate panel below every finding.'],
+        ['Works on a phone', 'The workbench becomes a list of disclosures. The same content, without a horizontal split.'],
+      ]);
+
+    return shell(page, 'repositories');
+  }
+
+  function findingsTab() {
+    const list = findings.map((finding, index) =>
+      '<button class="finding-item ' + (index === state.finding ? 'active' : '') + '" data-finding="' + index + '">' +
+        '<span class="line">' + severityBadge(finding.severity) + '<span class="badge" data-tone="neutral">' + finding.area + '</span></span>' +
+        '<span class="title">' + finding.title + '</span>' +
+        '<span class="code">' + finding.code + '</span>' +
+      '</button>'
+    ).join('');
+
+    const single = findings.map((finding, index) =>
+      '<details class="single-finding" ' + (index === 0 ? 'open' : '') + '><summary>' + severityBadge(finding.severity) + '<span class="title">' + finding.title + '</span><span class="badge" data-tone="neutral">' + finding.area + '</span></summary>' +
+        '<div class="single-body"><p class="small muted" style="margin-top:10px;">' + finding.detail + '</p>' +
+        '<div class="fix-block"><h3>What to change</h3><p>' + finding.fix + '</p></div>' +
+        '<div class="finding-actions"><button class="btn sm">' + icon('copy') + 'Copy prompt</button><button class="btn sm">' + icon('spark') + 'Ask Eli</button><button class="btn sm">Waive</button></div>' +
+        '<div class="evidence"><h3>Where it was seen</h3><div class="chip-row">' + finding.evidence.map((item) => '<span class="chip">' + item + '</span>').join('') + '</div></div>' +
+        '</div></details>'
+    ).join('');
+
+    return '<div class="area-filters" role="group" aria-label="Finding area">' +
+        '<button class="area-filter active">All <span class="count">2</span></button>' +
+        '<button class="area-filter">Workflow <span class="count">2</span></button>' +
+        '<button class="area-filter">Protection <span class="count">0</span></button>' +
+        '<button class="area-filter">Agent guidance <span class="count">0</span></button>' + callout(1) +
+      '</div>' +
+      '<div class="split-actions" style="display:flex; justify-content:flex-end; gap:6px; margin-bottom:10px;">' +
+        '<button class="btn sm ' + (state.findingsLayout === 'workbench' ? 'active' : '') + '" data-layout="workbench">Workbench</button>' +
+        '<button class="btn sm ' + (state.findingsLayout === 'single' ? 'active' : '') + '" data-layout="single">Single column</button>' + callout(3) +
+      '</div>' +
+      '<div class="' + (state.findingsLayout === 'single' ? 'layout-single' : '') + '">' +
+        '<div class="workbench">' +
+          '<div class="finding-list">' + list + '</div>' +
+          findingDetail(findings[state.finding]) +
+          '<div class="single-list">' + single + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<details class="panel" style="margin-top: 14px;"><summary style="padding: 13px 18px; color: var(--muted); font-size: var(--text-sm);">Waived findings <span class="subtle">0 open, 0 lapsed</span>' + callout(5) + '</summary><div class="empty-note">Nobody has waived a finding on this repository.</div></details>';
+  }
+
+  function activityTab() {
+    return '<div class="metric-band">' +
+        '<div><div class="label">Jobs finished</div><div class="value">33</div><div class="detail">32 succeeded, 1 failed</div></div>' +
+        '<div><div class="label">Success rate</div><div class="value">97%</div><div class="detail">Of jobs with a result</div></div>' +
+        '<div><div class="label">Queue wait, p95</div><div class="value">6.2s</div><div class="detail">Median 1.4s</div></div>' +
+        '<div><div class="label">Run time, p95</div><div class="value">4m 12s</div><div class="detail">Median 1m 48s</div></div>' +
+      '</div>' +
+      '<div class="split" style="margin-top: 16px;">' +
+        '<section class="panel"><div class="panel-head"><div class="heading"><h2>Where it ran</h2><p>Pools and hosts that ran this repository\'s jobs, busiest first.</p></div><button class="btn sm">Open in Jobs</button></div><div class="panel-body"><div class="places">' +
+          '<div><h3 style="margin-bottom:8px;">Pools</h3><ul class="place-list"><li><a href="#">zoomies-demo-linux-x64</a><span class="count">28 jobs, 85%</span></li><li><a href="#">zoomies-demo-linux-arm64</a><span class="count">5 jobs, 15%</span></li></ul></div>' +
+          '<div><h3 style="margin-bottom:8px;">Hosts</h3><ul class="place-list"><li><a href="#">build-prod-1</a><span class="count">21 jobs, 64%</span></li><li><a href="#">build-prod-2</a><span class="count">12 jobs, 36%</span></li></ul></div>' +
+        '</div></div></section>' +
+        '<div class="aside-stack"><section class="panel"><div class="panel-head"><div class="heading"><h2>Waiting now</h2><p>Jobs queued for this repository that no pool will take.</p></div></div><div class="panel-body"><p class="small">No job is waiting for a matching pool. <a href="#">Open the queue</a></p></div></section></div>' +
+      '</div>';
+  }
+
+  function aiContext() {
+    const cards = aiRepos.map((repo) =>
+      '<article class="ai-card">' +
+        '<div class="head"><div><a class="name" href="#">' + repo.name + '</a><div class="facts">' +
+          '<div class="fact"><div class="label">Source branch</div><div class="value">' + repo.branch + '</div></div>' +
+          '<div class="fact"><div class="label">Output</div><div class="value">' + repo.output + '</div></div>' +
+          '<div class="fact"><div class="label">Installation</div><div class="value">' + repo.installation + '</div></div>' +
+          '<div class="fact"><div class="label">Last checked</div><div class="value">' + repo.checked + '</div></div>' +
+        '</div></div><div>' + statusBadge(repo.status, repo.tone) + '</div></div>' +
+        '<div class="actions"><button class="btn sm">' + icon('refresh') + repo.action + '</button><button class="btn sm">View setup</button>' +
+          '<details class="menu"><summary aria-label="More actions for ' + repo.name + '">' + icon('more') + '</summary><div class="menu-panel"><button>Copy AI instructions</button><button>Copy badge Markdown</button><button>Reinstall / repair</button><button>Amend</button><button class="danger">Remove</button></div></details>' + callout(2) +
+        '</div>' +
+        '<details class="instructions"><summary>AI instructions and README badge</summary><p class="tiny muted" style="margin-top:8px; max-width:72ch;">Paste the copied instructions into an AI conversation. Repository output works through GitHub access without MCP; Zoomies-only output needs a connected assistant.</p></details>' +
+      '</article>'
+    ).join('');
+
+    const page =
+      '<header class="page-header">' +
+        '<div class="heading"><h1>AI Context</h1><p class="subtitle">Spend fewer tokens loading your code. Give AI assistants the relevant source, ready after every push.</p></div>' +
+        '<div class="actions"><a class="btn primary" href="#">+ Enable repositories</a>' + callout(1) +
+          '<details class="menu"><summary aria-label="More AI Context actions">' + icon('more') + '</summary><div class="menu-panel"><button>Installation owners</button><button>Manage connection access</button></div></details>' +
+        '</div>' +
+      '</header>' +
+      '<div class="ai-summary">' +
+        '<div class="stats"><div class="stat"><strong>2</strong><span>repositories in setup</span></div><div class="stat"><strong>0</strong><span>ready</span></div><div class="stat"><strong>0</strong><span>need attention</span></div></div>' +
+        '<div class="scope-toggle" role="group" aria-label="AI Context filter"><button class="active">All</button><button>Drafts</button><button>Ready</button></div>' + callout(4) +
+      '</div>' +
+      '<div class="filter-row"><label class="search-field">' + icon('search') + '<input type="search" placeholder="Search repositories" aria-label="Search AI Context repositories"></label><select aria-label="Installation" style="min-height:34px; padding:0 10px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--surface);"><option>All installations</option><option>acme</option></select></div>' +
+      '<div class="ai-list">' + cards + '</div>' +
+      '<details class="how"><summary>How AI Context works' + callout(3) + icon('chevron') + '</summary><div class="body">' +
+        '<div><h3>Less token overhead</h3><p>Assistants search and read relevant excerpts instead of loading a whole repository.</p></div>' +
+        '<div><h3>Fresh, verified source</h3><p>A GitHub workflow regenerates context after each source push. Zoomies checks it against Git and pins every reply to a commit.</p></div>' +
+        '<div><h3>Powered by Repomix</h3><p>Repomix packages and scans eligible source. Zoomies manages setup, updates and access.</p></div>' +
+      '</div></details>' +
+      notes([
+        ['The list comes first', 'People arrive here to manage repositories. Benefits and explainers move below the list, and collapse.'],
+        ['One primary action per card', 'The action that fits the state is the button. The rest move into an overflow menu, so the card stops reading as a wall of buttons.'],
+        ['Explainers are opt-in', 'The two long setup explanations become one "How AI Context works" disclosure. The empty state can carry the full version.'],
+        ['Counts before controls', 'A short summary says what is in setup, ready and needing attention before the filters.'],
+      ]);
+
+    return shell(page, 'ai-context');
+  }
+
+  function crumb() {
+    const labels = {
+      overview: '<strong>Kennel Club</strong>',
+      repositories: '<strong>Kennel Club</strong>' + icon('chevron') + '<strong>Repositories</strong>',
+      repository: '<strong>Kennel Club</strong>' + icon('chevron') + '<strong>acme/site</strong>',
+      'ai-context': '<strong>Kennel Club</strong>' + icon('chevron') + '<strong>AI Context</strong>',
+    };
+    document.getElementById('crumb').innerHTML = labels[state.screen];
+  }
+
+  function render() {
+    const main = document.getElementById('main');
+    if (state.screen === 'overview') main.innerHTML = overview();
+    else if (state.screen === 'repositories') main.innerHTML = repositories();
+    else if (state.screen === 'repository') main.innerHTML = repository(true);
+    else main.innerHTML = aiContext();
+    crumb();
+    bind();
+    main.querySelector('h1')?.setAttribute('tabindex', '-1');
+  }
+
+  function bind() {
+    document.querySelectorAll('[data-finding]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.finding = Number(button.dataset.finding);
+        document.getElementById('repository-body').innerHTML = findingsTab();
+        bind();
+      });
+    });
+    document.querySelectorAll('[data-layout]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.findingsLayout = button.dataset.layout;
+        document.getElementById('repository-body').innerHTML = findingsTab();
+        bind();
+      });
+    });
+    document.querySelectorAll('[data-tab]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const tabs = document.querySelectorAll('[data-tab]');
+        tabs.forEach((tab) => {
+          tab.classList.toggle('active', tab === button);
+          tab.setAttribute('aria-selected', String(tab === button));
+        });
+        const body = document.getElementById('repository-body');
+        if (button.dataset.tab === 'findings') body.innerHTML = findingsTab();
+        else if (button.dataset.tab === 'activity') body.innerHTML = activityTab();
+        else body.innerHTML = '<section class="panel"><div class="panel-head"><div class="heading"><h2>AI Context for acme/site</h2><p>Not set up for this repository. The same card as the AI Context page.</p></div></div><div class="panel-body"><button class="btn primary">Enable AI Context</button></div></section>';
+        bind();
+      });
+    });
+    document.querySelectorAll('.quick-filter').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.quick-filter').forEach((item) => item.classList.toggle('active', item === button));
+      });
+    });
+    document.querySelectorAll('.area-filter').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.area-filter').forEach((item) => item.classList.toggle('active', item === button));
+      });
+    });
+    document.querySelectorAll('.scope-toggle button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const group = button.parentElement;
+        group.querySelectorAll('button').forEach((item) => item.classList.toggle('active', item === button));
+      });
+    });
+    document.querySelectorAll('.page-nav a').forEach((link) => {
+      link.addEventListener('click', () => {
+        document.querySelectorAll('.page-nav a').forEach((item) => item.classList.toggle('active', item === link));
+      });
+    });
+  }
+
+  function applyTheme() {
+    const root = document.documentElement;
+    root.dataset.style = state.style;
+    root.dataset.mode = state.mode;
+    document.body.classList.toggle('annotations', state.annotations);
+  }
+
+  document.getElementById('screen').addEventListener('change', (event) => {
+    state.screen = event.target.value;
+    state.finding = 0;
+    render();
+  });
+  document.getElementById('style').addEventListener('change', (event) => {
+    state.style = event.target.value;
+    applyTheme();
+  });
+  document.getElementById('mode').addEventListener('change', (event) => {
+    state.mode = event.target.value;
+    applyTheme();
+  });
+  document.getElementById('annotations').addEventListener('change', (event) => {
+    state.annotations = event.target.checked;
+    applyTheme();
+  });
+
+  const SCREENS = { '#overview': 'overview', '#repositories': 'repositories', '#repository': 'repository', '#ai-context': 'ai-context' };
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest('a[href]');
+    if (!link) return;
+    const screen = SCREENS[link.getAttribute('href')];
+    if (!screen) return;
+    event.preventDefault();
+    state.screen = screen;
+    state.finding = 0;
+    document.getElementById('screen').value = screen;
+    render();
+    window.scrollTo(0, 0);
+  });
+
+  applyTheme();
+  render();
+</script>
+</body>
+</html>

@@ -187,7 +187,7 @@ func ProjectStatus(problems []Problem, stats *Stats) FleetStatus {
 func statusExempt(code string) bool {
 	switch code {
 	case "host.os_health", "host.health_stale", "host.reboot_pending",
-		"host.update_failed", "host.update_unavailable":
+		"host.update_failed", "host.update_helper_stuck", "host.update_unavailable":
 		return true
 	}
 	return strings.HasPrefix(code, "ai_context.") || strings.HasPrefix(code, "kennel.")
@@ -347,6 +347,7 @@ var publicSentences = map[string]string{
 	"provider.renting_off":                          "Machines are not being rented, so jobs wait for the machines the fleet already has.",
 	"provider.template_unverified":                  "A machine template has not been checked yet.",
 	"provider.machine_ca_same_as_cluster":           "Machines may refuse this controller's certificate and never join.",
+	"provider.machine_disk_small":                   "Machines may run out of disk part-way through a job.",
 	"provider.machines_behind":                      "Some machines the fleet rents are running a release other than its controller's.",
 	"provider.unreachable":                          "A machine provider cannot be reached, so no new machines can be added from it.",
 	"provider.unservable":                           "Some jobs need machines no provider can supply.",

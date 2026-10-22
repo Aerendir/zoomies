@@ -130,8 +130,9 @@
   {:else}
     <div class="brand">
       <a href="/" class="mark" aria-label="Zoomies, go to the overview">
-        <Logo variant="mark" size={32} label="" />
-        {#if !collapsed}<span class="brand-name">Zoomies</span>{/if}
+        <!-- The product's name is the artwork's own lettering, as on the public pages'
+             header, and not set in Inter beside the mark. -->
+        <Logo variant={collapsed ? 'mark' : 'full'} size={32} label="" />
       </a>
       {#if !collapsed}
         <p class="descriptor">Self-hosted Git runners</p>
@@ -214,7 +215,7 @@
     height: 100vh;
     padding: var(--z-space-3);
     border-right: var(--z-border-width) solid var(--z-border);
-    background: var(--z-surface);
+    background: var(--z-surface-sunken);
     z-index: var(--z-layer-nav);
     transition: width var(--z-motion-base) var(--z-ease);
   }
@@ -224,8 +225,8 @@
   }
   /*
     The masthead is too small for the detailed dog artwork to read cleanly, so
-    it uses the paw/swish shorthand at 32px and sets the product name as
-    ordinary interface text. It does not imitate or crop the wordmark.
+    it uses the paw/swish shorthand at 32px, with the artwork's own wordmark
+    beside it when the sidebar is open.
   */
   .brand {
     padding: var(--z-space-2) var(--z-space-2) var(--z-space-3);
@@ -247,13 +248,6 @@
   .mark:hover {
     /* The mark is fixed artwork; the text carries the hover state. */
     color: var(--z-accent);
-  }
-  .brand-name {
-    margin-left: var(--z-space-3);
-    font-size: var(--z-text-xl);
-    line-height: 1;
-    font-weight: var(--z-weight-semibold);
-    letter-spacing: -0.02em;
   }
   /*
     Set in Inter, not taken from the artwork: the descriptor line inside the
@@ -338,10 +332,17 @@
     background: var(--z-surface-hover);
     color: var(--z-text);
   }
+  /* The page you are on is raised off the column and carries the brand's rail,
+     and it is bold: the rail is for the eye, and the weight is for anyone it
+     does not reach. */
   a.current,
   .more.current {
-    background: var(--z-accent-subtle);
-    color: var(--z-accent);
+    background: var(--z-surface-raised);
+    box-shadow:
+      inset var(--z-border-width-thick) 0 0 var(--z-brand-runner-blue),
+      var(--z-shadow-sm);
+    color: var(--z-text);
+    font-weight: var(--z-weight-semibold);
   }
   .label {
     flex: 1;
@@ -435,6 +436,11 @@
       collapsed sidebar uses. Five entries fit their names across a phone,
       and a named target is one an operator can hit without learning a glyph.
     */
+    /* A bar has no side to put a rail on: the rail goes along the top. */
+    .phone a.current,
+    .phone .more.current {
+      box-shadow: inset 0 var(--z-border-width-thick) 0 var(--z-brand-runner-blue);
+    }
     .phone .label {
       flex: none;
       max-width: 100%;

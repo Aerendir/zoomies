@@ -84,11 +84,20 @@ func TestPreviousAssistantGuidanceUpgradesWithoutOverwritingCustomEdits(t *testi
 			upgraded := 0
 			for _, change := range changes {
 				saved = append(saved, SetupFile{Path: change.Path, SHA: strings.Repeat("b", 40), Content: change.Content})
-				if change.Path == "AGENTS.md" || change.Path == "CLAUDE.md" {
+				switch change.Path {
+				case "AGENTS.md":
 					upgraded++
-					want := prefix + managedBlock(assistantEntryPoint(change.Path), newline) + suffix
+					want := prefix + managedBlock(assistantEntryPoint("AGENTS.md"), newline) + suffix
 					if change.Content != want || change.PreviousSHA != files[0].SHA {
 						t.Fatal("upgrade lost user text, line endings or original blob identity")
+					}
+				case "CLAUDE.md":
+					upgraded++
+					// The block is in AGENTS.md, so the Claude file keeps the
+					// operator's words and is given the import that reaches it.
+					want := "@AGENTS.md" + newline + newline + prefix + strings.TrimPrefix(suffix, newline)
+					if change.Content != want || change.PreviousSHA != files[0].SHA {
+						t.Fatalf("upgrade lost user text, line endings or original blob identity:\n%q", change.Content)
 					}
 				}
 			}
@@ -147,8 +156,13 @@ func TestSetupPreservesUserTextAndRetriesWithoutChanges(t *testing.T) {
 	for _, change := range changes {
 		saved = append(saved, SetupFile{Path: change.Path, SHA: strings.Repeat("c", 40), Content: change.Content})
 		if change.Path == "CLAUDE.md" {
-			if !strings.HasPrefix(change.Content, original) || strings.Contains(strings.ReplaceAll(change.Content, "\r\n", ""), "\n") {
+			// The user's text is kept as it was, and the import that reaches
+			// the block in AGENTS.md is put in front of it.
+			if !strings.Contains(change.Content, original) || strings.Contains(strings.ReplaceAll(change.Content, "\r\n", ""), "\n") {
 				t.Fatal("user content or CRLF changed")
+			}
+			if !strings.HasPrefix(change.Content, "@AGENTS.md\r\n") {
+				t.Fatal("the Claude file does not import AGENTS.md")
 			}
 			if change.PreviousSHA != strings.Repeat("a", 40) {
 				t.Fatal("lost original blob SHA")
@@ -228,7 +242,8 @@ func TestSetupUsesEnterpriseBadgeAndDoesNotCreateAMissingReadme(t *testing.T) {
 
 // Prettier puts a blank line between top-level Markdown blocks, so a managed
 // section with the markers jammed against the text, or with extra blank lines
-// before it, fails the format check of any repository that runs one.
+// before it, fails the format check of any repository that runs one. The
+// managed section is the one in AGENTS.md, which is where it is written.
 func TestSetupWritesFormatterCleanMarkdown(t *testing.T) {
 	key, config := setupInputs()
 	cases := map[string]string{
@@ -238,7 +253,7 @@ func TestSetupWritesFormatterCleanMarkdown(t *testing.T) {
 		"empty":            "",
 	}
 	for name, original := range cases {
-		files := []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: original}}
+		files := []SetupFile{{Path: "AGENTS.md", SHA: strings.Repeat("a", 40), Content: original}}
 		if original == "" {
 			files[0].SHA = ""
 		}
@@ -247,7 +262,7 @@ func TestSetupWritesFormatterCleanMarkdown(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, change := range changes {
-			if change.Path != "CLAUDE.md" {
+			if change.Path != "AGENTS.md" {
 				continue
 			}
 			got := change.Content
@@ -281,17 +296,162 @@ func TestBadgeSectionIsFormatterCleanAfterATitle(t *testing.T) {
 
 func TestEarlierTightMarkersUpgradeToFormatterCleanOnes(t *testing.T) {
 	key, config := setupInputs()
-	body := assistantEntryPoint("CLAUDE.md")
-	files := []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: "# X\n\n" + tightManagedBlock(body, "\n") + "\n"}}
+	body := assistantEntryPoint("AGENTS.md")
+	files := []SetupFile{{Path: "AGENTS.md", SHA: strings.Repeat("a", 40), Content: "# X\n\n" + tightManagedBlock(body, "\n") + "\n"}}
 	changes, err := PlanSetupFiles(key, "owner/repo", config, files)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, change := range changes {
-		if change.Path == "CLAUDE.md" && change.Content != "# X\n\n"+managedBlock(assistantEntryPoint("CLAUDE.md"), "\n")+"\n" {
+		if change.Path == "AGENTS.md" && change.Content != "# X\n\n"+managedBlock(assistantEntryPoint("AGENTS.md"), "\n")+"\n" {
 			t.Fatal("tight markers were not upgraded")
 		}
 	}
+}
+
+// A repository that keeps the block in AGENTS.md and imports it from CLAUDE.md
+// must not gain a second copy: Claude Code expands the import and loads both.
+func TestSetupLeavesAnAgentsImportToCarryTheBlockOnce(t *testing.T) {
+	key, config := setupInputs()
+	agents := "# AGENTS\n\n" + managedBlock(assistantEntryPoint("AGENTS.md"), "\n") + "\n"
+	claude := "# CLAUDE\n\nThe rules live in AGENTS.md.\n\n@AGENTS.md\n\n" + managedBlock(assistantEntryPoint("CLAUDE.md"), "\n") + "\n"
+	files := []SetupFile{
+		{Path: "AGENTS.md", SHA: strings.Repeat("a", 40), Content: agents},
+		{Path: "CLAUDE.md", SHA: strings.Repeat("b", 40), Content: claude},
+	}
+	changes, err := PlanSetupFiles(key, "owner/repo", config, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, change := range changes {
+		if change.Path != "CLAUDE.md" {
+			continue
+		}
+		found = true
+		want := "# CLAUDE\n\nThe rules live in AGENTS.md.\n\n@AGENTS.md\n"
+		if change.Content != want || change.PreviousSHA != strings.Repeat("b", 40) {
+			t.Fatalf("CLAUDE.md block was not removed from around the import:\n%s", change.Content)
+		}
+	}
+	if !found {
+		t.Fatal("the duplicate block in CLAUDE.md was left in place")
+	}
+	for _, change := range changes {
+		if change.Path == "AGENTS.md" {
+			t.Fatal("the AGENTS.md block must stay where it is")
+		}
+	}
+	saved := append([]SetupFile{}, files...)
+	for _, change := range changes {
+		replaced := false
+		for i := range saved {
+			if saved[i].Path == change.Path {
+				saved[i] = SetupFile{Path: change.Path, SHA: strings.Repeat("c", 40), Content: change.Content}
+				replaced = true
+			}
+		}
+		if !replaced {
+			saved = append(saved, SetupFile{Path: change.Path, SHA: strings.Repeat("c", 40), Content: change.Content})
+		}
+	}
+	if retry, err := PlanSetupFiles(key, "owner/repo", config, saved); err != nil || len(retry) != 0 {
+		t.Fatalf("import-only Claude guidance is not idempotent: %v, %+v", err, retry)
+	}
+}
+
+// A repository that keeps its block in AGENTS.md must not be given a second
+// copy in a CLAUDE.md: Claude Code loads both, and a repository that checks
+// for one copy fails its build. The Claude file reaches the block by import.
+func TestSetupGivesTheClaudeFileAnImportRatherThanASecondBlock(t *testing.T) {
+	key, config := setupInputs()
+	agents := "# AGENTS\n\n" + managedBlock(assistantEntryPoint("AGENTS.md"), "\n") + "\n"
+	cases := map[string][]SetupFile{
+		"no Claude file at all": {
+			{Path: "AGENTS.md", SHA: strings.Repeat("a", 40), Content: agents},
+		},
+		"a Claude file with rules of its own": {
+			{Path: "AGENTS.md", SHA: strings.Repeat("a", 40), Content: agents},
+			{Path: "CLAUDE.md", SHA: strings.Repeat("b", 40), Content: "# CLAUDE\n\nMy own rules.\n"},
+		},
+		"a Claude file that already imports AGENTS.md": {
+			{Path: "AGENTS.md", SHA: strings.Repeat("a", 40), Content: agents},
+			{Path: "CLAUDE.md", SHA: strings.Repeat("b", 40), Content: "# CLAUDE\n\n@AGENTS.md\n"},
+		},
+	}
+	for name, files := range cases {
+		t.Run(name, func(t *testing.T) {
+			changes, err := PlanSetupFiles(key, "owner/repo", config, files)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, change := range changes {
+				if change.Path != "CLAUDE.md" {
+					continue
+				}
+				if strings.Contains(change.Content, managedStart) {
+					t.Fatalf("the Claude file was given a second copy of the block:\n%s", change.Content)
+				}
+				if !strings.Contains(change.Content, "@AGENTS.md") {
+					t.Fatalf("the Claude file does not import AGENTS.md:\n%s", change.Content)
+				}
+			}
+		})
+	}
+}
+
+// An @AGENTS.md line that only appears in an example is not an import, so the
+// Claude file is given the real one.
+func TestSetupDoesNotMistakeAFencedImportForOne(t *testing.T) {
+	key, config := setupInputs()
+	original := "# CLAUDE\n\nFor example:\n\n```\n@AGENTS.md\n```\n"
+	changes, err := PlanSetupFiles(key, "owner/repo", config, []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: original}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertClaudeImportsAgents(t, changes, "CLAUDE.md", "@AGENTS.md")
+}
+
+// A backtick fence inside a tilde fence is part of the example: only the
+// delimiter that opened the fence closes it.
+func TestSetupDoesNotMistakeAFenceInsideAnotherFenceForAnImport(t *testing.T) {
+	key, config := setupInputs()
+	original := "# CLAUDE\n\nFor example:\n\n~~~\n```\n@AGENTS.md\n```\n~~~\n"
+	changes, err := PlanSetupFiles(key, "owner/repo", config, []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: original}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertClaudeImportsAgents(t, changes, "CLAUDE.md", "@AGENTS.md")
+}
+
+// An absolute import names a file outside the repository, so it does not make
+// the repository's AGENTS.md the entry point.
+func TestSetupDoesNotMistakeAnAbsoluteImportForOne(t *testing.T) {
+	key, config := setupInputs()
+	original := "# CLAUDE\n\n@/AGENTS.md\n"
+	changes, err := PlanSetupFiles(key, "owner/repo", config, []SetupFile{{Path: "CLAUDE.md", SHA: strings.Repeat("a", 40), Content: original}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertClaudeImportsAgents(t, changes, "CLAUDE.md", "@AGENTS.md")
+}
+
+// A Claude file that does not import the repository's AGENTS.md is given the
+// import that reaches the block in it, and keeps the words it had.
+func assertClaudeImportsAgents(t *testing.T, changes []SetupChange, path, wrapper string) {
+	t.Helper()
+	for _, change := range changes {
+		if change.Path != path {
+			continue
+		}
+		for _, line := range strings.Split(strings.ReplaceAll(change.Content, "\r\n", "\n"), "\n") {
+			if strings.TrimSpace(line) == wrapper {
+				return
+			}
+		}
+		t.Fatalf("%s was not given the import:\n%s", path, change.Content)
+	}
+	t.Fatalf("%s was left without the import", path)
 }
 
 func TestSetupSharesTheGuideWithoutChangingClaudeImportWrappers(t *testing.T) {
@@ -343,7 +503,10 @@ func TestSetupUsesRelativeImportsInAnExistingNestedClaudeFile(t *testing.T) {
 			t.Fatal("created an unnecessary root Claude file")
 		}
 		if change.Path == ".claude/CLAUDE.md" {
-			found = strings.HasPrefix(change.Content, original) && strings.Contains(change.Content, "@../.zoomies/AI_CONTEXT.md")
+			// The nested file imports AGENTS.md, which is where the block is,
+			// and the path to it is relative to the nested file. Its own text
+			// is kept.
+			found = strings.Contains(change.Content, original) && strings.Contains(change.Content, "@../AGENTS.md")
 		}
 	}
 	if !found {

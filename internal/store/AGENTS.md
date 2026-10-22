@@ -29,6 +29,14 @@ repair request. Match with `errors.Is`. Refusals the auth service makes for a re
 * **IDs are prefixed** (`pool_`, `run_`, `job_`, `usr_`…) via `store.NewID`, so a
   pasted ID is self-describing in a log line or bug report. Add new prefixes to
   `internal/store/ids.go`.
+* **A statement on a hot path is a constant, registered with `hot`.** The driver
+  parses whatever it is handed every time it is handed it, which was a third of
+  a webhook delivery, so the statements the busiest paths run (a job's arrival,
+  the reads of a reconcile pass, a heartbeat's read of each runner it reports)
+  are registered with `hot` in `hot.go` and run through `hotRead`, `hotTx` or
+  `execHot`, prepared once. Only a constant belongs there: a statement built
+  around a list is a new statement for each length of it. Do not run a hot query
+  inside its own cursor, and do not loop one in a transaction; `hot.go` says why.
 * **A host's report body is written when it changes.** Its freshness rides the
   heartbeat's own UPDATE (`HeartbeatWithReport`, `doctor_checked_at`), because any
   `UPDATE hosts` rewrites the whole record, report included. `scanHost` overlays

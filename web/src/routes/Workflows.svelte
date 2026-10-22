@@ -631,12 +631,6 @@
       {/if}
     {/snippet}
   </DataGrid>
-
-  <p class="footnote">
-    Open a run to see its jobs and how each is getting on, or switch to Every job for the same
-    history one job to a row. Sort by queue wait to find work that waited, or by duration to find
-    work that took its time.
-  </p>
 </div>
 
 <JobDrawer bind:open={drawerOpen} job={selected} onclose={() => (selected = null)} />
@@ -723,10 +717,5 @@
   .waiting {
     color: var(--z-pending);
     white-space: nowrap;
-  }
-  .footnote {
-    margin: 0;
-    color: var(--z-text-subtle);
-    font-size: var(--z-text-xs);
   }
 </style>

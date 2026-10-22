@@ -11,7 +11,9 @@ package scheduler
 
 import (
 	"cmp"
+	"encoding/binary"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -33,9 +35,15 @@ type Snapshot struct {
 	Pools []*store.Pool
 	// Runners holds the non-removed runners of each pool, keyed by pool ID.
 	Runners map[string][]*store.Runner
-	// Jobs holds queued and in-progress jobs. Only queued jobs create demand:
-	// an in-progress job is already represented by the busy runner running it.
+	// Jobs holds queued jobs; the controller never puts an in-progress job
+	// here, see RunnersWithAJob. An in-progress job supplied by another caller
+	// still counts towards the guard that spares a runner with work on it.
 	Jobs []*store.Job
+	// RunnersWithAJob is every runner a job is in progress on, by ID, whatever
+	// that runner's row says. An in-progress job in Jobs counts towards it too.
+	// The controller sends the set on its own instead, because everything else
+	// it hands a snapshot's jobs to reads them as waiting work.
+	RunnersWithAJob map[string]bool
 	// ActiveByRepository and QueuedByRepository make repository fair-share
 	// state explicit at the scheduler boundary rather than hiding database reads
 	// inside the policy engine.
@@ -372,7 +380,7 @@ func Decide(s Snapshot) Plan {
 		jitter:             s.Jitter,
 		lastProvisioned:    s.LastProvisioned,
 		held:               s.HeldInstallations,
-		stillRunning:       runnersWithAJob(s.Jobs),
+		stillRunning:       runnersWithAJob(s),
 		history:            s.JobHistory,
 		historySizing:      s.HistorySizing,
 	}
@@ -446,21 +454,73 @@ type tick struct {
 
 // assign maps every queued job onto the pool that will run it, and collects the
 // ones nothing claims, each with the reason it went unclaimed.
+//
+// A pool is chosen for what a job asks, not for the job: a burst is mostly jobs of
+// the same workflows, asking for the same labels of the same installation, and
+// choosing set every one of them against every pool (100,000 comparisons for a
+// thousand jobs and a hundred pools, 75% of Decide on such a burst in a profile).
+// So the answer is kept for the next job that asks the same thing, and only a job
+// that asks something new is set against the pools.
 func assign(pools []*store.Pool, jobs []*store.Job, targets map[string]string) (map[string][]*store.Job, []UnmatchedJob) {
 	demand := make(map[string][]*store.Job, len(pools))
 	var unmatched []UnmatchedJob
+	var prepared [][]string
+	var answers map[string]claim
+	key := make([]byte, 0, 128)
 	for _, j := range sortedJobs(jobs) {
 		if j.State != store.JobQueued || j.Provisioning != "" {
 			continue
 		}
-		p, reason := bestPool(pools, j, targets)
-		if p == nil {
-			unmatched = append(unmatched, UnmatchedJob{Job: j, Reason: reason})
+		if prepared == nil {
+			// Prepared for the first job that needs it. Most passes find nothing
+			// waiting, and they should not pay to get the pools ready for a
+			// comparison that never happens.
+			prepared, answers = preparedLabels(pools), map[string]claim{}
+		}
+		names := store.NormalizeLabels(j.Labels)
+		key = appendClaimKey(key[:0], names, j)
+		c, known := answers[string(key)]
+		if !known {
+			p, reason := bestOf(pools, prepared, j, labelsOf(names), targets)
+			c = claim{pool: p, reason: reason}
+			answers[string(key)] = c
+		}
+		if c.pool == nil {
+			unmatched = append(unmatched, UnmatchedJob{Job: j, Reason: c.reason})
 			continue
 		}
-		demand[p.ID] = append(demand[p.ID], j)
+		demand[c.pool.ID] = append(demand[c.pool.ID], j)
 	}
 	return demand, unmatched
+}
+
+// claim is the pool a kind of job goes to, or why none does.
+type claim struct {
+	pool   *store.Pool
+	reason string
+}
+
+// appendClaimKey appends what bestOf reads of a job: its normalised labels, the
+// installation it belongs to and the class it was routed to, and, where no
+// installation covers it, the repository, which the explanation names. Two jobs
+// with the same key are given the same answer by bestOf, whatever else differs
+// between them. Each part is written with its length, so that no choice of label
+// can make two different questions the same bytes.
+func appendClaimKey(key []byte, names []string, j *store.Job) []byte {
+	key = binary.AppendUvarint(key, uint64(len(names)))
+	for _, l := range names {
+		key = appendKeyPart(key, l)
+	}
+	key = appendKeyPart(key, j.InstallationID)
+	key = appendKeyPart(key, string(j.RoutedClass))
+	if j.InstallationID == "" {
+		key = appendKeyPart(key, j.Repo)
+	}
+	return key
+}
+
+func appendKeyPart(key []byte, s string) []byte {
+	return append(binary.AppendUvarint(key, uint64(len(s))), s...)
 }
 
 // targetsOf indexes installations by identifier so that an explanation can
@@ -659,10 +719,13 @@ func recentBusyHosts(runners []*store.Runner, now time.Time) map[string]bool {
 	return out
 }
 
-// runnersWithAJob is the set of runners a job in progress is attributed to.
-func runnersWithAJob(jobs []*store.Job) map[string]bool {
-	out := map[string]bool{}
-	for _, j := range jobs {
+// runnersWithAJob is the set of runners a job in progress is attributed to:
+// the snapshot's own set, and the runner of every in-progress job among its
+// jobs. It is a copy, so the caller's set is never written to.
+func runnersWithAJob(s Snapshot) map[string]bool {
+	out := make(map[string]bool, len(s.RunnersWithAJob))
+	maps.Copy(out, s.RunnersWithAJob)
+	for _, j := range s.Jobs {
 		if j.State == store.JobInProgress && j.RunnerID != "" {
 			out[j.RunnerID] = true
 		}
@@ -1275,17 +1338,29 @@ func newHostSet(hosts []*store.Host, pools []*store.Pool, runners map[string][]*
 		hs.alloc[h.ID] = a
 		hs.left[h.ID] = Reservation{CPUs: a.CPUs, MemoryMB: a.MemoryMB, DiskMB: a.DiskMB}
 	}
-	for _, h := range hs.hosts {
+	// What the live runners add up to on each host, found in one pass over them.
+	// Each of the three questions asked of every host below used to look through
+	// every pool and every runner for the ones on it, which is hosts times runners
+	// three times over: 73% of Decide on a quiet fleet of a hundred pools in a
+	// profile.
+	totals := totalsByHost(hs.hosts, pools, runners)
+	for i, h := range hs.hosts {
+		t := totals[i]
 		// One sum, shared with the host view: what the page shows a host has
 		// promised away and what a pass starts from must be the same number,
 		// or an operator reads one figure and the scheduler acts on another.
-		res := Reserved(h, pools, runners)
 		l := hs.left[h.ID]
-		l.CPUs -= res.CPUs
-		l.MemoryMB -= res.MemoryMB
+		l.CPUs -= t.reserved.CPUs
+		l.MemoryMB -= t.reserved.MemoryMB
+		if hs.alloc[h.ID].DiskKnown {
+			l.DiskMB -= t.reserved.DiskMB
+		}
 		hs.promisedMemory[h.ID] = l.MemoryMB
-		hs.ours[h.ID] = hostRunsOurs(h, runners)
-		pending := hs.pending(h, pools, runners)
+		hs.ours[h.ID] = t.ours
+		if t.warming > 0 {
+			hs.warming[h.ID] += t.warming
+		}
+		pending := t.pending
 		if h.Usage.Fresh(now) {
 			if v := h.Usage.MemoryAvailableMB; v != nil {
 				// The host sample already includes running work, and what the
@@ -1533,18 +1608,6 @@ func (hs *hostSet) memoryLeft(h *store.Host, p *store.Pool) int64 {
 	return hs.left[h.ID].MemoryMB
 }
 
-// hostRunsOurs reports whether any live runner of ours is on h, in any pool.
-func hostRunsOurs(h *store.Host, runners map[string][]*store.Runner) bool {
-	for _, rs := range runners {
-		for _, r := range rs {
-			if r != nil && r.HostID == h.ID && r.State.Live() {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // HostCanRun is the placement rule, in one place: a host may take a runner for
 // a pool when it is available, offers the pool's backend and satisfies the
 // pool's host selector, and is a machine one of its runners would fit on at
@@ -1721,11 +1784,14 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 			if detail == "" {
 				detail = naming.ForSentence(h.Name) + ": " + ThrottleReason(h)
 			}
-		case hs.alloc[h.ID].DiskKnown && hs.alloc[h.ID].DiskMB <= 0:
+		case hs.alloc[h.ID].DiskKnown && hs.alloc[h.ID].DiskMB < MinimumReserve(p, h).DiskMB:
 			// The disk gate is asked before the sizing one, because a host at
 			// its reserve refuses every pool and "too small for this pool's
 			// limits" would send the operator to change limits that were never
-			// the problem.
+			// the problem. It is asked of the pool's disk ask too, not only of
+			// an empty allocation: every runner is charged a working room, so a
+			// host with a few GB free is short of disk, and freeing space on
+			// it does make room, unlike a machine that is too small.
 			lowDisk++
 		case !HostFits(h, p):
 			// The machine itself is too small for one runner of this pool, so
@@ -1888,7 +1954,13 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 		// Disk is the one of the three that no job finishing will return: a
 		// runner that exits leaves its caches behind on purpose, so telling an
 		// operator to wait here is telling them to wait for nothing.
-		b.fix = "free space on those hosts' work directories, lower the pool's disk request, or add a host"
+		if p.Resources.DiskGB > 0 {
+			// The pool is charged what it typed, so the figure to lower is
+			// its own; the working room is a default it is not using.
+			b.fix = "free space on those hosts' work directories, lower the pool's resources.disk_gb, or add a host"
+		} else {
+			b.fix = "free space on those hosts' work directories, set the pool's resources.disk_gb below the " + formatMB(RunnerDiskMB) + " of working room a runner is given, or add a host"
+		}
 	case profile > 0 && profile+unhealthy+cordoned == len(hs.hosts):
 		// Both halves are things an operator wrote, so both are named: either
 		// can be changed, and which one is right is theirs to say.

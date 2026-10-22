@@ -76,6 +76,10 @@ type machineRuntime struct {
 	sweepRetry         map[string]time.Time
 	operationCount     int
 	providerOperations map[string]int
+	// testMu holds a request for a test machine together, from the checks that
+	// read what exists to the reservation that writes. It is not mu: a pass
+	// holds that across provider calls, and a button must never wait on them.
+	testMu sync.Mutex
 	// calls tracks the provider calls a pass issued, which outlive the pass:
 	// Stop waits on it beside deliveries, because exiting under a create
 	// leaves a machine whose outcome nobody recorded.
@@ -332,19 +336,29 @@ func (c *Controller) noteMachineSizes(ctx context.Context, env *machineEnv) {
 		if row == nil || h == nil || m.HostID == "" || h.CPUs <= 0 || h.MemoryMB <= 0 {
 			continue
 		}
+		// An agent that could not measure its work directory reports no disk,
+		// which says nothing about the disk; recorded, it would drop the
+		// figure the template gave, and the next machine would be judged as
+		// one of unknown disk. The figure already known is carried instead.
+		disk := h.DiskTotalMB
+		if disk <= 0 {
+			disk = row.SeenDiskMB
+		}
 		at := m.CreatedAt.Truncate(time.Millisecond)
 		if row.SeenAt != nil && (at.Before(*row.SeenAt) ||
 			(at.Equal(*row.SeenAt) && row.SeenFrom == store.MachineSizeFromMachine &&
-				row.SeenCPUs == h.CPUs && row.SeenMemoryMB == h.MemoryMB)) {
+				row.SeenCPUs == h.CPUs && row.SeenMemoryMB == h.MemoryMB &&
+				row.SeenDiskMB == disk)) {
 			continue
 		}
-		wrote, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, h.CPUs, h.MemoryMB, store.MachineSizeFromMachine, at)
+		wrote, err := c.st.SetProviderMachineSizeSeen(ctx, row.ID, h.CPUs, h.MemoryMB, disk, store.MachineSizeFromMachine, at)
 		if err != nil {
 			c.log.Warn("could not record the size a provider's machine measured", "provider", row.Name, "machine", m.ID, "error", err)
 			continue
 		}
 		if wrote {
-			row.SeenCPUs, row.SeenMemoryMB, row.SeenFrom, row.SeenAt = h.CPUs, h.MemoryMB, store.MachineSizeFromMachine, &at
+			row.SeenCPUs, row.SeenMemoryMB, row.SeenDiskMB = h.CPUs, h.MemoryMB, disk
+			row.SeenFrom, row.SeenAt = store.MachineSizeFromMachine, &at
 		}
 	}
 }
@@ -944,6 +958,7 @@ func (c *Controller) stepMachines(ctx context.Context, env *machineEnv) {
 				c.machines.providerOperations[m.ProviderID]--
 				c.machines.mu.Unlock()
 			}()
+			defer c.recoverDetached("machine-step")
 			cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 			defer cancel()
 			c.runMachineStep(cctx, env, pr, m)

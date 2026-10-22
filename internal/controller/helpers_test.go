@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -49,9 +50,11 @@ func (f *fakeFactory) For(_ context.Context, inst *store.Installation, privateKe
 	return f.gh.Client(inst.Target, inst.TargetType), nil
 }
 
-// harness is a controller wired to an in-memory store and a fake GitHub.
+// harness is a controller wired to an in-memory store and a fake GitHub. It
+// takes a testing.TB rather than a *testing.T so that the benchmarks can build
+// the same controller the tests do, instead of a second one that drifts.
 type harness struct {
-	t       *testing.T
+	t       testing.TB
 	c       *Controller
 	st      *store.Store
 	gh      *github.FakeGitHub
@@ -82,7 +85,7 @@ func (h *harness) advance(d time.Duration) { h.offset.Add(int64(d)) }
 // testConfig is a configuration that validates without a single warning, so a
 // test asserting "Problems is empty" is asserting about the fleet rather than
 // about the defaults.
-func testConfig(t *testing.T) *config.Config {
+func testConfig(t testing.TB) *config.Config {
 	t.Helper()
 	cfg := config.Default()
 	cfg.Server.Bind = "127.0.0.1:8080"
@@ -97,7 +100,7 @@ func testConfig(t *testing.T) *config.Config {
 	return cfg
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t testing.TB) *harness {
 	t.Helper()
 	return newHarnessAt(t, nil)
 }
@@ -107,7 +110,7 @@ func newHarness(t *testing.T) *harness {
 // own stamps (a runner's creation, a failure's end) to fall inside it, and
 // the store stamps those from its clock, not from anything the test passes.
 // A nil clock is the wall clock.
-func newHarnessAt(t *testing.T, clock func() time.Time) *harness {
+func newHarnessAt(t testing.TB, clock func() time.Time) *harness {
 	t.Helper()
 	ctx := context.Background()
 
@@ -487,12 +490,24 @@ func (h *harness) deliveries() []*store.WebhookDelivery {
 	return ds
 }
 
-// problemCodes returns the codes Problems reports, for set assertions.
+// problemCodes returns the codes Problems reports, for set assertions. It asks
+// for the list twice, as it is worked out for the figures that follow a pass,
+// with its sections sharing a read of the fleet, and as it is worked out for a
+// request, with each section reading for itself, and fails if the two are not
+// about the same things. That puts every state a test builds before the
+// comparison, and a good many of them are states only one section notices.
 func (h *harness) problemCodes() []string {
 	h.t.Helper()
 	ps, err := h.c.Problems(h.ctx)
 	if err != nil {
 		h.t.Fatalf("Problems: %v", err)
+	}
+	alone, err := h.c.Problems(noFleetReads(h.ctx))
+	if err != nil {
+		h.t.Fatalf("Problems without sharing: %v", err)
+	}
+	if a, b := problemKeys(ps), problemKeys(alone); !slices.Equal(a, b) {
+		h.t.Fatalf("the problems are %v when the sections share their reads and %v when each reads for itself", a, b)
 	}
 	out := make([]string, 0, len(ps))
 	for _, p := range ps {

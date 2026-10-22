@@ -25,6 +25,7 @@ function host(over: Record<string, unknown> = {}, update: Partial<HostUpdateBloc
       reason: 'builder-1 runs 1.2.0 and can be updated to v1.3.0.',
       can_update: true,
       attempt_id: '',
+      code: '' as const,
       ...update,
     },
     ...over,
@@ -109,6 +110,20 @@ test('each state of an attempt has a label, a tone and whether it can be pressed
     assert.equal(words.canPress, canPress, `${state}/${can} canPress`);
     assert.equal(words.inFlight, inFlight, `${state}/${can} inFlight`);
   }
+});
+
+test('an update the stopped helper could not be handed to says the helper stopped, in words', () => {
+  // The card must not read as a release that failed to install: the helper on
+  // the host stopped reading requests, and the sentence says what to run.
+  const reason =
+    'The update helper on builder-1 has stopped (its path unit is inactive, disabled, failed; a request had been waiting for 3 days).';
+  const words = hostUpdateWords(
+    host({}, { state: 'failed', code: 'host.update_helper_stuck', reason }),
+  );
+  assert.equal(words?.label, 'Helper stopped');
+  assert.equal(words?.tone, 'danger');
+  assert.equal(words?.sentence, reason);
+  assert.equal(words?.action, 'Try again');
 });
 
 test('a failed update can be tried again, and says so in its action', () => {

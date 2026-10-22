@@ -28,7 +28,6 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import ErrorState from '$lib/components/ErrorState.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
-  import Switch from '$lib/components/Switch.svelte';
   import Panel from '$lib/components/Panel.svelte';
 
   interface Props {
@@ -129,9 +128,7 @@
 
 <Panel
   title="Active jobs"
-  description={others
-    ? 'Every job GitHub is running for these repositories, wherever it is running.'
-    : 'What this fleet is running at this moment.'}
+  description={others ? 'Wherever it is running.' : undefined}
   class={className}
   flush
 >
@@ -139,7 +136,7 @@
     {#if !loading && jobs.length > 0}
       <Badge tone="accent" label="{formatNumber(jobs.length)} running" dot={false} />
     {/if}
-    <Switch label="Other runners" checked={others} onchange={(on) => (prefs.otherRunners = on)} />
+    <a class="view-all" href={'/jobs?state=in_progress' + (others ? '&all=true' : '')}>View all</a>
   {/snippet}
 
   {#if error}
@@ -169,7 +166,7 @@
       title="Nothing is running right now"
       description={others
         ? 'GitHub is running nothing for these repositories, here or anywhere else.'
-        : 'A job appears here the moment a runner of this fleet picks it up. Turn on other runners to see what GitHub is running elsewhere.'}
+        : 'A job appears here the moment a runner of this fleet picks it up. Include other runners above to see what GitHub is running elsewhere.'}
     />
   {:else}
     <ul class="rows">
@@ -215,13 +212,19 @@
     </ul>
     {#if overflow > 0}
       <p class="more">
-        <a href="/jobs?state=in_progress">and {formatNumber(overflow)} more on the jobs page</a>
+        <a href={'/jobs?state=in_progress' + (others ? '&all=true' : '')}
+          >and {formatNumber(overflow)} more on the jobs page</a
+        >
       </p>
     {/if}
   {/if}
 </Panel>
 
 <style>
+  .view-all {
+    color: var(--z-accent);
+    font-size: var(--z-text-xs);
+  }
   .pad {
     padding: var(--z-space-4) var(--z-space-5);
   }

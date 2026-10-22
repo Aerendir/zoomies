@@ -56,6 +56,34 @@ func TestContextSetupReadsPinnedRegularFilesAndPublishesOneCompleteProposal(t *t
 	}
 }
 
+// The body is the reviewer's list of what the installer touches. A file the
+// installer writes but the body omits, such as CLAUDE.md, is merged unread.
+func TestContextSetupPRBodyListsEveryChangedFile(t *testing.T) {
+	fake, client := migrationFake(t)
+	setup := client.(ContextSetupClient)
+	source, err := setup.ReadContextSetup(t.Context(), "acme/widgets", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := []aicontext.SetupChange{
+		{Path: "CLAUDE.md", Mode: "100644", PreviousSHA: strings.Repeat("a", 40), Content: "@AGENTS.md\n"},
+		{Path: "AGENTS.md", Mode: "100644", Content: "guidance"},
+		{Path: ".github/workflows/zoomies-ai-context.yml", Mode: "100644", PreviousSHA: strings.Repeat("b", 40), Delete: true},
+	}
+	req := ContextSetupRequest{Repo: "acme/widgets", Base: "main", BaseCommit: source.Commit, Head: "context-body-files", PlanHash: strings.Repeat("a", 64), Files: files}
+	if _, err := setup.OpenContextSetup(t.Context(), req); err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	body := fake.repoLocked(req.Repo).contextGit().Pulls[0].GetBody()
+	fake.mu.Unlock()
+	for _, want := range []string{"`CLAUDE.md` (modified)", "`AGENTS.md` (new)", "`" + files[2].Path + "` (deleted)", "checks to pass"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("pull request body is missing %q:\n%s", want, body)
+		}
+	}
+}
+
 func TestContextSetupRefusesChangedBaseAndSymlinksWithoutWrites(t *testing.T) {
 	fake, client := migrationFake(t)
 	setup := client.(ContextSetupClient)

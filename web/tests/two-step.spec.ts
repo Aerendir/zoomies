@@ -13,7 +13,7 @@
  */
 import { createHmac } from 'node:crypto';
 import { test, expect, type Page } from '@playwright/test';
-import { setupToken } from './support/fixtures';
+import { setupToken, useSystemTheme } from './support/fixtures';
 
 const ADMIN = { username: 'ada', password: 'correct horse battery staple' };
 
@@ -126,11 +126,16 @@ test('the password is not enough: the code step comes next and a wrong code stay
 });
 
 test('the code step fits a phone in both themes', async ({ page }) => {
+  // An empty browser is dark whatever scheme is emulated, so follow the system.
+  await useSystemTheme(page);
   await page.setViewportSize({ width: 390, height: 844 });
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
     await password(page);
     await expect(page.getByRole('heading', { name: 'Enter your code', level: 1 })).toBeVisible();
+    // The theme the test is named for: a page that ignored the emulated scheme
+    // would be measured in the same one twice.
+    await expect(page.locator('html')).toHaveCSS('color-scheme', colorScheme);
     const { scrollWidth, clientWidth } = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: document.documentElement.clientWidth,

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/eyupio/zoomies/internal/config"
+	"github.com/eyupio/zoomies/internal/github"
 	"github.com/eyupio/zoomies/internal/store"
 	"github.com/eyupio/zoomies/internal/toolscan"
 )
@@ -185,4 +187,85 @@ jobs:
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// A scan is minutes of GitHub calls on a large organisation. The one an
+// operator asked for ran on a context cut loose from everything the controller
+// owns, and Stop waited for no scan at all, so the process could believe it had
+// stopped while a scan went on reading workflows and then filling tool caches
+// behind it.
+func TestStopCancelsARunningToolchainScanAndWaitsForIt(t *testing.T) {
+	h := newHarness(t)
+	h.installation()
+	// Held open far longer than the test, so only a cancellation can end it.
+	h.gh.SetDelay("", "/installation/repositories", time.Minute)
+	if err := h.c.Start(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.c.Stop(context.Background()) })
+
+	if err := h.c.StartToolchainScan(h.ctx); err != nil {
+		t.Fatalf("StartToolchainScan: %v", err)
+	}
+	stopCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := h.c.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	if h.c.ToolchainScanResult().Running {
+		t.Error("Stop returned while a toolchain scan was still running")
+	}
+}
+
+// A request that reaches the API while the controller is stopping, or just
+// after, must not start a scan that outlives it: nothing is left to cancel it
+// or to wait for it.
+func TestAToolchainScanAskedForAfterStopEndsAtOnce(t *testing.T) {
+	h := newHarness(t)
+	h.installation()
+	h.gh.SetDelay("", "/installation/repositories", time.Minute)
+	if err := h.c.Start(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.c.Stop(h.ctx); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	if err := h.c.StartToolchainScan(h.ctx); err != nil {
+		t.Fatalf("StartToolchainScan: %v", err)
+	}
+	eventually(t, 5*time.Second, "a scan asked for after Stop to end instead of running on", func() bool {
+		return !h.c.ToolchainScanResult().Running
+	})
+}
+
+// panickingGitHub is a factory whose client cannot be built, which is what a
+// bug in building one looks like from the scan's side.
+type panickingGitHub struct{}
+
+func (panickingGitHub) For(context.Context, *store.Installation, []byte) (github.Client, error) {
+	panic("a nil pointer where a GitHub client should be")
+}
+
+// A scan that panics ends the scan, not the process, and must not leave the
+// next one refused as already running for the rest of the process's life.
+func TestAPanickingToolchainScanLeavesRoomForTheNext(t *testing.T) {
+	h := newHarness(t)
+	h.installation()
+	h.c.factory = panickingGitHub{}
+
+	if err := h.c.StartToolchainScan(h.ctx); err != nil {
+		t.Fatalf("StartToolchainScan: %v", err)
+	}
+	eventually(t, 5*time.Second, "the scan that panicked to be over", func() bool {
+		return !h.c.ToolchainScanResult().Running
+	})
+
+	if err := h.c.StartToolchainScan(h.ctx); err != nil {
+		t.Fatalf("a scan asked for after the panic got %v: the one that failed is still counted as running", err)
+	}
+	eventually(t, 5*time.Second, "the second scan that panicked to be over", func() bool {
+		return !h.c.ToolchainScanResult().Running
+	})
 }

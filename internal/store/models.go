@@ -261,9 +261,19 @@ func (s *StringSlice) Scan(v any) error {
 		if len(t) == 0 {
 			return nil
 		}
+		if string(t) == "[]" {
+			*s = StringSlice{}
+			return nil
+		}
 		return json.Unmarshal(t, s)
 	case string:
 		if t == "" {
+			return nil
+		}
+		if t == "[]" {
+			// What the decoder makes of it, without calling it: an empty list
+			// that is not nil. A list is empty far oftener than not.
+			*s = StringSlice{}
 			return nil
 		}
 		return json.Unmarshal([]byte(t), s)
@@ -291,9 +301,19 @@ func (m *StringMap) Scan(v any) error {
 		if len(t) == 0 {
 			return nil
 		}
+		if string(t) == "{}" {
+			*m = StringMap{}
+			return nil
+		}
 		return json.Unmarshal(t, m)
 	case string:
 		if t == "" {
+			return nil
+		}
+		if t == "{}" {
+			// An empty map that is not nil, as the decoder makes it. A map is
+			// empty far oftener than not.
+			*m = StringMap{}
 			return nil
 		}
 		return json.Unmarshal([]byte(t), m)
@@ -822,8 +842,8 @@ func (h *Host) Supports(feature string) bool {
 // It is what a pool means by asking for no CPU and no memory, and it is the
 // shape a pool has unless somebody chose otherwise. Disk and the pids limit
 // are deliberately not part of the question: neither has a share to be given
-// (free disk is a measurement rather than a budget) so a pool may cap its
-// cache's disk and still leave its size to the host.
+// (a runner is charged a fixed working room on disk, not a slot's share) so a
+// pool may cap its cache's disk and still leave its size to the host.
 func (p *Pool) Automatic() bool {
 	return p.Resources.CPUs <= 0 && p.Resources.MemoryMB <= 0
 }
@@ -1177,6 +1197,13 @@ type Host struct {
 	// -- every host until somebody sets one -- changes nothing about how the
 	// host is sized.
 	RunnerProfile RunnerProfile `json:"runner_profile,omitzero"`
+	// AutoAdjust is the operator's answer to whether the controller keeps this
+	// host's capacity and reserve at what it recommends: AutoAdjustOn,
+	// AutoAdjustOff, or empty to follow the fleet's default
+	// (scheduler.host_auto_adjust). AutoAdjustedAt is when the controller last
+	// moved them, zero if it never has.
+	AutoAdjust     string    `json:"auto_adjust,omitempty"`
+	AutoAdjustedAt time.Time `json:"auto_adjusted_at,omitzero"`
 	// PriorityOverride is the operator's answer to where this host stands in
 	// placement, on the 0..100 scale the scheduler's spec score uses.
 	// It is theirs alone, written through PatchHost and by no heartbeat, and
@@ -1252,6 +1279,12 @@ func (h *Host) Platform() Platform {
 	}
 	return Platform{OS: os, OSVersion: h.OSVersion, Arch: h.Arch}.Normalized()
 }
+
+// The values of Host.AutoAdjust. Empty means the host follows the fleet.
+const (
+	AutoAdjustOn  = "on"
+	AutoAdjustOff = "off"
+)
 
 // Spec is the host in the naming grammar's terms: how much machine it is, what
 // it runs, and which machine it is.
@@ -1657,6 +1690,10 @@ type Job struct {
 	// carry it, so it arrives late, backfilled from a workflow_run lookup once
 	// one is made; zero means that lookup has not happened yet.
 	RunNumber int64 `json:"run_number,omitempty"`
+	// RunEvent is the event that started the run (`push`, `pull_request`,
+	// `schedule`...). workflow_job deliveries never carry it either, so it is
+	// backfilled from the same lookup; empty means that has not happened yet.
+	RunEvent string `json:"run_event,omitempty"`
 	// Steps are the job's steps as GitHub last reported them. The completed
 	// delivery carries every step with its conclusion, which is how a failed
 	// job can say which step it stopped at.

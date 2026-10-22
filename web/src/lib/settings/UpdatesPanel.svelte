@@ -16,13 +16,16 @@
   above it; it is started, resumed and cancelled on the Hosts page, beside the
   hosts it moves.
 
-  The one thing here that acts is the platform role's Update button for this
-  controller. Everything about it is read from the status and not remembered by
-  the page: whether an attempt is open, how the last one ended and whether the
-  button is offered all come from `controller` and `helper`, so a reload, a
-  reconnecting stream or a second tab shows the same. The page never says an
-  update worked before the controller has: success is the attempt closed as
-  succeeded, or the build it reports being the release asked for.
+  The one thing here that acts is the platform role's pair of review buttons for
+  this controller, "Review update to vX.Y.Z…" and "Review dev upgrade…" ("Reinstall
+  latest dev…" when the build already is the latest), each of which opens the
+  confirmation that asks for the update. Everything about them is read from the
+  status and not remembered by the page: whether an attempt is open, how the last
+  one ended and whether a button is offered all come from `controller` and
+  `helper`, so a reload, a reconnecting stream or a second tab shows the same.
+  The page never says an update worked before the controller has: success is the
+  attempt closed as succeeded, or the build it reports being the release asked
+  for.
 -->
 <script lang="ts">
   import { ExternalLink } from '@lucide/svelte';

@@ -24,7 +24,7 @@ from here rather than inventing values.
 ![Mission Control visual-style selection](screenshots/mission-control/appearance-dark.webp)
 
 
-Settings, Appearance offers **Classic** (the default) and **Mission Control**.
+Settings, Appearance offers **Classic** and **Mission Control** (the default).
 Classic retains the compact neutral palette. Mission Control uses navy surfaces
 in dark mode, cool light surfaces in light mode, and slightly larger type.
 Runner Blue remains the interactive accent; cyan still means running work.
@@ -33,8 +33,16 @@ The phone's More menu offers the same two style choices.
 
 Visual style stays in this browser under `zoomies.ui-style` and is applied before
 first paint, including sign-in and the first-account form. Missing or unknown
-values retain Classic. Reset visual style to Classic clears only that choice.
-The separate public `/status` document retains Classic.
+values get Mission Control; only a stored `classic` opts a browser out, so
+choosing Mission Control again simply clears the key.
+A browser that stored Light, Dark or Mission Control under an earlier release
+keeps that choice. System and Classic were stored as the absence of a key, so a
+browser that had chosen either, or never chose, now opens in Mission Control and
+the dark theme like a new one; choosing them again in Settings, Appearance is
+remembered from then on.
+The separate public `/status` document retains Classic. It is dark unless its
+reader stored Light or System, and the dark is written on its `<html>` element,
+because its policy allows no inline script of its own to apply it.
 
 Selecting a style updates root tokens without replacing the route or its state.
 It preserves the original Zoomies artwork and logo treatment, Eli, dog/paw
@@ -42,10 +50,16 @@ animations, Off/Cute/Standard vocabulary, reduced motion, navigation and saved
 phone-table layouts. Log viewers refresh their canvas palette and type without
 clearing output. No fleet setting or API call is needed to change style.
 
-Mission Control's Overview keeps first-run guidance first, then current issues
-and four live metrics before pools, active jobs and history. Startup and
-registration timings remain available in an expandable section. Classic retains
-its history-first layout. On a Mission Control phone, Jobs puts search, status
+Both styles use the Calm operations Overview: first-run guidance, attention
+summaries and four compact live metrics, then pools and active jobs beside a
+three-entry recent-events preview. One scope selector controls the page. Sticky
+jump links assist navigation; phones put supplementary destinations under More.
+History, host capacity and startup/registration timings are expandable sections
+with live summaries and browser-local expansion preferences. History remains
+this fleet's activity, with its own labelled range, even when other runners are
+included in job counts. A fragment link opens its destination before scrolling.
+The full events feed expands in place, retaining the controller's reason strings.
+On a Mission Control phone, Jobs puts search, status
 and records before supplementary analytics; Filters and Fleet context expand
 without clearing the URL filters.
 
@@ -55,6 +69,14 @@ both win over the style default. Existing saved Rows values are preserved,
 including values older versions may have written automatically. Changing a
 logo or vocabulary does not record an unchosen global table default. Saved
 column order and widths take precedence over the new Jobs default order.
+
+The Eli repairs pages use the same grammar: a sticky **On this page** navigation
+with counts, native disclosures whose closed summaries stay useful, and the
+supporting detail (History, Automatic repairs, the attempt's case and technical
+details) closed until somebody asks for it. A section that holds live work opens
+by itself; a quiet History does too, because then it is the content. A browser's
+explicit open or closed choice is remembered, and the phone keeps the last two
+destinations behind **More**.
 
 
 Mission Control colour values live in the `--z-mission-*` tokens. Preview cards
@@ -491,7 +513,8 @@ Page gutters are `--z-space-6`, card padding `--z-space-5`, table cell padding
 ### 1.4 Radii, borders and geometry
 
 `--z-radius-sm` 4 (badges, inputs) · `--z-radius-md` 8 (buttons, cards) ·
-`--z-radius-lg` 12 (dialogs, panels) · `--z-radius-full` 9999 (dots, pills).
+`--z-radius-lg` 12 (dialogs, panels) · `--z-radius-xl` 28 (the stage on the pages
+before sign in) · `--z-radius-full` 9999 (dots, pills).
 
 Borders come in three weights and the choice between them is meaning, not
 taste. `--z-border-width` (1px) is the hairline that separates things belonging
@@ -521,7 +544,8 @@ Dialogs and drawers are cut to their content's comfortable measure rather than
 to the viewport, so each has three widths and they are the three shapes we
 actually put in one; a confirmation, a form, a table:
 `--z-width-dialog-sm|md|lg` (400/560/820) and `--z-width-drawer-sm|md|lg`
-(360/520/760).
+(360/520/760). A public page, before anybody has signed in, is cut to
+`--z-width-public` (1120px), which its header, its stage and its footer share.
 
 ### 1.5 Elevation
 
@@ -573,9 +597,10 @@ Everything inside `@media (prefers-reduced-motion: reduce)` collapses to `1ms`.
 
 ### 1.8 Theme
 
-Three states: `light`, `dark`, `system`. `system` is the default and sets no
-attribute, so `prefers-color-scheme` decides. An explicit choice writes
-`data-theme` on `<html>` and persists to `localStorage` under `zoomies.theme`.
+Three states: `light`, `dark`, `system`. `dark` is the default. `system` sets no
+attribute, so `prefers-color-scheme` decides. Every choice persists to
+`localStorage` under `zoomies.theme`, and all but `system` write `data-theme` on
+`<html>`; a browser with nothing stored gets `dark`.
 The choice is applied by a tiny inline script before first paint so there is no
 flash.
 
@@ -626,6 +651,25 @@ it is handed the same three thumb tokens through its theme.
 
 ## 2. Information architecture
 
+**The look of a signed-in page** is the public pages' look carried inside the
+shell. The sidebar is a sunken column and the page you are on is raised off it
+with the brand's blue rail (a bar along the top on a phone) and a bold label, so
+the rail is for the eye and the weight is for anyone it does not reach. Every
+page header names its section above the title (the sidebar's own heading, drawn
+from a data attribute so it is never a second heading or a string a page's text
+can collide with), sets the title in the medium weight, and puts a short blue
+rule under it; the Overview, which stands alone, has no section to name. Panels
+are cards with the extra-large radius, on the page's own surface: the quiet
+text colours are only guaranteed to read on it, and a raised one costs the
+gallery's contrast check in dark. The Overview opens with the public pages'
+stage as a hero, Zoomies Black in both themes: the dog, an eyebrow, a large headline with its accent, the short
+blue rule and one sentence that answers "is anything wrong" in counts by
+severity, never a problem's own words, and with no status colour in it. It costs
+the Overview some height, so the pools start within the first 1000px of a
+desktop window and no longer within 900px; the hero is left out on a phone,
+where the pools must still be on the first screen. The wrong-address page uses
+the same stage with the dog.
+
 Persistent left navigation, collapsible to icons only (persisted). Order is
 fixed, because muscle memory is the point:
 
@@ -641,7 +685,11 @@ fixed, because muscle memory is the point:
 7. **Hosts**: where runners can go
 8. **Providers**: the infrastructure that machines are rented from
 9. **Installations**: GitHub App connections
-10. **Eli repairs**: review failed PR offers, configure repository policies and follow repair outcomes.
+10. **Eli repairs**: review failed PR offers, follow what is running and what
+    happened, and set up the accounts and repositories behind them. It is one
+    entry for four pages under `/repairs`: the hub, a failure at `/repairs/new`,
+    one repair at `/repairs/<id>` and setup at `/repairs/setup`. The entry is lit
+    on all four.
 11. **Migrate repositories**: move repositories off GitHub's runners onto this
     fleet. The navigation shortens it to *Migrate*, because a nav label has to
     fit beside an icon in a 232px column; every other place that names the page
@@ -784,18 +832,22 @@ The one page that has to earn the second monitor.
   above are what the page is for, and a configuration warning somebody chose
   deliberately must not push the pools and the running jobs below the fold
   every day.
-* **Recent failures**: the failures nobody has read, newest first, with the
+* **Recent failures**: unresolved failures nobody has acknowledged, newest first, with the
   count in the panel's header and each row naming the repository, the workflow,
   the job and the step or fault it stopped at. A row opens the job's own drawer,
   and its **Mark as known** button takes the failure off the list, with the
   toast carrying the undo and the drawer able to put it back. It is a panel
   rather than a line like the problems summary, because each entry is a
   separate job with a separate thing to do about it and each leaves when
-  somebody says they have seen it: the one question GitHub cannot answer is
-  which failures anybody has looked at, and a panel that showed every recent
-  failure for ever would stop being read. It shows a short glance of the newest
+  somebody acknowledges it or a newer run replaces it. Background GitHub checks
+  also remove fixed, superseded and closed PR failures; cancelled or skipped
+  results are not proof of a fix. An unavailable GitHub read never resolves a
+  failure. Opening a stale repair link explains what changed and offers the
+  appropriate next step instead of sending the reader into setup. It shows a short glance of the newest
   few with the whole count in the header, not the whole list, so it too leaves
-  the pools and the running jobs above the fold of a laptop screen.
+  the pools and the running jobs above the fold of a laptop screen. When
+  nothing is owed it drops to one quiet line with a link to the Failed view:
+  an empty card would spend the same height saying nothing.
 
 ### The problems drawer
 
@@ -850,11 +902,11 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 | `StatusDot` | the shape half of the state encoding, reusable inline |
 | `Tooltip` | the one hover and focus help, on one bubble (`TooltipBubble`) and one set of timing rules (`lib/tooltip.ts`); never the only place information lives. Plain help is a `title` heading, a `text` sentence, a `reason` and the `keys` that do the same thing; `text` is also what assistive technology gets, linked to the control with `aria-describedby`. An optional `content` snippet draws a richer card for sighted readers, with `text` as its one-sentence copy. What it wraps has to be something a keyboard reaches, or focus opens nothing; a card that carries figures also opens on a tap, which has no hover. See *Help* |
 | `Segmented` | one choice among a few as one control, `aria-pressed` on the one in force: the activity matrix's ranges, the fleet trend's windows, the usage chart's two measures |
-| `Dialog` | focus trap, restores focus on close, `Esc` closes, backdrop click closes only non-destructive dialogs, and never one that is showing a secret exactly once. A dialog with text fields is a `<form>` whose footer button is `type="submit" form="…"`, so `Enter` submits it |
+| `Dialog` | focus trap, restores focus on close unless something else has taken focus meanwhile, `Esc` closes, backdrop click closes only non-destructive dialogs, and never one that is showing a secret exactly once. A dialog with text fields is a `<form>` whose footer button is `type="submit" form="…"`, so `Enter` submits it |
 | `Drawer` | right-hand detail panel; same focus rules. On a phone it runs the full height but not the full width: a strip of the page stays visible down its left, under the scrim, so it reads as a panel over the page rather than a new page, and a tap on the strip closes it |
 | `NavMenu` | the phone's menu: a sheet that rises from the bottom edge, where the thumb that pressed More is, carrying every section named and in order, plus the account, the theme and sign out; same focus rules, closes when a section is chosen |
 | `DropdownMenu` | roving tabindex, type-ahead; the list opens in the browser's top layer, placed against its trigger and flipped above where there is no room below, so a menu on a grid's last row is not cut off by the frame that scrolls. It closes when its trigger scrolls out of that frame. A `header` snippet names who the menu is about, and items sharing a `choice` are one segmented row of radio items with the one in force checked |
-| `Tabs` | `aria-controls`/`aria-selected`, arrow-key navigation |
+| `Tabs` | `aria-selected` and arrow-key navigation; `aria-controls` only when the component renders the panel, because a caller that draws what the tabs switch between elsewhere leaves it none to point at, and an `aria-controls` naming an id that is not on the page is an error |
 | `Toast` | bottom-right, `aria-live="polite"` (`assertive` for errors), auto-dismiss except on error |
 | `Skeleton` | **the only loading affordance for content.** Spinners are for in-flight *actions* only |
 | `EmptyState` | icon + one sentence of what this is + the action that fills it; a `visual` snippet replaces the icon disc where artwork is wanted, as the not-found page does with the mark |
@@ -880,9 +932,12 @@ rather than on the day it is written. Svelte 5 runes (`$state`, `$derived`,
 | `LogViewer` | `lib/logs/`. xterm.js with search, follow/pause, wrap toggle, download, and a line counter |
 | `MemoryBadgePill`, `MemoryBadgeCard` | `lib/runners/`. A small pill and the card it opens, for what the memory valve has done for a runner and which of its folders are kept in memory. The model is `memory-badges.ts`, free of components so a unit test reads it: a badge names a tone (`accent` for something to notice, `pending` for something to look at, `neutral` for a fact, `danger` for a refusal) and an icon by meaning, and the components resolve both from tokens. A pill is as wide as its words -- a short column wraps its pills, it never squeezes one to a glyph -- a dashed one is something that has not happened, and a dot on one means the runner wants more and cannot have it. The card is a `Tooltip` `content` with the `wide` size, and the same markup is drawn open in the runner page's panel, so what an operator reads in the tooltip is what the page says. A pill is for reading, never for navigating: its click stops at it |
 | `HostMemoryPool` | `lib/hosts/`. The memory a host may lend, as a figure and a bar drawn against the whole machine, so segments compare between hosts of different sizes; the ledger it was worked out from, line by line, is the card behind it. The figure and bar are one button, so the ledger opens on focus and a tap as well as on hover |
+| `HostCard` | `lib/hosts/`. One host, closed unless asked. It opens on what the Hosts page exists to answer: the host's state, what kind of host it is, why it is not taking work if it is not, the slot bar and three utilisation bars, then a **Details** disclosure that opens the rest beneath it. The rule it keeps is that a fold may hide detail and never a reason: every sentence that explains why a host takes no work, and the Backends block for a host with nothing to run a job in, stay on the closed card. The page that holds the cards owns which are open, because a filter that takes a card off the screen must not close it; the choice is remembered per browser, written when it is made and never on sight. The open part is not mounted while closed. A card is a subgrid of the page's grid and its sections are rows of it, so the cards in a row are one height and the same section sits at the same height in each (a notice on one card leaves the space for it on the others, and opening one makes the whole row as tall as that card needs), with the page's row gap at zero so that it does not also open up the rows inside every card |
+| `HostVitals` | `lib/hosts/`. CPU, memory and disk as a share of the whole machine: three rows of one grid, so the bars align across a card and, by the columns' least widths, across a row of cards, each with the figures it is a share of. The arithmetic is the capacity map's (`hostSeries.ts`) and the lines are the product's own, one for each: amber from the scheduler's 85% for CPU, counted without the CPU it has lent to runners; at or below the host reserve for memory, where the scheduler holds new starts; and by the doctor's low-disk rule for the disk, with a warning triangle and a sentence in the row's label so colour is never the only cue. A figure that is not measured is the absent-value mark, and a host that has stopped sending heartbeats shows none as current |
 | `MemoryBar` | `lib/runners/`. A runner's memory as one bar: guaranteed, lent, swap (hatched, so it cannot be mistaken for the solid fill where colour is lost) and a tick at the ceiling. `aria-hidden`: the figures beside it carry the meaning |
 | `RunnerTimeline` | `lib/runners/`. One row per state with how long the runner stayed there, reconstructed from the four timestamps a runner row carries -- and it says so, rather than letting an operator read it as an audit trail |
-| `Wizard` | a flow of steps that is genuinely a sequence; the AI Context setup, the provider form, the migration; on a phone its footer stays pinned above the bottom bar. The provider form also sets `jumpable`, so each stage in the list is a button that goes straight to it. A pool is not one: see [the pool editor](#the-pool-editor) |
+| `Wizard` | a flow of steps that is genuinely a sequence; the AI Context setup, the provider form, the migration; on a phone its footer stays pinned above the bottom bar. The provider form also sets `jumpable`, so each stage in the list but the current one is a button that goes straight to it; the current stage is plain text with `aria-current` on its list item, because a button that did nothing would be a dead tab stop. A pool is not one: see [the pool editor](#the-pool-editor) |
+| `PublicFrame`, `SplitPage`, `BrandStage`, `ThemeSwitch` | `lib/public/`. The frame every page before sign in shares. `PublicFrame` is the header (paw and wordmark, with the appearance switch drawn at the right but read after the page, so a person who came to sign in is on the first field), the page, and a Zoomies Black footer panel with the build, the links and the credit, all on `--z-width-public`. `SplitPage` is the stage beside the column a person acts in, and a strip above it on a phone. `BrandStage` is the rounded panel holding the dog, an eyebrow, a headline (a string or its lines, optionally with a line in the runner blue), a blue rule and a sentence; `wide` makes it a band with its headline as the page's h1, as on the status page. `ThemeSwitch` is the three-way appearance choice as icons in a pill, with a native `title` and not the shared tooltip, because the status page that uses it is held to a few kilobytes. None of them imports the preference store or the API client, so the status page can; the dog is drawn by `LogoArt`, which is told its backdrop, where `Logo` asks the operator's preference |
 
 ### The log viewer
 
@@ -1281,24 +1336,25 @@ Five things make it fit, in this order:
   `--z-bp-md` and `--z-bp-lg`, columns marked `priority: 'wide'` wait for a
   window with the room to show them properly. Which ones those are is each
   page's judgement: the columns that answer the page's own question stay.
-* **A phone keeps the table, and the frame takes the scroll.** A grid is the
-  same shape at every width unless it is told otherwise: below `--z-bp-md` the
-  columns take the widths they declare rather than dividing a frame they cannot
-  meaningfully divide, and the grid's own frame scrolls sideways to reach the
-  ones past the edge. Like a deliberately widened desktop layout, the scroll
-  belongs to the table's frame rather than the page, so it buys a page an
-  operator already knows without moving the application itself.
-* **A phone reads down when the operator says so.** Ten columns in 412 pixels
-  each say very little, so each grid carries a Cards/Rows toggle above its rows
-  and Settings → Appearance holds the default every grid that has not chosen
-  follows. In the card layout every row becomes a card and every cell carries
-  its own heading, taken from its `data-label`; the shape the usage report and
-  the Hosts page already had. Nothing is dropped and nothing is truncated; a
-  `wide` column is back, because a card has a line for it. Two things a heading
-  row does that a card cannot are kept as a strip above the cards: the sort, and
-  the tick that takes every row on the page. The rest of the heading row stays
-  in the document, out of the layout, so a screen reader still has a column
-  header to associate each cell with.
+* **In Classic a phone keeps the table, and the frame takes the scroll.** A grid
+  is the same shape at every width unless it is told otherwise: below
+  `--z-bp-md` the columns take the widths they declare rather than dividing a
+  frame they cannot meaningfully divide, and the grid's own frame scrolls
+  sideways to reach the ones past the edge. Like a deliberately widened desktop
+  layout, the scroll belongs to the table's frame rather than the page, so it
+  buys a page an operator already knows without moving the application itself.
+* **A phone reads down in Mission Control, and in Classic when the operator says
+  so.** Ten columns in 412 pixels each say very little, so each grid carries a
+  Cards/Rows toggle above its rows and Settings → Appearance holds the default
+  every grid that has not chosen follows (Cards in Mission Control, Rows in
+  Classic, until it is set). In the card layout every row becomes a card and
+  every cell carries its own heading, taken from its `data-label`; the shape the
+  usage report and the Hosts page already had. Nothing is dropped and nothing is
+  truncated; a `wide` column is back, because a card has a line for it. Two
+  things a heading row does that a card cannot are kept as a strip above the
+  cards: the sort, and the tick that takes every row on the page. The rest of
+  the heading row stays in the document, out of the layout, so a screen reader
+  still has a column header to associate each cell with.
 
 The same card layout is written out by hand in the tables that are not grids;
 the usage report, the accounts and API-token lists, the outstanding join tokens
@@ -1368,7 +1424,7 @@ nudge.
 Every PR that touches the UI should be able to answer yes to all of these:
 
 - [ ] Operable with the keyboard alone, including grids and dialogs
-- [ ] Focus visible everywhere, and moved into and restored out of dialogs
+- [ ] Focus visible everywhere, moved into a dialog, and given back when it closes unless something else has taken it meanwhile
 - [ ] Custom widgets carry the right `role`, and state via `aria-*`
 - [ ] Colour is never the sole carrier of meaning
 - [ ] Text meets WCAG AA in **both** themes (4.5:1 body, 3:1 large and UI)

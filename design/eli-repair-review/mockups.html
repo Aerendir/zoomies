@@ -1,0 +1,3014 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zoomies Eli repairs: design concepts</title>
+    <style>
+      /*
+        Standalone design board. Illustrative data only. No product code is
+        imported and nothing here sends a request. The palette mirrors the
+        Mission Control tokens so the concepts sit beside the real product.
+      */
+      :root {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --raised: #ffffff;
+        --sunken: #eaf0f7;
+        --hover: #e3ecf8;
+        --border: #c3cede;
+        --border-strong: #697d96;
+        --text: #122235;
+        --muted: #405570;
+        --subtle: #536780;
+        --accent: #1762bc;
+        --accent-hover: #12509e;
+        --accent-subtle: #e3edfc;
+        --accent-border: #9ab8e2;
+        --accent-contrast: #ffffff;
+        --idle: #14754d;
+        --idle-subtle: #e7f1eb;
+        --idle-border: #bbd9c8;
+        --busy: #00757f;
+        --busy-subtle: #e9f3f4;
+        --busy-border: #bddcde;
+        --pending: #815400;
+        --pending-subtle: #f6f2e9;
+        --pending-border: #e6d8c1;
+        --danger: #b52440;
+        --danger-subtle: #faedec;
+        --danger-border: #efc9c8;
+        --neutral: #686d76;
+        --neutral-subtle: #f4f4f5;
+        --neutral-border: #dddee0;
+        --font: 'InterVariable', 'Inter', 'Geist', ui-sans-serif, system-ui, -apple-system,
+          BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+        --text-2xs: 0.6875rem;
+        --text-xs: 0.8125rem;
+        --text-sm: 0.875rem;
+        --text-base: 0.9375rem;
+        --text-lg: 1rem;
+        --text-xl: 1.25rem;
+        --text-2xl: 1.75rem;
+        --leading-2xs: 1rem;
+        --leading-xs: 1.125rem;
+        --leading-sm: 1.375rem;
+        --leading-base: 1.5rem;
+        --leading-lg: 1.5rem;
+        --leading-xl: 1.75rem;
+        --leading-2xl: 2.125rem;
+        --weight-normal: 450;
+        --weight-medium: 500;
+        --weight-semibold: 550;
+        --weight-bold: 640;
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-5: 1.25rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-10: 2.5rem;
+        --space-12: 3rem;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-full: 9999px;
+        --border-width: 1px;
+        --border-thick: 2px;
+        --border-rail: 3px;
+        --control-touch: 44px;
+        --topbar: 52px;
+        --nav: 232px;
+        --content: 1560px;
+        --shadow-sm: 0 1px 2px rgb(8 12 20 / 0.06);
+        --shadow-md: 0 4px 12px -2px rgb(8 12 20 / 0.1);
+        --focus: #1762bc;
+        --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      [data-theme='dark'] {
+        color-scheme: dark;
+        --bg: #090e18;
+        --surface: #111b2b;
+        --raised: #19263b;
+        --sunken: #0c1421;
+        --hover: #1a2b43;
+        --border: #2b3a50;
+        --border-strong: #7389a5;
+        --text: #eef4fc;
+        --muted: #afbed2;
+        --subtle: #9baec8;
+        --accent: #8ac2ff;
+        --accent-hover: #b0d7ff;
+        --accent-subtle: #142b47;
+        --accent-border: #55769c;
+        --accent-contrast: #07131d;
+        --idle: #5fd68c;
+        --idle-subtle: #111b17;
+        --idle-border: #20402e;
+        --busy: #3bd6e8;
+        --busy-subtle: #0e1c1f;
+        --busy-border: #174148;
+        --pending: #f2b246;
+        --pending-subtle: #1d1912;
+        --pending-border: #3c2f19;
+        --danger: #ff8d84;
+        --danger-subtle: #1d1516;
+        --danger-border: #3f2727;
+        --neutral: #7f858e;
+        --neutral-subtle: #16181a;
+        --neutral-border: #27292d;
+        --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+        --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.6);
+        --focus: #8ac2ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: var(--text-sm);
+        line-height: var(--leading-sm);
+        -webkit-font-smoothing: antialiased;
+      }
+      button,
+      select,
+      input,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      a,
+      select,
+      input,
+      summary {
+        outline-offset: 3px;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--focus);
+      }
+      a {
+        color: var(--accent);
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--text-2xl);
+        line-height: var(--leading-2xl);
+        letter-spacing: -0.02em;
+        font-weight: var(--weight-bold);
+      }
+      h2 {
+        font-size: var(--text-lg);
+        line-height: var(--leading-lg);
+        font-weight: var(--weight-semibold);
+      }
+      h3 {
+        font-size: var(--text-base);
+        line-height: var(--leading-base);
+        font-weight: var(--weight-semibold);
+      }
+      .icon {
+        width: 1rem;
+        height: 1rem;
+        flex: none;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icon-lg {
+        width: 1.15rem;
+        height: 1.15rem;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .subtle {
+        color: var(--subtle);
+      }
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.95em;
+      }
+      .nowrap {
+        white-space: nowrap;
+      }
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      /* The review strip is not product UI. */
+      .review {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        padding: 9px 20px;
+        border-bottom: 1px solid var(--border);
+        background: var(--sunken);
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .review strong {
+        color: var(--accent);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-size: var(--text-2xs);
+      }
+      .review .spacer {
+        flex: 1;
+      }
+      .review label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .review select {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        padding: 4px 8px;
+      }
+      .review button {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      body.capture .review {
+        display: none;
+      }
+
+      /* The product shell. */
+      .shell {
+        display: grid;
+        grid-template-columns: var(--nav) minmax(0, 1fr);
+        min-height: 100vh;
+      }
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+        padding: 20px 14px;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px 4px;
+      }
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+        color: var(--text);
+      }
+      .brand-name {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .descriptor {
+        padding: 0 10px;
+        margin-top: -14px;
+        color: var(--muted);
+        font-size: 9px;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+      .nav-group {
+        display: grid;
+        gap: 2px;
+      }
+      .nav-label {
+        padding: 10px 12px 4px;
+        color: var(--subtle);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .nav-item:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .nav-item.current {
+        background: var(--accent-subtle);
+        color: var(--accent);
+        font-weight: var(--weight-semibold);
+      }
+      .sidebar-foot {
+        margin-top: auto;
+        display: grid;
+        gap: 6px;
+        padding: 0 10px;
+        color: var(--subtle);
+        font-size: 10px;
+      }
+      .work {
+        min-width: 0;
+      }
+      .instance {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 38px;
+        padding: 8px 24px;
+        background: var(--accent-subtle);
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+        font-size: var(--text-xs);
+      }
+      .instance span {
+        color: var(--muted);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-height: var(--topbar);
+        padding: 0 24px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .topcrumb {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        min-width: 0;
+      }
+      .topbar .spacer {
+        flex: 1;
+      }
+      .live {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--idle);
+        font-size: var(--text-xs);
+      }
+      .live i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .searchbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 235px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--subtle);
+        font-size: var(--text-xs);
+      }
+      .searchbox kbd {
+        margin-left: auto;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 0 4px;
+        font: inherit;
+      }
+      .account {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 4px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-xs);
+      }
+      .iconbtn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .iconbtn:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .bell {
+        position: relative;
+      }
+      .bell b {
+        position: absolute;
+        top: 2px;
+        right: 1px;
+        min-width: 14px;
+        height: 14px;
+        padding: 0 3px;
+        border-radius: var(--radius-full);
+        background: var(--danger);
+        color: var(--danger-contrast, #fff);
+        font-size: 9px;
+        line-height: 14px;
+        text-align: center;
+        font-weight: var(--weight-semibold);
+      }
+      .main {
+        max-width: var(--content);
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      /* Page furniture. */
+      .page-head {
+        display: grid;
+        gap: var(--space-2);
+        margin-bottom: var(--space-4);
+      }
+      .crumbs {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--subtle);
+        font-size: var(--text-xs);
+      }
+      .crumbs a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .head-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-4);
+        flex-wrap: wrap;
+      }
+      .head-row > div:first-child {
+        min-width: 0;
+      }
+      .sub {
+        margin-top: 4px;
+        max-width: 76ch;
+        color: var(--muted);
+        font-size: var(--text-base);
+        line-height: var(--leading-base);
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 36px;
+        padding: 7px 13px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 140ms var(--ease), border-color 140ms var(--ease);
+      }
+      .button:hover {
+        background: var(--hover);
+      }
+      .button.primary {
+        border-color: transparent;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        font-weight: var(--weight-semibold);
+      }
+      .button.primary:hover {
+        background: var(--accent-hover);
+      }
+      .button.ghost {
+        border-color: transparent;
+        background: transparent;
+        color: var(--muted);
+      }
+      .button.ghost:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .button.small {
+        min-height: 30px;
+        padding: 5px 10px;
+        font-size: var(--text-xs);
+      }
+      .page-nav {
+        display: flex;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 9;
+        min-height: var(--control-touch);
+        margin: 0 -24px var(--space-4);
+        padding: 0 24px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .page-nav::-webkit-scrollbar {
+        display: none;
+      }
+      .page-nav a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: var(--control-touch);
+        padding: 8px 12px;
+        border-bottom: 2px solid transparent;
+        color: var(--muted);
+        font-size: var(--text-sm);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .page-nav a:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .page-nav a[aria-current] {
+        border-bottom-color: var(--accent);
+        color: var(--accent);
+        font-weight: var(--weight-semibold);
+      }
+      .nav-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 5px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+      .page-nav a[aria-current] .nav-count {
+        border-color: var(--accent-border);
+        background: var(--accent-subtle);
+        color: var(--accent);
+      }
+      .page-more {
+        display: none;
+        position: relative;
+        margin-left: auto;
+      }
+      .page-more summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: var(--control-touch);
+        padding: 8px 12px;
+        color: var(--muted);
+        font-size: var(--text-sm);
+        cursor: pointer;
+        list-style: none;
+      }
+      .page-more summary::-webkit-details-marker {
+        display: none;
+      }
+      .page-more summary:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .page-more-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        min-width: 11rem;
+        padding: var(--space-1);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-md);
+      }
+      .page-more-menu a {
+        justify-content: flex-start;
+        min-height: var(--control-touch);
+        border-bottom: 0;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      #now,
+      #needs,
+      #running,
+      #automatic,
+      #history,
+      #next,
+      #failed,
+      #checks,
+      #repair-setup,
+      #summary,
+      #what-failed,
+      #details,
+      #access,
+      #repositories,
+      #allowance {
+        scroll-margin-top: calc(var(--control-touch) + var(--space-3));
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 21rem;
+        gap: var(--space-5);
+        align-items: start;
+      }
+      .main-col,
+      .side-col {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        min-width: 0;
+      }
+      .side-col {
+        position: sticky;
+        top: 64px;
+      }
+
+      /* Rails and setup. */
+      .attention-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-3);
+      }
+      .rail-card {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-height: 66px;
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--border);
+        border-left: var(--border-rail) solid var(--pending);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--text);
+        text-decoration: none;
+        box-shadow: var(--shadow-sm);
+      }
+      .rail-card.busy {
+        border-left-color: var(--busy);
+      }
+      .rail-card.danger {
+        border-left-color: var(--danger);
+      }
+      .rail-card.warning {
+        border-left-color: var(--pending);
+      }
+      .rail-card .rail-icon {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-sm);
+        background: var(--pending-subtle);
+        color: var(--pending);
+        flex: none;
+      }
+      .rail-card.busy .rail-icon {
+        background: var(--busy-subtle);
+        color: var(--busy);
+      }
+      .rail-card.danger .rail-icon {
+        background: var(--danger-subtle);
+        color: var(--danger);
+      }
+      .rail-card .rail-body {
+        min-width: 0;
+      }
+      .rail-card strong {
+        display: block;
+        font-size: var(--text-base);
+        font-weight: var(--weight-semibold);
+      }
+      .rail-card p {
+        margin-top: 1px;
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .rail-card .rail-go {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--accent);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+      .clear-line {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-1);
+        color: var(--muted);
+      }
+      .clear-line .icon {
+        color: var(--idle);
+      }
+      .clear-line strong {
+        color: var(--text);
+      }
+      .setup-line {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .setup-line strong {
+        color: var(--text);
+      }
+      .setup-line a {
+        margin-left: auto;
+      }
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--idle);
+        flex: none;
+      }
+      .status-dot.warning {
+        background: var(--pending);
+      }
+
+      /* Panels and disclosures. */
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+        min-width: 0;
+      }
+      .panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border);
+      }
+      .panel-head p {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .panel-body {
+        padding: var(--space-3) var(--space-4);
+      }
+      details.disclosure {
+        border: 1px solid var(--border);
+        border-left: var(--border-rail) solid transparent;
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+        scroll-margin-top: 64px;
+      }
+      details.disclosure.danger {
+        border-left-color: var(--danger);
+      }
+      details.disclosure.busy {
+        border-left-color: var(--busy);
+      }
+      details.disclosure.pending {
+        border-left-color: var(--pending);
+      }
+      details.disclosure > summary {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-height: 48px;
+        padding: 10px 14px;
+        cursor: pointer;
+        list-style: none;
+      }
+      details.disclosure > summary::-webkit-details-marker {
+        display: none;
+      }
+      details.disclosure > summary:hover {
+        background: var(--hover);
+      }
+      .chev {
+        transition: transform 140ms var(--ease);
+      }
+      details[open] > summary .chev {
+        transform: rotate(90deg);
+      }
+      .summary-title {
+        font-weight: var(--weight-semibold);
+      }
+      .summary-context {
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .summary-action {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--accent);
+        font-size: var(--text-xs);
+      }
+      .disclosure-body {
+        padding: var(--space-3) var(--space-4) var(--space-4);
+        border-top: 1px solid var(--border);
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 7px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        background: var(--neutral-subtle);
+        color: var(--muted);
+        font-size: var(--text-2xs);
+        font-weight: var(--weight-medium);
+        white-space: nowrap;
+      }
+      .badge.idle {
+        border-color: var(--idle-border);
+        background: var(--idle-subtle);
+        color: var(--idle);
+      }
+      .badge.busy {
+        border-color: var(--busy-border);
+        background: var(--busy-subtle);
+        color: var(--busy);
+      }
+      .badge.pending {
+        border-color: var(--pending-border);
+        background: var(--pending-subtle);
+        color: var(--pending);
+      }
+      .badge.danger {
+        border-color: var(--danger-border);
+        background: var(--danger-subtle);
+        color: var(--danger);
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 7px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--sunken);
+        color: var(--muted);
+        font-size: var(--text-2xs);
+        text-decoration: none;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+      .chip .icon {
+        width: 0.8rem;
+        height: 0.8rem;
+        color: var(--subtle);
+      }
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        min-width: 0;
+      }
+      .list {
+        display: flex;
+        flex-direction: column;
+      }
+      .list > * + * {
+        border-top: 1px solid var(--border);
+      }
+
+      /* Offer and running rows. */
+      .offer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--space-3);
+        align-items: center;
+        padding: var(--space-3) var(--space-4);
+      }
+      .offer:hover,
+      .run-row:hover,
+      .auto-row:hover,
+      .history-row:hover {
+        background: var(--hover);
+      }
+      .row-head {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 5px 8px;
+      }
+      .row-head h3 {
+        overflow-wrap: anywhere;
+      }
+      .row-head .num {
+        color: var(--muted);
+        font-weight: var(--weight-normal);
+      }
+      .row-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .row-meta span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .row-meta .icon {
+        width: 0.8rem;
+        height: 0.8rem;
+        color: var(--subtle);
+      }
+      .row-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        justify-content: flex-end;
+      }
+      .run-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--space-3);
+        align-items: center;
+        padding: var(--space-3) var(--space-4);
+      }
+      .run-right {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+      }
+      .progress {
+        display: flex;
+        gap: 3px;
+      }
+      .progress i {
+        display: block;
+        width: 18px;
+        height: 4px;
+        border-radius: var(--radius-full);
+        background: var(--border-strong);
+      }
+      .progress i.done {
+        background: var(--idle);
+      }
+      .progress i.current {
+        background: var(--busy);
+      }
+
+      /* Automatic rows. */
+      .auto-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
+        gap: var(--space-4);
+        align-items: start;
+        padding: var(--space-3) var(--space-4);
+      }
+      .auto-row h3 {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+        overflow-wrap: anywhere;
+      }
+      .auto-row p {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: var(--text-xs);
+        overflow-wrap: anywhere;
+      }
+      .meter {
+        height: 7px;
+        border-radius: var(--radius-full);
+        background: var(--sunken);
+        overflow: hidden;
+      }
+      .meter span {
+        display: block;
+        height: 100%;
+        border-radius: var(--radius-full);
+        background: var(--neutral);
+      }
+      .meter.full span {
+        background: var(--pending);
+      }
+      .auto-label {
+        color: var(--subtle);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .auto-acts {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      /* History. */
+      .history-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+        padding: var(--space-2) var(--space-4);
+        border-bottom: 1px solid var(--border);
+        background: var(--sunken);
+      }
+      .history-toolbar .toolbar-spacer {
+        flex: 1;
+      }
+      .history-toolbar .active-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 7px;
+        border: 1px solid var(--accent-border);
+        border-radius: var(--radius-full);
+        background: var(--accent-subtle);
+        color: var(--accent);
+        font-size: var(--text-2xs);
+      }
+      .filters {
+        display: none;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border);
+      }
+      .filters.open {
+        display: grid;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .field label {
+        color: var(--muted);
+        font-size: var(--text-2xs);
+      }
+      .field input,
+      .field select {
+        width: 100%;
+        min-height: 34px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+      }
+      .history-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.6fr) minmax(6rem, 0.7fr) 5rem 1rem;
+        gap: var(--space-3);
+        align-items: center;
+        padding: var(--space-3) var(--space-4);
+        text-decoration: none;
+        color: var(--text);
+      }
+      .history-row h3 {
+        margin-top: 4px;
+        overflow-wrap: anywhere;
+      }
+      .history-row .row-meta {
+        margin-top: 2px;
+      }
+      .history-failure {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        min-width: 0;
+      }
+      .history-when {
+        color: var(--muted);
+        font-size: var(--text-xs);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .history-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.6fr) minmax(6rem, 0.7fr) 5rem 1rem;
+        gap: var(--space-3);
+        padding: 7px var(--space-4);
+        border-bottom: 1px solid var(--border);
+        color: var(--subtle);
+        font-size: 10px;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      /* Focus workspace. */
+      .focus-tabs {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        max-width: 100%;
+        overflow-x: auto;
+      }
+      .focus-tabs button {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 34px;
+        padding: 6px 11px;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--muted);
+        font-size: var(--text-sm);
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .focus-tabs button:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .focus-tabs button[aria-selected='true'] {
+        background: var(--accent-subtle);
+        color: var(--accent);
+        font-weight: var(--weight-semibold);
+      }
+      .focus-tabs .nav-count {
+        height: 18px;
+      }
+      .focus-context {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        margin-bottom: var(--space-3);
+      }
+      .focus-note {
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+
+      /* Detail pages. */
+      .case-strip {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-5);
+        flex-wrap: wrap;
+        padding: var(--space-3) var(--space-4) var(--space-3) var(--space-4);
+        border: 1px solid var(--border);
+        border-left: var(--border-rail) solid var(--danger);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+      }
+      .overline {
+        color: var(--danger);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        font-weight: var(--weight-semibold);
+      }
+      .case-strip h2 {
+        margin-top: 3px;
+        overflow-wrap: anywhere;
+      }
+      .case-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .case-facts span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .next-card {
+        border-left: var(--border-rail) solid var(--pending);
+      }
+      .next-card.ready {
+        border-left-color: var(--idle);
+      }
+      .next-card .panel-head {
+        border-bottom: 0;
+        padding-bottom: 4px;
+      }
+      .next-card .panel-body {
+        padding-top: 0;
+      }
+      .next-card .lead {
+        max-width: 68ch;
+        color: var(--muted);
+      }
+      .next-card .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-3);
+      }
+      .fine {
+        margin-top: var(--space-2);
+        color: var(--subtle);
+        font-size: var(--text-xs);
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr);
+        gap: 7px var(--space-3);
+        margin: var(--space-3) 0 0;
+        font-size: var(--text-sm);
+      }
+      .facts dt {
+        color: var(--muted);
+      }
+      .facts dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .check-row {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-3) 0;
+      }
+      .check-row + .check-row {
+        border-top: 1px solid var(--border);
+      }
+      .check-icon {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .check-icon.blocked {
+        background: var(--danger-subtle);
+        color: var(--danger);
+      }
+      .check-icon.ok {
+        background: var(--idle-subtle);
+        color: var(--idle);
+      }
+      .check-icon.unchecked {
+        background: var(--neutral-subtle);
+        color: var(--neutral);
+      }
+      .check-body {
+        flex: 1;
+        min-width: 0;
+      }
+      .check-body strong {
+        font-weight: var(--weight-semibold);
+      }
+      .check-body p {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .check-action {
+        margin-top: 6px;
+      }
+      .job {
+        border: 1px solid var(--border);
+        border-left: var(--border-rail) solid var(--danger);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+      .job-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+      }
+      .job-body {
+        padding: 0 var(--space-4) var(--space-4);
+        color: var(--muted);
+      }
+      .locked {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        border: 1px dashed var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--sunken);
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+      .banner {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border: 1px solid var(--danger-border);
+        border-left: var(--border-rail) solid var(--danger);
+        border-radius: var(--radius-md);
+        background: var(--danger-subtle);
+      }
+      .banner .icon {
+        color: var(--danger);
+        width: 1.3rem;
+        height: 1.3rem;
+        margin-top: 1px;
+      }
+      .banner h2 {
+        color: var(--danger);
+      }
+      .banner p {
+        margin-top: 3px;
+        color: var(--text);
+      }
+      .steps {
+        display: grid;
+        gap: var(--space-2);
+        margin: var(--space-3) 0 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: step;
+      }
+      .steps li {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        counter-increment: step;
+      }
+      .steps li::before {
+        content: counter(step);
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border: 1px solid var(--border-strong);
+        border-radius: 50%;
+        color: var(--muted);
+        font-size: var(--text-2xs);
+        flex: none;
+      }
+      .timeline {
+        display: grid;
+        gap: 10px;
+        margin: var(--space-3) 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .timeline li {
+        display: grid;
+        gap: 1px;
+        padding-left: var(--space-3);
+        border-left: 2px solid var(--border);
+      }
+      .timeline time {
+        color: var(--subtle);
+        font-size: var(--text-2xs);
+        font-variant-numeric: tabular-nums;
+      }
+      .setup-summary {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+      .setup-summary strong {
+        font-weight: var(--weight-semibold);
+      }
+      .setup-summary .bar {
+        width: 120px;
+        height: 6px;
+        border-radius: var(--radius-full);
+        background: var(--sunken);
+        overflow: hidden;
+      }
+      .setup-summary .bar span {
+        display: block;
+        height: 100%;
+        width: 66%;
+        background: var(--accent);
+      }
+      .savebar {
+        position: sticky;
+        bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-md);
+      }
+      .savebar .spacer {
+        flex: 1;
+      }
+      .savebar span {
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+
+      /* Phone. */
+      .phone-nav {
+        display: none;
+      }
+      @media (max-width: 1100px) {
+        .two-col {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .side-col {
+          position: static;
+        }
+      }
+      @media (max-width: 900px) {
+        .auto-row {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+        .auto-row .auto-acts {
+          grid-column: 1 / -1;
+          justify-content: flex-start;
+        }
+        .history-head {
+          display: none;
+        }
+        .history-row {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .history-row .history-failure,
+        .history-row .history-trigger {
+          grid-column: 1;
+        }
+        .history-when {
+          grid-column: 2;
+          grid-row: 1 / span 2;
+          align-self: start;
+        }
+      }
+      @media (max-width: 768px) {
+        .review {
+          padding: 8px 12px;
+        }
+        .review .spacer,
+        .review .context {
+          display: none;
+        }
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .sidebar {
+          display: none;
+        }
+        .instance {
+          display: none;
+        }
+        .topbar {
+          padding: 0 16px;
+        }
+        .searchbox,
+        .bell,
+        .live {
+          display: none;
+        }
+        .main {
+          padding: 18px 16px 88px;
+        }
+        .page-nav {
+          margin: 0 -16px var(--space-3);
+          padding: 0 12px;
+          overflow: visible;
+        }
+        .page-nav .secondary {
+          display: none;
+        }
+        .page-more {
+          display: block;
+        }
+        h1 {
+          font-size: 1.5rem;
+          line-height: 1.9rem;
+        }
+        .sub {
+          font-size: var(--text-sm);
+          line-height: var(--leading-sm);
+        }
+        .actions {
+          width: 100%;
+        }
+        .actions .button {
+          flex: 1;
+          min-height: var(--control-touch);
+        }
+        .attention-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .rail-card {
+          min-height: var(--control-touch);
+        }
+        .offer,
+        .run-row,
+        .auto-row {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .row-actions,
+        .auto-acts {
+          justify-content: flex-start;
+        }
+        .row-actions .button,
+        .auto-acts .button,
+        .next-card .button {
+          min-height: var(--control-touch);
+        }
+        .run-right {
+          justify-content: space-between;
+        }
+        .filters {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .history-row {
+          grid-template-columns: minmax(0, 1fr) 1rem;
+        }
+        .history-when {
+          grid-column: 1;
+          grid-row: auto;
+          text-align: left;
+        }
+        .history-row > .icon {
+          grid-column: 2;
+          grid-row: 1;
+        }
+        .setup-line a {
+          margin-left: 0;
+        }
+        .phone-nav {
+          display: flex;
+          position: fixed;
+          right: 0;
+          bottom: 0;
+          left: 0;
+          z-index: 20;
+          justify-content: space-around;
+          padding: 6px 4px max(6px, env(safe-area-inset-bottom));
+          border-top: 1px solid var(--border);
+          background: var(--surface);
+        }
+        .phone-nav a {
+          display: grid;
+          justify-items: center;
+          gap: 2px;
+          min-width: 64px;
+          padding: 6px 4px;
+          color: var(--muted);
+          font-size: 10px;
+          text-decoration: none;
+        }
+        .phone-nav a[aria-current] {
+          color: var(--accent);
+        }
+        .phone-nav .icon {
+          width: 18px;
+          height: 18px;
+        }
+        .focus-tabs {
+          width: 100%;
+        }
+        .focus-tabs button {
+          min-height: var(--control-touch);
+        }
+        details.disclosure > summary {
+          min-height: var(--control-touch);
+        }
+        .summary-action {
+          width: 100%;
+          margin-left: 24px;
+          margin-top: -4px;
+        }
+        .savebar {
+          bottom: 74px;
+        }
+        .savebar .button {
+          min-height: var(--control-touch);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        * {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="review" id="review">
+      <strong>Design concept</strong>
+      <span class="context"
+        >Eli repairs review, 19 October 2026. Illustrative data. No product code changed.</span
+      >
+      <span class="spacer"></span>
+      <label>Concept <select id="concept"></select></label>
+      <label>Screen <select id="screen"></select></label>
+      <label>State <select id="state"></select></label>
+      <button type="button" id="theme">Light / dark</button>
+    </div>
+
+    <div>
+      <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+        <symbol id="i-paw" viewBox="0 0 24 24">
+          <ellipse cx="7" cy="7" rx="2.2" ry="2.8" fill="currentColor" stroke="none" />
+          <ellipse cx="12" cy="5.5" rx="2.2" ry="3" fill="currentColor" stroke="none" />
+          <ellipse cx="17" cy="7" rx="2.2" ry="2.8" fill="currentColor" stroke="none" />
+          <ellipse cx="20.2" cy="12" rx="1.8" ry="2.3" fill="currentColor" stroke="none" />
+          <path
+            d="M6.2 14.4c0-3 2.6-5.4 5.8-5.4s5.8 2.4 5.8 5.4c0 3.1-2.6 4.7-5.8 4.7s-5.8-1.6-5.8-4.7Z"
+            fill="currentColor"
+            stroke="none"
+          />
+        </symbol>
+        <symbol id="i-grid" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="9" rx="1" />
+          <rect x="14" y="3" width="7" height="5" rx="1" />
+          <rect x="14" y="12" width="7" height="9" rx="1" />
+          <rect x="3" y="16" width="7" height="5" rx="1" />
+        </symbol>
+        <symbol id="i-boxes" viewBox="0 0 24 24">
+          <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" />
+          <path d="m3 7 9 5 9-5M12 12v10" />
+        </symbol>
+        <symbol id="i-server" viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="7" rx="2" />
+          <rect x="2" y="14" width="20" height="7" rx="2" />
+          <path d="M6 6.5h.01M6 17.5h.01M10 6.5h4M10 17.5h4" />
+        </symbol>
+        <symbol id="i-list" viewBox="0 0 24 24">
+          <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+        </symbol>
+        <symbol id="i-workflow" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+          <path d="M10 6.5h4a4 4 0 0 1 4 4V14" />
+        </symbol>
+        <symbol id="i-chart" viewBox="0 0 24 24">
+          <path d="M3 3v18h18" />
+          <path d="m7 14 4-4 3 3 5-6" />
+        </symbol>
+        <symbol id="i-host" viewBox="0 0 24 24">
+          <rect x="2" y="4" width="20" height="12" rx="2" />
+          <path d="M8 20h8M12 16v4" />
+        </symbol>
+        <symbol id="i-cloud" viewBox="0 0 24 24">
+          <path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.3 8.6 4 4 0 0 0 7 19h10.5Z" />
+        </symbol>
+        <symbol id="i-plug" viewBox="0 0 24 24">
+          <path d="M12 22v-5M9 7V2M15 7V2M6 7h12v4a6 6 0 0 1-12 0V7Z" />
+        </symbol>
+        <symbol id="i-pr" viewBox="0 0 24 24">
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="18" cy="19" r="2" />
+          <circle cx="6" cy="19" r="2" />
+          <path d="M6 7v10M18 17V7a2 2 0 0 0-2-2h-3M9 5h1" />
+        </symbol>
+        <symbol id="i-migrate" viewBox="0 0 24 24">
+          <path d="M4 7h14l-3-3M20 17H6l3 3" />
+        </symbol>
+        <symbol id="i-trophy" viewBox="0 0 24 24">
+          <path d="M8 4h8v5a4 4 0 0 1-8 0V4ZM8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 13v5M8 21h8" />
+        </symbol>
+        <symbol id="i-audit" viewBox="0 0 24 24">
+          <rect x="4" y="3" width="16" height="18" rx="2" />
+          <path d="M8 8h8M8 12h8M8 16h5" />
+        </symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1.1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.03.38.24.72.6 1 .3.25.7.4 1.1.4H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5.6Z"
+          />
+        </symbol>
+        <symbol id="i-search" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+        </symbol>
+        <symbol id="i-user" viewBox="0 0 24 24">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21a8 8 0 0 1 16 0" />
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24">
+          <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
+        </symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></symbol>
+        <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6" /></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="m7 4 13 8-13 8V4Z" /></symbol>
+        <symbol id="i-branch" viewBox="0 0 24 24">
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="18" cy="7" r="2" />
+          <circle cx="6" cy="19" r="2" />
+          <path d="M6 7v10M18 9c0 4-4 4-7 4H6" />
+        </symbol>
+        <symbol id="i-external" viewBox="0 0 24 24">
+          <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+        </symbol>
+        <symbol id="i-filter" viewBox="0 0 24 24">
+          <path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z" />
+        </symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24">
+          <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h10M18 18h2" />
+          <circle cx="16" cy="6" r="2" />
+          <circle cx="8" cy="12" r="2" />
+          <circle cx="16" cy="18" r="2" />
+        </symbol>
+        <symbol id="i-more" viewBox="0 0 24 24">
+          <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+          <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
+        </symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6" /></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        </symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24">
+          <rect x="4" y="10" width="16" height="11" rx="2" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+        </symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24">
+          <path d="M10.3 3.7 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z" />
+          <path d="M12 9v4M12 17h.01" />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v6M12 7h.01" />
+        </symbol>
+        <symbol id="i-spark" viewBox="0 0 24 24">
+          <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" />
+        </symbol>
+      </svg>
+
+      <div class="shell">
+        <aside class="sidebar">
+          <div class="brand">
+            <svg class="brand-mark icon" aria-hidden="true"><use href="#i-paw" /></svg>
+            <span class="brand-name">Zoomies</span>
+          </div>
+          <p class="descriptor">Self-hosted Git runners</p>
+          <nav class="nav-group" aria-label="Sections">
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-grid" /></svg>Overview</a>
+            <p class="nav-label">Fleet</p>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-boxes" /></svg>Pools</a>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-server" /></svg>Runners</a>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-list" /></svg>Queue</a>
+            <a class="nav-item" href="#"
+              ><svg class="icon"><use href="#i-workflow" /></svg>Workflows</a
+            >
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-chart" /></svg>Usage</a>
+            <p class="nav-label">Infrastructure</p>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-host" /></svg>Hosts</a>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-cloud" /></svg>Providers</a>
+            <p class="nav-label">GitHub</p>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-plug" /></svg>Installations</a>
+            <a class="nav-item current" href="#"
+              ><svg class="icon"><use href="#i-pr" /></svg>Eli repairs</a
+            >
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-migrate" /></svg>Migrate</a>
+            <a class="nav-item" href="#"
+              ><svg class="icon"><use href="#i-trophy" /></svg>Kennel Club</a
+            >
+            <p class="nav-label">Administration</p>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-audit" /></svg>Audit</a>
+            <a class="nav-item" href="#"><svg class="icon"><use href="#i-settings" /></svg>Settings</a>
+          </nav>
+          <div class="sidebar-foot">
+            <span>Dev b417382</span>
+            <span>Docs · Source</span>
+          </div>
+        </aside>
+
+        <div class="work">
+          <div class="instance">
+            <strong>Zoomies demo system</strong><span>This fleet contains demonstration data.</span>
+          </div>
+          <header class="topbar">
+            <span class="topcrumb" id="top-crumb">Eli repairs</span>
+            <span class="spacer"></span>
+            <span class="live"><i></i>Live</span>
+            <button class="iconbtn bell" type="button" aria-label="Problems, 9 open">
+              <svg class="icon"><use href="#i-bell" /></svg><b>9</b>
+            </button>
+            <div class="searchbox">
+              <svg class="icon" style="width: 0.85rem; height: 0.85rem"><use href="#i-search" /></svg>
+              Search or jump to <kbd>Ctrl K</kbd>
+            </div>
+            <span class="account"><svg class="icon" style="width: 0.9rem; height: 0.9rem"><use href="#i-user" /></svg>alice</span>
+          </header>
+          <main class="main" id="main"></main>
+        </div>
+      </div>
+
+      <nav class="phone-nav" aria-label="Primary">
+        <a href="#"><svg class="icon"><use href="#i-grid" /></svg>Overview</a>
+        <a href="#"><svg class="icon"><use href="#i-boxes" /></svg>Pools</a>
+        <a href="#"><svg class="icon"><use href="#i-server" /></svg>Runners</a>
+        <a href="#"><svg class="icon"><use href="#i-workflow" /></svg>Workflows</a>
+        <a href="#" aria-current="page"><svg class="icon"><use href="#i-more" /></svg>More</a>
+      </nav>
+    </div>
+
+    <noscript>This design board needs JavaScript to switch concepts and screens.</noscript>
+
+    <script>
+      const DATA = {
+        setup: {
+          ready: true,
+          headline: 'Ready to repair',
+          account: 'as @alice',
+          automatic: 2,
+          askFirst: 1,
+        },
+        offers: [
+          {
+            title: 'Fix the broken link on the install page',
+            repo: 'acme/docs',
+            pull: 31,
+            branch: 'docs/fix-link-check',
+            failed: 'Docs build',
+            step: 'mkdocs build, strict mode',
+            when: '5h ago',
+          },
+          {
+            title: 'Cap the retry budget in the gateway client',
+            repo: 'acme/gateway',
+            pull: 112,
+            branch: 'feat/gateway-retry-budget',
+            failed: 'Go (gateway)',
+            step: 'Run go test ./...',
+            when: '3h ago',
+          },
+        ],
+        running: [
+          {
+            title: 'Add a retry budget to the gateway client',
+            repo: 'acme/gateway',
+            pull: 113,
+            branch: 'feat/gateway-retry',
+            stage: 'Preparing the fix',
+            step: 3,
+            elapsed: '41s',
+            who: '@alice',
+          },
+        ],
+        automatic: [
+          {
+            repo: 'acme/docs',
+            state: 'Ready',
+            tone: 'idle',
+            paid: 'Paid by Team provider (sample) (demo).',
+            used: 1,
+            limit: 5,
+            last: 'Could not repair on #31',
+            lastTone: 'danger',
+            when: '5h ago',
+            running: '',
+          },
+          {
+            repo: 'acme/gateway',
+            state: 'Ready',
+            tone: 'idle',
+            paid: 'Paid by Team provider (sample) (demo).',
+            used: 2,
+            limit: 5,
+            last: 'Checks passed on #112',
+            lastTone: 'idle',
+            when: '5h ago',
+            running: '1 running',
+          },
+        ],
+        history: [
+          {
+            state: 'Could not repair',
+            tone: 'danger',
+            title: 'Fix the broken link on the install page',
+            repo: 'acme/docs',
+            pull: 31,
+            branch: 'docs/fix-link-check',
+            job: 'Docs build',
+            step: 'mkdocs build, strict mode',
+            trigger: 'Automatic',
+            when: '5h ago',
+            took: '41s',
+            message: 'Eli could not produce a fix it was willing to push.',
+          },
+          {
+            state: 'Checks passed',
+            tone: 'idle',
+            title: 'Add a retry budget to the gateway client',
+            repo: 'acme/gateway',
+            pull: 112,
+            branch: 'feat/gateway-retry-budget',
+            job: 'Go (gateway)',
+            step: 'Run go test ./...',
+            trigger: 'Automatic',
+            when: '5h ago',
+            took: '41s',
+            message: 'Restored the missing nil check; the PR checks passed.',
+          },
+          {
+            state: 'Checks failed',
+            tone: 'danger',
+            title: 'Cap the retry budget in the gateway client',
+            repo: 'acme/gateway',
+            pull: 109,
+            branch: 'feat/gateway-retry-cap',
+            job: 'Go (gateway)',
+            step: 'Run go test ./...',
+            trigger: 'Automatic',
+            when: '5h ago',
+            took: '41s',
+            message: 'Eli pushed a commit and the checks still fail.',
+          },
+        ],
+      };
+
+      const icon = (name, className = 'icon') =>
+        `<svg class="${className}" aria-hidden="true"><use href="#i-${name}" /></svg>`;
+      const esc = (value) =>
+        String(value).replace(
+          /[&<>"']/g,
+          (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
+        );
+      const badge = (label, tone = '') => `<span class="badge ${tone}">${esc(label)}</span>`;
+      const chip = (iconName, label) =>
+        `<span class="chip">${icon(iconName)}${esc(label)}</span>`;
+      const linkChip = (iconName, label) =>
+        `<a class="chip" href="#" onclick="return false">${icon(iconName)}${esc(label)}</a>`;
+
+      function pageHeader({ crumb, title, subtitle, actions }) {
+        return `<header class="page-head">
+          <nav class="crumbs" aria-label="Breadcrumb">${crumb}</nav>
+          <div class="head-row">
+            <div><h1>${esc(title)}</h1>${subtitle ? `<p class="sub">${subtitle}</p>` : ''}</div>
+            <div class="actions">${actions}</div>
+          </div>
+        </header>`;
+      }
+
+      function setupLine(setup) {
+        if (!setup.ready) {
+          return `<div class="setup-line" style="border-color: var(--pending-border); background: var(--pending-subtle)">
+            <span class="status-dot warning"></span>
+            <strong>Setup needed</strong><span>No GitHub account linked. Eli cannot confirm write access.</span>
+            <a href="#repair-setup" onclick="goSetup(event)">Finish setup ${icon('chevron')}</a>
+          </div>`;
+        }
+        return `<div class="setup-line">
+          <span class="status-dot"></span>
+          <strong>${esc(setup.headline)}</strong><span>${esc(setup.account)}</span>
+          <span class="muted">·</span><span>${setup.automatic} automatic</span>
+          <span class="muted">·</span><span>${setup.askFirst} asks first</span>
+          <a href="#repair-setup" onclick="goSetup(event)">Manage setup ${icon('chevron')}</a>
+        </div>`;
+      }
+
+      function attentionArea(setup, offersCount, runningCount) {
+        if (!setup.ready) {
+          return `<div class="attention-grid">
+            <a class="rail-card warning" href="#repair-setup" onclick="goSetup(event)">
+              <span class="rail-icon">${icon('alert')}</span>
+              <span class="rail-body"><strong>Finish setup before Eli can act</strong>
+                <p>Link your GitHub account and choose a model provider.</p></span>
+              <span class="rail-go">Finish setup ${icon('arrow')}</span>
+            </a>
+          </div>`;
+        }
+        if (offersCount === 0 && runningCount === 0) return '';
+        return `<div class="attention-grid">
+          ${
+            offersCount
+              ? `<a class="rail-card danger" href="#needs">
+                  <span class="rail-icon">${icon('alert')}</span>
+                  <span class="rail-body"><strong>${offersCount} offers need review</strong>
+                    <p>Failed PR checks on Ask me first repositories.</p></span>
+                  <span class="rail-go">Review offers ${icon('arrow')}</span>
+                </a>`
+              : ''
+          }
+          ${
+            runningCount
+              ? `<a class="rail-card busy" href="#running">
+                  <span class="rail-icon">${icon('play')}</span>
+                  <span class="rail-body"><strong>${runningCount} repair running</strong>
+                    <p>Eli is reading the failed checks or preparing a fix.</p></span>
+                  <span class="rail-go">Follow ${icon('arrow')}</span>
+                </a>`
+              : ''
+          }
+        </div>`;
+      }
+
+      function offersPanel(state) {
+        const offers = state.offers;
+        if (!offers.length) {
+          if (!state.setup.ready) {
+            return `<section id="needs" class="clear-line" style="padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface)">
+              ${icon('info')}
+              <p><strong>Offers appear after setup.</strong> Link your GitHub account and choose a provider before reviewing failed pull requests. <a href="#repair-setup" onclick="goSetup(event)">Finish setup</a>.</p>
+            </section>`;
+          }
+          return `<section id="needs" class="clear-line" style="padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface)">
+            ${icon('check')}
+            <p><strong>No offers need you.</strong> Offers appear when a pull request's checks fail on a repository set to Ask me first. <a href="#" onclick="return false">Repair a pull request</a> to start one yourself.</p>
+          </section>`;
+        }
+        return `<details id="needs" class="disclosure danger" open>
+          <summary>
+            <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+            <span class="summary-title">Needs you</span>
+            <span class="summary-context">${offers.length} offers</span>
+            <span class="summary-action">Reviewing never calls a model ${icon('info')}</span>
+          </summary>
+          <div class="list">
+            ${offers
+              .map(
+                (offer) => `<article class="offer">
+                  <div>
+                    <div class="row-head"><h3>${esc(offer.title)}</h3><span class="num">#${offer.pull}</span></div>
+                    <div class="row-meta">
+                      <span>${icon('pr')}${esc(offer.repo)}</span>
+                      <span>${icon('branch')}${esc(offer.branch)}</span>
+                      <span>${icon('clock')}Failed ${esc(offer.when)}</span>
+                    </div>
+                    <div class="chip-row" style="margin-top: 6px">
+                      ${chip('alert', `${offer.failed}: ${offer.step}`)}
+                    </div>
+                  </div>
+                  <div class="row-actions">
+                    <a class="button primary" href="#" onclick="return false" aria-label="Review repair for ${esc(offer.repo)} #${offer.pull}">Review repair</a>
+                    <button class="button ghost" type="button">Dismiss</button>
+                  </div>
+                </article>`,
+              )
+              .join('')}
+          </div>
+        </details>`;
+      }
+
+      function runningPanel(state) {
+        if (!state.running.length) return '';
+        return `<details id="running" class="disclosure busy" open>
+          <summary>
+            <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+            <span class="summary-title">In progress</span>
+            <span class="summary-context">${state.running.length} running</span>
+            <span class="summary-action">You can leave ${icon('info')}</span>
+          </summary>
+          <div class="list">
+            ${state.running
+              .map(
+                (run) => `<article class="run-row">
+                  <div>
+                    <div class="row-head">${badge(run.stage, 'busy')}<h3>${esc(run.title)}</h3><span class="num">#${run.pull}</span></div>
+                    <div class="row-meta">
+                      <span>${icon('pr')}${esc(run.repo)}</span>
+                      <span>${icon('branch')}${esc(run.branch)}</span>
+                      <span>${icon('clock')}Running for ${esc(run.elapsed)}</span>
+                      <span>${esc(run.who)}</span>
+                    </div>
+                  </div>
+                  <div class="run-right">
+                    <div class="progress" role="img" aria-label="Step ${run.step} of 5: ${esc(run.stage)}">
+                      <i class="done"></i><i class="done"></i><i class="current"></i><i></i><i></i>
+                    </div>
+                    <a class="button" href="#" onclick="return false">Follow</a>
+                  </div>
+                </article>`,
+              )
+              .join('')}
+          </div>
+        </details>`;
+      }
+
+      function automaticPanel(state, open = false) {
+        const repos = state.automatic;
+        if (!repos.length) return '';
+        const used = repos.reduce((sum, repo) => sum + repo.used, 0);
+        const limit = repos.reduce((sum, repo) => sum + repo.limit, 0);
+        return `<details id="automatic" class="disclosure" ${open ? 'open' : ''}>
+          <summary>
+            <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+            <span class="summary-title">Automatic repairs</span>
+            <span class="summary-context">${repos.length} repositories · ${used} of ${limit} attempts used · all ready</span>
+          </summary>
+          <div class="list">
+            ${repos
+              .map(
+                (repo) => `<article class="auto-row">
+                  <div>
+                    <h3>${esc(repo.repo)} ${badge(repo.state, repo.tone)}</h3>
+                    <p>${esc(repo.paid)}</p>
+                  </div>
+                  <div>
+                    <div class="meter ${repo.used === repo.limit ? 'full' : ''}" role="meter" aria-valuemin="0" aria-valuemax="${repo.limit}" aria-valuenow="${repo.used}" aria-label="Allowance used on ${esc(repo.repo)}"><span style="width:${(repo.used / repo.limit) * 100}%"></span></div>
+                    <p>${repo.used} of ${repo.limit} attempts used in the last 24 hours</p>
+                  </div>
+                  <div>
+                    <div class="auto-label">Latest automatic repair</div>
+                    <p><a href="#" onclick="return false">${esc(repo.last)}</a> <span class="${repo.lastTone === 'danger' ? 'muted' : 'muted'}">${esc(repo.when)}</span></p>
+                    ${repo.running ? `<p>${esc(repo.running)}</p>` : ''}
+                  </div>
+                  <div class="auto-acts"><button class="button small" type="button">Stop automatic repairs</button></div>
+                </article>`,
+              )
+              .join('')}
+          </div>
+        </details>`;
+      }
+
+      function historyRows(rows) {
+        return rows
+          .map(
+            (row) => `<a class="history-row" href="#" onclick="return false">
+              <div>
+                ${badge(row.state, row.tone)}
+                <h3>${esc(row.title)}</h3>
+                <div class="row-meta"><span>${esc(row.repo)} #${row.pull}</span><span class="mono">${esc(row.branch)}</span></div>
+              </div>
+              <div class="history-failure">
+                <div class="chip-row">${chip('alert', row.job)}${chip('workflow', row.step)}</div>
+                <p class="muted" style="margin-top: 4px; font-size: var(--text-xs)">${esc(row.message)}</p>
+              </div>
+              <div class="history-trigger muted">${esc(row.trigger)}</div>
+              <div class="history-when">${esc(row.when)}<br /><span class="subtle">${esc(row.took)}</span></div>
+              ${icon('chevron')}
+            </a>`,
+          )
+          .join('');
+      }
+
+      function historyPanel(state, open = false) {
+        return `<details id="history" class="disclosure" ${open ? 'open' : ''}>
+          <summary>
+            <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+            <span class="summary-title">History</span>
+            <span class="summary-context">12 repairs · latest 5h ago · open for the outcome and what Eli used</span>
+          </summary>
+          <div class="history-toolbar">
+            <button class="button small" type="button" onclick="toggleFilters(this)" aria-expanded="false">${icon('filter')}Filters</button>
+            <span class="active-filter">All repairs</span>
+            <span class="active-filter">Any trigger</span>
+            <span class="toolbar-spacer"></span>
+            <button class="button ghost small" type="button">Select</button>
+          </div>
+          <div class="filters" id="history-filters">
+            <div class="field"><label for="filter-show">Show</label><select id="filter-show"><option>All repairs</option><option>Needs attention</option><option>In progress</option><option>Checks passed</option></select></div>
+            <div class="field"><label for="filter-repo">Repository</label><input id="filter-repo" placeholder="acme/site" /></div>
+            <div class="field"><label for="filter-trigger">Triggered by</label><select id="filter-trigger"><option>Any</option><option>Automatic</option><option>Requested</option></select></div>
+          </div>
+          <div class="history-head"><span>Repair</span><span>Failure</span><span>Triggered by</span><span>When</span><span></span></div>
+          <div class="list">${historyRows(state.history)}</div>
+        </details>`;
+      }
+
+      function hubNav(state, concept) {
+        if (concept === 'b') return '';
+        return `<nav class="page-nav" aria-label="Eli repairs sections">
+          <a href="#now" aria-current="location">Now</a>
+          <a href="#needs">Needs you <span class="nav-count">${state.offers.length}</span></a>
+          <a href="#running">In progress <span class="nav-count">${state.running.length}</span></a>
+          <a href="#automatic" class="secondary">Automatic <span class="nav-count">${state.automatic.length}</span></a>
+          <a href="#history" class="secondary">History</a>
+          <details class="page-more">
+            <summary>More <svg class="icon" aria-hidden="true"><use href="#i-down" /></svg></summary>
+            <div class="page-more-menu">
+              <a href="#automatic" onclick="this.closest('details').open = false">Automatic <span class="nav-count">${state.automatic.length}</span></a>
+              <a href="#history" onclick="this.closest('details').open = false">History</a>
+            </div>
+          </details>
+        </nav>`;
+      }
+
+      function hubFocusTabs(state, active) {
+        const tabs = [
+          ['needs', 'Needs you', state.offers.length],
+          ['running', 'In progress', state.running.length],
+          ['automatic', 'Automatic', state.automatic.length],
+          ['history', 'History', ''],
+        ];
+        return `<div class="focus-context">
+          <div class="focus-tabs" role="tablist" aria-label="Repair views">
+            ${tabs
+              .map(
+                ([id, label, count]) => `<button type="button" role="tab" data-view="${id}" aria-selected="${id === active}">${label}${count !== '' ? `<span class="nav-count">${count}</span>` : ''}</button>`,
+              )
+              .join('')}
+          </div>
+          <span class="focus-note">Only one view is on screen. The counts stay visible above.</span>
+        </div>`;
+      }
+
+      function hubContent(state, concept, activeView) {
+        if (concept === 'b') {
+          const panels = {
+            needs: offersPanel(state),
+            running: runningPanel(state) || `<div class="panel"><div class="panel-body muted">No repair is running. Repairs appear here while Eli is reading the failure, preparing a fix or watching CI.</div></div>`,
+            automatic: automaticPanel(state, true),
+            history: historyPanel(state, true),
+          };
+          return panels[activeView] || panels.needs;
+        }
+        return `<div class="stack">
+          <section id="now" class="stack">
+            ${attentionArea(state.setup, state.offers.length, state.running.length)}
+            ${state.setup.ready ? setupLine(state.setup) : ''}
+          </section>
+          ${offersPanel(state)}
+          ${runningPanel(state)}
+          ${automaticPanel(state)}
+          ${historyPanel(state, state.setup.ready && state.offers.length === 0 && state.running.length === 0)}
+        </div>`;
+      }
+
+      function renderHub(concept, state) {
+        const active = concept === 'b' ? (state.offers.length ? 'needs' : 'history') : '';
+        hubState = state;
+        const actions = state.setup.ready
+          ? '<button class="button" type="button" onclick="goSetup(event)">Setup</button><button class="button primary" type="button">Repair a PR</button>'
+          : '<button class="button" type="button">Repair a PR</button><button class="button primary" type="button" onclick="goSetup(event)">Finish setup</button>';
+        return `${pageHeader({
+          crumb: '<span>Eli repairs</span>',
+          title: 'Eli repairs',
+          subtitle:
+            'Review failed PR checks, follow each repair, and see what Eli is doing on its own.',
+          actions,
+        })}
+        ${hubNav(state, concept)}
+        ${
+          concept === 'b'
+            ? `${setupLine(state.setup)}${hubFocusTabs(state, active)}<div id="focus-panel">${hubContent(state, 'b', active)}</div>`
+            : hubContent(state, concept, active)
+        }`;
+      }
+
+      function caseStrip({
+        repo = 'acme/widgets',
+        pull = 42,
+        branch = 'fix/docs-link',
+        sha = '9ad2f1c',
+        run = 'CI #4820',
+        failed = 'Docs build',
+        step = 'mkdocs build, strict mode',
+        ran = 'linux-x64',
+      } = {}) {
+        return `<section class="case-strip" id="case">
+          <div>
+            <span class="overline">Failed check</span>
+            <h2>Pull request #${pull} in ${esc(repo)}</h2>
+            <div class="chip-row" style="margin-top: 7px">
+              ${linkChip('pr', `${repo} #${pull}`)}
+              ${linkChip('branch', branch)}
+              ${linkChip('workflow', `Commit ${sha}`)}
+              ${linkChip('external', run)}
+            </div>
+            <div class="case-facts">
+              <span>${icon('clock')}Failed 5h ago</span>
+              <span>${icon('alert')}${esc(failed)} stopped at ${esc(step)}</span>
+              <span>${icon('host')}Ran on ${esc(ran)}</span>
+            </div>
+          </div>
+          <div class="row-actions">
+            <button class="button" type="button">Repair a different PR</button>
+          </div>
+        </section>`;
+      }
+
+      function repairBlocked() {
+        return `${pageHeader({
+          crumb:
+            '<a href="#" onclick="return false">Eli repairs</a>' +
+            icon('chevron') +
+            '<span>Repair: Pull request #42 in acme/widgets</span>',
+          title: 'Repair a failed check',
+          subtitle:
+            'Eli reads the failed checks, pushes one commit to the pull request branch, then watches CI. You review the result like any other commit.',
+          actions: '<button class="button" type="button">Refresh</button>',
+        })}
+        <nav class="page-nav" aria-label="Repair sections">
+          <a href="#next" aria-current="location">Next step</a>
+          <a href="#failed">What failed</a>
+          <a href="#checks">Checks</a>
+          <a href="#repair-setup">Setup</a>
+        </nav>
+        <div class="stack">
+          ${caseStrip()}
+          <div class="two-col">
+            <div class="main-col">
+              <section class="panel next-card" id="next">
+                <div class="panel-head">
+                  <div><h2>Fix write access first</h2><p>Two checks are in the way. Nothing has been spent.</p></div>
+                  ${badge('2 to fix', 'pending')}
+                </div>
+                <div class="panel-body">
+                  <p class="lead">Your GitHub account is not linked, so Eli cannot confirm write access to acme/widgets. Link an account with write access, then check again. The model provider is also missing.</p>
+                  <div class="buttons">
+                    <button class="button primary" type="button" onclick="jumpTo('repair-setup')">Open repair setup</button>
+                    <button class="button" type="button">Check again</button>
+                  </div>
+                  <p class="fine">Checking never calls a model and never uses an attempt.</p>
+                </div>
+              </section>
+
+              <details class="disclosure danger" id="failed" open>
+                <summary>
+                  <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+                  <span class="summary-title">What failed</span>
+                  <span class="summary-context">1 failed job · Docs build</span>
+                </summary>
+                <div class="disclosure-body">
+                  <div class="job">
+                    <div class="job-head">
+                      <div><h3>Docs build</h3><p class="muted">Failed at step: mkdocs build, strict mode · 3m 12s</p></div>
+                      ${badge('Workflow fault', 'pending')}
+                    </div>
+                    <div class="job-body">
+                      <p>mkdocs could not resolve a link in docs/install.md. Eli would need to edit a documentation file to repair this.</p>
+                      <div class="locked">${icon('lock')}<span>Error output needs write access. Link an account with access to acme/widgets to read the failing lines. Nothing is stored.</span></div>
+                      <div class="chip-row" style="margin-top: 10px">
+                        <a class="chip" href="#" onclick="return false">${icon('external')}Open job on GitHub</a>
+                        <a class="chip" href="#" onclick="return false">Open in Zoomies</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details class="disclosure" id="checks" open>
+                <summary>
+                  <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+                  <span class="summary-title">Can Eli act on this?</span>
+                  <span class="summary-context">2 blocked · 7 not checked</span>
+                </summary>
+                <div class="disclosure-body">
+                  <div class="check-row">
+                    <span class="check-icon blocked">${icon('x')}</span>
+                    <div class="check-body"><strong>GitHub account</strong><p>No account is linked. Link and confirm the account that can write to this repository.</p><div class="check-action"><button class="button small" type="button">Repair setup</button></div></div>
+                  </div>
+                  <div class="check-row">
+                    <span class="check-icon blocked">${icon('x')}</span>
+                    <div class="check-body"><strong>Model provider</strong><p>Add an enabled personal model provider in Eli settings.</p><div class="check-action"><button class="button small" type="button">Add a provider</button></div></div>
+                  </div>
+                  <p class="fine">7 checks were not reached. <a href="#" onclick="return false">Show all 9 checks</a></p>
+                </div>
+              </details>
+
+              <details class="disclosure pending" id="repair-setup" open>
+                <summary>
+                  <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+                  <span class="summary-title">Setup for this repository</span>
+                  <span class="summary-context">Account and provider required</span>
+                </summary>
+                <div class="disclosure-body">
+                  <p class="muted" style="margin-bottom: 10px">Only the missing pieces are shown. Saving checks this failure again and keeps the page in place.</p>
+                  <div class="filters open" style="padding: 0; border: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)">
+                    <div class="field"><label for="github-user">GitHub username</label><input id="github-user" placeholder="Your GitHub account" /></div>
+                    <div class="field"><label for="installation">GitHub installation</label><select id="installation"><option>acme</option></select></div>
+                  </div>
+                  <div class="buttons" style="display: flex; gap: 8px; margin-top: 10px">
+                    <button class="button primary" type="button">Save setup and check this failure</button>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <aside class="side-col">
+              <section class="panel">
+                <div class="panel-head"><div><h2>At a glance</h2></div></div>
+                <div class="panel-body">
+                  <dl class="facts">
+                    <dt>Pull request</dt><dd>#42</dd>
+                    <dt>Author</dt><dd>@mira</dd>
+                    <dt>Failed</dt><dd>5h ago</dd>
+                    <dt>Branch</dt><dd class="mono">fix/docs-link</dd>
+                    <dt>Commit</dt><dd class="mono">9ad2f1c</dd>
+                    <dt>Run</dt><dd>CI #4820</dd>
+                    <dt>Ran on</dt><dd>linux-x64</dd>
+                  </dl>
+                </div>
+              </section>
+              <section class="panel">
+                <div class="panel-head"><div><h2>What Eli will do</h2></div></div>
+                <div class="panel-body muted">
+                  <p>Reads the failed checks, prepares one commit, pushes it to the pull request branch, then watches CI.</p>
+                  <p style="margin-top: 8px">It never merges and never force-pushes. You review the commit like any other change.</p>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>`;
+      }
+
+      function repairReady() {
+        return `${pageHeader({
+          crumb:
+            '<a href="#" onclick="return false">Eli repairs</a>' +
+            icon('chevron') +
+            '<span>Repair: Pull request #31 in acme/docs</span>',
+          title: 'Repair a failed check',
+          subtitle:
+            'Eli reads the failed checks, pushes one commit to the pull request branch, then watches CI. You review the result like any other commit.',
+          actions: '<button class="button" type="button">Refresh</button>',
+        })}
+        <nav class="page-nav" aria-label="Repair sections">
+          <a href="#next" aria-current="location">Next step</a>
+          <a href="#failed">What failed</a>
+          <a href="#checks">Checks</a>
+        </nav>
+        <div class="stack">
+          ${caseStrip({
+            repo: 'acme/docs',
+            pull: 31,
+            branch: 'docs/fix-link-check',
+            sha: 'b2d4f60',
+            run: 'CI #5319',
+            failed: 'Docs build',
+            step: 'the strict link check',
+          })}
+          <div class="two-col">
+            <div class="main-col">
+              <section class="panel next-card ready" id="next">
+                <div class="panel-head">
+                  <div><h2>Ready to fix</h2><p>Everything checks out. Starting spends one attempt.</p></div>
+                  ${badge('All checks passed', 'idle')}
+                </div>
+                <div class="panel-body">
+                  <dl class="facts">
+                    <dt>Paid by</dt><dd>Personal provider <span class="muted">(demo)</span></dd>
+                    <dt>Attempts left</dt><dd>4 today, <span class="muted">resets in 19h</span></dd>
+                    <dt>Workflow files</dt><dd>Eli will not edit them</dd>
+                    <dt>Pushes to</dt><dd class="mono">fix/docs-link</dd>
+                  </dl>
+                  <div class="field" style="margin-top: 12px"><label for="note">Tell Eli what to look at (optional)</label><textarea id="note" rows="2" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface)"></textarea></div>
+                  <div class="buttons">
+                    <button class="button primary" type="button">Fix with Eli</button>
+                  </div>
+                  <p class="fine">Eli pushes one commit and watches CI. It never merges and never force-pushes.</p>
+                </div>
+              </section>
+
+              <details class="disclosure danger" id="failed" open>
+                <summary>
+                  <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+                  <span class="summary-title">What failed</span>
+                  <span class="summary-context">1 failed job · Docs build</span>
+                </summary>
+                <div class="disclosure-body">
+                  <div class="job">
+                    <div class="job-head">
+                      <div><h3>Docs build</h3><p class="muted">Failed at step: mkdocs build, strict mode · 3m 12s</p></div>
+                      ${badge('Workflow fault', 'pending')}
+                    </div>
+                    <div class="job-body">
+                      <p>mkdocs could not resolve a link in docs/install.md. Eli would need to edit a documentation file to repair this.</p>
+                      <div class="chip-row" style="margin-top: 10px">
+                        <a class="chip" href="#" onclick="return false">${icon('external')}Open job on GitHub</a>
+                        <a class="chip" href="#" onclick="return false">Open in Zoomies</a>
+                        <a class="chip" href="#" onclick="return false">${icon('alert')}Read error output</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details class="disclosure" id="checks">
+                <summary>
+                  <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+                  <span class="summary-title">Can Eli act on this?</span>
+                  <span class="summary-context">All 9 checks passed · checked just now</span>
+                  <span class="summary-action">Show checks ${icon('down')}</span>
+                </summary>
+                <div class="disclosure-body">
+                  <div class="check-row"><span class="check-icon ok">${icon('check')}</span><div class="check-body"><strong>GitHub account</strong><p>@alice can write to acme/docs.</p></div></div>
+                  <div class="check-row"><span class="check-icon ok">${icon('check')}</span><div class="check-body"><strong>Model provider</strong><p>Personal provider (demo) is enabled.</p></div></div>
+                  <div class="check-row"><span class="check-icon ok">${icon('check')}</span><div class="check-body"><strong>Repository policy</strong><p>Manual repairs are allowed here.</p></div></div>
+                </div>
+              </details>
+            </div>
+            <aside class="side-col">
+              <section class="panel">
+                <div class="panel-head"><div><h2>At a glance</h2></div></div>
+                <div class="panel-body">
+                  <dl class="facts">
+                    <dt>Pull request</dt><dd>#31</dd>
+                    <dt>Author</dt><dd>@mira</dd>
+                    <dt>Failed</dt><dd>5h ago</dd>
+                    <dt>Branch</dt><dd class="mono">docs/fix-link-check</dd>
+                    <dt>Commit</dt><dd class="mono">b2d4f60</dd>
+                    <dt>Run</dt><dd>CI #5319</dd>
+                    <dt>Ran on</dt><dd>linux-x64</dd>
+                  </dl>
+                </div>
+              </section>
+              <section class="panel">
+                <div class="panel-head"><div><h2>What Eli will do</h2></div></div>
+                <div class="panel-body muted">
+                  <p>Reads the failed checks, prepares one commit, pushes it to the pull request branch, then watches CI.</p>
+                  <p style="margin-top: 8px">It never merges and never force-pushes. You review the commit like any other change.</p>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>`;
+      }
+
+      function renderRepair(stateName) {
+        return stateName === 'ready' ? repairReady() : repairBlocked();
+      }
+
+      function renderAttempt() {
+        return `${pageHeader({
+          crumb:
+            '<a href="#" onclick="return false">Eli repairs</a>' +
+            icon('chevron') +
+            '<span>acme/widgets #44</span>' +
+            icon('chevron') +
+            '<span>Attempt erf_7kenf9q...</span>',
+          title: 'Show the retention window on the Usage page',
+          subtitle: '',
+          actions:
+            '<button class="button" type="button">Refresh</button><a class="button" href="#" onclick="return false">Open PR ' + icon('external') + '</a><a class="button" href="#" onclick="return false">Open run ' + icon('external') + '</a>',
+        })}
+        <div class="chip-row" style="margin-top: -8px; margin-bottom: 14px">
+          ${badge('Could not repair', 'danger')}
+          ${badge('Requested by @alice')}
+          ${badge('Personal provider')}
+          ${badge('Started 1d ago')}
+        </div>
+        <nav class="page-nav" aria-label="Repair attempt sections">
+          <a href="#summary" aria-current="location">Summary</a>
+          <a href="#what-failed">What failed</a>
+          <a href="#details">Details</a>
+        </nav>
+        <div class="two-col" id="summary">
+          <div class="main-col">
+            <div class="banner">
+              ${icon('x')}
+              <div><h2>Could not repair</h2><p>Eli could not produce a fix it was willing to push.</p></div>
+            </div>
+            <section class="panel">
+              <div class="panel-head"><div><h2>What to try next</h2><p>Eli could not produce a fix it was willing to push.</p></div></div>
+              <div class="panel-body">
+                <ol class="steps">
+                  <li>Add a note that points at the file or the test, then try again.</li>
+                  <li>Read the error output: the quickest fix may be yours.</li>
+                </ol>
+                <div class="buttons" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px">
+                  <button class="button primary" type="button">Try another attempt</button>
+                  <a class="button" href="#" onclick="return false">Open pull request ${icon('external')}</a>
+                  <button class="button ghost" type="button">Repair setup</button>
+                </div>
+              </div>
+            </section>
+            <details class="disclosure" id="what-failed">
+              <summary>
+                <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+                <span class="summary-title">What Eli was asked to fix</span>
+                <span class="summary-context">Pull request #44 · UI (e2e) failed</span>
+              </summary>
+              <div class="disclosure-body">
+                <div class="job">
+                  <div class="job-head"><div><h3>UI (e2e)</h3><p class="muted">Failed at step: Playwright · 3m 12s</p></div>${badge('Workflow fault', 'pending')}</div>
+                  <div class="job-body">
+                    <p>The retained conversation list did not show the usage window after a reload.</p>
+                    <div class="chip-row" style="margin-top: 10px">
+                      <a class="chip" href="#" onclick="return false">${icon('external')}Open job on GitHub</a>
+                      <a class="chip" href="#" onclick="return false">Open in Zoomies</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </details>
+            <details class="disclosure" id="details">
+              <summary>
+                <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+                <span class="summary-title">Technical details</span>
+                <span class="summary-context">2 model calls · 38 KB source · 41s</span>
+              </summary>
+              <div class="disclosure-body">
+                <dl class="facts">
+                  <dt>Model</dt><dd>demo (sample history)</dd>
+                  <dt>Source supplied</dt><dd>38 KB</dd>
+                  <dt>Stage reached</dt><dd>Preparing the fix</dd>
+                  <dt>Failure code</dt><dd class="mono">unsupported_fix</dd>
+                </dl>
+                <div style="margin-top: 12px; overflow-x: auto">
+                  <table style="width:100%; border-collapse: collapse; font-size: var(--text-xs)">
+                    <thead><tr><th style="text-align:left; padding:6px; color:var(--muted); font-weight:500">Model call</th><th style="text-align:right; padding:6px; color:var(--muted); font-weight:500">Input</th><th style="text-align:right; padding:6px; color:var(--muted); font-weight:500">Output</th><th style="text-align:right; padding:6px; color:var(--muted); font-weight:500">Request</th><th style="text-align:right; padding:6px; color:var(--muted); font-weight:500">Time</th></tr></thead>
+                    <tbody><tr><td style="padding:6px; border-top:1px solid var(--border)">1</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">21,400</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">1,800</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">78 KB</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">41s</td></tr><tr><td style="padding:6px; border-top:1px solid var(--border)">2</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">Unknown</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">Unknown</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">89 KB</td><td style="padding:6px; border-top:1px solid var(--border); text-align:right">9.0s</td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
+          </div>
+          <aside class="side-col">
+            <section class="panel">
+              <div class="panel-head"><div><h2>This attempt</h2></div></div>
+              <div class="panel-body">
+                <dl class="facts">
+                  <dt>Attempt</dt><dd class="mono">erf_7kenf9q...</dd>
+                  <dt>Status</dt><dd>Could not repair</dd>
+                  <dt>Started</dt><dd>17 Oct 2026, 12:13:09</dd>
+                  <dt>Took</dt><dd>41s</dd>
+                  <dt>Provider</dt><dd>Personal provider</dd>
+                  <dt>Model</dt><dd>demo (sample history)</dd>
+                  <dt>Source</dt><dd>38 KB</dd>
+                  <dt>Pushes to</dt><dd class="mono">feat/usage-retention</dd>
+                </dl>
+                <p class="fine">A newer commit on the branch stops the repair without changing anything.</p>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head"><div><h2>Timeline</h2></div></div>
+              <div class="panel-body">
+                <ul class="timeline">
+                  <li><time>17 Oct, 12:13:09</time><span>Queued</span></li>
+                  <li><time>17 Oct, 12:13:50</time><span>Could not repair</span></li>
+                </ul>
+              </div>
+            </section>
+          </aside>
+        </div>`;
+      }
+
+      function renderSetup() {
+        return `${pageHeader({
+          crumb:
+            '<a href="#" onclick="return false">Eli repairs</a>' +
+            icon('chevron') +
+            '<span>Repair setup</span>',
+          title: 'Repair setup',
+          subtitle:
+            'Choose who can ask Eli, which repositories may be repaired, and what automatic repairs may spend.',
+          actions:
+            '<a class="button" href="#" onclick="return false">Back to repairs</a>',
+        })}
+        <nav class="page-nav" aria-label="Repair setup sections">
+          <a href="#access" aria-current="location">Access</a>
+          <a href="#repositories">Repositories</a>
+          <a href="#allowance">Allowance</a>
+        </nav>
+        <div class="stack">
+          <div class="setup-summary">
+            <span class="status-dot"></span>
+            <strong>2 of 3 ready</strong>
+            <span class="bar"><span style="width:66%"></span></span>
+            <span class="muted">Account linked as @alice · 2 repositories automatic · 1 asks first</span>
+          </div>
+          <details class="disclosure" id="access" open>
+            <summary>
+              <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+              <span class="summary-title">Access</span>
+              <span class="summary-context">@alice linked · write access confirmed</span>
+              <span class="summary-action">Edit ${icon('down')}</span>
+            </summary>
+            <div class="disclosure-body">
+              <p class="muted">Eli acts as the person who asked. A linked account proves who that is and which repositories they can write to.</p>
+              <dl class="facts">
+                <dt>GitHub account</dt><dd>@alice</dd>
+                <dt>Write access</dt><dd>acme/docs, acme/gateway, acme/widgets</dd>
+                <dt>Checked</dt><dd>2 minutes ago</dd>
+              </dl>
+              <div class="buttons" style="display:flex; gap:8px; margin-top:12px"><button class="button" type="button">Relink account</button></div>
+            </div>
+          </details>
+          <details class="disclosure" id="repositories" open>
+            <summary>
+              <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+              <span class="summary-title">Repositories</span>
+              <span class="summary-context">2 automatic · 1 asks first</span>
+              <span class="summary-action">Edit ${icon('down')}</span>
+            </summary>
+            <div class="disclosure-body">
+              <div class="filters open" style="padding:0; border:0; grid-template-columns: minmax(0,1fr) minmax(0,1fr)">
+                <div class="field"><label for="setup-installation">GitHub installation</label><select id="setup-installation"><option>acme</option></select></div>
+                <div class="field"><label for="setup-mode">When should Eli help?</label><select id="setup-mode"><option>Automatic repairs</option><option>Ask me first</option><option>Off</option></select></div>
+              </div>
+              <div class="chip-row" style="margin-top:10px">${chip('pr','acme/docs')}${chip('pr','acme/gateway')}${chip('pr','acme/widgets')}</div>
+              <div class="buttons" style="display:flex; gap:8px; margin-top:12px"><button class="button small" type="button">Manage repositories</button></div>
+            </div>
+          </details>
+          <details class="disclosure" id="allowance">
+            <summary>
+              <svg class="chev icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+              <span class="summary-title">Allowance</span>
+              <span class="summary-context">5 attempts per 24 hours · shared by manual and automatic repairs</span>
+              <span class="summary-action">Edit ${icon('down')}</span>
+            </summary>
+            <div class="disclosure-body">
+              <div class="field" style="max-width: 12rem"><label for="attempts">Attempts per 24 hours</label><input id="attempts" value="5" /></div>
+              <p class="fine">Personal accounts have an additional limit of 10.</p>
+            </div>
+          </details>
+          <div class="savebar"><span>2 changes are not saved</span><span class="spacer"></span><button class="button ghost" type="button">Discard</button><button class="button primary" type="button">Save changes</button></div>
+        </div>`;
+      }
+
+      const concepts = [
+        ['a', 'A: Calm review'],
+        ['b', 'B: Focus workspace'],
+      ];
+      const screens = [
+        ['hub', 'Eli repairs hub'],
+        ['repair', 'Repair a failed check'],
+        ['attempt', 'One repair'],
+        ['setup', 'Repair setup'],
+      ];
+      const statesByScreen = {
+        hub: [
+          ['full', 'Work waiting'],
+          ['quiet', 'Quiet fleet'],
+          ['setup', 'Setup needed'],
+        ],
+        repair: [
+          ['blocked', 'Blocked'],
+          ['ready', 'Ready to fix'],
+        ],
+        attempt: [['full', 'Finished, could not repair']],
+        setup: [['full', 'Configured']],
+      };
+
+      const controls = {
+        concept: document.querySelector('#concept'),
+        screen: document.querySelector('#screen'),
+        state: document.querySelector('#state'),
+        theme: document.querySelector('#theme'),
+      };
+      const params = new URLSearchParams(location.search);
+      let hubState = null;
+
+      /** Switch to the setup page, for the links that manage the account and policies. */
+      function goSetup(event) {
+        if (event) event.preventDefault();
+        controls.screen.value = 'setup';
+        setStateOptions();
+        syncUrl();
+        apply();
+      }
+
+      /** The history filters are a disclosure, not more furniture on the page. */
+      function toggleFilters(button) {
+        const panel = document.querySelector('#history-filters');
+        if (!panel) return;
+        const open = panel.classList.toggle('open');
+        button.setAttribute('aria-expanded', String(open));
+      }
+
+      function jumpTo(id) {
+        const target = document.getElementById(id);
+        if (!target) return;
+        for (let node = target; node; node = node.parentElement) {
+          if (node instanceof HTMLDetailsElement) node.open = true;
+        }
+        target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        const focusable = target.querySelector('summary') || target;
+        focusable.setAttribute('tabindex', '-1');
+        focusable.focus({ preventScroll: true });
+      }
+
+      function fill(select, entries) {
+        select.innerHTML = entries
+          .map(([value, label]) => `<option value="${value}">${esc(label)}</option>`)
+          .join('');
+      }
+
+      function current() {
+        return {
+          concept: controls.concept.value || 'a',
+          screen: controls.screen.value || 'hub',
+          state: controls.state.value || statesByScreen[controls.screen.value || 'hub'][0][0],
+          theme: document.body.dataset.theme || 'light',
+        };
+      }
+
+      function apply() {
+        const now = current();
+        document.body.dataset.theme = now.theme;
+        document.querySelector('#top-crumb').textContent =
+          screens.find(([id]) => id === now.screen)?.[1] || 'Eli repairs';
+        let state;
+        if (now.state === 'quiet') {
+          state = {
+            setup: { ...DATA.setup },
+            offers: [],
+            running: [],
+            automatic: DATA.automatic,
+            history: DATA.history,
+          };
+        } else if (now.state === 'setup') {
+          state = {
+            setup: { ...DATA.setup, ready: false, headline: 'Setup needed', account: '' },
+            offers: [],
+            running: [],
+            automatic: DATA.automatic,
+            history: DATA.history,
+          };
+        } else {
+          state = {
+            setup: DATA.setup,
+            offers: DATA.offers,
+            running: DATA.running,
+            automatic: DATA.automatic,
+            history: DATA.history,
+          };
+        }
+
+        let html = '';
+        if (now.screen === 'hub') html = renderHub(now.concept, state);
+        else if (now.screen === 'repair') html = renderRepair(now.state);
+        else if (now.screen === 'attempt') html = renderAttempt();
+        else html = renderSetup();
+        document.querySelector('#main').innerHTML = html;
+
+        if (now.concept === 'b' && now.screen === 'hub') {
+          document.querySelectorAll('[data-view]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const view = button.dataset.view;
+              const panel = document.querySelector('#focus-panel');
+              if (panel) panel.innerHTML = hubContent(hubState, 'b', view);
+              document.querySelectorAll('[data-view]').forEach((b) =>
+                b.setAttribute('aria-selected', String(b.dataset.view === view)),
+              );
+            });
+          });
+        }
+        window.scrollTo(0, 0);
+        attachNav();
+      }
+
+      function attachNav() {
+        const links = Array.from(document.querySelectorAll('.page-nav a'));
+        if (!links.length) return;
+        const update = () => {
+          let currentLink = links[0];
+          for (const link of links) {
+            const target = document.querySelector(link.getAttribute('href'));
+            if (target && target.getBoundingClientRect().top <= 140) currentLink = link;
+          }
+          links.forEach((link) => {
+            if (link === currentLink) link.setAttribute('aria-current', 'location');
+            else link.removeAttribute('aria-current');
+          });
+        };
+        update();
+        window.removeEventListener('scroll', window.__eliUpdate || (() => {}));
+        window.__eliUpdate = update;
+        window.addEventListener('scroll', update, { passive: true });
+        links.forEach((link) => {
+          link.addEventListener('click', (event) => {
+            const id = link.getAttribute('href').slice(1);
+            const target = document.getElementById(id);
+            if (!target) return;
+            event.preventDefault();
+            let node = target;
+            while (node) {
+              if (node instanceof HTMLDetailsElement) node.open = true;
+              node = node.parentElement;
+            }
+            target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            history.replaceState(null, '', '#' + id);
+            const focusable = target.querySelector('summary') || target;
+            focusable.setAttribute('tabindex', '-1');
+            focusable.focus({ preventScroll: true });
+            update();
+          });
+        });
+      }
+
+      function syncUrl() {
+        const now = current();
+        params.set('concept', now.concept);
+        params.set('screen', now.screen);
+        params.set('state', now.state);
+        params.set('theme', now.theme);
+        history.replaceState(null, '', '?' + params.toString() + location.hash);
+      }
+
+      function setStateOptions() {
+        const screen = controls.screen.value;
+        fill(controls.state, statesByScreen[screen]);
+        const wanted = params.get('state');
+        if (wanted && statesByScreen[screen].some(([id]) => id === wanted)) {
+          controls.state.value = wanted;
+        }
+      }
+
+      fill(controls.concept, concepts);
+      fill(controls.screen, screens);
+      setStateOptions();
+      controls.concept.value = params.get('concept') || 'a';
+      controls.screen.value = params.get('screen') || 'hub';
+      setStateOptions();
+      if (params.get('capture') === '1') document.body.classList.add('capture');
+      document.body.dataset.theme = params.get('theme') || 'light';
+
+      controls.concept.addEventListener('change', () => {
+        syncUrl();
+        apply();
+      });
+      controls.screen.addEventListener('change', () => {
+        setStateOptions();
+        syncUrl();
+        apply();
+      });
+      controls.state.addEventListener('change', () => {
+        syncUrl();
+        apply();
+      });
+      controls.theme.addEventListener('click', () => {
+        document.body.dataset.theme =
+          document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+        syncUrl();
+        apply();
+      });
+
+      apply();
+    </script>
+  </body>
+</html>

@@ -991,6 +991,7 @@ func (c *appClient) GetWorkflowRun(ctx context.Context, repo string, runID int64
 		Status:     run.GetStatus(),
 		Conclusion: run.GetConclusion(),
 		RunNumber:  int64(run.GetRunNumber()),
+		Event:      run.GetEvent(),
 	}, nil
 }
 

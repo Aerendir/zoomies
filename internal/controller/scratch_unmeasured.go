@@ -36,7 +36,7 @@ const (
 // scratchUnmeasuredProblems names each host that cannot measure the in-memory
 // folders of its runners.
 func (c *Controller) scratchUnmeasuredProblems(ctx context.Context, out *[]Problem) error {
-	hosts, err := c.st.ListHosts(ctx)
+	hosts, err := c.fleetHosts(ctx)
 	if err != nil {
 		return fmt.Errorf("listing hosts: %w", err)
 	}
@@ -47,7 +47,7 @@ func (c *Controller) scratchUnmeasuredProblems(ctx context.Context, out *[]Probl
 		if h.Incompatible || h.Cordoned {
 			continue
 		}
-		runners, err := c.st.ListRunnersForHost(ctx, h.ID, store.RunnerIdle, store.RunnerBusy)
+		runners, err := c.fleetRunnersUpOn(ctx, h.ID)
 		if err != nil {
 			return fmt.Errorf("listing the runners on %s: %w", naming.ForSentence(h.Name), err)
 		}

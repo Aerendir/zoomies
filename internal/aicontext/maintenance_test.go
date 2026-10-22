@@ -101,6 +101,81 @@ func TestRepairUpgradesAPreviousWorkflowInsteadOfRefusingIt(t *testing.T) {
 	}
 }
 
+// A release that takes a new version of an action changes the workflow it
+// writes, and every repository that installed the earlier one still owns what
+// it installed: reading it as somebody's edit would close its access gate
+// until somebody ran a repair. The action versions are part of what an earlier
+// release wrote, so the workflow carrying them is still recognised.
+//
+// The Enterprise Server workflow is the exception that proves the rule: it has
+// always carried the versions that server bundles, and those have not moved,
+// so there is no earlier set of versions for it to be recognised by.
+func TestAWorkflowWithAnEarlierActionVersionIsStillRecognised(t *testing.T) {
+	key, config := setupInputs()
+	for i, pins := range olderActionPins {
+		installed, err := setupWorkflowWithPins(key, config, pins)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !IsOlderSetupWorkflow(key, config, installed) {
+			t.Errorf("the workflow with action versions %d was not recognised", i)
+		}
+		if edited := installed + "# edited\n"; IsOlderSetupWorkflow(key, config, edited) {
+			t.Errorf("an edited workflow with action versions %d was recognised", i)
+		}
+	}
+}
+
+// A repository may have taken an action update that this release's template
+// predates. Reinstalling regenerates the workflow around the pins rather than
+// moving them backwards.
+func TestReinstallKeepsTheActionVersionsTheRepositoryAlreadyPinned(t *testing.T) {
+	key, config := setupInputs()
+	files, err := PlanManagedSetup(key, "owner/repo", config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer := "actions/setup-node@" + strings.Repeat("d", 40) + " # v7.1.0"
+	templatePin := ""
+	installed := make([]SetupFile, 0, len(files))
+	for _, f := range files {
+		content := f.Content
+		if f.Path == WorkflowPath {
+			// The pin this test moves is whatever the template ships now, so a
+			// release that takes a new version does not have to change it. Only
+			// the action and its ref are replaced, so the line keeps the shape
+			// the installer recognises.
+			current := setupNodePin(f.Content)
+			if current == "" {
+				t.Fatal("the workflow template no longer contains the pin this test moves")
+			}
+			templatePin = current
+			content = strings.Replace(f.Content, current, strings.TrimSpace(newer), 1)
+			if content == f.Content {
+				t.Fatal("the workflow template no longer contains the pin this test moves")
+			}
+		}
+		installed = append(installed, SetupFile{Path: f.Path, SHA: strings.Repeat("b", 40), Mode: "100644", Content: content})
+	}
+	amended := config
+	amended.SetupGeneration++
+	changes, err := PlanMaintenance(key, "owner/repo", config, amended, installed, files, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, change := range changes {
+		if change.Path == WorkflowPath {
+			// The repository's own pin is in the file, and the one the template
+			// ships is not: the reinstall regenerated the workflow around it.
+			found = strings.Contains(change.Content, newer) && !strings.Contains(change.Content, templatePin)
+		}
+	}
+	if !found {
+		t.Fatal("reinstall moved the repository's pinned action backwards")
+	}
+}
+
 // Every generation of script a release has shipped must stay recognised, in both
 // hosting flavours and for the Zoomies-only workflow, which has no publish job.
 func TestEveryOlderWorkflowGenerationStaysRecognisedAndDistinct(t *testing.T) {
@@ -148,6 +223,85 @@ func TestEveryOlderWorkflowGenerationStaysRecognisedAndDistinct(t *testing.T) {
 				t.Error("the current workflow must not count as older")
 			}
 		})
+	}
+}
+
+// The generator's lockfile is verified byte for byte as well, so a bump to it,
+// such as the one that took handlebars to 4.7.10, has to leave the file it
+// replaced recognised: otherwise every installed copy reads as an edit and its
+// repository's access gate closes.
+func TestEveryOlderGeneratorLockStaysRecognisedAndDistinct(t *testing.T) {
+	current, err := setupTemplates.ReadFile("templates/package-lock.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{"current": string(current)}
+	for _, name := range olderGeneratorLocks {
+		older, err := setupTemplates.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for other, content := range seen {
+			if content == string(older) {
+				t.Errorf("%s is identical to %s: nothing to recognise", name, other)
+			}
+		}
+		seen[name] = string(older)
+		if !IsOlderGeneratorLock(string(older)) {
+			t.Errorf("%s was not recognised", name)
+		}
+		if IsOlderGeneratorLock(string(older) + " ") {
+			t.Errorf("an edited copy of %s was recognised", name)
+		}
+	}
+	if IsOlderGeneratorLock(string(current)) || IsOlderGeneratorLock("") {
+		t.Error("the current lockfile, or no file, was treated as an older one")
+	}
+	if previous, err := PreviousGeneratorLock(); err != nil || previous == string(current) {
+		t.Errorf("the previous lockfile must be a different file from the current one: %v", err)
+	}
+}
+
+func TestRepairUpgradesAnEarlierGeneratorLockInsteadOfRefusingIt(t *testing.T) {
+	key, config := setupInputs()
+	files, err := PlanManagedSetup(key, "owner/repo", config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, err := PreviousGeneratorLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var installed []SetupFile
+	var current string
+	for _, f := range files {
+		content := f.Content
+		if f.Path == GeneratorLockPath {
+			current, content = f.Content, previous
+		}
+		installed = append(installed, SetupFile{Path: f.Path, SHA: strings.Repeat("b", 40), Mode: "100644", Content: content})
+	}
+	changes, err := PlanMaintenance(key, "owner/repo", config, config, installed, nil, false)
+	if err != nil {
+		t.Fatalf("a lockfile an earlier Zoomies release wrote was refused as unowned: %v", err)
+	}
+	upgraded := false
+	for _, c := range changes {
+		if c.Path == GeneratorLockPath {
+			upgraded = c.Content == current
+		}
+	}
+	if !upgraded {
+		t.Fatal("repair did not move the lockfile to the current one")
+	}
+	// An edit is still an edit.
+	for i := range installed {
+		if installed[i].Path == GeneratorLockPath {
+			installed[i].Content = previous + " "
+		}
+	}
+	if _, err := PlanMaintenance(key, "owner/repo", config, config, installed, nil, false); err == nil {
+		t.Fatal("an edited lockfile was taken for an earlier release's")
 	}
 }
 
@@ -221,8 +375,17 @@ func TestRepairMigratesAnOlderSetupToTheSharedGuide(t *testing.T) {
 		if change.Path == ContextGuidePath {
 			guide = strings.Contains(change.Content, "manifest.json")
 		}
-		if assistantDocument(change.Path) {
-			if !strings.HasPrefix(change.Content, "Keep my instructions.\r\n\r\n") || !strings.Contains(change.Content, ContextGuidePath) || strings.Contains(change.Content, "snapshot.json") {
+		switch change.Path {
+		case "AGENTS.md":
+			// The short entry point, in the file that holds it, with the
+			// operator's own words kept and the long injected prompt gone.
+			if !strings.Contains(change.Content, "Keep my instructions.\r\n\r\n") || !strings.Contains(change.Content, "## Zoomies AI Context") || strings.Contains(change.Content, "snapshot.json") {
+				t.Fatal("repair lost custom instructions or retained the long injected prompt")
+			}
+			entries++
+		case "CLAUDE.md":
+			// The import that reaches AGENTS.md, and the operator's own words.
+			if !strings.HasPrefix(change.Content, "@AGENTS.md\r\n") || !strings.Contains(change.Content, "Keep my instructions.") || strings.Contains(change.Content, "snapshot.json") {
 				t.Fatal("repair lost custom instructions or retained the long injected prompt")
 			}
 			entries++
@@ -251,4 +414,15 @@ func TestAmendingAnEntirelyManagedGuidePreservesCRLF(t *testing.T) {
 		}
 	}
 	t.Fatal("guide amendment missing")
+}
+
+// setupNodePin is the action and ref of the setup-node line a workflow
+// carries, whatever version it is pinned to.
+func setupNodePin(workflow string) string {
+	for _, m := range workflowActionUse.FindAllStringSubmatch(workflow, -1) {
+		if m[2] == "actions/setup-node" {
+			return m[2] + "@" + m[3] + m[4]
+		}
+	}
+	return ""
 }

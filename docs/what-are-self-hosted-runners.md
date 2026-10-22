@@ -69,7 +69,8 @@ An **ephemeral** runner takes exactly one job and is then removed. The next job
 gets a fresh one. The state of one job cannot leak into another, which is the
 property GitHub-hosted runners have by default and a hand-built self-hosted
 runner usually lacks. It is also what makes autoscaling possible, because
-nothing needs to be cleaned up.
+nothing needs to be cleaned up. [Ephemeral runners](ephemeral-runners.md) and
+[autoscaling](runner-autoscaling.md) explain how Zoomies does each.
 
 Ephemeral runners are registered with a short-lived, single-use credential
 rather than a long-lived one sitting on the machine, which also shrinks what an

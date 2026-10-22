@@ -214,7 +214,7 @@ can do is ask it for a release. This is the whole list, as the code does it:
 | Its per-pool cache | A named volume `zoomies-cache-<identity>`, or a directory `<source>/<identity>` when a pool's cache source is an absolute path, with scope, immutable pool ID and repository hashed into the versioned identity | A cache directory with a size limit is trimmed back under it, oldest entries first, before a runner starts. A named cache volume is never deleted. |
 | Its kept tool cache | A directory `cache/tools/<identity>/image-<digest>` in the host's shared folder, `/var/lib/zoomies/shared` (separated by cache scope and resolved runner image) when the pool sets `cache.tools` | Never trimmed or deleted by Zoomies; it is a cache, so emptying it costs the next job its downloads and nothing else. Created writable by every account, under a shared folder only Zoomies' own account can enter. After a toolchain scan Zoomies fills it too, in a container of the pool's image as its runner user, from each toolchain's publisher (nodejs.org, go.dev, Adoptium and GitHub's `actions/python-versions`) with the publisher's checksum checked where it lists one. Runners get it read-only, beside a folder of their own in `cache/tool-runs/<runner>` that is removed with the runner, so a job cannot change what the next job runs. |
 | The Docker builder cache | The Docker daemon the agent uses | See below. |
-| The update helper, only where its owner installed it | `zoomies-update.path` and `zoomies-update.service`, systemd units that run as root, and root's own folder `/var/lib/zoomies-update` for the helper's limits and its record of where the update folder is | Not the agent, and not installed by it: only the host's owner puts it there, with `sudo zoomies updates helper install` or a yes to the question `zoomies init`, `zoomies agent join` and `zoomies upgrade` ask at a terminal (never `--yes`), or `--update-helper` typed by the person at the host (`update_helper: true` in the answer file they wrote for `zoomies init`), and `sudo zoomies updates helper remove` or `zoomies uninstall` takes it away. For a request it runs `zoomies upgrade --version <tag> --non-interactive` for the release named, never with `--yes`, at most twice for one release and once in ten minutes. Its unit loads no environment file the service could write, and keeps home directories read-only. |
+| The update helper, only where its owner installed it | `zoomies-update.path` and `zoomies-update.service`, systemd units that run as root, `zoomies-update-repair.path` and `zoomies-update-repair.service`, a second pair that repairs them, and root's own folder `/var/lib/zoomies-update` for the helper's limits and its record of where the update folder is | Not the agent, and not installed by it: only the host's owner puts it there, with `sudo zoomies updates helper install` or a yes to the question `zoomies init`, `zoomies agent join` and `zoomies upgrade` ask at a terminal (never `--yes`), or `--update-helper` typed by the person at the host (`update_helper: true` in the answer file they wrote for `zoomies init`), and `sudo zoomies updates helper remove` or `zoomies uninstall` takes it away. For a request it runs `zoomies upgrade --version <tag> --non-interactive` for the release named, never with `--yes`, at most twice for one release and once in ten minutes. Its unit loads no environment file the service could write, and keeps home directories read-only. The agent never touches these units: when a request sits unread it only looks (`systemctl is-active` and `is-enabled`, which need no privilege), and if the helper is stopped it writes `repair.json` naming the attempt and nothing else. The repair unit looks again as root and acts only on what it finds: it clears the failed state, rewrites and starts the path unit, and only then removes a request or lock that is provably abandoned (older than 15 minutes, no helper or upgrade running), at most three times a day and ten minutes apart. |
 | The update folder, only with the helper | `update/` under the state directory (`/var/lib/zoomies/update` for a root install), or under the shared folder for a container deployment, owned by the account Zoomies runs as | Made by the helper's install and by nothing else. The service writes `request.json` there, naming one release and nothing more; the helper reads it as untrusted input, removes it, and answers in `result.json`. `helper.json` says the helper is installed. |
 
 It never removes an image, a volume it did not create with a container, or a
@@ -371,10 +371,12 @@ that adds, and what it is built not to add:
 
 * **A connection is a person's consent, at a role they choose.** The consent
   screen names the client, shows the host the code will be sent to, and warns
-  when every redirect the client registered is on the person's own machine,
-  where any program can listen. The role is viewer or operator and never above
-  the person's own; a connection whose person is later demoted is demoted with
-  them, and one whose person is disabled or deleted stops.
+  when that address is on the person's own machine, where any program can
+  listen. It judges the address this sign-in will send the person to, not the
+  client's whole list, so a client that also registered an https address is
+  still warned about on its loopback one. The role is viewer or operator and
+  never above the person's own; a connection whose person is later demoted is
+  demoted with them, and one whose person is disabled or deleted stops.
 * **The token works on `/mcp` alone.** An MCP access token presented to the
   REST API is refused with a sentence saying so. The person approved an agent's
   tools, not a general credential; `/mcp` reaches the routes it needs in
@@ -389,9 +391,14 @@ that adds, and what it is built not to add:
   token again revokes the whole connection, since only a copy explains it, and
   is audited as `mcp_connection.replay`.
 * **Redirects are exact.** A code is only ever sent to a redirect URI the client
-  registered, https, or http to loopback, where the port is allowed to differ
+  has registered, https, or http to loopback, where the port is allowed to differ
   as RFC 8252 asks. A client or redirect that cannot be trusted is refused on
-  the controller's own page and never followed.
+  the controller's own page and never followed. The list is read again when a
+  sign-in is approved and when its code is exchanged, so editing a client's
+  redirect URIs takes effect at once: the sign-ins still waiting for an address
+  that was removed, and any code issued for it that has not been exchanged, are
+  refused, with a sentence saying to start again. Connections already made keep
+  working; an edit does not end them.
 * **Registration is open, access is not.** A client may register itself or name
   itself by a client ID metadata document, and gets nothing until a person signs
   in and approves it. A client that registers again describing itself exactly as
@@ -409,12 +416,15 @@ that adds, and what it is built not to add:
   say-so. `security.mcp_open_registration: false` closes both, leaving only the
   clients an administrator creates, which may be confidential and carry a secret.
 * **Audited.** `mcp_client.register`, `mcp_client.create`,
-  `mcp_client.secret_rotate`, `mcp_client.revoke`, `mcp_connection.grant`,
-  `mcp_connection.deny`, `mcp_connection.revoke`, `mcp_connection.replay`,
+  `mcp_client.update`, `mcp_client.secret_rotate`, `mcp_client.revoke`,
+  `mcp_connection.grant`, `mcp_connection.deny`, `mcp_connection.revoke`,
+  `mcp_connection.replay`,
   `mcp_connection.revoke_all` when a password change, an administrator's
   password reset or **Sign out other sessions** ends every connection an
   account holds (a connection outlives any session, and whoever does either
-  suspects a credential of theirs is loose) and
+  suspects a credential of theirs is loose),
+  `mcp_connection.context` when the connection's owner chooses the repositories
+  it may read source from and write notes to, and
   `mcp_connection.call` for every tool call that changed or tried to change the
   fleet. The route the call reached writes its own row as well, with the
   connection as the actor.

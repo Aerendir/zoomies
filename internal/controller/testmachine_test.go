@@ -2,9 +2,13 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
+	"github.com/eyupio/zoomies/internal/config"
 	"github.com/eyupio/zoomies/internal/store"
 )
 
@@ -116,5 +120,101 @@ func TestATestMachineDoesNotCountTowardsTheWarmMinimum(t *testing.T) {
 	}
 	if real != 1 {
 		t.Fatalf("with a minimum of 1 and a test machine on its way the provider bought %d real machines, want 1", real)
+	}
+}
+
+// provider.max_machines is 0 until somebody sets it, and 0 means this fleet
+// rents nothing: the planner buys no machine under it and the validator says
+// so. A test machine is a real billed machine, so it has no more room under a
+// maximum of none than any other, and the sentence names the setting to raise
+// rather than leaving a button that quietly spends.
+func TestATestMachineNeedsRoomUnderTheFleetsMaximumToo(t *testing.T) {
+	h := newHarness(t)
+	row := h.testFleet(t)
+	h.c.UpdateConfig(func(c *config.Config) { c.Provider.MaxMachines = 0 })
+
+	_, err := h.c.StartTestMachine(h.ctx, row)
+	if !errors.Is(err, ErrTestMachineRefused) || !strings.Contains(err.Error(), "provider.max_machines") {
+		t.Fatalf("a fleet that may rent nothing started a test machine: %v", err)
+	}
+	if got := len(h.machines()); got != 0 {
+		t.Fatalf("a refused test left %d machines behind", got)
+	}
+}
+
+// The same ceiling once it is not none: a fleet that already owns as many
+// machines as it may is refused, whichever provider they belong to, and is
+// served again when the maximum is raised, as the sentence says to do.
+func TestATestMachineIsRefusedWhenTheFleetIsAtItsMaximum(t *testing.T) {
+	h := newHarness(t)
+	row := h.testFleet(t)
+	other := h.providerRow(t, "lab-2")
+	h.c.UpdateConfig(func(c *config.Config) { c.Provider.MaxMachines = 1 })
+
+	first, err := h.c.StartTestMachine(h.ctx, row)
+	if err != nil {
+		t.Fatalf("StartTestMachine: %v", err)
+	}
+	h.machinePass(t)
+	if !h.machineByID(t, first.ID).Owns() {
+		t.Fatal("the first test machine does not own a resource yet, so the fleet is not at its maximum")
+	}
+
+	_, err = h.c.StartTestMachine(h.ctx, other)
+	if !errors.Is(err, ErrTestMachineRefused) || !strings.Contains(err.Error(), "provider.max_machines") {
+		t.Fatalf("a fleet at its maximum started a second provider's test machine: %v", err)
+	}
+
+	h.c.UpdateConfig(func(c *config.Config) { c.Provider.MaxMachines = 2 })
+	if _, err := h.c.StartTestMachine(h.ctx, other); err != nil {
+		t.Fatalf("with room under the maximum the test machine was refused: %v", err)
+	}
+}
+
+// Two operators, or one double click, asking for a test at the same moment.
+// The checks read what exists and the reservation writes after, so without
+// something holding them together every caller sees no test machine on the way
+// and each reserves one: real machines, billed, on a provider that was to have
+// one. Released together so that they overlap, and repeated because an overlap
+// is a matter of luck where a lock is not.
+func TestConcurrentTestMachineRequestsReserveOnlyOne(t *testing.T) {
+	h := newHarness(t)
+	h.testFleet(t)
+
+	const callers = 16
+	for round := range 5 {
+		row := h.providerRow(t, fmt.Sprintf("lab-round-%d", round))
+		var (
+			wg      sync.WaitGroup
+			gate    = make(chan struct{})
+			started atomic.Int32
+		)
+		for range callers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-gate
+				_, err := h.c.StartTestMachine(h.ctx, row)
+				switch {
+				case err == nil:
+					started.Add(1)
+				case !errors.Is(err, ErrTestMachineRefused):
+					t.Errorf("a test machine request failed instead of being refused: %v", err)
+				}
+			}()
+		}
+		close(gate)
+		wg.Wait()
+
+		tests := 0
+		for _, m := range h.machines() {
+			if m.Test && m.ProviderID == row.ID {
+				tests++
+			}
+		}
+		if started.Load() != 1 || tests != 1 {
+			t.Fatalf("round %d: %d of %d simultaneous requests were accepted and %d test machines were reserved, want 1 of each",
+				round, started.Load(), callers, tests)
+		}
 	}
 }

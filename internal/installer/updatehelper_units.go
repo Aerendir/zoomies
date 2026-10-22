@@ -29,6 +29,13 @@ import (
 const (
 	UpdatePathUnit    = "zoomies-update.path"
 	UpdateServiceUnit = "zoomies-update.service"
+	// The repair pair is a second, separate way to reach root. The helper's own
+	// path unit is the thing that dies when systemd stops it for starting the
+	// service too often, and a helper that is dead cannot be asked to repair
+	// itself, so the service writes a repair request that these units, which
+	// have a start limit of their own, answer.
+	UpdateRepairPathUnit    = "zoomies-update-repair.path"
+	UpdateRepairServiceUnit = "zoomies-update-repair.service"
 )
 
 const (
@@ -96,6 +103,52 @@ KillMode=mixed
 # credentials root holds. Home directories stay read-only, which is why the
 # installer refuses the binary, the configuration directory, the update folder
 # and a container deployment's directory and environment file in one.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+UMask=0022
+`
+	return pathUnit, serviceUnit
+}
+
+// RenderRepairUnits renders the units that repair the helper. The service unit
+// runs "zoomies updates helper repair", which takes no flags: like the helper
+// itself it learns where everything is from root's copy of the pointer.
+func RenderRepairUnits(binary, dir string) (pathUnit, serviceUnit string) {
+	esc := func(s string) string { return strings.ReplaceAll(s, "%", "%%") }
+	pathUnit = `# Written by "zoomies updates helper install"; "zoomies updates helper remove"
+# takes it away. It starts the repair when the service finds the update helper
+# stopped and asks for it to be looked at.
+[Unit]
+Description=Zoomies update helper repair: waits for the service to report a stuck helper
+Documentation=https://zoomies.sh/security/#what-the-agent-owns-on-a-host
+
+[Path]
+PathExists=` + esc(filepath.Join(dir, updates.RepairFile)) + `
+Unit=` + UpdateRepairServiceUnit + `
+
+[Install]
+WantedBy=paths.target
+`
+	serviceUnit = `# Written by "zoomies updates helper install"; "zoomies updates helper remove"
+# takes it away. ` + UpdateRepairPathUnit + ` starts it, once per repair request.
+[Unit]
+Description=Zoomies update helper repair: puts a stopped update helper right
+Documentation=https://zoomies.sh/security/#what-the-agent-owns-on-a-host
+# The repair removes its own request before it acts, so it cannot start itself
+# again; this is a second stop for anything that would, and root keeps a limit
+# of its own on how often it repairs.
+StartLimitIntervalSec=1h
+StartLimitBurst=6
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=` + esc(binary) + ` updates helper repair
+TimeoutStartSec=5min
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=read-only
@@ -310,7 +363,9 @@ func (o InstallHelperOptions) planInstall(ctx context.Context) (helperInstall, e
 		}
 	}
 	pathUnit, serviceUnit := RenderUpdateUnits(binary, dir)
-	units := [][2]string{{UpdatePathUnit, pathUnit}, {UpdateServiceUnit, serviceUnit}}
+	repairPath, repairService := RenderRepairUnits(binary, dir)
+	units := [][2]string{{UpdatePathUnit, pathUnit}, {UpdateServiceUnit, serviceUnit},
+		{UpdateRepairPathUnit, repairPath}, {UpdateRepairServiceUnit, repairService}}
 	for _, u := range units {
 		path := filepath.Join(o.unitDir, u[0])
 		if old, err := os.ReadFile(path); err == nil && string(old) != u[1] {
@@ -380,8 +435,11 @@ func (o InstallHelperOptions) applyInstall(ctx context.Context, plan helperInsta
 		return err
 	}
 	// A helper systemd stopped for starting too often stays stopped until this.
-	_, _ = o.run(ctx, "systemctl", "reset-failed", UpdateServiceUnit, UpdatePathUnit)
+	_, _ = o.run(ctx, "systemctl", "reset-failed", UpdateServiceUnit, UpdatePathUnit, UpdateRepairServiceUnit, UpdateRepairPathUnit)
 	if _, err := o.run(ctx, "systemctl", "enable", "--now", UpdatePathUnit); err != nil {
+		return err
+	}
+	if _, err := o.run(ctx, "systemctl", "enable", "--now", UpdateRepairPathUnit); err != nil {
 		return err
 	}
 	if err := o.writeMarker(folder, plan); err != nil {
@@ -600,9 +658,11 @@ func removeUpdateHelper(ctx context.Context, opts InstallHelperOptions) (removed
 // would kill the upgrade midway and leave upgrade.lock behind.
 func stopUpdateTrigger(ctx context.Context, opts InstallHelperOptions) error {
 	o := opts.withDefaults()
-	if exists(filepath.Join(o.unitDir, UpdatePathUnit)) {
-		if _, err := o.run(ctx, "systemctl", "disable", "--now", UpdatePathUnit); err != nil {
-			return err
+	for _, unit := range []string{UpdatePathUnit, UpdateRepairPathUnit} {
+		if exists(filepath.Join(o.unitDir, unit)) {
+			if _, err := o.run(ctx, "systemctl", "disable", "--now", unit); err != nil {
+				return err
+			}
 		}
 	}
 	state, _ := o.run(ctx, "systemctl", "is-active", UpdateServiceUnit)
@@ -624,8 +684,11 @@ func (o InstallHelperOptions) remove(ctx context.Context) (removed, left []strin
 	}
 	installed := havePointer || exists(o.helperStateDir) || (configPointer != "" && exists(configPointer))
 
-	pathUnit, serviceUnit := filepath.Join(o.unitDir, UpdatePathUnit), filepath.Join(o.unitDir, UpdateServiceUnit)
-	for _, path := range []string{pathUnit, serviceUnit} {
+	var unitFiles []string
+	for _, unit := range []string{UpdatePathUnit, UpdateServiceUnit, UpdateRepairPathUnit, UpdateRepairServiceUnit} {
+		unitFiles = append(unitFiles, filepath.Join(o.unitDir, unit))
+	}
+	for _, path := range unitFiles {
 		if err := os.Remove(path); err == nil {
 			removed = append(removed, path)
 			installed = true
@@ -635,7 +698,7 @@ func (o InstallHelperOptions) remove(ctx context.Context) (removed, left []strin
 	}
 	if len(removed) > 0 {
 		_, _ = o.run(ctx, "systemctl", "daemon-reload")
-		_, _ = o.run(ctx, "systemctl", "reset-failed", UpdateServiceUnit, UpdatePathUnit)
+		_, _ = o.run(ctx, "systemctl", "reset-failed", UpdateServiceUnit, UpdatePathUnit, UpdateRepairServiceUnit, UpdateRepairPathUnit)
 	}
 
 	switch {
@@ -721,7 +784,7 @@ func emptyUpdateFolder(dir string, uid int) (removed, left []string) {
 		return nil, []string{fmt.Sprintf("%s untouched, because %v", dir, err)}
 	}
 	defer folder.Close()
-	for _, name := range []string{channel.MarkerFile, channel.ResultFile, channel.RequestFile} {
+	for _, name := range []string{channel.MarkerFile, channel.ResultFile, channel.RequestFile, updates.RepairFile, updates.RepairResultFile} {
 		if err := folder.Remove(name); err == nil {
 			removed = append(removed, filepath.Join(dir, name))
 		} else if !errors.Is(err, fs.ErrNotExist) {

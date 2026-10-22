@@ -10,11 +10,20 @@ on:
     paths:
       - ".github/**"
       - "deploy/**"
+      # The docs site's lockfile and the AI context's are manifests the
+      # Vulnerabilities check reads, and a fix for an advisory lands in one of
+      # them. Without them here such a fix waits for Saturday's run to be seen.
+      - "docs/requirements.txt"
+      - "internal/aicontext/templates/package-lock.json"
       - "go.mod"
       - "go.sum"
       - "web/package.json"
       - "web/package-lock.json"
       - "SECURITY.md"
+      # The Vulnerabilities check reads the ignore list that sits beside each
+      # manifest it scans, so a change to any of them moves the check.
+      - "osv-scanner.toml"
+      - "**/osv-scanner.toml"
   schedule:
     # Re-evaluate repository and supply-chain posture every week.
     - cron: "23 7 * * 6"
@@ -64,6 +73,6 @@ jobs:
           retention-days: 5
 
       - name: Upload results to code scanning
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: results.sarif

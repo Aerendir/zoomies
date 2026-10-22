@@ -172,8 +172,21 @@ esac
 [ "${ZOOMIES_RUNNER_VERSION:-}" = "${WANT_RUNNER}" ] && pass "ZOOMIES_RUNNER_VERSION" || fail "ZOOMIES_RUNNER_VERSION is '${ZOOMIES_RUNNER_VERSION:-}'"
 
 # The baseline from deploy/runner-packages.sh, plus what the entrypoint itself
-# calls (bash, timeout, date, uname, hostname).
-for t in bash git curl jq tar unzip zip gzip xz sudo ssh rsync timeout date uname hostname; do has "$t"; done
+# calls (bash, awk, timeout, date, uname, hostname).
+for t in bash git curl jq tar unzip zip gzip xz sudo ssh rsync timeout date uname hostname awk; do has "$t"; done
+# That awk is only any use if it hands a line on while its input is still open.
+# The entrypoint pipes the runner's output through it to pick out the build log,
+# and mawk, the awk a Debian-family image starts with, waits for a large block
+# of input first, so the live log stayed empty until a build ended. Having an awk
+# at all proved nothing about that; this asks the image's own with a producer
+# that goes quiet for three seconds after its first line.
+started=$SECONDS
+waited="$({ printf 'first\n'; sleep 3; printf 'second\n'; } | awk '{ print; fflush() }' | { read -r _ && echo $((SECONDS - started)); cat > /dev/null; })"
+if [ "${waited:-99}" -lt 3 ]; then
+  pass "awk hands a line on while its input is still open"
+else
+  fail "awk held a line back for ${waited:-?}s while its input was still open, so the live build log would stay empty until a build ends; the image needs gawk, not mawk"
+fi
 # The toolchain from deploy/runner-toolchain.sh, deploy/runner-gh.sh and deploy/runner-shellcheck.sh.
 for t in cc make cmake python3 node npm git-lfs gh shellcheck; do has "$t"; done
 # libxml2's headers and runtime must be a compatible pair. Package metadata

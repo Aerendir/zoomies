@@ -41,7 +41,15 @@ info:
     ## Conventions
 
     * List endpoints take `limit`, `offset`, `sort` and `order`, and return
-      `{ items, total, limit, offset }`.
+      `{ items, total, limit, offset }`. Some do not page. The listings of
+      things an operator keeps few of and reads whole, such as `/hosts`,
+      `/pools`, `/users`, `/tokens`, `/backups`, `/providers`,
+      `/installations` and `/problems`, return every row as `{ items }`,
+      because their size follows the size of the fleet rather than the volume
+      of work through it, and so do other small or bounded listings. A
+      listing's response schema says which shape it has.
+    * A `201` from a create whose result can be read back names it in a
+      `Location` header.
     * Timestamps are RFC 3339 with a `Z` offset.
     * Durations are Go duration strings: `"5m"`, `"1h30s"`.
     * Errors are `{ "error": { code, message, field?, detail? } }` with a
@@ -902,12 +910,15 @@ paths:
       x-zoomies-role: viewer
       description: >-
         Every second the jobs queued in the period waited, each put down to exactly one
-        cause, for the fleet or for one pool. Needs a signed-in caller or a token with
+        cause, for the fleet or for one pool. Only the jobs this fleet has a hand in are
+        read: one whose labels all name another vendor's runners, and that no pool here
+        claimed and no runner here ran, is left out, as the Jobs page's default view
+        leaves it out. Needs a signed-in caller or a token with
         `jobs:read`; a public view's visitor is refused before anything is read.
       parameters:
         - $ref: "#/components/parameters/AnalysisSince"
         - $ref: "#/components/parameters/AnalysisUntil"
-        - { name: pool_id, in: query, description: "Only the jobs of this pool, and its own conditions. A pool the fleet does not have is a 404.", schema: { type: string } }
+        - { name: pool_id, in: query, description: "Only the jobs of this pool, and its own conditions. A pool the fleet does not have, and none of the period's jobs name, is a 404; one deleted since is read from its jobs.", schema: { type: string } }
       responses:
         "200":
           description: The finding.
@@ -925,9 +936,10 @@ paths:
       description: >-
         Two releases' jobs in the period, or the period against the one of the same length
         before it, measure by measure. Cancelled and skipped jobs are left out of every
-        figure, and the response says so in `excluded`. Under 30 jobs on either side
-        nothing is ranked, and the summary says the sample is too small. A side older than
-        `retention.jobs` is read from the daily roll-up: counts only, in whole UTC days.
+        figure read from the job rows, and the response says so in `excluded`. Under 30
+        jobs on either side nothing is ranked, and the summary says the sample is too small.
+        A side older than `retention.jobs` is read from the daily roll-up: counts only, in
+        whole UTC days, of every job that ran here, cancelled ones included.
         Needs a signed-in caller or a token with `jobs:read`; a public view's visitor is
         refused before anything is read.
       parameters:
@@ -943,13 +955,15 @@ paths:
           in: query
           description: >-
             The earlier release. Left out, it is the newest release whose last job came
-            before `b`'s. Only with `by=version`; sent with `by=period` it is a 400.
+            before `b`'s. Only with `by=version`; sent with `by=period` it is a 400. A
+            release's name is at most 128 bytes, and a longer one is a 400 too.
           schema: { type: string }
         - name: b
           in: query
           description: >-
             The later release. Left out, it is the newest release to complete a job in the
-            period. Only with `by=version`; sent with `by=period` it is a 400.
+            period. Only with `by=version`; sent with `by=period` it is a 400. A release's
+            name is at most 128 bytes, and a longer one is a 400 too.
           schema: { type: string }
       responses:
         "200":
@@ -957,9 +971,10 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/CompareFinding" } } }
         "400":
           description: >-
-            A period that does not end after it starts or is longer than
-            `limits.job_stats_window` (on `since`), a `by` that is neither `version` nor
-            `period`, a release named to a comparison by period, or `analysis.same_release`
+            A period that does not end after it starts, begins at or after now, or is longer
+            than `limits.job_stats_window` (on `since`), a `by` that is neither `version` nor
+            `period`, a release named to a comparison by period or longer than a release's
+            name can be, or `analysis.same_release`
             (on `a`) when `a` and `b` name one release. The message says what to change.
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1018,8 +1033,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/AnalysisSince"
         - $ref: "#/components/parameters/AnalysisUntil"
-        - { name: pool_id, in: query, description: Only the starts for this pool. A pool the fleet does not have is a 404., schema: { type: string } }
-        - { name: host_id, in: query, description: Only the starts on this host. A host the fleet does not have is a 404., schema: { type: string } }
+        - { name: pool_id, in: query, description: "Only the starts for this pool. A pool the fleet does not have, and none of the period's runners name, is a 404.", schema: { type: string } }
+        - { name: host_id, in: query, description: "Only the starts on this host. A host the fleet does not have, and none of the period's runners name, is a 404.", schema: { type: string } }
       responses:
         "200":
           description: The finding.
@@ -1352,7 +1367,16 @@ paths:
       summary: Approve an MCP connection
       description: >-
         Creates the connection at the role chosen and returns the client's redirect carrying a
-        single-use authorisation code, for the browser to follow. Audited as `mcp_connection.grant`.
+        single-use authorisation code, for the browser to follow. The client is read again here
+        and not only when the sign-in began, up to fifteen minutes earlier, so an edit to its
+        redirect URIs since then still reaches a request that is waiting. When the address the
+        sign-in was going to is no longer one of them, nothing is created and the answer is a 422
+        rather than a redirect, so the person stays on the consent screen, which shows its
+        message as it is: `<client>'s redirect URIs changed after it asked to connect, and the
+        address it asked to send you back to is no longer one of them, so nothing was shared;
+        start the connection again from <client>, and if that is refused too, ask an
+        administrator to check its redirect URIs in Settings, MCP clients`, with the client's name
+        for `<client>`. Audited as `mcp_connection.grant`.
       x-zoomies-role: viewer
       requestBody:
         required: true
@@ -1958,6 +1982,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Installation" }
@@ -2432,6 +2458,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Pool" }
@@ -3500,12 +3528,25 @@ paths:
           in: query
           description: >-
             Only the failures that still want a person: failed, queued within the last
-            week, acknowledged by nobody, and not replaced by a later attempt of the same
-            job in the same run. This is the question behind the Jobs page's "Needs
+            week, acknowledged by nobody, and not replaced by a later attempt or run of
+            the same job and workflow on the same known branch. Cancelled, skipped and
+            neutral outcomes do not settle an earlier failure. Background GitHub checks
+            also remove failures whose PR closed, whose head was superseded, or whose
+            checks passed. Failed GitHub reads do not establish a resolution. This is
+            the question behind the Jobs page's "Needs
             attention" view and the Overview's failures panel, asked as one parameter so a
             link into it cannot compose half of it. Acknowledging a job removes it from
             this list without changing the failure; a re-run that passes is what settles
             the failure itself.
+          schema: { type: boolean }
+        - name: eli_repairable
+          in: query
+          description: >-
+            Only the jobs of runs a pull request started, plus those whose trigger the
+            controller has not read yet. Eli repairs a pull request's branch and
+            nothing else, so the failure of a push, merge or scheduled run is left out.
+            The Overview's failures panel sends it with `attention` so that every row it
+            lists is one Eli can be offered.
           schema: { type: boolean }
         - name: faulted
           in: query
@@ -4184,6 +4225,16 @@ paths:
                 reserve_cpus: { type: integer, minimum: 0 }
                 reserve_memory_mb: { type: integer, format: int64, minimum: 0 }
                 reserve_disk_mb: { type: integer, format: int64, minimum: 0 }
+                auto_adjust:
+                  type: string
+                  enum: ["", "on", "off"]
+                  description: >-
+                    Whether the controller keeps this host's capacity and reserve at
+                    what `GET /hosts/{id}/recommendation` says. `on` and `off` decide for
+                    this host; an empty string hands the decision back to the fleet's
+                    `scheduler.host_auto_adjust`. Leave it out to change nothing. Turning it
+                    on adjusts the host at the controller's next housekeeping pass, not
+                    within the request.
                 priority:
                   type: object
                   description: >-
@@ -4399,6 +4450,28 @@ paths:
               schema: { $ref: "#/components/schemas/Host" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /hosts/{id}/recommendation:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      operationId: getHostRecommendation
+      tags: [hosts]
+      summary: What Adjust recommends for a host
+      description: >-
+        The capacity and reserve the Adjust dialog's "Set to recommendations" puts on a
+        host, worked out on the controller from the machine's CPUs, memory and disk and the
+        largest runner an enabled pool asks for. The same numbers the controller applies
+        when the host is kept at its recommendation. `available` is false for a host that
+        has not reported how big it is.
+      x-zoomies-role: viewer
+      responses:
+        "200":
+          description: The recommendation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HostRecommendation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /hosts/{id}/throttle/clear:
     parameters: [{ $ref: "#/components/parameters/PathID" }]
     post:
@@ -4480,6 +4553,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema:
@@ -4868,6 +4943,8 @@ paths:
       responses:
         "201":
           description: Setup command; keep private and run within one hour.
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProviderSetup" }
@@ -4970,6 +5047,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Provider" }
@@ -5162,7 +5241,9 @@ paths:
       description: >-
         Asks the provider what it would refuse, changing nothing there. The result is
         recorded on the row as well as returned, so a check run in a terminal quiets the
-        warning the UI is showing. Audited, because it uses the credential.
+        warning the UI is showing. Audited, because it uses the credential. A token narrowed
+        by scopes needs `providers:pause`, the kill switch's scope; the test machine has a
+        scope of its own, `providers:test`.
       x-zoomies-role: operator
       responses:
         "200":
@@ -5188,7 +5269,10 @@ paths:
         it is never kept warm. The answer is the planned machine (`test` is true); follow
         it on the event stream or `GET /machines`. 409 says why it cannot start: renting is
         off or paused, a test is already running, or there is no room under a maximum.
-        Audited, because it spends money and uses the credential.
+        Audited, because it spends money and uses the credential. Requires the operator role
+        and, for a token narrowed by scopes, `providers:test`. The kill switch's scope,
+        `providers:pause`, does not cover it: a token minted to stop spending cannot start a
+        machine somebody pays for.
       x-zoomies-role: operator
       responses:
         "202":
@@ -5208,7 +5292,9 @@ paths:
       description: >-
         The nodes, storages, bridges and templates a provider offers, so the form presents
         a menu rather than asking somebody to go and look an identifier up. A driver that
-        cannot list them answers 409 and the form asks for the identifiers instead.
+        cannot list them answers 409 and the form asks for the identifiers instead. A token
+        narrowed by scopes needs `providers:pause`, the kill switch's scope; the test machine
+        has a scope of its own, `providers:test`.
       x-zoomies-role: operator
       responses:
         "200":
@@ -5248,7 +5334,9 @@ paths:
       description: >-
         The kill switch. It blocks new machines only: draining, deleting, recovering and
         verifying ownership all continue, because a switch that stopped those would strand
-        running machines nobody is watching. Pressing it twice is not an error.
+        running machines nobody is watching. Pressing it twice is not an error. A token
+        narrowed by scopes needs `providers:pause`, which also covers resume, the live
+        preflight and discovery, and not the test machine, which has `providers:test`.
       x-zoomies-role: operator
       requestBody:
         required: false
@@ -5993,6 +6081,87 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /assistant/repairs/error-output:
+    get:
+      operationId: getEliErrorOutput
+      tags: [assistant]
+      summary: Read the error lines of one failed job, when asked
+      description: >-
+        The lines of the job's log that say why it failed, read from GitHub when the request is
+        made and passed through the same credential redaction a repair's evidence gets. They are
+        kept nowhere: held in memory for a minute so a second look is not a second download, and
+        never stored or logged. Personal accounts only, like readiness, and only for a caller
+        whose confirmed GitHub account can write to the repository; anyone else is a 409 that
+        says what is needed. A log GitHub no longer has, or a job that printed no error lines,
+        is an empty `lines` with a `note`.
+      x-zoomies-role: viewer
+      parameters:
+        - name: repo
+          in: query
+          required: true
+          description: The repository, as `owner/name`.
+          schema: { type: string, maxLength: 200 }
+        - name: job_id
+          in: query
+          required: true
+          description: GitHub's id for the job.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliErrorOutput" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/automatic:
+    get:
+      operationId: getEliAutomaticRepairs
+      tags: [assistant]
+      summary: See the repositories that repair themselves, what they have used and whether they can run
+      description: >-
+        One entry for each enabled repository policy set to Automatic, the ones that cannot run
+        first and then by name. `used` is every attempt on the repository in the last 24 hours, by
+        anyone and by any trigger, a repair cleared from the history included: the number the
+        daily limit is held against. Automatic repairs have no owner, so this is an
+        administrator's view and nobody else can read it.
+      x-zoomies-role: admin
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliAutomaticRepairs" }
+
+  /assistant/repairs/automatic/stop:
+    post:
+      operationId: stopEliAutomaticRepairs
+      tags: [assistant]
+      summary: Stop automatic repairs on one or more repositories
+      description: >-
+        Only ever relaxes a policy, so it needs no working provider, which is the day it is
+        wanted. `ask_first` sets the repository to Ask me first. `off` clears the policy's enable
+        switch and keeps its mode, so switching it back on in setup resumes Automatic as it was.
+        A repair already queued is blocked when the worker reaches it, and one that has not
+        pushed yet stops before it does. Each repository is answered for on its own: one that is
+        not automatic any more is `changed: false` and no error, one with no policy has an
+        `error`. One audit row `assistant.repair_automatic_stop` is written for each repository
+        that changed.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EliAutomaticStopRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliAutomaticStopResponse" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /assistant/repairs/opportunities:
     get:
       operationId: listEliOpportunities
@@ -6078,6 +6247,30 @@ paths:
               schema: { $ref: "#/components/schemas/EliRepair" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assistant/repairs/{id}:
+    get:
+      operationId: getEliRepair
+      tags: [assistant]
+      summary: Read one repair
+      description: >-
+        One repair by id, in the shape the list returns. Administrators reach any repair and
+        everyone else their own; a repair that is not the caller's is a 404 word for word the
+        same as one that does not exist. A repair cleared from the history still opens, so a
+        link someone kept keeps working.
+      x-zoomies-role: viewer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EliRepair" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /assistant/repairs/selection:
     get:
@@ -6644,6 +6837,8 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
@@ -6928,8 +7123,11 @@ paths:
       description: >-
         Only a client an administrator created can be edited; a dynamic one owns its registration and
         a metadata client's facts come from its document. Redirect URIs default to Claude's, as
-        creation does. Connections already made are not ended, and the client ID and secret stay as
-        they were. Audited as `mcp_client.update`.
+        creation does. Connections already made are not ended and keep working, and the client ID and
+        secret stay as they were. Removing a redirect URI does reach what has not finished yet: a
+        sign-in still waiting for consent, and an authorisation code not yet exchanged, are refused
+        when the address they carry is no longer one of the client's, with a sentence saying to start
+        the connection again. Audited as `mcp_client.update`.
       x-zoomies-role: admin
       requestBody:
         required: true
@@ -6950,7 +7148,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MCPClient" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
     delete:
       operationId: revokeMCPClient
@@ -7122,6 +7319,8 @@ paths:
       responses:
         "201":
           description: Taken
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Backup" }
@@ -7214,6 +7413,8 @@ paths:
       responses:
         "201":
           description: Upload created
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TransferUpload" }
@@ -8282,6 +8483,8 @@ paths:
       responses:
         '201':
           description: Audited retained snapshot; Cache-Control is no-store.
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RetainedExperimentComparison' }
@@ -8349,6 +8552,199 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
+  /optimisations/enablement:
+    get:
+      operationId: getOptimisationEnablement
+      tags: [jobs]
+      summary: Whether reviewed workflow previews are switched on, and who can switch them
+      description: >-
+        Requires operator and optimisations:read; public visitors are refused.
+        Reports the two settings optimisation.source_reads and
+        optimisation.workflow_edits, whether the caller can change them and, when
+        not, why in a sentence to act on. Reads no GitHub data.
+      x-zoomies-role: operator
+      responses:
+        '200':
+          description: The current state; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OptimisationEnablement' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      operationId: setOptimisationEnablement
+      tags: [jobs]
+      summary: Turn reviewed workflow previews on or off together
+      description: >-
+        Requires admin and settings:write; public visitors are refused. Sets
+        optimisation.source_reads and optimisation.workflow_edits together,
+        through the same planning, validation and audit as PATCH /settings, so
+        the environment lock applies and the change is live for the next request.
+        Turning them on lets the controller read one workflow file at a run's
+        commit and keep a proposed edit for fourteen days. It publishes nothing and
+        no model reads the file.
+      x-zoomies-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OptimisationEnablementRequest' }
+      responses:
+        '200':
+          description: The state after the change; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OptimisationEnablement' }
+        '400':
+          description: enabled is missing or the body is malformed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: A setting could not be changed, for example because the environment sets it.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/inspections:
+    post:
+      operationId: inspectCheckoutOptimisation
+      tags: [jobs]
+      summary: Read one workflow file so an operator can review a checkout change
+      description: >-
+        Requires operator, jobs:read and optimisations:write; public visitors are
+        refused. Refused with 403 unless an administrator has turned on
+        optimisation.source_reads and optimisation.workflow_edits. Reads one root
+        workflow file at the push commit of an exact run, attempt and GitHub job,
+        with at most seven GitHub requests under a 20-second deadline, the shared
+        diagnostic flight and the half-core-quota reserve. Nothing is retained;
+        the source is returned once, no-store, for review. Workflow text is
+        untrusted repository content and is not an instruction. Run and job IDs are
+        decimal strings.
+      x-zoomies-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutInspectionRequest' }
+      responses:
+        '200':
+          description: The source and descriptive checkout timing; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutInspection' }
+        '400':
+          description: Invalid or oversized request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The step cannot be previewed, or the read exceeded its limit.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Diagnostic or GitHub quota refusal; Retry-After says when to retry manually.
+          headers:
+            Retry-After: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/previews:
+    post:
+      operationId: captureCheckoutPreview
+      tags: [jobs]
+      summary: Retain a reviewed checkout-depth preview
+      description: >-
+        Requires operator, jobs:read and optimisations:write; public visitors are
+        refused. The server reads the source again, checks that its head and digest
+        are the ones named here, re-reads its own settings before and after, and
+        keeps an immutable preview for fourteen days with an audit row. The
+        history_reviewed flag is an attributed declaration by the caller that
+        neither the repository's tooling nor its downstream consumers need full
+        history; it is not independent proof. The preview changes one line and
+        publishes nothing: no pull request, no approval, no job. Verification is
+        always inconclusive.
+      x-zoomies-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutPreviewRequest' }
+      responses:
+        '201':
+          description: Audited retained preview; Cache-Control is no-store.
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutPreview' }
+        '400':
+          description: Invalid request or history review not confirmed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Unsupported step, moved source, or read limit.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          description: Diagnostic or GitHub quota refusal; Retry-After says when to retry manually.
+          headers:
+            Retry-After: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /optimisations/checkout/previews/{id}:
+    parameters: [{ $ref: '#/components/parameters/PathID' }]
+    get:
+      operationId: getCheckoutPreview
+      tags: [jobs]
+      summary: Replay a retained checkout preview without GitHub reads
+      description: >-
+        Requires operator, jobs:read and optimisations:read; public visitors are
+        refused. Supply exactly one installation_id and repo and nothing else.
+        Verifies the stored digest and recomputes the preview from retained input
+        only. The answer carries the one changed line and never the workflow file.
+        currentness is always not_checked: the head and policy are not re-read.
+      x-zoomies-role: operator
+      parameters:
+        - name: installation_id
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: repo
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+      responses:
+        '200':
+          description: Verified retained preview; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutPreview' }
+        '400':
+          description: Invalid query or preview ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Stored content integrity cannot be verified.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
 components:
   securitySchemes:
     cookieAuth:
@@ -8390,12 +8786,16 @@ components:
       description: >-
         Start of the period, included. Defaults to a day before `until`. A period that does
         not end after it starts, or one longer than `limits.job_stats_window` (90 days unless
-        set), is a 400 on `since` naming the setting.
+        set), is a 400 on `since` naming the setting, and so is a `since` at or after now:
+        nothing in that period has happened yet.
       schema: { type: string, format: date-time }
     AnalysisUntil:
       name: until
       in: query
-      description: End of the period, not included. Defaults to now.
+      description: >-
+        End of the period, not included. Defaults to now. A later instant is read as now: the
+        rest has not happened, and a job still waiting would be counted as waiting through
+        it. The finding's `until` is the instant read.
       schema: { type: string, format: date-time }
     EliRepairGroup:
       name: group
@@ -8428,6 +8828,12 @@ components:
       name: order
       in: query
       schema: { type: string, enum: [asc, desc], default: desc }
+
+  headers:
+    Location:
+      description: The URL of the resource this request created, to read it back with `GET`.
+      required: true
+      schema: { type: string }
 
   responses:
     Unauthorized:
@@ -8494,8 +8900,9 @@ components:
     AnalysisBadRequest:
       description: >-
         A `since` or `until` that is not an RFC 3339 instant, a period that does not end
-        after it starts, or one longer than `limits.job_stats_window`, each on the field at
-        fault, and on host pressure a request naming no `host_id`.
+        after it starts, one that begins at or after now, or one longer than
+        `limits.job_stats_window`, each on the field at fault, and on host pressure a request
+        naming no `host_id`.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -8812,7 +9219,7 @@ components:
             code:
               type: string
               enum: [bad_request, unauthorized, forbidden, not_found, conflict, unprocessable, too_large, rate_limited, limit_reached, update.mode_off, update.check_disabled, update.helper_missing, update.in_progress, update.not_a_release, update.nothing_newer, update.host_cannot_update, update.rollout_halted, update.check_failed, assistant.provider_failed, assistant.provider_not_yours, assistant.identity_held, analysis.same_release, analysis.too_few_releases, analysis.whole_days_only, internal]
-            message: { type: string, description: Written for a person to read, and to act on. }
+            message: { type: string, description: "Written for a person to read, and to act on." }
             field: { type: string, description: "The form field at fault, or on a `limit_reached` refusal the `limits.*` setting that refused." }
             detail: { type: string }
 
@@ -11982,6 +12389,13 @@ components:
             shows next to the workflow name, for cross-referencing the two. Zero until a
             workflow_run lookup backfills it, since the webhook that recorded the job never
             carries it.
+        run_event:
+          type: string
+          description: >-
+            What started the run: `push`, `pull_request`, `schedule` and so on. Absent until
+            the controller has read the run from GitHub, since the webhook that recorded the
+            job never carries it. Eli repairs a pull request's branch and nothing else, so a
+            failure of a run that is not a pull request's is never offered to it.
         controller_version:
           type: string
           description: >-
@@ -12127,14 +12541,16 @@ components:
           format: date-time
           description: >-
             When somebody marked this failure as known, taking it out of the
-            attention list without changing anything about the failure itself. Null
+            attention list without changing anything about the failure itself. Absent
             on a failure nobody has triaged, which is the ordinary state.
         acknowledged_by:
           type: string
           description: >-
             The name the person who acknowledged the failure went by, kept as a snapshot the
-            way an audit row's actor name is. Empty when nobody has, and on an instance with
-            authentication off, where there is no account behind the action.
+            way an audit row's actor name is. Absent when nobody has acknowledged the failure,
+            on an instance with authentication off, where there is no account behind the
+            action, and for a visitor to a public view, who is told a failure was marked as
+            known and when but never by whom.
         queued_at: { type: string, format: date-time }
         started_at: { type: [string, "null"], format: date-time }
         completed_at: { type: [string, "null"], format: date-time }
@@ -12576,7 +12992,10 @@ components:
             The evidence's version. A reader refuses a version it does not know rather than
             misreading its evidence.
         since: { type: string, format: date-time, description: "Start of what the finding covers, included." }
-        until: { type: string, format: date-time, description: "End of what the finding covers, not included." }
+        until:
+          type: string
+          format: date-time
+          description: End of what the finding covers, not included. Never later than when it was computed.
         summary: { type: string, description: The answer in one or two sentences. Always set. }
         dominant: { type: string, description: What the summary leads with; empty when nothing does. }
         confidence:
@@ -12724,7 +13143,7 @@ components:
           items: { $ref: "#/components/schemas/CompareChange" }
         excluded:
           type: array
-          description: The conclusions left out of every figure, `cancelled` and `skipped`.
+          description: The conclusions left out of every figure read from the job rows, `cancelled` and `skipped`.
           items: { type: string }
         percentiles_unavailable: { type: boolean, description: "The database could not compute percentiles, so no time was compared." }
 
@@ -12995,11 +13414,14 @@ components:
         otherwise looks exactly like a pool that is merely busy. `oom_killed` is the kernel
         killing the job's runner, or one of its steps, for its memory limit -- which can be
         recorded after `completed`, because a runner whose step was killed finishes the job
-        and reports the kill only when it exits. `acknowledged` and `reopened` are the
-        fleet's triage of a failure: somebody said they had read it, and somebody put it
-        back in front of whoever looks next. Neither changes the job, which is why they are
-        entries here rather than a move of the job.
-      enum: [queued, waiting, approved, claimed, unmatched, started, completed, runner_lost, runner_returned, cancel_requested, runner_start_failed, rerun_requested, oom_killed, acknowledged, reopened]
+        and reports the kill only when it exits. `sized` is the controller's sizing of a
+        waiting job: it put the job in a size class, sent it to the pool of another class, or
+        took that back when `scheduler.size_routing` was switched `off`, with the sentence
+        that says why; a fleet that leaves size routing `off` writes none. `acknowledged`
+        and `reopened` are the fleet's triage of a failure: somebody said they had read it,
+        and somebody put it back in front of whoever looks next. Neither changes the job,
+        which is why they are entries here rather than a move of the job.
+      enum: [queued, waiting, approved, claimed, unmatched, started, completed, runner_lost, runner_returned, cancel_requested, runner_start_failed, rerun_requested, oom_killed, sized, acknowledged, reopened]
 
     JobEvent:
       type: object
@@ -13436,13 +13858,27 @@ components:
         outcome: { type: string, enum: [first, changed, unchanged, not_newer], description: "When done: whether the report was the first, changed the findings, matched the last, or carried a clock no later than the last report's." }
         message: { type: string, description: "When failed: a sentence for a person saying what to check." }
         next_at: { type: string, format: date-time, description: "When the host may be asked again. Only present while that is in the future." }
+    HostRecommendation:
+      type: object
+      required: [available]
+      properties:
+        available: { type: boolean }
+        capacity: { type: integer, description: How many runners the machine holds after the reserve. }
+        reserve_cpus: { type: integer }
+        reserve_memory_mb: { type: integer, format: int64 }
+        reserve_disk_mb: { type: integer, format: int64 }
+        limited_by: { type: string, enum: [cpu, memory, disk], description: The figure that set the capacity. }
+        ask_cpus: { type: number, description: The CPUs one runner asks for. }
+        ask_memory_mb: { type: integer, format: int64 }
+        ask_pool: { type: string, description: The pool whose runner size set the ask. Absent when the fleet default did. }
+        reason: { type: string, description: The recommendation as one sentence. }
     HostUpdate:
       type: object
       description: >-
         The host's part in updating Zoomies from the web UI: whether it can be updated
         from here, why in a sentence, and its latest attempt while that attempt still says
         something about the host. Nothing in it moves with the clock or with a heartbeat.
-      required: [state, reason, can_update, attempt_id]
+      required: [state, reason, can_update, attempt_id, code]
       properties:
         state:
           type: string
@@ -13478,6 +13914,18 @@ components:
             wherever turning it on would let the host be asked; where it would not, as for a host
             the update helper can never be installed on, `reason` says what is in the way instead.
         attempt_id: { type: string, description: The attempt `state` describes, and empty with none., examples: [upd_k3fqz2mx7abcd] }
+        code:
+          type: string
+          enum: ["", host.update_helper_stuck]
+          description: >-
+            The problem code of the failure `state` describes, when it has a cause of its own
+            worth naming, and empty otherwise. `host.update_helper_stuck` says the update helper
+            on the host had stopped reading requests (its path unit disabled, inactive or
+            failed, or a request nobody had read for longer than a healthy helper takes), so
+            the attempt failed before anything ran. `reason` is then built by the controller
+            from fixed words and numbers, with the attempt, how long the request had waited and
+            what systemd says of the units, and carries no path, so every role reads it rather
+            than the fixed sentence below the `platform` role is otherwise given.
     RecoveryHost:
       type: object
       required: [host_id, name, state]
@@ -13519,6 +13967,17 @@ components:
           allOf:
             - $ref: "#/components/schemas/ImagePullIncident"
           description: The last start or prewarm here whose image could not be made ready. Absent when there is none.
+        auto_adjust:
+          type: string
+          enum: ["", "on", "off"]
+          description: The operator's answer to whether the controller keeps this host at its recommended capacity and reserve. Empty follows the fleet.
+        auto_adjust_effective:
+          type: boolean
+          description: Whether the controller is keeping this host at its recommendation now, once the fleet's default is counted.
+        auto_adjusted_at:
+          type: string
+          format: date-time
+          description: When the controller last moved this host's capacity or reserve. Absent if it never has.
         throttle_reason:
           type: string
           description: >-
@@ -14167,11 +14626,14 @@ components:
         max_output_tokens:
           type: integer
           description: >-
-            How much the model may write in one round of a chat, thinking included, as
-            the request's `max_tokens`; 0 is the controller's default of 8,192. From 1,024
-            to 65,536. A thinking model's reasoning counts against it, and an answer that
-            reaches it is reported as cut, with this provider and the limit in force, so the
-            person can raise it. Refused on the subscription kinds, whose tool decides.
+            How much the model may write in one round, thinking included, as the request's
+            `max_tokens`, from 1,024 to 65,536; 0 is automatic. A chat starts at 8,192 and
+            reports an answer that reaches the limit as cut, with this provider and the
+            limit in force, so the person can raise it. A repair starts at 12,000 and, when
+            the model runs out, asks again with twice as much, up to 65,536, and keeps that
+            amount for the rest of the repair. A number is kept exactly, so it also caps
+            what an answer can cost. A thinking model's reasoning counts against the limit.
+            Refused on the subscription kinds, whose tool decides.
         subscription:
           type: boolean
           description: >-
@@ -14189,6 +14651,40 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
+    EliRepairCaseJob:
+      type: object
+      description: >-
+        One failed job of the run a repair was started for, with the step it stopped at.
+        Every text is the workflow's own words, so it is data to draw and never markup.
+      required: [name]
+      properties:
+        name: { type: string }
+        step: { type: string, description: The first step that did not succeed. }
+        url:
+          type: string
+          description: >-
+            The job's page, on the host GitHub served it from. Present only when it is a plain
+            http or https address.
+        duration_ms: { type: integer }
+    EliRepairCase:
+      type: object
+      description: >-
+        What a repair was about, kept as it was when the repair began: Zoomies' own job records
+        are pruned and a pull request's title changes. It holds no log text. Absent on a repair
+        made before cases were kept, and a case whose jobs were already pruned names the pull
+        request alone.
+      properties:
+        pull_title: { type: string }
+        pull_url: { type: string }
+        author: { type: string }
+        branch: { type: string }
+        run_url: { type: string }
+        workflow: { type: string }
+        run_number: { type: integer }
+        jobs:
+          type: array
+          description: The failed jobs, at most ten.
+          items: { $ref: "#/components/schemas/EliRepairCaseJob" }
     EliRepairDetails:
       type: object
       properties:
@@ -14196,6 +14692,7 @@ components:
         stage: { type: string }
         failure_code: { type: string }
         source_bytes: { type: integer }
+        case: { $ref: "#/components/schemas/EliRepairCase" }
         steps:
           type: array
           nullable: true
@@ -14216,20 +14713,87 @@ components:
         total: { type: integer }
         capped: { type: boolean }
         missing_permissions: { type: array, items: { type: string } }
+    EliErrorOutput:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          description: >-
+            The error lines of the job's log, redacted: at most twelve, each at most 300 bytes,
+            the last ones being those that ended the job.
+          items: { type: string }
+        note:
+          type: string
+          description: A sentence for the person when there are no lines to show.
+    EliReadinessPull:
+      type: object
+      description: >-
+        The pull request a readiness answer is about, in its own words. Present
+        only after the caller's linked GitHub account has been shown to write to
+        the repository, so a person who may not see the repository is never told
+        what is in it. The url is the server's, so a GitHub Enterprise Server
+        link points at the right host.
+      required: [number, title, author, branch, base, url, open]
+      properties:
+        number: { type: integer }
+        title: { type: string }
+        author: { type: string }
+        branch: { type: string, description: The branch the pull request comes from. }
+        base: { type: string, description: The branch it would merge into. }
+        url: { type: string }
+        open: { type: boolean }
+    EliReadinessCheck:
+      type: object
+      description: >-
+        One thing readiness looks at and what it found. A check readiness never
+        reached because an earlier one stopped it is unchecked, which is not the
+        same as passed.
+      required: [code, status, message]
+      properties:
+        code:
+          type: string
+          enum: [identity, provider, installation, access, policy, budget, pull, checks, permissions]
+        status: { type: string, enum: [ok, blocked, unchecked] }
+        message: { type: string }
+        blocker:
+          type: string
+          description: >-
+            On a blocked check, the code of the blocker that stopped it, as it
+            appears in `blockers`. The check says where readiness stopped and the
+            blocker says why, and they are not the same: GitHub not answering
+            (`github`) or the allowance not being readable (`budget_unavailable`)
+            is reported on whichever check it was making. When the target has
+            changed, `blockers` holds that change alone, and a check blocked
+            before it was found still names what stopped it. Absent on a check
+            that passed or was not reached, and from a controller older than
+            this field.
     EliReadiness:
       type: object
-      required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers]
+      required: [ready, repo, pull_number, head_sha, provider, model, allow_workflows, remaining, blockers, checks]
       properties:
         ready: { type: boolean }
         repo: { type: string }
         pull_number: { type: integer }
         head_sha: { type: string }
+        pull: { $ref: "#/components/schemas/EliReadinessPull" }
         provider: { type: string }
         model: { type: string }
         allow_workflows: { type: boolean }
         remaining: { type: integer }
         reset_at: { type: string, format: date-time }
+        policy_mode:
+          type: string
+          enum: [automatic, ask_first, manual]
+          description: >-
+            How the repository's policy lets Eli help, so a page can say whether the repository
+            would have started a repair itself. Present once readiness has reached the policy
+            check, and not before.
         blockers:
+          description: >-
+            What stands in the way. When the target has changed (fixed, closed
+            or superseded) this is that alone, which is the answer to what the
+            person asked; checks still say what each check found.
           type: array
           items:
             type: object
@@ -14237,6 +14801,12 @@ components:
             properties:
               code: { type: string }
               message: { type: string }
+        checks:
+          description: >-
+            Every check readiness makes, always the same nine in the order they
+            are made, so a page can show what passed as well as what did not.
+          type: array
+          items: { $ref: "#/components/schemas/EliReadinessCheck" }
     EliOpportunity:
       type: object
       required: [id, repo, installation_id, pull_number, head_sha, run_id, title, state, created_at, updated_at]
@@ -14315,6 +14885,11 @@ components:
         pull_number: { type: integer }
         instruction: { type: string }
         head_sha: { type: string, description: PR head reviewed by the requester }
+        run_id:
+          type: integer
+          description: >-
+            The run whose failure the requester was looking at, when they came from one. The
+            repair records it and says it was started for that run.
 
     EliRepair:
       type: object
@@ -14377,6 +14952,94 @@ components:
           type: array
           items: { $ref: "#/components/schemas/EliRepairPolicy" }
 
+    EliAutomaticLast:
+      type: object
+      description: The newest automatic repair on a repository that is still in the history.
+      required: [id, state, pull_number, updated_at]
+      properties:
+        id: { type: string }
+        state: { type: string }
+        pull_number: { type: integer }
+        updated_at: { type: string, format: date-time }
+
+    EliAutomaticRepository:
+      type: object
+      required: [repo, installation_id, provider_id, provider_name, model, allow_workflows, daily_limit, used, running]
+      properties:
+        repo: { type: string }
+        installation_id: { type: string }
+        provider_id:
+          type: string
+          description: Empty when the policy's provider was deleted, which leaves a policy with none.
+        provider_name: { type: string, description: Empty when there is no provider. }
+        model: { type: string }
+        problem:
+          type: string
+          description: >-
+            Present only when automatic repairs here cannot run: the provider is missing,
+            disabled or a person's. One sentence that says what to do in setup.
+        allow_workflows: { type: boolean }
+        daily_limit: { type: integer }
+        used:
+          type: integer
+          description: >-
+            Attempts on this repository in the last 24 hours, by anyone and by any trigger,
+            cleared ones included. The same figure the daily limit is held against.
+        next_free_at:
+          type: string
+          format: date-time
+          description: >-
+            When a full allowance has a place again: the oldest of those attempts leaves the
+            24-hour window, or, when the limit was lowered below what is spent, the one whose
+            leaving brings the count under it. Present when `used` is above zero.
+        running:
+          type: integer
+          description: Automatic repairs queued, working or waiting on checks now.
+        last: { $ref: "#/components/schemas/EliAutomaticLast" }
+
+    EliAutomaticRepairs:
+      type: object
+      required: [repositories]
+      properties:
+        repositories:
+          type: array
+          items: { $ref: "#/components/schemas/EliAutomaticRepository" }
+
+    EliAutomaticStopRequest:
+      type: object
+      required: [repos, then]
+      properties:
+        repos:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { type: string }
+        then:
+          type: string
+          enum: [ask_first, off]
+          description: >-
+            What the repository does instead. `ask_first` offers a repair under Needs you and
+            waits. `off` clears the policy's switch: nothing is offered, started or requested
+            until it is switched back on in setup.
+
+    EliAutomaticStopResult:
+      type: object
+      required: [repo, changed]
+      properties:
+        repo: { type: string }
+        changed:
+          type: boolean
+          description: False for a repository that was not automatic any more.
+        error: { type: string }
+
+    EliAutomaticStopResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/EliAutomaticStopResult" }
+
     AssistantProviderInput:
       type: object
       description: >-
@@ -14404,9 +15067,11 @@ components:
         max_output_tokens:
           type: integer
           description: >-
-            How much the model may write in one round, from 1,024 to 65,536, or 0 for the
-            controller's default of 8,192. Refused with a `max_output_tokens` field error
-            on a subscription kind, whose tool decides, rather than ignored.
+            How much the model may write in one round, from 1,024 to 65,536, or 0 for
+            automatic, where a chat starts at 8,192 and a repair raises the limit itself
+            when the model runs out. A number is kept exactly. Refused with a
+            `max_output_tokens` field error on a subscription kind, whose tool decides,
+            rather than ignored.
         api_key:
           type: string
           description: >-
@@ -14558,8 +15223,8 @@ components:
         value: { type: string }
         label: { type: string }
         consequence: { type: string, description: What picking it means, because a list of identifiers with no consequences is a list somebody guesses at. }
-        cpus: { type: integer, description: The processors a node has or a template gives, when the provider said. The limits step's recommendation is arithmetic on it. }
-        memory_mb: { type: integer, format: int64, description: The memory in MiB a node has or a template gives, when the provider said. }
+        cpus: { type: integer, description: "The processors a node has or a template gives, when the provider said. The limits step's recommendation is arithmetic on it." }
+        memory_mb: { type: integer, format: int64, description: "The memory in MiB a node has or a template gives, when the provider said." }
 
     ProviderDiscovery:
       type: object
@@ -14633,7 +15298,7 @@ components:
         host_name: { type: string }
         capacity: { type: integer }
         labels: { type: object, additionalProperties: { type: string } }
-        test: { type: boolean, description: True for the machine an operator asked for to prove the provider works. It is released once it reports ready, and the provider page reads the result of the test from it. }
+        test: { type: boolean, description: "True for the machine an operator asked for to prove the provider works. It is released once it reports ready, and the provider page reads the result of the test from it." }
         operation: { type: string, enum: [create, start, stop, bootstrap, delete], description: The operation in flight, if any. }
         operation_id: { type: string, examples: [mop_k3f9qz2mx7ab] }
         operation_handle: { type: string, description: The provider's own handle for the call, which is what an operator pastes into its task log. }
@@ -14895,7 +15560,7 @@ components:
             client_uri: { type: string }
         redirect_uri: { type: string }
         redirect_host: { type: string, description: Where approving sends you, which the consent screen shows plainly. }
-        loopback_only: { type: boolean, description: Every redirect the client registered is on your own machine, where any program could listen. }
+        loopback_only: { type: boolean, description: "Whether `redirect_uri`, the address approving sends you back to, is on your own machine, where any program could listen and claim to be the client. It judges that one address, not every address the client registered." }
         resource: { type: string, examples: ["https://zoomies.example.com/mcp"] }
         requested_scope: { type: string }
         roles: { type: array, items: { $ref: "#/components/schemas/Role" } }
@@ -15079,7 +15744,7 @@ components:
       description: Comparison with main for a stamped development build. Main may still be publishing to the dev channel.
       properties:
         current: { type: string, description: The commit in the running build. }
-        latest: { type: string, description: The last observed commit on main, or empty before a successful check. }
+        latest: { type: string, description: "The last observed commit on main, or empty before a successful check." }
         state: { type: string, enum: [unknown, current, available] }
         checked_at: { type: [string, "null"], format: date-time }
     UpdatesRelease:
@@ -15618,6 +16283,128 @@ components:
         tasks: { type: array, items: { $ref: "#/components/schemas/AgentTask" } }
         backoff: { type: integer, format: int64, description: Nanoseconds to wait before polling again, when the controller sheds load. }
 
+    OptimisationEnablement:
+      additionalProperties: false
+      properties:
+        source_reads: { type: boolean }
+        workflow_edits: { type: boolean }
+        enabled: { type: boolean, description: True when both settings are on. }
+        can_change: { type: boolean, description: Whether the caller may change them here. }
+        reason: { type: string, description: "Why the caller cannot, as a sentence to act on. Absent when they can." }
+      required: [source_reads, workflow_edits, enabled, can_change]
+      type: object
+    OptimisationEnablementRequest:
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+      required: [enabled]
+      type: object
+    CheckoutSelection:
+      additionalProperties: false
+      description: >-
+        One exact run, attempt and GitHub job. IDs are decimal strings. Leave both
+        positions out and the server finds the job's one previewable checkout step
+        in the workflow file; name both to choose a step yourself. Naming only one
+        is refused. Responses always carry the positions that were used.
+      properties:
+        run_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        attempt: { type: integer, minimum: 1 }
+        github_job_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        job_index: { type: integer, minimum: 0, maximum: 20000 }
+        step_index: { type: integer, minimum: 0, maximum: 20000 }
+      required: [run_id, attempt, github_job_id]
+      type: object
+    CheckoutInspectionRequest:
+      additionalProperties: false
+      properties:
+        installation_id: { type: string, minLength: 1, maxLength: 128 }
+        repository: { type: string, minLength: 1, maxLength: 1024 }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+      required: [installation_id, repository, selection]
+      type: object
+    CheckoutInspection:
+      additionalProperties: false
+      description: Untrusted workflow source shown once for review, with descriptive checkout timing. Not retained.
+      properties:
+        installation_id: { type: string }
+        repository: { type: string }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+        head_sha: { type: string }
+        path: { type: string }
+        mode: { type: string }
+        content: { type: string, description: The workflow file; untrusted text. }
+        source_sha256: { type: string }
+        step_number: { type: integer, format: int64 }
+        job_name: { type: string, description: The literal name the workflow gives the job. }
+        step_name: { type: string, description: The literal name of the checkout step that was found. }
+        checkout_ms: { type: integer, format: int64, description: Milliseconds the successful checkout step took in the selected attempt; descriptive, not a saving. }
+        evidence_id: { type: string }
+        basis: { type: string }
+        inspected_at: { type: string, format: date-time }
+      required: [installation_id, repository, selection, head_sha, path, mode, content, source_sha256, step_number, job_name, step_name, checkout_ms, evidence_id, basis, inspected_at]
+      type: object
+    CheckoutPreviewRequest:
+      additionalProperties: false
+      properties:
+        installation_id: { type: string, minLength: 1, maxLength: 128 }
+        repository: { type: string, minLength: 1, maxLength: 1024 }
+        selection: { $ref: '#/components/schemas/CheckoutSelection' }
+        head_sha: { type: string, description: The head of the source that was reviewed. }
+        source_sha256: { type: string, description: The digest of the source that was reviewed. }
+        history_reviewed:
+          type: boolean
+          description: Must be true. The caller declares that neither the repository's tooling nor its downstream consumers need full history.
+      required: [installation_id, repository, selection, head_sha, source_sha256, history_reviewed]
+      type: object
+    CheckoutCollection:
+      additionalProperties: false
+      nullable: true
+      description: How the source and timing were collected. Null for a preview retained before collection was recorded.
+      properties:
+        version: { type: string }
+        basis: { type: string }
+        step_number: { type: integer, format: int64 }
+        blob_sha: { type: string }
+        source_funding: { type: string }
+      required: [version, basis, step_number, blob_sha, source_funding]
+      type: object
+    CheckoutPreviewDetail:
+      additionalProperties: false
+      properties:
+        version: { type: string }
+        kind: { type: string }
+        state: { type: string }
+        head_sha: { type: string }
+        source_sha256: { type: string }
+        after_sha256: { type: string }
+        evidence_id: { type: string }
+        run_id: { type: string }
+        attempt: { type: integer }
+        job_index: { type: integer }
+        step_index: { type: integer }
+        line: { type: integer, description: The one-based line of the workflow file that changes. }
+        checkout_ms: { type: integer, format: int64 }
+        path: { type: string }
+        before: { type: string, description: The line as it is; untrusted text. }
+        after: { type: string, description: The line as it would be; untrusted text. }
+        verification: { type: string, enum: [inconclusive] }
+        explanation: { type: string }
+      required: [version, kind, state, head_sha, source_sha256, after_sha256, evidence_id, run_id, attempt, job_index, step_index, line, checkout_ms, path, before, after, verification, explanation]
+      type: object
+    CheckoutPreview:
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        installation_id: { type: string }
+        repository: { type: string }
+        reviewed_by: { type: string }
+        sha256: { type: string }
+        created_at: { type: string, format: date-time }
+        currentness: { type: string, enum: [not_checked] }
+        collection: { $ref: '#/components/schemas/CheckoutCollection' }
+        preview: { $ref: '#/components/schemas/CheckoutPreviewDetail' }
+      required: [id, installation_id, repository, reviewed_by, sha256, created_at, currentness, collection, preview]
+      type: object
     ComparisonCaptureRequest:
       additionalProperties: false
       properties:

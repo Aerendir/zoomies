@@ -188,6 +188,7 @@ func (c *Controller) deliverCapacityEvent(ctx context.Context, p *store.Pool, ca
 	c.deliveries.Add(1)
 	go func() {
 		defer c.deliveries.Done()
+		defer c.recoverDetached("capacity-demand")
 		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*timeout+time.Second)
 		defer cancel()
 		c.finishCapacityDelivery(dctx, p, e, body, d)

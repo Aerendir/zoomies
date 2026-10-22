@@ -1,7 +1,8 @@
 # Eli enhancement roadmap handoff
 
 Prepared 12 October 2026. Planning baseline: local checkout
-`1e745d258fdfce61d3395da97b72d575aab1fbbd`.
+`1e745d258fdfce61d3395da97b72d575aab1fbbd`. Reconciled with the code on
+19 October 2026, last against main `98e1e82` (see the next section).
 
 This document turns the product review into implementation tracks that several
 agents can work from. It describes proposed extensions, their dependencies,
@@ -14,6 +15,115 @@ This file supports it rather than replacing it. Before implementation, the
 coordinating agent reconciles these tracks with current code and records new or
 changed work in ROADMAP.md, using existing packages where the work overlaps.
 The track IDs below are local handoff identifiers, not allocated ZF numbers.
+
+## Reconciliation, 19 October 2026
+
+Checked against main `87c5aa3b` and brought up to date at `98e1e82` after #1171,
+#1176 and #1177 merged. Where this section
+and an older row below disagree, this section is newer; the older rows are kept
+as the record of how each slice landed.
+
+| Track | Verified state in code | Correction to older text |
+| --- | --- | --- |
+| E1 (ZF-242) | Merged and used: `internal/analysis` (`merge_delay.go`), `get_pr_delay` on Eli's allowlist, CLI, contextual UI | None. ROADMAP.md still lists `in_progress` because live-model evaluation and a real performance experiment have not run |
+| E2 (ZF-243) | Descriptive milestone merged (#1020); `get_retained_comparison` on Eli's allowlist; ZF-241's period comparison, queue breakdown, host pressure and startup failures are `implemented` | None. Controlled-experiment proof and dispatch stay deferred by the owner |
+| E3 (ZF-244) | The first operator slice is on main: pure preview (`internal/optimisation`), private retention (migration 0107), admitted checkout evidence ([#1024](https://github.com/eyupio/zoomies/pull/1024)), and, from [#1171](https://github.com/eyupio/zoomies/pull/1171), the policy, routes and web flow described under "E3: what is built, and what is not" below | The rows further down that call #1024 or the policy and web flow "pending" are out of date; both merged. Still absent: approval, publication, verification, CLI, MCP and Eli access, and any run against a real repository |
+| E4 | Not started as a track. Kennel's evaluator, waivers and guidance exist, but no fix preview or publication path does | Unchanged |
+| E5 | ZF-241's `startup_failures` covers runner-startup recurrence. No workflow/test failure fingerprinting exists | Unchanged |
+| E6 | Not started. `internal/prrepair/mention` (ZF-239 slice 1) is only the command matcher | Unchanged |
+| E7 | Eli's repair history tools, repair identity relink, repair pages, automatic-repair visibility and stop controls (18 October), Eli protected-read recovery (19 October) and the analysis cards are all on main | The two E7 rows marked "Implemented, branch ..." are merged. Automatic repairs are repair-mode work, not Optimise or Review mode, and give those modes no new authority |
+
+Newer work that this handoff did not plan but that later tracks should reuse:
+the Eli repair pages and their readiness, policy and budget views, `run_event`
+on a job, and `GET /assistant/repairs/automatic` with its stop route.
+
+### E3: what is built, and what is not
+
+Built and merged (#1171, #1176, #1177), all verified against fakes and mocked
+routes only:
+
+* **Policy.** `optimisation.source_reads` and `optimisation.workflow_edits`, two
+  separate live instance settings, off by default and read on every call, so a
+  withdrawal stops the next request. No request field carries policy.
+* **Enablement without Settings.** `GET`/`PUT /optimisations/enablement`: the
+  Checkout preview page opens with a card saying what turning the switches on
+  allows, an administrator turns both on with one press, anyone else is told whom to
+  ask and can copy the request. Repair setup offers it as an unticked box. Nothing
+  turns it on silently.
+* **Routes.** `POST /optimisations/checkout/inspections` (reads one workflow file,
+  retains nothing), `POST /optimisations/checkout/previews` (re-reads, requires the
+  head and digest the operator reviewed, keeps an immutable preview for 14 days with
+  an audit row), `GET /optimisations/checkout/previews/{id}` (replay; the changed
+  line, never the file). Actions `optimisations.read` and `optimisations.write`
+  (operator, plus `jobs:read`); visitors refused.
+* **No IDs to type.** A selection is a run, an attempt and a job. The server finds
+  the job's one previewable checkout step (`workflow.FindCheckout`, zero or two
+  candidates is an explained refusal). The page lists a repository's recent
+  successful push jobs; the job drawer offers **Preview a checkout change** on those
+  jobs; typing IDs is a collapsed fallback.
+* **Cost.** Inspection and capture each take one of the 20 hourly diagnostic
+  admissions, so one preview costs two.
+
+Not built, in the order to do it. Nothing below has been started; the owner asked
+for this record before any further code.
+
+1. **Validate against one real repository first.** The reader, the policy gate and
+   the web flow have never met a real GitHub App, real Actions history or a real
+   fleet. Pick one repository with a commit-pinned `actions/checkout` and a literal
+   `fetch-depth: 0` in a root workflow, enable the switches, and run read, review and
+   keep end to end. Record what GitHub actually returned (permissions, rate-limit
+   headroom, step names) and fix what the fakes hid. This is cheap and should come
+   before publication is built on top.
+2. **Approval of a kept preview.** An explicit, attributed approval distinct from
+   keeping. It names the preview ID, the head and source digest it approved, and the
+   actor, is audited, and expires with the preview. Approving must not publish.
+   Decide whether a different person than the reviewer must approve; the recommended
+   default is that the same operator may, with both recorded.
+3. **Draft PR publication.** A new capability, not a repair: repairs push to an
+   existing PR branch and never raise one. This opens a draft PR from a new branch,
+   so it needs its own opt-in (proposed `optimisation.publish`, off by default, with
+   the same one-press enable card) and the App's contents and pull-requests write
+   permission. Before writing it must re-read the head, the policy and the source,
+   run `optimisation.CheckCurrent`, and refuse on any change. Non-force, never
+   merges, and a restart in the middle needs reconciling (look for the branch and PR
+   before retrying) rather than blind replay. Reuse the repair worker's bounded
+   edit validation and `internal/github/eli_repairs.go` where both consumers need it.
+   Allocate any migration from 0115 (0114 is `host_auto_adjust`).
+4. **E2 verification of the published change.** After merge, compare the checkout
+   time before and after through the E2 comparison. The result is "inconclusive"
+   unless a suitable control and candidate exist, and CI passing is never evidence of
+   a saving. Projected savings stay estimates.
+5. **CLI, MCP and Eli access.** Needs a contract decision first: a kept preview
+   holds private workflow source, so these surfaces would see more than the web UI
+   deliberately shows. Until that is decided the routes are not on Eli's allowlist
+   and Eli can only point at the page. Web first, then CLI, then MCP/Eli with
+   scripted scenarios.
+6. **Wider catalogue** (later): bounded readiness polling, dependency or build
+   cache, and sharding, each with its own evidence and refusals. Do not lead with
+   test removal, relaxed assertions or blanket retries.
+
+Owner decisions still open: the approver rule in step 2; the name and default of
+the publish setting in step 3; whether the 10 GiB-per-runner disk allowance used by
+host auto-adjust should become a setting.
+
+### Related work that shipped in the same PRs, and is not E3
+
+* **Runner names carry the host** (`zoomies-4vcpu-ubuntu-2404-fido-a3f9qz2m`), so a
+  failed job can be traced to its machine from GitHub alone. Existing runners keep
+  their kennel word. The job list still shows a host ID, not a name.
+* **Host auto-adjust** (`scheduler.host_auto_adjust`, on by default; per host
+  **Follow the fleet setting**, **Keep at recommendations** or **Never adjust**).
+  The controller keeps each host's capacity and reserves at the Adjust
+  recommendation, with the disk counted: capacity is the smallest of what CPU,
+  memory and disk hold. See [the plan](roadmap/plans/2026-10-19-host-auto-adjust.md).
+  Existing hosts are moved at the next housekeeping pass after upgrade. A runtime
+  response to a disk that is filling now is not built.
+* **Overview feed specs** now open the feed before asserting (#1177); the panel
+  previews three entries.
+
+Hold E4 to E6 until the E3 steps above are decided. E4 (one deterministic Kennel fix
+preview) can run in parallel only if a second owner is free; it shares no files with
+E3 beyond the coordinator-owned registries.
 
 ## Execution status, updated 13 October 2026
 
@@ -58,14 +168,15 @@ in the same implementation PR. A draft PR is not a delivered feature.
 | E2 MCP/Eli workflow evidence | Merged | ZF-243, [#1015](https://github.com/eyupio/zoomies/pull/1015), based on main after #1014 | Independent validated workflow whitelist with exact IDs/nulls and six-group whole-row budget sharing; original report binding and root-only labels. Full/focused MCP race, scripted Eli, generated references/catalogue, vet and strict docs pass |
 | E2 CLI workflow evidence | Merged | ZF-243, [#1016](https://github.com/eyupio/zoomies/pull/1016), based on main after #1015 | Shared capture/replay human view with exact bindings, nulls and full counts; raw JSON future versions preserved. Focused CLI race tests, vet, strict docs and whitespace pass |
 | E2 private root dependency inventory | Merged | ZF-243, [#1018](https://github.com/eyupio/zoomies/pull/1018), based on main after #1016 | Bounded root uses positions/fingerprints/literal pins and full counts during the existing read; unsupported shapes stay null, no dependency resolution. Full parser/GitHub race, controller fixtures, short fuzzing, vet and strict docs pass |
-| E7 repair identity relink | Implemented, branch `fix/eli-identity-relink` | After #1053 | A GitHub account already linked to another Zoomies user (the state an instance move leaves behind) is refused as `assistant.identity_held` with the holder named in message and detail instead of a driver's constraint text; the page's move press resends with `relink`, moves the row server-side in one transaction, lands it unconfirmed so the new owner allows provider use again, and the link audit row carries `moved_from`. Store, API, GitHub fake, schema and client regenerated, docs and unit tests updated; full store/API/docs/web suites pending CI |
+| E7 repair identity relink | Merged (verified on main 19 October) | After #1053 | A GitHub account already linked to another Zoomies user (the state an instance move leaves behind) is refused as `assistant.identity_held` with the holder named in message and detail instead of a driver's constraint text; the page's move press resends with `relink`, moves the row server-side in one transaction, lands it unconfirmed so the new owner allows provider use again, and the link audit row carries `moved_from`. Store, API, GitHub fake, schema and client regenerated, docs and unit tests updated; full store/API/docs/web suites pending CI |
 | E2 descriptive-comparison milestone | Merged | ZF-243, [#1020](https://github.com/eyupio/zoomies/pull/1020), based on main after #1019 | Dependency inspection across REST/web UI/CLI and validated MCP/Eli summaries; broad controlled-experiment proof explicitly deferred by owner on 14 October 2026 |
 | E3 checkout preview foundation | Merged | ZF-244, [#1021](https://github.com/eyupio/zoomies/pull/1021), based on main after #1020 | Pure supplied-evidence checkout-depth preview and source/head/policy recheck; no runtime route, publication or verified savings |
 | E3 private preview retention | Merged | ZF-244, [#1022](https://github.com/eyupio/zoomies/pull/1022), based on main after #1021 | Bounded immutable private source/evidence/preview envelope and offline recomputation, scoped actor/audit and explicit unchecked currentness; admission and web flow remain outstanding |
-| E3 admitted checkout evidence | Implemented, pending review/CI/merge | ZF-244, [#1024](https://github.com/eyupio/zoomies/pull/1024), updated onto main after #1023 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
+| E3 admitted checkout evidence | Merged 14 October | ZF-244, [#1024](https://github.com/eyupio/zoomies/pull/1024), updated onto main after #1023 | Seven bounded data reads associate push source with unique literal job/step names, verify regular file mode and recheck timing; shared quota/flight and server policy rechecks before private retention. Web route remains next |
+| E3 policy and web preview flow | Merged 19 October | ZF-244, [#1171](https://github.com/eyupio/zoomies/pull/1171), [plan](roadmap/plans/2026-10-19-eli-e3-checkout-web.md) | Two off-by-default settings, one-press enablement, inspect/capture/replay routes, Checkout preview page with run picker and job-drawer entry. Full API, controller, config, docs and auth race suites, browser checks on desktop and phone, unit tests and lint pass. Fakes and mocked routes only: no real GitHub, model or fleet. Approval, publication, verification, CLI/MCP/Eli remain |
 | E4 to E6 | Not started | Dependencies and sequence below | No new Kennel fix, recurrence engine or PR reviewer has been implemented in this stack |
 | E7 storage fixture correction | Merged | [#960](https://github.com/eyupio/zoomies/pull/960), following merged #959 | Explicit public fixture permissions; all aicontext package race tests pass. Broad run completed; corrected package reruns pass, as recorded below |
-| E7 repair history in Eli's toolbox | Implemented, branch `eli-repairs` | After #1049 | The two read tools (`list_elis_repairs`, `get_eli_repair`) over `GET /assistant/repairs`, on the allowlist with the pinning test extended to the action tools, and the writes (request, accept, clear, policy) refused as not offered. Focused MCP/API/Eli scenario and docs tests pass; the generated MCP reference is refreshed. No live model evaluation has run |
+| E7 repair history in Eli's toolbox | Merged (verified on main 19 October) | After #1049 | The two read tools (`list_elis_repairs`, `get_eli_repair`) over `GET /assistant/repairs`, on the allowlist with the pinning test extended to the action tools, and the writes (request, accept, clear, policy) refused as not offered. Focused MCP/API/Eli scenario and docs tests pass; the generated MCP reference is refreshed. No live model evaluation has run |
 | E7 fallback-copy mode correction | Merged | [#961](https://github.com/eyupio/zoomies/pull/961), stacked on #960 | Source permissions restored after copying; focused test fails before the correction and backend package race tests pass afterwards |
 | E7 installer fixture correction | Merged | [#962](https://github.com/eyupio/zoomies/pull/962), stacked on #961 | Explicit previous-binary source mode; complete installer package race tests pass |
 | E7 ledger fixture isolation | Merged | [#965](https://github.com/eyupio/zoomies/pull/965), following merged validation parents | Proxmox ledger package race tests pass with a temporary directory and checked opening error; no live e2e cluster run |
@@ -2163,7 +2274,7 @@ merge, dispatch, enrichment or E2 scope expansion.
 
 Retention #1022 merged. Branch codex/eli-e3-checkout-evidence starts from main
 after #1022 and is updated onto main after #1023.
-Ready PR [#1024](https://github.com/eyupio/zoomies/pull/1024) awaits review/CI/merge.
+PR [#1024](https://github.com/eyupio/zoomies/pull/1024) merged on 14 October 2026.
 This adds the bounded optional GitHub reader and internal capture
 adapter; no HTTP route, source policy setting or web flow is exposed yet.
 
@@ -2221,3 +2332,20 @@ rate-limit retry. Bind the review to the displayed source digest/head and actor,
 then call CaptureOptimisationPreview. No model provider/key is needed for this
 deterministic preview. Approval, reconciled draft publication and experiment
 execution remain distinct later slices. Do not claim E3 complete.
+
+
+### E3 policy and web preview flow, 19 October 2026
+
+Delivers the first end-to-end operator slice of ZF-244: read, review, keep. It
+merged in [#1171](https://github.com/eyupio/zoomies/pull/1171) with the one-press
+enablement, the run picker and the job-drawer entry. The designs are in
+[the plan](roadmap/plans/2026-10-19-eli-e3-checkout-web.md). Policy is two live
+instance settings read at every call, inspection and capture share one admitted
+read, replay never returns the file, and nothing is published.
+
+Next agent: read "E3: what is built, and what is not" near the top. Start with a
+real-repository validation run, then approval, then draft publication with its own
+opt-in and fresh head, policy and source rechecks (non-force, never merges, restart
+reconciliation), then E2 verification. CLI and MCP/Eli access wait on a contract
+decision because the retained envelope is private source; do not add the routes to
+Eli's allowlist without it. The next free migration number is 0115.

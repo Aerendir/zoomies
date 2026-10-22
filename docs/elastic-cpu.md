@@ -168,10 +168,13 @@ share it.
 The plan is complete on every heartbeat (every runner the controller leaves out
 goes back to its guarantee) so a runner whose demand ended is never left
 holding a boost. A controller that stops answering sends no plan at all, so the
-agent keeps count: after three heartbeats in a row go unanswered it gives back
-every boost itself, since a few missed beats are a restart and more are a
-controller not coming back soon. A throttle standing at that moment stays, as
-the safe direction to be wrong in, until the controller returns to lift it.
+agent gives every boost back after three normal heartbeat intervals without a
+new plan. An independent lease watchdog can do that even while a heartbeat is
+still blocked. Failed heartbeats retry after a short backoff; those extra
+attempts do not shorten the loan's time window, so a brief controller restart
+does not take a running job's borrowed CPU. A throttle standing at that moment
+stays, as the safe direction to be wrong in, until the controller returns to
+lift it.
 
 ### Worked example
 
@@ -360,8 +363,9 @@ The controller records what each agent advertises (`features` and
 `elastic_cpu` on the host), the editor's **Size** section says whether every host the
 pool can land on can lend CPU and names the ones that cannot, the controller's
 check at the foot of the page warns (`pool.elastic_cpu_unsupported`) with the same names, and each such
-host's card carries a **Cannot lend CPU** badge with the upgrade command folded
-beneath it. Nothing else about a host is part of it; no slot, reserve or
+host's card carries a **Cannot lend CPU** badge under **Details**, with the
+upgrade command folded at the foot of the card. Nothing else about a host is part
+of it; no slot, reserve or
 capacity setting changes for an elastic pool.
 
 ## What you see

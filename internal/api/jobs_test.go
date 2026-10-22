@@ -739,3 +739,90 @@ func TestAttentionAndItsTriageRoutesAskOneQuestion(t *testing.T) {
 	resp = h.do(request{method: "DELETE", path: "/api/v1/jobs/job_missing/acknowledge", cookie: operator})
 	resp.mustStatus(t, 404, "reopening a job that does not exist")
 }
+
+// The audit log says who did what, so a press that changed nothing is not an
+// entry. A second operator pressing the button on a failure the first has
+// already marked as known leaves the first name on the row and nothing on the
+// timeline, and an audit row crediting them with the acknowledgement would
+// contradict both; the same for putting back a failure nobody had marked.
+func TestOnlyAPressThatChangedSomethingIsAudited(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	pool := h.pool(inst, "linux")
+	done := time.Now().UTC().Add(-time.Minute)
+	started := done.Add(-2 * time.Minute)
+	failed, err := h.st.UpsertJob(h.ctx, &store.Job{
+		GitHubJobID: 7301, GitHubRunID: 57, Repo: "acme/widgets", Workflow: "CI", JobName: "build",
+		State: store.JobCompleted, Conclusion: "failure", InstallationID: inst.ID, PoolID: pool.ID,
+		QueuedAt: started.Add(-time.Minute), StartedAt: &started, CompletedAt: &done, RunAttempt: 1,
+	})
+	if err != nil {
+		t.Fatalf("UpsertJob failed: %v", err)
+	}
+	_, alice := h.user("alice", store.RoleOperator)
+	_, bob := h.user("bob", store.RoleOperator)
+	route := "/api/v1/jobs/" + failed.ID + "/acknowledge"
+	audited := func(action string) []string {
+		t.Helper()
+		rows, _, err := h.st.ListAudit(h.ctx, store.AuditFilter{Actions: []string{action}, TargetID: failed.ID}, store.Page{Limit: 10})
+		if err != nil {
+			t.Fatalf("ListAudit failed: %v", err)
+		}
+		var actors []string
+		for _, r := range rows {
+			actors = append(actors, r.ActorName)
+		}
+		return actors
+	}
+
+	h.do(request{method: "POST", path: route, cookie: alice}).mustStatus(t, 200, "alice marking the failure as known")
+	h.do(request{method: "POST", path: route, cookie: bob}).mustStatus(t, 200, "bob pressing the button on a failure already known")
+	if got := audited("job.acknowledged"); !slices.Equal(got, []string{"alice"}) {
+		t.Fatalf("acknowledgements audited for %v, want alice alone: bob changed nothing", got)
+	}
+
+	h.do(request{method: "DELETE", path: route, cookie: bob}).mustStatus(t, 200, "bob putting the failure back")
+	h.do(request{method: "DELETE", path: route, cookie: alice}).mustStatus(t, 200, "alice putting back a failure nobody had marked")
+	if got := audited("job.reopened"); !slices.Equal(got, []string{"bob"}) {
+		t.Fatalf("reopenings audited for %v, want bob alone: alice changed nothing", got)
+	}
+}
+
+// With authentication off every request is the development identity, whose name
+// is a placeholder rather than a person. The API documents acknowledged_by as
+// empty there, "where there is no account behind the action", and the drawer
+// falls back to "an operator" for an empty one; the placeholder in its place
+// had it say a person called auth-disabled looked at the failure. The timeline
+// takes the same fallback, so it does not name them either.
+func TestAcknowledgingWithAuthenticationOffNamesNobody(t *testing.T) {
+	h := newHarness(t, func(c *config.Config) { c.Security.DisableAuth = true })
+	inst := h.installation()
+	pool := h.pool(inst, "linux")
+	done := time.Now().UTC().Add(-time.Minute)
+	started := done.Add(-2 * time.Minute)
+	failed, err := h.st.UpsertJob(h.ctx, &store.Job{
+		GitHubJobID: 7401, GitHubRunID: 58, Repo: "acme/widgets", Workflow: "CI", JobName: "build",
+		State: store.JobCompleted, Conclusion: "failure", InstallationID: inst.ID, PoolID: pool.ID,
+		QueuedAt: started.Add(-time.Minute), StartedAt: &started, CompletedAt: &done, RunAttempt: 1,
+	})
+	if err != nil {
+		t.Fatalf("UpsertJob failed: %v", err)
+	}
+
+	resp := h.do(request{method: "POST", path: "/api/v1/jobs/" + failed.ID + "/acknowledge"})
+	resp.mustStatus(t, 200, "acknowledging with authentication off")
+	var out struct {
+		AcknowledgedAt string `json:"acknowledged_at"`
+		AcknowledgedBy string `json:"acknowledged_by"`
+	}
+	resp.into(t, &out)
+	if out.AcknowledgedAt == "" || out.AcknowledgedBy != "" {
+		t.Fatalf("acknowledged job = %+v, want the moment recorded and nobody named", out)
+	}
+
+	events := h.do(request{method: "GET", path: "/api/v1/jobs/" + failed.ID + "/events"})
+	events.mustStatus(t, 200, "reading the timeline")
+	if strings.Contains(string(events.body), "auth-disabled") || !strings.Contains(string(events.body), "an operator marked this failure as known") {
+		t.Fatalf("the timeline credits the placeholder, want \"an operator\": %s", events.body)
+	}
+}

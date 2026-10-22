@@ -26,67 +26,86 @@ func (c *Controller) CaptureOptimisationPreview(ctx context.Context, actor *stor
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	policy, err := check(ctx)
+	evidence, policy, err := c.readCheckoutEvidence(ctx, installation, repo, selection, check)
 	if err != nil {
 		return nil, err
 	}
+	collection := &OptimisationCheckoutProvenance{Version: evidence.Version, Basis: evidence.Basis, Selection: evidence.Selection, StepNumber: evidence.StepNumber, BlobSHA: evidence.BlobSHA, JobNameSHA256: evidence.JobNameSHA256, StepNameSHA256: evidence.StepNameSHA256, SourceFunding: "installation_github_read"}
+	return c.retainOptimisationPreview(ctx, actor, installation, repo, evidence.Source, evidence.Timing, review, policy, collection)
+}
+
+// readCheckoutEvidence is the admitted read shared by inspection and capture:
+// server policy before any source read, the installation's hold, the shared
+// diagnostic flight and quota reserve, the bounded read, and server policy again
+// before the caller keeps or shows anything. It never retains.
+func (c *Controller) readCheckoutEvidence(ctx context.Context, installation, repo string, selection github.CheckoutSelection, check OptimisationPolicyCheck) (*github.CheckoutEvidence, optimisation.Policy, error) {
+	none := optimisation.Policy{}
+	policy, err := check(ctx)
+	if err != nil {
+		return nil, none, err
+	}
 	if !policy.SourceAllowed || !policy.WorkflowEditsAllowed {
-		return nil, ErrOptimisationPreview
+		return nil, none, ErrOptimisationPolicy
 	}
 	inst, err := c.st.GetInstallation(ctx, installation)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	owner, name, kind := github.SplitTarget(repo)
 	if kind != store.TargetRepo || name == "" || !(inst.TargetType == store.TargetRepo && inst.Target == repo || inst.TargetType == store.TargetOrg && inst.Target == owner) {
-		return nil, ErrOptimisationPreview
+		return nil, none, ErrOptimisationPreview
 	}
 	if c.githubHeld(installation, c.Now()) {
-		return nil, github.ErrRateLimited
+		return nil, none, github.ErrRateLimited
 	}
 	client, err := c.ClientFor(ctx, installation)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	reader, ok := client.(github.CheckoutEvidenceReader)
 	if !ok {
-		return nil, ErrOptimisationPreview
+		return nil, none, ErrOptimisationPreview
 	}
 	release, err := c.admitPRDelay(installation)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	defer release()
 	quota, err := client.RateLimit(ctx)
 	if err != nil {
 		c.holdIfRateLimited(installation, err, c.Now(), "reading checkout preview quota")
-		return nil, err
+		return nil, none, err
 	}
 	if quota == nil || quota.Limit <= 0 || quota.Remaining < 0 || quota.Remaining > quota.Limit || quota.Remaining-github.CheckoutEvidenceMaximumRequests < quota.Limit/2+quota.Limit%2 {
 		retry := time.Minute
 		if quota != nil && quota.ResetAt.After(c.Now()) {
 			retry = quota.ResetAt.Sub(c.Now())
 		}
-		return nil, &PRDelayAdmissionError{RetryAfter: retry}
+		return nil, none, &PRDelayAdmissionError{RetryAfter: retry}
 	}
 	if c.githubHeld(installation, c.Now()) {
-		return nil, github.ErrRateLimited
+		return nil, none, github.ErrRateLimited
 	}
 	evidence, err := reader.ReadCheckoutEvidence(ctx, repo, selection)
 	if err != nil {
 		c.holdIfRateLimited(installation, err, c.Now(), "reading checkout preview evidence")
-		return nil, err
+		return nil, none, err
 	}
-	if !github.ValidCheckoutEvidence(evidence, repo, selection) {
-		return nil, ErrOptimisationPreview
+	// A Locate read returns the positions it found; everything else the caller
+	// named must come back exactly as named.
+	if evidence == nil {
+		return nil, none, ErrOptimisationPreview
+	}
+	resolved := evidence.Selection
+	if resolved.RunID != selection.RunID || resolved.Attempt != selection.Attempt || resolved.GitHubJobID != selection.GitHubJobID || resolved.Locate || !selection.Locate && (resolved.JobIndex != selection.JobIndex || resolved.StepIndex != selection.StepIndex) || !github.ValidCheckoutEvidence(evidence, repo, resolved) {
+		return nil, none, ErrOptimisationPreview
 	}
 	policy, err = check(ctx)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	if !policy.SourceAllowed || !policy.WorkflowEditsAllowed {
-		return nil, ErrOptimisationPreview
+		return nil, none, ErrOptimisationPolicy
 	}
-	collection := &OptimisationCheckoutProvenance{Version: evidence.Version, Basis: evidence.Basis, Selection: selection, StepNumber: evidence.StepNumber, BlobSHA: evidence.BlobSHA, JobNameSHA256: evidence.JobNameSHA256, StepNameSHA256: evidence.StepNameSHA256, SourceFunding: "installation_github_read"}
-	return c.retainOptimisationPreview(ctx, actor, installation, repo, evidence.Source, evidence.Timing, review, policy, collection)
+	return evidence, policy, nil
 }

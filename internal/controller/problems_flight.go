@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -15,7 +17,9 @@ import (
 // and a queue of several seconds each. There is deliberately no time-to-live: a
 // caller that arrives after a computation has finished starts a new one, so the
 // answer is never older than the moment it was asked for, and a test that
-// changes something and asks again sees the change.
+// changes something and asks again sees the change. The one exception is a single
+// section, the slower-job check, which keeps what it found for a minute (see
+// jobtrends.go).
 type problemsFlight struct {
 	mu     sync.Mutex
 	active *problemsCall
@@ -32,6 +36,11 @@ type problemsCall struct {
 // gives up.
 const problemsTimeout = 30 * time.Second
 
+// errProblemsPanicked is what the requests waiting on a computation that
+// panicked are told. The panic and its stack are in the log.
+var errProblemsPanicked = errors.New("the problems list could not be worked out because the controller hit an internal error; " +
+	"its log has the stack under \"" + detachedPanicMessage + "\"")
+
 // SharedProblems is Problems for callers that may overlap: the API handler and
 // the event stream. Callers that arrive while a computation is running wait for
 // it rather than starting another, and each gets its own copy of the list.
@@ -43,14 +52,28 @@ func (c *Controller) SharedProblems(ctx context.Context) ([]Problem, error) {
 		call = &problemsCall{done: make(chan struct{})}
 		f.active = call
 		go func() {
+			// However the computation ends, the requests waiting on it are
+			// released and the next one starts afresh. A call left registered
+			// would make every request after it wait for a result that is
+			// never coming.
+			defer func() {
+				f.mu.Lock()
+				f.active = nil
+				f.mu.Unlock()
+				close(call.done)
+			}()
+			// Recovered here and not by recoverDetached, because the requests
+			// waiting are owed an error and not an empty list.
+			defer func() {
+				if r := recover(); r != nil {
+					c.reportDetachedPanic("problems-list", r, debug.Stack())
+					call.items, call.err = nil, errProblemsPanicked
+				}
+			}()
 			// Detached from the caller's cancellation but not from its values.
 			run, cancel := context.WithTimeout(context.WithoutCancel(ctx), problemsTimeout)
 			defer cancel()
 			call.items, call.err = c.Problems(run)
-			f.mu.Lock()
-			f.active = nil
-			f.mu.Unlock()
-			close(call.done)
 		}()
 	}
 	f.mu.Unlock()
