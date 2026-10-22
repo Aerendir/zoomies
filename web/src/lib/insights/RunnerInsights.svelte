@@ -11,7 +11,17 @@
   import { poolSignals, finite, queueTone } from './signals';
   import { formatNumber, NO_VALUE } from '$lib/format';
   import { runnerStatus } from '$lib/status';
-  let { poolId = '', compact = false }: { poolId?: string; compact?: boolean } = $props();
+  /**
+   * `lean` is the Runners page: the question there is "what are my runners
+   * doing", and the grid answers it, so the page opens with the provisioning
+   * strip and keeps the six tiles' figures (which the Overview and Queue pages
+   * carry) and the lifecycle explanation behind a disclosure.
+   */
+  let {
+    poolId = '',
+    compact = false,
+    lean = false,
+  }: { poolId?: string; compact?: boolean; lean?: boolean } = $props();
   const signal = $derived(poolSignals(fleet.pools, fleet.stats).find((p) => p.pool.id === poolId));
   const r = $derived(fleet.stats?.runners);
   const queue = $derived(poolId ? signal?.queued : finite(fleet.stats?.fleet?.queued_jobs));
@@ -162,23 +172,46 @@
       >Explore usage history</a
     >
   </div>
-  {#if !fleet.stats}<Skeleton lines={3} />{:else}<MetricGrid items={metrics} />{/if}
-  <ProvisioningPulse {poolId} />
-  {#if !compact && fleet.stats}<ChartPanel
-      title="Runner lifecycle"
-      description={poolId
-        ? 'How this pool\u2019s live runners divide up right now. Failed and removed records are excluded from this bar.'
-        : 'The states a runner passes through, in the order the controller allows, with how many are at each step right now. Failed and removed records are excluded from the bar.'}
-    >
-      {#if !poolId && r}<LifecycleFlow runners={r} />{/if}
-      <StateBreakdown {segments} label="Live runner states" noun="live runners" />
-    </ChartPanel>{/if}
-  <p class="note">
-    Job queue depth is waiting GitHub work, including jobs whose provisioning demand is held; it is
-    not a count of runner creation requests.
-    {#if compact}These figures describe the whole pool.{:else}Search, host and state filters below
-      do not change this {poolId ? 'pool' : 'fleet'} context.{/if}
-  </p>
+  {#if lean}
+    <ProvisioningPulse {poolId} />
+    {#if fleet.stats}
+      <details class="how">
+        <summary>How runners move through their states</summary>
+        <ChartPanel
+          title="Runner lifecycle"
+          description={poolId
+            ? 'How this pool\u2019s live runners divide up right now. Failed and removed records are excluded from this bar.'
+            : 'The states a runner passes through, in the order the controller allows, with how many are at each step right now. Failed and removed records are excluded from the bar.'}
+        >
+          {#if !poolId && r}<LifecycleFlow runners={r} />{/if}
+          <StateBreakdown {segments} label="Live runner states" noun="live runners" />
+        </ChartPanel>
+        <p class="note">
+          Job queue depth is waiting GitHub work, including jobs whose provisioning demand is held;
+          it is not a count of runner creation requests. Search, host and state filters below do not
+          change this {poolId ? 'pool' : 'fleet'} context.
+        </p>
+      </details>
+    {/if}
+  {:else}
+    {#if !fleet.stats}<Skeleton lines={3} />{:else}<MetricGrid items={metrics} />{/if}
+    <ProvisioningPulse {poolId} />
+    {#if !compact && fleet.stats}<ChartPanel
+        title="Runner lifecycle"
+        description={poolId
+          ? 'How this pool\u2019s live runners divide up right now. Failed and removed records are excluded from this bar.'
+          : 'The states a runner passes through, in the order the controller allows, with how many are at each step right now. Failed and removed records are excluded from the bar.'}
+      >
+        {#if !poolId && r}<LifecycleFlow runners={r} />{/if}
+        <StateBreakdown {segments} label="Live runner states" noun="live runners" />
+      </ChartPanel>{/if}
+    <p class="note">
+      Job queue depth is waiting GitHub work, including jobs whose provisioning demand is held; it
+      is not a count of runner creation requests.
+      {#if compact}These figures describe the whole pool.{:else}Search, host and state filters below
+        do not change this {poolId ? 'pool' : 'fleet'} context.{/if}
+    </p>
+  {/if}
 </section>
 
 <style>
@@ -196,6 +229,21 @@
   }
   a {
     color: var(--z-accent);
+  }
+  .how {
+    margin: var(--z-space-3) 0 0;
+  }
+  .how summary {
+    padding: var(--z-space-3);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-lg);
+    background: var(--z-surface);
+    color: var(--z-accent);
+    font-size: var(--z-text-sm);
+    cursor: pointer;
+  }
+  .how[open] summary {
+    margin-bottom: var(--z-space-3);
   }
   .note {
     font-size: var(--z-text-xs);
