@@ -190,16 +190,6 @@ jobs:
                   linked = os.path.normpath(folder + target.split("#")[0])
                   assert linked.startswith(folder) and os.path.isfile(linked), skill["name"] + " links to " + target + ", which is not published beside its SKILL.md"
 
-          # A .json name, because Pages types a file by its extension and
-          # RFC 9728 requires application/json; the edge worker serves it at
-          # the extensionless well-known address.
-          prm = load(".well-known/oauth-protected-resource.json")
-          assert prm["resource"].startswith("https://zoomies.sh"), prm["resource"]
-          assert prm["authorization_servers"] == ["https://portal.zoomies.sh"]
-          assert prm["bearer_methods_supported"] == ["header"]
-          assert prm["agent_auth"]["skill"].startswith("https://portal.zoomies.sh")
-          assert prm["agent_auth"]["register_uri"].endswith("/oauth/register")
-          assert prm["agent_auth"]["identity_types_supported"] == []
           for name in ("ai-catalog.json", "poppy.json", "api-catalog.json"):
               load(".well-known/" + name) if name != "api-catalog.json" else load(name)
           catalog = load(".well-known/ai-catalog.json")

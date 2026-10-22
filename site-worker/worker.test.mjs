@@ -1,8 +1,8 @@
 // The negotiation rules and the handler's decisions, against an in-memory
-// asset binding. The Markdown copies, the catalog and the identity documents
-// the worker serves are written by hooks/seo.py, so a change to their address
-// or their shape fails here rather than at the edge. Plain node:test, so no
-// dependency beyond the binary runs it.
+// asset binding. The Markdown copies and the catalog the worker serves are
+// written by hooks/seo.py, so a change to their address or their shape fails
+// here rather than at the edge. Plain node:test, so no dependency beyond the
+// binary runs it.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -56,10 +56,10 @@ function originFor(paths, seen = []) {
   };
 }
 
-// The asset binding: what the deployment shipped. The same map the mirror
-// tests use for other hosts, keyed by pathname; a path with no asset answers
-// the not-found page the assets pipeline serves, at 404. Every ask is pushed
-// into `seen` like a fetch, so a test can say what the worker went to.
+// The asset binding: what the deployment shipped, keyed by pathname; a path
+// with no asset answers the not-found page the assets pipeline serves, at 404.
+// Every ask is pushed into `seen` like a fetch, so a test can say what the
+// worker went to.
 function assetsFor(paths, seen = []) {
   return {
     ASSETS: {
@@ -512,237 +512,20 @@ test("a HEAD request for the api-catalog answers with headers and no body", asyn
   assert.equal(await response.text(), "");
 });
 
-test("the identity provider's discovery document is mirrored from the portal", async () => {
-  const discovery = JSON.stringify({
-    issuer: "https://portal.zoomies.sh",
-    authorization_endpoint: "https://portal.zoomies.sh/authorize",
-    token_endpoint: "https://portal.zoomies.sh/token",
-    jwks_uri: "https://portal.zoomies.sh/jwks.json",
-    grant_types_supported: ["authorization_code"],
-    response_types_supported: ["code"],
-  });
-  const response = await handle(
-    "https://zoomies.sh/.well-known/openid-configuration",
-    new Map([
-      ["portal.zoomies.sh/.well-known/openid-configuration", { type: "application/json", body: discovery }],
-    ]),
-    { headers: { accept: "application/json" } },
-  );
-
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "application/json");
-  assert.equal(await response.text(), discovery);
-});
-
-test("the authorization-server address serves the provider's own metadata document", async () => {
-  const asDoc = JSON.stringify({
-    issuer: "https://portal.zoomies.sh",
-    token_endpoint: "https://portal.zoomies.sh/oauth/token",
-    agent_auth: { skill: "https://portal.zoomies.sh/auth.md", register_uri: "https://portal.zoomies.sh/oauth/register" },
-  });
-  const response = await handle(
-    "https://zoomies.sh/.well-known/oauth-authorization-server",
-    new Map([
-      ["portal.zoomies.sh/.well-known/oauth-authorization-server", { type: "application/json", body: asDoc }],
-    ]),
-    {},
-  );
-
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "application/json");
-  const served = JSON.parse(await response.text());
-  assert.notEqual(served.agent_auth, undefined);
-  assert.equal(served.token_endpoint, "https://portal.zoomies.sh/oauth/token");
-});
-
-test("a HEAD request for the discovery document answers with no body", async () => {
-  const discovery = '{"issuer": "https://portal.zoomies.sh"}';
-  const response = await handle(
-    "https://zoomies.sh/.well-known/openid-configuration",
-    new Map([
-      ["portal.zoomies.sh/.well-known/openid-configuration", { type: "application/json", body: discovery }],
-    ]),
-    { method: "HEAD" },
-  );
-
-  assert.equal(response.status, 200);
-  assert.equal(await response.text(), "");
-});
-
-test("when the provider has no such document, the origin's answer stands", async () => {
-  const response = await handle(
-    "https://zoomies.sh/.well-known/openid-configuration",
-    new Map([
-      [
-        "portal.zoomies.sh/.well-known/openid-configuration",
-        { status: 404, type: "application/json", body: '{"error":"not_found"}' },
-      ],
-    ]),
-    {},
-  );
-
-  assert.equal(response.status, 404);
-  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
-  assert.equal(await response.text(), HTML);
-});
-
-// A provider that cannot answer is not a provider with nothing to say. The
-// origin's own 404 for these addresses is cached for hours, so mistaking an
-// outage for an absence would tell every client that this domain has no OAuth
-// metadata, long after the portal came back.
-const MIRRORED = [
-  "/.well-known/openid-configuration",
-  "/.well-known/oauth-authorization-server",
-];
-const PROVIDER_DOWN = [
-  ["a refused connection", { respond: () => Promise.reject(new TypeError("fetch failed")) }],
-  // Only a 404 means "no such document". A provider that refuses this site's
-  // request (a firewall's 403, say) is a provider to fix, not an absence.
-  ["a 403", { status: 403, type: "text/html", body: "<h1>forbidden</h1>" }],
-  ["a 429", { status: 429, type: "text/plain", body: "slow down" }],
-  ["a 500", { status: 500, type: "text/plain", body: "oops" }],
-  ["a 502", { status: 502, type: "text/html", body: "<h1>bad gateway</h1>" }],
-  ["a 503", { status: 503, type: "text/plain", body: "busy" }],
-  ["a 504", { status: 504, type: "text/plain", body: "slow" }],
-];
-
-for (const address of MIRRORED) {
-  for (const [what, upstream] of PROVIDER_DOWN) {
-    test(`${what} from the provider is answered as unavailable and never cached (${address})`, async () => {
-      const response = await handle(
-        `https://zoomies.sh${address}`,
-        new Map([[`portal.zoomies.sh${address}`, upstream]]),
-        {},
-      );
-
-      assert.equal(response.status, 502);
-      assert.equal(response.headers.get("cache-control"), "no-store");
-      assert.match(response.headers.get("content-type"), /^text\/plain/);
-      assert.match(await response.text(), /portal\.zoomies\.sh/);
-    });
+test("the site serves no authorization-server or resource metadata of its own", async () => {
+  // The site is documentation. A deployment's identity documents live at the
+  // deployment's address, and the site declares no authorization server.
+  for (const path of [
+    "/.well-known/openid-configuration",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource",
+  ]) {
+    const response = await handle("https://zoomies.sh" + path, new Map([]), {});
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
   }
-}
-
-test("a HEAD request for a discovery document the provider cannot serve gets the same refusal", async () => {
-  const response = await handle(
-    "https://zoomies.sh/.well-known/openid-configuration",
-    new Map([
-      [
-        "portal.zoomies.sh/.well-known/openid-configuration",
-        { status: 503, type: "text/plain", body: "busy" },
-      ],
-    ]),
-    { method: "HEAD" },
-  );
-
-  assert.equal(response.status, 502);
-  assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.equal(await response.text(), "");
 });
 
-test("a provider that does not answer in time is reported, not waited for", async () => {
-  // The real timer runs for seconds. The test hands the worker a signal it can
-  // fire at once, and records what the worker asked for.
-  const timer = new AbortController();
-  const asked = [];
-  const previous = AbortSignal.timeout;
-  AbortSignal.timeout = (ms) => {
-    asked.push(ms);
-    return timer.signal;
-  };
-  let passed;
-  try {
-    const response = await handle(
-      "https://zoomies.sh/.well-known/oauth-authorization-server",
-      new Map([
-        [
-          "portal.zoomies.sh/.well-known/oauth-authorization-server",
-          {
-            // Never answers; settles only when the signal gives up on it.
-            respond: (init) =>
-              new Promise((_, reject) => {
-                passed = init.signal;
-                init.signal.addEventListener("abort", () => reject(init.signal.reason));
-                timer.abort(new DOMException("The operation timed out.", "TimeoutError"));
-              }),
-          },
-        ],
-      ]),
-      {},
-    );
-
-    assert.equal(response.status, 502);
-    assert.equal(response.headers.get("cache-control"), "no-store");
-  } finally {
-    AbortSignal.timeout = previous;
-  }
-  assert.equal(passed, timer.signal, "the worker did not pass its timeout to the fetch");
-  assert.equal(asked.length, 1);
-  assert.ok(asked[0] > 0 && asked[0] <= 10_000, `${asked[0]} ms is not a few seconds`);
-});
-
-const PRM = JSON.stringify({
-  resource: "https://portal.zoomies.sh/api/admin/mcp",
-  authorization_servers: ["https://portal.zoomies.sh"],
-  scopes_supported: ["mcp:read"],
-  bearer_methods_supported: ["header"],
-  agent_auth: { skill: "https://portal.zoomies.sh/auth.md", register_uri: "https://portal.zoomies.sh/oauth/register" },
-});
-
-// RFC 9728 asks for application/json, and GitHub Pages types a file by its
-// extension: the extensionless file this document used to be was served as
-// application/octet-stream. The build now writes it as a .json file, and the
-// worker serves it at the well-known address with the type the RFC asks for,
-// whatever type the origin gave the file.
-for (const [what, originType] of [
-  ["JSON", "application/json; charset=utf-8"],
-  ["opaque bytes", "application/octet-stream"],
-]) {
-  test(`the resource metadata is served at its well-known address as JSON when the origin types the file as ${what}`, async () => {
-    const response = await handle(
-      "https://zoomies.sh/.well-known/oauth-protected-resource",
-      new Map([
-        // The old build's extensionless file, typed as Pages typed it.
-        ["/.well-known/oauth-protected-resource", { type: "application/octet-stream", body: "stale" }],
-        ["/.well-known/oauth-protected-resource.json", { type: originType, body: PRM }],
-      ]),
-      { headers: { accept: "application/json" } },
-    );
-
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("content-type"), "application/json");
-    assert.equal(await response.text(), PRM);
-  });
-}
-
-test("a HEAD request for the resource metadata answers with the type and no body", async () => {
-  const response = await handle(
-    "https://zoomies.sh/.well-known/oauth-protected-resource",
-    new Map([
-      ["/.well-known/oauth-protected-resource.json", { type: "application/octet-stream", body: PRM }],
-    ]),
-    { method: "HEAD" },
-  );
-
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "application/json");
-  assert.equal(await response.text(), "");
-});
-
-test("without the generated file the origin's own answer for the well-known address stands", async () => {
-  const response = await handle(
-    "https://zoomies.sh/.well-known/oauth-protected-resource",
-    new Map([]),
-    {},
-  );
-
-  assert.equal(response.status, 404);
-  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
-});
-
-// GitHub Pages sets none of these, so the worker is the only place they can
-// come from. A page, the origin's own 404 and a Markdown copy all need them: a
-// browser can be sent to any of the three.
 test("every kind of answer carries the browser-hardening headers", async () => {
   const origin = new Map([
     ["/quickstart/", { type: "text/html; charset=utf-8", body: HTML }],

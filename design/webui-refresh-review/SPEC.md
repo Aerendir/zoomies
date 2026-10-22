@@ -159,26 +159,26 @@ starting again.
 ## Direction chosen after pack 1 (21 October 2026)
 
 The owner did not like the three concepts per page and pointed at
-portal.zoomies.sh as the look to follow. That look is now implemented on the
+the console's look as the one to follow. That look is now implemented on the
 pages before sign in (the pull request that carries this folder), and it is the
 approach for the signed-in pages. What changes in this specification:
 
-* **One concept per page, not three.** The portal's look is the concept. Each
+* **One concept per page, not three.** The console's look is the concept. Each
   signed-in page gets a mock in it, beside a capture of the page today, so the
-  review page's concept control offers Current and Portal.
+  review page's concept control offers Current and Console.
 * **One pack for every signed-in page**, in `signed-in/`, not four. There is
   nothing left to choose between, so there is nothing to review in batches. The
   pages are the ones in the table under "Rolling on", and the Overview, Eli
   repairs and Kennel Club mocks say what changed since their own reviews.
-* **What the look is**, taken from the portal's pages and the implemented public
+* **What the look is**, taken from the console's pages and the implemented public
   frame: a rounded Zoomies Black stage with the dog where a page has one thing to
   say; large, calm headings with a small eyebrow above; rounded cards on a quiet
   ground with a tinted tile for the icon; status as a pill with a dot, never
   colour alone; mono for what is technical; outlined numerals for steps; a
   sidebar that names where you are. Spacious where a page is a summary, dense
   where it is a grid: a table stays a table and scrolls inside its own card.
-* **Where a mock departs from the portal**, it says why in the README, because
-  an operator's grid has to hold a hundred rows and the portal's pages hold six.
+* **Where a mock departs from the console**, it says why in the README, because
+  an operator's grid has to hold a hundred rows and the console's pages hold six.
 * The constraints, the checks and the "Not claimed" list above are unchanged.
 
 ## Out of scope

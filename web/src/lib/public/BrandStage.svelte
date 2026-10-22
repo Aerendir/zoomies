@@ -12,7 +12,7 @@
   gets a smaller dog and not a different layout.
 
   A page with nothing to do beside it, like the status page, uses it wide: the
-  words on the left and the dog on the right, as the portal's pricing page does,
+  words on the left and the dog on the right, as the page that quotes a price does,
   and the headline is that page's h1.
 -->
 <script lang="ts">
@@ -28,7 +28,7 @@
      * the stage never wraps it for you.
      */
     headline: string | readonly string[];
-    /** A line of the headline drawn in the brand's runner blue, as the portal's hero does. */
+    /** A line of the headline drawn in the brand's runner blue, as the hero does. */
     accent?: string;
     /** The sentence under the rule. Dropped on a phone, where the form is the point. */
     lede?: string;

@@ -1,9 +1,7 @@
 <!-- Copy: served verbatim at https://zoomies.sh/auth.md by hooks/seo.py. It
      describes what a person, or an agent acting for one, can pass at a Zoomies
-     deployment and at the hosted service's identity. Keep it true to
-     internal/api and internal/auth (the fleet's half) and to the portal's
-     discovery documents (the hosted half), and check both when something here
-     names a scope or an endpoint. -->
+     deployment. Keep it true to internal/api and internal/auth, and check both
+     when something here names a scope or an endpoint. -->
 
 # auth.md
 
@@ -13,26 +11,23 @@ account to begin with.
 ## Flows
 
 - **Consent first**: every credential an agent gets here was approved by a
-  person, on a page. The hosted service's page is described in the walkthrough
-  below. A self-hosted controller's is its ordinary sign-in, which asks for a
-  second factor only of an account that has two-step verification turned on
-  (or where the instance requires it) and never of a single-sign-on account,
-  whose provider owns that step. Registering a client takes no sign-in on
-  either half, but a registered client holds no credential until a person
+  person, on a page. A controller's consent page is its ordinary sign-in,
+  which asks for a second factor only of an account that has two-step
+  verification turned on (or where the instance requires it) and never of a
+  single-sign-on account, whose provider owns that step. Registering a client
+  takes no sign-in, but a registered client holds no credential until a person
   approves it, so no credential is self-issued or anonymous.
-- **Agent as an OAuth client** (the hosted service's staff console, and the
-  self-hosted controller's MCP): dynamic client registration, an
-  authorization-code flow with PKCE, a consent page between the request and
-  the grant. The full walk is in [Registration](#registration-a-complete-flow).
-- **API tokens** (the self-hosted REST interface): a bearer token that anybody
-  signed in creates for themselves, with a role no higher than their own,
-  optionally narrowed by scopes and optionally expiring.
+- **Agent as an OAuth client** (the controller's MCP): dynamic client
+  registration, an authorization-code flow with PKCE, a consent page between
+  the request and the grant. The full walk is in
+  [Registration](#registration-a-complete-flow).
+- **API tokens** (the REST interface): a bearer token that anybody signed in
+  creates for themselves, with a role no higher than their own, optionally
+  narrowed by scopes and optionally expiring.
 - In the auth.md vocabulary: `identity_assertion` and its ID-JAG and
   verified-email forms are not enabled, `anonymous` is not enabled, and
-  `service_auth` is replaced by the consent ceremony above. The
-  `identity_types_supported` list is empty in both documents that carry it,
-  and nothing here issues a credential an agent can claim without its
-  person's own decision.
+  `service_auth` is replaced by the consent ceremony above. Nothing here
+  issues a credential an agent can claim without its person's own decision.
 
 ## What needs no credentials
 
@@ -54,58 +49,55 @@ There are two of them, and both are documented in full:
   tools an agent calls to ask about and, where the person confirms, act on the
   fleet. For details see [connecting an agent](https://zoomies.sh/connect-claude/).
 
-The hosted service (the portal that operates instances for a team) runs the
-one identity the site can name: an OpenID-style provider at
-`https://portal.zoomies.sh`, whose discovery documents this site mirrors at
-its own addresses. The walkthrough below registers an agent against it.
+The controller is its own authorization server and resource server. The
+walkthrough below uses `https://<your controller>` for the deployment's
+address; the [public demo](https://demo.zoomies.sh/) serves the whole chain
+live.
 
 ## Scopes
 
-- `mcp:read`: read the fleet the way a viewer may. What the hosted service's
-  staff console issues; the staff member's own role at the portal caps every
-  call.
-- `mcp:operate`: on a self-hosted controller, what an operator may change,
-  implying `mcp:read`.
+- `mcp:read`: read the fleet the way a viewer may.
+- `mcp:operate`: what an operator may change, implying `mcp:read`.
 - The REST interface's tokens may carry scopes, written `resource:verb` (for
   example `hosts:read`, or `pools:*` for every verb on pools). A scope only
   narrows the token's role; with none, a token has whatever its role allows.
 
 ## Registration: a complete flow
 
-The portal registers agents as OAuth clients, and the person who will be
-acting decides on the portal's page before the client can do anything. An
-agent that wants its own way in must walk the person through it; there is no
-self-issued credential.
+The controller registers agents as OAuth clients, and the person who will be
+acting decides on the controller's consent page before the client can do
+anything. An agent that wants its own way in must walk the person through it;
+there is no self-issued credential.
+
+Dynamic client registration is part of the metadata while the deployment's
+`security.mcp_open_registration` setting is on, and the default is on; an
+operator who turns it off adds the MCP client by hand first.
 
 1. **Discover** (two hops):
 
    ```
-   GET https://zoomies.sh/.well-known/oauth-protected-resource
+   GET https://<your controller>/.well-known/oauth-protected-resource/mcp
    ```
 
    ```json
-   {"resource": "https://zoomies.sh/",
-    "authorization_servers": ["https://portal.zoomies.sh"],
-    "scopes_supported": ["mcp:read"], "bearer_methods_supported": ["header"],
-    "resource_documentation": "https://zoomies.sh/auth.md",
-    "agent_auth": {"skill": "https://portal.zoomies.sh/auth.md",
-                   "register_uri": "https://portal.zoomies.sh/oauth/register",
-                   "registration_methods": [{"type": "dynamic_client_registration",
-                                             "grant_types": ["authorization_code", "refresh_token"],
-                                             "consent": "a staff member approves the connection, after the second factor"}],
-                   "identity_types_supported": []}}
+   {"resource": "https://<your controller>/mcp",
+    "authorization_servers": ["https://<your controller>"],
+    "scopes_supported": ["mcp:read", "mcp:operate"],
+    "bearer_methods_supported": ["header"],
+    "resource_name": "Zoomies",
+    "resource_documentation": "https://zoomies.sh/connect-claude/"}
    ```
 
-   The `agent_auth` block names the hosted service's own copy of this
-   walkthrough and its registration endpoint. The provider's two discovery
-   documents are mirrored here from its own addresses (the same bytes);
-   the resource metadata is this site's own, because the resource is the
-   site's to declare.
+   The controller is the authorization server in that answer. It publishes
+   OAuth authorization-server metadata at
+   `https://<your controller>/.well-known/oauth-authorization-server`. It
+   issues no ID tokens and publishes no signing keys, so it has no OpenID
+   Connect discovery document.
 
 2. **Register the client** (dynamic client registration, RFC 7591):
 
    ```http
-   POST https://portal.zoomies.sh/oauth/register
+   POST https://<your controller>/oauth/register
    Content-Type: application/json
 
    {"client_name": "the agent's name",
@@ -124,28 +116,32 @@ self-issued credential.
    Clients are public: no secret is sent anywhere, and PKCE (S256) binds
    every code to the client that asked. `invalid_client_metadata`,
    `invalid_redirect_uri` and `too_many_requests` arrive in RFC 7591's shape.
+   While registration is off, the operator adds the client first and the same
+   request answers 403.
 
 3. **Ask for a sign-in, and the person decides**:
 
    ```http
-   GET https://portal.zoomies.sh/oauth/authorize?response_type=code
+   GET https://<your controller>/oauth/authorize?response_type=code
        &client_id=<id>&redirect_uri=<uri>&state=<state>
        &code_challenge=<s256 challenge>&code_challenge_method=S256
    ```
 
-   The portal redirects a browser to its consent page. The staff member signs
-   in to the portal (password and a second factor, or a passkey), reads what
+   The controller redirects a browser to its consent page. The person signs
+   in with the deployment's own sign-in (password and a second factor where
+   the account or the instance asks for one, or single sign-on), reads what
    the client named and what the connection may see, and approves. An
    approval returns to the client's address with `code`; a denial is
    `error=access_denied`. This page is the whole security decision, and it is
-   the part the portal does not offer to automation: no anonymous or
+   the part the controller does not offer to automation: no anonymous or
    self-issued registration exists, because a token here acts as one named
-   person, and that person consents with the second factor behind them.
+   person, and that person consents with the second factor behind them where
+   one applies.
 
 4. **Exchange**:
 
    ```http
-   POST https://portal.zoomies.sh/oauth/token
+   POST https://<your controller>/oauth/token
    Content-Type: application/x-www-form-urlencoded
 
    grant_type=authorization_code&code=<code>&client_id=<id>
@@ -161,30 +157,15 @@ self-issued credential.
    step 3. Refresh (`grant_type=refresh_token`) returns a new pair and
    retires the old.
 
-5. **Act, and end it**: `POST https://portal.zoomies.sh/api/admin/mcp`, Bearer
-   in hand, every call audited under the staff member's name. Revoke at
-   `https://portal.zoomies.sh/oauth/revoke` (RFC 7009); the staff member can
-   also end the connection from their own account, which stops the token at
-   once. A 401 from the endpoint carries the discovery pointer in its
+5. **Act, and end it**: `POST https://<your controller>/mcp`, Bearer in hand,
+   every call audited under the person's name. Revoke at
+   `https://<your controller>/oauth/revoke` (RFC 7009); the person can also
+   end the connection from their own account, which stops the token at once.
+   A 401 from the endpoint carries the discovery pointer in its
    `WWW-Authenticate` header, so a closed door still shows where the lock is.
 
-### On a self-hosted controller
-
-The same shape, at the deployment's own address, and no mirror: the
-controller is its own authorization server and resource server. The scope
-names differ (`mcp:read`, `mcp:operate`), and dynamic client registration is
-part of the metadata only while the deployment's
-`security.mcp_open_registration` setting is on; the default is on, and an
-operator who turns it off adds the MCP client by hand first. The
-[public demo](https://demo.zoomies.sh/) serves the whole chain live:
-
-```
-curl -s https://demo.zoomies.sh/.well-known/oauth-protected-resource
-curl -s https://demo.zoomies.sh/.well-known/oauth-authorization-server
-```
-
-[The connection walkthrough](https://zoomies.sh/connect-claude/) does the
-same walk by hand, one screen at a time.
+[The connection walkthrough](https://zoomies.sh/connect-claude/) does the same
+walk by hand, one screen at a time.
 
 ## Credentials for the REST interface
 

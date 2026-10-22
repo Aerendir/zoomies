@@ -176,97 +176,13 @@ async function apiCatalogResponse(url, env) {
   return new Response(body, { status: source.status, headers });
 }
 
-// The site's own protected-resource metadata (RFC 9728) at its well-known
-// address, for the same reason as the catalog above: the assets store it as a
-// .json file and a file without the extension would be typed
-// application/octet-stream, where the RFC requires application/json.
-async function protectedResourceResponse(url, env) {
-  const source = await env.ASSETS.fetch(new URL("/.well-known/oauth-protected-resource.json", url.origin));
-  if (!source.ok) {
-    return null;
-  }
-  const body = await source.text();
-  const headers = new Headers(source.headers);
-  headers.set("content-type", "application/json");
-  return new Response(body, { status: source.status, headers });
-}
-
-// The identity documents this site can back truthfully are the hosted
-// service's own: the portal runs an OpenID Provider whose discovery names a
-// real issuer, real endpoints and signing keys, and its authorization-server
-// metadata carries the agent_auth block. The mirrors serve each document at
-// the site's address for it, exactly as the portal serves it, refetched on
-// every request, so a rotation or an added block can never leave a stale copy
-// here. Where discovery "should" live is the issuer's own well-known address,
-// and the documents say that is where they live: a mirror changes nothing
-// inside their bytes, and a client that insists on fetching at the issuer
-// itself is pointed there by everything in them. The resource's own metadata
-// is not mirrored: it is the site's to declare, hooks/seo.py writes it, and
-// protectedResourceResponse serves it.
-const ISSUER_ORIGIN = "https://portal.zoomies.sh";
-const MIRRORS = [
-  { from: "/.well-known/openid-configuration",
-    at: ["/.well-known/openid-configuration"] },
-  { from: "/.well-known/oauth-authorization-server",
-    at: ["/.well-known/oauth-authorization-server"] },
-];
-
-// How long the provider has to answer. The documents are small and nearly
-// static, so one that has not arrived in this long is not coming, and a client
-// waiting on discovery is better told so than held until the platform gives up.
-const MIRROR_TIMEOUT_MS = 5000;
-
-// What a client is told when the provider cannot be asked. It is not the
-// origin's 404: that says this site has no such document and is cached for
-// hours, so an outage at the provider would read as an absence long after the
-// provider came back.
-function providerUnavailable() {
-  return new Response(
-    "The identity provider at portal.zoomies.sh is not serving this document " +
-      "right now. Nothing was cached, so try again in a minute.\n",
-    {
-      status: 502,
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
-        "cache-control": "no-store",
-      },
-    },
-  );
-}
-
-// The provider's document, null where the provider says it has none (the
-// origin's answer then stands), or a 502 where it could not be asked or did not
-// answer well: a refused connection, a timeout, a 429 or a 5xx.
-async function mirrorResponse(from) {
-  let upstream;
-  let body;
-  try {
-    upstream = await fetch(new URL(from, ISSUER_ORIGIN), {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(MIRROR_TIMEOUT_MS),
-    });
-    if (upstream.status === 404) {
-      return null;
-    }
-    if (!upstream.ok) {
-      return providerUnavailable();
-    }
-    body = await upstream.text();
-  } catch {
-    return providerUnavailable();
-  }
-  const headers = new Headers(upstream.headers);
-  headers.set("content-type", "application/json");
-  return new Response(body, { status: upstream.status, headers });
-}
-
 // GitHub Pages cannot set response headers, so the browser-hardening set is
 // added here, on every answer the zone gives: pages, the origin's own 404,
-// the Markdown copies and the mirrored identity documents.
+// the Markdown copies.
 //
 // HSTS is deliberately one year with no includeSubDomains and no preload.
-// Preload is close to irreversible and would bind portal.zoomies.sh and
-// demo.zoomies.sh to HTTPS-only for years; that is the owner's decision to
+// Preload is close to irreversible and would bind every name in this zone,
+// the demo's included, to HTTPS-only for years; that is the owner's decision to
 // take, not a default to ship quietly.
 //
 // The policy allows 'unsafe-inline' for scripts and styles because the theme
@@ -321,23 +237,10 @@ function withSecurityHeaders(response) {
 async function route(request, env) {
   if (request.method === "GET" || request.method === "HEAD") {
     const url = new URL(request.url);
-    const mirror = MIRRORS.find((m) => m.at.includes(url.pathname));
-    if (mirror) {
-      const mirrored = await mirrorResponse(mirror.from);
-      if (mirrored !== null) {
-        return request.method === "HEAD" ? new Response(null, mirrored) : mirrored;
-      }
-    }
     if (url.pathname === "/.well-known/api-catalog" || url.pathname === "/.well-known/api-catalog/") {
       const catalog = await apiCatalogResponse(url, env);
       if (catalog !== null) {
         return request.method === "HEAD" ? new Response(null, catalog) : catalog;
-      }
-    }
-    if (url.pathname === "/.well-known/oauth-protected-resource") {
-      const resource = await protectedResourceResponse(url, env);
-      if (resource !== null) {
-        return request.method === "HEAD" ? new Response(null, resource) : resource;
       }
     }
     if (wantsMarkdown(request.headers.get("accept"))) {
