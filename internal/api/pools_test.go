@@ -161,6 +161,8 @@ func TestPoolValidationNamesTheField(t *testing.T) {
 		{"bad duration", func(b map[string]any) { b["idle_timeout"] = "5 munutes" }, "idle_timeout", "5m"},
 		{"unknown installation", func(b map[string]any) { b["installation_id"] = "ins_nope" }, "installation_id", "no installation"},
 		{"docker on the process backend", func(b map[string]any) { b["backend"] = "process"; b["docker_mode"] = "dind" }, "docker_mode", "process backend"},
+		{"a sidecar image on a pool with no sidecar", func(b map[string]any) { b["docker_mode"] = "none"; b["dind_image"] = "registry.example.com/dind:27" }, "dind_image", "docker_mode to dind"},
+		{"a sidecar image with a space in it", func(b map[string]any) { b["docker_mode"] = "dind"; b["dind_image"] = "registry.example.com/dind 27" }, "dind_image", "whitespace"},
 		{"repository cache without a repository", func(b map[string]any) {
 			b["cache"] = map[string]any{"enabled": true, "scope": "repository"}
 		}, "cache.repository", "acme/name"},
@@ -1711,4 +1713,35 @@ func TestADockerInDockerPoolKeepsItsImageStoreInMemory(t *testing.T) {
 	edit := h.do(request{method: http.MethodPatch, path: "/api/v1/pools/" + got.ID, cookie: cookie,
 		body: map[string]any{"docker_mode": "none"}})
 	edit.mustStatus(t, http.StatusUnprocessableEntity, "drop the sidecar under the image store")
+}
+
+// An operator names a pool's sidecar image through the API and gets it back, and
+// an edit that sends it empty hands the pool back to the host's image. The
+// pool has to be a dind pool for there to be a sidecar to name.
+func TestAPoolsSidecarImageIsSetReadBackAndCleared(t *testing.T) {
+	h := newHarness(t)
+	inst := h.installation()
+	u, _ := h.user("operator", store.RoleOperator)
+	cookie := h.session(u)
+
+	body := poolBody(inst.ID)
+	body["docker_mode"] = "dind"
+	body["dind_image"] = " registry.example.com/ci/dind:27 "
+	created := h.do(request{method: http.MethodPost, path: "/api/v1/pools", cookie: cookie, body: body})
+	created.mustStatus(t, http.StatusCreated, "create")
+	var pool poolResponse
+	created.into(t, &pool)
+	if pool.DinDImage != "registry.example.com/ci/dind:27" {
+		t.Fatalf("dind_image = %q, want it trimmed and kept", pool.DinDImage)
+	}
+	if stored, err := h.st.GetPool(h.ctx, pool.ID); err != nil || stored.DinDImage != "registry.example.com/ci/dind:27" {
+		t.Fatalf("stored dind image = %v, %v", stored, err)
+	}
+
+	cleared := h.do(request{method: http.MethodPatch, path: "/api/v1/pools/" + pool.ID, cookie: cookie,
+		body: map[string]any{"dind_image": ""}})
+	cleared.mustStatus(t, http.StatusOK, "clear")
+	if stored, err := h.st.GetPool(h.ctx, pool.ID); err != nil || stored.DinDImage != "" {
+		t.Fatalf("a cleared dind image = %v, %v", stored, err)
+	}
 }

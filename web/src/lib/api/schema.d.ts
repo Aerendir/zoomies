@@ -7607,6 +7607,8 @@ export interface components {
             effective_image?: string;
             pull_policy?: components["schemas"]["PullPolicy"];
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             min_runners?: number;
             max_runners?: number;
             /** @description Best-effort per-repository runner creation limit; zero disables it. This cannot prevent GitHub from assigning work to compatible idle runners and is not a strict execution concurrency cap. */
@@ -7768,6 +7770,8 @@ export interface components {
             image: string;
             pull_policy: string;
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             min_runners: number;
             max_runners: number;
             repository_scale_up_limit?: number;
@@ -7858,6 +7862,8 @@ export interface components {
             image?: string;
             pull_policy?: components["schemas"]["PullPolicy"];
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             /** @default 0 */
             min_runners: number;
             /** @default 4 */
@@ -7930,6 +7936,8 @@ export interface components {
             image?: string;
             pull_policy?: components["schemas"]["PullPolicy"];
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             min_runners?: number;
             max_runners?: number;
             /** @description Best-effort creation limit */

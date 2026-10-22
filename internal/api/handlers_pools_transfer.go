@@ -63,6 +63,7 @@ type poolDocument struct {
 	Image                  string               `json:"image"`
 	PullPolicy             store.PullPolicy     `json:"pull_policy"`
 	RunnerVersion          string               `json:"runner_version"`
+	DinDImage              string               `json:"dind_image"`
 	MinRunners             int                  `json:"min_runners"`
 	MaxRunners             int                  `json:"max_runners"`
 	RepositoryScaleUpLimit int                  `json:"repository_scale_up_limit"`
@@ -135,6 +136,7 @@ func documentPool(p *store.Pool, installation string) poolDocument {
 		Image:                  p.Image,
 		PullPolicy:             p.PullPolicy,
 		RunnerVersion:          p.RunnerVersion,
+		DinDImage:              p.DinDImage,
 		MinRunners:             p.MinRunners,
 		MaxRunners:             p.MaxRunners,
 		RepositoryScaleUpLimit: p.RepositoryScaleUpLimit,

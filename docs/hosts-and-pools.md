@@ -410,6 +410,15 @@ to pin. Answering no is the default and costs nothing. The host Docker socket,
 which hands a job root on the host, is chosen in the **Runner** section, where
 it is confirmed deliberately.
 
+A `dind` pool starts a sidecar from the host's image (`agent.dind_image`,
+which is `docker:27-dind` until a host says otherwise). A pool that needs a
+different one names it in **Runner**, under *Your own image, or a pinned runner
+version*, as the Docker-in-Docker image; the field appears only when the pool
+is `dind`, and empty follows the host. The sidecar runs privileged, so the field
+chooses which image gets that access. See
+[`agent.dind_image`](configuration.md#agentdind_image-your-own-docker-in-docker-sidecar)
+for what the image must provide and how a private registry is reached.
+
 The other five sections are the same pool with the opinions put back: which
 hosts, a backend and platform chosen by hand, a fixed size on every host, the
 count and the runner timings this pool disagrees with the fleet about, and

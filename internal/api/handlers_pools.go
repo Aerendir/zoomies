@@ -120,6 +120,7 @@ type poolInput struct {
 	Image                  *string               `json:"image"`
 	PullPolicy             *string               `json:"pull_policy"`
 	RunnerVersion          *string               `json:"runner_version"`
+	DinDImage              *string               `json:"dind_image"`
 	MinRunners             *int                  `json:"min_runners"`
 	MaxRunners             *int                  `json:"max_runners"`
 	RepositoryScaleUpLimit *int                  `json:"repository_scale_up_limit"`
@@ -376,6 +377,9 @@ func (in *poolInput) apply(p *store.Pool) []fieldError {
 	}
 	if in.RunnerVersion != nil {
 		p.RunnerVersion = strings.TrimSpace(*in.RunnerVersion)
+	}
+	if in.DinDImage != nil {
+		p.DinDImage = strings.TrimSpace(*in.DinDImage)
 	}
 	if in.MinRunners != nil {
 		p.MinRunners = *in.MinRunners
@@ -668,6 +672,12 @@ func (s *Server) validatePool(ctx context.Context, p *store.Pool, existingID str
 	}
 	if p.PullPolicy == store.PullPinnedOnly && !digestReference(p.Image) {
 		add("image", "pinned-only requires an immutable digest reference such as image@sha256:…; mutable tags are rejected")
+	}
+	if strings.ContainsAny(p.DinDImage, " \t\r\n") {
+		add("dind_image", "an image reference cannot contain whitespace; leave it blank to use the host's sidecar image")
+	}
+	if p.DinDImage != "" && p.DockerMode != store.DockerDinD {
+		add("dind_image", "only a pool with docker_mode dind starts a sidecar; clear this or set docker_mode to dind")
 	}
 	errs = append(errs, validatePlatform(p)...)
 

@@ -1846,16 +1846,26 @@ sidecar's storage starts empty, so every job pulls its images again. A host
 that keeps pull-through caches can build an image of its own, `FROM
 docker:27-dind`, that carries `/etc/docker/daemon.json` and
 `/etc/docker/certs.d/<registry>/hosts.toml` pointing at them, and name it here.
-This is a host setting, not a pool one, because the caches belong to the
-network the host sits on.
+This is the host's choice, because the caches belong to the network the host
+sits on. A pool that needs a different sidecar from the host's, such as another
+Docker version, names its own in the pool editor's **Runner** section
+(`dind_image`), and an empty field there follows this setting.
 
 The sidecar's command stays `dockerd --host=tcp://127.0.0.1:2375
 --host=unix:///var/run/docker.sock`, so the image has to provide `dockerd` and
 should keep the tag you tested. Empty runs `docker:27-dind`. The sidecar runs
 privileged, so this chooses which image gets that access on the host: build it
-from a source you trust, and give it a digest (`@sha256:...`) if the pool pulls
-only pinned images. The image is pulled under the pool's pull policy and with
-`agent.registry_auth`, like any runner image.
+from a source you trust.
+
+The image is pulled under the host's pull policy, not the pool's, which governs
+the runner image only, so `pinned-only` does not check the sidecar image.
+Pulls use the one credential in `agent.registry_auth`, so a private sidecar
+image has to be on a registry that credential covers. The images a job pulls
+inside the sidecar do not: the nested daemon never sees `agent.registry_auth`,
+so a private job image needs a `docker login` in the workflow, or credentials in
+the sidecar image's own `/root/.docker/config.json`. Prewarming prepares the
+host's image only; a pool's own image is pulled when its first runner starts. An agent
+older than the pool field ignores it and runs the host's image.
 
 ### `agent.extra_ca_file`: behind a proxy that re-signs TLS
 

@@ -1456,3 +1456,22 @@ func TestTheDinDSidecarRunsTheConfiguredImageAndDefaultsWhenNoneIsSet(t *testing
 		})
 	}
 }
+
+// A pool that names its own sidecar image beats the host's, and a pool that
+// names none gets the host's. Both end up in the one place the sidecar's image
+// is read from.
+func TestAPoolsSidecarImageBeatsTheHostsAndEmptyFollowsIt(t *testing.T) {
+	b, err := NewDocker(DockerOptions{Host: "unix:///var/run/docker.sock", DinDImage: "host.example.com/dind:27", Logger: quietLogger()})
+	if err != nil {
+		t.Fatalf("NewDocker: %v", err)
+	}
+	for name, tc := range map[string]struct{ pool, want string }{
+		"no pool image": {"", "host.example.com/dind:27"},
+		"blank":         {"  ", "host.example.com/dind:27"},
+		"its own":       {"pool.example.com/dind:28", "pool.example.com/dind:28"},
+	} {
+		if got := b.sidecarImage(Spec{DinDImage: tc.pool}); got != tc.want {
+			t.Errorf("%s: sidecar image = %q, want %q", name, got, tc.want)
+		}
+	}
+}

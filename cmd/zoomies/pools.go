@@ -170,6 +170,7 @@ func poolsGet(ctx context.Context, e *env, args []string) error {
 		{"platform", pool.Platform.String()},
 		{"image", poolImage(pool)},
 		{"runner version", dash(pool.RunnerVersion)},
+		{"dind image", dash(pool.DinDImage)},
 		{"runners", fmt.Sprintf("%d live of %d max, %d minimum", pool.Counts.Live, pool.MaxRunners, pool.MinRunners)},
 		{"priority", strconv.Itoa(pool.Priority)},
 		{"states", fmt.Sprintf("%d idle, %d busy, %d draining, %d provisioning, %d failed",
@@ -384,6 +385,7 @@ type poolSpec struct {
 	image            *string
 	pullPolicy       *string
 	version          *string
+	dindImage        *string
 	group            *string
 	idleTimeout      *string
 	dockerMode       *string
@@ -470,6 +472,7 @@ func registerPoolFlags(fs *flagSet) *poolSpec {
 	spec.image = fs.String("image", "", "runner image (default: the variant --os selects, else the controller's github.runner_image)")
 	spec.pullPolicy = fs.String("pull-policy", "if-not-present", "if-not-present, always, or pinned-only")
 	spec.version = fs.String("runner-version", "", "pin the actions/runner release")
+	spec.dindImage = fs.String("dind-image", "", "the docker-in-docker sidecar image (default: the host's agent.dind_image, else docker:27-dind)")
 	spec.group = fs.String("runner-group", "", "the GitHub runner group to register into")
 	spec.minRunners = fs.Int("min", 0, "runners to keep even when nothing is queued")
 	spec.maxRunners = fs.Int("max", 4, "the most runners this pool may have at once")
@@ -562,6 +565,9 @@ func (spec *poolSpec) body(fs *flagSet, onlyChanged bool) map[string]any {
 	}
 	if fs.changed("runner-version") {
 		body["runner_version"] = *spec.version
+	}
+	if fs.changed("dind-image") {
+		body["dind_image"] = *spec.dindImage
 	}
 	if fs.changed("runner-group") {
 		body["runner_group"] = *spec.group

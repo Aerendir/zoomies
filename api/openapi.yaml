@@ -11023,6 +11023,7 @@ components:
             its jobs a daemon.
         pull_policy: { $ref: "#/components/schemas/PullPolicy" }
         runner_version: { type: string }
+        dind_image: { type: string, description: "The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar." }
         min_runners: { type: integer }
         max_runners: { type: integer }
         repository_scale_up_limit: { type: integer, minimum: 0, description: Best-effort per-repository runner creation limit; zero disables it. This cannot prevent GitHub from assigning work to compatible idle runners and is not a strict execution concurrency cap. }
@@ -11247,6 +11248,7 @@ components:
         image: { type: string }
         pull_policy: { type: string }
         runner_version: { type: string }
+        dind_image: { type: string, description: "The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar." }
         min_runners: { type: integer }
         max_runners: { type: integer }
         repository_scale_up_limit: { type: integer }
@@ -11360,6 +11362,7 @@ components:
             no platform.
         pull_policy: { $ref: "#/components/schemas/PullPolicy" }
         runner_version: { type: string }
+        dind_image: { type: string, description: "The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar." }
         min_runners: { type: integer, default: 0, minimum: 0 }
         max_runners: { type: integer, default: 4, minimum: 1 }
         repository_scale_up_limit: { type: integer, minimum: 0, description: Best-effort creation limit, not a strict execution concurrency cap. }
@@ -11413,6 +11416,7 @@ components:
         image: { type: string }
         pull_policy: { $ref: "#/components/schemas/PullPolicy" }
         runner_version: { type: string }
+        dind_image: { type: string, description: "The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar." }
         min_runners: { type: integer, minimum: 0 }
         max_runners: { type: integer, minimum: 1 }
         repository_scale_up_limit: { type: integer, minimum: 0, description: Best-effort creation limit, not a strict execution concurrency cap. }

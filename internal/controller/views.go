@@ -1194,6 +1194,7 @@ type PoolView struct {
 	EffectiveImage string           `json:"effective_image"`
 	PullPolicy     store.PullPolicy `json:"pull_policy"`
 	RunnerVersion  string           `json:"runner_version,omitempty"`
+	DinDImage      string           `json:"dind_image,omitempty"`
 	MinRunners     int              `json:"min_runners"`
 	MaxRunners     int              `json:"max_runners"`
 	Priority       int              `json:"priority"`
@@ -1399,6 +1400,7 @@ func (v *PoolRenderer) View(p *store.Pool) PoolView {
 		EffectiveImage:         v.image(p),
 		PullPolicy:             p.PullPolicy,
 		RunnerVersion:          p.RunnerVersion,
+		DinDImage:              p.DinDImage,
 		MinRunners:             p.MinRunners,
 		MaxRunners:             p.MaxRunners,
 		Priority:               p.Priority,
