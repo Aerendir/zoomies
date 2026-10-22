@@ -56,9 +56,9 @@ export function statusLine(input: StatusInput): StatusLine {
       headline: `${n} ${n === 1 ? 'thing needs' : 'things need'} you.`,
       accent: jobs(input.running),
       // Counts and no more: what each one is, and what to do about it, is the
-      // line under this and the drawer behind it. The page keeps to a sentence
-      // and a way in, and never quotes a problem.
-      lede: `${counts(input.problems)}. Review them below.`,
+      // drawer behind the Review button. The page keeps to a sentence and a way
+      // in, and never quotes a problem.
+      lede: `${counts(input.problems)} ${n === 1 ? 'needs' : 'need'} your attention.`,
       needsYou: true,
     };
   }
