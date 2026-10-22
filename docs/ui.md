@@ -299,16 +299,18 @@ of grid filters, while selecting a pool scopes the headline runner metrics.
 
 ## Queue
 
-Provisioning demand has its own view, with ready, expedited, paused and removed
-counts alongside filtering and bulk controls. Job queue depth can remain high
+Provisioning demand has its own view: ready, expedited, paused and removed
+counts as status buttons, then the table with its filtering and bulk controls.
+How demand splits and how provisioning is ordered sit in a disclosure under the
+table. Job queue depth can remain high
 when provisioning demand is paused; these are separate measures. Removing an
 item is the exception: an operator who takes work out of the queue has said it
 is not for this fleet, so it stops counting as queued everywhere; the
 Overview's queue depth and pool bars, `zoomies_jobs_queued` and the queue age
 with it. Restoring it from the Removed view puts it back.
 
-![The Queue page: provisioning demand composition, status filters and bulk controls](screenshots/queue-dark.webp#only-dark){ .zoomies-shot }
-![The Queue page: provisioning demand composition, status filters and bulk controls](screenshots/queue-light.webp#only-light){ .zoomies-shot }
+![The Queue page: status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-dark.webp#only-dark){ .zoomies-shot }
+![The Queue page: status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-light.webp#only-light){ .zoomies-shot }
 
 ## Workflows
 
@@ -360,6 +362,8 @@ Workflows has the run each belongs to. It is not in the navigation, Workflows
 is, but every link that names a job lands here, and **Workflow runs** at the
 top goes back up with the same filters in force. Everything this fleet claims,
 runs or is waiting to run is listed, with each job's queue wait and duration.
+The fleet's own figures, the outcome mix, the activity history and the size
+advice are one fold, **Fleet context and activity**, under the grid.
 Status is the filter this page is opened for, so it is a row of buttons above
 the grid (**Needs attention**, **Running**, **Queued**, **Failed**, **Our
 failures**, **Finished**, **All**) and the page opens on *Running*, which is the
@@ -418,8 +422,8 @@ immediately (queued demand paused, runners taken back) and records that it
 did, so the tiles and the lists agree from that moment rather than from
 whenever GitHub gets round to it.
 
-![The Jobs page: queue depth, running jobs, success rate, P95 wait and outcome composition above the job grid](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
-![The Jobs page: queue depth, running jobs, success rate, P95 wait and outcome composition above the job grid](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
+![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
+![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
 
 Opening a job says where it went wrong first: the step that failed and how
 long it ran, with a link to that step's log on GitHub, or, when the runner

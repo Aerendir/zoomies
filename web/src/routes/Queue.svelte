@@ -402,50 +402,6 @@
       </button>
     {/each}
   </div>
-  {#if Object.keys(counts).length}
-    <ChartPanel
-      title="Provisioning demand"
-      description="Counts match your repository, workflow, pool and other filters across all pages. Status filters do not narrow this breakdown. Ready and Run now remain subject to scheduling limits."
-    >
-      <div class="demand-heading">
-        <strong
-          >{((counts.ready ?? 0) + (counts.expedited ?? 0)).toLocaleString()} active demand</strong
-        ><span
-          >{(counts.paused ?? 0).toLocaleString()} on hold · {(
-            counts.deleted ?? 0
-          ).toLocaleString()} removed</span
-        >
-      </div>
-      <StateBreakdown
-        label="Provisioning states"
-        segments={[
-          { label: QUEUE_STATUS_LABELS.ready, value: counts.ready ?? 0, tone: 'idle' },
-          { label: QUEUE_STATUS_LABELS.expedited, value: counts.expedited ?? 0, tone: 'accent' },
-          { label: QUEUE_STATUS_LABELS.paused, value: counts.paused ?? 0, tone: 'draining' },
-          { label: QUEUE_STATUS_LABELS.deleted, value: counts.deleted ?? 0, tone: 'neutral' },
-        ]}
-      />
-    </ChartPanel>
-  {/if}
-  <div class="policy">
-    <ListOrdered size={20} />
-    <div>
-      <strong>Predictable provisioning, within your limits</strong>
-      <p>
-        Higher pool priority first. Run now takes precedence within a priority tier; other pools
-        take turns, least recently provisioned first. Within a pool, demand is oldest first with a
-        stable ID tie-break.
-      </p>
-      <details>
-        <summary>What these controls affect</summary>
-        <p>
-          Controls change new runner demand. Existing runners, tasks already issued and minimum warm
-          capacity remain available. Run now respects pool and host limits, repository quotas and
-          failure backoff. GitHub still assigns jobs to available runners.
-        </p>
-      </details>
-    </div>
-  </div>
   <div class="filters-panel">
     <JobFilters
       queue
@@ -577,10 +533,55 @@
         >{/snippet}
     </DataGrid>
   {/key}
-  <p class="footnote">
-    The table is sorted by waiting time by default. Sorting changes this view, not scheduling
-    priority. Open an item to see why it is waiting.
-  </p>
+  <!-- The table is the page. How demand is split and how provisioning is ordered are one
+       fold under it. -->
+  <details class="how">
+    <summary>How provisioning is ordered, and how demand splits</summary>
+    {#if Object.keys(counts).length}
+      <ChartPanel
+        title="Provisioning demand"
+        description="Counts match your repository, workflow, pool and other filters across all pages. Status filters do not narrow this breakdown. Ready and Run now remain subject to scheduling limits."
+      >
+        <div class="demand-heading">
+          <strong
+            >{((counts.ready ?? 0) + (counts.expedited ?? 0)).toLocaleString()} active demand</strong
+          ><span
+            >{(counts.paused ?? 0).toLocaleString()} on hold · {(
+              counts.deleted ?? 0
+            ).toLocaleString()} removed</span
+          >
+        </div>
+        <StateBreakdown
+          label="Provisioning states"
+          segments={[
+            { label: QUEUE_STATUS_LABELS.ready, value: counts.ready ?? 0, tone: 'idle' },
+            { label: QUEUE_STATUS_LABELS.expedited, value: counts.expedited ?? 0, tone: 'accent' },
+            { label: QUEUE_STATUS_LABELS.paused, value: counts.paused ?? 0, tone: 'draining' },
+            { label: QUEUE_STATUS_LABELS.deleted, value: counts.deleted ?? 0, tone: 'neutral' },
+          ]}
+        />
+      </ChartPanel>
+    {/if}
+    <div class="policy">
+      <ListOrdered size={20} />
+      <div>
+        <strong>Predictable provisioning, within your limits</strong>
+        <p>
+          Higher pool priority first. Run now takes precedence within a priority tier; other pools
+          take turns, least recently provisioned first. Within a pool, demand is oldest first with a
+          stable ID tie-break.
+        </p>
+        <details>
+          <summary>What these controls affect</summary>
+          <p>
+            Controls change new runner demand. Existing runners, tasks already issued and minimum
+            warm capacity remain available. Run now respects pool and host limits, repository quotas
+            and failure backoff. GitHub still assigns jobs to available runners.
+          </p>
+        </details>
+      </div>
+    </div>
+  </details>
 </div>
 
 <ConfirmDialog
@@ -690,10 +691,6 @@
   }
   .card-hint,
   .filter-hint,
-  .footnote {
-    color: var(--z-text-muted);
-    font-size: var(--z-text-xs);
-  }
   .policy {
     display: flex;
     align-items: flex-start;
@@ -805,5 +802,20 @@
     .extra-filters :global(.wrap) {
       max-width: 100%;
     }
+  }
+  .how {
+    margin-block: var(--z-space-4);
+  }
+  .how > summary {
+    padding: var(--z-space-3);
+    color: var(--z-accent);
+    font-size: var(--z-text-sm);
+    cursor: pointer;
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-xl);
+    background: var(--z-surface);
+  }
+  .how[open] > summary {
+    margin-bottom: var(--z-space-3);
   }
 </style>

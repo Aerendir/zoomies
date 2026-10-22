@@ -116,7 +116,9 @@
   const operational = $derived(visualStyle.choice === 'mission-control');
   const compact = $derived(operational && viewport.phone);
   let contextExpanded = $state(false);
-  const layoutSections = $derived(compact ? ['records', 'context'] : ['context', 'records']);
+  // The rows are what the page is for, on every screen: the tiles, outcomes and activity
+  // history are one fold under them.
+  const layoutSections = ['records', 'context'];
   const filterState = jobFilterState();
   const filters = $derived(filterState.filters);
   const view = $derived(filterState.view);
@@ -690,13 +692,10 @@
   {#if section === 'context'}
     <details
       class="fleet-context"
-      class:compact
-      open={!compact || contextExpanded}
-      ontoggle={(event) => {
-        if (compact) contextExpanded = event.currentTarget.open;
-      }}
+      open={contextExpanded}
+      ontoggle={(event) => (contextExpanded = event.currentTarget.open)}
     >
-      <summary hidden={!compact}>Fleet context and activity</summary>
+      <summary>Fleet context and activity</summary>
       {@render fleetContext()}
     </details>
   {:else}
@@ -910,9 +909,6 @@
   }
 
   .fleet-context {
-    display: contents;
-  }
-  .fleet-context.compact {
     display: block;
     margin-block: var(--z-space-4);
   }
