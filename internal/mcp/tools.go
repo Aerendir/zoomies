@@ -95,7 +95,16 @@ func enum(description string, values ...string) map[string]any {
 // handful rather than one tool per route: an agent given every route in the
 // API, admin ones included, chooses worse and costs more to run.
 func tools() []*tool {
-	return append(append(append(append(append(append(append(append(append(append(append(append(append(contextTools(), comparisonTools()...), prDelayTools()...), noteTools()...), kennelTools()...), catalogTools()...), usageTools()...), providerTools()...), configTools()...), adminConfigTools()...), windowTools()...), analysisTools()...), repairTools()...), []*tool{
+	read := contextTools()
+	for _, group := range [][]*tool{
+		comparisonTools(), prDelayTools(), optimisationTools(), noteTools(),
+		kennelTools(), catalogTools(), usageTools(), providerTools(),
+		configTools(), adminConfigTools(), windowTools(), analysisTools(),
+		repairTools(),
+	} {
+		read = append(read, group...)
+	}
+	return append(read, []*tool{
 		{
 			Name:  "fleet_status",
 			Title: "Fleet status",

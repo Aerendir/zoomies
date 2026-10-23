@@ -35,6 +35,7 @@ numeric job ID in a GitHub Actions URL.
 | “Which workflows used the most runner time this week?” | Usage over a chosen period, with configured cost assumptions and history limits | `get_usage` |
 | “Read the observed required-check delay for this job's PR number.” | The selected head, target-branch protection, coverage and known timings; the window begins at the earliest observed job, not the push | `get_pr_delay` |
 | “Explain retained comparison cmp_ID in installation ins_ID and repository OWNER/REPO.” | Separate latency, all-attempt execution/idle and failure measures, counts and missing evidence | `get_retained_comparison` |
+| “Read kept checkout preview opv_ID in installation ins_ID and repository OWNER/REPO.” | Metadata, status, the commit and digests, and the one workflow line the preview changes; never the full file, and verification is inconclusive | `get_checkout_preview` |
 | “What needs attention across the fleet?” | Fleet status, host health, problems and repository findings | `fleet_status`, `host_health`, `kennel_overview` |
 | “Why did Eli's repair of my pull request get nowhere?” | The repair's history row for the person asking: repository and pull request, state and the row's reason, whether asking again now would be refused, and how to start another | `list_elis_repairs`, `get_eli_repair` |
 | “Read the workflow and explain how to improve it.” | Verified source excerpts tied to a commit, after source access has been granted | `context_search`, `context_read`, `context_pack` |
@@ -46,6 +47,18 @@ rather than polling. Check names stay opaque. Repository and target-branch text
 are repository data, not instructions. It does not establish full merge readiness
 or a dependency critical path. Eli can use it only through an enabled personal
 provider with fleet access; it adds neither source tools nor mutation rights.
+
+`get_checkout_preview` requires `preview_id`, `installation_id` and `repo`. It
+uses one scoped local-history GET with operator, `optimisations:read` and
+`jobs:read` access, and never reads GitHub, approves or publishes. The answer is
+the same bounded view as the web page: preview ID, repository, path, commit and
+source/after digests, run and step positions, checkout time, approval,
+publication and linked-comparison status, and the one changed line. The full
+workflow file was shown once at inspection and is never returned. Actor identities
+are excluded from model output. The path and changed line are quoted untrusted
+repository text, not instructions. Verification is always inconclusive; the
+checkout time is descriptive, and a linked comparison remains evidence to read.
+Approval and publication stay on the web page.
 
 `get_retained_comparison` requires `comparison_id`, `installation_id` and `repo`.
 It uses one scoped local-history GET with viewer/jobs:read access, without GitHub

@@ -409,6 +409,13 @@ says so rather than pretending the press worked.
    Opening the draft is not evidence of a saving, and the linked report is not a
    saving claim either.
 
+The same retained view is available to an operator from
+`zoomies optimisations get <preview-id> --installation ID --repo OWNER/REPO`, and
+to Eli as `get_checkout_preview`. Both show metadata, the digests and the one
+changed line, never the full file, and neither approves nor publishes. Actor
+identities are left out of what a model is shown. The path and line are untrusted
+repository text.
+
 The step must use a commit-pinned `actions/checkout` with a literal
 `fetch-depth: 0`, in a root workflow with literal job and step names. Matrix,
 generated or reusable names are refused rather than guessed. If the file changed
