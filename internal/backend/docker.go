@@ -338,11 +338,16 @@ type DockerBackend struct {
 	// because it cannot write to it; see prepareCacheDirs.
 	toolCacheMu      sync.Mutex
 	toolCacheProblem string
-	// externalsMu guards externalsReady, the externals volumes already filled
-	// from their runner image by this agent.
-	externalsMu    sync.Mutex
-	externalsReady map[string]bool
-	log            *slog.Logger
+	// externalsMu guards the maps below. Each externals volume has a lock of
+	// its own, so a fill blocks only the runners waiting for that volume.
+	// externalsReady is every volume filled and checked by this agent, and
+	// externalsFailed when a fill last failed, so a broken image is retried
+	// after externalsRetry rather than by every runner created meanwhile.
+	externalsMu     sync.Mutex
+	externalsLocks  map[string]*sync.Mutex
+	externalsReady  map[string]bool
+	externalsFailed map[string]time.Time
+	log             *slog.Logger
 	// nameRelease is how long a create waits for the daemon to release a name
 	// whose container has gone. A field rather than the constant so a test can
 	// exercise the wait without spending it.
@@ -539,7 +544,10 @@ type containerOptions struct {
 	// read-only into the docker-in-docker sidecar at RunnerExternalsMount.
 	ExternalsVolume string
 	// VolumesFrom is the docker-in-docker sidecar whose volumes the runner
-	// mounts, so the work folder lives at the same path in both.
+	// mounts, so the work folder is at the same path for the job and for the
+	// daemon its containers run in. The sidecar owns the folder as an
+	// anonymous volume, which Docker removes with the last container using
+	// it: the agent never deletes a volume itself (docs/security.md).
 	VolumesFrom string
 	// WorkDirMount is a host directory to bind at RunnerWorkMount.
 	WorkDirMount string
@@ -856,8 +864,8 @@ func buildDinDConfig(spec Spec, fl flavor, o containerOptions) ContainerCreateRe
 	// checkout (docker compose's ".:/workspace", docker run -v "$PWD:...") names
 	// a path it resolves in its own filesystem. The work folder is therefore
 	// the sidecar's, at the runner's path, and the runner mounts it from here:
-	// a host directory when the spec gives one, an anonymous volume otherwise,
-	// which Docker removes with the last container that uses it.
+	// the spec's host directory when it gives one, an anonymous volume
+	// otherwise, which Docker removes with the last container that uses it.
 	if o.WorkDirMount != "" {
 		hc.Binds = append(hc.Binds, o.WorkDirMount+":"+RunnerWorkMount+fl.mountSuffix)
 	} else {
@@ -1300,7 +1308,10 @@ func (b *DockerBackend) CreateWithResult(ctx context.Context, spec Spec) (result
 		if _, err := b.ensureImage(ctx, b.dind); err != nil {
 			return CreateResult{}, err
 		}
-		if vol, err := b.ensureExternalsVolume(ctx, spec.Image); err != nil {
+		if spec.Tmpfs.Work.Enabled {
+			b.log.Warn("the work folder of a docker-in-docker runner is shared with its sidecar, so it is not kept in memory", "runner", spec.Name, "pool", spec.PoolName)
+		}
+		if vol, err := b.ensureExternalsVolume(ctx, spec.Image, digest); err != nil {
 			b.log.Warn("could not share the runner's externals with the docker-in-docker sidecar; jobs in a container: block will fail", "runner", spec.Name, "image", spec.Image, "error", err)
 		} else {
 			opts.ExternalsVolume = vol
@@ -1441,12 +1452,16 @@ func (b *DockerBackend) startDinD(ctx context.Context, spec Spec, opts container
 				lastErr = errors.New("runtime did not report sidecar health; the runtime must honour container healthchecks and the custom DinD image must provide the docker CLI")
 			}
 			if state.Running && state.Health != nil && state.Health.Status == "healthy" {
-				// The work folder is created by the daemon as root's; the
-				// runner's account has to write to it. A daemon that cannot
-				// run the command is logged, not fatal: the runner then finds
-				// out at checkout, with the folder named in the warning.
-				if res, err := b.api.ContainerExec(readyCtx, id, []string{"chmod", "0777", RunnerWorkMount}, nil); err != nil || res.ExitCode != 0 {
-					b.log.Warn("could not open the shared work folder to the runner", "runner", spec.Name, "folder", RunnerWorkMount, "exit", res.ExitCode, "error", err)
+				// The anonymous work volume is created by the daemon as root's,
+				// and the runner's account has to write to it. Only that volume
+				// is opened: a host directory the spec names belongs to
+				// whoever made it. A daemon that cannot run the command is
+				// logged, not fatal: the runner then finds out at checkout,
+				// with the folder named in the warning.
+				if opts.WorkDirMount == "" {
+					if res, err := b.api.ContainerExec(readyCtx, id, []string{"chmod", "0777", RunnerWorkMount}, nil); err != nil || res.ExitCode != 0 {
+						b.log.Warn("could not open the shared work folder to the runner", "runner", spec.Name, "folder", RunnerWorkMount, "exit", res.ExitCode, "error", err)
+					}
 				}
 				b.log.Warn("docker-in-docker daemon ready: this runner has a privileged container", "runner", spec.Name, "pool", spec.PoolName, "container", shortID(id))
 				return id, nil
@@ -2304,37 +2319,105 @@ func boolString(v bool) string {
 	return "false"
 }
 
+// externalsRetry is how long a failed externals fill is remembered before the
+// next runner of the same image tries again.
+const externalsRetry = 10 * time.Minute
+
+// externalsFillTimeout bounds one fill: copying several hundred megabytes of
+// externals into a new volume, and checking them.
+const externalsFillTimeout = 5 * time.Minute
+
 // ensureExternalsVolume returns a volume holding the runner image's externals,
 // filled once per image. A job with a container: block mounts the runner's
 // externals into that container, and under dind the container is created by
 // the sidecar's daemon, which resolves the mount in its own filesystem. The
-// externals are several hundred megabytes, so they are not copied per runner:
-// Docker fills an empty named volume from the image the first time a
-// container of that image mounts it, and a container created and removed
-// without starting is enough for that.
-func (b *DockerBackend) ensureExternalsVolume(ctx context.Context, image string) (string, error) {
-	sum := sha256.Sum256([]byte(image))
+// externals are several hundred megabytes, so they are not copied per runner.
+//
+// The volume is named after the image's digest, not its reference, so a tag
+// that moves to a new image gets a new volume rather than the old Node builds.
+// The fill runs a container of the image with the empty volume at the
+// externals path, which the runtime fills from the image (Docker as the
+// container is created, Podman as it starts), and the container's command
+// checks that the folder is not empty, so a runtime that fills nothing is a
+// failed fill rather than an empty volume taken for a full one.
+func (b *DockerBackend) ensureExternalsVolume(ctx context.Context, image, digest string) (string, error) {
+	key := digest
+	if key == "" {
+		key = image
+	}
+	sum := sha256.Sum256([]byte(key))
 	name := "zoomies-externals-" + hex.EncodeToString(sum[:])[:16]
+
 	b.externalsMu.Lock()
-	defer b.externalsMu.Unlock()
-	if b.externalsReady[name] {
+	if b.externalsLocks == nil {
+		b.externalsLocks = map[string]*sync.Mutex{}
+		b.externalsReady = map[string]bool{}
+		b.externalsFailed = map[string]time.Time{}
+	}
+	lock, ok := b.externalsLocks[name]
+	if !ok {
+		lock = &sync.Mutex{}
+		b.externalsLocks[name] = lock
+	}
+	b.externalsMu.Unlock()
+
+	lock.Lock()
+	defer lock.Unlock()
+	b.externalsMu.Lock()
+	ready, failedAt := b.externalsReady[name], b.externalsFailed[name]
+	b.externalsMu.Unlock()
+	if ready {
 		return name, nil
 	}
-	id, err := b.api.ContainerCreate(ctx, "", ContainerCreateRequest{
+	if !failedAt.IsZero() && time.Since(failedAt) < externalsRetry {
+		return "", fmt.Errorf("filling %s from %s failed at %s; retrying after %s", name, image, failedAt.Format(time.RFC3339), externalsRetry)
+	}
+
+	err := b.fillExternalsVolume(ctx, image, name)
+	b.externalsMu.Lock()
+	if err != nil {
+		b.externalsFailed[name] = time.Now()
+	} else {
+		b.externalsReady[name] = true
+		delete(b.externalsFailed, name)
+	}
+	b.externalsMu.Unlock()
+	if err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// fillExternalsVolume runs the fill container for ensureExternalsVolume and
+// always removes it, so a failed fill leaves no container behind.
+func (b *DockerBackend) fillExternalsVolume(ctx context.Context, image, name string) error {
+	fillCtx, cancel := context.WithTimeout(ctx, externalsFillTimeout)
+	defer cancel()
+	id, err := b.api.ContainerCreate(fillCtx, name+"-fill", ContainerCreateRequest{
 		Image:      image,
-		Entrypoint: []string{"true"},
+		Entrypoint: []string{"sh", "-c", `[ -n "$(ls -A ` + RunnerExternalsMount + `)" ]`},
 		Labels:     map[string]string{LabelPrefix + "externals": name},
 		HostConfig: &HostConfig{Binds: []string{name + ":" + RunnerExternalsMount}},
 	})
 	if err != nil {
-		return "", fmt.Errorf("filling %s from %s: %w", name, image, err)
+		return fmt.Errorf("filling %s from %s: %w", name, image, err)
 	}
-	if err := b.api.ContainerRemove(ctx, id, true); err != nil {
-		b.log.Warn("could not remove the container that filled the externals volume", "volume", name, "container", shortID(id), "error", err)
+	defer func() {
+		rmCtx, rmCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		defer rmCancel()
+		if err := b.api.ContainerRemove(rmCtx, id, true); err != nil {
+			b.log.Warn("could not remove the container that filled the externals volume", "volume", name, "container", shortID(id), "error", err)
+		}
+	}()
+	if err := b.api.ContainerStart(fillCtx, id); err != nil {
+		return fmt.Errorf("filling %s from %s: %w", name, image, err)
 	}
-	if b.externalsReady == nil {
-		b.externalsReady = map[string]bool{}
+	code, err := b.api.ContainerWait(fillCtx, id)
+	if err != nil {
+		return fmt.Errorf("filling %s from %s: %w", name, image, err)
 	}
-	b.externalsReady[name] = true
-	return name, nil
+	if code != 0 {
+		return fmt.Errorf("filling %s from %s: %s is empty in the volume (exit %d); the image may keep its externals elsewhere", name, image, RunnerExternalsMount, code)
+	}
+	return nil
 }

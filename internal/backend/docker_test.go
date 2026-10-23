@@ -1458,21 +1458,31 @@ func TestTheDinDSidecarRunsTheConfiguredImageAndDefaultsWhenNoneIsSet(t *testing
 }
 
 // A dind job's containers are created by the sidecar's daemon, so a bind mount
-// of the checkout is resolved in the sidecar's filesystem: the work folder has
-// to be the sidecar's, at the runner's path, and the runner has to mount it
-// from there rather than keep one of its own.
-func TestDinDSidecarOwnsTheWorkFolderAndTheRunnerMountsIt(t *testing.T) {
+// of the checkout is resolved in the sidecar's filesystem: the work folder is
+// the sidecar's, at the runner's path, and the runner mounts it from there.
+//
+// The runner takes all of the sidecar's mounts with VolumesFrom, not only the
+// work folder. Mounting the one volume by name would need the agent to delete
+// that volume afterwards, which it never does (agent_owns_test.go); an
+// anonymous volume is removed by Docker with the last container using it. So
+// the runner also sees the sidecar's /var/lib/docker volume, which its job
+// already drives through DOCKER_HOST, and the externals volume read-only over
+// its image's own externals, which hold the same files. This test pins both.
+func TestDinDRunnerMountsTheSidecarsWorkFolder(t *testing.T) {
 	spec := jitSpec()
 	spec.DockerMode = store.DockerDinD
 
-	dind := buildDinDConfig(spec, dockerFlavor(), containerOptions{Now: time.Now()})
+	dind := buildDinDConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), ExternalsVolume: "zoomies-externals-abc"})
 	if _, ok := dind.Volumes[RunnerWorkMount]; !ok {
 		t.Fatalf("sidecar volumes = %v, want an anonymous volume at %s", dind.Volumes, RunnerWorkMount)
+	}
+	if !slices.Contains(dind.HostConfig.Binds, "zoomies-externals-abc:"+RunnerExternalsMount+":ro") {
+		t.Fatalf("sidecar binds = %v, want the externals volume read-only at %s", dind.HostConfig.Binds, RunnerExternalsMount)
 	}
 
 	runner := buildRunnerConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), NetworkMode: "container:sidecar", VolumesFrom: "sidecar"})
 	if got := runner.HostConfig.VolumesFrom; len(got) != 1 || got[0] != "sidecar" {
-		t.Fatalf("runner VolumesFrom = %v, want [sidecar]", got)
+		t.Fatalf("runner VolumesFrom = %v, want [sidecar]: all the sidecar's mounts, read-only ones staying read-only", got)
 	}
 	if _, ok := runner.HostConfig.Tmpfs[RunnerWorkMount]; ok {
 		t.Fatalf("runner keeps a tmpfs at %s over the sidecar's work folder", RunnerWorkMount)
@@ -1484,17 +1494,168 @@ func TestDinDSidecarOwnsTheWorkFolderAndTheRunnerMountsIt(t *testing.T) {
 	if len(host.Volumes) != 0 || !slices.Contains(host.HostConfig.Binds, "/srv/work/r1:"+RunnerWorkMount) {
 		t.Fatalf("sidecar with a host work dir: volumes=%v binds=%v", host.Volumes, host.HostConfig.Binds)
 	}
-	// The runner's externals, which a job in a container: block mounts at
-	// /__e, reach the sidecar read-only at the runner's path.
-	ext := buildDinDConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), ExternalsVolume: "zoomies-externals-abc"})
-	if !slices.Contains(ext.HostConfig.Binds, "zoomies-externals-abc:"+RunnerExternalsMount+":ro") {
-		t.Fatalf("sidecar binds = %v, want the externals volume at %s", ext.HostConfig.Binds, RunnerExternalsMount)
-	}
-
 	runner = buildRunnerConfig(spec, dockerFlavor(), containerOptions{Now: time.Now(), WorkDirMount: "/srv/work/r1", VolumesFrom: "sidecar"})
 	for _, b := range runner.HostConfig.Binds {
 		if strings.HasSuffix(b, ":"+RunnerWorkMount) {
 			t.Fatalf("runner binds %q itself, which would clash with the sidecar's mount", b)
 		}
+	}
+}
+
+// externalsEngine is a fake daemon for the externals fill: it records each
+// fill container's create request and answers its wait with exitCode.
+type externalsEngine struct {
+	mu       sync.Mutex
+	creates  []ContainerCreateRequest
+	names    []string
+	removed  int
+	exitCode int
+}
+
+func (e *externalsEngine) routes() map[string]http.HandlerFunc {
+	return map[string]http.HandlerFunc{
+		"POST " + v + "/containers/create": func(w http.ResponseWriter, r *http.Request) {
+			var req ContainerCreateRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			e.mu.Lock()
+			e.creates = append(e.creates, req)
+			e.names = append(e.names, r.URL.Query().Get("name"))
+			e.mu.Unlock()
+			writeJSON(w, 201, map[string]string{"Id": "fill"})
+		},
+		"POST " + v + "/containers/fill/start": func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) },
+		"POST " + v + "/containers/fill/wait": func(w http.ResponseWriter, r *http.Request) {
+			e.mu.Lock()
+			code := e.exitCode
+			e.mu.Unlock()
+			writeJSON(w, 200, map[string]int{"StatusCode": code})
+		},
+		"DELETE " + v + "/containers/fill": func(w http.ResponseWriter, r *http.Request) {
+			e.mu.Lock()
+			e.removed++
+			e.mu.Unlock()
+			w.WriteHeader(204)
+		},
+	}
+}
+
+// The externals volume is named after the image's digest, so a tag that moves
+// to a new image gets a new volume, and it is filled by a container whose
+// command checks the folder is not empty, once per volume.
+func TestExternalsVolumeIsKeyedOnTheDigestAndFilledOnce(t *testing.T) {
+	e := &externalsEngine{}
+	b := dockerBackendFor(t, newFakeEngine(t, e.routes()), DockerOptions{})
+	ctx := context.Background()
+
+	first, err := b.ensureExternalsVolume(ctx, "runner:latest", "sha256:aaa")
+	if err != nil {
+		t.Fatalf("first fill: %v", err)
+	}
+	again, err := b.ensureExternalsVolume(ctx, "runner:latest", "sha256:aaa")
+	if err != nil || again != first {
+		t.Fatalf("second call = %q, %v; want the same volume without a new fill", again, err)
+	}
+	moved, err := b.ensureExternalsVolume(ctx, "runner:latest", "sha256:bbb")
+	if err != nil || moved == first {
+		t.Fatalf("a new digest under the same tag gave %q, %v; want a new volume", moved, err)
+	}
+	if len(e.creates) != 2 || e.removed != 2 {
+		t.Fatalf("fills: %d creates, %d removals; want one of each per digest", len(e.creates), e.removed)
+	}
+	req := e.creates[0]
+	if req.Image != "runner:latest" || e.names[0] != first+"-fill" {
+		t.Fatalf("fill container %q from %q; want %q from the runner image", e.names[0], req.Image, first+"-fill")
+	}
+	if !slices.Contains(req.HostConfig.Binds, first+":"+RunnerExternalsMount) {
+		t.Fatalf("fill binds = %v, want the empty volume at %s", req.HostConfig.Binds, RunnerExternalsMount)
+	}
+	if len(req.Entrypoint) != 3 || req.Entrypoint[0] != "sh" || !strings.Contains(req.Entrypoint[2], "ls -A "+RunnerExternalsMount) {
+		t.Fatalf("fill entrypoint = %q, want a check that %s is not empty", req.Entrypoint, RunnerExternalsMount)
+	}
+}
+
+// A fill that finds the folder empty, as a runtime that fills a volume only
+// when its container starts would if it were never started, is a failure:
+// the volume is not taken for a full one, the container is removed, and the
+// failure is remembered so the runners created meanwhile do not retry it.
+func TestAFailedExternalsFillIsRememberedAndRetriedLater(t *testing.T) {
+	e := &externalsEngine{exitCode: 1}
+	b := dockerBackendFor(t, newFakeEngine(t, e.routes()), DockerOptions{})
+	ctx := context.Background()
+
+	if _, err := b.ensureExternalsVolume(ctx, "runner:latest", "sha256:aaa"); err == nil {
+		t.Fatal("an empty externals folder was taken for a filled volume")
+	}
+	if e.removed != 1 {
+		t.Fatalf("the failed fill left its container behind (%d removals)", e.removed)
+	}
+	if _, err := b.ensureExternalsVolume(ctx, "runner:latest", "sha256:aaa"); err == nil || len(e.creates) != 1 {
+		t.Fatalf("a second runner retried the failed fill at once (%d creates, err %v)", len(e.creates), err)
+	}
+
+	// Once the retry interval has passed, the next runner tries again.
+	b.externalsMu.Lock()
+	for k := range b.externalsFailed {
+		b.externalsFailed[k] = time.Now().Add(-externalsRetry - time.Second)
+	}
+	b.externalsMu.Unlock()
+	e.mu.Lock()
+	e.exitCode = 0
+	e.mu.Unlock()
+	if _, err := b.ensureExternalsVolume(ctx, "runner:latest", "sha256:aaa"); err != nil || len(e.creates) != 2 {
+		t.Fatalf("retry after the interval: %d creates, err %v", len(e.creates), err)
+	}
+}
+
+// The sidecar opens the work volume Zoomies made to the runner's account, and
+// never a host directory the spec names; a chmod that fails is logged, not
+// fatal.
+func TestTheSidecarOpensOnlyItsOwnWorkVolume(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		opts     containerOptions
+		execCode int
+		wantExec bool
+	}{
+		{"anonymous volume", containerOptions{}, 0, true},
+		{"chmod fails", containerOptions{}, 500, true},
+		{"host directory", containerOptions{WorkDirMount: "/srv/work/r1"}, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			execs := 0
+			f := newFakeEngine(t, map[string]http.HandlerFunc{
+				"POST " + v + "/containers/create": func(w http.ResponseWriter, r *http.Request) {
+					writeJSON(w, 201, map[string]string{"Id": "d1"})
+				},
+				"POST " + v + "/containers/d1/start": func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) },
+				"GET " + v + "/containers/d1/json": func(w http.ResponseWriter, r *http.Request) {
+					writeJSON(w, 200, ContainerInspect{State: &ContainerState{Running: true, Health: &ContainerHealth{Status: "healthy"}}})
+				},
+				"POST " + v + "/containers/d1/exec": func(w http.ResponseWriter, r *http.Request) {
+					execs++
+					if tc.execCode != 0 {
+						w.WriteHeader(tc.execCode)
+						return
+					}
+					writeJSON(w, http.StatusCreated, map[string]string{"Id": "e1"})
+				},
+				"POST " + v + "/exec/e1/start": func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
+				},
+				"GET " + v + "/exec/e1/json": func(w http.ResponseWriter, r *http.Request) {
+					writeJSON(w, http.StatusOK, map[string]any{"Running": false, "ExitCode": 0})
+				},
+			})
+			b := dockerBackendFor(t, f, DockerOptions{})
+			spec := jitSpec()
+			spec.DockerMode = store.DockerDinD
+			id, err := b.startDinD(context.Background(), spec, tc.opts)
+			if err != nil || id != "d1" {
+				t.Fatalf("startDinD = %q, %v", id, err)
+			}
+			if (execs > 0) != tc.wantExec {
+				t.Fatalf("chmod exec calls = %d, want any: %t", execs, tc.wantExec)
+			}
+		})
 	}
 }
