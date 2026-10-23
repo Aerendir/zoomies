@@ -174,3 +174,60 @@ func TestCreateUserWithoutPasswordWhenSSOIsOn(t *testing.T) {
 			login.errorMessage(t), unknown.errorMessage(t))
 	}
 }
+
+func cookieNamed(res *response, name string) *http.Cookie {
+	for _, c := range (&http.Response{Header: res.header}).Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// Signing out of this controller does not sign the person out of the identity
+// provider, so the next press of "Sign in with SSO" would be answered at once,
+// as the same person, with no password asked. The sign-out remembers that in
+// the browser, and the next start asks the provider for prompt=login, once.
+func TestSSOAfterASignOutAsksTheProviderToAuthenticateAgain(t *testing.T) {
+	h := oidcHarness(t)
+	h.user("alice", store.RoleOperator)
+	login := h.do(request{method: http.MethodPost, path: "/api/v1/auth/login", body: map[string]any{
+		"username": "alice", "password": testPassword,
+	}})
+	login.mustStatus(t, http.StatusOK, "login")
+
+	plain := h.do(request{method: http.MethodGet, path: "/api/v1/auth/oidc/start"})
+	if loc, _ := url.Parse(plain.header.Get("Location")); loc.Query().Get("prompt") != "" {
+		t.Fatalf("a first sign-in asked for prompt=%q, want none", loc.Query().Get("prompt"))
+	}
+
+	out := h.do(request{method: http.MethodPost, path: "/api/v1/auth/logout", cookie: login.cookie.Value})
+	out.mustStatus(t, http.StatusNoContent, "logout")
+	again := cookieNamed(out, oidcReauthCookie)
+	if again == nil || again.MaxAge <= 0 || !again.HttpOnly || again.Path != oidcCookiePath {
+		t.Fatalf("sign-out left no reauthentication marker: %+v", again)
+	}
+
+	start := h.do(request{method: http.MethodGet, path: "/api/v1/auth/oidc/start",
+		headers: map[string]string{"Cookie": oidcReauthCookie + "=1"}})
+	loc, err := url.Parse(start.header.Get("Location"))
+	if err != nil || loc.Query().Get("prompt") != "login" {
+		t.Fatalf("after a sign-out the provider was sent %q, want prompt=login", start.header.Get("Location"))
+	}
+	if spent := cookieNamed(start, oidcReauthCookie); spent == nil || spent.MaxAge >= 0 {
+		t.Fatalf("the marker was not spent by the start that used it: %+v", spent)
+	}
+}
+
+// A controller with no single sign-on has nothing to remember.
+func TestSigningOutWithoutSSOLeavesNoReauthenticationMarker(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOperator)
+	login := h.do(request{method: http.MethodPost, path: "/api/v1/auth/login", body: map[string]any{
+		"username": "alice", "password": testPassword,
+	}})
+	out := h.do(request{method: http.MethodPost, path: "/api/v1/auth/logout", cookie: login.cookie.Value})
+	if c := cookieNamed(out, oidcReauthCookie); c != nil {
+		t.Fatalf("sign-out set %+v on a controller with no single sign-on", c)
+	}
+}

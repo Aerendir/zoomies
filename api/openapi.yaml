@@ -1623,6 +1623,35 @@ paths:
         "302": { description: Redirected into the app, or to the login page with a message. }
         "503": { description: Single sign-on is not enabled on this instance. }
 
+  /auth/oidc/backchannel-logout:
+    post:
+      operationId: oidcBackchannelLogout
+      tags: [auth]
+      summary: End sessions when the identity provider signs a person out
+      description: >-
+        OpenID Connect Back-Channel Logout. The identity provider's server, not a browser, posts
+        a signed logout token here when somebody signs out there. The token is checked against
+        the provider's keys (signature, issuer, audience, expiry), must carry the back-channel
+        logout event and no nonce, must have been issued in the last few minutes, and can be used
+        once. It ends the sessions the named person holds here: those made from the provider
+        session it names (its sid) when it names one, otherwise all of them. A person with no
+        account here is answered 200, so the route does not say who has one.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [logout_token]
+              properties:
+                logout_token: { type: string, description: The signed logout token. }
+      responses:
+        "200": { description: "The sessions it names are ended, or there were none." }
+        "400": { description: "The token is missing, malformed, expired, already used or not a logout token." }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { description: Single sign-on is not enabled on this instance. }
+
   # ==========================================================================
   # Overview
   # ==========================================================================

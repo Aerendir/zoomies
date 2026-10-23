@@ -141,7 +141,7 @@ func (s *Server) failSecondStep(w http.ResponseWriter, r *http.Request, err erro
 // password-only one: the session cookie, the audit row, the identity.
 func (s *Server) signedIn(w http.ResponseWriter, r *http.Request, in *auth.SignIn, how string) {
 	s.clearSignInCookie(w)
-	s.setSessionCookie(w, in.Session)
+	s.startBrowserSession(w, r, in.Session)
 	u := in.User
 	id := &auth.Identity{Kind: auth.KindUser, ID: u.ID, Name: u.Username, Role: u.Role, UserID: u.ID, IP: ClientIP(r.Context())}
 	s.auth.Auditor().Auth(r.Context(), id, "auth.login", map[string]any{"role": u.Role, "two_step": how})

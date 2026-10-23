@@ -109,6 +109,7 @@ Conventions:
 | DELETE | `/api/v1/auth/mcp-connections/{id}` | viewer | Disconnect one of your own; its tokens stop working at once. Audited as `mcp_connection.revoke`. |
 | GET | `/api/v1/auth/oidc/start` | - | 302 to the identity provider. |
 | GET | `/api/v1/auth/oidc/callback` | - | Completes the flow, sets the cookie, 302 to `/`. |
+| POST | `/api/v1/auth/oidc/backchannel-logout` | - | The identity provider's signed logout token (form field `logout_token`); ends that person's sessions, or those made from the provider session it names. |
 
 ## Overview
 

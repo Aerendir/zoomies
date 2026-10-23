@@ -225,6 +225,10 @@ class Prefs {
   #logoTreatment = $state<LogoTreatment>(DEFAULT_LOGO_TREATMENT);
   #hiddenBands = $state<BandPage[]>([]);
   #accountSync = false;
+  // Counts the syncs begun and the accounts disconnected, so a read of the
+  // account that is overtaken by a sign-out, or by another account's sign-in,
+  // can be told from the current one and dropped.
+  #syncGen = 0;
   #accountSave: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -360,8 +364,13 @@ class Prefs {
    * different account never copies the previous person's layout into it.
    */
   async syncAccount(userID: string): Promise<void> {
+    const gen = ++this.#syncGen;
     try {
       const remote = await getOwnPreferences();
+      // Signing in does not wait for this answer, so it can arrive after the
+      // person has signed out or somebody else has signed in. It describes the
+      // previous account and must not be applied to this one.
+      if (gen !== this.#syncGen) return;
       const layouts = remote.table_layouts ?? {};
       const previous = storage.get(PREFS_ACCOUNT_KEY);
       // How Eli answers is the account's choice where one has been made: a
@@ -404,11 +413,12 @@ class Prefs {
     } catch {
       // Browser preferences remain fully functional while the controller is
       // offline or while an older controller has no account endpoint.
-      this.#accountSync = false;
+      if (gen === this.#syncGen) this.#accountSync = false;
     }
   }
 
   disconnectAccount(): void {
+    this.#syncGen++;
     this.#accountSync = false;
     if (this.#accountSave !== null) clearTimeout(this.#accountSave);
     this.#accountSave = null;

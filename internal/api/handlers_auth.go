@@ -196,7 +196,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.setSessionCookie(w, token)
+	s.startBrowserSession(w, r, token)
 	id := &auth.Identity{Kind: auth.KindUser, ID: u.ID, Name: u.Username, Role: u.Role, IP: ip}
 	s.auth.Auditor().Auth(r.Context(), id, "auth.login", map[string]any{"role": u.Role})
 	writeJSON(w, http.StatusOK, newIdentityResponse(id, u.MustChangePassword))
@@ -257,6 +257,10 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.clearSessionCookie(w)
+	if s.oidcProvider().Enabled() {
+		http.SetCookie(w, &http.Cookie{Name: oidcReauthCookie, Value: "1", Path: oidcCookiePath, HttpOnly: true,
+			Secure: s.cfg().CookieSecureValue(), SameSite: http.SameSiteLaxMode, MaxAge: int(auth.OIDCStateTTL/time.Second) * 6})
+	}
 	s.auth.Auditor().Auth(r.Context(), Identity(r.Context()), "auth.logout", nil)
 	noContent(w)
 }
@@ -602,7 +606,15 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		rateLimited(w, auth.ErrRateLimited.Error(), s.auth.SSOStartRetryAfter(ip))
 		return
 	}
-	authURL, state, err := sso.Start()
+	// A sign-out here left a marker: the provider is asked to authenticate the
+	// person again, once, and the marker is spent by doing so.
+	reauth := false
+	if c, err := r.Cookie(oidcReauthCookie); err == nil && c.Value != "" {
+		reauth = true
+		http.SetCookie(w, &http.Cookie{Name: oidcReauthCookie, Value: "", Path: oidcCookiePath, HttpOnly: true,
+			Secure: s.cfg().CookieSecureValue(), SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(0, 0)})
+	}
+	authURL, state, err := sso.StartAfterSignOut(reauth)
 	if err != nil {
 		if errors.Is(err, auth.ErrTooManyPendingSignIns) {
 			// A finished flow will free a slot inside the state TTL, so a
@@ -637,6 +649,64 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   int(auth.OIDCStateTTL / time.Second),
 	})
 	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+// handleOIDCBackchannelLogout ends a person's sessions here when the identity
+// provider says they have signed out there (OpenID Connect Back-Channel Logout
+// 1.0). The caller is the provider's server, not a browser: it has no cookie,
+// and what proves it is the signature on the logout token, checked against the
+// provider's keys.
+//
+// A subject this controller has no account for is answered 200: there is
+// nothing to end, and saying otherwise would tell a caller who has a valid
+// token which people have accounts here.
+func (s *Server) handleOIDCBackchannelLogout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	sso := s.oidcProvider()
+	if !sso.Enabled() {
+		s.ssoUnavailable(w)
+		return
+	}
+	ip := ClientIP(r.Context())
+	if !s.auth.AllowBackchannelLogout(ip) {
+		rateLimited(w, auth.ErrRateLimited.Error(), s.auth.BackchannelLogoutRetryAfter(ip))
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	if err := r.ParseForm(); err != nil {
+		badRequest(w, "the request body is not a form")
+		return
+	}
+	subject, oidcSession, err := sso.VerifyLogoutToken(r.Context(), r.PostForm.Get("logout_token"))
+	if err != nil {
+		s.logger(r).Warn("a back-channel logout was refused", "error", err)
+		badRequest(w, err.Error())
+		return
+	}
+	u, err := s.ctrl.Store().GetUserByOIDCSubject(r.Context(), subject)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		w.WriteHeader(http.StatusOK)
+		return
+	case err != nil:
+		s.internal(w, r, "finding the account a logout token names", err)
+		return
+	}
+	// A token that names a session of the provider's ends the sessions made
+	// from that one; a token that names only the person ends all of theirs.
+	if oidcSession != "" {
+		err = s.auth.LogoutOIDCSession(r.Context(), u.ID, oidcSession)
+	} else {
+		err = s.auth.LogoutAll(r.Context(), u.ID)
+	}
+	if err != nil {
+		s.internal(w, r, "ending the sessions a logout token names", err)
+		return
+	}
+	s.auth.Auditor().Auth(r.Context(),
+		&auth.Identity{Kind: auth.KindUser, ID: u.ID, Name: u.Username, Role: u.Role, IP: ip},
+		"auth.logout", map[string]any{"method": "oidc_backchannel", "scoped_to_session": oidcSession != ""})
+	w.WriteHeader(http.StatusOK)
 }
 
 // clearOIDCStateCookie forgets the handshake, whichever way it ended.
@@ -708,12 +778,12 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := ClientIP(r.Context())
-	token, err := s.auth.NewSession(r.Context(), u, ip, r.UserAgent())
+	token, err := s.auth.NewSSOSession(r.Context(), u, ip, r.UserAgent(), claims.SessionID)
 	if err != nil {
 		s.internal(w, r, "starting a session after single sign-on", err)
 		return
 	}
-	s.setSessionCookie(w, token)
+	s.startBrowserSession(w, r, token)
 	if err := s.ctrl.Store().TouchLogin(r.Context(), u.ID, s.auth.Now()); err != nil {
 		s.logger(r).Warn("could not record a single sign-on login", "user", u.Username, "error", err)
 	}
@@ -729,6 +799,12 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		Secure: s.cfg().CookieSecureValue(), SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(0, 0)})
 	http.Redirect(w, r, landing, http.StatusFound)
 }
+
+// oidcReauthCookie is left by a sign-out so the next single sign-on start asks
+// the identity provider to authenticate the person again (prompt=login). The
+// provider's own session outlives this controller's, so without it the button
+// would sign the previous person straight back in on a shared browser.
+const oidcReauthCookie = "zoomies_oidc_reauth"
 
 // oidcReturnCookie remembers where a single sign-on that began on the MCP
 // consent screen goes back to.

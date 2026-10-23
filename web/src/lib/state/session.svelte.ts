@@ -13,6 +13,7 @@ import {
   getSession,
   login as loginRequest,
   logout as logoutRequest,
+  noteSignedIn,
 } from '../api/client';
 import type { Identity, Meta, Role, SignInChallenge, TwoStepSignIn } from '../api/types';
 import { atLeast } from '../api/types';
@@ -147,6 +148,7 @@ class Session {
   async refresh(): Promise<void> {
     try {
       this.#identity = await getSession();
+      noteSignedIn();
       // Auth-disabled sessions resolve to a fixed identity with no row behind
       // it, so there is no account for a table layout to belong to.
       if (!this.authDisabled && this.#identity.kind === 'user' && this.#identity.id) {
@@ -188,9 +190,16 @@ class Session {
   }
 
   async #signedIn(identity: Identity): Promise<void> {
+    // Before anything else: a 401 for a request begun under the old credential
+    // must not be read as this session ending.
+    noteSignedIn();
     this.#identity = identity;
+    // The account's saved layout and dismissals follow the person in; the
+    // page does not wait for them, because a slow answer there looked like a
+    // sign-in that had hung and sent people to reload. Both swallow their own
+    // failures, and the browser's copy stands until they land.
     if (identity.kind === 'user' && identity.id) {
-      await Promise.all([prefs.syncAccount(identity.id), notifications.syncAccount(identity.id)]);
+      void Promise.all([prefs.syncAccount(identity.id), notifications.syncAccount(identity.id)]);
     }
     this.#phase = 'ready';
   }
@@ -203,6 +212,7 @@ class Session {
     email?: string;
   }): Promise<Identity> {
     this.#identity = await bootstrapRequest(input);
+    noteSignedIn();
     if (this.#identity.kind === 'user' && this.#identity.id) {
       await Promise.all([
         prefs.syncAccount(this.#identity.id),
@@ -226,6 +236,7 @@ class Session {
   async confirmSignedIn(): Promise<boolean> {
     try {
       this.#identity = await getSession();
+      noteSignedIn();
       this.#phase = 'ready';
       return true;
     } catch {

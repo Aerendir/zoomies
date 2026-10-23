@@ -160,6 +160,7 @@ func (s *Server) apiRoutes() chi.Router {
 		r.Post("/auth/two-step/enrol/confirm", s.handleTwoStepEnrolConfirm)
 		r.Get("/auth/oidc/start", s.handleOIDCStart)
 		r.Get("/auth/oidc/callback", s.handleOIDCCallback)
+		r.Post("/auth/oidc/backchannel-logout", s.handleOIDCBackchannelLogout)
 	})
 
 	r.Group(func(r chi.Router) {
