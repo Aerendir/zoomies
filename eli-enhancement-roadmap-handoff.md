@@ -27,7 +27,7 @@ as the record of how each slice landed.
 | --- | --- | --- |
 | E1 (ZF-242) | Merged and used: `internal/analysis` (`merge_delay.go`), `get_pr_delay` on Eli's allowlist, CLI, contextual UI | None. ROADMAP.md still lists `in_progress` because live-model evaluation and a real performance experiment have not run |
 | E2 (ZF-243) | Descriptive milestone merged (#1020); `get_retained_comparison` on Eli's allowlist; ZF-241's period comparison, queue breakdown, host pressure and startup failures are `implemented` | None. Controlled-experiment proof and dispatch stay deferred by the owner |
-| E3 (ZF-244) | The first operator slice is on main: pure preview (`internal/optimisation`), private retention (migration 0107), admitted checkout evidence ([#1024](https://github.com/eyupio/zoomies/pull/1024)), the policy, routes and web flow from [#1171](https://github.com/eyupio/zoomies/pull/1171), attributed approval (migration 0119), reconciled draft publication (migration 0120), the two-way link between a published preview and E2's comparison (migration 0121), and read access from the CLI, MCP and Eli, all described under "E3: what is built, and what is not" below | The rows further down that call #1024 or the policy and web flow "pending" are out of date; both merged. Still absent: a real E2 comparison of a published change, any run against a real repository, and write access from the CLI, MCP or Eli (deliberately web-only) |
+| E3 (ZF-244) | The first operator slice is on main: pure preview (`internal/optimisation`), private retention (migration 0107), admitted checkout evidence ([#1024](https://github.com/eyupio/zoomies/pull/1024)), the policy, routes and web flow from [#1171](https://github.com/eyupio/zoomies/pull/1171), attributed approval (migration 0119), reconciled draft publication (migration 0120), the two-way link between a published preview and E2's comparison (migration 0121), read access from the CLI, MCP and Eli, and a pure supplied-evidence cache preview foundation, all described under "E3: what is built, and what is not" below | The rows further down that call #1024 or the policy and web flow "pending" are out of date; both merged. Still absent: a real E2 comparison of a published change, any run against a real repository, cache evidence/retention/routes, and write access from the CLI, MCP or Eli (deliberately web-only) |
 | E4 | Not started as a track. Kennel's evaluator, waivers and guidance exist, but no fix preview or publication path does | Unchanged |
 | E5 | ZF-241's `startup_failures` covers runner-startup recurrence. No workflow/test failure fingerprinting exists | Unchanged |
 | E6 | Not started. `internal/prrepair/mention` (ZF-239 slice 1) is only the command matcher | Unchanged |
@@ -96,6 +96,13 @@ publication arrived on 23 October:
   untrusted repository text; a scripted Eli scenario plants an instruction in the
   line and proves it stays inside the fence. No new route, migration or setting is
   added; the CLI preserves the raw JSON for `--output json`.
+* **Cache preview foundation (23 October, pure).** `internal/optimisation` can
+  turn one complete workflow file and one root lockfile at a pinned head into an
+  exact proposal that adds the `actions/setup-node` package cache (`npm`, `yarn`
+  or `pnpm`, chosen by the lockfile). It supports one pinned setup step, refuses
+  ambiguity and unsupported YAML, requires caller-supplied repeated-setup
+  evidence, preserves bytes and line endings, and always says inconclusive. It
+  reads nothing, retains nothing and has no route or surface.
 
 Not built, in the order to do it. The list below was the record on 19 October;
 approval, draft publication and read access from the CLI, MCP and Eli have since
@@ -112,9 +119,12 @@ been built (see the 23 October sections at the end). The rest remains.
    time before and after through the E2 comparison. The result is "inconclusive"
    unless a suitable control and candidate exist, and CI passing is never evidence of
    a saving. Projected savings stay estimates.
-3. **Wider catalogue** (later): bounded readiness polling, dependency or build
-   cache, and sharding, each with its own evidence and refusals. Do not lead with
-   test removal, relaxed assertions or blanket retries.
+3. **Wider catalogue.** The dependency/build cache foundation is the pure
+   `actions/setup-node` preview described above. Next is bounded evidence
+   admission that binds exact runs, the workflow and the root lockfile, then
+   retention, approval, publication and the read surfaces it needs. Bounded
+   readiness polling and sharding follow, each with its own evidence and
+   refusals. Do not lead with test removal, relaxed assertions or blanket retries.
 
 Owner decisions still open: whether a different person than the reviewer must
 approve (the 23 October slice keeps the recommended default, that the same
@@ -2520,3 +2530,33 @@ fakes and mocked routes only.
 Next agent: a real repository run and a real comparison of a published change
 remain. Approval, publication and the read surfaces are all present; do not add
 write tools for them.
+
+
+### E3 cache preview foundation, 23 October 2026
+
+The wider catalogue's first slice is a pure supplied-evidence preview for the
+`actions/setup-node` package cache. One complete workflow file and one root
+lockfile at a pinned head produce an exact insertion: `cache: npm`, `cache:
+yarn` or `cache: pnpm` under the one pinned setup-node step. The lockfile decides
+the manager (`package-lock.json` or `npm-shrinkwrap.json`, `yarn.lock`,
+`pnpm-lock.yaml`); a nested, unknown, oversized or non-UTF-8 lockfile is refused.
+Zero or two setup-node steps, an unpinned action, a cache already named, an
+inline or empty `with` mapping and a non-unique preimage are refused.
+
+The caller supplies repeated-setup evidence: an evidence ID, the same head and
+source/lockfile digests, 2 to 100 runs and the mean setup milliseconds. It is a
+declaration, not independent attestation. The preview preserves bytes, comments
+and line endings through the existing repair edit bounds, and verification stays
+inconclusive: the setup time is descriptive, the cache is the action's own, and
+CI passing alone cannot establish improvement.
+
+The design is in
+[the plan](roadmap/plans/2026-10-23-eli-e3-cache-preview-foundation.md). There is
+no collector, store row, route, CLI, MCP, Eli or UI change. Tests cover manager
+mapping, insertion and byte preservation, CRLF, unsupported setup shapes,
+lockfile refusals, policy/evidence/currentness refusals. No live GitHub, model or
+fleet.
+
+Next agent: bind this calculation to a bounded real evidence read before adding
+retention or a route. Do not describe the foundation as a usable cache
+optimisation yet.
