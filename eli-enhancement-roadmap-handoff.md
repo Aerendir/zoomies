@@ -27,7 +27,7 @@ as the record of how each slice landed.
 | --- | --- | --- |
 | E1 (ZF-242) | Merged and used: `internal/analysis` (`merge_delay.go`), `get_pr_delay` on Eli's allowlist, CLI, contextual UI | None. ROADMAP.md still lists `in_progress` because live-model evaluation and a real performance experiment have not run |
 | E2 (ZF-243) | Descriptive milestone merged (#1020); `get_retained_comparison` on Eli's allowlist; ZF-241's period comparison, queue breakdown, host pressure and startup failures are `implemented` | None. Controlled-experiment proof and dispatch stay deferred by the owner |
-| E3 (ZF-244) | The first operator slice is on main: pure preview (`internal/optimisation`), private retention (migration 0107), admitted checkout evidence ([#1024](https://github.com/eyupio/zoomies/pull/1024)), the policy, routes and web flow from [#1171](https://github.com/eyupio/zoomies/pull/1171), attributed approval (migration 0119), reconciled draft publication (migration 0120) and the two-way link between a published preview and E2's comparison (migration 0121), all described under "E3: what is built, and what is not" below | The rows further down that call #1024 or the policy and web flow "pending" are out of date; both merged. Still absent: a real E2 comparison of a published change, CLI, MCP and Eli access, and any run against a real repository |
+| E3 (ZF-244) | The first operator slice is on main: pure preview (`internal/optimisation`), private retention (migration 0107), admitted checkout evidence ([#1024](https://github.com/eyupio/zoomies/pull/1024)), the policy, routes and web flow from [#1171](https://github.com/eyupio/zoomies/pull/1171), attributed approval (migration 0119), reconciled draft publication (migration 0120), the two-way link between a published preview and E2's comparison (migration 0121), and read access from the CLI, MCP and Eli, all described under "E3: what is built, and what is not" below | The rows further down that call #1024 or the policy and web flow "pending" are out of date; both merged. Still absent: a real E2 comparison of a published change, any run against a real repository, and write access from the CLI, MCP or Eli (deliberately web-only) |
 | E4 | Not started as a track. Kennel's evaluator, waivers and guidance exist, but no fix preview or publication path does | Unchanged |
 | E5 | ZF-241's `startup_failures` covers runner-startup recurrence. No workflow/test failure fingerprinting exists | Unchanged |
 | E6 | Not started. `internal/prrepair/mention` (ZF-239 slice 1) is only the command matcher | Unchanged |
@@ -87,10 +87,19 @@ publication arrived on 23 October:
   to E2's Comparisons page with the scope, workflow kind and the preview reference
   prefilled; the comparison remains a manual, inconclusive capture, and can be
   linked back to the preview after it is retained.
+* **Read surfaces (23 October).** `zoomies optimisations get <preview-id>` and the
+  MCP/Eli tool `get_checkout_preview` read the same bounded route as the web page:
+  metadata, the commit and both digests, approval and publication status, the
+  linked comparison, and the one changed line. They never return the full workflow
+  file, and they neither approve nor publish. The MCP/Eli projection leaves out
+  actor identities and future fields. The changed line and path are marked
+  untrusted repository text; a scripted Eli scenario plants an instruction in the
+  line and proves it stays inside the fence. No new route, migration or setting is
+  added; the CLI preserves the raw JSON for `--output json`.
 
 Not built, in the order to do it. The list below was the record on 19 October;
-approval and draft publication have since been built (see the 23 October sections
-at the end). The rest remains.
+approval, draft publication and read access from the CLI, MCP and Eli have since
+been built (see the 23 October sections at the end). The rest remains.
 
 1. **Validate against one real repository first.** The reader, the policy gate, the
    web flow and the draft publisher have never met a real GitHub App, real Actions
@@ -103,12 +112,7 @@ at the end). The rest remains.
    time before and after through the E2 comparison. The result is "inconclusive"
    unless a suitable control and candidate exist, and CI passing is never evidence of
    a saving. Projected savings stay estimates.
-3. **CLI, MCP and Eli access.** Needs a contract decision first: a kept preview
-   holds private workflow source, so these surfaces would see more than the web UI
-   deliberately shows. Until that is decided the routes are not on Eli's allowlist
-   and Eli can only point at the page. Web first, then CLI, then MCP/Eli with
-   scripted scenarios.
-4. **Wider catalogue** (later): bounded readiness polling, dependency or build
+3. **Wider catalogue** (later): bounded readiness polling, dependency or build
    cache, and sharding, each with its own evidence and refusals. Do not lead with
    test removal, relaxed assertions or blanket retries.
 
@@ -117,7 +121,9 @@ approve (the 23 October slice keeps the recommended default, that the same
 operator may, with both recorded); whether the proposed
 `optimisation.publish` name and off-by-default level should stand (the slice uses
 them); whether the 10 GiB-per-runner disk allowance used by host auto-adjust
-should become a setting.
+should become a setting. The private-envelope contract is settled: the CLI, MCP
+and Eli read metadata and the one changed line, never the full file, and writes
+stay on the web page.
 
 ### Related work that shipped in the same PRs, and is not E3
 
@@ -2484,3 +2490,33 @@ mocked routes only.
 Next agent: a real repository run and a real comparison of a published change
 remain. Do not describe the link as verification; it is the route to an explicit
 capture and a way to read it again.
+
+
+### E3 read surfaces, 23 October 2026
+
+The owner chose the bounded view for the CLI, MCP and Eli: metadata, the commit
+and both digests, approval and publication status, the linked comparison, and the
+one changed line, never the full workflow file. `zoomies optimisations get
+<preview-id> --installation ID --repo OWNER/REPO` and the MCP/Eli tool
+`get_checkout_preview` read the existing replay route through the caller's token.
+They need `optimisations:read` and `jobs:read`, and they neither approve nor
+publish. The MCP/Eli projection excludes `reviewed_by`, `approved_by`,
+`published_by` and `linked_by`; the CLI, run by the operator, prints them.
+
+The path and the two lines are quoted untrusted repository text. The MCP answer
+puts the JSON after a boundary saying so, and a scripted Eli scenario plants an
+instruction in the changed line to prove it reaches the model only inside that
+fence. The preview remains `inconclusive` and `not_checked`; the checkout time is
+descriptive, and a linked comparison is evidence to open, not a saving claim. No
+new route, migration or setting is added.
+
+Validation: CLI tests cover the human view, raw JSON preservation and refusal
+before any request. MCP tests cover one scoped GET, the bounded projection, actor
+identity exclusion, invalid arguments and inconsistent evidence. The API
+allowlist test holds the tool on Eli's list, and the scripted Eli scenario passes.
+`make generate` rewrites the CLI and MCP references from the binary. All against
+fakes and mocked routes only.
+
+Next agent: a real repository run and a real comparison of a published change
+remain. Approval, publication and the read surfaces are all present; do not add
+write tools for them.

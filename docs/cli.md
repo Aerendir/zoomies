@@ -406,6 +406,18 @@ diagnostic allowance, and a lost response may have already retained evidence.
 Use a returned ID for scoped replay when available. Capture is a change command
 in the agent skill and is not offered as an MCP/Eli read-only tool.
 
+### `zoomies optimisations`
+
+`optimisations get <preview-id> --installation ID --repo OWNER/REPO` replays a
+kept checkout preview without a GitHub read, an approval or a publication. It
+shows the repository, file and line, commit and digests, run and step positions,
+the checkout time, approval and publication status, any linked comparison, and
+the one changed line. The full workflow file was shown once at inspection and is
+never returned. Verification is always inconclusive, and the checkout time is
+descriptive, not a saving. Requires an operator and a token with
+`optimisations:read` and `jobs:read`; a public visitor is refused. Use
+`--output json` for the controller's answer unchanged.
+
 ### `zoomies why`
 
 `why <job>` is the one question "why did this job fail, stall or run slow",

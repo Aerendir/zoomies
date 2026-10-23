@@ -771,4 +771,7 @@ requests and Workflows write for that one act; a retry reconciles the branch and
 pull request the previous attempt left rather than starting again. A retained E2
 comparison can be linked to the publication as its verification evidence. The
 link names the comparison and the actor and is audited; the comparison is not
-copied, and its result is not promoted to a saving claim.
+copied, and its result is not promoted to a saving claim. The CLI and the MCP
+tool read the same bounded preview as the web page, never the full workflow
+source; model output excludes actor identities, and neither surface can approve
+or publish.
