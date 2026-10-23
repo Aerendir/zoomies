@@ -78,6 +78,20 @@
   </div>
 
   <div class="block">
+    <h3>Band, dog hidden or sized</h3>
+    <div class="stages">
+      <BrandStage
+        wide
+        art={false}
+        headline="Fleet status"
+        lede="The dog hidden, so the sentence has the whole band."
+      />
+      <BrandStage wide artSize="small" headline="Fleet status" lede="A small dog." />
+      <BrandStage wide artSize="large" headline="Fleet status" lede="A large dog." />
+    </div>
+  </div>
+
+  <div class="block">
     <h3>Band figures, in the band</h3>
     <BrandStage
       wide

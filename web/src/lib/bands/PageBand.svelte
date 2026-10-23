@@ -8,7 +8,8 @@
 
   Two sizes. Standard is the Overview's full stage; Compact is the slim one the working
   pages use, where the rows are the point. Each page has a default and the operator's
-  choice, per page, is in Appearance.
+  choice, per page, is in Appearance. The dog can be hidden, or drawn at a chosen size,
+  whichever cut the band takes; that choice applies to every band.
 
   A band can carry figures (`stats`) in a strip along its lower edge, which is how a
   page gives up the panel it used to spend a row of its height on. They are never lost
@@ -71,6 +72,8 @@
       accent={line.accent || undefined}
       lede={line.lede}
       treatment={prefs.logoTreatment}
+      art={prefs.bandLogo}
+      artSize={prefs.bandLogoSize === 'auto' ? undefined : prefs.bandLogoSize}
     >
       {#if actions}<div class="actions">{@render actions()}</div>{/if}
       {#if stats.length > 0}

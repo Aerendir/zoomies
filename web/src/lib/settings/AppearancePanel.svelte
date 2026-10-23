@@ -25,6 +25,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import Switch from '$lib/components/Switch.svelte';
   import { BAND_PAGES, BAND_SIZES, type BandSize } from '$lib/bands/pages';
+  import { BAND_LOGO_SIZE_OPTIONS, type BandLogoSize } from '$lib/bands/band-logo';
   import { visualStyle } from '$lib/state/ui-style.svelte';
   import VisualStylePicker from './VisualStylePicker.svelte';
 
@@ -143,6 +144,32 @@
 
   <div class="setting">
     <div class="text">
+      <p class="label">Logo in the band</p>
+      <p class="description">
+        The dog beside a band's headline, and how large it is drawn. Auto follows the band's size,
+        Compact or Standard; the three named sizes pin it whichever the cut. Hiding it gives the
+        sentence the whole band. The backdrop follows the Logo style above.
+      </p>
+    </div>
+    <div class="band-logo-controls">
+      <Switch
+        label="Show the logo in the band"
+        hideLabel
+        checked={prefs.bandLogo}
+        onchange={(on) => (prefs.bandLogo = on)}
+      />
+      <Segmented
+        options={BAND_LOGO_SIZE_OPTIONS}
+        value={prefs.bandLogoSize}
+        label="Logo size in the band"
+        disabled={!prefs.bandLogo}
+        onchange={(value) => (prefs.bandLogoSize = value as BandLogoSize)}
+      />
+    </div>
+  </div>
+
+  <div class="setting">
+    <div class="text">
       <p class="label">Zoomies vocabulary</p>
       <p class="description">
         Off, the default, uses plain status names and icons. Cute keeps the original animated dog.
@@ -251,6 +278,13 @@
     border: var(--z-border-width) solid var(--z-border);
     border-radius: var(--z-radius-md);
     background: var(--z-surface);
+  }
+  .band-logo-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--z-space-3);
+    flex: none;
   }
   .logo-setting {
     align-items: center;
