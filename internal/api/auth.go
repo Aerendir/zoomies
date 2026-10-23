@@ -374,6 +374,23 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
 	})
 }
 
+// startBrowserSession installs the session a completed sign-in has just
+// created, and ends the one the browser was holding.
+//
+// Replacing the cookie is not enough: the session behind the old value stays
+// valid in the database until it expires, so a person who signs in on a shared
+// browser after somebody else leaves that person's access usable by anyone who
+// still has the value. Called only once the new session exists, so a refused
+// sign-in leaves the holder's session alone.
+func (s *Server) startBrowserSession(w http.ResponseWriter, r *http.Request, token string) {
+	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" && c.Value != token {
+		if err := s.auth.Logout(r.Context(), c.Value); err != nil {
+			s.logger(r).Warn("could not end the session this browser held before signing in", "error", err)
+		}
+	}
+	s.setSessionCookie(w, token)
+}
+
 // clearSessionCookie expires the cookie. The attributes have to match the ones
 // it was set with or the browser keeps the old cookie alongside the new one.
 func (s *Server) clearSessionCookie(w http.ResponseWriter) {

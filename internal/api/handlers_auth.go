@@ -196,7 +196,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.setSessionCookie(w, token)
+	s.startBrowserSession(w, r, token)
 	id := &auth.Identity{Kind: auth.KindUser, ID: u.ID, Name: u.Username, Role: u.Role, IP: ip}
 	s.auth.Auditor().Auth(r.Context(), id, "auth.login", map[string]any{"role": u.Role})
 	writeJSON(w, http.StatusOK, newIdentityResponse(id, u.MustChangePassword))
@@ -713,7 +713,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, "starting a session after single sign-on", err)
 		return
 	}
-	s.setSessionCookie(w, token)
+	s.startBrowserSession(w, r, token)
 	if err := s.ctrl.Store().TouchLogin(r.Context(), u.ID, s.auth.Now()); err != nil {
 		s.logger(r).Warn("could not record a single sign-on login", "user", u.Username, "error", err)
 	}
