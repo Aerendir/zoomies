@@ -1,0 +1,153 @@
+package optimisation
+
+import (
+	"errors"
+	"path"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/eyupio/zoomies/internal/kennel/workflow"
+	"github.com/eyupio/zoomies/internal/prrepair"
+)
+
+const MaxLockfileBytes = 1 << 20
+
+// ErrCacheUnsupported is the one refusal for a setup cache preview. It says what
+// the evidence needs without pretending a guessed package manager or step is a
+// supported change.
+var ErrCacheUnsupported = errors.New("setup cache preview needs one pinned setup-node step with a block with mapping, one supported root lockfile, repeated setup evidence and source/edit policy")
+
+// CacheSource is complete supplied evidence: the workflow file at a pinned
+// head and the root lockfile at the same head. The lockfile content is used
+// only for its identity; the preview retains its path and digest, not it.
+type CacheSource struct {
+	HeadSHA  string
+	Workflow prrepair.File
+	Lockfile prrepair.File
+}
+
+// SetupEvidence is caller-supplied, not independently attested. It says the
+// setup step has cost this much over this many runs; the collector that binds
+// exact run identities is a later slice.
+type SetupEvidence struct {
+	EvidenceID     string
+	HeadSHA        string
+	SourceSHA256   string
+	LockfileSHA256 string
+	Runs           int
+	SetupMS        *int64
+}
+
+// CachePreview is a proposed cache key insertion, computed only from the
+// supplied source and evidence. Verification is always inconclusive.
+type CachePreview struct {
+	Version        string
+	Kind           string
+	State          string
+	HeadSHA        string
+	SourceSHA256   string
+	AfterSHA256    string
+	LockfilePath   string
+	LockfileSHA256 string
+	PackageManager string
+	EvidenceID     string
+	JobIndex       int
+	StepIndex      int
+	Line           int
+	Runs           int
+	SetupMS        int64
+	Edit           prrepair.Edit
+	File           prrepair.File
+	Verification   string
+	Explanation    string
+}
+
+func cacheManager(lockfile string) string {
+	switch lockfile {
+	case "package-lock.json", "npm-shrinkwrap.json":
+		return "npm"
+	case "yarn.lock":
+		return "yarn"
+	case "pnpm-lock.yaml":
+		return "pnpm"
+	}
+	return ""
+}
+
+func cacheLockfile(file prrepair.File) bool {
+	return (file.Path == "package-lock.json" || file.Path == "npm-shrinkwrap.json" || file.Path == "yarn.lock" || file.Path == "pnpm-lock.yaml") && (file.Mode == "100644" || file.Mode == "100755") && !file.Partial && file.StartLine == 0 && len(file.Content) > 0 && len(file.Content) <= MaxLockfileBytes && utf8.ValidString(file.Content)
+}
+
+func cacheWorkflow(file prrepair.File) bool {
+	return !file.Partial && file.StartLine == 0 && len(file.Content) > 0 && len(file.Content) <= MaxCheckoutSourceBytes && strings.HasPrefix(file.Path, ".github/workflows/") && path.Dir(file.Path) == ".github/workflows" && (strings.HasSuffix(file.Path, ".yml") || strings.HasSuffix(file.Path, ".yaml"))
+}
+
+// PreviewCache computes the exact insertion that enables the setup action's
+// package cache. It refuses unknown lockfiles, unpinned or ambiguous setup
+// steps, a cache already named, unsupported YAML, stale evidence and disabled
+// policy. It reads nothing and calls no model.
+func PreviewCache(source CacheSource, evidence SetupEvidence, policy Policy) (CachePreview, error) {
+	if !policy.SourceAllowed || !policy.WorkflowEditsAllowed || !commit(source.HeadSHA) || !cacheWorkflow(source.Workflow) || !cacheLockfile(source.Lockfile) {
+		return CachePreview{}, ErrCacheUnsupported
+	}
+	sourceDigest := hash(source.Workflow.Content)
+	lockfileDigest := hash(source.Lockfile.Content)
+	manager := cacheManager(source.Lockfile.Path)
+	if manager == "" || evidence.HeadSHA != source.HeadSHA || evidence.SourceSHA256 != sourceDigest || evidence.LockfileSHA256 != lockfileDigest || evidence.EvidenceID == "" || len(evidence.EvidenceID) > 128 || strings.ContainsAny(evidence.EvidenceID, " \t\r\n\x00") || evidence.Runs < 2 || evidence.Runs > 100 || evidence.SetupMS == nil || *evidence.SetupMS <= 0 || *evidence.SetupMS > 7*24*60*60*1000 {
+		return CachePreview{}, ErrCacheUnsupported
+	}
+	job, step, err := workflow.FindSetupNode([]byte(source.Workflow.Content))
+	if err != nil {
+		return CachePreview{}, ErrCacheUnsupported
+	}
+	before, after, line, err := workflow.SetupCacheChange([]byte(source.Workflow.Content), job, step, manager)
+	if err != nil {
+		return CachePreview{}, ErrCacheUnsupported
+	}
+	edit := prrepair.Edit{Path: source.Workflow.Path, Before: before, After: after}
+	files, err := prrepair.ApplySuppliedEdits([]prrepair.File{source.Workflow}, []prrepair.Edit{edit}, true)
+	if err != nil {
+		return CachePreview{}, ErrCacheUnsupported
+	}
+	return CachePreview{
+		Version: "cache-preview-v1", Kind: "dependency_cache", State: "preview_ready",
+		HeadSHA: source.HeadSHA, SourceSHA256: sourceDigest, AfterSHA256: hash(files[0].Content),
+		LockfilePath: source.Lockfile.Path, LockfileSHA256: lockfileDigest, PackageManager: manager,
+		EvidenceID: evidence.EvidenceID, JobIndex: job, StepIndex: step, Line: line,
+		Runs: evidence.Runs, SetupMS: *evidence.SetupMS, Edit: edit, File: files[0],
+		Verification: "inconclusive",
+		Explanation:  "Enable the setup action's " + manager + " cache using the root " + source.Lockfile.Path + ". The setup step averaged " + setupSeconds(*evidence.SetupMS) + " over " + runCount(evidence.Runs) + "; the saving is unverified and the cache is the action's own, shared with whoever can write this repository's cache. Passing CI alone cannot establish improvement.",
+	}, nil
+}
+
+func setupSeconds(ms int64) string {
+	if ms < 1000 {
+		return "less than a second"
+	}
+	return strconv.FormatFloat(float64(ms)/1000, 'f', 1, 64) + "s"
+}
+
+func runCount(n int) string {
+	if n == 1 {
+		return "1 run"
+	}
+	return strconv.Itoa(n) + " runs"
+}
+
+// CheckCacheCurrent is a local precondition, not publication authorisation. A
+// later publisher must independently fetch the head and the lockfile and
+// recheck policy immediately.
+func CheckCacheCurrent(p CachePreview, source CacheSource, evidence SetupEvidence, policy Policy) error {
+	if p.Version != "cache-preview-v1" || p.Kind != "dependency_cache" || p.State != "preview_ready" {
+		return ErrCacheUnsupported
+	}
+	current, err := PreviewCache(source, evidence, policy)
+	if err != nil {
+		return err
+	}
+	if current.HeadSHA != p.HeadSHA || current.SourceSHA256 != p.SourceSHA256 || current.AfterSHA256 != p.AfterSHA256 || current.LockfilePath != p.LockfilePath || current.LockfileSHA256 != p.LockfileSHA256 || current.PackageManager != p.PackageManager || current.JobIndex != p.JobIndex || current.StepIndex != p.StepIndex || current.Line != p.Line || current.Edit != p.Edit || current.File != p.File {
+		return ErrCacheUnsupported
+	}
+	return nil
+}
