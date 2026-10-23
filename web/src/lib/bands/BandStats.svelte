@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
   import Duration from '$lib/components/Duration.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { NO_VALUE } from '$lib/format';
   import type { BandMore, BandStat } from './stats';
 
@@ -30,27 +31,35 @@
   </strong>
 {/snippet}
 
+{#snippet item(stat: BandStat)}
+  {#if stat.onselect}
+    <button
+      type="button"
+      class="stat interactive"
+      class:active={stat.active}
+      data-tone={stat.tone}
+      aria-pressed={stat.active}
+      onclick={stat.onselect}
+    >
+      {@render figure(stat)}
+    </button>
+  {:else if stat.href}
+    <a class="stat interactive" data-tone={stat.tone} href={stat.href}>
+      {@render figure(stat)}
+    </a>
+  {:else}
+    <div class="stat" data-tone={stat.tone}>{@render figure(stat)}</div>
+  {/if}
+{/snippet}
+
 <ul class="strip {variant}" aria-label={label}>
   {#each stats as stat (stat.label)}
     <li>
-      {#if stat.onselect}
-        <button
-          type="button"
-          class="stat interactive"
-          class:active={stat.active}
-          data-tone={stat.tone}
-          title={stat.hint}
-          aria-pressed={stat.active}
-          onclick={stat.onselect}
-        >
-          {@render figure(stat)}
-        </button>
-      {:else if stat.href}
-        <a class="stat interactive" data-tone={stat.tone} title={stat.hint} href={stat.href}>
-          {@render figure(stat)}
-        </a>
+      <!-- The shared bubble, not the browser's title: it shows for the keyboard too. -->
+      {#if stat.hint}
+        <Tooltip bare text={stat.hint}>{@render item(stat)}</Tooltip>
       {:else}
-        <div class="stat" data-tone={stat.tone} title={stat.hint}>{@render figure(stat)}</div>
+        {@render item(stat)}
       {/if}
     </li>
   {/each}

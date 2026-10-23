@@ -23,6 +23,7 @@
   import type { Snippet } from 'svelte';
   import { X } from '@lucide/svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import BrandStage from '$lib/public/BrandStage.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
   import BandStats from './BandStats.svelte';
@@ -76,15 +77,16 @@
         <div class="figures"><BandStats {stats} {more} variant="band" /></div>
       {/if}
     </BrandStage>
-    <button
-      type="button"
-      class="dismiss"
-      aria-label={`Hide the ${name} band`}
-      title={`Hide the ${name} band`}
-      onclick={() => (confirming = true)}
-    >
-      <X size={14} aria-hidden="true" />
-    </button>
+    <Tooltip bare text={`Hide the ${name} band`} placement="left">
+      <button
+        type="button"
+        class="dismiss"
+        aria-label={`Hide the ${name} band`}
+        onclick={() => (confirming = true)}
+      >
+        <X size={14} aria-hidden="true" />
+      </button>
+    </Tooltip>
   </div>
 {/if}
 
