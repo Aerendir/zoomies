@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -1655,6 +1656,11 @@ func TestExternalsVolumeIsKeyedOnTheDigestAndFilledOnce(t *testing.T) {
 // marker) is emptied and copied again; a complete one is left alone; an image
 // without externals fails and writes no marker.
 func TestTheExternalsFillScriptWritesTheMarkerOnlyAfterACompleteCopy(t *testing.T) {
+	// The script runs in a Linux container of the runner image; a Windows
+	// sh, given Windows paths, is not what it is written for.
+	if runtime.GOOS == "windows" {
+		t.Skip("the fill script runs in a Linux container")
+	}
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("no sh")
 	}
