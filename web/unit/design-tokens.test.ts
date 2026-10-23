@@ -57,7 +57,6 @@ const UNREAD_ON_PURPOSE: Record<string, string> = {
   // in now read the text, muted text, subtle text and border; these two are
   // still documented and not yet read, which is a design decision, so they are
   // named here rather than deleted.
-  '--z-panel-raised': 'documented, not yet read',
   '--z-panel-ring': 'documented, not yet read',
 };
 

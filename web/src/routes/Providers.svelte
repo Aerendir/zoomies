@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
   import PageBand from '$lib/bands/PageBand.svelte';
+  import type { BandStat } from '$lib/bands/stats';
   import { providersLine } from '$lib/bands/lines';
   import { Cloud, Plus } from '@lucide/svelte';
   import {
@@ -23,7 +24,7 @@
   } from '$lib/api/client';
   import { events } from '$lib/api/sse';
   import type { Machine, Provider, ProviderPairing, ProviderRenting } from '$lib/api/types';
-  import { pluralise } from '$lib/format';
+  import { formatNumber, pluralise } from '$lib/format';
   import { router } from '$lib/router';
   import { machineStatus } from '$lib/status';
   import { session } from '$lib/state/session.svelte';
@@ -213,6 +214,31 @@
     }
   }
 
+  // The figures that used to sit in the header, carried by the band (or a plain panel).
+  const bandFigures = $derived<BandStat[]>(
+    loaded && providers.length > 0
+      ? [
+          {
+            label: providers.length === 1 ? 'Provider' : 'Providers',
+            value: formatNumber(providers.length),
+          },
+          {
+            label: machines.length === 1 ? 'Machine' : 'Machines',
+            value: formatNumber(machines.length),
+          },
+          ...(review.length > 0
+            ? [
+                {
+                  label: 'Needing review',
+                  value: formatNumber(review.length),
+                  hint: 'Machines that need a person to look at them.',
+                  tone: 'warning' as const,
+                },
+              ]
+            : []),
+        ]
+      : [],
+  );
   const bandLine = $derived(
     loaded
       ? providersLine({
@@ -231,20 +257,11 @@
   subtitle="Where machines are rented from. A machine becomes a host when its agent joins, and is deleted when the work runs out."
   onrefresh={refreshPage}
 >
-  {#snippet meta()}
-    {#if loaded && providers.length > 0}
-      <p class="summary">
-        {pluralise(providers.length, 'provider')} · {pluralise(machines.length, 'machine')}
-        {#if review.length > 0}
-          · {review.length} needing review{/if}
-      </p>
-    {/if}
-  {/snippet}
   {#if canAdmin}
     <Button variant="primary" icon={Plus} href="/providers/new">Add a provider</Button>
   {/if}
 </PageHeader>
-<PageBand page="providers" line={bandLine} />
+<PageBand page="providers" line={bandLine} stats={bandFigures} />
 
 <div class="content">
   <LoadingBoundary
@@ -382,11 +399,6 @@
   }
   .content :global(.stack > .metrics) {
     margin-bottom: 0;
-  }
-  .summary {
-    margin: 0;
-    font-size: var(--z-text-xs);
-    color: var(--z-text-muted);
   }
   .grid {
     display: grid;

@@ -17,7 +17,10 @@
   import { readableJobText } from '$lib/jobs/name';
   import RunnerInsights from '$lib/insights/RunnerInsights.svelte';
   import PageBand from '$lib/bands/PageBand.svelte';
+  import { demandMore, demandStats } from '$lib/bands/demand-stats';
   import { runnersLine } from '$lib/bands/runners-line';
+  import { provisioningDemand } from '$lib/insights/provisioning.svelte';
+  import { finite, poolSignals, queueTone } from '$lib/insights/signals';
   import FleetHistory from '$lib/insights/FleetHistory.svelte';
   import { CircleSlash, Search, Trash2 } from '@lucide/svelte';
   import { analyseStartupFailures, listRunners } from '$lib/api/client';
@@ -48,7 +51,7 @@
   } from '$lib/insights/analysis';
   import { registerSearch } from '$lib/keys';
   import { navigate, router } from '$lib/router';
-  import { runnerStatus } from '$lib/status';
+  import { QUEUE_STATUS_LABELS, runnerStatus } from '$lib/status';
   import { fleet } from '$lib/state/fleet.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
   import { session } from '$lib/state/session.svelte';
@@ -94,6 +97,24 @@
   );
 
   const filters = $derived({ search, poolId, hostId, includeRemoved, states });
+  // The provisioning figures the band carries. They follow the pool filter, as the strip
+  // they replace did, and are said so by the context line under the band.
+  const demand = provisioningDemand(() => poolId);
+  const queuedNow = $derived(
+    poolId
+      ? poolSignals(fleet.pools, fleet.stats).find((p) => p.pool.id === poolId)?.queued
+      : finite(fleet.stats?.fleet?.queued_jobs),
+  );
+  const bandFigures = $derived(
+    demandStats({
+      queued: queuedNow ?? null,
+      queuedWarning: queueTone(queuedNow, session.meta?.queue_warning_threshold) === 'warning',
+      counts: demand.counts,
+      oldest: demand.oldest,
+      poolId,
+      labels: QUEUE_STATUS_LABELS,
+    }),
+  );
 
   /* What keeps failing to start ------------------------------------------------
    * Narrowing the list to failed runners is asking "why do these keep
@@ -562,6 +583,8 @@
 
 <PageBand
   page="runners"
+  stats={bandFigures}
+  more={demandMore(poolId)}
   line={fleet.stats?.runners
     ? runnersLine({
         provisioning: fleet.stats.runners.provisioning ?? 0,
@@ -572,7 +595,7 @@
       })
     : null}
 />
-<RunnerInsights {poolId} />
+<RunnerInsights {poolId} pulse={false} />
 <details class="activity-history">
   <summary>Explore fleet activity over the last 24 hours</summary><FleetHistory />
 </details>

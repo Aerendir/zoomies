@@ -1,5 +1,6 @@
 <script lang="ts">
   import PageBand from '$lib/bands/PageBand.svelte';
+  import type { BandStat } from '$lib/bands/stats';
   import { queueLine } from '$lib/bands/lines';
   import { readableJobText } from '$lib/jobs/name';
   import ChartPanel from '$lib/components/ChartPanel.svelte';
@@ -342,6 +343,17 @@
 
   // The band's figures are this fleet's, as the Overview's are.
   const bandStats = $derived(fleet.stats?.fleet ?? fleet.stats);
+  // The provisioning status filters, carried by the band (and by a plain panel when it is
+  // off). Pressing one filters the list below, as the cards they replace did.
+  const statusFigures = $derived<BandStat[]>(
+    statuses.map((item) => ({
+      label: item.label,
+      value: counts[item.value]?.toLocaleString(),
+      hint: `${item.hint}. Show only these.`,
+      active: provisioning.length === 1 && provisioning[0] === item.value,
+      onselect: () => setStatus([item.value]),
+    })),
+  );
   const bandLine = $derived(
     bandStats
       ? queueLine({
@@ -402,23 +414,9 @@
   <Button variant="secondary" icon={Bookmark} onclick={() => (saveOpen = true)}>Save view</Button>
   <Button variant="ghost" href="/runners">View runners</Button>
 </PageHeader>
-<PageBand page="queue" line={bandLine} />
+<PageBand page="queue" line={bandLine} stats={statusFigures} />
 
 <div class="queue-content">
-  <div class="summary" aria-label="Provisioning status filters">
-    {#each statuses as item (item.value)}
-      <button
-        class="summary-card"
-        class:active={provisioning.length === 1 && provisioning[0] === item.value}
-        onclick={() => setStatus([item.value])}
-        aria-pressed={provisioning.length === 1 && provisioning[0] === item.value}
-      >
-        <span class="card-title">{item.label}</span><strong
-          >{counts[item.value]?.toLocaleString() ?? NO_VALUE}</strong
-        ><span class="card-hint">{item.hint}</span>
-      </button>
-    {/each}
-  </div>
   <div class="filters-panel">
     <JobFilters
       queue
@@ -672,41 +670,6 @@
     gap: var(--z-space-4);
     min-width: 0;
   }
-  .summary {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--z-space-3);
-  }
-  .summary-card {
-    text-align: left;
-    display: flex;
-    flex-direction: column;
-    gap: var(--z-space-2);
-    padding: var(--z-space-4);
-    border: 1px solid var(--z-border);
-    border-radius: var(--z-radius-lg);
-    background: var(--z-surface);
-    color: var(--z-text);
-    cursor: pointer;
-  }
-  .summary-card:hover,
-  .summary-card.active {
-    border-color: var(--z-accent);
-    background: var(--z-accent-subtle);
-  }
-  .summary-card:focus-visible {
-    outline: 2px solid var(--z-accent);
-    outline-offset: 2px;
-  }
-  .summary-card strong {
-    font-size: var(--z-text-2xl);
-    font-variant-numeric: tabular-nums;
-  }
-  .card-title {
-    font-size: var(--z-text-sm);
-    font-weight: var(--z-weight-medium);
-  }
-  .card-hint,
   .filter-hint,
   .policy {
     display: flex;
@@ -804,12 +767,6 @@
     overflow-wrap: anywhere;
   }
   @media (max-width: 767px) {
-    .summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .summary-card {
-      padding: var(--z-space-3);
-    }
     .filter-hint {
       flex-basis: 100%;
     }

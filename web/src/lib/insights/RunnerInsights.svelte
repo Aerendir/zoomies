@@ -9,11 +9,12 @@
   import { poolSignals, finite, queueTone } from './signals';
   import { runnerStatus } from '$lib/status';
   /**
-   * The context above a runner list: the provisioning strip, and the lifecycle
+   * The context above a runner list: the provisioning strip (unless the page carries it
+   * elsewhere, with `pulse` off), and the lifecycle
    * explanation behind a disclosure. The grid answers "what are my runners doing", and
    * the Overview and Queue pages carry the figures the old tiles repeated.
    */
-  let { poolId = '' }: { poolId?: string } = $props();
+  let { poolId = '', pulse = true }: { poolId?: string; pulse?: boolean } = $props();
   const signal = $derived(poolSignals(fleet.pools, fleet.stats).find((p) => p.pool.id === poolId));
   const r = $derived(fleet.stats?.runners);
   // The one figure an operator looks for first: how much work is waiting for a runner.
@@ -98,12 +99,16 @@
       >Explore usage history</a
     >
   </div>
-  <ProvisioningPulse
-    {poolId}
-    queued={queued ?? null}
-    {queuedTone}
-    queuedHref={`/jobs?state=queued${suffix}`}
-  />
+  <!-- The Runners list carries these figures in its band instead (and on its own, with
+       the band off), so it asks for the context without them. -->
+  {#if pulse}
+    <ProvisioningPulse
+      {poolId}
+      queued={queued ?? null}
+      {queuedTone}
+      queuedHref={`/jobs?state=queued${suffix}`}
+    />
+  {/if}
   {#if fleet.stats}
     <details class="how">
       <summary>How runners move through their states</summary>

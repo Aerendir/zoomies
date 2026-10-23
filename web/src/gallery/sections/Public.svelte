@@ -7,12 +7,24 @@
   break on, and the band a page with no form beside it uses.
 -->
 <script lang="ts">
+  import BandStats from '$lib/bands/BandStats.svelte';
+  import type { BandStat } from '$lib/bands/stats';
   import Panel from '$lib/components/Panel.svelte';
   import BrandStage from '$lib/public/BrandStage.svelte';
   import ThemeSwitch from '$lib/public/ThemeSwitch.svelte';
   import type { ThemeChoice } from '$lib/state/theme.svelte';
 
   let choice = $state<ThemeChoice>('dark');
+  /*
+    The figures a band carries, in the states that break a strip: a link, a filter that
+    is on, a warning, a figure whose answer has not arrived, and one that is a live age.
+  */
+  const FIGURES: BandStat[] = [
+    { label: 'Jobs queued', value: '7', href: '#', tone: 'warning', hint: 'Open them.' },
+    { label: 'Ready', value: '1,204', onselect: () => {}, active: true },
+    { label: 'Paused', onselect: () => {} },
+    { label: 'Oldest demand', since: new Date(Date.now() - 250_000).toISOString() },
+  ];
   /** Unbroken, and longer than any column: a hostname, as a stage may be given one. */
   const UNBROKEN =
     'controller0123456789012345678901234567890123456789012345678901234567890123456789.example';
@@ -63,6 +75,23 @@
       headline="Fleet status"
       lede="How this fleet is doing right now, in plain words."
     />
+  </div>
+
+  <div class="block">
+    <h3>Band figures, in the band</h3>
+    <BrandStage
+      wide
+      eyebrow="Right now"
+      headline="12 runners are live."
+      lede="Every one is working."
+    >
+      <BandStats stats={FIGURES} more={{ label: 'Manage queue', href: '#' }} variant="band" />
+    </BrandStage>
+  </div>
+
+  <div class="block">
+    <h3>Band figures, on their own (band off, or a phone)</h3>
+    <BandStats stats={FIGURES} more={{ label: 'Manage queue', href: '#' }} variant="panel" />
   </div>
 </Panel>
 

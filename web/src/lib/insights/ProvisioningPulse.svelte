@@ -1,10 +1,7 @@
 <script lang="ts">
-  import { listProvisioning } from '$lib/api/client';
-  import { events } from '$lib/api/sse';
-  import { fleet } from '$lib/state/fleet.svelte';
   import { QUEUE_STATUS_LABELS } from '$lib/status';
   import Duration from '$lib/components/Duration.svelte';
-  import { untrack } from 'svelte';
+  import { provisioningDemand } from './provisioning.svelte';
   import { formatNumber, NO_VALUE } from '$lib/format';
   let {
     poolId = '',
@@ -18,71 +15,7 @@
     queuedTone?: 'warning' | 'neutral';
     queuedHref?: string;
   } = $props();
-  let counts = $state<Record<string, number> | null>(null);
-  let failed = $state(false);
-  let oldest = $state<string | null>(null);
-  let retry = $state(0);
-  $effect(() => {
-    const id = poolId;
-    void retry;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let disposed = false;
-    let fetching = false;
-    let dirty = false;
-    counts = null;
-    failed = false;
-    oldest = null;
-    async function load() {
-      if (fetching) {
-        dirty = true;
-        return;
-      }
-      fetching = true;
-      try {
-        const result = await listProvisioning(
-          { limit: 1, sort: 'queued_at', order: 'asc', pool_id: id ? [id] : undefined },
-          controller.signal,
-        );
-        if (!disposed) {
-          counts = result.counts ?? null;
-          oldest = result.items?.[0]?.queued_at ?? null;
-          failed = false;
-        }
-      } catch {
-        if (!disposed) failed = true;
-      } finally {
-        fetching = false;
-        if (dirty && !disposed) {
-          dirty = false;
-          schedule();
-        }
-      }
-    }
-    function schedule() {
-      if (timer) return;
-      timer = setTimeout(() => {
-        timer = undefined;
-        void load();
-      }, 1500);
-    }
-    void load();
-    const unsubscribe = events.subscribe('job.updated', schedule);
-    const offReset = events.subscribe('resync', schedule);
-    return () => {
-      disposed = true;
-      controller.abort();
-      clearTimeout(timer);
-      unsubscribe();
-      offReset();
-    };
-  });
-  let previous = '';
-  $effect(() => {
-    const next = fleet.connection;
-    if (next === 'live' && previous && previous !== 'live') untrack(() => (retry += 1));
-    previous = next;
-  });
+  const demand = provisioningDemand(() => poolId);
 </script>
 
 <div class="pulse" aria-label="Provisioning demand context">
@@ -95,13 +28,13 @@
       ><strong>{queued == null ? NO_VALUE : formatNumber(queued)}</strong>
       {queued === 1 ? 'job queued' : 'jobs queued'}</a
     >{/if}
-  {#if counts}{#each [{ key: 'ready', label: QUEUE_STATUS_LABELS.ready }, { key: 'expedited', label: QUEUE_STATUS_LABELS.expedited }, { key: 'paused', label: QUEUE_STATUS_LABELS.paused }, { key: 'deleted', label: QUEUE_STATUS_LABELS.deleted }] as item (item.key)}<a
+  {#if demand.counts}{#each [{ key: 'ready', label: QUEUE_STATUS_LABELS.ready }, { key: 'expedited', label: QUEUE_STATUS_LABELS.expedited }, { key: 'paused', label: QUEUE_STATUS_LABELS.paused }, { key: 'deleted', label: QUEUE_STATUS_LABELS.deleted }] as item (item.key)}<a
         class={item.key}
         href={`/queue?provisioning=${item.key}${poolId ? `&pool_id=${encodeURIComponent(poolId)}` : ''}`}
-        ><strong>{counts[item.key] ?? 0}</strong> {item.label}</a
-      >{/each}{:else}<span>{failed ? 'Counts unavailable' : 'Loading counts…'}</span>{/if}
-  {#if oldest}<span>Oldest queued demand: <Duration from={oldest} live /></span>{/if}
-  {#if failed}<span>Last received counts</span><button onclick={() => (retry += 1)}
+        ><strong>{demand.counts[item.key] ?? 0}</strong> {item.label}</a
+      >{/each}{:else}<span>{demand.failed ? 'Counts unavailable' : 'Loading counts…'}</span>{/if}
+  {#if demand.oldest}<span>Oldest queued demand: <Duration from={demand.oldest} live /></span>{/if}
+  {#if demand.failed}<span>Last received counts</span><button onclick={() => demand.refresh()}
       >Refresh counts</button
     >{/if}
   <a class="manage" href={`/queue${poolId ? `?pool_id=${encodeURIComponent(poolId)}` : ''}`}
