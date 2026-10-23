@@ -198,9 +198,16 @@ func TestVolumeRemoveIsCalledOnlyByTheExternalsSweep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := string(body)
-	fn := src[strings.Index(src, "func (b *DockerBackend) removeExternals("):]
-	fn = fn[:strings.Index(fn, "\n}\n")]
+	// A Windows checkout ends its lines with CRLF.
+	src := strings.ReplaceAll(string(body), "\r\n", "\n")
+	start := strings.Index(src, "func (b *DockerBackend) removeExternals(")
+	if start < 0 {
+		t.Fatalf("removeExternals is not in docker.go; this test has to follow it (%s)", agentOwnsPromise)
+	}
+	fn := src[start:]
+	if end := strings.Index(fn, "\n}\n"); end >= 0 {
+		fn = fn[:end]
+	}
 	if !strings.Contains(fn, ".VolumeRemove(") {
 		t.Fatalf("VolumeRemove is called outside removeExternals (%s)", agentOwnsPromise)
 	}
