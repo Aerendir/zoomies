@@ -169,6 +169,16 @@ func hostTmpfs(spec Spec) store.HostTmpfs {
 	return h
 }
 
+// dindWorkTmpfsMB is the size of a docker-in-docker runner's work folder in
+// memory, 0 for none. The folder is the sidecar's volume, shared with the
+// runner, and it is placed against the runner's half of the pair, as
+// PlanScratch reports it.
+func dindWorkTmpfsMB(spec Spec) int64 {
+	runner, _ := pairLimits(spec)
+	work, _ := spec.Tmpfs.PlaceRunner(runner.MemoryMB, hostTmpfs(spec))
+	return work
+}
+
 // DaemonStoreMount is the docker-in-docker sidecar's image store, which a pool
 // may keep in memory. It is a folder of the sidecar's container, not the runner's.
 const DaemonStoreMount = "/var/lib/docker"
@@ -347,6 +357,9 @@ type DockerBackend struct {
 	externalsLocks  map[string]*sync.Mutex
 	externalsReady  map[string]bool
 	externalsFailed map[string]time.Time
+	// externalsHanded is when each volume was last handed to a runner, which
+	// keeps it out of SweepExternals until its sidecar exists.
+	externalsHanded map[string]time.Time
 	log             *slog.Logger
 	// nameRelease is how long a create waits for the daemon to release a name
 	// whose container has gone. A field rather than the constant so a test can
@@ -547,7 +560,8 @@ type containerOptions struct {
 	// mounts, so the work folder is at the same path for the job and for the
 	// daemon its containers run in. The sidecar owns the folder as an
 	// anonymous volume, which Docker removes with the last container using
-	// it: the agent never deletes a volume itself (docs/security.md).
+	// it: the only volumes the agent deletes itself are its superseded
+	// externals (docs/security.md).
 	VolumesFrom string
 	// WorkDirMount is a host directory to bind at RunnerWorkMount.
 	WorkDirMount string
@@ -866,9 +880,19 @@ func buildDinDConfig(spec Spec, fl flavor, o containerOptions) ContainerCreateRe
 	// the sidecar's, at the runner's path, and the runner mounts it from here:
 	// the spec's host directory when it gives one, an anonymous volume
 	// otherwise, which Docker removes with the last container that uses it.
-	if o.WorkDirMount != "" {
+	// A pool that keeps the work folder in memory gets the volume on a tmpfs,
+	// sized from the runner's half of the pair as a runner's own tmpfs is: a
+	// HostConfig.Tmpfs mount would not reach the runner through VolumesFrom.
+	switch {
+	case o.WorkDirMount != "":
 		hc.Binds = append(hc.Binds, o.WorkDirMount+":"+RunnerWorkMount+fl.mountSuffix)
-	} else {
+	case dindWorkTmpfsMB(spec) > 0:
+		hc.Mounts = append(hc.Mounts, Mount{Type: "volume", Target: RunnerWorkMount, VolumeOptions: &VolumeOptions{
+			DriverConfig: &VolumeDriver{Name: "local", Options: map[string]string{
+				"type": "tmpfs", "device": "tmpfs", "o": fmt.Sprintf("size=%dm,%s", dindWorkTmpfsMB(spec), tmpfsOptions),
+			}},
+		}})
+	default:
 		cfg.Volumes = map[string]struct{}{RunnerWorkMount: {}}
 	}
 	if o.ExternalsVolume != "" {
@@ -1252,6 +1276,7 @@ func (b *DockerBackend) CreateWithResult(ctx context.Context, spec Spec) (result
 		return CreateResult{}, err
 	}
 
+	requested := spec.Image
 	createRef, digest, pulled, pullDuration, err := b.prepareImage(ctx, spec.Image, spec.PullPolicy)
 	if err != nil {
 		return CreateResult{}, err
@@ -1309,10 +1334,7 @@ func (b *DockerBackend) CreateWithResult(ctx context.Context, spec Spec) (result
 		if _, err := b.ensureImage(ctx, dindImage); err != nil {
 			return CreateResult{}, err
 		}
-		if spec.Tmpfs.Work.Enabled {
-			b.log.Warn("the work folder of a docker-in-docker runner is shared with its sidecar, so it is not kept in memory", "runner", spec.Name, "pool", spec.PoolName)
-		}
-		if vol, err := b.ensureExternalsVolume(ctx, spec.Image, digest); err != nil {
+		if vol, err := b.ensureExternalsVolume(ctx, requested, spec.Image, digest); err != nil {
 			b.log.Warn("could not share the runner's externals with the docker-in-docker sidecar; jobs in a container: block will fail", "runner", spec.Name, "image", spec.Image, "error", err)
 		} else {
 			opts.ExternalsVolume = vol
@@ -2335,78 +2357,138 @@ const externalsRetry = 10 * time.Minute
 // externals into a new volume, and checking them.
 const externalsFillTimeout = 5 * time.Minute
 
+// externalsHandoff is how long a volume handed to a runner is kept out of the
+// sweep: the time between ensureExternalsVolume returning it and the sidecar
+// that mounts it being created. A sweep in that gap would remove a volume no
+// container uses yet, and the sidecar's mount would recreate it empty.
+const externalsHandoff = 10 * time.Minute
+
+// Labels on an externals volume and on the container that fills it.
+// LabelExternals carries the volume's name on both; the volume also records
+// the image reference it was filled for, so the sweep can tell a digest the
+// reference has moved away from.
+const (
+	LabelExternals       = LabelPrefix + "externals"
+	LabelExternalsImage  = LabelPrefix + "externals-image"
+	LabelExternalsDigest = LabelPrefix + "externals-digest"
+)
+
+// externalsMarker is written into the volume after the copy, and only then:
+// a volume without it is an interrupted fill, never a complete one.
+const externalsMarker = ".zoomies-complete"
+
+// externalsFillMount is where the fill container mounts the volume. It is not
+// a path the image has, so the runtime copies nothing into the volume and the
+// fill's own copy is the only thing that writes it.
+const externalsFillMount = "/zoomies-externals"
+
+// externalsFillScript copies the image's externals into the volume and writes
+// the marker last. A volume that already has the marker is left as it is; one
+// without it, from a fill that was cut short, is emptied and copied again.
+var externalsFillScript = `set -e
+[ -f ` + externalsFillMount + `/` + externalsMarker + ` ] && exit 0
+[ -n "$(ls -A ` + RunnerExternalsMount + `)" ] || { echo "` + RunnerExternalsMount + ` is empty in the image" >&2; exit 3; }
+find ` + externalsFillMount + ` -mindepth 1 -delete
+cp -a ` + RunnerExternalsMount + `/. ` + externalsFillMount + `/
+touch ` + externalsFillMount + `/` + externalsMarker
+
+// externalsVolumeName is the volume for one image: its digest when there is
+// one, so a tag that moves to a new image gets a new volume rather than the
+// old Node builds, and the reference otherwise.
+func externalsVolumeName(image, digest string) string {
+	key := digest
+	if key == "" {
+		key = image
+	}
+	sum := sha256.Sum256([]byte(key))
+	return "zoomies-externals-" + hex.EncodeToString(sum[:])[:16]
+}
+
 // ensureExternalsVolume returns a volume holding the runner image's externals,
 // filled once per image. A job with a container: block mounts the runner's
 // externals into that container, and under dind the container is created by
 // the sidecar's daemon, which resolves the mount in its own filesystem. The
 // externals are several hundred megabytes, so they are not copied per runner.
 //
-// The volume is named after the image's digest, not its reference, so a tag
-// that moves to a new image gets a new volume rather than the old Node builds.
-// The fill runs a container of the image with the empty volume at the
-// externals path, which the runtime fills from the image (Docker as the
-// container is created, Podman as it starts), and the container's command
-// checks that the folder is not empty, so a runtime that fills nothing is a
-// failed fill rather than an empty volume taken for a full one.
-func (b *DockerBackend) ensureExternalsVolume(ctx context.Context, image, digest string) (string, error) {
-	key := digest
-	if key == "" {
-		key = image
-	}
-	sum := sha256.Sum256([]byte(key))
-	name := "zoomies-externals-" + hex.EncodeToString(sum[:])[:16]
+// ref is the image as the pool names it and image the reference the runner is
+// created from; the volume is labelled with ref, so sweepExternals can remove
+// it once ref has moved to another digest.
+func (b *DockerBackend) ensureExternalsVolume(ctx context.Context, ref, image, digest string) (string, error) {
+	name := externalsVolumeName(image, digest)
 
-	b.externalsMu.Lock()
-	if b.externalsLocks == nil {
-		b.externalsLocks = map[string]*sync.Mutex{}
-		b.externalsReady = map[string]bool{}
-		b.externalsFailed = map[string]time.Time{}
-	}
-	lock, ok := b.externalsLocks[name]
-	if !ok {
-		lock = &sync.Mutex{}
-		b.externalsLocks[name] = lock
-	}
-	b.externalsMu.Unlock()
-
+	lock := b.externalsLock(name)
 	lock.Lock()
 	defer lock.Unlock()
 	b.externalsMu.Lock()
 	ready, failedAt := b.externalsReady[name], b.externalsFailed[name]
 	b.externalsMu.Unlock()
+	// The cache is this agent's memory, not the daemon's: a volume removed by
+	// hand or by docker volume prune would be recreated empty by the sidecar's
+	// mount. One inspect before trusting it is cheap next to a runner.
 	if ready {
-		return name, nil
+		if _, err := b.api.VolumeInspect(ctx, name); errors.Is(err, ErrNotFound) {
+			ready = false
+			b.log.Info("the externals volume has gone from the daemon; filling it again", "volume", name, "image", image)
+		} else if err != nil {
+			return "", fmt.Errorf("looking for externals volume %s: %w", name, err)
+		}
 	}
-	if !failedAt.IsZero() && time.Since(failedAt) < externalsRetry {
-		return "", fmt.Errorf("filling %s from %s failed at %s; retrying after %s", name, image, failedAt.Format(time.RFC3339), externalsRetry)
+	if !ready {
+		if !failedAt.IsZero() && time.Since(failedAt) < externalsRetry {
+			return "", fmt.Errorf("filling %s from %s failed at %s; retrying after %s", name, image, failedAt.Format(time.RFC3339), externalsRetry)
+		}
+		err := b.fillExternalsVolume(ctx, ref, image, digest, name)
+		b.externalsMu.Lock()
+		switch {
+		case err == nil:
+			b.externalsReady[name] = true
+			delete(b.externalsFailed, name)
+		case ctx.Err() != nil:
+			// The caller gave up, so this says nothing about the image: the
+			// next runner fills it again rather than finding a cached failure.
+			delete(b.externalsReady, name)
+		default:
+			delete(b.externalsReady, name)
+			b.externalsFailed[name] = time.Now()
+		}
+		b.externalsMu.Unlock()
+		if err != nil {
+			return "", err
+		}
 	}
-
-	err := b.fillExternalsVolume(ctx, image, name)
 	b.externalsMu.Lock()
-	if err != nil {
-		b.externalsFailed[name] = time.Now()
-	} else {
-		b.externalsReady[name] = true
-		delete(b.externalsFailed, name)
-	}
+	b.externalsHanded[name] = time.Now()
 	b.externalsMu.Unlock()
-	if err != nil {
-		return "", err
-	}
 	return name, nil
 }
 
-// fillExternalsVolume runs the fill container for ensureExternalsVolume and
-// always removes it, so a failed fill leaves no container behind.
-func (b *DockerBackend) fillExternalsVolume(ctx context.Context, image, name string) error {
+// fillExternalsVolume creates the volume with its labels and runs the fill
+// container, which it always removes, so a failed fill leaves no container
+// behind. A fill container of the same name left by an agent that died
+// mid-fill carries this volume's label, and is removed before trying again.
+func (b *DockerBackend) fillExternalsVolume(ctx context.Context, ref, image, digest, name string) error {
 	fillCtx, cancel := context.WithTimeout(ctx, externalsFillTimeout)
 	defer cancel()
-	id, err := b.api.ContainerCreate(fillCtx, name+"-fill", ContainerCreateRequest{
+	if err := b.api.VolumeCreate(fillCtx, name, map[string]string{
+		LabelExternals: name, LabelExternalsImage: ref, LabelExternalsDigest: digest,
+	}); err != nil {
+		return fmt.Errorf("creating externals volume %s: %w", name, err)
+	}
+	fill := name + "-fill"
+	req := ContainerCreateRequest{
 		Image:      image,
-		Entrypoint: []string{"sh", "-c", `[ -n "$(ls -A ` + RunnerExternalsMount + `)" ]`},
-		Labels:     map[string]string{LabelPrefix + "externals": name},
-		HostConfig: &HostConfig{Binds: []string{name + ":" + RunnerExternalsMount}},
-	})
+		User:       "0",
+		Entrypoint: []string{"sh", "-c", externalsFillScript},
+		Labels:     map[string]string{LabelExternals: name},
+		HostConfig: &HostConfig{Binds: []string{name + ":" + externalsFillMount}},
+	}
+	id, err := b.api.ContainerCreate(fillCtx, fill, req)
+	if StatusCode(err) == http.StatusConflict {
+		if err := b.removeLeftoverFill(fillCtx, fill, name); err != nil {
+			return err
+		}
+		id, err = b.api.ContainerCreate(fillCtx, fill, req)
+	}
 	if err != nil {
 		return fmt.Errorf("filling %s from %s: %w", name, image, err)
 	}
@@ -2425,7 +2507,123 @@ func (b *DockerBackend) fillExternalsVolume(ctx context.Context, image, name str
 		return fmt.Errorf("filling %s from %s: %w", name, image, err)
 	}
 	if code != 0 {
-		return fmt.Errorf("filling %s from %s: %s is empty in the volume (exit %d); the image may keep its externals elsewhere", name, image, RunnerExternalsMount, code)
+		return fmt.Errorf("filling %s from %s: the copy of %s exited %d; the image may keep its externals elsewhere, or lack sh, find or cp", name, image, RunnerExternalsMount, code)
 	}
 	return nil
+}
+
+// removeLeftoverFill removes a fill container that holds the name a new fill
+// needs, only if it carries that volume's label: a container of the same name
+// that is not the agent's is left alone and the fill fails.
+func (b *DockerBackend) removeLeftoverFill(ctx context.Context, fill, name string) error {
+	c, err := b.api.ContainerInspect(ctx, fill)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("looking at the container holding %s: %w", fill, err)
+	}
+	if c.Config == nil || c.Config.Labels[LabelExternals] != name {
+		return fmt.Errorf("%w: %s belongs to something else; remove or rename it", ErrContainerConflict, fill)
+	}
+	if err := b.removeContainer(ctx, fill); err != nil && !errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("removing the fill container %s an earlier agent left: %w", fill, err)
+	}
+	b.log.Info("removed the fill container an earlier fill left behind", "container", fill, "volume", name)
+	return nil
+}
+
+// SweepExternals removes the externals volumes whose image reference has
+// moved on: for each reference it keeps the newest volume and removes the
+// older ones, but only those that carry the agent's label, that no container
+// uses (the daemon refuses those, running or stopped), that are not being
+// filled, and that were not handed to a runner in the last externalsHandoff.
+// A reference no pool uses any more keeps its newest volume.
+func (b *DockerBackend) SweepExternals(ctx context.Context) (int, error) {
+	vols, err := b.api.VolumeList(ctx, map[string][]string{"label": {LabelExternals}})
+	if err != nil {
+		return 0, fmt.Errorf("listing externals volumes: %w", err)
+	}
+	newest := map[string]Volume{}
+	for _, v := range vols {
+		ref := v.Labels[LabelExternalsImage]
+		if v.Labels[LabelExternals] != v.Name || ref == "" {
+			continue
+		}
+		if cur, ok := newest[ref]; !ok || volumeCreated(v).After(volumeCreated(cur)) {
+			newest[ref] = v
+		}
+	}
+	removed := 0
+	for _, v := range vols {
+		ref := v.Labels[LabelExternalsImage]
+		if v.Labels[LabelExternals] != v.Name || ref == "" || newest[ref].Name == v.Name {
+			continue
+		}
+		ok, err := b.removeExternals(ctx, v.Name)
+		if err != nil {
+			b.log.Warn("could not remove a superseded externals volume; will retry", "volume", v.Name, "image", ref, "error", err)
+			continue
+		}
+		if ok {
+			removed++
+			b.log.Info("removed a superseded externals volume", "volume", v.Name, "image", ref, "digest", v.Labels[LabelExternalsDigest])
+		}
+	}
+	return removed, nil
+}
+
+// externalsLock returns the lock of one externals volume, making the maps on
+// first use.
+func (b *DockerBackend) externalsLock(name string) *sync.Mutex {
+	b.externalsMu.Lock()
+	defer b.externalsMu.Unlock()
+	if b.externalsLocks == nil {
+		b.externalsLocks = map[string]*sync.Mutex{}
+		b.externalsReady = map[string]bool{}
+		b.externalsFailed = map[string]time.Time{}
+		b.externalsHanded = map[string]time.Time{}
+	}
+	lock, ok := b.externalsLocks[name]
+	if !ok {
+		lock = &sync.Mutex{}
+		b.externalsLocks[name] = lock
+	}
+	return lock
+}
+
+// removeExternals removes one volume under its fill lock, so a fill and a
+// removal of the same volume never overlap, and reports false for a volume
+// it left because it is in use or was just handed out.
+func (b *DockerBackend) removeExternals(ctx context.Context, name string) (bool, error) {
+	lock := b.externalsLock(name)
+	b.externalsMu.Lock()
+	handed := b.externalsHanded[name]
+	b.externalsMu.Unlock()
+	if !handed.IsZero() && time.Since(handed) < externalsHandoff {
+		return false, nil
+	}
+	if !lock.TryLock() {
+		return false, nil
+	}
+	defer lock.Unlock()
+	err := b.api.VolumeRemove(ctx, name)
+	switch {
+	case StatusCode(err) == http.StatusConflict:
+		return false, nil
+	case err != nil && !errors.Is(err, ErrNotFound):
+		return false, err
+	}
+	b.externalsMu.Lock()
+	delete(b.externalsReady, name)
+	delete(b.externalsHanded, name)
+	b.externalsMu.Unlock()
+	return err == nil, nil
+}
+
+// volumeCreated parses a volume's creation time; one the daemon did not
+// report sorts first, so it is never the volume kept.
+func volumeCreated(v Volume) time.Time {
+	t, _ := time.Parse(time.RFC3339Nano, v.CreatedAt)
+	return t
 }

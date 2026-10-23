@@ -166,6 +166,9 @@ func TestForeignConflictSurvivesFailedCreateCleanup(t *testing.T) {
 			creates++
 			writeJSON(w, 409, map[string]string{"message": "name already in use"})
 		},
+		"POST " + v + "/volumes/create": func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, 201, map[string]string{"Name": "zoomies-externals"})
+		},
 		"POST " + v + "/containers/fill/start": func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) },
 		"POST " + v + "/containers/fill/wait":  func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]int{"StatusCode": 0}) },
 		"DELETE " + v + "/containers/{id}": func(w http.ResponseWriter, r *http.Request) {
