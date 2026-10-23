@@ -425,10 +425,10 @@ mount of the checkout (`docker run -v "$PWD:/src"`, a compose file's
 work folder is therefore the sidecar's, at the runner's path, and the runner
 mounts every volume of its sidecar to reach it. Kept in memory, it is a volume
 on a tmpfs, sized from the runner's half of the pair like any runner's work
-folder. That includes the sidecar's
-`/var/lib/docker`, unless the image store is kept in memory: a job can read and
-write the daemon's storage there, which gives it nothing it lacked, since it
-already drives that daemon, privileged, through `DOCKER_HOST`. The runner's
+folder. The sidecar's volumes also include its `/var/lib/docker`, unless the
+image store is kept in memory: a job can read and write the daemon's storage
+there, which gives it nothing it lacked, since it already drives that daemon,
+privileged, through `DOCKER_HOST`. The runner's
 externals, the Node builds a `container:` block mounts, reach the sidecar from a
 volume per runner image, read-only; see
 [What the agent owns on a host](security.md#what-the-agent-owns-on-a-host).

@@ -1705,6 +1705,24 @@ func TestTheExternalsFillScriptWritesTheMarkerOnlyAfterACompleteCopy(t *testing.
 	}
 }
 
+// A runtime that answers an existing volume's name with a conflict, rather
+// than with the volume as Docker does, still has the volume: the fill goes on
+// instead of caching a failure after every agent restart.
+func TestAnExternalsVolumeThatExistsAlreadyIsNotAFailedFill(t *testing.T) {
+	e := &externalsEngine{}
+	routes := e.routes()
+	routes["POST "+v+"/volumes/create"] = func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 409, map[string]string{"message": "volume already exists"})
+	}
+	b := dockerBackendFor(t, newFakeEngine(t, routes), DockerOptions{})
+	if _, err := b.ensureExternalsVolume(context.Background(), "runner:latest", "runner@sha256:aaa", "sha256:aaa"); err != nil {
+		t.Fatalf("an existing volume failed the fill: %v", err)
+	}
+	if len(e.creates) != 1 {
+		t.Fatalf("fills = %d, want the fill to run once", len(e.creates))
+	}
+}
+
 // A fill that fails is remembered so the runners created meanwhile do not
 // retry it, its container is removed, and the next runner after the interval
 // tries again.

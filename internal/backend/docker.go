@@ -358,7 +358,9 @@ type DockerBackend struct {
 	externalsReady  map[string]bool
 	externalsFailed map[string]time.Time
 	// externalsHanded is when each volume was last handed to a runner, which
-	// keeps it out of SweepExternals until its sidecar exists.
+	// keeps it out of SweepExternals until its sidecar exists. It is memory
+	// only: a restart forgets it, which is safe because the runners being
+	// created when the agent stopped stopped with it.
 	externalsHanded map[string]time.Time
 	log             *slog.Logger
 	// nameRelease is how long a create waits for the daemon to release a name

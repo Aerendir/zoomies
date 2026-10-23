@@ -1173,13 +1173,18 @@ type Volume struct {
 	Labels    map[string]string `json:"Labels"`
 }
 
-// VolumeCreate creates a named volume carrying labels. The daemon answers a
-// name that already exists with that volume, unchanged, labels included.
+// VolumeCreate creates a named volume carrying labels. Docker answers a name
+// that already exists with that volume, unchanged, labels included; a runtime
+// that answers it with a conflict instead gets the same: the volume exists.
 func (c *APIClient) VolumeCreate(ctx context.Context, name string, labels map[string]string) error {
 	if name == "" {
 		return errors.New("docker api: a volume name is required")
 	}
-	return c.do(ctx, http.MethodPost, "/volumes/create", nil, map[string]any{"Name": name, "Labels": labels}, nil)
+	err := c.do(ctx, http.MethodPost, "/volumes/create", nil, map[string]any{"Name": name, "Labels": labels}, nil)
+	if StatusCode(err) == http.StatusConflict {
+		return nil
+	}
+	return err
 }
 
 // VolumeInspect returns one volume, or an error wrapping ErrNotFound.
