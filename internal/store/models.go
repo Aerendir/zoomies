@@ -2176,6 +2176,9 @@ type Session struct {
 	IP        string    `json:"ip,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// OIDCSessionID is the identity provider's session this one was created
+	// from, when single sign-on made it. A back-channel logout names it.
+	OIDCSessionID string `json:"-"`
 }
 
 // APIToken is a long-lived credential for automation, scoped by role and

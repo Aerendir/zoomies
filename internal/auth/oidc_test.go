@@ -216,6 +216,13 @@ func TestClaimsFrom(t *testing.T) {
 		t.Errorf("role = %q; want admin", c.Role)
 	}
 
+	// The provider's own session, when it sends one, is what a back-channel
+	// logout later names.
+	c, err = p.claimsFrom("sub-1", map[string]any{"preferred_username": "alice", "sid": "provider-session-1"})
+	if err != nil || c.SessionID != "provider-session-1" {
+		t.Errorf("session id = %q, %v; want the sid claim", c.SessionID, err)
+	}
+
 	// Providers that send no preferred_username fall back to a *verified* email
 	// rather than failing a login nobody can debug.
 	c, err = p.claimsFrom("sub-2", map[string]any{

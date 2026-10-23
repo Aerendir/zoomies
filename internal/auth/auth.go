@@ -268,6 +268,12 @@ type Service struct {
 	setupToken string
 
 	logins *RateLimiter
+	// logouts bounds back-channel logout tokens per address. It is not the
+	// login limiter: the one caller that matters is the identity provider's
+	// server, which sends a token for every sign-out it sees from one address,
+	// and a burst of genuine ones must not be refused by a limit meant for a
+	// person typing passwords.
+	logouts *RateLimiter
 	// accountLogins is the same counter keyed on the username instead of the
 	// address, so a distributed attempt against one account is still bounded.
 	accountLogins *RateLimiter
@@ -364,6 +370,7 @@ func New(st *store.Store, cfg *config.Config, bus *events.Bus, opts ...Option) *
 	}
 	s.setupToken = store.NewSecret(secretBytes)
 	s.logins = NewRateLimiter(s.cfg.RateLimitLogins, time.Minute, s.clock)
+	s.logouts = NewRateLimiter(logoutsPerMinute, time.Minute, s.clock)
 	s.accountLogins = NewRateLimiter(s.cfg.RateLimitLogins*accountLimitFactor, accountLimitWindow, s.clock)
 	s.refusalAudits = NewRateLimiter(1, time.Minute, s.clock)
 	s.joins = NewRateLimiter(s.cfg.RateLimitLogins, time.Minute, s.clock)
@@ -638,6 +645,20 @@ func (s *Service) JoinRetryAfter(ip string) time.Duration { return s.joins.Retry
 // out with ErrTooManyPendingSignIns until states expire.
 func (s *Service) AllowSSOStart(ip string) bool { return s.logins.Allow(ip) }
 
+// logoutsPerMinute is how many back-channel logout tokens one address may
+// present in a minute, genuine or not. Checking one costs a signature
+// verification, so the limit is there to bound the work a stranger can ask for.
+const logoutsPerMinute = 600
+
+// AllowBackchannelLogout reports whether another logout token from this
+// address is within its limit, and records it.
+func (s *Service) AllowBackchannelLogout(ip string) bool { return s.logouts.Allow(ip) }
+
+// BackchannelLogoutRetryAfter is the Retry-After the 429 promises.
+func (s *Service) BackchannelLogoutRetryAfter(ip string) time.Duration {
+	return s.logouts.RetryAfter(ip)
+}
+
 // SSOStartRetryAfter is the Retry-After the 429 promises.
 func (s *Service) SSOStartRetryAfter(ip string) time.Duration { return s.logins.RetryAfter(ip) }
 
@@ -802,14 +823,22 @@ func normalizeForLimiter(username string) string {
 // password change that invalidated the old cookie. It returns the plaintext
 // token exactly once.
 func (s *Service) NewSession(ctx context.Context, u *store.User, ip, ua string) (string, error) {
+	return s.NewSSOSession(ctx, u, ip, ua, "")
+}
+
+// NewSSOSession is NewSession for a sign-in through the identity provider:
+// oidcSessionID is the provider's own session (the sid claim of its ID token),
+// kept so a back-channel logout for that session can end this one.
+func (s *Service) NewSSOSession(ctx context.Context, u *store.User, ip, ua, oidcSessionID string) (string, error) {
 	token := store.NewSecret(32)
 	now := s.Now()
 	sess := &store.Session{
-		UserID:    u.ID,
-		TokenHash: cryptox.HashToken(token),
-		UserAgent: truncate(ua, 512),
-		IP:        ip,
-		ExpiresAt: now.Add(s.SessionTTL()),
+		UserID:        u.ID,
+		TokenHash:     cryptox.HashToken(token),
+		UserAgent:     truncate(ua, 512),
+		IP:            ip,
+		ExpiresAt:     now.Add(s.SessionTTL()),
+		OIDCSessionID: oidcSessionID,
 	}
 	if err := s.store.CreateSession(ctx, sess); err != nil {
 		return "", fmt.Errorf("creating session: %w", err)
@@ -825,6 +854,15 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	}
 	if err := s.store.DeleteSession(ctx, cryptox.HashToken(token)); err != nil {
 		return fmt.Errorf("ending session: %w", err)
+	}
+	return nil
+}
+
+// LogoutOIDCSession ends the sessions a user holds from one session of the
+// identity provider, and not the ones from another.
+func (s *Service) LogoutOIDCSession(ctx context.Context, userID, oidcSessionID string) error {
+	if err := s.store.DeleteUserSessionsFromOIDC(ctx, userID, oidcSessionID); err != nil {
+		return fmt.Errorf("ending sessions: %w", err)
 	}
 	return nil
 }

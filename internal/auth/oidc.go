@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -54,6 +55,13 @@ type discoveryError struct {
 func (e *discoveryError) Error() string   { return e.msg }
 func (e *discoveryError) Unwrap() []error { return []error{e.cause, ErrOIDCDiscovery} }
 
+// backchannelLogoutEvent is the member of a logout token's events claim that
+// makes it one (OpenID Connect Back-Channel Logout 1.0, section 2.4).
+const backchannelLogoutEvent = "http://schemas.openid.net/event/backchannel-logout"
+
+// logoutTokenMaxAge is how old a logout token may be and still be believed.
+const logoutTokenMaxAge = 5 * time.Minute
+
 // Claims is what a completed OIDC login tells us about the person, already
 // mapped onto Zoomies' own vocabulary.
 type Claims struct {
@@ -65,6 +73,9 @@ type Claims struct {
 	Email    string
 	// Name is the display name, if the provider sent one.
 	Name string
+	// SessionID is the provider's own session this login belongs to (the sid
+	// claim), empty when it sends none. A back-channel logout names it.
+	SessionID string
 	// Groups are the raw group values from cfg.GroupsClaim.
 	Groups []string
 	// Role is what those groups map to.
@@ -79,7 +90,10 @@ type OIDCProvider struct {
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier
 	states   *stateCache
-	logger   *slog.Logger
+	// logouts remembers the identifier of every logout token accepted, so one
+	// replayed from a proxy log ends nothing a second time.
+	logouts *stateCache
+	logger  *slog.Logger
 }
 
 // NewOIDC builds the provider, discovering the issuer's endpoints over the
@@ -136,6 +150,7 @@ func NewOIDC(ctx context.Context, cfg config.OIDC, externalURL string) (*OIDCPro
 		},
 		verifier: provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		states:   newStateCache(OIDCStateTTL, time.Now),
+		logouts:  newStateCache(2*logoutTokenMaxAge, time.Now),
 		logger:   slog.Default(),
 	}, nil
 }
@@ -158,6 +173,13 @@ func (p *OIDCProvider) AllowSignup() bool { return p != nil && p.cfg.AllowSignup
 // Start begins a login: it mints a single-use state and nonce, remembers them,
 // and returns the URL to redirect the browser to.
 func (p *OIDCProvider) Start() (authURL, state string, err error) {
+	return p.StartAfterSignOut(false)
+}
+
+// StartAfterSignOut is Start for a sign-in that follows a sign-out from this
+// controller: reauthenticate asks the provider to authenticate the person
+// again even if it still holds a session for them (prompt=login).
+func (p *OIDCProvider) StartAfterSignOut(reauthenticate bool) (authURL, state string, err error) {
 	if p == nil {
 		return "", "", errors.New("single sign-on is not configured on this instance")
 	}
@@ -166,15 +188,19 @@ func (p *OIDCProvider) Start() (authURL, state string, err error) {
 	if err := p.states.put(state, nonce); err != nil {
 		return "", "", err
 	}
-	return p.AuthCodeURL(state, nonce), state, nil
+	return p.AuthCodeURL(state, nonce, reauthenticate), state, nil
 }
 
 // AuthCodeURL renders the provider's authorisation URL for a state and nonce.
-func (p *OIDCProvider) AuthCodeURL(state, nonce string) string {
+func (p *OIDCProvider) AuthCodeURL(state, nonce string, reauthenticate bool) string {
 	if p == nil {
 		return ""
 	}
-	return p.oauth.AuthCodeURL(state, oidc.Nonce(nonce))
+	opts := []oauth2.AuthCodeOption{oidc.Nonce(nonce)}
+	if reauthenticate {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"))
+	}
+	return p.oauth.AuthCodeURL(state, opts...)
 }
 
 // Complete finishes a login begun by Start: it spends the state, exchanges the
@@ -191,6 +217,56 @@ func (p *OIDCProvider) Complete(ctx context.Context, state, code string) (*Claim
 		return nil, errors.New("this sign-in link has already been used or has expired; start again from the login page")
 	}
 	return p.Exchange(ctx, code, nonce)
+}
+
+// VerifyLogoutToken checks a back-channel logout token from the identity
+// provider and returns the subject whose sessions it ends.
+//
+// The token is signed by the same keys as an ID token and is verified the same
+// way (signature, issuer, audience, expiry). It must then say it is a logout
+// token, and must not be an ID token that is being passed off as one: it
+// carries the logout event and no nonce. It is refused when it is old, when it
+// names no subject, and when its identifier has been seen, so that a captured
+// token cannot be played again.
+func (p *OIDCProvider) VerifyLogoutToken(ctx context.Context, raw string) (subject, sessionID string, err error) {
+	if p == nil {
+		return "", "", errors.New("single sign-on is not configured on this instance")
+	}
+	tok, err := p.verifier.Verify(ctx, raw)
+	if err != nil {
+		return "", "", fmt.Errorf("the logout token did not verify: %w", err)
+	}
+	var claims struct {
+		Events map[string]json.RawMessage `json:"events"`
+		Nonce  *string                    `json:"nonce"`
+		JTI    string                     `json:"jti"`
+		SID    string                     `json:"sid"`
+	}
+	if err := tok.Claims(&claims); err != nil {
+		return "", "", fmt.Errorf("could not read the logout token's claims: %w", err)
+	}
+	if _, ok := claims.Events[backchannelLogoutEvent]; !ok {
+		return "", "", errors.New("the token is not a logout token: it has no back-channel logout event")
+	}
+	if claims.Nonce != nil {
+		return "", "", errors.New("the token carries a nonce, so it is an ID token and not a logout token")
+	}
+	if tok.Subject == "" {
+		return "", "", errors.New("the logout token names no subject")
+	}
+	if claims.JTI == "" {
+		return "", "", errors.New("the logout token has no identifier")
+	}
+	now := time.Now()
+	if tok.IssuedAt.IsZero() || now.Sub(tok.IssuedAt) > logoutTokenMaxAge || tok.IssuedAt.Sub(now) > time.Minute {
+		return "", "", errors.New("the logout token was not issued within the last few minutes")
+	}
+	if ok, err := p.logouts.firstUse(claims.JTI); err != nil {
+		return "", "", err
+	} else if !ok {
+		return "", "", errors.New("that logout token has already been used")
+	}
+	return tok.Subject, claims.SID, nil
 }
 
 // Exchange swaps an authorisation code for an ID token, verifies it, and maps
@@ -238,11 +314,12 @@ func (p *OIDCProvider) claimsFrom(subject string, raw map[string]any) (*Claims, 
 	}
 
 	c := &Claims{
-		Subject:  subject,
-		Username: claimString(raw, usernameClaim),
-		Email:    claimString(raw, "email"),
-		Name:     claimString(raw, "name"),
-		Groups:   claimStrings(raw, groupsClaim),
+		Subject:   subject,
+		Username:  claimString(raw, usernameClaim),
+		Email:     claimString(raw, "email"),
+		Name:      claimString(raw, "name"),
+		SessionID: claimString(raw, "sid"),
+		Groups:    claimStrings(raw, groupsClaim),
 	}
 	if c.Username == "" && claimBool(raw, "email_verified") {
 		// Providers that do not send preferred_username almost always send an
@@ -438,6 +515,29 @@ func (c *stateCache) put(state, nonce string) error {
 	}
 	c.entries[state] = stateEntry{nonce: nonce, expires: now.Add(c.ttl)}
 	return nil
+}
+
+// firstUse records a key and reports whether it was new. A key still held
+// from an earlier call is not new. Like put it refuses when the cache is full
+// of live entries, which is an error and not a "seen" so a flood cannot make a
+// genuine token look replayed.
+func (c *stateCache) firstUse(key string) (bool, error) {
+	now := c.now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k, e := range c.entries {
+		if now.After(e.expires) {
+			delete(c.entries, k)
+		}
+	}
+	if _, seen := c.entries[key]; seen {
+		return false, nil
+	}
+	if len(c.entries) >= maxPendingStates {
+		return false, ErrTooManyPendingSignIns
+	}
+	c.entries[key] = stateEntry{expires: now.Add(c.ttl)}
+	return true, nil
 }
 
 // take returns the nonce for a state and forgets it, so a state can be spent
