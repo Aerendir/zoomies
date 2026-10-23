@@ -443,7 +443,7 @@ func TestStatsCanBeNarrowedToTheFleetsOwnJobs(t *testing.T) {
 	// here touched it. Its wait is an hour, which would drag the percentiles
 	// somewhere no operator could act on.
 	if _, err := s.UpsertJob(ctx, &Job{GitHubJobID: 900, JobName: "hosted-running",
-		State: JobInProgress, QueuedAt: now, StartedAt: &slow}); err != nil {
+		State: JobInProgress, RunnerName: "GitHub Actions 1", QueuedAt: now, StartedAt: &slow}); err != nil {
 		t.Fatalf("seeding a hosted running job: %v", err)
 	}
 	// Three of them, so that they outnumber ours and the unscoped median lands
@@ -451,7 +451,8 @@ func TestStatsCanBeNarrowedToTheFleetsOwnJobs(t *testing.T) {
 	// the assertion below would pass without the scoping doing anything.
 	for id, name := range map[int64]string{901: "hosted-done", 902: "hosted-done-again"} {
 		if _, err := s.UpsertJob(ctx, &Job{GitHubJobID: id, JobName: name,
-			State: JobCompleted, Conclusion: "success", QueuedAt: now, StartedAt: &slow, CompletedAt: &done}); err != nil {
+			State: JobCompleted, Conclusion: "success", RunnerName: "GitHub Actions 1",
+			QueuedAt: now, StartedAt: &slow, CompletedAt: &done}); err != nil {
 			t.Fatalf("seeding %s: %v", name, err)
 		}
 	}
@@ -459,7 +460,7 @@ func TestStatsCanBeNarrowedToTheFleetsOwnJobs(t *testing.T) {
 	// This fleet's, three ways of being ours.
 	ours := []*Job{
 		{GitHubJobID: 910, JobName: "claimed", State: JobInProgress, Matched: true,
-			QueuedAt: now, StartedAt: &started},
+			RunnerName: "zoomies-linux-abcd", QueuedAt: now, StartedAt: &started},
 		{GitHubJobID: 911, JobName: "ran-here", State: JobCompleted, Conclusion: "success",
 			RunnerID: "run_ours", QueuedAt: now, StartedAt: &started, CompletedAt: &done},
 		// Queued and unclaimed. It stays in: nothing ran it, so it is this
@@ -505,6 +506,65 @@ func TestStatsCanBeNarrowedToTheFleetsOwnJobs(t *testing.T) {
 	if all.MedianWaitMS <= fleet.MedianWaitMS {
 		t.Errorf("unscoped median wait = %dms, fleet = %dms; the fixture is not distinguishing them",
 			all.MedianWaitMS, fleet.MedianWaitMS)
+	}
+}
+
+// GitHub stamps started_at on a job that never reached a runner, with the same
+// value as queued_at: a job cancelled while queued, or one its `if:` skipped.
+// They looked like waits of zero, and on a repository whose workflow skips its
+// real job when a path filter finds nothing they come with every push and
+// outnumber the waits that were real. The median said 0ms while jobs waited
+// minutes, and the p95 was dragged down beside it.
+func TestQueueWaitCountsOnlyJobsThatReachedARunner(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	queued := time.Now().UTC().Truncate(time.Millisecond).Add(-10 * time.Minute)
+
+	record := func(id int64, conclusion, runnerName, runnerID string, started time.Time) {
+		t.Helper()
+		done := started.Add(time.Minute)
+		if _, err := s.UpsertJob(ctx, &Job{
+			GitHubJobID: id, JobName: "build", State: JobCompleted, Conclusion: conclusion,
+			RunnerName: runnerName, RunnerID: runnerID,
+			QueuedAt: queued, StartedAt: &started, CompletedAt: &done,
+		}); err != nil {
+			t.Fatalf("seeding job %d: %v", id, err)
+		}
+	}
+
+	// The zeros: fifteen skipped jobs and five cancels that never got a runner.
+	// Twenty of them against five real waits is the shape the fleet reported.
+	for i := range 15 {
+		record(int64(100+i), "skipped", "", "", queued)
+	}
+	for i := range 5 {
+		record(int64(200+i), "cancelled", "", "", queued)
+	}
+
+	// The real waits, 30s to 60s. One is linked by runner_id alone, so both
+	// halves of "got a runner" are exercised.
+	for i, wait := range []time.Duration{30 * time.Second, 40 * time.Second, 50 * time.Second, 60 * time.Second} {
+		name, id := "zoomies-linux-abcd", ""
+		if wait == 40*time.Second {
+			name, id = "", "run_40"
+		}
+		record(int64(300+i), "success", name, id, queued.Add(wait))
+	}
+	// A cancellation after a runner took the job waited 70s, and that wait was
+	// real: it stays.
+	record(400, "cancelled", "zoomies-linux-abcd", "", queued.Add(70*time.Second))
+
+	stats, err := s.StatsSince(ctx, queued, false)
+	if err != nil {
+		t.Fatalf("StatsSince: %v", err)
+	}
+	// The five real waits are 30s, 40s, 50s, 60s and 70s. The zeros would put
+	// the median at 0 and the p95 at 50s.
+	if stats.MedianWaitMS != 50_000 {
+		t.Errorf("median wait = %dms, want 50000: a job that never got a runner counted as a wait", stats.MedianWaitMS)
+	}
+	if stats.P95WaitMS != 60_000 {
+		t.Errorf("p95 wait = %dms, want 60000: the zeros pulled the tail down", stats.P95WaitMS)
 	}
 }
 
