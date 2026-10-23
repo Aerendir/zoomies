@@ -1,24 +1,23 @@
 import { expect, test } from '@playwright/test';
 import { goto, openFleetContext, openHostCapacityMap } from './support/fixtures';
 
-test('runner context is the provisioning strip, with the way to the queue and no tiles', async ({
+test('the provisioning figures are in the Runners band, with the way to the queue and no tiles', async ({
   page,
 }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await goto(page, '/runners', 'Runners');
-  const context = page.getByRole('region', { name: 'Runner operational context' });
+  const band = page.getByTestId('band-runners');
   // The six tiles are gone from this page: the Overview and the Queue carry those
   // figures, and the grid is what a person came to the Runners page for.
-  // The queued-jobs figure is the one that stays, at the top and a click from the jobs.
-  await expect(context.getByRole('link', { name: /^Jobs queued:/ })).toHaveAttribute(
+  // The queued-jobs figure is the one that stays, first in the band and a click from the jobs.
+  await expect(band.getByRole('link', { name: /^Jobs? queued/ })).toHaveAttribute(
     'href',
     /^\/jobs\?state=queued/,
   );
-  await expect(context.getByRole('link', { name: 'Manage queue ↗' })).toHaveAttribute(
-    'href',
-    '/queue',
-  );
+  await expect(band.getByRole('link', { name: /^Manage queue/ })).toHaveAttribute('href', '/queue');
+  // And the strip that used to stand between the band and the list is not there twice.
+  await expect(page.getByLabel('Provisioning demand context')).toHaveCount(0);
   await page.getByText('Explore fleet activity over the last 24 hours', { exact: true }).click();
   await expect(page.getByRole('slider', { name: 'Inspect a moment' })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('fleet-history.png'), fullPage: true });

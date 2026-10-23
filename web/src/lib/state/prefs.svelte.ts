@@ -24,7 +24,13 @@ import {
   resolveLogoTreatment,
   type LogoTreatment,
 } from './logo-treatment';
-import { isBandPage, type BandPage } from '../bands/pages';
+import {
+  defaultBandSize,
+  isBandPage,
+  isBandSize,
+  type BandPage,
+  type BandSize,
+} from '../bands/pages';
 import { storage } from './storage';
 
 const PREFS_KEY = 'zoomies.prefs';
@@ -165,6 +171,12 @@ interface StoredPrefs {
    * columns, so a band added later is on for everyone.
    */
   hiddenBands?: string[];
+  /**
+   * The size an operator chose for a page's band, where it is not the page's default.
+   * Overrides only, as `hiddenBands` is, so a default that changes later reaches everyone
+   * who never chose.
+   */
+  bandSizes?: Record<string, string>;
 }
 
 /** The quick ranges the activity matrix offers, as the buttons name them. */
@@ -224,6 +236,7 @@ class Prefs {
   #eliStyle = $state<EliStyle>(DEFAULT_ELI_STYLE);
   #logoTreatment = $state<LogoTreatment>(DEFAULT_LOGO_TREATMENT);
   #hiddenBands = $state<BandPage[]>([]);
+  #bandSizes = $state<Partial<Record<BandPage, BandSize>>>({});
   #accountSync = false;
   #accountSave: ReturnType<typeof setTimeout> | null = null;
 
@@ -259,6 +272,14 @@ class Prefs {
     this.#hiddenBands = Array.isArray(stored.hiddenBands)
       ? stored.hiddenBands.filter(isBandPage)
       : [];
+    // Validated twice over: the page and the size are both words an older or newer build
+    // may have written, and neither is a choice this build can honour if it does not know it.
+    this.#bandSizes = {};
+    if (stored.bandSizes && typeof stored.bandSizes === 'object') {
+      for (const [page, size] of Object.entries(stored.bandSizes)) {
+        if (isBandPage(page) && isBandSize(size)) this.#bandSizes[page] = size;
+      }
+    }
     this.#applyNav();
   }
 
@@ -540,6 +561,20 @@ class Prefs {
     this.#persist();
   }
 
+  /** The size this page's band stands at: the operator's choice, else the page's default. */
+  bandSize(page: BandPage): BandSize {
+    return this.#bandSizes[page] ?? defaultBandSize(page);
+  }
+
+  setBandSize(page: BandPage, size: BandSize): void {
+    const next = { ...this.#bandSizes };
+    // Choosing the default again is un-choosing, so the page follows it if it ever moves.
+    if (size === defaultBandSize(page)) delete next[page];
+    else next[page] = size;
+    this.#bandSizes = next;
+    this.#persist();
+  }
+
   get logoTreatment(): LogoTreatment {
     return this.#logoTreatment;
   }
@@ -594,6 +629,7 @@ class Prefs {
         eliStyle: this.#eliStyle,
         logoTreatment: this.#logoTreatment,
         hiddenBands: this.#hiddenBands,
+        bandSizes: this.#bandSizes,
       } satisfies StoredPrefs),
     );
     this.#scheduleAccountSave();

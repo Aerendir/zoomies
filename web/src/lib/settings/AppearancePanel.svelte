@@ -24,7 +24,7 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import Switch from '$lib/components/Switch.svelte';
-  import { BAND_PAGES } from '$lib/bands/pages';
+  import { BAND_PAGES, BAND_SIZES, type BandSize } from '$lib/bands/pages';
   import { visualStyle } from '$lib/state/ui-style.svelte';
   import VisualStylePicker from './VisualStylePicker.svelte';
 
@@ -113,17 +113,29 @@
     <div class="text">
       <p class="label" id="bands-label">Page bands</p>
       <p class="description">
-        The dark band at the top of a page that says its answer in a sentence. Switch off the ones
-        you do not want. A phone never shows them, and the choice stays in this browser.
+        The dark band at the top of a page that says its answer in a sentence, with the page's key
+        figures in a strip along its lower edge. Standard is the full-height band the Overview opens
+        on; Compact is the slim one that leaves the rows more room. Switch off the ones you do not
+        want, and their figures stay on the page in a plain panel. A phone never shows the bands,
+        and the choices stay in this browser.
       </p>
       <div class="bands" role="group" aria-labelledby="bands-label">
         {#each BAND_PAGES as page (page.key)}
-          <Switch
-            label={page.label}
-            size="sm"
-            checked={prefs.bandShown(page.key)}
-            onchange={(on) => prefs.setBandShown(page.key, on)}
-          />
+          <div class="band-row">
+            <Switch
+              label={page.label}
+              size="sm"
+              checked={prefs.bandShown(page.key)}
+              onchange={(on) => prefs.setBandShown(page.key, on)}
+            />
+            <Segmented
+              options={BAND_SIZES.map((size) => ({ value: size.key, label: size.label }))}
+              value={prefs.bandSize(page.key)}
+              label={`${page.label} band size`}
+              disabled={!prefs.bandShown(page.key)}
+              onchange={(value) => prefs.setBandSize(page.key, value as BandSize)}
+            />
+          </div>
         {/each}
       </div>
     </div>
@@ -223,10 +235,22 @@
   }
   .bands {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
     min-width: 0;
     gap: var(--z-space-3) var(--z-space-5);
     margin-top: var(--z-space-4);
+  }
+  .band-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--z-space-2) var(--z-space-4);
+    min-width: 0;
+    padding: var(--z-space-2) var(--z-space-3);
+    border: var(--z-border-width) solid var(--z-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-surface);
   }
   .logo-setting {
     align-items: center;

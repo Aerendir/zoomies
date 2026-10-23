@@ -158,15 +158,30 @@ pool) without leaving the keyboard.
 
 ## Page bands
 
-The Overview opens on a hero, and the fleet pages open on a slimmer cut of the same
+The Overview opens on a hero, and the fleet pages open on a band cut from the same
 stage: **Runners**, **Pools**, **Queue**, **Jobs**, **Workflows**, **Hosts** and
-**Providers**. Each says one thing about its page in a sentence, from figures the
-page already holds ("3 hosts are connected. 9 of 12 slots in use."), and the list or
-grid under it is the evidence. A band is Zoomies Black in both themes, uses only
-neutral white and the brand's blue, and is not shown on a phone, so the rows stay on
-the first screen. **Settings → Appearance → Page bands** has one switch per page,
-the Overview's included; they are all on until you switch one off, and the choice
-stays in that browser.
+**Providers**. Every page uses the one component, so they cannot drift apart. Each
+says one thing about its page in a sentence, from figures the page already holds
+("3 hosts are connected. 9 of 12 slots in use."), and the list or grid under it is
+the evidence. A band is Zoomies Black in both themes and uses only neutral white and
+the brand's blue.
+
+A band comes in two sizes. **Standard** is the Overview's full stage; **Compact** is
+the slimmer one the working pages use, so the rows keep the room. The Overview
+defaults to Standard and every other page to Compact.
+
+Where a page used to spend a row of its height on a panel of figures, the band
+carries them in a strip along its lower edge. The Runners band holds the
+provisioning demand (jobs queued, ready, run now, paused, removed and the age of the
+oldest) and the Queue band holds the provisioning status filters, which still filter
+the list. Providers holds its provider, machine and needing-review counts. A band
+that is switched off, and any band on a phone, shows those same figures in a plain
+panel in its place, so nothing disappears with the dog.
+
+The small cross at the top right of a band removes it. It asks first, and says where
+to bring it back. **Settings → Appearance → Page bands** has a switch and a size for
+each page, the Overview's included; every band is on until you switch it off, and
+the choices stay in that browser.
 
 ## Pools
 
