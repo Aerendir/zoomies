@@ -47,6 +47,14 @@ type MaintenanceOptions struct {
 // operator at a terminal does not walk away from a hung command.
 const DefaultMaintenanceWait = 10 * time.Minute
 
+// How long a restarted Docker is given to answer: twelve looks, five seconds
+// apart, so a slow daemon gets about a minute before the restart is reported as
+// failed.
+const (
+	dockerAnswerTries    = 12
+	dockerAnswerInterval = 5 * time.Second
+)
+
 // maintainedServices are the units that admit jobs on this host, in the order
 // they are stopped. They are started again in the reverse order.
 var maintainedServices = []string{"zoomies-agent.service", "zoomies.service"}
@@ -204,12 +212,12 @@ func (e *Engine) MaintainDocker(ctx context.Context, o MaintenanceOptions) (err 
 	// Up means answering, which is what a runner needs, not merely a unit that
 	// says it started.
 	answered := false
-	for tries := 0; tries < 12 && !answered; tries++ {
+	for tries := 0; tries < dockerAnswerTries && !answered; tries++ {
 		if _, derr := command(ctx, e, "docker", "info", "--format", "{{.ServerVersion}}"); derr == nil {
 			answered = true
 			break
 		}
-		o.Sleep(ctx, 5*time.Second)
+		o.Sleep(ctx, dockerAnswerInterval)
 	}
 	if !answered {
 		return fmt.Errorf("docker restarted but is not answering; check it with: systemctl status docker.service")

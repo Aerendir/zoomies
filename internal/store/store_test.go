@@ -1188,3 +1188,29 @@ func TestAHostsReserveIsSetOnItsOwnAndSurvivesWhatAnAgentReports(t *testing.T) {
 		t.Fatalf("SetHostReserve on a missing host = %v, want ErrNotFound", err)
 	}
 }
+
+// A pool's sidecar image is its own say, and empty is "the host's", which is
+// every pool that exists before the column does. It has to survive a write and
+// a read, and an edit has to be able to clear it again.
+func TestAPoolKeepsItsDockerSidecarImageAndCanLetItGo(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	_, pool, _ := seedPool(t, s)
+	if got, err := s.GetPool(ctx, pool.ID); err != nil || got.DinDImage != "" {
+		t.Fatalf("a new pool's sidecar image = %q, %v; want the host's (empty)", got.DinDImage, err)
+	}
+	pool.DinDImage = "registry.example.com/ci/dind:27"
+	if err := s.UpdatePool(ctx, pool); err != nil {
+		t.Fatalf("UpdatePool: %v", err)
+	}
+	if got, err := s.GetPool(ctx, pool.ID); err != nil || got.DinDImage != "registry.example.com/ci/dind:27" {
+		t.Fatalf("sidecar image = %q, %v", got.DinDImage, err)
+	}
+	pool.DinDImage = ""
+	if err := s.UpdatePool(ctx, pool); err != nil {
+		t.Fatalf("UpdatePool: %v", err)
+	}
+	if got, err := s.GetPool(ctx, pool.ID); err != nil || got.DinDImage != "" {
+		t.Fatalf("a cleared sidecar image = %q, %v", got.DinDImage, err)
+	}
+}

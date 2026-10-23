@@ -463,6 +463,21 @@ Single sign-on binds its `state` to the browser that started the handshake with
 a short-lived cookie, so a callback obtained by an attacker signing in as
 themselves cannot be replayed into somebody else's browser.
 
+On a browser that more than one person uses, three things keep one person's
+session from becoming the next person's. Signing in ends the session the
+browser was already holding, so replacing the cookie does not leave the old
+value usable. Signing out here makes the next single sign-on start ask the
+identity provider to authenticate again (`prompt=login`), once, so the button
+does not sign the previous person straight back in on the strength of the
+provider's own session. And when the provider tells this controller that
+somebody has signed out there (OpenID Connect Back-Channel Logout, a signed
+token posted to `/api/v1/auth/oidc/backchannel-logout`), the sessions that
+person holds here end: those made from the provider session the token names
+when it names one, so a person signed in from two browsers keeps the other,
+and all of them when it names only the person. The token is checked against
+the provider's keys, must say it is a logout token, must be recent, and is
+accepted once.
+
 ### Two-step verification
 
 A local account can add a second step to its sign-in: a six-digit code from an
@@ -1004,6 +1019,9 @@ kept; a rule that could not be made to fail did not ship.
 | A `process` runner's environment is built, not inherited | `TestProcessChildEnvironmentIsBuiltNotInherited` (`internal/backend`) |
 | Disabling an account ends its sessions, not merely its access | `TestDisablingAUserEndsItsSessionsAtTheAPI` (`internal/api`) |
 | A cross-origin sign-in is refused, and a non-browser client is not | `TestCSRFRefusesACrossOriginLogin` (`internal/api`) |
+| Signing in ends the session the browser was holding | `TestSigningInEndsTheSessionTheBrowserWasHolding` (`internal/api`) |
+| A sign-out here makes the next single sign-on ask the provider to authenticate again | `TestSSOAfterASignOutAsksTheProviderToAuthenticateAgain` (`internal/api`) |
+| A back-channel logout ends the named person's sessions, only those made from the session it names, and cannot be forged, replayed or played as an ID token | `TestABackChannelLogoutEndsThatPersonsSessionsAndNobodyElses`, `TestABackChannelLogoutNamingASessionEndsOnlyTheSessionsMadeFromIt`, `TestALogoutTokenCannotBePlayedTwice`, `TestALogoutTokenThatIsNotOneIsRefusedAndEndsNothing` (`internal/api`) |
 | `X-Forwarded-Proto` is believed only from a trusted proxy | `TestForwardedProtoIsBelievedOnlyFromATrustedProxy` (`internal/api`) |
 | Enrolment is rate limited, on a counter of its own | `TestAgentJoinIsRateLimited` (`internal/api`) |
 | A live stream ends within one heartbeat of its credential being revoked, and keeps running while it stands | `TestAStreamEndsWhenItsCredentialIsRevoked`, `TestALogStreamEndsWhenItsCredentialIsRevoked`, `TestALiveStreamSurvivesItsOwnHeartbeat` (`internal/api`) |

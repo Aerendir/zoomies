@@ -129,7 +129,8 @@
       () =>
         draft.image.trim() !== '' ||
         draft.runner_version.trim() !== '' ||
-        Boolean(errors['image'] || errors['runner_version']),
+        draft.dind_image.trim() !== '' ||
+        Boolean(errors['image'] || errors['runner_version'] || errors['dind_image']),
     ),
   );
 
@@ -352,7 +353,9 @@
 
 <PoolMore
   title="Your own image, or a pinned runner version"
-  note={draft.image.trim() !== '' || draft.runner_version.trim() !== ''
+  note={draft.image.trim() !== '' ||
+  draft.runner_version.trim() !== '' ||
+  (draft.docker_mode === 'dind' && draft.dind_image.trim() !== '')
     ? 'in use'
     : 'the defaults follow the platform and the latest runner'}
   bind:open={moreOpen}
@@ -374,6 +377,27 @@
           placeholder={chosen?.image ?? 'ghcr.io/eyupio/zoomies-runner:latest'}
           autocomplete="off"
           onblur={() => touch('image')}
+        />
+      {/snippet}
+    </Field>
+  {/if}
+
+  {#if draft.docker_mode === 'dind'}
+    <Field
+      label="Docker-in-Docker image"
+      error={errors['dind_image']}
+      hint="The image this pool's Docker sidecar runs. Leave it empty to use the host's, which is the agent's Docker-in-Docker image setting. It runs privileged and has to provide dockerd."
+    >
+      {#snippet children({ id, describedBy, invalid })}
+        <Input
+          bind:value={draft.dind_image}
+          {id}
+          {describedBy}
+          {invalid}
+          mono
+          placeholder="docker:27-dind"
+          autocomplete="off"
+          onblur={() => touch('dind_image')}
         />
       {/snippet}
     </Field>

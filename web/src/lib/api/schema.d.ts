@@ -1144,6 +1144,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/oidc/backchannel-logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End sessions when the identity provider signs a person out
+         * @description OpenID Connect Back-Channel Logout. The identity provider's server, not a browser, posts a signed logout token here when somebody signs out there. The token is checked against the provider's keys (signature, issuer, audience, expiry), must carry the back-channel logout event and no nonce, must have been issued in the last few minutes, and can be used once. It ends the sessions the named person holds here: those made from the provider session it names (its sid) when it names one, otherwise all of them. A person with no account here is answered 200, so the route does not say who has one.
+         */
+        post: operations["oidcBackchannelLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stats": {
         parameters: {
             query?: never;
@@ -7607,6 +7627,8 @@ export interface components {
             effective_image?: string;
             pull_policy?: components["schemas"]["PullPolicy"];
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             min_runners?: number;
             max_runners?: number;
             /** @description Best-effort per-repository runner creation limit; zero disables it. This cannot prevent GitHub from assigning work to compatible idle runners and is not a strict execution concurrency cap. */
@@ -7768,6 +7790,8 @@ export interface components {
             image: string;
             pull_policy: string;
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             min_runners: number;
             max_runners: number;
             repository_scale_up_limit?: number;
@@ -7858,6 +7882,8 @@ export interface components {
             image?: string;
             pull_policy?: components["schemas"]["PullPolicy"];
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             /** @default 0 */
             min_runners: number;
             /** @default 4 */
@@ -7930,6 +7956,8 @@ export interface components {
             image?: string;
             pull_policy?: components["schemas"]["PullPolicy"];
             runner_version?: string;
+            /** @description The image this pool's docker-in-docker sidecar runs. Empty uses the host's own, which is agent.dind_image or docker:27-dind. Only a pool with docker_mode dind starts a sidecar. */
+            dind_image?: string;
             min_runners?: number;
             max_runners?: number;
             /** @description Best-effort creation limit */
@@ -14493,6 +14521,46 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Single sign-on is not enabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    oidcBackchannelLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    /** @description The signed logout token. */
+                    logout_token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The sessions it names are ended, or there were none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The token is missing, malformed, expired, already used or not a logout token. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["RateLimited"];
             /** @description Single sign-on is not enabled on this instance. */
             503: {
                 headers: {

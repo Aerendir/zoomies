@@ -156,6 +156,33 @@ pool) without leaving the keyboard.
 ![The command palette matching hosts, pools, runners and quick actions for the word "demo"](screenshots/command-palette-dark.webp#only-dark){ .zoomies-shot }
 ![The command palette matching hosts, pools, runners and quick actions for the word "demo"](screenshots/command-palette-light.webp#only-light){ .zoomies-shot }
 
+## Page bands
+
+The Overview opens on a hero, and the fleet pages open on a band cut from the same
+stage: **Runners**, **Pools**, **Queue**, **Jobs**, **Workflows**, **Hosts** and
+**Providers**. Every page uses the one component, so they cannot drift apart. Each
+says one thing about its page in a sentence, from figures the page already holds
+("3 hosts are connected. 9 of 12 slots in use."), and the list or grid under it is
+the evidence. A band is Zoomies Black in both themes and uses only neutral white and
+the brand's blue.
+
+A band comes in two sizes. **Standard** is the Overview's full stage; **Compact** is
+the slimmer one the working pages use, so the rows keep the room. The Overview
+defaults to Standard and every other page to Compact.
+
+Where a page used to spend a row of its height on a panel of figures, the band
+carries them in a strip along its lower edge. The Runners band holds the
+provisioning demand (jobs queued, ready, run now, paused, removed and the age of the
+oldest) and the Queue band holds the provisioning status filters, which still filter
+the list. Providers holds its provider, machine and needing-review counts. A band
+that is switched off, and any band on a phone, shows those same figures in a plain
+panel in its place, so nothing disappears with the dog.
+
+The small cross at the top right of a band removes it. It asks first, and says where
+to bring it back. **Settings → Appearance → Page bands** has a switch and a size for
+each page, the Overview's included; every band is on until you switch it off, and
+the choices stay in that browser.
+
 ## Pools
 
 What runners to make. Each pool's labels, GitHub target, backend, floor and
@@ -166,8 +193,8 @@ how queue pressure compares with configured headroom is behind a disclosure,
 **How pool demand compares with headroom**, as the Runners page keeps its
 lifecycle.
 
-![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
-![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
+![The Pools page: a band saying how many pools are enabled, then the pool list with a folded explanation of queue pressure and headroom under it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
+![The Pools page: a band saying how many pools are enabled, then the pool list with a folded explanation of queue pressure and headroom under it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
 
 The page that creates one is the pool editor. It is six sections (**Name and
 labels**, **Hosts**, **Runner**, **Size**, **Scaling** and **Speed-ups**) and
@@ -225,10 +252,11 @@ Every runner that exists right now and what each one is doing. Removed runners
 are hidden by default, because a busy fleet makes and destroys thousands of
 them and they are all history. Rows select for bulk drain or delete, and the
 state filter is a real filter: it narrows the set rather than repainting it.
-Above the grid are the number of jobs queued (a link to them, in the warning
-colour once it reaches the queue threshold), the provisioning strip and a way to
-the queue; the page opens on the runners, and the other tiles it used to carry
-live on the Overview and the Queue. Behind a disclosure, **How runners move through their states**,
+Above the grid are a band that says how many runners are live and how they split,
+and the provisioning demand row, whose first figure is the number of jobs queued
+(a link to them, in the warning colour once it reaches the queue threshold),
+followed by the ready, run now, paused and removed counts and a way to the queue;
+the other tiles the page used to carry live on the Overview and the Queue. Behind a disclosure, **How runners move through their states**,
 the runner lifecycle is the controller's own state machine drawn out
 (provisioning, registering, idle, busy, draining) with how many runners are at
 each step this moment and a link into each; under it, a bar of the same states
@@ -242,8 +270,8 @@ list is narrowed to, and that the list's search is not applied to it. It is the
 answer [`zoomies analyse startup-failures`](cli.md#zoomies-analyse) prints, with
 its evidence folded under the next steps.
 
-![The Runners page: the provisioning strip and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
-![The Runners page: the provisioning strip and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
+![The Runners page: a band saying how many runners are live, the provisioning row with the jobs queued figure first, and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-dark.webp#only-dark){ .zoomies-shot }
+![The Runners page: a band saying how many runners are live, the provisioning row with the jobs queued figure first, and a folded explanation of how runners move through their states above the runner grid](screenshots/runners-light.webp#only-light){ .zoomies-shot }
 
 A runner's page carries the job it is on, a timeline of how long it spent in
 each state (provisioning, registering, idle, busy) its resource usage as the
@@ -310,8 +338,8 @@ is not for this fleet, so it stops counting as queued everywhere; the
 Overview's queue depth and pool bars, `zoomies_jobs_queued` and the queue age
 with it. Restoring it from the Removed view puts it back.
 
-![The Queue page: status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-dark.webp#only-dark){ .zoomies-shot }
-![The Queue page: status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-light.webp#only-light){ .zoomies-shot }
+![The Queue page: a band saying how many jobs are waiting, then status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-dark.webp#only-dark){ .zoomies-shot }
+![The Queue page: a band saying how many jobs are waiting, then status filters above the provisioning table, with demand and ordering folded under it](screenshots/queue-light.webp#only-light){ .zoomies-shot }
 
 ## Workflows
 
@@ -423,8 +451,8 @@ immediately (queued demand paused, runners taken back) and records that it
 did, so the tiles and the lists agree from that moment rather than from
 whenever GitHub gets round to it.
 
-![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
-![The Jobs page: status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
+![The Jobs page: a band saying what is running and waiting, then status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-dark.webp#only-dark){ .zoomies-shot }
+![The Jobs page: a band saying what is running and waiting, then status buttons and filters above the job grid, with the fleet context folded under it](screenshots/jobs-light.webp#only-light){ .zoomies-shot }
 
 Opening a job says where it went wrong first: the step that failed and how
 long it ran, with a link to that step's log on GitHub, or, when the runner
@@ -754,8 +782,8 @@ that still have runners on them*, which loses whatever those runners were
 running. The same rules apply as when deleting one machine; the box is off
 again the next time the dialog opens.
 
-![The Providers page: machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-dark.webp#only-dark){ .zoomies-shot }
-![The Providers page: machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-light.webp#only-light){ .zoomies-shot }
+![The Providers page: a band saying how many machines are owned, then machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-dark.webp#only-dark){ .zoomies-shot }
+![The Providers page: a band saying how many machines are owned, then machines owned against the ceiling that may not be passed, the lifecycle band from planned to draining with the switch that pauses new machines beside it, and the card for the one provider this fleet rents from](screenshots/providers-light.webp#only-light){ .zoomies-shot }
 
 When a switch is the reason nothing is rented, a notice above the totals says so
 in the controller's own sentence, lists the pools it is holding back, and offers
@@ -1061,7 +1089,8 @@ A section of pages rather than a page of tabs, with its own rail beside them:
 your account, appearance and which events the Overview's feed shows; the
 accounts that can sign in and their roles, and the API tokens; the
 configuration this controller is actually running with, its backups, which
-release an update would take, and what it is. Each page has an address of its
+release an update would take, and what it is. Appearance also holds the **Page bands** switches (see [Page bands](#page-bands)).
+Each page has an address of its
 own, so a settings page is a link. Zoomies refuses any change that would leave
 no enabled administrator, and the pages that need that role are listed for
 everybody, marked rather than hidden.

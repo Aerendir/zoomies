@@ -128,6 +128,8 @@ var shippedMigrations = []string{
 	"0114_host_auto_adjust.sql",
 	"0115_provider_machine_disk_seen.sql",
 	"0116_update_attempt_stuck.sql",
+	"0117_pool_dind_image.sql",
+	"0118_session_oidc_session.sql",
 }
 
 // The prefixes shared by pairs of files that already shipped. They sort by what

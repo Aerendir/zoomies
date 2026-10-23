@@ -978,6 +978,12 @@ type Pool struct {
 	// provider's own PoolSelector is the other half, and a machine is rented
 	// only where both agree.
 	ProviderSelector StringMap `json:"provider_selector"`
+	// DinDImage is the image this pool's docker-in-docker sidecar runs. Empty
+	// follows the host's own (agent.dind_image), which is what a pool that
+	// does not care gets. It is the pool's say rather than only the host's
+	// because two pools on one host can need different daemons, and an image
+	// is something a pool already chooses for its runner (Image).
+	DinDImage string `json:"dind_image"`
 	// Env is injected into every runner this pool creates.
 	Env StringMap `json:"env"`
 	// RunAsRoot disables the backend's default of dropping to an unprivileged
@@ -2170,6 +2176,9 @@ type Session struct {
 	IP        string    `json:"ip,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// OIDCSessionID is the identity provider's session this one was created
+	// from, when single sign-on made it. A back-channel logout names it.
+	OIDCSessionID string `json:"-"`
 }
 
 // APIToken is a long-lived credential for automation, scoped by role and

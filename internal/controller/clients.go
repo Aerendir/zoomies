@@ -206,6 +206,19 @@ func (cc *clientCache) runnerGroupID(ctx context.Context, inst *store.Installati
 	}
 	cc.mu.Unlock()
 
+	if found.ID == 0 && !wantsDefault && inst.TargetType == store.TargetOrg && strings.EqualFold(name, ManagedRunnerGroupName) {
+		// The probe skips the managed group while every pool names its own, so
+		// a pool made afterwards into it would otherwise register in Default
+		// until the next probe. The group is Zoomies' to create; a same-named
+		// one it will not adopt falls through to the warning below.
+		if g, err := cc.c.ensureManagedRunnerGroup(ctx, inst, client); err != nil {
+			cc.c.log.Warn("could not provision the managed runner group for a pool that uses it",
+				"installation", inst.ID, "group", name, "error", err)
+		} else if g != nil {
+			found = *g
+		}
+	}
+
 	if found.ID == 0 {
 		if wantsDefault {
 			return 0, "", false
@@ -284,6 +297,31 @@ func (c *Controller) refreshRunnerGroupProblems(ctx context.Context, inst *store
 		_, unresolved, publicBlocked := c.clients.runnerGroupID(ctx, inst, client, pool.RunnerGroup)
 		c.noteRunnerGroup(pool, pool.RunnerGroup, unresolved, publicBlocked)
 	}
+}
+
+// needsManagedRunnerGroup says whether any pool of the installation relies on
+// the managed group, that is, leaves runner_group empty. When every pool names
+// its own group the managed one would sit empty and open to public
+// repositories, a standing invitation for a later pool to land in it, and an
+// administrator who narrowed it would see the installation reported as unusable
+// for a group nothing uses. An installation with no pools yet still gets the
+// group, so the first pool created without one has somewhere safe to go.
+func (c *Controller) needsManagedRunnerGroup(ctx context.Context, inst *store.Installation) (bool, error) {
+	pools, err := c.st.ListPools(ctx)
+	if err != nil {
+		return false, err
+	}
+	hasPools := false
+	for _, pool := range pools {
+		if pool.InstallationID != inst.ID {
+			continue
+		}
+		hasPools = true
+		if strings.TrimSpace(pool.RunnerGroup) == "" {
+			return true, nil
+		}
+	}
+	return !hasPools, nil
 }
 
 // ensureManagedRunnerGroup creates the organisation-wide group Zoomies owns,
@@ -389,10 +427,14 @@ func (c *Controller) ProbeInstallation(ctx context.Context, installationID strin
 	if err == nil {
 		info, err = client.Probe(ctx)
 		if err == nil {
-			var group *github.RunnerGroup
-			group, err = c.ensureManagedRunnerGroup(ctx, inst, client)
-			if err == nil {
-				err = c.adoptManagedRunnerGroup(ctx, inst, group)
+			var needed bool
+			needed, err = c.needsManagedRunnerGroup(ctx, inst)
+			if err == nil && needed {
+				var group *github.RunnerGroup
+				group, err = c.ensureManagedRunnerGroup(ctx, inst, client)
+				if err == nil {
+					err = c.adoptManagedRunnerGroup(ctx, inst, group)
+				}
 			}
 			if err == nil {
 				c.refreshRunnerGroupProblems(ctx, inst, client)

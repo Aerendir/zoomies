@@ -476,6 +476,7 @@ jobs:
           import os
           import json
           import re
+          import time
           import urllib.request
 
           token = os.environ.get("GITHUB_TOKEN", "")
@@ -484,9 +485,15 @@ jobs:
               headers["Authorization"] = "token " + token
 
           def get(url):
-              request = urllib.request.Request(url, headers=headers)
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  return json.load(response)
+              for attempt in range(4):
+                  try:
+                      request = urllib.request.Request(url, headers=headers)
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          return json.load(response)
+                  except OSError:
+                      if attempt == 3:
+                          raise
+                  time.sleep(5 * 2**attempt)
 
           template = open("internal/aicontext/workflow.go", encoding="utf-8").read()
           # The pins the template holds, as "actions/name@ref # vX.Y.Z". The
@@ -500,11 +507,16 @@ jobs:
               raise SystemExit("no action versions found in the managed workflow template")
 
           def latest_release(repo):
-              for release in get(f"https://api.github.com/repos/{repo}/releases?per_page=20"):
-                  tag = release.get("tag_name", "")
-                  if not tag or release.get("draft"):
-                      continue
-                  return tag
+              # An action with no release is rare enough that an empty answer
+              # is retried first: the API has returned one for actions that
+              # have long histories, and that failed this check for no reason.
+              for attempt in range(3):
+                  for release in get(f"https://api.github.com/repos/{repo}/releases?per_page=20"):
+                      tag = release.get("tag_name", "")
+                      if not tag or release.get("draft"):
+                          continue
+                      return tag
+                  time.sleep(5 * 2**attempt)
               return None
 
           def commit_of(repo, tag):
@@ -727,7 +739,17 @@ jobs:
       - name: install.ps1 lint and unit tests
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Force -Scope CurrentUser
+          # PowerShell Gallery can return an unusable package URL; retry the pinned download before failing this check.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Force -Scope CurrentUser -ErrorAction Stop
+              break
+            } catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "PSScriptAnalyzer download failed on attempt $attempt of 3: $($_.Exception.Message)"
+              Start-Sleep -Seconds ($attempt * 10)
+            }
+          }
           $findings = foreach ($file in 'install.ps1', 'test/install/install.Tests.ps1', 'test/install/windows-smoke.ps1') {
             Invoke-ScriptAnalyzer -Path $file -Settings test/install/PSScriptAnalyzerSettings.psd1
           }
@@ -763,6 +785,7 @@ jobs:
           tag=$(python3 - <<'PY'
           import os
           import json
+          import time
           import urllib.request
 
           repo = "eyupio/zoomies"
@@ -771,14 +794,30 @@ jobs:
           headers = {"Accept": "application/vnd.github+json"}
           if token:
               headers["Authorization"] = "token " + token
+
+          def releases_page(page):
+              # The API has answered with an empty list for a repository that
+              # has releases; the first page of this one is never empty, so
+              # that is retried like an error rather than read as "none".
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request(
+                          f"https://api.github.com/repos/{repo}/releases?per_page=100&page={page}",
+                          headers=headers,
+                      )
+                      with urllib.request.urlopen(req, timeout=30) as resp:
+                          releases = json.load(resp)
+                      if releases or page > 1:
+                          return releases
+                  except OSError:
+                      if attempt == 3:
+                          raise
+                  time.sleep(5 * 2**attempt)
+              return []
+
           page = 1
           while True:
-              req = urllib.request.Request(
-                  f"https://api.github.com/repos/{repo}/releases?per_page=100&page={page}",
-                  headers=headers,
-              )
-              with urllib.request.urlopen(req, timeout=30) as resp:
-                  releases = json.load(resp)
+              releases = releases_page(page)
               if not releases:
                   break
               for release in releases:

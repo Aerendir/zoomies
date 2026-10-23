@@ -356,8 +356,8 @@ pass; the runners already on it stay where they are.
 
 ## Adding a pool
 
-![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
-![The Pools page: the pool list with a folded explanation of queue pressure and headroom above it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
+![The Pools page: a band saying how many pools are enabled, then the pool list with a folded explanation of queue pressure and headroom under it](screenshots/pools-dark.webp#only-dark){ .zoomies-shot }
+![The Pools page: a band saying how many pools are enabled, then the pool list with a folded explanation of queue pressure and headroom under it](screenshots/pools-light.webp#only-light){ .zoomies-shot }
 
 One pool is enough until the fleet has to answer two different questions. Add a
 second when a job needs something the first cannot give it:
@@ -409,6 +409,15 @@ page says so, and the runner image follows automatically, so there is nothing
 to pin. Answering no is the default and costs nothing. The host Docker socket,
 which hands a job root on the host, is chosen in the **Runner** section, where
 it is confirmed deliberately.
+
+A `dind` pool starts a sidecar from the host's image (`agent.dind_image`,
+which is `docker:27-dind` until a host says otherwise). A pool that needs a
+different one names it in **Runner**, under *Your own image, or a pinned runner
+version*, as the Docker-in-Docker image; the field appears only when the pool
+is `dind`, and empty follows the host. The sidecar runs privileged, so the field
+chooses which image gets that access. See
+[`agent.dind_image`](configuration.md#agentdind_image-your-own-docker-in-docker-sidecar)
+for what the image must provide and how a private registry is reached.
 
 The other five sections are the same pool with the opinions put back: which
 hosts, a backend and platform chosen by hand, a fixed size on every host, the
@@ -1129,6 +1138,11 @@ chooses another group or Default.
 Explicit group choices remain administrator policy and Zoomies never rewrites
 them. If an incompatible group named `zoomies` already exists, connection
 verification stops with an actionable error instead of silently widening it.
+The group is only needed by pools that leave the runner group empty, so when
+an installation has pools and every one of them names its own group, Zoomies
+neither creates `zoomies` nor minds an existing one that is narrower or closed
+to public repositories. Add a pool without a runner group later and the next
+check creates it.
 If any explicitly selected group cannot be resolved, runners fall back to
 Default and the pool carries a `pool.runner_group_unresolved` warning.
 Repositories have no runner groups, so repository-target pools continue to use

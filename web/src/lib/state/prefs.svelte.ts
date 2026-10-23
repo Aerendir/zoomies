@@ -24,6 +24,13 @@ import {
   resolveLogoTreatment,
   type LogoTreatment,
 } from './logo-treatment';
+import {
+  defaultBandSize,
+  isBandPage,
+  isBandSize,
+  type BandPage,
+  type BandSize,
+} from '../bands/pages';
 import { storage } from './storage';
 
 const PREFS_KEY = 'zoomies.prefs';
@@ -159,6 +166,17 @@ interface StoredPrefs {
    */
   eliStyle?: Partial<EliStyle>;
   logoTreatment?: LogoTreatment;
+  /**
+   * Pages whose band this browser has switched off. The exception, as `hidden` is for
+   * columns, so a band added later is on for everyone.
+   */
+  hiddenBands?: string[];
+  /**
+   * The size an operator chose for a page's band, where it is not the page's default.
+   * Overrides only, as `hiddenBands` is, so a default that changes later reaches everyone
+   * who never chose.
+   */
+  bandSizes?: Record<string, string>;
 }
 
 /** The quick ranges the activity matrix offers, as the buttons name them. */
@@ -217,7 +235,13 @@ class Prefs {
   #statusStyle = $state<StatusStyle>(DEFAULT_STATUS_STYLE);
   #eliStyle = $state<EliStyle>(DEFAULT_ELI_STYLE);
   #logoTreatment = $state<LogoTreatment>(DEFAULT_LOGO_TREATMENT);
+  #hiddenBands = $state<BandPage[]>([]);
+  #bandSizes = $state<Partial<Record<BandPage, BandSize>>>({});
   #accountSync = false;
+  // Counts the syncs begun and the accounts disconnected, so a read of the
+  // account that is overtaken by a sign-out, or by another account's sign-in,
+  // can be told from the current one and dropped.
+  #syncGen = 0;
   #accountSave: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -248,6 +272,18 @@ class Prefs {
     this.#statusStyle = resolveStatusStyle(stored);
     this.#eliStyle = resolveEliStyle(stored.eliStyle);
     this.#logoTreatment = resolveLogoTreatment(stored.logoTreatment);
+    // Validated: a page an older build named and this one does not is not a band to hide.
+    this.#hiddenBands = Array.isArray(stored.hiddenBands)
+      ? stored.hiddenBands.filter(isBandPage)
+      : [];
+    // Validated twice over: the page and the size are both words an older or newer build
+    // may have written, and neither is a choice this build can honour if it does not know it.
+    this.#bandSizes = {};
+    if (stored.bandSizes && typeof stored.bandSizes === 'object') {
+      for (const [page, size] of Object.entries(stored.bandSizes)) {
+        if (isBandPage(page) && isBandSize(size)) this.#bandSizes[page] = size;
+      }
+    }
     this.#applyNav();
   }
 
@@ -349,8 +385,13 @@ class Prefs {
    * different account never copies the previous person's layout into it.
    */
   async syncAccount(userID: string): Promise<void> {
+    const gen = ++this.#syncGen;
     try {
       const remote = await getOwnPreferences();
+      // Signing in does not wait for this answer, so it can arrive after the
+      // person has signed out or somebody else has signed in. It describes the
+      // previous account and must not be applied to this one.
+      if (gen !== this.#syncGen) return;
       const layouts = remote.table_layouts ?? {};
       const previous = storage.get(PREFS_ACCOUNT_KEY);
       // How Eli answers is the account's choice where one has been made: a
@@ -393,11 +434,12 @@ class Prefs {
     } catch {
       // Browser preferences remain fully functional while the controller is
       // offline or while an older controller has no account endpoint.
-      this.#accountSync = false;
+      if (gen === this.#syncGen) this.#accountSync = false;
     }
   }
 
   disconnectAccount(): void {
+    this.#syncGen++;
     this.#accountSync = false;
     if (this.#accountSave !== null) clearTimeout(this.#accountSave);
     this.#accountSave = null;
@@ -518,6 +560,31 @@ class Prefs {
     this.#persist();
   }
 
+  /** Whether this page's band is showing: on unless this browser has switched it off. */
+  bandShown(page: BandPage): boolean {
+    return !this.#hiddenBands.includes(page);
+  }
+
+  setBandShown(page: BandPage, shown: boolean): void {
+    const rest = this.#hiddenBands.filter((p) => p !== page);
+    this.#hiddenBands = shown ? rest : [...rest, page];
+    this.#persist();
+  }
+
+  /** The size this page's band stands at: the operator's choice, else the page's default. */
+  bandSize(page: BandPage): BandSize {
+    return this.#bandSizes[page] ?? defaultBandSize(page);
+  }
+
+  setBandSize(page: BandPage, size: BandSize): void {
+    const next = { ...this.#bandSizes };
+    // Choosing the default again is un-choosing, so the page follows it if it ever moves.
+    if (size === defaultBandSize(page)) delete next[page];
+    else next[page] = size;
+    this.#bandSizes = next;
+    this.#persist();
+  }
+
   get logoTreatment(): LogoTreatment {
     return this.#logoTreatment;
   }
@@ -571,6 +638,8 @@ class Prefs {
         statusStyle: this.#statusStyle,
         eliStyle: this.#eliStyle,
         logoTreatment: this.#logoTreatment,
+        hiddenBands: this.#hiddenBands,
+        bandSizes: this.#bandSizes,
       } satisfies StoredPrefs),
     );
     this.#scheduleAccountSave();

@@ -903,3 +903,45 @@ func TestTheAnswerStyleFollowsTheSignedInAccount(t *testing.T) {
 		body: map[string]any{"assistant": map[string]any{"length": "epic"}}})
 	bad.mustStatus(t, http.StatusUnprocessableEntity, "a length this build does not know")
 }
+
+// Two people sharing a browser sign in one after the other. The second
+// sign-in replaces the cookie, but the first person's session would otherwise
+// stay valid in the database until it expired, for anyone who had copied the
+// cookie or left it in another profile.
+func TestSigningInEndsTheSessionTheBrowserWasHolding(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOperator)
+	h.user("bob", store.RoleViewer)
+
+	first := h.do(request{method: http.MethodPost, path: "/api/v1/auth/login", body: map[string]any{
+		"username": "alice", "password": testPassword,
+	}})
+	first.mustStatus(t, http.StatusOK, "alice's login")
+	alice := first.cookie.Value
+
+	second := h.do(request{method: http.MethodPost, path: "/api/v1/auth/login", cookie: alice, body: map[string]any{
+		"username": "bob", "password": testPassword,
+	}})
+	second.mustStatus(t, http.StatusOK, "bob's login on alice's browser")
+
+	h.do(request{method: http.MethodGet, path: "/api/v1/auth/session", cookie: second.cookie.Value}).
+		mustStatus(t, http.StatusOK, "bob's session")
+	h.do(request{method: http.MethodGet, path: "/api/v1/auth/session", cookie: alice}).
+		mustStatus(t, http.StatusUnauthorized, "alice's session after bob signed in on her browser")
+}
+
+// A refused sign-in is not a sign-in: whoever is still holding a session keeps it.
+func TestARefusedLoginLeavesTheBrowsersSessionAlone(t *testing.T) {
+	h := newHarness(t)
+	h.user("alice", store.RoleOperator)
+	login := h.do(request{method: http.MethodPost, path: "/api/v1/auth/login", body: map[string]any{
+		"username": "alice", "password": testPassword,
+	}})
+	login.mustStatus(t, http.StatusOK, "alice's login")
+
+	h.do(request{method: http.MethodPost, path: "/api/v1/auth/login", cookie: login.cookie.Value, body: map[string]any{
+		"username": "alice", "password": "not-the-password",
+	}}).mustStatus(t, http.StatusUnauthorized, "a wrong password")
+	h.do(request{method: http.MethodGet, path: "/api/v1/auth/session", cookie: login.cookie.Value}).
+		mustStatus(t, http.StatusOK, "the session after a refused login")
+}

@@ -263,6 +263,68 @@ func TestInstallationProbePreservesAnExplicitPoolRunnerGroup(t *testing.T) {
 	}
 }
 
+// A group nothing uses is not worth an installation's health: an administrator
+// who narrowed it, because every pool names its own, must not lose job tracking.
+func TestInstallationProbeIgnoresTheManagedGroupWhenEveryPoolNamesItsOwn(t *testing.T) {
+	h := newHarness(t)
+	inst, pool, _ := h.fleet()
+	h.gh.AddRunnerGroup("security-reviewed")
+	pool.RunnerGroup = "security-reviewed"
+	if err := h.st.UpdatePool(h.ctx, pool); err != nil {
+		t.Fatalf("UpdatePool: %v", err)
+	}
+	h.gh.AddRunnerGroup(ManagedRunnerGroupName)
+	h.gh.SetRunnerGroupPublicAccess(ManagedRunnerGroupName, false)
+
+	if _, err := h.c.ProbeInstallation(h.ctx, inst.ID); err != nil {
+		t.Fatalf("ProbeInstallation: %v, want a narrowed managed group to be harmless when no pool uses it", err)
+	}
+}
+
+func TestInstallationProbeDoesNotCreateTheManagedGroupWhenEveryPoolNamesItsOwn(t *testing.T) {
+	h := newHarness(t)
+	inst, pool, _ := h.fleet()
+	h.gh.AddRunnerGroup("security-reviewed")
+	pool.RunnerGroup = "security-reviewed"
+	if err := h.st.UpdatePool(h.ctx, pool); err != nil {
+		t.Fatalf("UpdatePool: %v", err)
+	}
+
+	if _, err := h.c.ProbeInstallation(h.ctx, inst.ID); err != nil {
+		t.Fatalf("ProbeInstallation: %v", err)
+	}
+	for _, request := range h.gh.Requests() {
+		if strings.Contains(request, "POST /orgs/acme/actions/runner-groups") {
+			t.Fatalf("request %q created a runner group nothing would use", request)
+		}
+	}
+}
+
+// The probe no longer creates the managed group while every pool names its own,
+// but a pool made afterwards without one is given that group's name. Its first
+// runner must not wait for the next probe, or it registers in GitHub's Default
+// group, wider than the isolation the name promised.
+func TestAPoolMadeLaterIntoTheManagedGroupGetsItCreatedForItsFirstRunner(t *testing.T) {
+	h := newHarness(t)
+	pool := groupPool(h, ManagedRunnerGroupName)
+
+	if got := len(h.runners()); got != 1 {
+		t.Fatalf("created %d runners, want 1", got)
+	}
+	if w := runnerGroupWarning(h, pool.ID); w != nil {
+		t.Fatalf("warning = %+v, want none: the managed group is Zoomies' to create", w)
+	}
+	creates := 0
+	for _, request := range h.gh.Requests() {
+		if strings.Contains(request, "POST /orgs/acme/actions/runner-groups") {
+			creates++
+		}
+	}
+	if creates != 1 {
+		t.Fatalf("runner-group create requests = %d, want exactly one", creates)
+	}
+}
+
 func TestInstallationProbeDoesNotWidenAnExistingIncompatibleZoomiesGroup(t *testing.T) {
 	h := newHarness(t)
 	inst, pool, _ := h.fleet()

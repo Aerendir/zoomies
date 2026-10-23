@@ -12,10 +12,12 @@
 
   A phone stacks everything and the pools must still be on its first screen, which
   even a slim band costs, so the hero is for the screens that have room for both.
+  The stage itself is the shared PageBand, so this page's size, switch and dismiss
+  behave as every other page's do; only its sentence and its Review button are its own.
 -->
 <script lang="ts">
   import Button from '$lib/components/Button.svelte';
-  import BrandStage from '$lib/public/BrandStage.svelte';
+  import PageBand from '$lib/bands/PageBand.svelte';
   import { fleet } from '$lib/state/fleet.svelte';
   import { notifications } from '$lib/state/notifications.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
@@ -41,37 +43,17 @@
   );
 </script>
 
-{#if fleet.loaded}
-  <div class="hero" data-testid="fleet-status">
-    <BrandStage
-      wide
-      eyebrow={setupPending ? 'Welcome to Zoomies' : 'Fleet status'}
-      headline={line.headline}
-      accent={line.accent}
-      lede={line.lede}
-      treatment={prefs.logoTreatment}
-    >
-      <!-- The hero is the page's problems line on a desktop (Overview.svelte puts the
-           old banner away there), so the way in is here. -->
-      {#if line.needsYou}
-        <div class="review">
-          <Button variant="primary" onclick={() => (notifications.open = true)}>Review</Button>
-        </div>
-      {/if}
-    </BrandStage>
-  </div>
-{/if}
-
-<style>
-  .hero {
-    margin-bottom: var(--z-space-4);
-  }
-  .review {
-    margin-top: var(--z-space-5);
-  }
-  @media (max-width: 768px) {
-    .hero {
-      display: none;
-    }
-  }
-</style>
+<PageBand
+  page="overview"
+  testid="fleet-status"
+  eyebrow={setupPending ? 'Welcome to Zoomies' : 'Fleet status'}
+  line={fleet.loaded ? line : null}
+>
+  {#snippet actions()}
+    <!-- The hero is the page's problems line on a desktop (Overview.svelte puts the
+         old banner away there), so the way in is here. -->
+    {#if line.needsYou}
+      <Button variant="primary" onclick={() => (notifications.open = true)}>Review</Button>
+    {/if}
+  {/snippet}
+</PageBand>

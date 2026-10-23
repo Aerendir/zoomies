@@ -44,6 +44,7 @@ export interface PoolDraft {
   platform_arch: string;
   image: string;
   runner_version: string;
+  dind_image: string;
   min_runners: string;
   max_runners: string;
   priority: string;
@@ -164,6 +165,7 @@ export function emptyDraft(): PoolDraft {
     platform_arch: '',
     image: '',
     runner_version: '',
+    dind_image: '',
     min_runners: '0',
     max_runners: '4',
     priority: '0',
@@ -238,6 +240,7 @@ export function draftFromPool(pool: Pool): PoolDraft {
     platform_arch: pool.platform?.arch ?? '',
     image: pool.image ?? '',
     runner_version: pool.runner_version ?? '',
+    dind_image: pool.dind_image ?? '',
     min_runners: fromNumber(pool.min_runners),
     max_runners: fromNumber(pool.max_runners),
     priority: fromNumber(pool.priority),
@@ -325,6 +328,7 @@ export function poolIsTuned(draft: PoolDraft): boolean {
     draft.tmpfs_daemon ||
     draft.image.trim() !== '' ||
     draft.runner_version.trim() !== '' ||
+    draft.dind_image.trim() !== '' ||
     draft.platform_os.trim() !== '' ||
     draft.platform_arch.trim() !== '' ||
     draft.disk_gb.trim() !== '' ||
@@ -500,6 +504,11 @@ export function toPoolBody(draft: PoolDraft, options: { complete?: boolean } = {
   if (complete || draft.runner_group.trim()) body.runner_group = draft.runner_group.trim();
   if (complete || draft.image.trim()) body.image = draft.image.trim();
   if (complete || draft.runner_version.trim()) body.runner_version = draft.runner_version.trim();
+  // Only a pool that gives its jobs a Docker daemon of its own has a sidecar,
+  // and the server refuses an image on any other, so a pool switched away
+  // from it sends the field empty rather than carrying a forgotten value.
+  const dindImage = draft.docker_mode === 'dind' ? draft.dind_image.trim() : '';
+  if (complete || dindImage) body.dind_image = dindImage;
   // Always sent, like the platform and for the same reason: a pool moved
   // from a fixed size to automatic clears its figures, and an absent key
   // would be read as "leave them alone".

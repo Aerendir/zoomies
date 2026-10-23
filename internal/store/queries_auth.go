@@ -216,9 +216,9 @@ func (s *Store) CreateSession(ctx context.Context, sess *Session) error {
 	}
 	sess.CreatedAt = s.Now()
 	_, err := s.exec(ctx, `INSERT INTO sessions (id, user_id, token_hash, user_agent, ip,
-		created_at, expires_at) VALUES (?,?,?,?,?,?,?)`,
+		created_at, expires_at, oidc_sid) VALUES (?,?,?,?,?,?,?,?)`,
 		sess.ID, sess.UserID, sess.TokenHash, sess.UserAgent, sess.IP,
-		ms(sess.CreatedAt), ms(sess.ExpiresAt))
+		ms(sess.CreatedAt), ms(sess.ExpiresAt), sess.OIDCSessionID)
 	return wrapWrite(err)
 }
 
@@ -268,6 +268,17 @@ func (s *Store) DeleteSession(ctx context.Context, hash string) error {
 // DeleteUserSessions logs a user out everywhere, e.g. after a password change.
 func (s *Store) DeleteUserSessions(ctx context.Context, userID string) error {
 	_, err := s.exec(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
+}
+
+// DeleteUserSessionsFromOIDC ends the sessions a user holds that were created
+// from one session of the identity provider, and no others: the same person
+// signed in from another browser has another provider session, and keeps theirs.
+func (s *Store) DeleteUserSessionsFromOIDC(ctx context.Context, userID, oidcSessionID string) error {
+	if oidcSessionID == "" {
+		return nil
+	}
+	_, err := s.exec(ctx, `DELETE FROM sessions WHERE user_id = ? AND oidc_sid = ?`, userID, oidcSessionID)
 	return err
 }
 

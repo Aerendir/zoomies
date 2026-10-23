@@ -1263,7 +1263,8 @@ func (b *DockerBackend) CreateWithResult(ctx context.Context, spec Spec) (result
 	spec.Image = createRef
 	createStarted := time.Now()
 
-	opts := containerOptions{Now: time.Now(), DinDImage: b.dind, ProxyEnv: inheritedProxyEnv(os.LookupEnv, spec.Env), ExtraCAFile: b.extraCA}
+	dindImage := b.sidecarImage(spec)
+	opts := containerOptions{Now: time.Now(), DinDImage: dindImage, ProxyEnv: inheritedProxyEnv(os.LookupEnv, spec.Env), ExtraCAFile: b.extraCA}
 	network := firstNonEmpty(strings.TrimSpace(spec.Network), b.network)
 	if network != "" {
 		if err := b.ensureNetwork(ctx, network); err != nil {
@@ -1305,7 +1306,7 @@ func (b *DockerBackend) CreateWithResult(ctx context.Context, spec Spec) (result
 	var dindReadyDuration *time.Duration
 	switch spec.DockerMode {
 	case store.DockerDinD:
-		if _, err := b.ensureImage(ctx, b.dind); err != nil {
+		if _, err := b.ensureImage(ctx, dindImage); err != nil {
 			return CreateResult{}, err
 		}
 		if spec.Tmpfs.Work.Enabled {
@@ -1553,6 +1554,13 @@ func (b *DockerBackend) PrewarmImage(ctx context.Context, image string, policy s
 	}
 	_, digest, _, _, err := b.prepareImage(ctx, image, policy)
 	return digest, err
+}
+
+// sidecarImage is the image a runner's docker-in-docker sidecar runs: the
+// pool's own when it names one, else the host's. Prewarming can only name the
+// host's, since a pool's image is not known until a runner of it is made.
+func (b *DockerBackend) sidecarImage(spec Spec) string {
+	return firstNonEmpty(strings.TrimSpace(spec.DinDImage), b.dind)
 }
 
 // PrewarmDinD prepares this host's configured sidecar image. The controller

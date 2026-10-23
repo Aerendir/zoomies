@@ -193,6 +193,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   'platform.arch': 'Architecture',
   image: 'Image',
   runner_version: 'Runner version',
+  dind_image: 'Docker-in-Docker image',
   min_runners: 'Minimum runners',
   max_runners: 'Maximum runners',
   idle_timeout: 'Idle timeout',

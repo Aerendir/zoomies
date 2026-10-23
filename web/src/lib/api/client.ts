@@ -101,6 +101,25 @@ export function onUnauthorized(handler: UnauthorizedHandler): void {
   unauthorized = handler;
 }
 
+/*
+ * Which sign-in a request was begun under. A request started while nobody was
+ * signed in (or under another person's cookie) can come back 401 after the new
+ * sign-in has finished; that answer is about the credential it was sent with,
+ * not the one now held, and running the hook for it put the login form back
+ * over a good session until the page was reloaded.
+ */
+let signInEpoch = 0;
+
+/** Say that a sign-in has just completed, so answers to earlier requests are not read as its end. */
+export function noteSignedIn(): void {
+  signInEpoch++;
+}
+
+/** Run the 401 hook for a request begun under `epoch`, unless a sign-in has completed since. */
+function sessionRefused(epoch: number): void {
+  if (epoch === signInEpoch) unauthorized?.();
+}
+
 /* -- query strings -------------------------------------------------------- */
 
 export type QueryValue = string | number | boolean | null | undefined | readonly string[];
@@ -156,6 +175,7 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
     init.body = options.body instanceof Blob ? options.body : JSON.stringify(options.body);
   }
 
+  const epoch = signInEpoch;
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}${toQuery(options.query)}`, init);
@@ -176,7 +196,7 @@ async function request<T>(method: Method, path: string, options: RequestOptions 
 
   if (response.ok) return payload as T;
 
-  if (response.status === 401 && !options.allow401) unauthorized?.();
+  if (response.status === 401 && !options.allow401) sessionRefused(epoch);
 
   throw new ApiError({
     ...errorFrom(response.status, payload),
@@ -1031,6 +1051,7 @@ export const exportInstanceTransfer = (passphrase: string) =>
   downloadEncryptedArchive('/transfers/export', passphrase);
 
 async function downloadEncryptedArchive(path: string, passphrase: string): Promise<Blob> {
+  const epoch = signInEpoch;
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
@@ -1048,7 +1069,7 @@ async function downloadEncryptedArchive(path: string, passphrase: string): Promi
     });
   }
   if (!response.ok) {
-    if (response.status === 401) unauthorized?.();
+    if (response.status === 401) sessionRefused(epoch);
     const payload: unknown = await response.json().catch(() => undefined);
     throw new ApiError(errorFrom(response.status, payload));
   }
@@ -1089,6 +1110,7 @@ function uploadArchive(
   passphrase: string,
   onProgress?: (fraction: number) => void,
 ): Promise<Result<'uploadBackup'>> {
+  const epoch = signInEpoch;
   const form = new FormData();
   // The passphrase first, so the server can read it before spooling the
   // file; it handles either order, but this is the cheaper one.
@@ -1116,7 +1138,7 @@ function uploadArchive(
         resolve(xhr.response as Result<'uploadBackup'>);
         return;
       }
-      if (xhr.status === 401) unauthorized?.();
+      if (xhr.status === 401) sessionRefused(epoch);
       reject(new ApiError(errorFrom(xhr.status, xhr.response)));
     };
     xhr.send(form);
@@ -1264,6 +1286,7 @@ export async function streamAssistantChat(
   onFrame: (frame: ChatFrame) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const epoch = signInEpoch;
   let response: Response;
   try {
     response = await fetch(`${BASE}/assistant/personal/chat`, {
@@ -1283,7 +1306,7 @@ export async function streamAssistantChat(
     });
   }
   if (!response.ok) {
-    if (response.status === 401) unauthorized?.();
+    if (response.status === 401) sessionRefused(epoch);
     const payload: unknown = await response.json().catch(() => undefined);
     throw new ApiError(errorFrom(response.status, payload));
   }
