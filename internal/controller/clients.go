@@ -206,6 +206,19 @@ func (cc *clientCache) runnerGroupID(ctx context.Context, inst *store.Installati
 	}
 	cc.mu.Unlock()
 
+	if found.ID == 0 && !wantsDefault && inst.TargetType == store.TargetOrg && strings.EqualFold(name, ManagedRunnerGroupName) {
+		// The probe skips the managed group while every pool names its own, so
+		// a pool made afterwards into it would otherwise register in Default
+		// until the next probe. The group is Zoomies' to create; a same-named
+		// one it will not adopt falls through to the warning below.
+		if g, err := cc.c.ensureManagedRunnerGroup(ctx, inst, client); err != nil {
+			cc.c.log.Warn("could not provision the managed runner group for a pool that uses it",
+				"installation", inst.ID, "group", name, "error", err)
+		} else if g != nil {
+			found = *g
+		}
+	}
+
 	if found.ID == 0 {
 		if wantsDefault {
 			return 0, "", false

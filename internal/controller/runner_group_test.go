@@ -300,6 +300,31 @@ func TestInstallationProbeDoesNotCreateTheManagedGroupWhenEveryPoolNamesItsOwn(t
 	}
 }
 
+// The probe no longer creates the managed group while every pool names its own,
+// but a pool made afterwards without one is given that group's name. Its first
+// runner must not wait for the next probe, or it registers in GitHub's Default
+// group, wider than the isolation the name promised.
+func TestAPoolMadeLaterIntoTheManagedGroupGetsItCreatedForItsFirstRunner(t *testing.T) {
+	h := newHarness(t)
+	pool := groupPool(h, ManagedRunnerGroupName)
+
+	if got := len(h.runners()); got != 1 {
+		t.Fatalf("created %d runners, want 1", got)
+	}
+	if w := runnerGroupWarning(h, pool.ID); w != nil {
+		t.Fatalf("warning = %+v, want none: the managed group is Zoomies' to create", w)
+	}
+	creates := 0
+	for _, request := range h.gh.Requests() {
+		if strings.Contains(request, "POST /orgs/acme/actions/runner-groups") {
+			creates++
+		}
+	}
+	if creates != 1 {
+		t.Fatalf("runner-group create requests = %d, want exactly one", creates)
+	}
+}
+
 func TestInstallationProbeDoesNotWidenAnExistingIncompatibleZoomiesGroup(t *testing.T) {
 	h := newHarness(t)
 	inst, pool, _ := h.fleet()
