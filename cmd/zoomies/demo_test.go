@@ -198,7 +198,7 @@ func TestTheDemoServesASeededFleetAndLeavesNothingBehind(t *testing.T) {
 	// It says where it is only once it answers, so this is the wait.
 	where := regexp.MustCompile(`http://127\.0\.0\.1:\d+`)
 	var base string
-	for deadline := time.Now().Add(60 * time.Second); base == "" && time.Now().Before(deadline); {
+	for deadline := time.Now().Add(demoReadyWithin + time.Minute); base == "" && time.Now().Before(deadline); {
 		base = where.FindString(out.String())
 		select {
 		case code := <-exit:
@@ -207,7 +207,7 @@ func TestTheDemoServesASeededFleetAndLeavesNothingBehind(t *testing.T) {
 		}
 	}
 	if base == "" {
-		t.Fatalf("the demo did not say where it was within a minute:\n%s", out)
+		t.Fatalf("the demo did not say where it was within its readiness budget:\n%s", out)
 	}
 
 	get := func(path string) (int, string) {
