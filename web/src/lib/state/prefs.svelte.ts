@@ -31,6 +31,7 @@ import {
   type BandPage,
   type BandSize,
 } from '../bands/pages';
+import { DEFAULT_BAND_LOGO_SIZE, isBandLogoSize, type BandLogoSize } from '../bands/band-logo';
 import { storage } from './storage';
 
 const PREFS_KEY = 'zoomies.prefs';
@@ -177,6 +178,10 @@ interface StoredPrefs {
    * who never chose.
    */
   bandSizes?: Record<string, string>;
+  /** Whether the dog is drawn in the band. On by default. */
+  bandLogo?: boolean;
+  /** How large the dog in the band is drawn; `auto` follows the band's size. */
+  bandLogoSize?: BandLogoSize;
 }
 
 /** The quick ranges the activity matrix offers, as the buttons name them. */
@@ -237,6 +242,8 @@ class Prefs {
   #logoTreatment = $state<LogoTreatment>(DEFAULT_LOGO_TREATMENT);
   #hiddenBands = $state<BandPage[]>([]);
   #bandSizes = $state<Partial<Record<BandPage, BandSize>>>({});
+  #bandLogo = $state(true);
+  #bandLogoSize = $state<BandLogoSize>(DEFAULT_BAND_LOGO_SIZE);
   #accountSync = false;
   // Counts the syncs begun and the accounts disconnected, so a read of the
   // account that is overtaken by a sign-out, or by another account's sign-in,
@@ -284,6 +291,12 @@ class Prefs {
         if (isBandPage(page) && isBandSize(size)) this.#bandSizes[page] = size;
       }
     }
+    this.#bandLogo = stored.bandLogo ?? true;
+    // Validated: a size an older build saved that this one no longer offers must
+    // not draw a dog at a width nothing defines.
+    this.#bandLogoSize = isBandLogoSize(stored.bandLogoSize)
+      ? stored.bandLogoSize
+      : DEFAULT_BAND_LOGO_SIZE;
     this.#applyNav();
   }
 
@@ -585,6 +598,27 @@ class Prefs {
     this.#persist();
   }
 
+  /** Whether the dog is drawn in the band. */
+  get bandLogo(): boolean {
+    return this.#bandLogo;
+  }
+
+  set bandLogo(value: boolean) {
+    this.#bandLogo = value;
+    this.#persist();
+  }
+
+  /** How large the dog in the band is drawn; `auto` follows the band's size. */
+  get bandLogoSize(): BandLogoSize {
+    return this.#bandLogoSize;
+  }
+
+  set bandLogoSize(value: BandLogoSize) {
+    if (!isBandLogoSize(value)) return;
+    this.#bandLogoSize = value;
+    this.#persist();
+  }
+
   get logoTreatment(): LogoTreatment {
     return this.#logoTreatment;
   }
@@ -640,6 +674,8 @@ class Prefs {
         logoTreatment: this.#logoTreatment,
         hiddenBands: this.#hiddenBands,
         bandSizes: this.#bandSizes,
+        bandLogo: this.#bandLogo,
+        bandLogoSize: this.#bandLogoSize,
       } satisfies StoredPrefs),
     );
     this.#scheduleAccountSave();

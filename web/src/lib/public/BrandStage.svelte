@@ -19,6 +19,7 @@
   import type { Snippet } from 'svelte';
   import LogoArt from '$lib/components/LogoArt.svelte';
   import { DEFAULT_LOGO_TREATMENT, type LogoTreatment } from '$lib/state/logo-treatment';
+  import type { BandLogoArtSize } from '../bands/band-logo';
 
   interface Props {
     /** The small capitals above the headline. */
@@ -41,6 +42,10 @@
      * it; one that has no preferences, like the status page, takes the default.
      */
     treatment?: LogoTreatment;
+    /** Whether the dog is drawn at all. A band hides it when its operator asks. */
+    art?: boolean;
+    /** How large the dog is drawn, when `wide`. The stage's own size otherwise. */
+    artSize?: BandLogoArtSize;
     /** Anything else the stage carries, under the lede. */
     children?: Snippet;
     class?: string;
@@ -53,14 +58,16 @@
     wide = false,
     heading = false,
     treatment = DEFAULT_LOGO_TREATMENT,
+    art = true,
+    artSize,
     children,
     class: klass = '',
   }: Props = $props();
   const lines = $derived(typeof headline === 'string' ? headline.split('\n') : headline);
 </script>
 
-<div class="stage {klass}" class:wide>
-  <div class="art"><LogoArt variant="mark" size={240} label="" {treatment} /></div>
+<div class="stage {klass}" class:wide data-art-size={art ? artSize : undefined}>
+  {#if art}<div class="art"><LogoArt variant="mark" size={240} label="" {treatment} /></div>{/if}
   <div class="words">
     {#if eyebrow}<p class="eyebrow">{eyebrow}</p>{/if}
     {#snippet words()}
@@ -159,6 +166,17 @@
   }
   .wide .art :global(.logo) {
     width: 100%;
+  }
+  /* The dog's size is the operator's choice, separate from the cut, so a
+     compact band can still carry a large dog and a standard band a small one. */
+  .stage.wide[data-art-size='small'] .art {
+    width: clamp(4rem, 12%, 6rem);
+  }
+  .stage.wide[data-art-size='medium'] .art {
+    width: clamp(6rem, 18%, 10rem);
+  }
+  .stage.wide[data-art-size='large'] .art {
+    width: clamp(8rem, 24%, 13rem);
   }
   @media (max-width: 800px) {
     .stage,

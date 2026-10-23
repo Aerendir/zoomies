@@ -671,8 +671,10 @@ where the pools must still be on the first screen. The fleet pages (Runners,
 Pools, Queue, Jobs, Workflows, Hosts and Providers) open on the same stage in a
 slimmer cut, with one sentence from the page's own figures; each is switched off
 per page in Appearance (a list of hidden pages in the browser, so a band added
-later is on), and a phone never shows one. The wrong-address page uses
-the same stage with the dog.
+later is on), and a phone never shows one. A band's dog can be hidden, or drawn
+at a chosen size (Auto follows the band's own size; Small, Medium and Large pin
+it), a choice made in Appearance and kept in this browser. The wrong-address
+page uses the same stage with the dog.
 
 Persistent left navigation, collapsible to icons only (persisted). Order is
 fixed, because muscle memory is the point:
