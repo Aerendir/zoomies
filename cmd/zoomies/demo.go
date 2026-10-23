@@ -26,9 +26,9 @@ const defaultDemoPort = 8080
 
 // demoReadyWithin is how long the demo waits for its own controller to answer
 // before it stops saying "starting" and says something is wrong. Seeding the
-// fleet and opening the database take about a second; a minute is a machine
-// with something badly wrong with it.
-const demoReadyWithin = time.Minute
+// fleet and opening the database take about a second; two minutes leaves room
+// for a busy machine without hiding a startup failure.
+const demoReadyWithin = 2 * time.Minute
 
 // runDemo is `zoomies demo`: a throwaway controller with a fleet already in it,
 // for somebody who wants to see the product before deciding whether to give it
@@ -88,12 +88,19 @@ func runDemo(ctx context.Context, e *env, args []string) error {
 	var startup bytes.Buffer
 	quiet := &env{out: io.Discard, err: &startup, in: e.in}
 
-	pollCtx, stopPolling := context.WithCancel(ctx)
+	controllerCtx, stopController := context.WithCancel(ctx)
+	defer stopController()
+	pollCtx, stopPolling := context.WithCancel(controllerCtx)
 	defer stopPolling()
 	announced := make(chan struct{})
+	readinessFailure := make(chan error, 1)
 	go func() {
 		defer close(announced)
 		if err := waitForDemo(pollCtx, url, demoReadyWithin); err != nil {
+			if controllerCtx.Err() == nil {
+				readinessFailure <- err
+				stopController()
+			}
 			return
 		}
 		announceDemo(e.out, url)
@@ -105,13 +112,22 @@ func runDemo(ctx context.Context, e *env, args []string) error {
 	}()
 
 	err = withEnvironment(demoSettings(dir, addr), func() error {
-		return runController(ctx, quiet, nil)
+		return runController(controllerCtx, quiet, nil)
 	})
 	// Waited for, so that nothing is written to the terminal after this
 	// returns, and so that what is printed below is not interleaved with the
 	// announcement of a demo that was stopped a moment after it came up.
 	stopPolling()
 	<-announced
+
+	select {
+	case readinessErr := <-readinessFailure:
+		if startup.Len() > 0 {
+			fmt.Fprint(e.err, startup.String())
+		}
+		return fmt.Errorf("starting the demo: %w", readinessErr)
+	default:
+	}
 
 	var restart *restartRequested
 	switch {
