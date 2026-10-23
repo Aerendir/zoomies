@@ -1393,8 +1393,17 @@ func (s *Store) queueWaits(ctx context.Context, since time.Time, managedOnly boo
 	if managedOnly {
 		scope = " AND " + managedJobSQL("jobs")
 	}
+	// Only a job a runner picked up has a wait to measure. GitHub stamps
+	// started_at on a job that never reached one, with the same value as
+	// queued_at: a job cancelled while queued, or one its `if:` skipped. On a
+	// repository whose workflow skips its real job when a path filter finds
+	// nothing, those zeros come with every push and outnumber the real waits,
+	// which pins the median, and eventually the p95, at nothing. A job
+	// cancelled after a runner took it keeps its name, so its wait, which was
+	// real, stays.
 	rows, err := s.read.QueryContext(ctx, `SELECT started_at - queued_at FROM jobs
-		WHERE started_at IS NOT NULL AND queued_at >= ?`+scope+` ORDER BY 1`, ms(since))
+		WHERE started_at IS NOT NULL AND (runner_name != '' OR runner_id != '')
+			AND queued_at >= ?`+scope+` ORDER BY 1`, ms(since))
 	if err != nil {
 		return nil, err
 	}
