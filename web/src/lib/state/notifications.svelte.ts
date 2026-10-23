@@ -117,6 +117,10 @@ class Notifications {
   // Counts local decisions, so a read of the account that started before one
   // can be told from one that did not.
   #revision = 0;
+  // Counts the syncs begun and the accounts disconnected, so a read that is
+  // overtaken by a sign-out, or by another account's sign-in, is dropped
+  // instead of being applied to whoever is there now.
+  #syncGen = 0;
 
   constructor() {
     // A dismissal outlives nothing it was not meant to. Once the controller
@@ -157,6 +161,7 @@ class Notifications {
    * different account hands nothing over.
    */
   async syncAccount(userID: string): Promise<void> {
+    const gen = ++this.#syncGen;
     // Remembered before anything can fail, so a first sync that hits an
     // unreachable controller is retried the next time the page is looked at
     // instead of leaving this tab on browser-only dismissals until a reload.
@@ -182,6 +187,7 @@ class Notifications {
         await this.#queue;
         const now = Date.now();
         let view = await getProblemDismissals();
+        if (gen !== this.#syncGen) return;
         if (!view.stored) {
           this.#remote = false;
           return;
@@ -191,6 +197,7 @@ class Notifications {
           storage.get(ACCOUNT_KEY) === null ? carriedOver(this.#dismissals, remote, now) : [];
         if (carry.length > 0) {
           view = await patchProblemDismissals({ set: carry });
+          if (gen !== this.#syncGen) return;
           remote = fromServer(view.items, now);
         }
         this.#remote = true;
@@ -210,6 +217,7 @@ class Notifications {
   }
 
   disconnectAccount(): void {
+    this.#syncGen++;
     this.#remote = false;
     this.#account = null;
   }
