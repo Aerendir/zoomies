@@ -31,9 +31,10 @@ test('queue controls persist, filter and restore demand without changing GitHub 
     await page.getByRole('dialog').getByRole('button', { name: 'Pause', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: '1 updated' })).toBeVisible();
     await page.reload();
-    // The status filters live in the Queue band now, as the cards above the list used to.
+    // The status filters live in the Queue band now (or its plain panel on a phone), as the
+    // cards above the list used to.
     await page
-      .getByTestId('band-queue')
+      .getByRole('list', { name: 'Key figures' })
       .getByRole('button', { name: /^Paused/ })
       .click();
     await expect(page.getByRole('grid', { name: 'Provisioning queue' })).toContainText(

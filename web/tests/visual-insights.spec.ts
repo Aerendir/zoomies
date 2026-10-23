@@ -7,7 +7,8 @@ test('the provisioning figures are in the Runners band, with the way to the queu
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await goto(page, '/runners', 'Runners');
-  const band = page.getByTestId('band-runners');
+  // In the band on a desktop; on a phone, which never draws the band, the same figures stand alone.
+  const band = page.getByRole('list', { name: 'Key figures' });
   // The six tiles are gone from this page: the Overview and the Queue carry those
   // figures, and the grid is what a person came to the Runners page for.
   // The queued-jobs figure is the one that stays, first in the band and a click from the jobs.

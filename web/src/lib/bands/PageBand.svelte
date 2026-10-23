@@ -26,6 +26,7 @@
   import BrandStage from '$lib/public/BrandStage.svelte';
   import { prefs } from '$lib/state/prefs.svelte';
   import BandStats from './BandStats.svelte';
+  import { figuresPlacement } from './placement';
   import { BAND_PAGES, type BandPage } from './pages';
   import type { BandLine } from './lines';
   import type { BandMore, BandStat } from './stats';
@@ -49,6 +50,9 @@
   const shown = $derived(prefs.bandShown(page));
   const size = $derived(prefs.bandSize(page));
   const name = $derived(BAND_PAGES.find((p) => p.key === page)?.label ?? page);
+  const placement = $derived(
+    figuresPlacement({ shown, hasLine: line !== null, hasStats: stats.length > 0 }),
+  );
   let confirming = $state(false);
 
   function hide(): boolean {
@@ -85,11 +89,11 @@
 {/if}
 
 <!--
-  The figures on their own: always when the band is off, and on a phone when it is on,
-  since a phone never draws the stage. Nothing at all when there are none to show.
+  The figures on their own: always when the band is off or has no sentence yet, and on a
+  phone when it is on, since a phone never draws the stage. Nothing when there are none.
 -->
-{#if stats.length > 0 && (!shown || line)}
-  <div class="alone" class:phone-only={shown}>
+{#if placement !== 'none'}
+  <div class="alone" class:phone-only={placement === 'phone-only'}>
     <BandStats {stats} {more} variant="panel" />
   </div>
 {/if}
