@@ -587,9 +587,10 @@ type Resources struct {
 	MinCPUs     float64 `json:"min_cpus,omitempty"`
 	MinMemoryMB int64   `json:"min_memory_mb,omitempty"`
 	// DaemonSharePercent is the part of a host-sized slot a docker-in-docker pool
-	// gives its daemon; the runner keeps the rest. Zero is the even split. It
-	// divides only a share the host chose (SplitWithDaemonShares): a limit typed
-	// above is given to both containers in full whatever this says.
+	// gives its daemon; the runner keeps the rest. Zero is the even split. A limit
+	// typed above is given to both containers in full while no share is said for
+	// it; once one is, the typed figure is the pair's and is divided the same way
+	// (SplitsTypedCPU, SplitsTypedMemory).
 	//
 	// It is one figure for both resources, which is what a pool that has not
 	// thought about it wants. The two below say it per resource, because the two
@@ -633,6 +634,21 @@ func (r Resources) DaemonCPUPercent() int {
 // DaemonMemoryPercent is the daemon's share of a split slot's memory.
 func (r Resources) DaemonMemoryPercent() int {
 	return daemonShare(r.DaemonMemorySharePercent, r.DaemonSharePercent)
+}
+
+// SplitsTypedCPU and SplitsTypedMemory report whether a typed figure is the size
+// of a docker-in-docker pair rather than of each container: the pool typed it and
+// said the daemon's share of that resource, the specific figure or the general
+// one. Such a figure is divided between the two by the share and charged once,
+// like a slot; a typed figure with no share said is given to both containers in
+// full and charged twice, which is what every pool had before a share could
+// divide one, so a pool that has not asked keeps it.
+func (r Resources) SplitsTypedCPU() bool {
+	return r.CPUs > 0 && (r.DaemonCPUSharePercent > 0 || r.DaemonSharePercent > 0)
+}
+
+func (r Resources) SplitsTypedMemory() bool {
+	return r.MemoryMB > 0 && (r.DaemonMemorySharePercent > 0 || r.DaemonSharePercent > 0)
 }
 
 // pairFactor is how many times the smaller half a slot must hold at a share:
@@ -777,7 +793,9 @@ func (p MemoryBurstPolicy) Enforces() bool { return p.Mode == MemoryBurstAutomat
 // has to decide which half to starve.
 //
 // Limits an operator typed are not split: those say what the job may have, the
-// daemon is given the same, and scheduler.Reserve charges the host for both.
+// daemon is given the same, and scheduler.Reserve charges the host for both --
+// unless the pool also said the daemon's share of that resource, which makes
+// the typed figure the pair's to divide here (SplitsTypedCPU, SplitsTypedMemory).
 func (r Resources) SplitWithDaemon() (runner, daemon Resources) {
 	return r.SplitWithDaemonShares(DefaultDaemonSharePercent, DefaultDaemonSharePercent)
 }
@@ -889,6 +907,18 @@ func (h *Host) Supports(feature string) bool {
 // pool may cap its cache's disk and still leave its size to the host.
 func (p *Pool) Automatic() bool {
 	return p.Resources.CPUs <= 0 && p.Resources.MemoryMB <= 0
+}
+
+// TypedCPUPerContainer and TypedMemoryPerContainer report whether a figure this
+// pool typed is given to each of a docker-in-docker pair's containers in full,
+// and so charged twice: a dind pool's typed figure with no daemon share said for
+// it. A typed figure with a share is the pair's, split and charged once.
+func (p *Pool) TypedCPUPerContainer() bool {
+	return p.DockerMode == DockerDinD && p.Resources.CPUs > 0 && !p.Resources.SplitsTypedCPU()
+}
+
+func (p *Pool) TypedMemoryPerContainer() bool {
+	return p.DockerMode == DockerDinD && p.Resources.MemoryMB > 0 && !p.Resources.SplitsTypedMemory()
 }
 
 type CacheScope string

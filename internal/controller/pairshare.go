@@ -458,6 +458,16 @@ func (c *Controller) daemonShareAdviceProblems(ctx context.Context, out *[]Probl
 		if adv.Memory != nil && !sameShare(adv.Memory.Current, p.Resources.DaemonMemoryPercent()) {
 			adv.Memory = nil
 		}
+		// A typed figure no share divides is given whole to both containers, so
+		// there is no division to move, and a share proposed for it -- applied by
+		// hand or by the autopilot -- would make it the pair's size instead of each
+		// container's and halve what the job is given.
+		if adv.CPU != nil && p.TypedCPUPerContainer() {
+			adv.CPU = nil
+		}
+		if adv.Memory != nil && p.TypedMemoryPerContainer() {
+			adv.Memory = nil
+		}
 		if adv.CPU == nil && adv.Memory == nil {
 			continue
 		}

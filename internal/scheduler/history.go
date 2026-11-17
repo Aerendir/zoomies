@@ -359,8 +359,8 @@ func sizeForNeed(p *store.Pool, res Reservation, size *store.Resources, need Req
 	res.MemoryMB = want
 	grant := p.Resources
 	grant.MinCPUs, grant.MinMemoryMB = 0, 0
-	grant.CPUs = res.CPUs / fieldFactor(p, p.Resources.CPUs > 0)
-	grant.MemoryMB = res.MemoryMB / int64(fieldFactor(p, p.Resources.MemoryMB > 0))
+	grant.CPUs = res.CPUs / cpuFactor(p)
+	grant.MemoryMB = res.MemoryMB / int64(memoryFactor(p))
 	return res, &grant
 }
 

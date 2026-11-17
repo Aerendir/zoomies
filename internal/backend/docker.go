@@ -726,20 +726,30 @@ func extraCABind(fl flavor, source string) string {
 // it may carry eight runners, not four because half of them brought a daemon.
 // The scheduler charges one share for the pair to match.
 //
+// A typed limit the pool also said the daemon's share of is the pair's size, not
+// each container's, and is split by that share like a slot; the scheduler charges
+// it once (store.Resources.SplitsTypedCPU). A share said only for the other
+// resource leaves this one whole, as before.
+//
 // Anything else -- a spec from a controller that says nothing about where its
 // limits came from -- is treated as typed, which is what such a spec has always
 // meant and leaves an older fleet exactly as it was.
 func pairLimits(spec Spec) (runner, daemon store.Resources) {
-	if spec.ResourcesSource != store.AllocationFromHost {
-		return spec.Resources, spec.Resources
+	shares := store.Resources{
+		CPUs: spec.Resources.CPUs, MemoryMB: spec.Resources.MemoryMB,
+		DaemonSharePercent: spec.DaemonSharePercent, DaemonCPUSharePercent: spec.DaemonCPUSharePercent, DaemonMemorySharePercent: spec.DaemonMemorySharePercent,
 	}
+	fromHost := spec.ResourcesSource == store.AllocationFromHost
+	// A field goes whole to both halves where the pool typed it, or where nothing
+	// came from the host, unless a daemon share divides it: only a slot the host
+	// decided, or a typed figure given a share, is divided.
+	cpuWhole := (!fromHost || spec.CPUTyped) && !shares.SplitsTypedCPU()
+	memoryWhole := (!fromHost || spec.MemoryTyped) && !shares.SplitsTypedMemory()
 	runner, daemon = spec.Resources.SplitWithDaemonShares(spec.DaemonShares())
-	// A field the pool typed goes whole to both halves, as it does when nothing came
-	// from the host: only what the host decided is a slot to divide.
-	if spec.CPUTyped {
+	if cpuWhole {
 		runner.CPUs, daemon.CPUs = spec.Resources.CPUs, spec.Resources.CPUs
 	}
-	if spec.MemoryTyped {
+	if memoryWhole {
 		runner.MemoryMB, daemon.MemoryMB = spec.Resources.MemoryMB, spec.Resources.MemoryMB
 	}
 	return runner, daemon

@@ -70,7 +70,9 @@ const (
 // have; the daemon is given the same, so the pair is charged twice, and a host
 // too small for what was typed says so. A fallback share is the machine cut
 // into slots, and there the pair splits one slot between them -- see
-// store.Resources.SplitWithDaemon -- so it is charged one.
+// store.Resources.SplitWithDaemon -- so it is charged one. A typed figure the
+// pool also said the daemon's share of is the pair's size, split the same way
+// and charged once (store.Resources.SplitsTypedCPU).
 //
 // A pool that takes its size from the host (SizeFromProfile) has the host's
 // standard size where an automatic pool has the share: the profile's, or the
@@ -125,12 +127,13 @@ func Reserve(p *store.Pool, h *store.Host) Reservation {
 		res.MemoryMB = max(slot, floor.MemoryMB)
 	}
 	if p.DockerMode == store.DockerDinD {
-		// Only what the operator typed doubles. A share is one slot, and the
-		// pair is given one slot between them.
-		if !cpuFromHost {
+		// Only what the operator typed for each container doubles. A share is
+		// one slot, and the pair is given one slot between them; a typed figure
+		// with a daemon share is the pair's, divided the same way.
+		if p.TypedCPUPerContainer() {
 			res.CPUs *= 2
 		}
-		if !memoryFromHost {
+		if p.TypedMemoryPerContainer() {
 			res.MemoryMB *= 2
 		}
 		// The default working room is one per pair, like a share: the pair
@@ -181,7 +184,7 @@ func RunnerGuarantee(p *store.Pool, h *store.Host, r *store.Runner) Reservation 
 	}
 	reduced := r.AllocationSource == store.AllocationReduced || r.AllocationSource == store.AllocationHistory
 	if r.AllocatedCPUs > 0 {
-		given := r.AllocatedCPUs * fieldFactor(p, p.Resources.CPUs > 0)
+		given := r.AllocatedCPUs * cpuFactor(p)
 		if reduced {
 			res.CPUs = given
 		} else {
@@ -189,7 +192,7 @@ func RunnerGuarantee(p *store.Pool, h *store.Host, r *store.Runner) Reservation 
 		}
 	}
 	if r.AllocatedMemoryMB > 0 {
-		given := r.AllocatedMemoryMB * int64(fieldFactor(p, p.Resources.MemoryMB > 0))
+		given := r.AllocatedMemoryMB * int64(memoryFactor(p))
 		if reduced {
 			res.MemoryMB = given
 		} else {
@@ -199,12 +202,20 @@ func RunnerGuarantee(p *store.Pool, h *store.Host, r *store.Runner) Reservation 
 	return res
 }
 
-// fieldFactor is how many containers one field of a runner's size is given
-// for: two for a docker-in-docker runner's typed figure, because the daemon is
-// given the same limit, and one for a field taken from the host, which is one
-// slot the pair shares -- the same distinction Reserve draws.
-func fieldFactor(p *store.Pool, typed bool) float64 {
-	if typed && p.DockerMode == store.DockerDinD {
+// cpuFactor and memoryFactor are how many containers one field of a runner's
+// size is given for: two for a docker-in-docker runner's typed figure, because
+// the daemon is given the same limit, and one for a field taken from the host,
+// which is one slot the pair shares, or a typed figure divided by a daemon share
+// -- the same distinction Reserve draws.
+func cpuFactor(p *store.Pool) float64 {
+	if p.TypedCPUPerContainer() {
+		return 2
+	}
+	return 1
+}
+
+func memoryFactor(p *store.Pool) float64 {
+	if p.TypedMemoryPerContainer() {
 		return 2
 	}
 	return 1
@@ -219,7 +230,9 @@ func fieldFactor(p *store.Pool, typed bool) float64 {
 // the minimum is where a reduction stops and never a way up past the
 // standard. And an automatic docker-in-docker slot is never cut below
 // what it takes to split between a runner and its daemon (ShareFloor), which
-// is the same line ShareTooSmall holds a whole slot to.
+// is the same line ShareTooSmall holds a whole slot to. A typed figure split by
+// a daemon share is a pair's too, so its minimum is never cut below what gives
+// the thinner half a runner's least (typedPairFloor).
 func MinimumReserve(p *store.Pool, h *store.Host) Reservation {
 	p = sizedOn(p, h)
 	res := Reserve(p, h)
@@ -229,17 +242,23 @@ func MinimumReserve(p *store.Pool, h *store.Host) Reservation {
 	floor := ShareFloor(p)
 	if m := p.Resources.MinCPUs; m > 0 {
 		typed := p.Resources.CPUs > 0
-		v := m * fieldFactor(p, typed)
-		if !typed {
+		v := m * cpuFactor(p)
+		switch {
+		case !typed:
 			v = max(v, floor.CPUs)
+		case p.DockerMode == store.DockerDinD && p.Resources.SplitsTypedCPU():
+			v = max(v, typedPairFloor(p).CPUs)
 		}
 		res.CPUs = min(res.CPUs, v)
 	}
 	if m := p.Resources.MinMemoryMB; m > 0 {
 		typed := p.Resources.MemoryMB > 0
-		v := m * int64(fieldFactor(p, typed))
-		if !typed {
+		v := m * int64(memoryFactor(p))
+		switch {
+		case !typed:
 			v = max(v, floor.MemoryMB)
+		case p.DockerMode == store.DockerDinD && p.Resources.SplitsTypedMemory():
+			v = max(v, typedPairFloor(p).MemoryMB)
 		}
 		res.MemoryMB = min(res.MemoryMB, v)
 	}
@@ -268,22 +287,22 @@ func ReducedSize(p *store.Pool, h *store.Host, left Reservation, known store.Hos
 		return Reservation{}, store.Resources{}, false
 	}
 	charge := Reserve(p, h)
-	cpuFactor := fieldFactor(p, p.Resources.CPUs > 0)
-	memFactor := int64(fieldFactor(p, p.Resources.MemoryMB > 0))
+	cpus := cpuFactor(p)
+	mem := int64(memoryFactor(p))
 	if known.CPUsKnown && left.CPUs+cpuEpsilon < charge.CPUs && floor.CPUs < charge.CPUs {
-		each := math.Floor(left.CPUs/cpuFactor*100+cpuEpsilon) / 100
-		charge.CPUs = max(each*cpuFactor, floor.CPUs)
+		each := math.Floor(left.CPUs/cpus*100+cpuEpsilon) / 100
+		charge.CPUs = max(each*cpus, floor.CPUs)
 	}
 	if known.MemoryKnown && left.MemoryMB < charge.MemoryMB && floor.MemoryMB < charge.MemoryMB {
-		charge.MemoryMB = max(left.MemoryMB/memFactor*memFactor, floor.MemoryMB)
+		charge.MemoryMB = max(left.MemoryMB/mem*mem, floor.MemoryMB)
 	}
 	if !fits(left, charge, known) {
 		return Reservation{}, store.Resources{}, false
 	}
 	grant := p.Resources
 	grant.MinCPUs, grant.MinMemoryMB = 0, 0
-	grant.CPUs = charge.CPUs / cpuFactor
-	grant.MemoryMB = charge.MemoryMB / memFactor
+	grant.CPUs = charge.CPUs / cpus
+	grant.MemoryMB = charge.MemoryMB / mem
 	return charge, grant, true
 }
 
@@ -588,6 +607,18 @@ func ShareFloor(p *store.Pool) Reservation {
 	return floor
 }
 
+// typedPairFloor is the least a typed figure split by a daemon share may be, per
+// field: what gives the thinner of the two containers the least a runner needs,
+// store.MinRunnerCPUs and store.MinRunnerMemoryMB. The API refuses a typed size
+// below it; this holds a minimum from the fleet or the host to the same line,
+// so a reduced pair never starves one half.
+func typedPairFloor(p *store.Pool) Reservation {
+	return Reservation{
+		CPUs:     store.MinRunnerCPUs * p.Resources.CPUPairFactor(),
+		MemoryMB: int64(math.Ceil(float64(store.MinRunnerMemoryMB) * p.Resources.MemoryPairFactor())),
+	}
+}
+
 // comfortFloor is ShareFloor for a pool nobody gave a minimum: the bare
 // minimum for one runner, or a comfortable figure for each of a pair.
 //
@@ -758,10 +789,10 @@ func HostShortfall(h *store.Host, p *store.Pool) string {
 			formatMB(left.DiskMB), formatMB(want.DiskMB), charged(p.Resources.DiskGB > 0, dind)+workingRoomCharged(p))
 	case alloc.CPUsKnown && left.CPUs+cpuEpsilon < want.CPUs:
 		return fmt.Sprintf("it has %s CPU to place on, and one runner of this pool is charged %s%s",
-			formatCPUs(left.CPUs), formatCPUs(want.CPUs), charged(p.Resources.CPUs > 0, dind)+minimumCharged(p, "cpu"))
+			formatCPUs(left.CPUs), formatCPUs(want.CPUs), charged(p.TypedCPUPerContainer(), dind)+minimumCharged(p, "cpu"))
 	case alloc.MemoryKnown && left.MemoryMB < want.MemoryMB:
 		return fmt.Sprintf("it has %s of memory to place on, and one runner of this pool is charged %s%s",
-			formatMB(left.MemoryMB), formatMB(want.MemoryMB), charged(p.Resources.MemoryMB > 0, dind)+minimumCharged(p, "memory"))
+			formatMB(left.MemoryMB), formatMB(want.MemoryMB), charged(p.TypedMemoryPerContainer(), dind)+minimumCharged(p, "memory"))
 	}
 	return "it is too small for this pool's limits"
 }

@@ -114,17 +114,18 @@ func (c *Controller) stampJobGranted(ctx context.Context, j *store.Job, runner *
 // limits somebody typed, twice that, because the daemon is given the same
 // figure as the runner and the job's work is in both. A size taken from the
 // host -- a share or a profile's standard -- is already the whole slot, split
-// between the pair, so it is not doubled. CPU lent to the runner later is not
+// between the pair, so it is not doubled, and neither is a typed size the pool
+// divides by a daemon share. CPU lent to the runner later is not
 // part of it: this is the guarantee, which is what two jobs can be compared by.
 func grantedSize(p *store.Pool, r *store.Runner) (cpus float64, memoryMB int64) {
 	cpus, memoryMB = r.AllocatedCPUs, r.AllocatedMemoryMB
 	if p == nil || p.DockerMode != store.DockerDinD {
 		return cpus, memoryMB
 	}
-	if typedAllocation(r, p.Resources.CPUs > 0) {
+	if typedAllocation(r, p.TypedCPUPerContainer()) {
 		cpus *= 2
 	}
-	if typedAllocation(r, p.Resources.MemoryMB > 0) {
+	if typedAllocation(r, p.TypedMemoryPerContainer()) {
 		memoryMB *= 2
 	}
 	return cpus, memoryMB
@@ -132,10 +133,12 @@ func grantedSize(p *store.Pool, r *store.Runner) (cpus float64, memoryMB int64) 
 
 // typedAllocation reports whether one field of a runner's allocation is a figure
 // somebody typed, which a docker-in-docker pair gives to each of its containers,
-// rather than one slot's worth the pair splits. A reduced or history runner
-// keeps the nature of the pool's field: it is smaller or larger than the typed
-// size, and still typed.
-func typedAllocation(r *store.Runner, fieldTyped bool) bool {
-	return r.AllocationSource == store.AllocationFromPool ||
-		((r.AllocationSource == store.AllocationReduced || r.AllocationSource == store.AllocationHistory) && fieldTyped)
+// rather than one slot's worth the pair splits. perContainer is the pool's word
+// on the field (store.Pool.TypedCPUPerContainer): a typed figure divided by a
+// daemon share is the pair's, like a slot. A reduced or history runner keeps the
+// nature of the pool's field: it is smaller or larger than the typed size, and
+// still typed.
+func typedAllocation(r *store.Runner, perContainer bool) bool {
+	return perContainer && (r.AllocationSource == store.AllocationFromPool ||
+		r.AllocationSource == store.AllocationReduced || r.AllocationSource == store.AllocationHistory)
 }

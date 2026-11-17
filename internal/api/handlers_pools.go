@@ -814,6 +814,9 @@ func (s *Server) validatePool(ctx context.Context, p *store.Pool, existingID str
 			add(f.field, fmt.Sprintf("the daemon's share must be between %d and %d percent, or 0 for an even split; a container given less than a tenth of the slot is no limit in effect", store.MinDaemonSharePercent, store.MaxDaemonSharePercent))
 		}
 	}
+	if p.DockerMode == store.DockerDinD {
+		validateTypedSplit(p, add)
+	}
 	if p.Resources.DiskGB < 0 {
 		add("resources.disk_gb", "a disk limit cannot be negative; use 0 for no limit")
 	}
@@ -1614,11 +1617,54 @@ func validateMemoryBurst(p *store.Pool, add func(field, msg string)) {
 	}
 }
 
+// validateTypedSplit holds a typed size that a daemon share divides between a
+// docker-in-docker pair to what each half needs to be a runner. Such a figure is
+// the pair's, not each container's (store.Resources.SplitsTypedCPU), so the floor
+// a typed figure is held to above is not enough: 1 CPU with the daemon given 80%
+// leaves the runner 0.2 of a core. The pool's minimum is a pair's figure too, and
+// is held to the same line. A share out of range is refused on its own and not
+// judged again here.
+func validateTypedSplit(p *store.Pool, add func(field, msg string)) {
+	inRange := func(s int) bool { return s >= store.MinDaemonSharePercent && s <= store.MaxDaemonSharePercent }
+	cpuShare, memoryShare := p.Resources.DaemonCPUPercent(), p.Resources.DaemonMemoryPercent()
+	thinner := func(r store.Resources) (float64, int64) {
+		runner, daemon := r.SplitWithDaemonShares(cpuShare, memoryShare)
+		return min(runner.CPUs, daemon.CPUs), min(runner.MemoryMB, daemon.MemoryMB)
+	}
+	if p.Resources.SplitsTypedCPU() && inRange(cpuShare) {
+		half := min(cpuShare, 100-cpuShare)
+		if cpus, _ := thinner(store.Resources{CPUs: p.Resources.CPUs}); cpus+1e-9 < store.MinRunnerCPUs {
+			add("resources.cpus", fmt.Sprintf("with a daemon share said, %g cores is the size of the runner and its Docker daemon together, and the %d%% half of it is %g, under the quarter of a core a container needs; type at least %g, or give the daemon a share nearer even",
+				p.Resources.CPUs, half, cpus, store.MinRunnerCPUs*100/float64(half)))
+		}
+		if m := p.Resources.MinCPUs; m > 0 && m <= p.Resources.CPUs {
+			if cpus, _ := thinner(store.Resources{CPUs: m}); cpus+1e-9 < store.MinRunnerCPUs {
+				add("resources.min_cpus", fmt.Sprintf("with a daemon share said, the minimum (%g cores) is the runner and its Docker daemon together, and its %d%% half is %g, under the quarter of a core a container needs; raise it to at least %g",
+					m, half, cpus, store.MinRunnerCPUs*100/float64(half)))
+			}
+		}
+	}
+	if p.Resources.SplitsTypedMemory() && inRange(memoryShare) {
+		half := int64(min(memoryShare, 100-memoryShare))
+		least := (store.MinRunnerMemoryMB*100 + half - 1) / half
+		if _, mb := thinner(store.Resources{MemoryMB: p.Resources.MemoryMB}); mb < store.MinRunnerMemoryMB {
+			add("resources.memory_mb", fmt.Sprintf("with a daemon share said, %d MB is the size of the runner and its Docker daemon together, and the %d%% half of it is %d MB, under the 512 MB a container needs; type at least %d MB, or give the daemon a share nearer even",
+				p.Resources.MemoryMB, half, mb, least))
+		}
+		if m := p.Resources.MinMemoryMB; m > 0 && m <= p.Resources.MemoryMB {
+			if _, mb := thinner(store.Resources{MemoryMB: m}); mb < store.MinRunnerMemoryMB {
+				add("resources.min_memory_mb", fmt.Sprintf("with a daemon share said, the minimum (%d MB) is the runner and its Docker daemon together, and its %d%% half is %d MB, under the 512 MB a container needs; raise it to at least %d MB",
+					m, half, mb, least))
+			}
+		}
+	}
+}
+
 // typedFactor is how many containers a pool's typed memory limit is given to: two
 // for docker-in-docker, where the daemon is given the same limit, and one
-// otherwise.
+// otherwise -- including a pair whose typed memory a daemon share divides.
 func typedFactor(p *store.Pool) int {
-	if p.DockerMode == store.DockerDinD {
+	if p.TypedMemoryPerContainer() {
 		return 2
 	}
 	return 1

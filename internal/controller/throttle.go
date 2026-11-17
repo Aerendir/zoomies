@@ -224,7 +224,7 @@ func (c *Controller) limitedContainerCPUs(ctx context.Context, h *store.Host) []
 			pools[r.PoolID] = p
 		}
 		perHalf := r.AllocatedCPUs
-		if p != nil && p.DockerMode == store.DockerDinD && !typedAllocation(r, p.Resources.CPUs > 0) {
+		if p != nil && p.DockerMode == store.DockerDinD && !typedAllocation(r, p.TypedCPUPerContainer()) {
 			// One slot split between the runner and its daemon.
 			perHalf /= 2
 		}

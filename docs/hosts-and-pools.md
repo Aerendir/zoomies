@@ -1017,16 +1017,25 @@ pool is sized.
   and got it only in the container that is not building would have asked for
   nothing) and the host is charged for both. The proposal covers whichever
   container needs more, not the sum, because each is charged for its own folders.
+- *A typed size with a daemon share* is the size of the pair, not of each
+  container: a pool that types `cpus: 3` and `daemon_cpu_share_percent: 20` gives
+  the runner 2.4 CPU and the daemon 0.6, and the host is charged 3. It is per
+  resource: a share said only for CPU leaves typed memory going to both in full and
+  charged twice. Use it when the daemon needs far less than the runner, so a typed
+  pair is not charged two whole runners. Each half has to clear what any runner
+  needs (a quarter of a core, 512 MB), and a typed size or minimum whose thinner
+  half would not is refused.
 - *A size left to the host* is one slot's share, and the pair splits it evenly,
   because a slot is one runner: a host set to eight slots may carry eight runners,
   not four because half of them brought a daemon. The host is charged once. The
   split is an accounting rule, not a measurement of where a build's memory goes;
   the memory a Docker-in-Docker job reports is the two containers added together.
   Where your jobs do their work decides how the slot should be divided, so it is
-  yours to set, see the next paragraph. It divides only a share the host chose;
-  a typed size goes to both containers in full whatever it says.
+  yours to set, see the next paragraph. A typed size goes to both containers in
+  full unless a share is said for it, as above.
 - *One field typed, the other left to the host* is each of the two at once: the
-  typed field goes to both containers in full and is charged twice, and the field
+  typed field goes to both containers in full and is charged twice (or, with a share
+  said for it, is the pair's and is charged once), and the field
   the host decided is one slot's share that the pair divides. That share is held to
   the same floor as a pool left entirely to the host (about 2 CPU and 4 GB for the
   two containers between them, more with a larger minimum) and a host whose slots
@@ -1035,7 +1044,8 @@ pool is sized.
   divided in two as well, so a job given 4 CPU ran on 2+2.
 
 **Dividing a slot: CPU and memory apart.** The Size section of the pool editor has a
-*Runner and Docker sidecar* choice for a Docker-in-Docker pool sized by its hosts.
+*Runner and Docker sidecar* choice for a Docker-in-Docker pool sized by its hosts
+(a typed size divided by a share is set through the API or `zoomies pools` for now).
 CPU and memory are two shares, not one, because the two are not used alike: an
 image build is CPU in the sidecar, so that is the share worth raising, while the
 runner's memory holds the checkout, the toolchain and any in-memory work folder
@@ -1516,7 +1526,9 @@ may have, and the build runs in the daemon, so the daemon is given the same and
 the host is charged twice: two of what the pool asked for. A size that came
 from **the host's slot** is one slot, and the pair splits it between them, so
 the host is charged one, and eight slots are eight runners whether or not their
-jobs build images.
+jobs build images. A typed size the pool also said **the daemon's share** of is
+the pair's size: it is split by the share like a slot and charged once, per
+resource.
 
 Both halves of that have to stay true together, and each has been wrong once.
 Charging a defaulted pair one share while giving each container a whole one is
@@ -1747,8 +1759,9 @@ charged what its pool asks for, a field left unset is charged one slot's worth
 of the host instead, and a **docker-in-docker pool is charged twice over for
 a figure it typed**, because the backend gives the build's sidecar the same
 limits as the runner. A field left to the host is one slot's share that the pair
-splits between them, and is charged once:
-so a pool asking for 8 CPU needs a 16-CPU host, and a 12-CPU machine that
+splits between them, and is charged once, and so is a typed figure the pool said
+the daemon's share of, which the pair splits the same way. Without a share,
+a pool asking for 8 CPU needs a 16-CPU host, and a 12-CPU machine that
 matches its selector in every other way will never take one. The pool editor
 says so as the limits are typed: it names each host its selector reaches that
 could not run the pool, and what that host has against what a runner costs. Note also what a

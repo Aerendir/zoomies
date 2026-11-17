@@ -59,21 +59,23 @@ func AskOf(pools []*store.Pool, fleetCPUs float64, fleetMemoryMB int64) RunnerAs
 			continue
 		}
 		// A docker-in-docker slot is two containers where the pool typed its
-		// own limits; a pool that leaves its size to the host puts the pair in
-		// one slot between them and asks for no more than anybody else.
-		typed := p.Resources.CPUs > 0 || p.Resources.MemoryMB > 0
-		containers := 1
-		if p.DockerMode == store.DockerDinD && typed {
-			containers = 2
+		// own limits for each; a pool that leaves its size to the host, or
+		// divides a typed figure by a daemon share, puts the pair in one slot
+		// between them and asks for no more than anybody else.
+		cpuPerContainer, memoryPerContainer := p.TypedCPUPerContainer(), p.TypedMemoryPerContainer()
+		anyPair = anyPair || cpuPerContainer || memoryPerContainer
+		wantCPUs, wantMemory := p.Resources.CPUs, p.Resources.MemoryMB
+		if cpuPerContainer {
+			wantCPUs *= 2
 		}
-		anyPair = anyPair || containers > 1
-		wantCPUs := p.Resources.CPUs * float64(containers)
-		wantMemory := p.Resources.MemoryMB * int64(containers)
+		if memoryPerContainer {
+			wantMemory *= 2
+		}
 		if wantCPUs > cpus {
-			cpus, cpuPair, winner = wantCPUs, containers > 1, p.Name
+			cpus, cpuPair, winner = wantCPUs, cpuPerContainer, p.Name
 		}
 		if wantMemory > memory {
-			memory, memoryPair = wantMemory, containers > 1
+			memory, memoryPair = wantMemory, memoryPerContainer
 			if winner == "" {
 				winner = p.Name
 			}

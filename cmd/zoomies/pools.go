@@ -225,8 +225,28 @@ func poolSizing(pool poolItem) string {
 	out := poolSizingBase(pool)
 	if pool.Sizing != "fixed" {
 		out += poolShareLabel(pool.Resources)
+	} else {
+		out += poolFixedShareLabel(pool.Resources)
 	}
 	return out
+}
+
+// poolFixedShareLabel says which of a fixed size's figures are divided between the
+// runner and its Docker daemon: those the pool said a share for, which are the
+// pair's size rather than each container's. A figure with no share is given to
+// both in full, and says nothing.
+func poolFixedShareLabel(r poolResources) string {
+	var parts []string
+	if cpu := firstPositive(r.DaemonCPUSharePercent, r.DaemonSharePercent); cpu > 0 && r.CPUs > 0 {
+		parts = append(parts, fmt.Sprintf("%d%% of the CPU", cpu))
+	}
+	if mem := firstPositive(r.DaemonMemorySharePercent, r.DaemonSharePercent); mem > 0 && r.MemoryMB > 0 {
+		parts = append(parts, fmt.Sprintf("%d%% of the memory", mem))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "; shared with the Docker daemon, which takes " + strings.Join(parts, " and ")
 }
 
 // poolShareLabel says how a host-sized slot is divided between the runner and its
@@ -493,9 +513,9 @@ func registerPoolFlags(fs *flagSet) *poolSpec {
 	fs.Var(spec.envVars, "env", "environment variables for every job in this pool, e.g. HTTP_PROXY=...")
 	spec.cpus = fs.Float64("cpus", 0, "CPU limit per runner; 0 leaves the size to the host, which gives each runner one slot's share of its machine")
 	spec.memoryMB = fs.Int64("memory-mb", 0, "memory limit per runner, in MiB; 0 leaves the size to the host")
-	spec.daemonShare = fs.Int("daemon-share", 0, "for a --docker-mode dind pool sized by its host: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split")
-	spec.daemonCPUShare = fs.Int("daemon-cpu-share", 0, "the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise")
-	spec.daemonMemoryShare = fs.Int("daemon-memory-share", 0, "the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower")
+	spec.daemonShare = fs.Int("daemon-share", 0, "for a --docker-mode dind pool: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split. With --cpus or --memory-mb it makes that figure the size of the runner and its daemon together, charged once and split by this share, where without a share each container is given the whole figure and the host is charged twice")
+	spec.daemonCPUShare = fs.Int("daemon-cpu-share", 0, "the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise. With --cpus it splits that figure between the runner and the daemon instead of giving each the whole of it")
+	spec.daemonMemoryShare = fs.Int("daemon-memory-share", 0, "the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower. With --memory-mb it splits that figure between the runner and the daemon instead of giving each the whole of it")
 	spec.minCPUs = fs.Float64("min-cpus", 0, "the least CPU a runner of this pool is given, per container (a Docker-in-Docker pair needs it twice over, scaled by the share); 0 follows the fleet's runners.minimum_cpus")
 	spec.minMemoryMB = fs.Int64("min-memory-mb", 0, "the least memory a runner of this pool is given, per container, in MiB; 0 follows runners.minimum_memory_mb")
 	spec.sizeFromHost = fs.Bool("size-from-host", false, "take each runner's size from the host it lands on, as that host's runner sizes say (see zoomies hosts edit); a pool does this or states a size, so it cannot be combined with --cpus or --memory-mb")

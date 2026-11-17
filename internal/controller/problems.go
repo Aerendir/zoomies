@@ -2131,7 +2131,9 @@ func dindPoolPlacesOn(h *store.Host, pools []*store.Pool) (name string, typed bo
 		if !scheduler.HostSelects(h, p) || !scheduler.HostOffers(h, p) || !scheduler.HostIsPlatform(h, p) {
 			continue
 		}
-		if !p.Automatic() {
+		// A typed figure a daemon share divides is one slot the pair splits, like
+		// a share: only one given to each container is charged twice.
+		if p.TypedCPUPerContainer() || p.TypedMemoryPerContainer() {
 			return p.Name, true
 		}
 		if name == "" {

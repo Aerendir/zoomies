@@ -1884,9 +1884,11 @@ func (a *Agent) handleCreate(ctx context.Context, task Task, release func()) {
 	}
 	now := a.now()
 	resources := spec.Resources
-	if (kind == store.BackendDocker || kind == store.BackendPodman) && spec.DockerMode == store.DockerDinD && spec.ResourcesSource == store.AllocationFromHost {
+	if (kind == store.BackendDocker || kind == store.BackendPodman) && spec.DockerMode == store.DockerDinD {
 		// Match the per-container labels used after adoption. Keeping the
-		// whole slot here doubled both quotas when a throttle was restored.
+		// whole slot here doubled both quotas when a throttle was restored. A
+		// typed size is the runner's own half too: whole where no daemon share
+		// divides it, and the runner's part where one does.
 		resources, _ = backend.PairLimits(spec)
 	}
 	handle = created.Handle

@@ -271,6 +271,12 @@ the rest; `0` is the even split. `--daemon-cpu-share` and `--daemon-memory-share
 it for one resource and override `--daemon-share` for it: a build is CPU in the
 daemon, so `--daemon-cpu-share 70 --daemon-memory-share 50` gives it the CPU while
 the runner keeps the memory. Naming one carries the other forward as it stands.
+Beside `--cpus` or `--memory-mb` a share makes that figure the size of the runner
+and its daemon together, split by the share and charged once: `--cpus 3
+--daemon-cpu-share 20` gives the runner 2.4 CPU and the daemon 0.6, where `--cpus 3`
+alone gives each 3 and is charged 6. A typed figure with no share keeps being given
+to both in full. Each half has to keep a quarter of a core and 512 MB, and a size
+whose thinner half would not is refused.
 
 `--min-cpus` and `--min-memory-mb` set the pool's smallest runner, per container: the
 least a runner is given on a host whose share is smaller, so the host holds fewer of
