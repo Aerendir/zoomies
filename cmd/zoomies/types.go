@@ -151,7 +151,8 @@ type poolResources struct {
 	MinCPUs     float64 `json:"min_cpus"`
 	MinMemoryMB int64   `json:"min_memory_mb"`
 	// DaemonSharePercent is how much of a host-sized slot a Docker-in-Docker pool
-	// gives its daemon; zero is the even split.
+	// gives its daemon; zero is the even split. Set beside a typed figure, it
+	// splits that figure between the pair too.
 	DaemonSharePercent       int `json:"daemon_share_percent"`
 	DaemonCPUSharePercent    int `json:"daemon_cpu_share_percent"`
 	DaemonMemorySharePercent int `json:"daemon_memory_share_percent"`

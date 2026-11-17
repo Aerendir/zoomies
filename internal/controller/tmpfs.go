@@ -470,10 +470,15 @@ func outcomes(c store.TmpfsConfig, runnerMB, daemonMB int64, h store.HostTmpfs) 
 
 // runnerLimitsOn is the memory limits a runner of p is given on a host: the
 // pool's typed limit to both containers, or one runner's charge there divided
-// between runner and daemon by the pool's share. False where there is nothing to
-// judge by, a host that has measured no memory.
+// between runner and daemon by the pool's share -- as is a typed limit the pool
+// said the daemon's share of. False where there is nothing to judge by, a host
+// that has measured no memory.
 func runnerLimitsOn(p *store.Pool, h PoolHostRoom) (runnerMB, daemonMB int64, ok bool) {
 	dind := p.DockerMode == store.DockerDinD
+	if dind && p.Resources.SplitsTypedMemory() {
+		r, d := store.Resources{MemoryMB: p.Resources.MemoryMB}.SplitWithDaemonShare(p.Resources.DaemonMemoryPercent())
+		return r.MemoryMB, d.MemoryMB, true
+	}
 	if p.Resources.MemoryMB > 0 {
 		return p.Resources.MemoryMB, p.Resources.MemoryMB, true
 	}

@@ -285,8 +285,9 @@ type Spec struct {
 	MemoryTyped bool `json:"memory_typed,omitempty"`
 	// DaemonSharePercent is the part of a host-sized slot the docker-in-docker
 	// daemon is given; zero is the even split. The CPU and memory figures say it
-	// per resource and, where set, override it for that resource. See
-	// store.Resources.
+	// per resource and, where set, override it for that resource. A typed field
+	// with a share said for it is divided the same way rather than given whole to
+	// both (pairLimits). See store.Resources.
 	DaemonSharePercent       int               `json:"daemon_share_percent,omitempty"`
 	DaemonCPUSharePercent    int               `json:"daemon_cpu_share_percent,omitempty"`
 	DaemonMemorySharePercent int               `json:"daemon_memory_share_percent,omitempty"`

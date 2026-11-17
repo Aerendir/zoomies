@@ -27,7 +27,8 @@ import (
 // as spec.Resources, and what that is depends on where the figure came from.
 // A limit an operator typed is given to both containers in full -- the build
 // runs in the daemon, so it needs the same figure the runner was promised --
-// and Reserve charges the host for both. A defaulted figure is one slot's
+// and Reserve charges the host for both, unless the pool said the daemon's
+// share of it, which makes it the pair's to split. A defaulted figure is one slot's
 // share, and store.Resources.SplitWithDaemon divides it between the pair
 // before either container is created, because a slot is one runner however
 // many containers it takes to run it; Reserve charges one share to match.
