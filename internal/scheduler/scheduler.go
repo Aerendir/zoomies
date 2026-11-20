@@ -986,6 +986,12 @@ func (t *tick) holdRoom(tiers []*store.Pool, byID map[string]*PoolPlan, runners 
 		if t.hosts.pick(p, nil) != nil {
 			continue // it fits now: there is nothing to hold
 		}
+		if h, _, _ := t.hosts.pickReduced(p, nil); h != nil {
+			// It fits at a size the pool itself accepts: placing it there is
+			// the pool's own answer, and holding room for the standard would
+			// drain other pools' runners for a runner that can start now.
+			continue
+		}
 		h := t.hosts.holdHost(p)
 		if h == nil {
 			continue
