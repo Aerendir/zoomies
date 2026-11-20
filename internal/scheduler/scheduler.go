@@ -349,8 +349,11 @@ type PoolPlan struct {
 	// Holding says the pool is holding room on a host for its next runner:
 	// a job of it has waited its reserve_room_after, no host has room, and
 	// that host is where it fits soonest. Empty when nothing is held.
-	Holding string   `json:"holding,omitempty"`
-	Actions []Action `json:"actions,omitempty"`
+	Holding string `json:"holding,omitempty"`
+	// HoldSkipped says why a pool with reserve_room_after held nothing this
+	// pass. It is for diagnosing the hold while it is on trial.
+	HoldSkipped string   `json:"hold_skipped,omitempty"`
+	Actions     []Action `json:"actions,omitempty"`
 }
 
 // Plan is one tick's worth of decisions.
@@ -977,23 +980,38 @@ func (t *tick) holdRoom(tiers []*store.Pool, byID map[string]*PoolPlan, runners 
 	for _, p := range tiers {
 		after := p.RunnerSettings.ReserveRoomAfter
 		pp := byID[p.ID]
-		if after == nil || !p.Enabled || pp.Desired <= pp.Current+creates(pp.Actions) || pp.Failing != "" || pp.Held != "" {
+		if after == nil || !p.Enabled {
 			continue
 		}
-		if !t.waitedFor(demand[p.ID], after.Duration()) {
+		skip := func(why string) { pp.HoldSkipped = why }
+		switch {
+		case pp.Desired <= pp.Current+creates(pp.Actions):
+			skip(fmt.Sprintf("desired %d, current %d, creating %d, queued %d", pp.Desired, pp.Current, creates(pp.Actions), len(demand[p.ID])))
+			continue
+		case pp.Failing != "":
+			skip("failing: " + pp.Failing)
+			continue
+		case pp.Held != "":
+			skip("held: " + pp.Held)
+			continue
+		case !t.waitedFor(demand[p.ID], after.Duration()):
+			skip("no job has waited " + formatDuration(after.Duration()))
 			continue
 		}
 		if t.hosts.pick(p, nil) != nil {
-			continue // it fits now: there is nothing to hold
+			skip("it fits now")
+			continue
 		}
 		if h, _, _ := t.hosts.pickReduced(p, nil); h != nil {
 			// It fits at a size the pool itself accepts: placing it there is
 			// the pool's own answer, and holding room for the standard would
 			// drain other pools' runners for a runner that can start now.
+			skip("it fits at a reduced size")
 			continue
 		}
 		h := t.hosts.holdHost(p)
 		if h == nil {
+			skip("no host could hold it")
 			continue
 		}
 		room := Reserve(p, h)
