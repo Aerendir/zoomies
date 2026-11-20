@@ -997,6 +997,7 @@ func (t *tick) holdRoom(tiers []*store.Pool, byID map[string]*PoolPlan, runners 
 			continue
 		}
 		room := Reserve(p, h)
+		before := t.hosts.leftFor(h, p)
 		if t.hosts.holds == nil {
 			t.hosts.holds = make(map[string]roomHold)
 		}
@@ -1016,8 +1017,9 @@ func (t *tick) holdRoom(tiers []*store.Pool, byID map[string]*PoolPlan, runners 
 				drained++
 			}
 		}
-		pp.Holding = fmt.Sprintf("holding %s on %s for its next runner: a job has waited %s and no host has room",
-			sizePhrase(room.CPUs, room.MemoryMB), h.Name, formatDuration(t.now.Sub(demand[p.ID][0].QueuedAt)))
+		b := t.hosts.why(p)
+		pp.Holding = fmt.Sprintf("holding %s on %s for its next runner: a job has waited %s and no host has room (%s; %.2f CPU and %d MB unpromised there)",
+			sizePhrase(room.CPUs, room.MemoryMB), h.Name, formatDuration(t.now.Sub(demand[p.ID][0].QueuedAt)), b.what, before.CPUs, before.MemoryMB)
 		if drained > 0 {
 			pp.Holding += fmt.Sprintf("; %s of other pools drained there", plural(drained, "idle reusable runner"))
 		}
@@ -1159,6 +1161,9 @@ func (t *tick) grant(p *store.Pool, plan *PoolPlan, runners []*store.Runner, que
 		if held, ok := heldOff[placed[0].hostID]; ok {
 			plan.History = "shadow: history sizing would have " + held
 		}
+	}
+	if hold, ok := t.hosts.holds[placed[0].hostID]; ok && hold.poolID != p.ID {
+		reason += fmt.Sprintf(" (beside %s held on this host for another pool)", sizePhrase(hold.room.CPUs, hold.room.MemoryMB))
 	}
 	action := Action{Kind: ActionCreate, PoolID: p.ID, PoolName: p.Name, HostID: placed[0].hostID, Reason: reason, Size: placed[0].size, SizedFromHistory: placed[0].raised}
 	plan.Actions = append(plan.Actions, action)

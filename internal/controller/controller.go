@@ -1636,6 +1636,9 @@ func (c *Controller) noteRunnerGroup(p *store.Pool, group, reason string, public
 // every few seconds, and a fleet that is one host short would otherwise fill
 // the log with the same sentence until somebody noticed it.
 func (c *Controller) noteBlocked(pp scheduler.PoolPlan) {
+	if pp.Holding != "" {
+		c.log.Info("a pool holds room for its next runner", "pool", pp.PoolName, "holding", pp.Holding)
+	}
 	c.mu.Lock()
 	if c.blocked == nil {
 		c.blocked = map[string]string{}
