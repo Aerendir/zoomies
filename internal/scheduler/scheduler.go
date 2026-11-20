@@ -345,8 +345,12 @@ type PoolPlan struct {
 	// more than any host that can run the pool has to give. Such a job is
 	// placed as it always was, and is likely to fail the way it did before;
 	// only a larger host fixes it, which is why it is reported.
-	HistoryUnfit string   `json:"history_unfit,omitempty"`
-	Actions      []Action `json:"actions,omitempty"`
+	HistoryUnfit string `json:"history_unfit,omitempty"`
+	// Holding says the pool is holding room on a host for its next runner:
+	// a job of it has waited its reserve_room_after, no host has room, and
+	// that host is where it fits soonest. Empty when nothing is held.
+	Holding string   `json:"holding,omitempty"`
+	Actions []Action `json:"actions,omitempty"`
 }
 
 // Plan is one tick's worth of decisions.
@@ -843,6 +847,9 @@ func (t *tick) allocate(pools []*store.Pool, plans []PoolPlan, runners map[strin
 		byID[plans[i].PoolID] = &plans[i]
 	}
 
+	// Room is held before anything is granted, so that no pool, whatever its
+	// priority, starts a runner this pass in the room a waiting pool holds.
+	t.holdRoom(tiers, byID, runners, demand)
 	// The share across tiers is granted before any tier is served, so that
 	// what is left is what priority then decides.
 	shared, floor := t.shareAcrossTiers(tiers, byID, runners, demand)
@@ -947,6 +954,89 @@ func (t *tick) shareAcrossTiers(tiers []*store.Pool, byID map[string]*PoolPlan, 
 		}
 	}
 	return granted, floor
+}
+
+// holdRoom holds, for every pool that asks for it, room on the host where its
+// next runner fits soonest.
+//
+// A runner larger than the room a finishing job frees is otherwise never
+// placed while the queue is long: each pass the smaller runners of other pools
+// take the room as it frees, a little at a time, and the large one never finds
+// enough left at once. A pool with reserve_room_after set whose oldest job has
+// waited that long, and which no host has room for now, holds its runner's
+// size on one host: no other pool starts a runner there that would cut into
+// it, and the idle reusable runners of other pools there are drained, since a
+// reusable runner keeps its room for as long as GitHub keeps giving it jobs.
+// Nothing running is interrupted: the room fills as the work on the host ends.
+//
+// The hold lives for one pass. It is worked out again from the jobs waiting
+// at every pass, so a pool with nothing waiting holds nothing and the room is
+// everyone's again. One host holds for one pool at a time; pools are served in
+// the order allocate ranks them, priority first.
+func (t *tick) holdRoom(tiers []*store.Pool, byID map[string]*PoolPlan, runners map[string][]*store.Runner, demand map[string][]*store.Job) {
+	for _, p := range tiers {
+		after := p.RunnerSettings.ReserveRoomAfter
+		pp := byID[p.ID]
+		if after == nil || !p.Enabled || pp.Desired <= pp.Current+creates(pp.Actions) || pp.Failing != "" || pp.Held != "" {
+			continue
+		}
+		if !t.waitedFor(demand[p.ID], after.Duration()) {
+			continue
+		}
+		if t.hosts.pick(p, nil) != nil {
+			continue // it fits now: there is nothing to hold
+		}
+		h := t.hosts.holdHost(p)
+		if h == nil {
+			continue
+		}
+		room := Reserve(p, h)
+		if t.hosts.holds == nil {
+			t.hosts.holds = make(map[string]roomHold)
+		}
+		t.hosts.holds[h.ID] = roomHold{poolID: p.ID, room: room}
+		drained := 0
+		for _, q := range tiers {
+			if q.ID == p.ID || q.Ephemeral {
+				continue
+			}
+			qp := byID[q.ID]
+			for _, r := range runners[q.ID] {
+				if r == nil || r.HostID != h.ID || r.State != store.RunnerIdle || t.stillRunning[r.ID] || draining(qp.Actions, r.ID) {
+					continue
+				}
+				qp.Actions = append(qp.Actions, t.action(ActionDrain, q, r,
+					fmt.Sprintf("room on this host is held for %s, whose jobs are waiting", p.Name)))
+				drained++
+			}
+		}
+		pp.Holding = fmt.Sprintf("holding %s on %s for its next runner: a job has waited %s and no host has room",
+			sizePhrase(room.CPUs, room.MemoryMB), h.Name, formatDuration(t.now.Sub(demand[p.ID][0].QueuedAt)))
+		if drained > 0 {
+			pp.Holding += fmt.Sprintf("; %s of other pools drained there", plural(drained, "idle reusable runner"))
+		}
+	}
+}
+
+// waitedFor reports whether the oldest of these queued jobs has waited at
+// least d, measured against the snapshot's time.
+func (t *tick) waitedFor(queued []*store.Job, d time.Duration) bool {
+	for _, j := range queued {
+		if !j.QueuedAt.IsZero() && t.now.Sub(j.QueuedAt) >= d {
+			return true
+		}
+	}
+	return false
+}
+
+// draining reports whether these actions already drain the runner.
+func draining(actions []Action, runnerID string) bool {
+	for _, a := range actions {
+		if a.Kind == ActionDrain && a.RunnerID == runnerID {
+			return true
+		}
+	}
+	return false
 }
 
 // waitedAnInterval reports whether any of these queued jobs has waited at
@@ -1324,6 +1414,15 @@ type hostSet struct {
 	// maxMultiple is how many times its slot's share of memory a runner sized from
 	// history may be given; see Snapshot.HistoryMaxMultiple.
 	maxMultiple int
+	// holds is the room held on a host for one pool's next runner this pass;
+	// see holdRoom. Every other pool sees that room, and one slot, as taken.
+	holds map[string]roomHold
+}
+
+// roomHold is the room one host holds for one pool.
+type roomHold struct {
+	poolID string
+	room   Reservation
 }
 
 // newHostSet seeds each host with its allocatable resources less what the
@@ -1482,6 +1581,10 @@ func (hs *hostSet) placeAvoiding(p *store.Pool, n int, avoid map[string]bool) []
 		hs.left[h.ID] = l
 		hs.promisedMemory[h.ID] -= res.MemoryMB
 		hs.ours[h.ID] = true
+		if hold, ok := hs.holds[h.ID]; ok && hold.poolID == p.ID {
+			// The runner the room was held for has it now.
+			delete(hs.holds, h.ID)
+		}
 		if cpu, ok := hs.observedCPU[h.ID]; ok {
 			hs.observedCPU[h.ID] = max(cpu-res.CPUs, 0)
 		}
@@ -1506,7 +1609,7 @@ func (hs *hostSet) pickReduced(p *store.Pool, avoid map[string]bool) (*store.Hos
 	}
 	var best, bestAvoided *option
 	for _, h := range hs.hosts {
-		if hs.free[h.ID] <= 0 || !HostCanRun(h, p, hs.now) ||
+		if hs.slotsFor(h, p) <= 0 || !HostCanRun(h, p, hs.now) ||
 			(hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] > 0) ||
 			(hs.need != nil && hs.shortOf(h, p, *hs.need) != "") {
 			continue
@@ -1586,7 +1689,7 @@ func (hs *hostSet) eligible(h *store.Host, p *store.Pool) bool {
 // eligibleAsSized is eligible without a job history's requirement: whether h
 // would take a runner of p at the pool's own size.
 func (hs *hostSet) eligibleAsSized(h *store.Host, p *store.Pool) bool {
-	return hs.free[h.ID] > 0 && hs.hasRoom(h, p) && HostCanRun(h, p, hs.now) &&
+	return hs.slotsFor(h, p) > 0 && hs.hasRoom(h, p) && HostCanRun(h, p, hs.now) &&
 		!(hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] > 0)
 }
 
@@ -1601,7 +1704,51 @@ func (hs *hostSet) hasRoom(h *store.Host, p *store.Pool) bool {
 func (hs *hostSet) leftFor(h *store.Host, p *store.Pool) Reservation {
 	l := hs.left[h.ID]
 	l.MemoryMB = hs.memoryLeft(h, p)
+	if hold, ok := hs.holds[h.ID]; ok && hold.poolID != p.ID {
+		l.CPUs -= hold.room.CPUs
+		l.MemoryMB -= hold.room.MemoryMB
+		l.DiskMB -= hold.room.DiskMB
+	}
 	return l
+}
+
+// slotsFor is the free slots on h as a runner of p sees them: one fewer for a
+// pool other than the one h holds room for.
+func (hs *hostSet) slotsFor(h *store.Host, p *store.Pool) int {
+	if hold, ok := hs.holds[h.ID]; ok && hold.poolID != p.ID {
+		return hs.free[h.ID] - 1
+	}
+	return hs.free[h.ID]
+}
+
+// holdHost is the host that should hold room for p's next runner: among those
+// that hold nothing yet, have a free slot and would take the runner were they
+// empty, the one with the most of its room still unpromised, which is the one
+// where enough frees up soonest.
+func (hs *hostSet) holdHost(p *store.Pool) *store.Host {
+	var best *store.Host
+	bestScore := -1.0
+	for _, h := range hs.hosts {
+		if _, held := hs.holds[h.ID]; held || hs.free[h.ID] <= 0 || !HostCanRun(h, p, hs.now) {
+			continue
+		}
+		a := hs.alloc[h.ID]
+		if !fits(Reservation{CPUs: a.CPUs, MemoryMB: a.MemoryMB, DiskMB: a.DiskMB}, Reserve(p, h), a) {
+			continue
+		}
+		l := hs.leftFor(h, p)
+		score := 0.0
+		if a.CPUs > 0 {
+			score += l.CPUs / a.CPUs
+		}
+		if a.MemoryMB > 0 {
+			score += float64(l.MemoryMB) / float64(a.MemoryMB)
+		}
+		if best == nil || score > bestScore {
+			best, bestScore = h, score
+		}
+	}
+	return best
 }
 
 // memoryLeft is how much memory h can still give a runner of p.

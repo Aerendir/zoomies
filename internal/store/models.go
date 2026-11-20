@@ -836,6 +836,15 @@ type RunnerSettings struct {
 	// runners.docker_wait, and means nothing on a pool whose docker_mode is
 	// none -- there is no daemon to wait for.
 	DockerWait *Duration `json:"docker_wait,omitempty"`
+	// ReserveRoomAfter turns on room reservation for this pool, which no fleet
+	// setting does: once a job for it has waited this long and no host has
+	// room for its runner, the host where it would fit soonest holds that room
+	// for it -- no other pool starts a runner there that would take it, and
+	// idle reusable runners of other pools on it are drained -- until the
+	// runner fits. The hold is worked out again at every pass from the jobs
+	// waiting, so with none waiting nothing is held. Nil leaves it off; zero
+	// holds as soon as the job is counted as demand.
+	ReserveRoomAfter *Duration `json:"reserve_room_after,omitempty"`
 }
 
 // Set reports whether this pool overrides anything at all, which is what the
@@ -843,7 +852,7 @@ type RunnerSettings struct {
 // a figure came from the pool.
 func (r RunnerSettings) Set() bool {
 	return r.ProvisionTimeout != nil || r.DrainTimeout != nil || r.MaxRunnerLifetime != nil ||
-		r.ScaleUpDelay != nil || r.DockerWait != nil
+		r.ScaleUpDelay != nil || r.DockerWait != nil || r.ReserveRoomAfter != nil
 }
 
 // Supports reports whether this host's agent advertises a feature. The

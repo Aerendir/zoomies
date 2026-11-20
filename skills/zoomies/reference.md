@@ -254,9 +254,9 @@ Flags:
   --cpu-burst-max=0          the most CPU one runner may be lent up to, in cores; 0 is the host's allocatable CPU
   --cpu-burst-size-builds=true with --cpu-burst automatic, start runners with CARGO_BUILD_JOBS, DOTNET_PROCESSOR_COUNT and the JVM's processor count set to the ceiling, so a build has workers for CPU lent after it started
   --cpus=0                   CPU limit per runner; 0 leaves the size to the host, which gives each runner one slot's share of its machine
-  --daemon-cpu-share=0       the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise
-  --daemon-memory-share=0    the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower
-  --daemon-share=0           for a --docker-mode dind pool sized by its host: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split
+  --daemon-cpu-share=0       the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise. With --cpus it splits that figure between the runner and the daemon instead of giving each the whole of it
+  --daemon-memory-share=0    the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower. With --memory-mb it splits that figure between the runner and the daemon instead of giving each the whole of it
+  --daemon-share=0           for a --docker-mode dind pool: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split. With --cpus or --memory-mb it makes that figure the size of the runner and its daemon together, charged once and split by this share, where without a share each container is given the whole figure and the host is charged twice
   --dind-image               the docker-in-docker sidecar image (default: the host's agent.dind_image, else docker:27-dind)
   --disk-gb=0                disk limit per runner, in GiB
   --docker-mode=none         none, dind or host-socket (host-socket gives jobs root on the host)
@@ -291,6 +291,7 @@ Flags:
   --provider-selector        only let providers that match rent machines for this pool, e.g. site=garage or kind=proxmox; name and kind need no label; empty means any provider
   --provision-timeout        override scheduler.provision_timeout for this pool, e.g. 30m (empty follows the fleet; 0 never gives up)
   --pull-policy=if-not-present if-not-present, always, or pinned-only
+  --reserve-room-after       hold room for this pool's next runner once a job has waited this long and no host has room for it (empty turns it off; 0 holds at once)
   --run-as-root              run job steps as root inside the runner
   --runner-group             the GitHub runner group to register into
   --runner-version           pin the actions/runner release
@@ -339,9 +340,9 @@ Flags:
   --cpu-burst-max=0          the most CPU one runner may be lent up to, in cores; 0 is the host's allocatable CPU
   --cpu-burst-size-builds=true with --cpu-burst automatic, start runners with CARGO_BUILD_JOBS, DOTNET_PROCESSOR_COUNT and the JVM's processor count set to the ceiling, so a build has workers for CPU lent after it started
   --cpus=0                   CPU limit per runner; 0 leaves the size to the host, which gives each runner one slot's share of its machine
-  --daemon-cpu-share=0       the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise
-  --daemon-memory-share=0    the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower
-  --daemon-share=0           for a --docker-mode dind pool sized by its host: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split
+  --daemon-cpu-share=0       the daemon's share of a slot's CPU, 10 to 90, where it differs from --daemon-share; a build is CPU in the daemon, so this is usually the one to raise. With --cpus it splits that figure between the runner and the daemon instead of giving each the whole of it
+  --daemon-memory-share=0    the daemon's share of a slot's memory, 10 to 90, where it differs from --daemon-share; the runner holds the checkout and any in-memory work folder, so this is often the one to lower. With --memory-mb it splits that figure between the runner and the daemon instead of giving each the whole of it
+  --daemon-share=0           for a --docker-mode dind pool: the percentage of one slot given to the Docker daemon, for CPU and memory alike, 10 to 90; 0 is an even split. With --cpus or --memory-mb it makes that figure the size of the runner and its daemon together, charged once and split by this share, where without a share each container is given the whole figure and the host is charged twice
   --dind-image               the docker-in-docker sidecar image (default: the host's agent.dind_image, else docker:27-dind)
   --disk-gb=0                disk limit per runner, in GiB
   --docker-mode=none         none, dind or host-socket (host-socket gives jobs root on the host)
@@ -375,6 +376,7 @@ Flags:
   --provider-selector        only let providers that match rent machines for this pool, e.g. site=garage or kind=proxmox; name and kind need no label; empty means any provider
   --provision-timeout        override scheduler.provision_timeout for this pool, e.g. 30m (empty follows the fleet; 0 never gives up)
   --pull-policy=if-not-present if-not-present, always, or pinned-only
+  --reserve-room-after       hold room for this pool's next runner once a job has waited this long and no host has room for it (empty turns it off; 0 holds at once)
   --run-as-root              run job steps as root inside the runner
   --runner-group             the GitHub runner group to register into
   --runner-version           pin the actions/runner release

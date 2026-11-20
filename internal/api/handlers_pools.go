@@ -203,6 +203,7 @@ type runnerSettingsIn struct {
 	MaxRunnerLifetime optionalDuration `json:"max_runner_lifetime"`
 	ScaleUpDelay      optionalDuration `json:"scale_up_delay"`
 	DockerWait        optionalDuration `json:"docker_wait"`
+	ReserveRoomAfter  optionalDuration `json:"reserve_room_after"`
 }
 
 // apply folds the overrides that arrived into the pool's, reporting the
@@ -226,6 +227,8 @@ func (in *runnerSettingsIn) apply(rs *store.RunnerSettings, add func(field, msg 
 			"use 0 to scale this pool the moment a job is queued"},
 		{"docker_wait", in.DockerWait, &rs.DockerWait,
 			"use 0 to leave the runner image's own wait in place"},
+		{"reserve_room_after", in.ReserveRoomAfter, &rs.ReserveRoomAfter,
+			"use 0 to hold room as soon as a job is waiting, or null to turn reservation off"},
 	}
 	for _, f := range each {
 		if !f.in.present {
