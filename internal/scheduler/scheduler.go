@@ -998,15 +998,18 @@ func (t *tick) holdRoom(tiers []*store.Pool, byID map[string]*PoolPlan, runners 
 			skip("no job has waited " + formatDuration(after.Duration()))
 			continue
 		}
-		if t.hosts.pick(p, nil) != nil {
-			skip("it fits now")
-			continue
-		}
-		if h, _, _ := t.hosts.pickReduced(p, nil); h != nil {
-			// It fits at a size the pool itself accepts: placing it there is
-			// the pool's own answer, and holding room for the standard would
-			// drain other pools' runners for a runner that can start now.
-			skip("it fits at a reduced size")
+		if fits := t.hosts.pick(p, nil) != nil; fits || t.hosts.hasReduced(p) {
+			// It fits, at its standard or at a size the pool itself accepts.
+			// Granted here, before the share across tiers and before any tier
+			// is served, its create is the first of the pass: creates are
+			// registered in plan order a few at a time, and one that comes
+			// after a deep backlog of smaller pools is put off pass after pass
+			// for as long as that backlog lasts.
+			if t.budget > 0 && t.grant(p, pp, runners[p.ID], demand[p.ID]) {
+				pp.Holding = fmt.Sprintf("created first: a job has waited %s", formatDuration(t.now.Sub(demand[p.ID][0].QueuedAt)))
+			} else {
+				skip("it fits, but could not be granted first")
+			}
 			continue
 		}
 		h := t.hosts.holdHost(p)
@@ -1748,6 +1751,13 @@ func (hs *hostSet) slotsFor(h *store.Host, p *store.Pool) int {
 		return hs.free[h.ID] - 1
 	}
 	return hs.free[h.ID]
+}
+
+// hasReduced reports whether some host could take a runner of p at a reduced
+// size the pool accepts.
+func (hs *hostSet) hasReduced(p *store.Pool) bool {
+	h, _, _ := hs.pickReduced(p, nil)
+	return h != nil
 }
 
 // holdHost is the host that should hold room for p's next runner: among those
