@@ -1659,6 +1659,9 @@ func (c *Controller) noteBlocked(pp scheduler.PoolPlan) {
 	if pp.Holding != "" {
 		c.log.Info("a pool holds room for its next runner", "pool", pp.PoolName, "holding", pp.Holding)
 	}
+	if pp.HoldSkipped != "" && pp.QueuedMatched > 0 {
+		c.log.Info("a pool holds no room this pass", "pool", pp.PoolName, "why", pp.HoldSkipped)
+	}
 	c.mu.Lock()
 	if c.blocked == nil {
 		c.blocked = map[string]string{}
