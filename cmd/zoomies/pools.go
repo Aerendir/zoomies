@@ -466,6 +466,7 @@ type poolSpec struct {
 	maxRunnerLifetime *string
 	scaleUpDelay      *string
 	dockerWait        *string
+	reserveRoomAfter  *string
 	cpuBurst          *string
 	cpuBurstMax       *float64
 	memoryBurst       *string
@@ -535,6 +536,7 @@ func registerPoolFlags(fs *flagSet) *poolSpec {
 	spec.maxRunnerLifetime = fs.String("max-runner-lifetime", "", "override scheduler.max_runner_lifetime for this pool (empty follows the fleet; 0 is no limit)")
 	spec.scaleUpDelay = fs.String("scale-up-delay", "", "override scheduler.scale_up_delay for this pool (empty follows the fleet; 0 scales the moment a job is queued)")
 	spec.dockerWait = fs.String("docker-wait", "", "override runners.docker_wait for this pool's runners (empty follows the fleet)")
+	spec.reserveRoomAfter = fs.String("reserve-room-after", "", "hold room for this pool's next runner once a job has waited this long and no host has room for it (empty turns it off; 0 holds at once)")
 	spec.cpuBurst = fs.String("cpu-burst", "", "elastic CPU: off, observe (measure without moving a quota) or automatic (lend spare host CPU to busy runners); needs automatic sizing on docker or podman")
 	spec.sizeBuilds = fs.Bool("cpu-burst-size-builds", true, "with --cpu-burst automatic, start runners with CARGO_BUILD_JOBS, DOTNET_PROCESSOR_COUNT and the JVM's processor count set to the ceiling, so a build has workers for CPU lent after it started")
 	spec.cpuBurstMax = fs.Float64("cpu-burst-max", 0, "the most CPU one runner may be lent up to, in cores; 0 is the host's allocatable CPU")
@@ -643,6 +645,7 @@ func (spec *poolSpec) body(fs *flagSet, onlyChanged bool) map[string]any {
 		"max-runner-lifetime": "max_runner_lifetime",
 		"scale-up-delay":      "scale_up_delay",
 		"docker-wait":         "docker_wait",
+		"reserve-room-after":  "reserve_room_after",
 	} {
 		if !fs.changed(flagName) {
 			continue
@@ -659,6 +662,8 @@ func (spec *poolSpec) body(fs *flagSet, onlyChanged bool) map[string]any {
 			v = spec.scaleUpDelay
 		case "docker_wait":
 			v = spec.dockerWait
+		case "reserve_room_after":
+			v = spec.reserveRoomAfter
 		}
 		if strings.TrimSpace(*v) == "" {
 			settings[field] = nil
