@@ -483,6 +483,12 @@ func (c *Controller) reconcileKnownJobs(ctx context.Context, now time.Time) {
 			seen[j.ID] = true
 		}
 	}
+	for _, j := range c.runningJobs(ctx, now) {
+		if !seen[j.ID] {
+			jobs = append([]*store.Job{j}, jobs...)
+			seen[j.ID] = true
+		}
+	}
 	for _, j := range jobs {
 		if ctx.Err() != nil {
 			return
@@ -561,6 +567,31 @@ func (c *Controller) idleDemandJobs(ctx context.Context, now time.Time) []*store
 		next = 0
 	}
 	c.idleDemandOffset.Store(int64(next))
+	return jobs
+}
+
+// runningJobs is a rotating page of the jobs in progress. A job whose
+// completion was missed keeps its runner busy here: a reusable runner is then
+// never drained, for its idle timeout or its maximum lifetime, and its slot
+// counts as taken. There are never more jobs in progress than runners, so a
+// small page of their own reaches each within minutes, however deep the queue
+// the main rotation has to cross.
+func (c *Controller) runningJobs(ctx context.Context, now time.Time) []*store.Job {
+	const batch = 5
+	cutoff := now.Add(-2 * time.Minute)
+	offset := int(c.runningOffset.Load())
+	jobs, total, err := c.st.ListJobs(ctx, store.JobFilter{
+		States: []store.JobState{store.JobInProgress}, Until: &cutoff,
+	}, store.Page{Limit: batch, Offset: offset})
+	if err != nil {
+		c.log.Warn("could not list jobs in progress to reconcile", "error", err)
+		return nil
+	}
+	next := offset + len(jobs)
+	if next >= total {
+		next = 0
+	}
+	c.runningOffset.Store(int64(next))
 	return jobs
 }
 
