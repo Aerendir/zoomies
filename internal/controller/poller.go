@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/eyupio/zoomies/internal/github"
@@ -469,6 +470,19 @@ func (c *Controller) reconcileKnownJobs(ctx context.Context, now time.Time) {
 		next = 0
 	}
 	c.jobPollOffset.Store(int64(next))
+	// The rotation reaches a job after total/batch ticks, hours with a deep
+	// queue. A queued job whose completion was missed keeps a pool's runners
+	// idle for all that time, so the jobs those runners wait on go first.
+	seen := make(map[string]bool, len(jobs))
+	for _, j := range jobs {
+		seen[j.ID] = true
+	}
+	for _, j := range c.idleDemandJobs(ctx, now) {
+		if !seen[j.ID] {
+			jobs = append([]*store.Job{j}, jobs...)
+			seen[j.ID] = true
+		}
+	}
 	for _, j := range jobs {
 		if ctx.Err() != nil {
 			return
@@ -502,6 +516,52 @@ func (c *Controller) reconcileKnownJobs(ctx context.Context, now time.Time) {
 			c.log.Warn("could not update reconciled workflow job", "job", j.ID, "error", err)
 		}
 	}
+}
+
+// idleDemandAfter is how long a runner may sit idle before the queued jobs of
+// its pool are checked against GitHub ahead of the rotation: an idle runner
+// beside queued work is the sign that some of that work has already finished.
+const idleDemandAfter = 10 * time.Minute
+
+// idleDemandJobs is a rotating page of the queued jobs of every pool with a
+// runner idle for longer than idleDemandAfter, oldest first.
+func (c *Controller) idleDemandJobs(ctx context.Context, now time.Time) []*store.Job {
+	const batch = 10
+	runners, _, err := c.st.ListRunners(ctx, store.RunnerFilter{States: []store.RunnerState{store.RunnerIdle}}, store.Page{Limit: 1000})
+	if err != nil {
+		c.log.Warn("could not list idle runners to reconcile their pools' queue", "error", err)
+		return nil
+	}
+	pools := map[string]bool{}
+	for _, r := range runners {
+		if r.LastIdleAt != nil && now.Sub(*r.LastIdleAt) >= idleDemandAfter && r.PoolID != "" {
+			pools[r.PoolID] = true
+		}
+	}
+	if len(pools) == 0 {
+		c.idleDemandOffset.Store(0)
+		return nil
+	}
+	ids := make([]string, 0, len(pools))
+	for id := range pools {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	cutoff := now.Add(-2 * time.Minute)
+	offset := int(c.idleDemandOffset.Load())
+	jobs, total, err := c.st.ListJobs(ctx, store.JobFilter{
+		States: []store.JobState{store.JobQueued}, PoolIDs: ids, Until: &cutoff,
+	}, store.Page{Limit: batch, Offset: offset, Sort: "queued_at"})
+	if err != nil {
+		c.log.Warn("could not list idle pools' queued jobs to reconcile", "error", err)
+		return nil
+	}
+	next := offset + len(jobs)
+	if next >= total {
+		next = 0
+	}
+	c.idleDemandOffset.Store(int64(next))
+	return jobs
 }
 
 // jobRecoveryLoop is the single owner of checking known unfinished jobs against
