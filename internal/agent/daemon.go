@@ -552,6 +552,7 @@ func New(opts Options) (*Agent, error) {
 	}
 
 	a := &Agent{
+		dindStartup:      startupQueue{width: dindStartupWidth},
 		opts:             opts,
 		log:              log,
 		tr:               opts.Transport,
@@ -1519,6 +1520,10 @@ func (a *Agent) dispatch(ctx context.Context, task Task) {
 
 	a.start(ctx, task)
 }
+
+// dindStartupWidth is how many DinD runners may initialise at once on a host.
+// Matches scheduler.startsUnderPressure.
+const dindStartupWidth = 2
 
 // startupLane is the queue a create waits in for this host's startup turn: a
 // DinD runner's create waits only behind other DinD creates, everything else

@@ -567,6 +567,12 @@ func targetsOf(insts []*store.Installation) map[string]string {
 	return out
 }
 
+// startsUnderPressure is how many runners a host under CPU pressure may have
+// starting at once. One kept a saturated host from initialising several
+// daemons together, but with short jobs a fifth of a runner's life went to
+// waiting for that turn.
+const startsUnderPressure = 2
+
 // decidePool applies the reap, scale-up and scale-down rules to one pool.
 func (t *tick) decidePool(p *store.Pool, runners []*store.Runner, queued []*store.Job) PoolPlan {
 	plan := PoolPlan{PoolID: p.ID, PoolName: p.Name, QueuedMatched: len(queued)}
@@ -1698,7 +1704,7 @@ func (hs *hostSet) pickReduced(p *store.Pool, avoid map[string]bool) (*store.Hos
 	var best, bestAvoided *option
 	for _, h := range hs.hosts {
 		if hs.slotsFor(h, p) <= 0 || !HostCanRun(h, p, hs.now) || !hs.platform.matches(p, h) ||
-			(hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] > 0) ||
+			(hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] >= startsUnderPressure) ||
 			(hs.need != nil && hs.shortOf(h, p, *hs.need) != "") {
 			continue
 		}
@@ -1778,7 +1784,7 @@ func (hs *hostSet) eligible(h *store.Host, p *store.Pool) bool {
 // would take a runner of p at the pool's own size.
 func (hs *hostSet) eligibleAsSized(h *store.Host, p *store.Pool) bool {
 	return hs.slotsFor(h, p) > 0 && hs.hasRoom(h, p) && HostCanRun(h, p, hs.now) && hs.platform.matches(p, h) &&
-		!(hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] > 0)
+		!(hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] >= startsUnderPressure)
 }
 
 // hasRoom reports whether what is still unpromised on the host covers one more
@@ -2042,7 +2048,7 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 			if detail == "" {
 				detail = naming.ForSentence(h.Name) + ": " + HostAdmissionReason(h, hs.now)
 			}
-		case hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] > 0:
+		case hostUnderCPUPressure(h, hs.now) && hs.warming[h.ID] >= startsUnderPressure:
 			warming++
 		case h.Throttle.Active() && hs.free[h.ID] <= 0 && h.ActiveRunners < h.Slots():
 			// Slots the operator configured and the throttle has taken back.
