@@ -313,6 +313,9 @@ type Controller struct {
 	// on a fleet whose webhooks are also broken the difference is every job.
 	lastPollAt    atomic.Int64
 	jobPollOffset atomic.Int64
+	// idleDemandOffset rotates the check of queued jobs that idle runners wait
+	// on, apart from jobPollOffset's rotation through every unfinished job.
+	idleDemandOffset atomic.Int64
 	// fence is the recovery fence, read from the database at start and kept
 	// here so that a decision made ten times a minute is not ten database
 	// reads. It is a pointer so the zero value -- no fence -- costs nothing to
