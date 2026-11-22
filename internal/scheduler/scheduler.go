@@ -1833,7 +1833,29 @@ func (hs *hostSet) memoryLeft(h *store.Host, p *store.Pool) int64 {
 // a copy of its own that a new rule here would have left behind. Room left on
 // the host is the scheduler's own accounting and is checked separately.
 func HostCanRun(h *store.Host, p *store.Pool, now time.Time) bool {
-	return HostAvailable(h, now) && HostCouldRun(h, p)
+	return HostPresent(h, now) && admits(h, p, now) && HostCouldRun(h, p)
+}
+
+// admits is HostAdmissionReason for one pool: a pool that reserves room is not
+// held by sustained CPU pressure alone. On a host that stays near its CPU limit
+// through a wave the hold lifts for seconds at a time, and the large runner a
+// reserving pool waits for went minutes without a start; its maximum bounds
+// what it can add. Memory at the reserve still holds it.
+func admits(h *store.Host, p *store.Pool, now time.Time) bool {
+	if HostAdmissionReason(h, now) == "" {
+		return true
+	}
+	return p != nil && p.RunnerSettings.ReserveRoomAfter != nil && cpuHoldOnly(h, now)
+}
+
+// cpuHoldOnly reports a host whose new starts are held for sustained CPU
+// pressure and for nothing else.
+func cpuHoldOnly(h *store.Host, now time.Time) bool {
+	if !h.Usage.Fresh(now) || !h.Usage.CPUHeld {
+		return false
+	}
+	v := h.Usage.MemoryAvailableMB
+	return v == nil || *v > h.MemoryReserve()
 }
 
 // HostCouldRun is that same rule with the weather left out: whether this host
@@ -1984,7 +2006,7 @@ func (hs *hostSet) why(p *store.Pool) blockage {
 			if detail == "" {
 				detail = naming.ForSentence(h.Name) + ": " + ExcludedBySize(h, p).Reason
 			}
-		case HostAdmissionReason(h, hs.now) != "":
+		case !admits(h, p, hs.now):
 			held++
 			if detail == "" {
 				detail = naming.ForSentence(h.Name) + ": " + HostAdmissionReason(h, hs.now)
