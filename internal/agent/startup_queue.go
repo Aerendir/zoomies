@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/rand/v2"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 // Enqueue happens in dispatch order, before goroutines can reorder a burst.
 type startupQueue struct {
 	mu      sync.Mutex
-	active  *startupTicket
+	active  []*startupTicket
 	pending []*startupTicket
+	// width is how many tickets may be active at once; zero is one.
+	width int
 }
 
 type startupTicket struct {
@@ -34,9 +37,13 @@ func (q *startupQueue) enqueue(foreground bool) *startupTicket {
 }
 
 func (q *startupQueue) advance() {
-	if q.active != nil || len(q.pending) == 0 {
-		return
+	width := max(q.width, 1)
+	for len(q.active) < width && len(q.pending) > 0 {
+		q.admitOne()
 	}
+}
+
+func (q *startupQueue) admitOne() {
 	i := 0
 	for n, t := range q.pending {
 		if t.foreground {
@@ -44,18 +51,19 @@ func (q *startupQueue) advance() {
 			break
 		}
 	}
-	q.active = q.pending[i]
+	t := q.pending[i]
 	copy(q.pending[i:], q.pending[i+1:])
 	q.pending[len(q.pending)-1] = nil
 	q.pending = q.pending[:len(q.pending)-1]
-	close(q.active.ready)
+	q.active = append(q.active, t)
+	close(t.ready)
 }
 
 func (q *startupQueue) done(t *startupTicket) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.active == t {
-		q.active = nil
+	if i := slices.Index(q.active, t); i >= 0 {
+		q.active = slices.Delete(q.active, i, i+1)
 	} else {
 		for i, waiting := range q.pending {
 			if waiting == t {
