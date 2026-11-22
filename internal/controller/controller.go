@@ -316,6 +316,9 @@ type Controller struct {
 	// idleDemandOffset rotates the check of queued jobs that idle runners wait
 	// on, apart from jobPollOffset's rotation through every unfinished job.
 	idleDemandOffset atomic.Int64
+	// runningOffset rotates the check of jobs in progress, apart from the two
+	// rotations above.
+	runningOffset atomic.Int64
 	// fence is the recovery fence, read from the database at start and kept
 	// here so that a decision made ten times a minute is not ten database
 	// reads. It is a pointer so the zero value -- no fence -- costs nothing to
