@@ -377,6 +377,20 @@ type UnmatchedJob struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// createdSince counts the runners created after a moment, whatever became of
+// them since.
+func createdSince(runners map[string][]*store.Runner, since time.Time) int {
+	n := 0
+	for _, rs := range runners {
+		for _, r := range rs {
+			if r != nil && r.CreatedAt.After(since) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
 // Decide turns a snapshot of the fleet into the actions that move it towards
 // what the queue is asking for. It is deterministic: the same snapshot always
 // yields the same plan, down to the order of the actions.
@@ -405,6 +419,12 @@ func Decide(s Snapshot) Plan {
 	if t.budget <= 0 {
 		// An unset cap must not stall the fleet; host capacity still bounds us.
 		t.budget = math.MaxInt
+	} else if s.Policy.Interval > 0 {
+		// A pass runs on every nudge as well as on the interval, seconds
+		// apart while runners come and go, so a cap counted per pass alone
+		// lets a whole pool be created inside one interval. The runners
+		// created within the last interval are charged to this pass.
+		t.budget = max(t.budget-createdSince(s.Runners, s.Now.Add(-s.Policy.Interval)), 0)
 	}
 
 	plan := Plan{Pools: make([]PoolPlan, 0, len(pools)), Unmatched: unmatched}
