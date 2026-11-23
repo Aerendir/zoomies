@@ -87,6 +87,14 @@ func (c *Controller) pollLoop(ctx context.Context) {
 	}
 }
 
+// lossyDiscoveryWindow is how recent a lost delivery makes the poller list the
+// queue of installations whose deliveries are otherwise arriving, and
+// lossyDiscoveryEvery how often it does so while that lasts.
+const (
+	lossyDiscoveryWindow = 5 * time.Minute
+	lossyDiscoveryEvery  = 2 * time.Minute
+)
+
 func (c *Controller) pollInterval() time.Duration {
 	if d := c.cfg().GitHub.PollInterval; d > 0 {
 		return d
@@ -129,6 +137,20 @@ func (c *Controller) discoverJobs(ctx context.Context) {
 		return
 	}
 
+	// Fresh deliveries say webhooks arrive, not that all of them do. When one
+	// was lost in the last few minutes -- a delivery GitHub gave up on is
+	// recorded as refused or failed -- the job it announced is known to nobody
+	// here, and a queued job nobody knows gets no runner until webhooks go
+	// quiet. So while deliveries are being lost the queue is listed for the
+	// fresh installations too, at most once every lossyDiscoveryEvery.
+	lossy := false
+	if lost, lostErr := c.st.LastLostDeliveryAt(ctx); lostErr == nil && !lost.IsZero() && now.Sub(lost) < lossyDiscoveryWindow {
+		if last := c.lossyDiscoveryAt.Load(); last == 0 || now.Sub(time.Unix(0, last)) >= lossyDiscoveryEvery {
+			lossy = true
+			c.lossyDiscoveryAt.Store(now.UnixNano())
+		}
+	}
+
 	insts, err := c.st.ListInstallations(ctx)
 	if err != nil {
 		c.log.Error("could not list installations to poll", "error", err)
@@ -151,7 +173,7 @@ func (c *Controller) discoverJobs(ctx context.Context) {
 		}
 		// Skip discovery for this installation when its deliveries are fresh.
 		// Known job reconciliation above remains independent of that signal.
-		if fresh[inst.ID] {
+		if fresh[inst.ID] && !lossy {
 			continue
 		}
 		client, err := c.clients.get(ctx, inst)
@@ -188,6 +210,9 @@ func (c *Controller) discoverJobs(ctx context.Context) {
 
 	if found > 0 {
 		c.log.Debug("polled GitHub for unfinished jobs", "found", found, "new_or_changed", changed)
+	}
+	if lossy {
+		c.log.Info("listed GitHub's queue while deliveries are being lost", "found", found, "new_or_changed", changed)
 	}
 	if changed > 0 {
 		c.Nudge()

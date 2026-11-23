@@ -1894,6 +1894,19 @@ func (s *Store) LastAcceptedDeliveryAt(ctx context.Context) (time.Time, error) {
 	return s.lastDeliveryAt(ctx, "accepted")
 }
 
+// LastLostDeliveryAt is when a delivery last reached this controller and was
+// not applied: refused, or failed part-way. A delivery that times out on its
+// way in ends as one of the two, so a recent one says deliveries are being
+// lost while others still arrive.
+func (s *Store) LastLostDeliveryAt(ctx context.Context) (time.Time, error) {
+	var v sql.NullInt64
+	err := s.read.QueryRowContext(ctx, `SELECT MAX(received_at) FROM webhook_deliveries WHERE status IN ('error', 'rejected')`).Scan(&v)
+	if err != nil || !v.Valid {
+		return time.Time{}, err
+	}
+	return at(v.Int64), nil
+}
+
 // InstallationsFreshSince returns the installations a webhook has verified for
 // since a cutoff: the ones whose deliveries are arriving.
 //
