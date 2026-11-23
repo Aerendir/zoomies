@@ -319,6 +319,10 @@ type Controller struct {
 	// runningOffset rotates the check of jobs in progress, apart from the two
 	// rotations above.
 	runningOffset atomic.Int64
+	// lossyDiscoveryAt is when the poller last listed the queue of
+	// installations with fresh deliveries because some were being lost, as
+	// UnixNano; see discoverJobs.
+	lossyDiscoveryAt atomic.Int64
 	// fence is the recovery fence, read from the database at start and kept
 	// here so that a decision made ten times a minute is not ten database
 	// reads. It is a pointer so the zero value -- no fence -- costs nothing to
