@@ -1921,8 +1921,24 @@ func admits(h *store.Host, p *store.Pool, now time.Time) bool {
 	if HostAdmissionReason(h, now) == "" {
 		return true
 	}
-	return p != nil && p.RunnerSettings.ReserveRoomAfter != nil && cpuHoldOnly(h, now)
+	if !cpuHoldOnly(h, now) {
+		return false
+	}
+	if p != nil && p.RunnerSettings.ReserveRoomAfter != nil {
+		return true
+	}
+	// The hold lasts until CPU falls below 85%, and on a host whose runners
+	// are used once that is when most of them have gone: the pool empties,
+	// then refills at once and sets the hold again. Below the 95% that set
+	// it, a held host takes starts again; hostUnderCPUPressure still bounds
+	// how many warm up at a time, so the refill is a trickle.
+	v := h.Usage.UnlentCPUPercent()
+	return v != nil && *v < cpuHoldTrickleBelow
 }
+
+// cpuHoldTrickleBelow is the CPU usage under which a host held for sustained
+// CPU pressure takes new starts again, a few at a time.
+const cpuHoldTrickleBelow = 95
 
 // cpuHoldOnly reports a host whose new starts are held for sustained CPU
 // pressure and for nothing else.
