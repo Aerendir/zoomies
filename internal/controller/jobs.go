@@ -173,7 +173,7 @@ func (c *Controller) cancelWorkflowRunLocally(ctx context.Context, repo string, 
 		// arrived owns live work. Completed siblings may have had their runner
 		// reused by another run and must never be torn down here.
 		if j.State == store.JobInProgress && j.RunnerID != "" {
-			if err := c.stopCancelledJobRunner(ctx, j); err != nil {
+			if err := c.stopCancelledJobRunner(ctx, j, confirmed); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -209,7 +209,7 @@ func (c *Controller) cancelWorkflowRunLocally(ctx context.Context, repo string, 
 // stopCancelledJobRunner detaches the job before forcing removal. That avoids
 // recording a fleet fault: GitHub cancelled this work; the runner did not fail
 // underneath it.
-func (c *Controller) stopCancelledJobRunner(ctx context.Context, j *store.Job) error {
+func (c *Controller) stopCancelledJobRunner(ctx context.Context, j *store.Job, confirmed bool) error {
 	r, err := c.st.GetRunner(ctx, j.RunnerID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -218,6 +218,17 @@ func (c *Controller) stopCancelledJobRunner(ctx context.Context, j *store.Job) e
 		return err
 	}
 	if r.CurrentJobID != j.ID {
+		return nil
+	}
+	// Once GitHub has confirmed the cancellation a reusable runner is left
+	// alone: GitHub has stopped the job on it and the runner takes the next
+	// one. Its row can still name this job after the runner has moved on, when
+	// the job's completion and the next job's start have not been applied yet,
+	// and removing it then kills a job of another run before its first step,
+	// which GitHub only cancels fifteen minutes later, when it gives the lost
+	// runner up. A cancellation asked through Zoomies still stops the runner
+	// at once, before GitHub confirms.
+	if confirmed && !r.Ephemeral {
 		return nil
 	}
 	finished, changed, err := c.st.CompleteRunnerJob(ctx, r.ID, j.ID,
