@@ -1072,19 +1072,37 @@ func (t *tick) holdRoom(tiers []*store.Pool, byID map[string]*PoolPlan, runners 
 			t.hosts.holds = make(map[string]roomHold)
 		}
 		t.hosts.holds[h.ID] = roomHold{poolID: p.ID, room: room}
+		// Idle reusable runners are drained only for the room that is missing,
+		// and only as many as cover it. A host that already has the room and
+		// refuses the runner for another reason -- CPU pressure, a start still
+		// warming, its disk -- gains nothing from losing them, and their pool
+		// then meets its next burst with no runner and rebuilds one start at a
+		// time.
+		// Disk is left out: draining an idle runner frees none.
 		drained := 0
+		have, alloc := before, t.hosts.alloc[h.ID]
+		enough := func() bool {
+			return (!alloc.CPUsKnown || have.CPUs+cpuEpsilon >= room.CPUs) &&
+				(!alloc.MemoryKnown || have.MemoryMB >= room.MemoryMB)
+		}
 		for _, q := range tiers {
 			if q.ID == p.ID || q.Ephemeral {
 				continue
 			}
 			qp := byID[q.ID]
 			for _, r := range runners[q.ID] {
+				if enough() {
+					break
+				}
 				if r == nil || r.HostID != h.ID || r.State != store.RunnerIdle || t.stillRunning[r.ID] || draining(qp.Actions, r.ID) {
 					continue
 				}
 				qp.Actions = append(qp.Actions, t.action(ActionDrain, q, r,
 					fmt.Sprintf("room on this host is held for %s, whose jobs are waiting", p.Name)))
 				drained++
+				freed := Reserve(q, h)
+				have.CPUs += freed.CPUs
+				have.MemoryMB += freed.MemoryMB
 			}
 		}
 		b := t.hosts.why(p)
