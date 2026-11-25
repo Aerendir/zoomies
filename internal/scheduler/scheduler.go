@@ -1868,7 +1868,7 @@ func (hs *hostSet) holdHost(p *store.Pool) *store.Host {
 	var best *store.Host
 	bestScore := -1.0
 	for _, h := range hs.hosts {
-		if _, held := hs.holds[h.ID]; held || hs.free[h.ID] <= 0 || !HostCanRun(h, p, hs.now) {
+		if _, held := hs.holds[h.ID]; held || hs.free[h.ID] <= 0 || !HostCanRun(h, p, hs.now) || !hs.platform.matches(p, h) {
 			continue
 		}
 		a := hs.alloc[h.ID]
