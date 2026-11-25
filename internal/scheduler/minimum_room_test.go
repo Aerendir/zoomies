@@ -44,7 +44,7 @@ func TestHostRoomCountsTheRunnersAMinimumReallyPlaces(t *testing.T) {
 			}
 			// The pass is the arithmetic's witness: the count must be what
 			// placement actually does on the same empty machine.
-			hs := newHostSet([]*store.Host{h}, []*store.Pool{tc.pool}, nil, now)
+			hs := newHostSet([]*store.Host{h}, []*store.Pool{tc.pool}, nil, now, false)
 			if placed := hs.placeAvoiding(tc.pool, 8, nil); len(placed) != tc.wantFits {
 				t.Errorf("the pass placed %d runners, want the %d the room promises", len(placed), tc.wantFits)
 			}
@@ -71,7 +71,7 @@ func TestABlockedPoolWithAMinimumNamesWhatIsShortOfTheMinimum(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := sized("h", 8, 32, hostFor(32*1024), 500*1024)
 			p := withMinimum("m", 4, 8*1024, 2, 4*1024)
-			hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+			hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
 			hs.left[h.ID] = tc.left
 			hs.promisedMemory[h.ID] = tc.left.MemoryMB
 			if placed := hs.placeAvoiding(p, 1, nil); len(placed) != 0 {

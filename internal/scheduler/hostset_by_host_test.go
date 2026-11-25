@@ -234,7 +234,7 @@ func TestAddingTheRunnersUpByHostSeedsTheHostsAsLookingThroughAllOfThemForEachDi
 		rng := rand.New(rand.NewSource(seed))
 		hosts, pools, runners := randomHostFleet(rng)
 
-		got := newHostSet(hosts, pools, runners, now)
+		got := newHostSet(hosts, pools, runners, now, false)
 		want := referenceNewHostSet(hosts, pools, runners, now)
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("seed %d: the host set differs\n got: %+v\nwant: %+v", seed, got, want)

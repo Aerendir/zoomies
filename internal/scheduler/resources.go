@@ -350,12 +350,18 @@ type hostTotals struct {
 	// pending is what the host's last sample cannot yet contain, the runners
 	// still starting and those created or started since it was taken.
 	pending Reservation
+	// unlimitedCPUs is the part of reserved.CPUs charged to runners that run
+	// with no CPU limit: their pool types no CPU and they were given none.
+	unlimitedCPUs float64
 }
 
 // add counts one live runner of the pool p, which is on h.
 func (t *hostTotals) add(p *store.Pool, h *store.Host, r *store.Runner) {
 	res := RunnerCharge(p, h, r)
 	t.reserved.CPUs += res.CPUs
+	if p.Resources.CPUs <= 0 && r.AllocatedCPUs <= 0 {
+		t.unlimitedCPUs += res.CPUs
+	}
 	t.reserved.MemoryMB += res.MemoryMB
 	// A live runner holds its working room until it is gone. Free disk is a
 	// measurement of what has been written, not of what was promised, so a

@@ -26,7 +26,7 @@ func TestAHostJustShortOfTheStandardRunsTheJobWithAllItCanSpare(t *testing.T) {
 	h := sized("short", 1, 16, hostFor(30*1024), 100000)
 	p := withMinimum("big", 8, 32*1024, 4, 24*1024)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
 	placed := hs.placeAvoiding(p, 1, nil)
 	if len(placed) != 1 || placed[0].hostID != "short" {
 		t.Fatalf("placed %+v, want one runner on the short host", placed)
@@ -44,7 +44,7 @@ func TestAHostJustShortOfTheStandardRunsTheJobWithAllItCanSpare(t *testing.T) {
 
 	// The pool with no minimum is exactly what it was: it does not fit.
 	plain := limited("big", 8, 32*1024)
-	hs = newHostSet([]*store.Host{h}, []*store.Pool{plain}, nil, now)
+	hs = newHostSet([]*store.Host{h}, []*store.Pool{plain}, nil, now, false)
 	if got := hs.placeAvoiding(plain, 1, nil); len(got) != 0 {
 		t.Fatalf("a pool with no minimum was placed on a host too small for it: %+v", got)
 	}
@@ -58,7 +58,7 @@ func TestTheStandardSizeWinsWhereverAHostHasRoomForIt(t *testing.T) {
 	whole := sized("b-whole", 1, 16, hostFor(32*1024), 100000)
 	p := withMinimum("big", 8, 32*1024, 4, 24*1024)
 
-	hs := newHostSet([]*store.Host{short, whole}, []*store.Pool{p}, nil, now)
+	hs := newHostSet([]*store.Host{short, whole}, []*store.Pool{p}, nil, now, false)
 	placed := hs.placeAvoiding(p, 2, nil)
 	if len(placed) != 2 {
 		t.Fatalf("placed %+v, want two runners", placed)
@@ -75,7 +75,7 @@ func TestTheStandardSizeWinsWhereverAHostHasRoomForIt(t *testing.T) {
 func TestAHostBelowTheMinimumTakesNothing(t *testing.T) {
 	h := sized("tiny", 1, 16, hostFor(20*1024), 100000)
 	p := withMinimum("big", 8, 32*1024, 4, 24*1024)
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
 	if got := hs.placeAvoiding(p, 1, nil); len(got) != 0 {
 		t.Fatalf("placed %+v below the pool's 24 GB minimum", got)
 	}
@@ -102,7 +102,7 @@ func TestAReducedRunnerIsChargedWhatItWasGiven(t *testing.T) {
 	}
 	// 40 GB less the 20 GB promised leaves 20: short of the standard, above
 	// the minimum, so the second runner is reduced too, to what is left.
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now, false)
 	placed := hs.placeAvoiding(p, 1, nil)
 	if len(placed) != 1 || placed[0].size == nil || placed[0].size.MemoryMB != 20*1024 {
 		t.Fatalf("placed %+v, want a second runner reduced to the 20 GB left", placed)
@@ -117,7 +117,7 @@ func TestAReducedDockerInDockerPairSplitsWhatIsLeft(t *testing.T) {
 	p := withMinimum("builds", 4, 8*1024, 2, 4*1024)
 	p.DockerMode = store.DockerDinD
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
 	placed := hs.placeAvoiding(p, 1, nil)
 	if len(placed) != 1 || placed[0].size == nil {
 		t.Fatalf("placed %+v, want one reduced pair", placed)
@@ -141,7 +141,7 @@ func TestAReducedDockerInDockerRunnerIsChargedTwiceItsRow(t *testing.T) {
 	p := withMinimum("builds", 4, 8*1024, 2, 4*1024)
 	p.DockerMode = store.DockerDinD
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
 	placed := hs.placeAvoiding(p, 1, nil)
 	if len(placed) != 1 || placed[0].size == nil {
 		t.Fatalf("placed %+v, want one reduced pair", placed)

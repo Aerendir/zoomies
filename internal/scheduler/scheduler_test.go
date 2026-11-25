@@ -1763,7 +1763,7 @@ func TestPlacementHonoursAReportedArchSelector(t *testing.T) {
 	p := testPool("arm-pool", "arm-pool")
 	p.HostSelector = store.StringMap{"arch": "arm64"}
 
-	hs := newHostSet([]*store.Host{arm, amd}, []*store.Pool{p}, nil, now)
+	hs := newHostSet([]*store.Host{arm, amd}, []*store.Pool{p}, nil, now, false)
 	got := hs.place(p, 3)
 	if len(got) != 3 {
 		t.Fatalf("placed %d runners, want 3: %v", len(got), got)
