@@ -86,7 +86,7 @@ func TestPlacementSendsRunnersToTheHigherScoringHost(t *testing.T) {
 	p := profilePool("ci", 0, 0)
 	for _, order := range []string{"", HostOrderHeadroom, HostOrderLargestStandard, HostOrderBestFit} {
 		big, small := bigHost("a-big"), smallHost("b-small")
-		hs := newHostSet([]*store.Host{big, small}, []*store.Pool{p}, nil, now, false)
+		hs := newHostSet([]*store.Host{big, small}, []*store.Pool{p}, nil, now)
 		hs.order = order
 		// The big host fills first under whichever order, because the spec
 		// score ranks it ahead before the order is ever consulted. Once the
@@ -111,7 +111,7 @@ func TestAnOverridePinsAHostAheadOfTheSpecScore(t *testing.T) {
 	if p := HostPriority(small); p.Source != PrioritySourceOverride || p.Score != 100 {
 		t.Fatalf("HostPriority = %+v, want the operator's 100", p)
 	}
-	hs := newHostSet([]*store.Host{big, small}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{big, small}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 4); len(got) == 0 || got[0] != "b-small" {
 		t.Fatalf("placed %v, want the pinned small host first", got)
 	}

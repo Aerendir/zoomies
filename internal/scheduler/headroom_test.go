@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +26,7 @@ func TestPlacementUsesHostSizeAndMeasuredHeadroomInsteadOfFreeSlots(t *testing.T
 		{"equal measurements break ties by ID", withUsage(sized("a", 4, 8, 16384, 100000), 20, 12000), withUsage(sized("b", 4, 8, 16384, 100000), 20, 12000), "a"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			hs := newHostSet([]*store.Host{tc.b, tc.a}, []*store.Pool{p}, nil, now, false)
+			hs := newHostSet([]*store.Host{tc.b, tc.a}, []*store.Pool{p}, nil, now)
 			if got := hs.place(p, 1); len(got) != 1 || got[0] != tc.want {
 				t.Fatalf("placed on %v, want %s", got, tc.want)
 			}
@@ -44,12 +43,12 @@ func TestPlaceAvoidingPrefersAnyOtherEligibleHost(t *testing.T) {
 	b := sized("b", 4, 16, 32768, 100000)
 	p := limited("build", 2, 2048)
 
-	hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p}, nil, now)
 	if got := hs.placeAvoiding(p, 1, map[string]bool{"a": true}); len(got) != 1 || got[0].hostID != "b" {
 		t.Fatalf("placed on %v, want the host not in avoid", got)
 	}
 
-	hs = newHostSet([]*store.Host{a}, []*store.Pool{p}, nil, now, false)
+	hs = newHostSet([]*store.Host{a}, []*store.Pool{p}, nil, now)
 	if got := hs.placeAvoiding(p, 1, map[string]bool{"a": true}); len(got) != 1 || got[0].hostID != "a" {
 		t.Fatalf("placed on %v, want the only host even though it is avoided", got)
 	}
@@ -59,7 +58,7 @@ func TestPlacementRebalancesEachNewReservationAcrossPools(t *testing.T) {
 	a := withUsage(sized("a", 8, 16, 32768, 100000), 10, 30000)
 	b := withUsage(sized("b", 8, 16, 32768, 100000), 10, 30000)
 	p, q := limited("one", 4, 4096), limited("two", 4, 4096)
-	hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p, q}, nil, now, false)
+	hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p, q}, nil, now)
 	if got := hs.place(p, 1); len(got) != 1 || got[0] != "a" {
 		t.Fatal(got)
 	}
@@ -75,7 +74,7 @@ func TestPendingStartsAreChargedBetweenPassesWithoutChargingBusyMemoryTwice(t *t
 			h := withUsage(sized("host_a", 4, 8, 16384, 100000), 20, 6656)
 			h.ActiveRunners = 1
 			r := testRunner("existing", p, state, time.Minute)
-			hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now, false)
+			hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now)
 			got := hs.place(p, 1)
 			if state == store.RunnerBusy && len(got) != 1 {
 				t.Fatal("busy memory was subtracted twice")
@@ -93,7 +92,7 @@ func TestPressureHoldsNewWorkButLeavesBusyRunnersAndManualLimitsAlone(t *testing
 	h.Usage.CPUHeld = true
 	h.ActiveRunners = 1
 	r := testRunner("busy", p, store.RunnerBusy, time.Minute)
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now)
 	if got := hs.place(p, 2); len(got) != 0 {
 		t.Fatalf("held host got %v", got)
 	}
@@ -117,12 +116,12 @@ func TestPressureHoldsNewWorkButLeavesBusyRunnersAndManualLimitsAlone(t *testing
 func TestBusyCPUAllowsOnlyOneStartUntilItRegisters(t *testing.T) {
 	p := limited("build", 1, 1024)
 	h := withUsage(sized("host_a", 8, 16, 32768, 100000), 90, 28000)
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 4); len(got) != 1 {
 		t.Fatalf("got %d simultaneous starts under pressure", len(got))
 	}
 	r := testRunner("pending", p, store.RunnerProvisioning, time.Second)
-	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now, false)
+	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now)
 	if got := hs.place(p, 1); len(got) != 0 {
 		t.Fatal("next pass ignored pending startup")
 	}
@@ -133,16 +132,16 @@ func TestStaleAndMissingUsageRetainReservationGuards(t *testing.T) {
 	h := withUsage(sized("host_a", 8, 8, 16384, 100000), 99, 0)
 	h.Usage.CPUHeld = true
 	h.Usage.SampledAt = now.Add(-store.HostUsageMaxAge)
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 8); len(got) != 3 {
 		t.Fatalf("stale reading blocked work or erased reservations: %v", got)
 	}
 	h.Usage.SampledAt = now
-	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 1); len(got) != 0 {
 		t.Fatal("fresh zero memory was treated as missing")
 	}
-	old := newHostSet([]*store.Host{testHost("a", 2, 0), testHost("b", 5, 1)}, []*store.Pool{p}, nil, now, false)
+	old := newHostSet([]*store.Host{testHost("a", 2, 0), testHost("b", 5, 1)}, []*store.Pool{p}, nil, now)
 	if got := old.place(p, 1); len(got) != 1 || got[0] != "b" {
 		t.Fatalf("old agent no longer placed by slots: %v", got)
 	}
@@ -159,7 +158,7 @@ func TestASingleSlotHostFitsTheRunnerItsOwnSizeAsksFor(t *testing.T) {
 	h := sized("host_a", 1, 8, 31*1024, 100000)
 	withUsage(h, 10, h.Allocatable().MemoryMB)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 1); len(got) != 1 {
 		t.Fatalf("placed on %v, want the idle host's only slot", got)
 	}
@@ -185,7 +184,7 @@ func TestAnIdleHostTakesAHostSizedRunnerWhenItsOperatingSystemUsesMoreThanTheRes
 		t.Fatalf("the fixture does not reproduce the fault: %d MB available is not below %d MB allocatable", avail, alloc)
 	}
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 1); len(got) != 1 {
 		t.Fatalf("placed on %v, want the idle host's only slot", got)
 	}
@@ -203,7 +202,7 @@ func TestAHostAlreadyRunningOurWorkStillMeasuresBeforeTakingMore(t *testing.T) {
 	// The busy runner is using most of the machine.
 	withUsage(h, 40, 6*1024)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now)
 	if got := hs.place(p, 1); len(got) != 0 {
 		t.Fatalf("placed on %v; a host whose runner is using its memory must not be handed another share it has not got", got)
 	}
@@ -217,49 +216,8 @@ func TestAnIdleHostStillRefusesAStatedSizeItHasNotGotFree(t *testing.T) {
 	h := sized("host_a", 1, 4, 16*1024, 100000)
 	withUsage(h, 5, 6*1024)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 1); len(got) != 0 {
 		t.Fatalf("placed on %v; an 8 GB runner does not fit in 6 GB free, whatever the host is otherwise doing", got)
-	}
-}
-
-// With default_runner_limits off a runner whose pool types no CPU is given no
-// CPU limit, so the share a pass charges it is held by nothing. Charged, twelve
-// such runners filled a twelve-core host on paper while its CPU sat at a fifth,
-// and every start was refused as short of CPU. Placed by measure, the host
-// takes more, and still refuses them once its CPU is held for pressure.
-func TestCPUIsPlacedByMeasureWhenRunnersHaveNoCPULimit(t *testing.T) {
-	p := testPool("nolimit", "nolimit")
-	p.Resources = store.Resources{MemoryMB: 512, MinCPUs: 1}
-	h := withUsage(sized("host_a", 28, 12, 32768, 1000000), 20, 28000)
-	var live []*store.Runner
-	for i := range 12 {
-		live = append(live, testRunner(fmt.Sprintf("busy-%d", i), p, store.RunnerBusy, time.Hour))
-	}
-	runners := map[string][]*store.Runner{p.ID: live}
-
-	byShare := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now, false)
-	if got := byShare.place(p, 1); len(got) != 0 || !strings.Contains(byShare.why(p).what, "CPU") {
-		t.Fatalf("charged by share, a full host placed %d, why: %s", len(got), byShare.why(p).what)
-	}
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now, true)
-	if got := hs.place(p, 3); len(got) != 3 {
-		t.Fatalf("placed by measure, an idle host placed %d of 3, why: %s", len(got), hs.why(p).what)
-	}
-
-	// A typed CPU is a real limit, and is still charged.
-	typed := limited("typed", 1, 512)
-	var typedLive []*store.Runner
-	for i := range 12 {
-		typedLive = append(typedLive, testRunner(fmt.Sprintf("typed-%d", i), typed, store.RunnerBusy, time.Hour))
-	}
-	if got := newHostSet([]*store.Host{h}, []*store.Pool{typed}, map[string][]*store.Runner{typed.ID: typedLive}, now, true).place(typed, 1); len(got) != 0 {
-		t.Fatalf("a pool with a typed CPU was placed past its quota: %d", len(got))
-	}
-
-	// The measured hold still stops starts.
-	h.Usage.CPUHeld = true
-	if got := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now, true).place(p, 1); len(got) != 0 {
-		t.Fatalf("a host held for CPU pressure placed %d", len(got))
 	}
 }

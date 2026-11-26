@@ -158,13 +158,6 @@ type Policy struct {
 	// backlog at the top cannot starve every other pool pass after pass.
 	// Zero turns that share off and priority alone decides.
 	Interval time.Duration
-	// CPUByMeasure is scheduler.default_runner_limits turned off. A runner
-	// with no CPU limit of its own is then given no CPU quota, so the share a
-	// pass would charge it is a figure no cgroup holds it to: charged, it
-	// refused starts on a host whose CPU was idle. With this set, CPU is
-	// charged only for runners that have a real limit, and how busy a host's
-	// CPU is decides the rest through the measured holds.
-	CPUByMeasure bool
 }
 
 // For is this policy as one pool sees it: the fleet's figures, with whatever
@@ -408,7 +401,7 @@ func Decide(s Snapshot) Plan {
 	t := &tick{
 		now:                s.Now,
 		policy:             s.Policy,
-		hosts:              newHostSet(s.Hosts, pools, s.Runners, s.Now, s.Policy.CPUByMeasure),
+		hosts:              newHostSet(s.Hosts, pools, s.Runners, s.Now),
 		budget:             s.Policy.MaxCreatesPerTick,
 		activeByRepository: s.ActiveByRepository,
 		poolCount:          len(pools),
@@ -1468,10 +1461,7 @@ type hostSet struct {
 	hosts           []*store.Host
 	free            map[string]int
 	observedCPU     map[string]float64
-	// cpuByMeasure is Policy.CPUByMeasure: a runner with no CPU limit takes
-	// no CPU from the room a pass places by.
-	cpuByMeasure bool
-	warming      map[string]int
+	warming         map[string]int
 	// warmingDinD is the part of warming that waits in the DinD startup lane.
 	// readyDelay keeps the two lanes apart; the CPU-pressure rule still uses
 	// the whole count, because one warming runner of either kind is enough.
@@ -1523,9 +1513,8 @@ type roomHold struct {
 // in the number already. Subtracting their reservations too would charge the
 // same bytes twice. It is charged only for the runners this pass adds, which
 // have written nothing yet.
-func newHostSet(hosts []*store.Host, pools []*store.Pool, runners map[string][]*store.Runner, now time.Time, cpuByMeasure bool) *hostSet {
+func newHostSet(hosts []*store.Host, pools []*store.Pool, runners map[string][]*store.Runner, now time.Time) *hostSet {
 	hs := &hostSet{
-		cpuByMeasure:   cpuByMeasure,
 		hosts:          sortedHosts(hosts),
 		free:           make(map[string]int, len(hosts)),
 		observedCPU:    make(map[string]float64, len(hosts)),
@@ -1556,11 +1545,6 @@ func newHostSet(hosts []*store.Host, pools []*store.Pool, runners map[string][]*
 		// or an operator reads one figure and the scheduler acts on another.
 		l := hs.left[h.ID]
 		l.CPUs -= t.reserved.CPUs
-		if cpuByMeasure {
-			// Charged to the host view as before, so the page still shows
-			// what a share would be, but not to the room a pass places by.
-			l.CPUs += t.unlimitedCPUs
-		}
 		l.MemoryMB -= t.reserved.MemoryMB
 		if hs.alloc[h.ID].DiskKnown {
 			l.DiskMB -= t.reserved.DiskMB
@@ -1667,9 +1651,7 @@ func (hs *hostSet) placeAvoiding(p *store.Pool, n int, avoid map[string]bool) []
 			hs.warmingDinD[h.ID]++
 		}
 		l := hs.left[h.ID]
-		if !hs.cpuByMeasure || p.Resources.CPUs > 0 {
-			l.CPUs -= res.CPUs
-		}
+		l.CPUs -= res.CPUs
 		l.MemoryMB -= res.MemoryMB
 		l.DiskMB -= res.DiskMB
 		hs.left[h.ID] = l

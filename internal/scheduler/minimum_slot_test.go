@@ -41,7 +41,7 @@ func TestAMinimumAboveTheShareIsGivenRatherThanRefused(t *testing.T) {
 	if room.Room != 4 || room.LimitedBy != "memory" {
 		t.Errorf("HostRoomFor = %+v, want room for 4, limited by memory", room)
 	}
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	placed := hs.placeAvoiding(p, 8, nil)
 	if len(placed) != 4 {
 		t.Fatalf("the pass placed %d runners, want the 4 the room promises", len(placed))

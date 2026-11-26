@@ -27,7 +27,7 @@ func TestReadinessPlacementRespectsFitAndStartupBacklog(t *testing.T) {
 			for range tc.busy {
 				rs[p.ID] = append(rs[p.ID], &store.Runner{HostID: "a", PoolID: p.ID, State: store.RunnerRegistering})
 			}
-			hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p}, rs, now, false)
+			hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p}, rs, now)
 			hs.preferReadiness = true
 			hs.readiness = map[string]map[string]time.Duration{p.ID: {"a": 10 * time.Second, "b": 25 * time.Second}}
 			got := hs.place(p, 1)
@@ -41,7 +41,7 @@ func TestReadinessPlacementRespectsFitAndStartupBacklog(t *testing.T) {
 func TestReadinessWithoutEvidenceFallsBackToHeadroom(t *testing.T) {
 	p := limited("build", 2, 2048)
 	a, b := sized("a", 4, 4, 8192, 100000), sized("b", 4, 16, 32768, 100000)
-	hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{a, b}, []*store.Pool{p}, nil, now)
 	hs.preferReadiness = true
 	if got := hs.place(p, 1); len(got) != 1 || got[0] != "b" {
 		t.Fatalf("placement=%v", got)
@@ -72,7 +72,7 @@ func TestReadinessCountsWarmingRunnersPerStartupLane(t *testing.T) {
 		{"a DinD pool is", dind, map[string]time.Duration{"a": 10 * time.Second, "b": 10 * time.Second}, "b"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			hs := newHostSet([]*store.Host{a, b}, []*store.Pool{plain, dind}, runners, now, false)
+			hs := newHostSet([]*store.Host{a, b}, []*store.Pool{plain, dind}, runners, now)
 			hs.preferReadiness = true
 			hs.readiness = map[string]map[string]time.Duration{tc.pool.ID: tc.history}
 			got := hs.place(tc.pool, 1)

@@ -58,7 +58,7 @@ func TestAHostAdmitsWhatItsMemoryCoversAndRefusesTheNext(t *testing.T) {
 	h := sized("host_a", 32, 32, hostFor(32*1024), 500*1024)
 	p := limited("big", 0, 4096)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	got := hs.place(p, 12)
 	if len(got) != 8 {
 		t.Fatalf("placed %d runners on a 32 GB host at 4 GB each, want 8", len(got))
@@ -77,7 +77,7 @@ func TestTwoPoolsCannotOversubscribeOneHostsMemory(t *testing.T) {
 	first := limited("first", 0, 6*1024)
 	second := limited("second", 0, 4*1024)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{first, second}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{first, second}, nil, now)
 	if got := hs.place(first, 1); len(got) != 1 {
 		t.Fatalf("the first pool was refused a host with 8 GB free: %v", got)
 	}
@@ -97,7 +97,7 @@ func TestADockerInDockerRunnerIsChargedForItsSidecar(t *testing.T) {
 	p := limited("dind", 0, 4096)
 	p.DockerMode = store.DockerDinD
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	got := hs.place(p, 4)
 	if len(got) != 1 {
 		t.Fatalf("placed %d dind runners on an 8 GB host at 4 GB each, want 1", len(got))
@@ -106,7 +106,7 @@ func TestADockerInDockerRunnerIsChargedForItsSidecar(t *testing.T) {
 	// The same pool without the sidecar fits twice, which is what says the
 	// difference above came from the sidecar and not from the arithmetic.
 	plain := limited("plain", 0, 4096)
-	hs = newHostSet([]*store.Host{sized("host_b", 8, 16, 8*1024+store.MinHostReserveMemoryMB, 500*1024)}, []*store.Pool{plain}, nil, now, false)
+	hs = newHostSet([]*store.Host{sized("host_b", 8, 16, 8*1024+store.MinHostReserveMemoryMB, 500*1024)}, []*store.Pool{plain}, nil, now)
 	if got := hs.place(plain, 4); len(got) != 2 {
 		t.Fatalf("placed %d plain runners, want 2", len(got))
 	}
@@ -125,7 +125,7 @@ func TestADefaultedDockerInDockerPairSharesOneSlot(t *testing.T) {
 	p := testPool("builders", "builders")
 	p.DockerMode = store.DockerDinD
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 4); len(got) != 4 {
 		t.Fatalf("placed %d defaulted dind runners on a 12-CPU host with 4 slots, want 4", len(got))
 	}
@@ -137,7 +137,7 @@ func TestADefaultedDockerInDockerPairSharesOneSlot(t *testing.T) {
 	// rather than the five it would take at the figure on the pool.
 	typed := limited("typed", 2, 4*1024)
 	typed.DockerMode = store.DockerDinD
-	hs = newHostSet([]*store.Host{sized("host_b", 4, 12, 32*1024, 500*1024)}, []*store.Pool{typed}, nil, now, false)
+	hs = newHostSet([]*store.Host{sized("host_b", 4, 12, 32*1024, 500*1024)}, []*store.Pool{typed}, nil, now)
 	if got := hs.place(typed, 4); len(got) != 2 {
 		t.Fatalf("placed %d dind runners of 2 typed CPU on a 12-CPU host, want 2 at twice the charge", len(got))
 	}
@@ -204,7 +204,7 @@ func TestASingleSlotHostStillPlacesAWellSizedDefaultedDockerInDockerRunner(t *te
 	if !HostFits(h, p) {
 		t.Fatalf("a one-slot host with room for both containers was refused the pool it exists for: %s", HostShortfall(h, p))
 	}
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 2); len(got) != 1 {
 		t.Fatalf("placed %d runners on a one-slot host, want 1", len(got))
 	}
@@ -237,7 +237,7 @@ func TestASplitTooThinForBothContainersIsRefused(t *testing.T) {
 			t.Errorf("HostShortfall = %q, want it to mention %q", why, want)
 		}
 	}
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 2); len(got) != 0 {
 		t.Fatalf("placed %d runners on a host too thin for the pair, want 0: %v", len(got), got)
 	}
@@ -253,7 +253,7 @@ func TestAHostOfUnlimitedPoolsStillAdmitsItsCapacity(t *testing.T) {
 		h := sized("host_a", capacity, 30, 30*1024, 500*1024)
 		p := testPool("unlimited", "unlimited")
 
-		hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+		hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 		got := hs.place(p, capacity+3)
 		if len(got) != capacity {
 			t.Errorf("capacity %d admitted %d runners; the upgrade changed what a host takes", capacity, len(got))
@@ -271,7 +271,7 @@ func TestAnUnlimitedPoolStillSpendsTheMemoryItTakes(t *testing.T) {
 	unlimited := testPool("unlimited", "unlimited")
 	named := limited("named", 0, 6*1024)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{unlimited, named}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{unlimited, named}, nil, now)
 	if got := hs.place(unlimited, 1); len(got) != 1 {
 		t.Fatalf("the unlimited pool was refused an empty host: %v", got)
 	}
@@ -289,7 +289,7 @@ func TestAHostThatReportedNoResourcesIsStillPlacedBySlots(t *testing.T) {
 	h := testHost("host_old", 3, 0) // no CPUs, no memory, no disk
 	p := limited("big", 8, 64*1024)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 5); len(got) != 3 {
 		t.Fatalf("placed %d runners on an unmeasured host with 3 slots, want 3: %v", len(got), got)
 	}
@@ -311,7 +311,7 @@ func TestOnlyLiveRunnersHoldAReservation(t *testing.T) {
 		onHost(testRunner("r_gone", p, store.RunnerRemoved, 0), "host_a"),
 	}}
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now)
 	if got := hs.place(p, 3); len(got) != 1 {
 		t.Fatalf("placed %d runners beside one live 4 GB runner on an 8 GB host, want 1: %v", len(got), got)
 	}
@@ -326,7 +326,7 @@ func TestAHostBelowItsDiskReserveTakesNothing(t *testing.T) {
 	roomy := sized("host_roomy", 4, 16, 16*1024, 200*1024)
 	p := testPool("unlimited", "unlimited")
 
-	hs := newHostSet([]*store.Host{full, roomy}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{full, roomy}, []*store.Pool{p}, nil, now)
 	for _, id := range hs.place(p, 4) {
 		if id == "host_full" {
 			t.Fatalf("a runner was placed on a host below its disk reserve")
@@ -336,7 +336,7 @@ func TestAHostBelowItsDiskReserveTakesNothing(t *testing.T) {
 	// And the operator is told which resource it was, because "no capacity"
 	// would send them to wait for a job that finishing will not help: a runner
 	// leaves its caches behind on purpose.
-	only := newHostSet([]*store.Host{full}, []*store.Pool{p}, nil, now, false)
+	only := newHostSet([]*store.Host{full}, []*store.Pool{p}, nil, now)
 	b := only.why(p)
 	if !strings.Contains(b.what, "low on disk") {
 		t.Errorf("the reason does not name the disk: %q", b.what)
@@ -353,7 +353,7 @@ func TestAHostTooSmallForThePoolSaysSoRatherThanSayingItIsFull(t *testing.T) {
 	h := sized("host_small", 4, 4, 4*1024, 200*1024)
 	p := limited("huge", 0, 32*1024)
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	b := hs.why(p)
 	if !strings.Contains(b.what, "too small for this pool's limits") {
 		t.Errorf("the reason does not say the machine is too small: %q", b.what)
@@ -375,7 +375,7 @@ func TestAHostWhoseMemoryIsSpentSaysItIsShortOfMemory(t *testing.T) {
 	h.ActiveRunners = 1
 	runners := map[string][]*store.Runner{p.ID: {onHost(testRunner("r1", p, store.RunnerBusy, 0), "host_a")}}
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, runners, now)
 	b := hs.why(p)
 	if !strings.Contains(b.what, "short of memory") {
 		t.Errorf("the reason does not name memory: %q", b.what)
@@ -410,7 +410,7 @@ func TestTheOperatorsReserveIsHeldBackFromPlacement(t *testing.T) {
 	h := sized("host_a", 8, 16, 12*1024, 200*1024)
 	h.ReserveMemoryMB = 8 * 1024
 
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 3); len(got) != 1 {
 		t.Fatalf("placed %d runners in the 4 GB left after an 8 GB reserve, want 1: %v", len(got), got)
 	}
@@ -692,7 +692,7 @@ func TestAnUnmeasuredDiskConstrainsNothing(t *testing.T) {
 // Each runner a pass adds is charged its room against what is free.
 func TestAPassChargesEachRunnerItAddsAWorkingRoom(t *testing.T) {
 	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024) // room for one
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{testPool("plain", "plain")}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{testPool("plain", "plain")}, nil, now)
 	if got := len(hs.place(testPool("plain", "plain"), 3)); got != 1 {
 		t.Fatalf("placed %d runners on a host with room for one", got)
 	}
@@ -707,13 +707,13 @@ func TestARunnerPlacedLastPassStillHoldsItsWorkingRoom(t *testing.T) {
 	p := testPool("plain", "plain")
 	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024) // room for one
 	live := map[string][]*store.Runner{p.ID: {{ID: "run_1", PoolID: p.ID, HostID: h.ID, State: store.RunnerIdle}}}
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now)
 	if got := len(hs.place(p, 3)); got != 0 {
 		t.Fatalf("placed %d runners beside one that holds the only room", got)
 	}
 	// Once it is gone the room is free again, and a measurement that has not
 	// moved is believed.
-	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs = newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	if got := len(hs.place(p, 3)); got != 1 {
 		t.Fatalf("placed %d runners on a host with room for one", got)
 	}
@@ -726,7 +726,7 @@ func TestALiveRunnersRoomDoesNotConstrainAnUnmeasuredHost(t *testing.T) {
 	h := sized("host", 4, 16, 16*1024, 0)
 	h.DiskTotalMB, h.DiskFreeMB = 0, 0
 	live := map[string][]*store.Runner{p.ID: {{ID: "run_1", PoolID: p.ID, HostID: h.ID, State: store.RunnerIdle}}}
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, live, now)
 	if got := len(hs.place(p, 1)); got != 1 {
 		t.Fatalf("placed %d runners on an unmeasured host with a slot free", got)
 	}
@@ -735,7 +735,7 @@ func TestALiveRunnersRoomDoesNotConstrainAnUnmeasuredHost(t *testing.T) {
 func TestTheLowOnDiskFixNamesTheWorkingRoom(t *testing.T) {
 	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
 	p := testPool("plain", "plain")
-	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false).why(p)
+	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now).why(p)
 	if !strings.Contains(b.what, "low on disk") {
 		t.Errorf("a host with a few GB free is short of disk, not too small: %q", b.what)
 	}
@@ -753,7 +753,7 @@ func TestTheLowOnDiskFixForATypedDiskNamesThePoolsOwnFigure(t *testing.T) {
 	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+1024)
 	p := testPool("typed", "typed")
 	p.Resources.DiskGB = 8
-	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false).why(p)
+	b := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now).why(p)
 	if !strings.Contains(b.what, "low on disk") {
 		t.Fatalf("a host with a few GB free is short of disk, not too small: %q", b.what)
 	}
@@ -770,7 +770,7 @@ func TestTheLowOnDiskFixForATypedDiskNamesThePoolsOwnFigure(t *testing.T) {
 func TestAHostWhoseRoomThisPassUsedUpIsLowOnDiskToo(t *testing.T) {
 	h := sized("host", 4, 16, 16*1024, store.MinHostReserveDiskMB+RunnerDiskMB+1024)
 	p := testPool("plain", "plain")
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 	hs.place(p, 1)
 	b := hs.why(p)
 	if !strings.Contains(b.what, "low on disk") || !strings.Contains(b.fix, "free space") {

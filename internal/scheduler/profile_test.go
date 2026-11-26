@@ -259,7 +259,7 @@ func TestAProfilePoolIsReducedOnlyDownToItsFloorOnABusyHost(t *testing.T) {
 	p := profilePool("heavy", 2, 4*1024)
 	r := &store.Runner{ID: "r1", PoolID: p.ID, HostID: h.ID, State: store.RunnerBusy, AllocatedCPUs: 3, AllocatedMemoryMB: 8 * 1024, AllocationSource: store.AllocationFromProfile}
 	h.ActiveRunners = 1
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: {r}}, now)
 
 	// Plenty of room: the second runner is a whole standard.
 	got := hs.placeAvoiding(p, 1, nil)
@@ -274,7 +274,7 @@ func TestAProfilePoolIsReducedOnlyDownToItsFloorOnABusyHost(t *testing.T) {
 func TestAPoolExcludedByEveryProfileSaysWhichLimitDidIt(t *testing.T) {
 	p := profilePool("heavy", 3, 0)
 	hosts := []*store.Host{smallHost("small-a"), smallHost("small-b")}
-	hs := newHostSet(hosts, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet(hosts, []*store.Pool{p}, nil, now)
 
 	if got := hs.place(p, 1); len(got) != 0 {
 		t.Fatalf("placed %v on hosts whose standard is below the pool's floor", got)
@@ -354,7 +354,7 @@ func TestTheMixedFleetExample(t *testing.T) {
 func TestAPassFillsAProfiledHostToItsDerivedSlotsAndNoFurther(t *testing.T) {
 	big := bigHost("big") // capacity 8, but the machine holds 3 standard runners
 	p := profilePool("ci", 0, 0)
-	hs := newHostSet([]*store.Host{big}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{big}, []*store.Pool{p}, nil, now)
 	if got := hs.place(p, 8); len(got) != 3 {
 		t.Fatalf("placed %d runners, want the 3 the machine holds", len(got))
 	}
@@ -379,7 +379,7 @@ func TestTheHostOrderChoosesBetweenHostsThatAllFit(t *testing.T) {
 			r.AllocatedCPUs, r.AllocatedMemoryMB, r.AllocationSource = 3, 8*1024, store.AllocationFromProfile
 			runners = append(runners, r)
 		}
-		hs := newHostSet([]*store.Host{big, small}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: runners}, now, false)
+		hs := newHostSet([]*store.Host{big, small}, []*store.Pool{p}, map[string][]*store.Runner{p.ID: runners}, now)
 		hs.order = order
 		got := hs.place(p, 1)
 		if len(got) != 1 {

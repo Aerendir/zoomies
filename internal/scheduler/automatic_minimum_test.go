@@ -20,7 +20,7 @@ func partlyUsed(t *testing.T, auto *store.Pool) *hostSet {
 	h.ActiveRunners = 1
 	big := limited("big", 5, 10*1024)
 	r := &store.Runner{ID: "r1", PoolID: big.ID, HostID: h.ID, State: store.RunnerBusy}
-	return newHostSet([]*store.Host{h}, []*store.Pool{big, auto}, map[string][]*store.Runner{big.ID: {r}}, now, false)
+	return newHostSet([]*store.Host{h}, []*store.Pool{big, auto}, map[string][]*store.Runner{big.ID: {r}}, now)
 }
 
 func automatic(name string, minCPUs float64, minMemoryMB int64) *store.Pool {
@@ -76,7 +76,7 @@ func TestAnAutomaticPoolWithoutAMinimumStillWantsAWholeShare(t *testing.T) {
 func TestAnAutomaticMinimumNeverShrinksARunnerThatHasAWholeShare(t *testing.T) {
 	h := sized("idle", 2, 8, hostFor(16*1024), 100000)
 	p := automatic("auto", 1, 2048)
-	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now, false)
+	hs := newHostSet([]*store.Host{h}, []*store.Pool{p}, nil, now)
 
 	placed := hs.placeAvoiding(p, 1, nil)
 	if len(placed) != 1 || placed[0].size != nil {
@@ -118,7 +118,7 @@ func TestAnAutomaticDinDSlotIsNotCutBelowTwiceItsMinimum(t *testing.T) {
 			h.ActiveRunners = 1
 			big := limited("big", tc.used, 13*1024)
 			r := &store.Runner{ID: "r1", PoolID: big.ID, HostID: h.ID, State: store.RunnerBusy}
-			hs := newHostSet([]*store.Host{h}, []*store.Pool{big, p}, map[string][]*store.Runner{big.ID: {r}}, now, false)
+			hs := newHostSet([]*store.Host{h}, []*store.Pool{big, p}, map[string][]*store.Runner{big.ID: {r}}, now)
 			left := hs.leftFor(h, p)
 			got := hs.placeAvoiding(p, 1, nil)
 			if (len(got) == 1) != tc.placed {
